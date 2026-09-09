@@ -230,6 +230,36 @@ export function buildWorkflowSteps(def: WorkflowDef): WorkflowStep[] {
 }
 
 /**
+ * Convert a zero-based declaration index to a stable spreadsheet-style display
+ * label: 0→A … 25→Z, 26→AA, 27→AB, … (task 0814 R5). Display address only —
+ * never a workflow execution key; canonical step ids stay the identity.
+ */
+export function columnLabel(index: number): string {
+    let n = Math.max(0, Math.floor(index));
+    let label = '';
+    do {
+        label = String.fromCharCode(65 + (n % 26)) + label;
+        n = Math.floor(n / 26) - 1;
+    } while (n >= 0);
+    return label;
+}
+
+/** Build one stable top-level label per declared step, in declaration order (0814 R5). */
+export function buildStepLabels(count: number): string[] {
+    const labels: string[] = [];
+    for (let i = 0; i < Math.max(0, Math.floor(count)); i++) labels.push(columnLabel(i));
+    return labels;
+}
+
+/**
+ * A visible child's label under a parent label: parent A → A1, A2, …; child
+ * numbering restarts at 1 under each parent (0814 R5). Display address only.
+ */
+export function labelChild(parentLabel: string, childIndex: number): string {
+    return `${parentLabel}${Math.max(0, Math.floor(childIndex)) + 1}`;
+}
+
+/**
  * Render the todo projection of a workflow definition: a markdown checklist of
  * the declared steps (the same sequence as {@link renderRunPlan} — one shared
  * builder), markers appended after ` — ` joined by ` · `. For state-machine
@@ -242,14 +272,22 @@ export function renderWorkflowTodo(def: WorkflowDef): string {
     if (kind === 'state-machine') {
         lines.push('Declared step inventory in declaration order, not a predicted execution path.', '');
     }
-    for (const step of buildWorkflowSteps(def)) {
-        lines.push(formatWorkflowStepLine(step));
-    }
+    const steps = buildWorkflowSteps(def);
+    const labels = buildStepLabels(steps.length);
+    steps.forEach((step, i) => {
+        lines.push(formatWorkflowStepLine(step, labels[i]));
+    });
     return lines.join('\n');
 }
 
-/** One checklist line for a declared step: checkbox + id + structural markers (0768 R2). */
-function formatWorkflowStepLine(step: WorkflowStep): string {
+/**
+ * One checklist line for a declared step: checkbox + optional display label +
+ * step id + structural markers (0768 R2). The label (0814 R5) is a display
+ * address (A, B, …; children A1, A2) — it is never the execution key, which
+ * remains `step.id`. When no label is supplied the line renders exactly as
+ * before, so existing callers/tests are unchanged.
+ */
+function formatWorkflowStepLine(step: WorkflowStep, label?: string): string {
     const markers = [
         step.initial ? 'initial' : undefined,
         step.terminal ? 'terminal' : undefined,
@@ -259,7 +297,31 @@ function formatWorkflowStepLine(step: WorkflowStep): string {
         step.conditional ? 'conditional' : undefined,
         step.nodeType !== undefined && step.nodeType !== 'action' ? step.nodeType : undefined,
     ].filter((m): m is string => m !== undefined);
-    return markers.length > 0 ? `- [ ] ${step.id} — ${markers.join(' · ')}` : `- [ ] ${step.id}`;
+    const head = label === undefined ? step.id : `${label}. ${step.id}`;
+    return markers.length > 0 ? `- [ ] ${head} — ${markers.join(' · ')}` : `- [ ] ${head}`;
+}
+
+/**
+ * Render the active step's visible children with labels that restart under the
+ * parent (parent A → A1, A2, …), bounding the view to a single parent so a
+ * complex plan never renders every state × every action (0814 R5 "expand only
+ * the active task/stage to bound display size"). Pure: the caller supplies the
+ * child rows (id + markers) it wants shown for the active parent; this only
+ * applies stable display labels and keeps child numbering per-parent.
+ */
+export function renderWorkflowActiveDetail(
+    parentLabel: string,
+    children: Array<{ id: string; markers?: string[] }>,
+): string {
+    return children
+        .map((child, i) => {
+            const label = labelChild(parentLabel, i);
+            const markers = (child.markers ?? []).filter((m): m is string => m !== undefined && m !== '');
+            return markers.length > 0
+                ? `- [ ] ${label}. ${child.id} — ${markers.join(' · ')}`
+                : `- [ ] ${label}. ${child.id}`;
+        })
+        .join('\n');
 }
 
 /**
@@ -273,10 +335,72 @@ function formatWorkflowStepLine(step: WorkflowStep): string {
  */
 export function renderRunPlan(def: WorkflowDef): string {
     const kind = def.kind ?? 'state-machine';
+    const steps = buildWorkflowSteps(def);
+    const labels = buildStepLabels(steps.length);
     return [
         `plan (${kind}) — declared inventory, not a predicted route:`,
-        ...buildWorkflowSteps(def).map(formatWorkflowStepLine),
+        ...steps.map((step, i) => formatWorkflowStepLine(step, labels[i])),
     ].join('\n');
+}
+
+/**
+ * Visible-item outcome states for the host todo/plan projection (0814 R6).
+ * Kept distinct so failed/skipped/blocked/unattempted work is never rendered as
+ * completed just to clear the UI.
+ */
+export type VisibleOutcome = 'pending' | 'active' | 'completed' | 'skipped' | 'failed' | 'blocked' | 'unattempted';
+
+/** One visible plan item with its stable display label and observed outcome. */
+export interface VisibleItem {
+    /** Display address (A, B, A1, A2, …) — a presentation key, never an execution key. */
+    label: string;
+    /** Canonical identity (workflow step id / stage id / command) — the execution key. */
+    id: string;
+    outcome: VisibleOutcome;
+    /** Optional human note (e.g. an attempt number, a halt reason). */
+    note?: string;
+}
+
+/** Options for the Markdown progress fallback (0814 R6). */
+export interface ProgressRenderOptions {
+    /** Title for the rendered progress block. */
+    title?: string;
+    /** Concise capability note when no native todo tool is available or it failed. */
+    capabilityNote?: string;
+}
+
+const OUTCOME_ANNOTATION: Record<VisibleOutcome, string | null> = {
+    pending: null,
+    active: 'active',
+    completed: null,
+    skipped: 'skipped',
+    failed: 'failed',
+    blocked: 'blocked',
+    unattempted: 'unattempted',
+};
+
+/**
+ * Render a truthful Markdown progress checklist (0814 R6 fallback). Only an
+ * observed `completed` item is checked `[x]`; every other outcome stays `[ ]`
+ * and is annotated with its state. This is the explicit fallback used when the
+ * host exposes no native todo/plan tool or the tool fails — it never fabricates
+ * a successful native invocation, and it never marks skipped/failed/blocked/
+ * unattempted work as done merely to clear the UI.
+ */
+export function renderProgressMarkdown(items: VisibleItem[], options: ProgressRenderOptions = {}): string {
+    const lines: string[] = [];
+    if (options.title !== undefined && options.title !== '') lines.push(`# ${options.title}`, '');
+    for (const item of items) {
+        const mark = item.outcome === 'completed' ? '[x]' : '[ ]';
+        const annotation = OUTCOME_ANNOTATION[item.outcome];
+        const suffix = annotation === null ? '' : ` [${annotation}]`;
+        const note = item.note !== undefined && item.note !== '' ? ` — ${item.note}` : '';
+        lines.push(`${mark} ${item.label}. ${item.id}${suffix}${note}`);
+    }
+    if (options.capabilityNote !== undefined && options.capabilityNote !== '') {
+        lines.push('', `> ${options.capabilityNote}`);
+    }
+    return lines.join('\n');
 }
 
 /** Format a millisecond duration as a compact `Ns` / `Nm Ns` string. */

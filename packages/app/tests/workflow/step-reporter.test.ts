@@ -5,10 +5,15 @@
 import { describe, expect, test } from 'bun:test';
 import type { StateMachineWorkflowDef, TransitionFlowWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import {
+    buildStepLabels,
     buildWorkflowSteps,
+    columnLabel,
+    labelChild,
     renderActionHeartbeat,
+    renderProgressMarkdown,
     renderRunPlan,
     renderStepLine,
+    renderWorkflowActiveDetail,
     renderWorkflowTodo,
     type StepEvent,
 } from '../../src/workflow/step-reporter';
@@ -295,9 +300,9 @@ describe('renderRunPlan', () => {
         expect(renderRunPlan(def)).toBe(
             [
                 'plan (state-machine) — declared inventory, not a predicted route:',
-                '- [ ] precheck — initial',
-                '- [ ] implement',
-                '- [ ] done',
+                '- [ ] A. precheck — initial',
+                '- [ ] B. implement',
+                '- [ ] C. done',
             ].join('\n'),
         );
     });
@@ -313,9 +318,9 @@ describe('renderRunPlan', () => {
         expect(renderRunPlan(def)).toBe(
             [
                 'plan (transition-flow) — declared inventory, not a predicted route:',
-                '- [ ] start — initial',
-                '- [ ] work',
-                '- [ ] end',
+                '- [ ] A. start — initial',
+                '- [ ] B. work',
+                '- [ ] C. end',
             ].join('\n'),
         );
     });
@@ -331,12 +336,84 @@ describe('renderRunPlan', () => {
         expect(renderRunPlan(def)).toBe(
             [
                 'plan (state-machine) — declared inventory, not a predicted route:',
-                '- [ ] a — initial',
-                '- [ ] b — conditional',
+                '- [ ] A. a — initial',
+                '- [ ] B. b — conditional',
             ].join('\n'),
         );
     });
 });
+describe('display labels (0814 R5)', () => {
+    test('columnLabel maps 0→A … 25→Z and extends past Z as AA, AB, …', () => {
+        expect(columnLabel(0)).toBe('A');
+        expect(columnLabel(1)).toBe('B');
+        expect(columnLabel(25)).toBe('Z');
+        expect(columnLabel(26)).toBe('AA');
+        expect(columnLabel(27)).toBe('AB');
+        expect(columnLabel(51)).toBe('AZ');
+        expect(columnLabel(52)).toBe('BA');
+        expect(columnLabel(-5)).toBe('A');
+    });
+
+    test('buildStepLabels yields one stable label per declared step in declaration order', () => {
+        expect(buildStepLabels(0)).toEqual([]);
+        expect(buildStepLabels(3)).toEqual(['A', 'B', 'C']);
+        expect(buildStepLabels(27).slice(-3)).toEqual(['Y', 'Z', 'AA']);
+    });
+
+    test('labelChild restarts child numbering under each parent and stays a display address', () => {
+        expect(labelChild('A', 0)).toBe('A1');
+        expect(labelChild('A', 1)).toBe('A2');
+        expect(labelChild('B', 0)).toBe('B1');
+        expect(labelChild('AA', 0)).toBe('AA1');
+        // Never the execution key: the parent label is preserved verbatim.
+        expect(labelChild('C', 2)).toBe('C3');
+    });
+});
+
+describe('active-detail bounding (0814 R5)', () => {
+    test('renderWorkflowActiveDetail applies child labels that restart under the parent', () => {
+        expect(renderWorkflowActiveDetail('B', [{ id: 'check-base' }, { id: 'create-tree', markers: ['git'] }])).toBe(
+            ['- [ ] B1. check-base', '- [ ] B2. create-tree — git'].join('\n'),
+        );
+    });
+
+    test('child labels never collide across parents and stay display addresses', () => {
+        expect(renderWorkflowActiveDetail('A', [{ id: 'x' }])).toBe('- [ ] A1. x');
+        expect(renderWorkflowActiveDetail('C', [{ id: 'x' }])).toBe('- [ ] C1. x');
+    });
+});
+
+describe('progress markdown fallback (0814 R6)', () => {
+    test('only completed items are checked; other outcomes stay unchecked and annotated', () => {
+        const items = [
+            { label: 'A', id: 'quick-readiness', outcome: 'completed' as const },
+            { label: 'B', id: 'prepare-git', outcome: 'active' as const },
+            { label: 'C', id: 'publish-plan', outcome: 'skipped' as const },
+            { label: 'D', id: 'comprehensive-check', outcome: 'failed' as const },
+            { label: 'E', id: 'record', outcome: 'unattempted' as const },
+        ];
+        expect(renderProgressMarkdown(items, { title: 'Host bootstrap', capabilityNote: 'no native todo tool' })).toBe(
+            [
+                '# Host bootstrap',
+                '',
+                '[x] A. quick-readiness',
+                '[ ] B. prepare-git [active]',
+                '[ ] C. publish-plan [skipped]',
+                '[ ] D. comprehensive-check [failed]',
+                '[ ] E. record [unattempted]',
+                '',
+                '> no native todo tool',
+            ].join('\n'),
+        );
+    });
+
+    test('a blocked item is never rendered as completed, and notes are preserved', () => {
+        expect(
+            renderProgressMarkdown([{ label: 'A', id: 'verify', outcome: 'blocked', note: 'halt: verdict FAIL' }]),
+        ).toBe('[ ] A. verify [blocked] — halt: verdict FAIL');
+    });
+});
+
 describe('buildWorkflowSteps', () => {
     test('state-machine: declaration order + initial/terminal/failure/pause/loop-back/conditional markers', () => {
         const def: StateMachineWorkflowDef = {
@@ -459,12 +536,12 @@ describe('renderWorkflowTodo', () => {
                 '',
                 'Declared step inventory in declaration order, not a predicted execution path.',
                 '',
-                '- [ ] precheck — initial',
-                '- [ ] implement — loop-back',
-                '- [ ] approve — pause',
-                '- [ ] verify',
-                '- [ ] done — terminal · loop-back',
-                '- [ ] failed — terminal · failure',
+                '- [ ] A. precheck — initial',
+                '- [ ] B. implement — loop-back',
+                '- [ ] C. approve — pause',
+                '- [ ] D. verify',
+                '- [ ] E. done — terminal · loop-back',
+                '- [ ] F. failed — terminal · failure',
             ].join('\n'),
         );
     });
@@ -485,9 +562,9 @@ describe('renderWorkflowTodo', () => {
             [
                 '# flow (transition-flow) — declared steps',
                 '',
-                '- [ ] start — initial',
-                '- [ ] gate — gate',
-                '- [ ] end — terminal',
+                '- [ ] A. start — initial',
+                '- [ ] B. gate — gate',
+                '- [ ] C. end — terminal',
             ].join('\n'),
         );
     });
@@ -507,7 +584,7 @@ describe('renderRunPlan (builder parity, 0695 R5)', () => {
         const smPlanLines = renderRunPlan(sm).split('\n').slice(1);
         // The todo body (header + disclaimer + blank = 4 lines) must match the plan body.
         expect(smPlanLines).toEqual(renderWorkflowTodo(sm).split('\n').slice(4));
-        expect(smPlanLines).toEqual(['- [ ] a — initial', '- [ ] b — conditional']);
+        expect(smPlanLines).toEqual(['- [ ] A. a — initial', '- [ ] B. b — conditional']);
         const tf: TransitionFlowWorkflowDef = {
             kind: 'transition-flow',
             name: 'tf',
@@ -518,6 +595,6 @@ describe('renderRunPlan (builder parity, 0695 R5)', () => {
         const tfPlanLines = renderRunPlan(tf).split('\n').slice(1);
         // The todo body (header + blank = 2 lines) must match the plan body.
         expect(tfPlanLines).toEqual(renderWorkflowTodo(tf).split('\n').slice(2));
-        expect(tfPlanLines).toEqual(['- [ ] x — initial', '- [ ] y']);
+        expect(tfPlanLines).toEqual(['- [ ] A. x — initial', '- [ ] B. y']);
     });
 });

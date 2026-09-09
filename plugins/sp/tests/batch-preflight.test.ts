@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { preflightTask, recoveryHint, runPreflightCli } from '../scripts/batch-preflight';
+import { join } from 'node:path';
+import {
+    parsePreflightCliArgs,
+    preflightTask,
+    quickReadiness,
+    recoveryHint,
+    runPreflightCli,
+} from '../scripts/batch-preflight';
 
 describe('batch-preflight — TABLE A STOP evaluation (task 0279)', () => {
     test('A2 — todo with unmet dep is skipped (no pipeline launch)', () => {
@@ -137,5 +144,185 @@ describe('batch-preflight — TABLE A STOP evaluation (task 0279)', () => {
         expect(none.stdout).toContain('no recovery hop');
         expect(recoveryHint('backlog', '9')?.command).toContain('dev-refine');
         expect(recoveryHint('blocked', '9')?.command).toContain('dev-handover');
+    });
+});
+
+describe('quickReadiness — command-aware readiness (task 0814 R2)', () => {
+    test('runnable — todo run with no required-section gaps', () => {
+        const r = quickReadiness({ wbs: '0814', status: 'todo', operation: 'run' });
+        expect(r.action).toBe('runnable');
+    });
+
+    test('needs-refinement — run with an incomplete required section', () => {
+        const r = quickReadiness({
+            wbs: '0814',
+            status: 'todo',
+            operation: 'run',
+            requiredSections: ['Solution'],
+            sectionFindings: { Solution: 'empty placeholder' },
+        });
+        expect(r.action).toBe('needs-refinement');
+        if (r.action === 'needs-refinement') expect(r.gaps).toEqual(['Solution']);
+    });
+
+    test('refine treats planning gaps as work, not a failure', () => {
+        const r = quickReadiness({
+            wbs: '0814',
+            status: 'todo',
+            operation: 'refine',
+            requiredSections: ['Design', 'Plan'],
+            sectionFindings: { Design: 'missing design', Plan: 'placeholder' },
+        });
+        expect(r.action).toBe('runnable');
+    });
+
+    test('blocked — run with an unmet out-of-set dependency', () => {
+        const r = quickReadiness({
+            wbs: '0814',
+            status: 'todo',
+            operation: 'run',
+            dependencies: ['0275'],
+            depStatuses: { '0275': 'wip' },
+        });
+        expect(r.action).toBe('blocked');
+        if (r.action === 'blocked') expect(r.unmetDeps).toEqual(['0275']);
+    });
+
+    test('skipped — empty status-filtered set (zero-task rule)', () => {
+        const r = quickReadiness({ wbs: '0814', status: 'todo', operation: 'run', filteredCount: 0 });
+        expect(r.action).toBe('skipped');
+        if (r.action === 'skipped') expect(r.code).toBe('EMPTY');
+    });
+
+    test('skipped — done/cancelled', () => {
+        expect(quickReadiness({ wbs: '1', status: 'done', operation: 'verify' }).action).toBe('skipped');
+        expect(quickReadiness({ wbs: '1', status: 'cancelled', operation: 'run' }).action).toBe('skipped');
+    });
+
+    test('invalid — unknown operation, or verify/run on an ineligible status', () => {
+        expect(quickReadiness({ wbs: '1', status: 'todo', operation: 'bogus' }).action).toBe('invalid');
+        expect(quickReadiness({ wbs: '1', status: 'todo', operation: 'verify' }).action).toBe('invalid');
+        expect(quickReadiness({ wbs: '1', status: 'backlog', operation: 'run' }).action).toBe('invalid');
+    });
+
+    test('verify — testing/wip are runnable; blocked status blocks', () => {
+        expect(quickReadiness({ wbs: '1', status: 'testing', operation: 'verify' }).action).toBe('runnable');
+        expect(quickReadiness({ wbs: '1', status: 'wip', operation: 'verify' }).action).toBe('runnable');
+        expect(quickReadiness({ wbs: '1', status: 'blocked', operation: 'verify' }).action).toBe('blocked');
+    });
+
+    test('verify --force re-verifies an already-done/cancelled task instead of skipping', () => {
+        expect(quickReadiness({ wbs: '1', status: 'done', operation: 'verify', force: true }).action).toBe('runnable');
+        expect(quickReadiness({ wbs: '1', status: 'done', operation: 'verify', force: true }).code).toBe('FORCE');
+        expect(quickReadiness({ wbs: '1', status: 'cancelled', operation: 'verify', force: true }).action).toBe(
+            'runnable',
+        );
+        // force never re-admits a non-verify operation, and a dirty tree stays the owner's gate.
+        expect(quickReadiness({ wbs: '1', status: 'done', operation: 'run', force: true }).action).toBe('skipped');
+    });
+
+    test('negative filteredCount is invalid; zero is skipped (empty-set rule)', () => {
+        expect(quickReadiness({ wbs: '1', status: 'todo', operation: 'run', filteredCount: -1 }).action).toBe(
+            'invalid',
+        );
+        expect(quickReadiness({ wbs: '1', status: 'todo', operation: 'run', filteredCount: 0 }).action).toBe('skipped');
+    });
+
+    test('presentSections lets the function detect a missing required section itself', () => {
+        const r = quickReadiness({
+            wbs: '0814',
+            status: 'todo',
+            operation: 'run',
+            requiredSections: ['Solution', 'Review'],
+            presentSections: ['Solution'],
+        });
+        expect(r.action).toBe('needs-refinement');
+        if (r.action === 'needs-refinement') expect(r.gaps).toEqual(['Review']);
+    });
+
+    test('CLI quick-readiness mode (--operation) returns structured outcomes', () => {
+        const runnable = runPreflightCli(['--operation', 'run', '--wbs', '0814', '--status', 'todo', '--json']);
+        expect(runnable.exitCode).toBe(0);
+        expect(JSON.parse(runnable.stdout).action).toBe('runnable');
+        const force = runPreflightCli(['--operation', 'verify', '--wbs', '1', '--status', 'done', '--force', '--json']);
+        expect(force.exitCode).toBe(0);
+        expect(JSON.parse(force.stdout).code).toBe('FORCE');
+        const skip = runPreflightCli([
+            '--operation',
+            'run',
+            '--wbs',
+            '1',
+            '--status',
+            'todo',
+            '--filtered-count',
+            '0',
+            '--json',
+        ]);
+        expect(skip.exitCode).toBe(2);
+        expect(JSON.parse(skip.stdout).action).toBe('skipped');
+    });
+
+    test('refine on a non-plan status is skipped (NONPLAN), not run', () => {
+        expect(quickReadiness({ wbs: '0814', status: 'wip', operation: 'refine' }).action).toBe('skipped');
+        const r = quickReadiness({ wbs: '1', status: 'testing', operation: 'refine' });
+        expect(r.action).toBe('skipped');
+        if (r.action === 'skipped') expect(r.code).toBe('NONPLAN');
+    });
+
+    test('runPreflightCli — quick-readiness non-json text output', () => {
+        const ok = runPreflightCli(['--operation', 'run', '--wbs', '0814', '--status', 'todo']);
+        expect(ok.exitCode).toBe(0);
+        expect(ok.stdout).toContain('runnable');
+        const skip = runPreflightCli(['--operation', 'run', '--wbs', '1', '--status', 'todo', '--filtered-count', '0']);
+        expect(skip.exitCode).toBe(2);
+        expect(skip.stdout).toContain('skipped');
+        expect(skip.stdout).toContain('EMPTY');
+    });
+
+    test('runPreflightCli — preflight non-json skip text output', () => {
+        const done = runPreflightCli(['--wbs', '1', '--status', 'done']);
+        expect(done.exitCode).toBe(2);
+        expect(done.stdout).toContain('skip A8');
+        const blocked = runPreflightCli(['--wbs', '1', '--status', 'blocked']);
+        expect(blocked.exitCode).toBe(2);
+        expect(blocked.stdout).toContain('skip A7');
+    });
+});
+
+describe('batch-preflight CLI arg parsing (task 0814 R2)', () => {
+    test('parsePreflightCliArgs — --required-sections / --present-sections / --filtered-count / --force', () => {
+        const args = parsePreflightCliArgs([
+            '--wbs',
+            '0814',
+            '--status',
+            'todo',
+            '--operation',
+            'run',
+            '--required-sections',
+            'Solution,Review',
+            '--present-sections',
+            'Solution',
+            '--filtered-count',
+            '3',
+            '--force',
+        ]);
+        expect(args.requiredSections).toEqual(['Solution', 'Review']);
+        expect(args.presentSections).toEqual(['Solution']);
+        expect(args.filteredCount).toBe(3);
+        expect(args.force).toBe(true);
+        // empty value → empty array; non-finite count → null
+        expect(parsePreflightCliArgs(['--required-sections', '']).requiredSections).toEqual([]);
+        expect(parsePreflightCliArgs(['--present-sections', '']).presentSections).toEqual([]);
+        expect(parsePreflightCliArgs(['--filtered-count', 'x']).filteredCount).toBeNull();
+    });
+
+    test('CLI script entrypoint (import.meta.main) exits with the declared code', () => {
+        const script = join(import.meta.dir, '..', 'scripts', 'batch-preflight.ts');
+        const ok = Bun.spawnSync(['bun', script, '--wbs', '1', '--status', 'todo']);
+        expect(ok.exitCode).toBe(0);
+        expect(ok.stdout.toString()).toContain('run:');
+        const skip = Bun.spawnSync(['bun', script, '--wbs', '1', '--status', 'done']);
+        expect(skip.exitCode).toBe(2);
+        expect(skip.stdout.toString()).toContain('skip A8');
     });
 });

@@ -43,9 +43,19 @@ command, skill, script, or second workflow.
 
 ## Run setup
 
-1. Resolve the command inputs, `--auto`, and any explicit `--vars`; read the selected YAML and overlay
-   its `vars` defaults with those invocation values. An explicit non-inline executor selection
-   chooses the subprocess workflow path.
+**Shared startup contract (task 0814 R1/R3/R4/R6/R7).** The order is load-bearing: publish a compact
+**bootstrap checklist** immediately (host-preparation rows, never copied workflow states); run quick
+deterministic readiness (admission, not an implementation certificate) before any isolation; when
+`--worktree` is valid, create/adopt and switch to the execution tree; then publish the **workflow
+inventory** (the CLI todo projection) — and only then read the full YAML for comprehensive/model work.
+Comprehensive checks stay at their owning boundaries and run after the plan is visible and after
+isolation when requested (R7); quick readiness and plan projection dispatch zero models and execute
+zero workflow actions (R8). Use the stable label helpers
+(`columnLabel` / `buildStepLabels` / `labelChild` in `packages/app/src/workflow/step-reporter.ts`) for
+the human/native presentation layer — labels are display addresses only, never an execution key.
+
+1. Resolve the command inputs, `--auto`, and any explicit `--vars` — **without reading the selected
+   YAML yet**. An explicit non-inline executor selection chooses the subprocess workflow path.
 2. Allocate a collision-resistant inline run id (`uuidgen`, with a timestamp/pid fallback), create
    `.spur/run/`, and use `.spur/run/<run-id>.log` as the run log.
 3. **Authoritative run identity (task 0804 R1, fail-closed).** Persist the run row through the
@@ -69,13 +79,36 @@ command, skill, script, or second workflow.
    `session` and the Codex key `session_id` (in that order). If neither is available, allocate
    `host-session-<run-id>` and record that fallback in the log; provenance must never be blank or
    guessed from an executor subprocess.
-5. Render the two-layer plan into the host todo list (task 0596):
-   - **Layer 1** = `spur workflow show <pipeline-yaml> --format todo --json` → its `steps[]`: the
-     declared state inventory in declaration order with `initial` / `terminal` / `failure` /
-     `pause` / `loopBack` / `conditional` markers. Mark the active state. Never re-derive this
-     list from the YAML.
+5. **Publish the bootstrap checklist (R1).** Render host-preparation rows into the host todo list
+   before any expensive check: `A, Quick readiness`, `B, Prepare Git`, `C, Publish workflow plan`,
+   `D, Comprehensive checking`. These are host preparation, never copied workflow states; they are
+   not silently reassigned to unrelated workflow states when the workflow view later appears.
+6. **Quick deterministic readiness (R2), before isolation.** Evaluate `quickReadiness` from
+   `plugins/sp/scripts/batch-preflight.ts` with the operation, status, filtered-set size, the
+   matrix-selected required/present sections, and content-policy findings. Record the outcome
+   (runnable / needs-refinement / blocked / skipped / invalid) in the run log. Admission decision
+   only — no model, no full tests/lint, no live-data probe, no feature mutation, no corpus-wide
+   relational check.
+7. **Isolation (R3), only when `--worktree` is valid.** After quick readiness and the required Git
+   safety checks succeed, create/adopt and `cd` into the execution tree; confirm absolute cwd,
+   branch, base SHA, and ownership. An invalid/empty target, unsupported mode, ambiguous ownership,
+   or stale target stops without creating a tree or discarding work. All subsequent tools, agents,
+   corpus writes, and run artifacts use the confirmed execution tree.
+8. **Publish the workflow inventory (R4), BEFORE reading the YAML.** Resolve the selected workflow
+   through the same project/bundled resolver as execution and run
+   `spur workflow show <resolved-file> --no-logo --format todo --json`. Validate the projection with
+   `parseWorkflowInventory` and bind it to the run's persisted `__definitionDigest` with
+   `assertInventoryIdentity` — a drift or projection failure stops the run before any
+   comprehensive/model work, never executing with a misleading plan.
+   - **Layer 1** = that projection's `steps[]`: the declared state inventory in declaration order
+     with `initial` / `terminal` / `failure` / `pause` / `loopBack` / `conditional` markers. Mark
+     the active state. Never re-derive this list from the YAML.
+9. **Read the selected YAML and overlay its `vars` defaults** with the invocation values. Compare the
+   resolved definition identity against the bound `__definitionDigest`; a mismatch is identity drift
+   and fails closed (step 8 already caught projection-side drift; this re-checks the same definition
+   the interpreter will execute).
    - **Layer 2** = the active state's `onEnter` actions (`kind` + resolved `input`/`command`), from
-     the YAML parsed in step 1, shown only for the active state.
+     the YAML read here, shown only for the active state.
    - **Refresh cadence** = stage boundaries only (when the current state changes after a transition),
      never per action.
    - **Transition reconciliation (task 0727)** = at every stage boundary the host must
@@ -84,9 +117,18 @@ command, skill, script, or second workflow.
      whether the stage ran via native subagent, host-inline execution, or the post-dispatch host
      fallback, so a run can never terminate with earlier stages stuck `in_progress` (task 0726
      ended 0/11 with precheck and implement still open).
-   - **Source of truth** = the CLI projection for layer 1; the YAML parsed in step 1 for layer 2.
+   - **Source of truth** = the CLI projection for layer 1; the YAML read here for layer 2.
      Never hand-copy or hand-derive the state list into the driver, a command, a skill, or a script.
-6. For task execution only, record lifecycle provenance before entering the FSM:
+   - **Stable labels (task 0814 R5).** Top-level declaration indexes map to A, B, … Z, AA, AB …;
+     visible children restart numbering under their parent (A1, A2, B1 …). Labels never replace the
+     canonical step id, and are re-derived identically on retry/resume against the same definition.
+   - **Truthful progress (task 0814 R6).** Publish pending/active state before the visible item
+     starts, then update it immediately after the observed item completes and before the next item
+     starts. Keep completed, skipped, failed, blocked, paused, and unattempted outcomes distinct;
+     never mark skipped/conditional work completed merely to clear the UI. If the host has no
+     suitable native todo tool, or it fails, use an explicit Markdown fallback with the same labels
+     and truth — never a fabricated successful tool invocation.
+10. For task execution only, record lifecycle provenance before entering the FSM:
 
    ```bash
    spur task run-link <wbs> --source inline-full --run-id <run-id> --json
@@ -94,6 +136,28 @@ command, skill, script, or second workflow.
 
    This is required for the normal `testing → done` provenance guard. Planning pipelines have no
    task lifecycle link and skip this task-specific action.
+
+## Comprehensive-check retention and evidence (R7/R8)
+
+**R7 — comprehensive checks stay at their owning boundaries.** Quick readiness and plan projection are
+admission and visibility, not a substitute for the owning gates. After the plan is visible and after
+isolation when requested, retain the full task/feature integrity, size, evidence-channel,
+provenance, capability, dependency, quality, review, and verification gates exactly where their
+owners declare them. Prefer deterministic checks; invoke semantic model work only for an identified
+unresolved requirement/design/evidence question and record its reason in the run log. Reuse a
+cached observation only while its relevant inputs (task content, effective status, matrix, dependency
+snapshot, cwd) remain unchanged; refresh after branch/tree changes, task writes, dependency
+completion, or resume. Never run a shadow copy of a workflow precheck state in the host — if a
+workflow defines a precheck state, its result updates that state, not a host-side duplicate.
+
+**R8 — matched before/after evidence, no invented claims.** Record a timestamped event trace under
+`.spur/run/<run-id>-event-trace.md` (render via `renderEventTrace` in
+`packages/app/src/workflow/workflow-inventory.ts`) naming event ordering, time-to-first-visible
+checklist, time-to-workflow-inventory, confirmed execution cwd, and CLI/process/model invocation
+counts. Quick readiness and plan projection must dispatch zero models and execute zero workflow
+actions — record that as observed. Record unavailable measurements as `unknown`; never present a
+simulated run as a real verified outcome. Event order and provenance are evidence; wall-clock/token
+savings are observations, never fabricated pass conditions.
 
 ## YAML interpreter
 
