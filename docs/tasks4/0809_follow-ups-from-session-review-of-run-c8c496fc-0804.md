@@ -232,7 +232,7 @@ Post-review remediation: the first review pass flagged `mkdirSync` still being a
 - Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
-|-------------|--------|----------|
+| ------------- | -------- | ---------- |
 | R1 | MET | `packages/app/src/services/inline-run-setup.ts:261-266` — the initial engine INSERT persists the complete launch identity (`metadata_json` = canonical `definitionDigest`, `workflowVersion` with explicit null, `definitionSource` path/layer/workdir) and the separate `stampRunIdentity` call is removed from the create branch; interruption tests `packages/app/tests/services/inline-run-setup.test.ts:361` (after-insert failure leaves a fully identified row + idempotent retry attach, row count 1) and `:413` (before-insert failure leaves no row) pass this run. |
 | R2 | MET | Preserved unchanged as designed (validation, not a second implementation): reachable `finally { projectDb.close(); }` + post-finally `process.exit(exitCode)` at `plugins/sp/scripts/inline-run-setup.ts:189-192`; new real-delegate subprocess evidence `plugins/sp/tests/inline-run-setup.test.ts:135` (success closes exactly once, exit 0, outcome doc kept), `:156` (returned refusal closes once, exit 1, outcome doc kept), `:179` (thrown failure closes once, exit 1, stderr kept, no outcome doc), `:195` (unsafe id never opens the DB, no `.spur/`) — all pass this run. |
 | R3 | MET | `packages/app/src/workflow/actions/run-artifact.ts:327` normalizes the DAO lookup (`?? undefined`) so a SQL-NULL row hits the missing-row check instead of the JSON-parse catch; `:331` keeps the exact `no authoritative row` refusal; test `packages/app/tests/workflow/actions/run-artifact.test.ts:624-643` deletes only the run row on the fixture-owned DB, asserts the exact refusal, no `malformed` label, and an empty artifact ledger — passes this run. |
@@ -240,12 +240,13 @@ Post-review remediation: the first review pass flagged `mkdirSync` still being a
 | R5 | MET | `plugins/sp/scripts/verify-answer-lint.ts:298` restores the exact pre-refactor set `/[\u0027\u2018\u2019\u201c\u201d]/g` (U+02BC not removable) with `stripAcWrappers` reuse intact at `:267`; module-level imports at `packages/app/src/services/inline-run-setup.ts:32-34` (module-scope `mkdirSync` binding + static `node:path` `join`/`resolve`; in-function imports deleted, resolution/mkdir/migration/close unchanged); quote tests `plugins/sp/tests/verify-answer-lint.test.ts:528-560` pass this run. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
+| --------------------- | -------- | --------------- | ---------- |
 | AC1 | MET | test | `packages/app/tests/services/inline-run-setup.test.ts:361-434` — after-insert injected failure leaves the durable row fully identified (`sha256:` digest, `workflowVersion: null`, source path/layer/workdir, status `running`) and the retry attaches idempotently (row count 1); before-insert failure throws and leaves no row; existing attach/legacy/malformed/conflict/collision refusals still green (suite 40 pass / 0 fail this run). |
 | AC2 | MET | test | `plugins/sp/tests/inline-run-setup.test.ts:135-206` — the real delegate through `--spur-bin` on a stub repo appends `open→setup→close` exactly once before child exit on success (exit 0), returned refusal (exit 1, outcome doc kept) and thrown failure (exit 1, stderr kept, no outcome doc); unsafe id never opens the DB. |
 | AC3 | MET | test | `packages/app/tests/workflow/actions/run-artifact.test.ts:624-643` — with the matching run row removed before registration, the real action returns `ok: false` naming `no authoritative row`, never `malformed`, and the artifact ledger stays empty. |
 | AC4 | MET | test | `packages/app/tests/services/inline-run-setup.test.ts:437-529` — tracked workflow (ignore narrowed to `.spur/run/`), A at launch, B on disk before capture: fresh fingerprint binds with A's identity, no `resumeDefinitionDigest`, exactly one ledger row; forged B refuses (`stale-definition artifact cannot certify this run`), no second row; `bun run inline-pipeline-parity-check` → ok (9 actions, 2 guards, 11 workflows) this run. |
 | AC5 | MET | test | `plugins/sp/tests/verify-answer-lint.test.ts:528-560` — U+2019 alias of an ASCII-apostrophe title accepted; quote-equivalent duplicate rejected (`alias-equivalent`); U+02BC negative case refused; existing exact-title/wrapper/ordinal/ambiguity suites green after the static-import cleanup (40 pass / 0 fail this run). |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -329,4 +330,3 @@ Scope: `git diff HEAD` (10 files vs base `24056230c`, uncommitted) against R1–
 - 2026-09-08T23:32:15.346Z todo → wip (system)
 - 2026-09-09T00:25:31.946Z wip → testing (system)
 - 2026-09-09T00:26:14.177Z testing → done (system)
-
