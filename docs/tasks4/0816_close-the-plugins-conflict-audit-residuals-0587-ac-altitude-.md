@@ -4,7 +4,7 @@ name: "Close the plugins conflict-audit residuals: 0587 AC-altitude ruling, bare
 status: done
 template: standard
 created_at: 2026-09-09T07:12:32.313Z
-updated_at: "2026-09-09T20:19:32.000Z"
+updated_at: "2026-09-09T20:21:20.787Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -386,7 +386,7 @@ and R8 touch nothing this task edits.
 | Residual | Files | Change |
 | --- | --- | --- |
 | R1 — 0587 AC-altitude | `docs/tasks4/0587_*.md` (Acceptance Criteria, Q&A) | `ac_altitude: task-local` + dated Q&A ruling naming the five exempt ACs (AC2/AC3/AC6/AC7/AC8) with the stated cost |
-| R2 — stale anchors | `docs/tasks4/{0492,0568,0661,0755}_*.md` (Testing) | 13 bare/ambiguous anchors qualified or re-authored; 0492's external citation moved to package-scoped notation (`@gobing-ai/ts-llm-jsonl-importer` + `src/mappers.ts:347`); corpus stale-line-anchor 156 → 120 |
+| R2 — stale anchors | `docs/tasks4/{0492,0568,0661,0755}_*.md` (Testing) | 13 bare/ambiguous anchors qualified or re-authored; 0492's external citation moved to F91 package-scoped notation (`@gobing-ai/ts-llm-jsonl-importer`, mappers.ts line 347); corpus stale-line-anchor 156 → 120 |
 | R3 — rename spellings | `docs/tasks4/*` (26 scenario/verdict rows) + 6 identity artifacts (`docs/features/INDEX.md`, `docs/features/F31/F92/F93`, `docs/05_FEATURES.md`, F91 Notes) | 26/32 `dev-featurechange` spellings renamed; identity artifacts refreshed with reasons; 16 residual `rg` hits classified |
 | R4 — README roster | `plugins/sp/README.md:169-174` | standalone technique-skill roster completed to 32 + completeness sentence |
 | R5 — enum validation | `plugins/sp/skills/conflict-finding/SKILL.md` Step 1, `docs/04_DESIGN.md` §dev-find-conflict | out-of-domain `--pillar`/`--mode`/`--agent` refuses the audit; `<scope>` exempt; design doc mirrored (same commit) |
