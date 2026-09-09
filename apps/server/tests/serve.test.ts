@@ -1378,7 +1378,7 @@ describe('startServer', () => {
         // job's 60000ms budget plus the 5000ms default kill grace (task 0806 R3), so a watchdog
         // kill still inside its escalation window is not double-swept by the same tick.
         expect(updates).toHaveLength(1);
-        expect(String(updates[0]?.params[0])).toContain('watchdog: processing exceeded 65000ms');
+        expect(String(updates[0]?.params[0])).toContain('age-sweep: processing exceeded 65000ms');
         expect(updates[0]?.sql).toContain('processing_at = NULL');
         // The same tick enqueues a fresh job, with ONE attempt — not the default retry policy.
         expect(enqueued).toEqual([
@@ -1397,7 +1397,7 @@ describe('startServer', () => {
         const swept = emitted.map((e) => e.payload as Record<string, unknown>).find((p) => p.swept === true);
         expect(swept?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:history-refresh`);
         expect(swept?.severity).toBe('info');
-        expect(String(swept?.reason)).toContain('watchdog');
+        expect(String(swept?.reason)).toContain('age-sweep');
     });
 
     test('registerSchedulerEntries never age-sweeps an explicit-unlimited job (task 0813 R2)', async () => {

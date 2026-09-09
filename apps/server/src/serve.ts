@@ -271,7 +271,7 @@ export function registerSchedulerEntries(
                     active.status === 'processing' &&
                     now - (active.processingAt ?? active.updatedAt) > sweepThresholdMs;
                 if (stale) {
-                    const reason = `watchdog: processing exceeded ${sweepThresholdMs}ms`;
+                    const reason = `age-sweep: processing exceeded ${sweepThresholdMs}ms`;
                     const swept = await failStaleSchedulerCustomJob(db, active.id, now, reason);
                     if (swept) {
                         ctx.eventBus().emit('scheduler.job.executed', {
