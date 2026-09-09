@@ -413,29 +413,33 @@ const DEFERRED_SOURCES: readonly string[] = ['gemini', 'opencode', 'antigravity'
  * Resolves `'timeout'` when the import is still running at `timeoutMs` — the losing
  * import promise stays subscribed, so a post-timeout rejection is observed and cannot
  * escape as an unhandled rejection — resolves `'completed'` when the import settles
- * first, and rethrows non-timeout rejections unchanged. The timer is always cleared.
+ * first, and rethrows non-timeout rejections unchanged.
+ *
+ * The deadline is the native primitive (`AbortSignal.timeout`, 0815 residual 1): one
+ * abort source, no hand-rolled controller + `setTimeout` pair, so there is no
+ * double-kill window between timer fire and abort dispatch and no timer to leak or
+ * clear. Note (unchanged semantics): the race still cannot truly cancel an in-flight
+ * import — the importer owns real cancellation when it grows a native deadline.
  */
 async function raceSourceImport(
     importPromise: Promise<HistoryImportResult>,
     source: string,
     timeoutMs: number,
 ): Promise<'timeout' | 'completed'> {
-    const abort = new AbortController();
-    const timer = setTimeout(
-        () => abort.abort(new Error(`source '${source}' exceeded ${timeoutMs}ms timeout`)),
-        timeoutMs,
-    );
-    const timeoutPromise = new Promise<never>((_, reject) => {
-        abort.signal.addEventListener('abort', () => reject(abort.signal.reason as Error));
+    const signal = AbortSignal.timeout(timeoutMs);
+    const deadline = new Promise<never>((_, reject) => {
+        signal.addEventListener(
+            'abort',
+            () => reject(new Error(`source '${source}' exceeded ${timeoutMs}ms timeout`, { cause: signal.reason })),
+            { once: true },
+        );
     });
     try {
-        await Promise.race([importPromise, timeoutPromise]);
+        await Promise.race([importPromise, deadline]);
         return 'completed';
     } catch (e) {
-        if (abort.signal.aborted) return 'timeout';
+        if (signal.aborted) return 'timeout';
         throw e;
-    } finally {
-        clearTimeout(timer);
     }
 }
 
