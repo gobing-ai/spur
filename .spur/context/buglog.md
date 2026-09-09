@@ -6978,3 +6978,15 @@ spur workflow run config/workflows/task-pipe
 - **Fix direction:** persist merged vars (incl. setVars) in the run snapshot at pause and reload on resume; or re-execute the pause state's hitl actions on resume instead of skip-on-enter.
 - **Tags:** workflow-engine, hitl, task-pipeline, ts-libs
 - **Occurrences:** 3
+
+---
+
+### 2026-09-09 — Global `spur` binary shadows worktree CLI from inside `bun run test` (0817 run dbff678e)
+
+- **Symptom:** `importer-schema-check` fails in a fresh worktree's quality gate with recorded 0.4.60 vs installed 0.4.62, even though the worktree DB was just created. `spur migrate` cannot self-repair (fast path: all migrations journaled).
+- **Root cause:** a test invoked bare `spur` on PATH, resolving to a stale global install (`~/.bun/bin/spur` v0.3.78, ts-db 0.4.60), which `INSERT OR REPLACE`d an `importer_schema@0.4.60` ledger row into the worktree-local `.spur/spur.db`, shadowing the real 0.4.62 row by latest `applied_at`.
+- **Impact:** quality-gate red on a fresh worktree; two fix-loop hops consumed (0817 test-fix hop 2) plus one verify-child DB repair.
+- **Workaround used:** delete the false ledger row (`DELETE FROM ... WHERE importer schema row`), or re-provision via `spur migrate` re-stamp.
+- **Fix direction:** test hermeticity — assert the `spur` invoked from inside tests is the source-local CLI (PATH prepend or exec path pinning); pair with 0815 References item 6 (fold migrate into the check's remedy path).
+- **Tags:** test-hermeticity, importer-schema, worktree, PATH-shadow
+- **Occurrences:** 1
