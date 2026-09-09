@@ -4,7 +4,7 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: done
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T18:34:06.743Z"
+updated_at: "2026-09-09T19:30:51.441Z"
 
 priority: P2
 ---
@@ -289,21 +289,21 @@ Change-map for the shipped state (this worktree is zero non-corpus delta; implem
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | ts-libs commit db77d8a, published @gobing-ai/ts-db@0.4.62 — `packages/db/src/adapters/bun-sqlite.ts:99-104` queryFirst: inner cast T-null + `?? undefined`; fresh probe this session through installed package's createDbAdapter(bun-sqlite) on a temp DB: no-row queryFirst resolved `===undefined: true, ===null: false` |
-| R2 | MET | ts-libs `packages/db/tests/adapters/bun-sqlite.test.ts:82-89` — test 'queryFirst returns undefined for no match' asserts `expect(row).toBeUndefined()`; suite re-run fresh: 14 pass / 0 fail |
-| R3 | MET | `package.json:33` catalog `"@gobing-ai/ts-db": "^0.4.62"`, `package.json:102` `catalog:` consumer, bun.lock resolves 0.4.62, node_modules symlink -> @gobing-ai+ts-db@0.4.62; fresh `bun run spur-check` exit 0 (7951 pass / 0 fail / 439 files, post-check 2/2 rules) |
-| R4 | MET | `packages/app/src/workflow/actions/run-artifact.ts:322-329` and `packages/app/src/services/inline-run-setup.ts:156-160` re-read: no `?? undefined` normalization remains at either former workaround site (grep: 0 hits); attach/refusal guards read as-written |
-| R5 | MET | `packages/domain/tests/dao/run-dao.test.ts:215-220` — test 'traceRowById returns undefined for missing run' asserts `expect(row).toBeUndefined()` at :220; suite re-run fresh: 20 pass / 0 fail |
-| R6 | MET | `packages/app/src/services/workflow-service.ts:213` — `if (existing === undefined) await stamp(result.id)` intact, now semantically correct on 0.4.62; `packages/domain/src/analytics/run-cost.ts:100-111` bare-aggregate query and its `row === undefined` guard untouched as documented |
-| R7 | MET | `packages/app/src/workflow/actions/run-artifact.ts:324` trigger `runRow === undefined`, `:327` exact refusal string `no authoritative row — refusing binding (0785 R3)`, `:331-334` malformed-metadata branch reached only after a present row (JSON.parse of runRow.metadata_json); run-artifact + inline-run-setup suites 40/40 fresh incl. the 0809 R3 'missing row refuses as missing — never mislabeled malformed metadata' case |
+| R1 | MET | @gobing-ai/ts-db `tests/adapters/bun-sqlite.test.ts` line 82 — no-row suite green fresh this run: `cd ~/xprojects/ts-libs/packages/db && bun test tests/adapters/bun-sqlite.test.ts tests/adapters/d1.test.ts` → 32 pass / 0 fail; installed `node_modules/@gobing-ai/ts-db/package.json` version 0.4.62 |
+| R2 | MET | @gobing-ai/ts-db `tests/adapters/bun-sqlite.test.ts` line 82 — `toBeUndefined()` regression assertion passes (fails without the R1 normalization; verified by suite result above) |
+| R3 | MET | `package.json:33` catalog `^0.4.62` + `package.json:102` consumer `catalog:`; installed resolves 0.4.62; `bun run spur-check` exit 0 (7953 pass / 0 fail / 439 files; rule preset clean) |
+| R4 | MET | `packages/app/src/workflow/actions/run-artifact.ts:324` `runRow === undefined` (workaround absent: `rg '?? undefined'` over both sites exits 1) and `packages/app/src/services/inline-run-setup.ts:160` `existing !== undefined`; behavior preserved — `packages/app` suites `tests/workflow/actions/run-artifact.test.ts` + `tests/services/inline-run-setup.test.ts` 40 pass / 0 fail |
+| R5 | MET | `packages/domain/tests/dao/run-dao.test.ts:220` `expect(row).toBeUndefined()`; suite green `cd packages/domain && bun test tests/dao/run-dao.test.ts` → 20 pass / 0 fail |
+| R6 | MET | `packages/app/src/services/workflow-service.ts:213` `existing === undefined` guard unchanged and now semantically correct; `packages/domain/src/analytics/run-cost.ts:111` untouched (unreachable-in-practice guard documented, no sweep) |
+| R7 | MET | `packages/app/src/workflow/actions/run-artifact.ts:324` trigger + `packages/app/src/workflow/actions/run-artifact.ts:327` refusal string `has no authoritative row — refusing binding (0785 R3)` byte-identical; malformed-metadata branch `packages/app/src/workflow/actions/run-artifact.ts:331-334` reached only for present-but-unparseable rows |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | ts-libs `packages/db/tests/adapters/bun-sqlite.test.ts` 'queryFirst returns undefined for no match' (`toBeUndefined()` :89) — 14/14 fresh; plus runtime probe on installed 0.4.62: no-row queryFirst `===undefined: true, ===null: false` |
-| AC2 | MET | test | fresh `bun test tests/adapters/d1.test.ts` in /Users/robin/xprojects/ts-libs/packages/db — 18 pass / 0 fail; plus ts-libs `packages/db/src/adapters/d1.ts:72-75` `?? undefined` re-read; both adapters honor the same DbAdapter.queryFirst contract |
-| AC3 | MET | test | `cd packages/domain && bun test tests/dao/run-dao.test.ts` — 20 pass / 0 fail fresh on the bumped tree (catalog ^0.4.62, node_modules 0.4.62); repaired `toBeUndefined()` assertion at run-dao.test.ts:220 |
-| AC4 | MET | test | `cd packages/app && bun test tests/workflow/actions/run-artifact.test.ts tests/services/inline-run-setup.test.ts` — 40 pass / 0 fail fresh; refusal-contract case green; both `?? undefined` workarounds deleted |
-| AC5 | MET | command | fresh `bun run spur-check` this session: exit 0 — lint + 7951 tests pass / 0 fail across 439 files; recommended-post-check 2/2 rules |
+| AC1 (R1, R2) — ts-db adapter returns undefined | MET | test | @gobing-ai/ts-db `tests/adapters/bun-sqlite.test.ts` line 82 — `toBeUndefined()` suite green fresh this run (bun test, 14 tests in file) |
+| AC2 (R1) — D1 parity holds | MET | test | @gobing-ai/ts-db `tests/adapters/d1.test.ts` line 1 — D1 adapter suite green fresh this run (bun test, 18 tests in file; `d1.ts` no-row path returns undefined) |
+| AC3 (R3, R5) — Spur sees undefined end to end | MET | test | `packages/domain/tests/dao/run-dao.test.ts:215` missing-run test green (20/20 suite) against installed @gobing-ai/ts-db 0.4.62 |
+| AC4 (R4, R7) — workarounds removed without behavior change | MET | command | `rg '?? undefined' packages/app/src/workflow/actions/run-artifact.ts packages/app/src/services/inline-run-setup.ts` exits 1 (absent); workaround-site suites 40 pass / 0 fail |
+| AC5 (R3, R6) — full gate green | MET | command | `bun run spur-check` exit 0: 7953 pass / 0 fail / 439 files + `rule run --preset recommended-post-check` all rules passed |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
