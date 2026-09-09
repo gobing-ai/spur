@@ -4,7 +4,7 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: done
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T19:52:44.194Z"
+updated_at: "2026-09-09T20:09:36.964Z"
 
 priority: P2
 feature_id: D6
@@ -280,7 +280,7 @@ Change-map for the shipped state (this worktree is zero non-corpus delta; implem
 | `packages/domain/tests/dao/run-dao.test.ts:215` | `traceRowById` missing-run assertion strengthened to `toBeUndefined()` (:220); comment preserved |
 | `packages/app/src/services/workflow-service.ts:213` | `existing === undefined` stamp guard — no edit needed; semantically correct on 0.4.62 |
 | `package.json:33` | Catalog `@gobing-ai/ts-db` `^0.4.60` → `^0.4.62` (consumer `catalog:` at `package.json:102`); lock + node_modules resolve 0.4.62 |
-| Cross-repo (ts-libs `db77d8a`) | `packages/db/src/adapters/bun-sqlite.ts:99-104` no-row `queryFirst` → `undefined` (inner `T \| null` cast); D1 parity `d1.ts:72-75`; regression test `bun-sqlite.test.ts:82-91` `toBeUndefined()` |
+| Cross-repo (ts-libs `db77d8a`) | @gobing-ai/ts-db `src/adapters/bun-sqlite.ts` lines 99-104 — no-row `queryFirst` → `undefined` (inner `T \| null` cast); D1 parity `src/adapters/d1.ts` lines 72-75; regression test `tests/adapters/bun-sqlite.test.ts` lines 82-91 `toBeUndefined()` |
 
 ### Testing
 
