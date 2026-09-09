@@ -4,7 +4,7 @@ name: Fix test hermeticity and dogfood-harness findings from run 20260908-2330-d
 status: todo
 template: issue
 created_at: 2026-09-09T17:11:57.002Z
-updated_at: "2026-09-09T17:13:18.102Z"
+updated_at: "2026-09-09T17:37:54.153Z"
 
 priority: P2
 ---
@@ -16,6 +16,14 @@ priority: P2
 Findings batch from dogfood run 20260908-2330-devrun-0815 (inline `/sp-dev-run 0815 --auto --next --agent inline --worktree --force`; protocol `sp:dogfood-testing@1.2`). The run reached terminal `failed`: the pipeline FSM behaved contract-correctly, but the quality gate was environment-blocked, and the operator hand-confirmed the gate before authorizing merge-back (main `a2c0dac8a`). The code-level findings are already fixed and merged in `39563d002` (ts-db ^0.4.62 lockstep, workaround deletions, four no-row assertion repairs) and are NOT in scope here.
 
 This task owns the remaining open findings from the run report (`docs/dogfood/2026-09-08-dev-run-0815-dogfood.md`, validator rc=0) plus the six residuals parked in task 0815 References, so 0815 can be closed without orphaning them.
+
+**Premise correction (2026-09-09 refine, `--depth ready`).** The run report's P1 finding states the leaking file is a *gitignored* `.spur/config.yaml` that is *absent in CI*. Both halves are false in this tree and the corrected premise changes the fix:
+
+- `.spur/config.yaml` is **tracked** (`git ls-files .spur`; present at the run's BASE_SHA `3f11b875`) and `git check-ignore` does not match it. A `git worktree add` therefore materializes it, and CI checks it out too — file presence is not the worktree/CI divergence.
+- The `.spur` paths that config references are tracked **relative symlinks** into `config/`: `.spur/rules -> ../config/rules`, `.spur/tasks -> ../config/tasks`, `.spur/plugins -> ../config/plugins` (all mode `120000` in `git ls-files -s`). They resolve identically in a worktree.
+- What is genuinely worktree-divergent under `.spur/` is the untracked/ignored runtime state: `spur.db*` (`.gitignore:128`), `run/`, `backups/`, `logs/`, `reports/`, `agents/*` (`.gitignore:136`). The run's own "worktree importer schema stamp" fix (worktree-local `spur migrate`) is the `spur.db` half of exactly this.
+
+The reproducible, tree-verifiable defect behind the P1 class is therefore **cwd binding, not file presence**: a test that omits `cwd` binds the CLI to whatever `process.cwd()` happens to be, so the operator's live project root — its config, its DB, its executor/team roster — becomes a test input. R1 is rewritten against that.
 
 ### Requirements
 
