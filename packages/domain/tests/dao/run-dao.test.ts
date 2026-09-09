@@ -217,7 +217,7 @@ describe('RunDao', () => {
             const dao = new RunDao(adapter);
             const row = await dao.traceRowById('run_nonexistent');
             // queryFirst returns undefined for no row (SQLite null → undefined).
-            expect(row).toBeFalsy();
+            expect(row).toBeUndefined();
             adapter.close();
         });
     });
