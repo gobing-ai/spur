@@ -168,6 +168,7 @@ export {
     IMPORTER_SCHEMA_LEDGER_PREFIX,
     type ImporterSchemaVersionDrift,
     readRecordedImporterSchemaVersion,
+    repairImporterSchemaVersion,
 } from './importer-schema-version';
 export { MODEL_PRICING, resolvePricing, UNKNOWN_MODEL_PRICING } from './models';
 export {

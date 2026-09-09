@@ -1,5 +1,9 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
-import { HISTORY_IMPORT_SCHEMA_VERSION, IMPORTER_OWNED_TABLES } from '@gobing-ai/ts-llm-jsonl-importer';
+import {
+    HISTORY_IMPORT_SCHEMA_SQL,
+    HISTORY_IMPORT_SCHEMA_VERSION,
+    IMPORTER_OWNED_TABLES,
+} from '@gobing-ai/ts-llm-jsonl-importer';
 
 /** Prefix used to encode the applied importer schema version in __spur_cli_migrations.id */
 export const IMPORTER_SCHEMA_LEDGER_PREFIX = 'importer_schema@';
@@ -82,4 +86,35 @@ export async function checkImporterSchemaVersion(db: DbAdapter): Promise<Importe
         missingTables,
         remediation,
     };
+}
+
+/**
+ * Repair an importer schema drift (0815 residual 6 / 0817 buglog): idempotently
+ * re-provision the importer-owned tables and re-stamp the ledger at the installed
+ * version.
+ *
+ * Stale shadow rows — an older `importer_schema@x` row carrying a newer
+ * `applied_at`, written by a stale binary's `INSERT OR REPLACE` provisioning
+ * (observed: global spur 0.3.78 stamping 0.4.60 over a 0.4.62 worktree DB) — are
+ * deleted so the `ORDER BY applied_at DESC` read can only see the truthful stamp.
+ * `spur migrate`'s journaled fast path cannot heal this state, which is why the
+ * check folds the remedy in here instead of delegating to it.
+ */
+export async function repairImporterSchemaVersion(db: DbAdapter): Promise<void> {
+    const installed = HISTORY_IMPORT_SCHEMA_VERSION;
+    // HISTORY_IMPORT_SCHEMA_SQL is DDL-only (no procedural bodies), so a naive
+    // statement split is safe; statements are IF NOT EXISTS idempotent.
+    for (const statement of HISTORY_IMPORT_SCHEMA_SQL.split(';')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)) {
+        await db.exec(statement);
+    }
+    await db.run('DELETE FROM "__spur_cli_migrations" WHERE id LIKE ? AND id != ?', [
+        `${IMPORTER_SCHEMA_LEDGER_PREFIX}%`,
+        `${IMPORTER_SCHEMA_LEDGER_PREFIX}${installed}`,
+    ]);
+    await db.run('INSERT OR REPLACE INTO "__spur_cli_migrations" (id, applied_at) VALUES (?, ?)', [
+        `${IMPORTER_SCHEMA_LEDGER_PREFIX}${installed}`,
+        Date.now(),
+    ]);
 }
