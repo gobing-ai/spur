@@ -932,6 +932,32 @@ describe('failOrphanedProcessingJobs', () => {
             db.close();
         }
     });
+
+    test('exempts explicit-unlimited scheduler.custom rows by name (task 0813 R2)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, processing_at)
+                 VALUES ('unlimited-1', 'scheduler.custom', '{"name":"slow-unlimited"}', 'processing', 1, 3, 1000, 1000, 1500)`,
+            );
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, processing_at)
+                 VALUES ('finite-1', 'scheduler.custom', '{"name":"history-refresh"}', 'processing', 1, 3, 1000, 1000, 1500)`,
+            );
+            const swept = await failOrphanedProcessingJobs(db, 9000, ['slow-unlimited']);
+            expect(swept).toBe(1);
+            const unlimited = await db.queryFirst<{ status: string }>(
+                "SELECT status FROM queue_jobs WHERE id = 'unlimited-1'",
+            );
+            expect(unlimited?.status).toBe('processing');
+            const finite = await db.queryFirst<{ status: string }>(
+                "SELECT status FROM queue_jobs WHERE id = 'finite-1'",
+            );
+            expect(finite?.status).toBe('failed');
+        } finally {
+            db.close();
+        }
+    });
 });
 
 describe('SQLite contention: WAL + busy_timeout (bug-245 lineage, dogfood 2026-08-31)', () => {

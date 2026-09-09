@@ -14,6 +14,7 @@ import {
 } from '@gobing-ai/spur-domain';
 import {
     assertPiImporterSafe,
+    DEFAULT_SOURCE_TIMEOUT_MS,
     HistoryService,
     type HistoryServiceContext,
     MIN_SAFE_PI_BASH_IMPORTER_VERSION,
@@ -1439,6 +1440,46 @@ describe('importAll per-source timeout containment (task 0806 R2)', () => {
         expect(err.message).toContain("source 'antigravity' exceeded its 20ms budget");
         expect(err.message).toContain('remaining sources not started');
         expect(svc.attempted).toEqual(['antigravity']);
+    });
+
+    test('task 0813 R2: explicit unlimited arms no timer — null is never coerced to the ten-minute default', async () => {
+        // A source that finishes AFTER any plausible short deadline but well under the
+        // ten-minute default: under explicit `null` it must complete untouched.
+        class SlowImportService extends HistoryService {
+            override async import(
+                source: string,
+                opts: { file?: string; root?: string; mode?: string; dryRun?: boolean } = {},
+            ): Promise<Awaited<ReturnType<HistoryService['import']>>> {
+                await Bun.sleep(40);
+                return super.import(source, opts);
+            }
+        }
+        const svc = new SlowImportService(makeCtx());
+        // Spy on the timer seam: if the null policy were silently coerced to the
+        // 600000ms default, the old caller-side race would arm exactly that timer.
+        const originalSetTimeout = globalThis.setTimeout;
+        let sawDefaultTimer = false;
+        globalThis.setTimeout = ((fn: (...args: unknown[]) => void, ms?: number, ...rest: unknown[]) => {
+            if (ms === 600_000) sawDefaultTimer = true;
+            return originalSetTimeout(fn as Parameters<typeof originalSetTimeout>[0], ms, ...rest);
+        }) as typeof setTimeout;
+        try {
+            const result = await svc.importAll({
+                sources: ['claude'],
+                mode: 'incremental',
+                root: emptyRoot(),
+                sourceTimeout: null,
+            });
+            expect(result.entries.map((e) => e.status)).toEqual(['empty']);
+            expect(result.warnings.some((w) => w.code === 'source-timeout')).toBe(false);
+        } finally {
+            globalThis.setTimeout = originalSetTimeout;
+        }
+        expect(sawDefaultTimer).toBe(false);
+    });
+
+    test('task 0813 R3: the exported application default stays ten minutes', () => {
+        expect(DEFAULT_SOURCE_TIMEOUT_MS).toBe(600_000);
     });
 });
 

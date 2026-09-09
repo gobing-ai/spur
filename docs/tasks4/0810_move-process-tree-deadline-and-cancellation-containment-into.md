@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Move process-tree deadline and cancellation containment into ts-runtime
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-08T22:33:10.231Z
-updated_at: "2026-09-08T22:34:23.504Z"
+updated_at: "2026-09-08T23:51:41.092Z"
 feature_id: A21
 priority: P1
 tags:
@@ -80,18 +80,50 @@ The current installed and clean upstream 0.4.57 implementation only sends group 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Owner-repo implementation (upstream ts-libs checkout; Spur carries tracking evidence only, per task Owner). Native `ProcessExecutor` deadline/cancellation containment, single group-owned termination path:
+
+- `/Users/robin/xprojects/ts-libs/packages/runtime/src/process-executor.ts:882-930` — `ownProcessGroupLifecycle`: first-wins trigger joining finite `timeout` deadline + external `cancelSignal`; escalation group-SIGTERM → `killGraceMs` grace (default 5000) → group-SIGKILL with bounded settle; completion decided by group liveness, never leader exit (`:852-866` `reapProcessGroup`; `:760-771` detached group, execa watchdog suppressed so no competing caller watchdog; `:298-308` pre-spawn validation + group-owned activation).
+- `/Users/robin/xprojects/ts-libs/packages/runtime/src/process-executor.ts:129-143` — `ProcessOutcome` distinguishes `timeout` / `cancelled` / `signal` / `exit` (+`error`); `defaultTimeout: null` = explicit unlimited, omitted inherits default.
+- `/Users/robin/xprojects/ts-libs/packages/runtime/tests/process-executor.test.ts:462-660` — 9 new containment scenarios: pipes+leader-exit-first timeout escalation, abort→`cancelled`, null-overrides-default, omitted-inherits, natural-leader-exit reap, SQLite `BEGIN EXCLUSIVE` write-lock reap with <2s lock reacquisition, explicit unlimited, abort+normal-exit, invalid-value rejection. 33/33 pass.
+- `/Users/robin/xprojects/ts-libs/packages/runtime/README.md` + ts-libs `CHANGELOG.md` `[Unreleased]` — contract docs; `runStreaming` explicitly scoped out (no group containment); `timeout: 0` semantic change (disable → `TypeError`) recorded as a compatibility entry.
+- Review findings P1/P2 (README `runStreaming` overclaim, empty changelog) fixed post-review; verify re-read all anchors: R1 MET, AC scenario MET, design conformance 7/7 (`.spur/run/0810-verify-answer.txt`).
+
+Upstream evidence: 5→6 files, +532/−47 pre-docs-fix; focused tests 33/33 (`NODE_ENV=test bun test tests/process-executor.test.ts`), `biome` + `tsc --noEmit` clean. Spur-side gate: quality gate PASS attempt 1 (`.spur/run/0810-test-gate.log`), proof bracket `8c69ad48…` held at verify.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | @gobing-ai/ts-runtime `src/process-executor.ts` lines 298-308 — deadline/grace validation before spawn (`resolveDeadline`/`resolveKillGraceMs`, definitions at lines 794/813) and group-owned activation on finite `timeout` or supplied `signal` (non-win32 gate); lines 760-771 — group-owned runs spawn detached with execa's own `timeout`/`cancelSignal` suppressed so no competing caller watchdog exists; lines 852-866 — `reapProcessGroup` single escalation: group SIGTERM → `killGraceMs` grace → group SIGKILL → bounded settle, decided by group liveness, never direct-child exit; lines 882-930 — `ownProcessGroupLifecycle` first-wins trigger (`timeout` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Process cancellation reaps the complete child tree | MET | test | Given TERM-resistant descendant (`trap "" TERM; sleep 30`) retaining inherited output pipes — @gobing-ai/ts-runtime `tests/process-executor.test.ts` line 427; When cancelled or finite deadline expires — tests at lines 462 (deadline) and 486 (abort); Then escalation after configured grace reaps owned group — `reapProcessGroup` @gobing-ai/ts-runtime `src/process-executor.ts` lines 852-866, asserted via outcome/`expectGroupGone` (test :541) and sub-5000ms bounds (:479, :497, :601); And result distinguishes timeout from external cancellation, signal, and normal exit — `ProcessOutcome` :129 with tests asserting `timeout` (:476), `cancelled` (:499), `exit` (:542, :614, :626) and non-owning-path `classifyFailedCompletion` (:932-943). Executable evidence: `bun test tests/process-executor.test.ts` 33 pass / 0 fail this run. |
+
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+| ---------- | ----------- | ---------- | ---------- |
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:8c69ad4815126d2dd573ad4430f78b657f6dc4f7d2f9d9b8a97479d76fce6899 |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-08T23:24:33.475Z todo → wip (system)
+- 2026-09-08T23:51:30.134Z wip → testing (system)
+- 2026-09-08T23:51:41.092Z testing → done (system)

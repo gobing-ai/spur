@@ -2,16 +2,21 @@ import { createRequire } from 'node:module';
 import type { Command } from '@commander-js/extra-typings';
 import {
     type DailyResult,
+    DEFAULT_SOURCE_TIMEOUT_MS,
     type FanOutResult,
     HISTORY_REFRESH_CONTEXT_ENV,
+    HISTORY_SOURCE_TIMEOUT_ENV,
     type HistoryRefreshPayload,
     HistoryService,
+    normalizeLegacyTimeoutMs,
     parseHistoryRefreshContext,
+    parseTimeoutInput,
     resolveArtifactPath,
     resolvePlanningFolders,
     runHistoryReport,
     type SystemEventBus,
     TaskLocator,
+    type TimeoutPolicyMs,
     UnsafeHistoryImporterError,
 } from '@gobing-ai/spur-app';
 import { formatSummary, stalenessBanner } from '@gobing-ai/spur-domain';
@@ -22,6 +27,22 @@ import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
+
+/**
+ * Resolve the per-source import execution policy for the history CLI (task 0813 R3):
+ * an explicit `--source-timeout` is strictly validated first — `'none'` means
+ * unlimited and malformed input is a usage error — then the refresh job's
+ * propagated policy env ({@link HISTORY_SOURCE_TIMEOUT_ENV}, legacy channel:
+ * invalid values fall back rather than disable the deadline), then the
+ * ten-minute application default.
+ */
+function resolveCliSourceTimeout(
+    explicit: string | undefined,
+    env: Record<string, string | undefined>,
+): TimeoutPolicyMs {
+    if (explicit !== undefined) return parseTimeoutInput(explicit);
+    return normalizeLegacyTimeoutMs(env[HISTORY_SOURCE_TIMEOUT_ENV], DEFAULT_SOURCE_TIMEOUT_MS);
+}
 
 /**
  * Resolve the running CLI's own invocation path and the resolved importer package version
@@ -90,7 +111,10 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--root <path>', 'Scan a history root')
         .option(...SHARED_OPTIONS.modeHistory)
         .option(...SHARED_OPTIONS.dryRunHistoryScan)
-        .option('--source-timeout <ms>', 'Per-source timeout in milliseconds (default 600000 = 10 min)', '600000')
+        .option(
+            '--source-timeout <ms|none>',
+            `Per-source timeout in milliseconds or 'none' (default ${DEFAULT_SOURCE_TIMEOUT_MS} = 10 min)`,
+        )
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
@@ -117,7 +141,28 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
                 return;
             }
 
-            const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
+            // Task 0813 R3: strict explicit-input validation BEFORE any service
+            // construction or import — partial numbers, signs, zero, fractions, and
+            // timer overflow are usage errors, and only 'none' disables the deadline.
+            let sourceTimeout: TimeoutPolicyMs;
+            try {
+                sourceTimeout = resolveCliSourceTimeout(options.sourceTimeout, process.env);
+            } catch (e) {
+                const timeoutMsg = `spur history import: ${e instanceof Error ? e.message : String(e)}`;
+                context.output.write(
+                    options.json
+                        ? toEnvelopeJson(
+                              { status: 'error', message: timeoutMsg },
+                              {
+                                  enveloped: options.jsonEnvelope,
+                                  error: { code: 'INTERNAL_ERROR', message: timeoutMsg, details: { cliCode: 'usage' } },
+                              },
+                          )
+                        : timeoutMsg,
+                );
+                context.setExitCode(1);
+                return;
+            }
             // Validate mode up-front — an invalid mode is a CLI usage error, not a per-source runtime failure.
             const mode = options.mode ?? (options.file ? 'force-file' : 'incremental');
             if (mode !== 'full' && mode !== 'incremental' && mode !== 'force-file') {
@@ -377,17 +422,36 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
         .option('--since <iso>', 'Inclusive lower bound on message timestamp for the report (not the import)')
         .option('--until <iso>', 'Inclusive upper bound on message timestamp for the report')
         .option(
-            '--source-timeout <ms>',
-            'Per-source import timeout in milliseconds (default 600000 = 10 min)',
-            '600000',
+            '--source-timeout <ms|none>',
+            `Per-source import timeout in milliseconds or 'none' (default ${DEFAULT_SOURCE_TIMEOUT_MS} = 10 min)`,
         )
         .option('--root <path>', 'History root override (default: per-source platform dir)')
         .option(...SHARED_OPTIONS.jsonDaily)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--mode <name>', 'Render the artifact as a .md sidecar in this mode after analyze (e.g. forensics)')
         .action(async (options) => {
+            // Task 0813 R3: strict explicit-input validation BEFORE service construction —
+            // same contract as `history import` (only 'none' disables the deadline).
+            let sourceTimeout: TimeoutPolicyMs;
+            try {
+                sourceTimeout = resolveCliSourceTimeout(options.sourceTimeout, process.env);
+            } catch (e) {
+                const timeoutMsg = `spur history daily: ${e instanceof Error ? e.message : String(e)}`;
+                context.output.write(
+                    options.json
+                        ? toEnvelopeJson(
+                              { error: timeoutMsg },
+                              {
+                                  enveloped: options.jsonEnvelope,
+                                  error: { code: 'INTERNAL_ERROR', message: timeoutMsg },
+                              },
+                          )
+                        : timeoutMsg,
+                );
+                context.setExitCode(1);
+                return;
+            }
             const svc = await makeService();
-            const sourceTimeout = Number.parseInt(options.sourceTimeout ?? '600000', 10) || 600_000;
 
             // Task 0717: queued child refresh context. Parsed BEFORE the bus/ledger so a
             // malformed context fails the child before any import or event emission;

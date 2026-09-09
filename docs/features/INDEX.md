@@ -4,7 +4,7 @@
 [active] **A**: Foundation ([A_foundation.md](./A_foundation.md))
     ├── [done] **A1**: Init scaffold ownership contract ([A1_init-scaffold-ownership-contract.md](./A1_init-scaffold-ownership-contract.md))
     ├── [verifying] **A2**: Embedded job queue and scheduler ([A2_embedded-job-queue-and-scheduler.md](./A2_embedded-job-queue-and-scheduler.md))
-        └── [backlog] **A21**: Reusable execution deadlines and unlimited jobs ([A21_reusable-execution-deadlines-and-unlimited-jobs.md](./A21_reusable-execution-deadlines-and-unlimited-jobs.md))
+        └── [done] **A21**: Reusable execution deadlines and unlimited jobs ([A21_reusable-execution-deadlines-and-unlimited-jobs.md](./A21_reusable-execution-deadlines-and-unlimited-jobs.md))
     ├── [done] **A3**: Harness surface governance: workflow composition measures and script-surface placement rules ([A3_harness-surface-governance-workflow-composition-measures-and-script-surface-placement-rules.md](./A3_harness-surface-governance-workflow-composition-measures-and-script-surface-placement-rules.md))
         └── [done] **A31**: Global CLI logo suppression and machine-output banner policy ([A31_global-cli-logo-suppression-and-machine-output-banner-policy.md](./A31_global-cli-logo-suppression-and-machine-output-banner-policy.md))
     ├── [done] **A4**: Spur config 1.2: global + project layered configuration ([A4_spur-config-1-2-global-project-layered-configuration.md](./A4_spur-config-1-2-global-project-layered-configuration.md))

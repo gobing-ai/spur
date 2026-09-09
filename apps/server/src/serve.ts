@@ -1,5 +1,5 @@
 import { basename, dirname, isAbsolute, join } from 'node:path';
-import type { SectionMatrix } from '@gobing-ai/spur-app';
+import type { SectionMatrix, TimeoutPolicyMs } from '@gobing-ai/spur-app';
 import {
     type AgentQuotaUpdateConsumer,
     AgentService,
@@ -148,11 +148,12 @@ export const defaultDeps: StartServerDeps = {
 /** Options for {@link registerSchedulerEntries} (task 0803 R4). */
 export interface SchedulerTickOptions {
     /**
-     * The R1-resolved scheduler.custom child timeout in ms — base budget the
-     * stale-processing sweep threshold builds on. Defaults to the env-resolved
-     * value so standalone callers agree with the daemon boot resolution.
+     * The R1-resolved scheduler.custom execution policy — base budget the
+     * stale-processing sweep threshold builds on; `null` is explicit unlimited
+     * (task 0813 R2). Defaults to the env-resolved value so standalone callers
+     * agree with the daemon boot resolution.
      */
-    timeoutMs?: number;
+    timeoutMs?: TimeoutPolicyMs;
     /**
      * Task 0806 R3: environment for per-job budget resolution. Defaults to
      * `process.env` so a per-job override agrees between the handler deadline
@@ -173,17 +174,20 @@ export interface SchedulerTickOptions {
  *
  * Task 0803 R3/R4: the tick enqueue carries `{ maxRetries: 1 }` so a failed
  * attempt goes terminal instead of re-pending and suppressing later ticks, and
- * a `processing` row older than `options.timeoutMs` is swept (failed in place,
- * `swept: true` event) before a fresh job is enqueued on the same tick. */
+ * a `processing` row older than the job's resolved execution-policy deadline
+ * plus the kill grace is swept (failed in place, `swept: true` event) before a
+ * fresh job is enqueued on the same tick. Task 0813 R2: an explicit unlimited
+ * job policy (`none`) is never swept by age. */
 export function registerSchedulerEntries(
     scheduler: ServerScheduler,
     ctx: ServerContext,
     jobs: readonly SchedulerJobConfig[] = [],
     options: SchedulerTickOptions = {},
 ): void {
-    const timeoutMs =
-        options.timeoutMs ?? resolveSchedulerCustomTimeoutMs(process.env as Record<string, string | undefined>);
     const env = options.env ?? (process.env as Record<string, string | undefined>);
+    // 0813 R2: `!== undefined`, never `??` — explicit `null` is unlimited and
+    // must survive; `??` would silently restore the env/default policy.
+    const timeoutMs = options.timeoutMs !== undefined ? options.timeoutMs : resolveSchedulerCustomTimeoutMs(env);
     const registrations: SchedulerScheduleRegistration[] = [];
     const now = Date.now();
 
@@ -234,11 +238,18 @@ export function registerSchedulerEntries(
     // command execution, and `queue.job.*` events report the attempt outcome.
     for (const job of jobs) {
         const schedule = job.cron ?? String(job.intervalMinutes * 60_000);
-        // Task 0806 R3: the stale-row sweep threshold is this job's effective
-        // budget (global default or `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`) plus the
-        // kill grace, so a row is only swept after the handler's own kill
-        // deadline + escalation window has demonstrably elapsed.
-        const sweepThresholdMs = resolveSchedulerJobTimeoutMs(job.name, env, timeoutMs) + resolveKillGraceMs(env);
+        // Task 0806 R3 / 0813 R1: the stale-row sweep threshold derives from this
+        // job's resolved execution policy (global default or
+        // `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`, `none` → unlimited) plus the kill
+        // grace — the same policy the handler's native containment uses — so a row
+        // is only swept after the handler's own kill deadline + escalation window
+        // has demonstrably elapsed. An explicit unlimited job is never swept by
+        // age: age-only sweeping is a recovery backstop for the finite deadline,
+        // and restoring a default timer under `none` would silently defeat it.
+        // (Native lease-based recovery stays deferred on the unreleased ts-infra
+        // consumer/lease work, task 0812.)
+        const jobPolicy = resolveSchedulerJobTimeoutMs(job.name, env, timeoutMs);
+        const sweepThresholdMs = jobPolicy === null ? null : jobPolicy + resolveKillGraceMs(env);
         register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
             const queue = await ctx.jobQueue();
             // Single-flight: skip if an active job with the same name already exists.
@@ -248,13 +259,15 @@ export function registerSchedulerEntries(
             const db = await ctx.getDb();
             const active = await findActiveSchedulerCustomJob(db, job.name);
             if (active !== undefined) {
-                // Task 0803 R4: a `processing` row older than the resolved timeout means the
-                // child was killed but the row never resolved (kill-delivery failure, handler
-                // wedge). Sweep it and enqueue a fresh job on this same tick — no daemon
-                // restart needed. Younger processing rows and any pending row keep the
+                // Task 0803 R4: a `processing` row older than the job's resolved
+                // deadline + grace means the child was killed but the row never
+                // resolved (kill-delivery failure, handler wedge). Sweep it and enqueue a
+                // fresh job on this same tick — no daemon restart needed. Younger
+                // processing rows, any pending row, and explicit-unlimited jobs keep the
                 // single-flight skip.
                 const now = Date.now();
                 const stale =
+                    sweepThresholdMs !== null &&
                     active.status === 'processing' &&
                     now - (active.processingAt ?? active.updatedAt) > sweepThresholdMs;
                 if (stale) {
@@ -712,9 +725,10 @@ export async function startServer(options: StartServerOptions, deps: StartServer
 
             const app = deps.createApp(appRt, { fs, ctx });
 
-            // Task 0803 R1: the child watchdog timeout is resolved once at daemon boot and
-            // threads into both child-spawning queue handlers and the tick's stale-row
-            // sweep threshold, so env, kill deadline, and watchdog agree on one number.
+            // Task 0803 R1 / 0813 R1: the child execution deadline is resolved once at
+            // daemon boot and threads into both child-spawning queue handlers and the
+            // tick's stale-row sweep threshold, so env, kill deadline, and sweep agree
+            // on one policy.
             const schedulerCustomTimeoutMs = resolveSchedulerCustomTimeoutMs(env);
 
             if (bootConfig.jobqueue.enabled) {
@@ -772,7 +786,15 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // Startup sweep: fail orphaned `processing` jobs left by a prior server
                 // crash/restart. Without this, rows stuck in `processing` are never retried
                 // and hold conceptual locks on resources like the SQLite database.
-                const orphanCount = await failOrphanedProcessingJobs(await ctx.getDb(), Date.now());
+                // Task 0813 R2: explicit-unlimited scheduler jobs are exempt — their rows
+                // are legitimately in flight (no deadline), and failing a live unlimited
+                // row while its detached child keeps running would re-enqueue on the next
+                // tick and execute the job twice. Symmetric with the periodic sweep's
+                // `null`-policy exemption above.
+                const unlimitedJobNames = appRt.config.scheduler.jobs
+                    .filter((job) => resolveSchedulerJobTimeoutMs(job.name, env, schedulerCustomTimeoutMs) === null)
+                    .map((job) => job.name);
+                const orphanCount = await failOrphanedProcessingJobs(await ctx.getDb(), Date.now(), unlimitedJobNames);
                 if (orphanCount > 0) {
                     appRt.logger.warn('Swept orphaned processing jobs at startup', {
                         count: orphanCount,

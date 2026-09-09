@@ -6,6 +6,7 @@ import {
     describeBoundedFailure,
     runBoundedChild,
 } from './bounded-child-run';
+import { normalizeLegacyTimeoutMs, type TimeoutPolicyMs } from './execution-policy';
 import { acquireExclusiveJob, releaseExclusiveJob } from './job-exclusion-guard';
 
 export type { BoundedChildResult };
@@ -50,15 +51,19 @@ export interface SchedulerCustomJobDeps {
     cwd: string;
     /** Process seam — one shared `NodeProcessExecutor` in the server. */
     executor: ProcessExecutor;
-    /** Override the per-command timeout; defaults to {@link SCHEDULER_CUSTOM_TIMEOUT_MS}. */
-    timeoutMs?: number;
     /**
-     * Per-job budget resolver (task 0806 R3): receives the configured job name and
-     * returns the effective deadline. The server wires
+     * Per-command execution policy: a finite deadline, or `null` for explicit
+     * unlimited (task 0813 R2 — no hidden ten-minute timer is restored).
+     * Defaults to {@link SCHEDULER_CUSTOM_TIMEOUT_MS}.
+     */
+    timeoutMs?: TimeoutPolicyMs;
+    /**
+     * Per-job policy resolver (task 0806 R3): receives the configured job name and
+     * returns the effective deadline or explicit unlimited. The server wires
      * {@link resolveSchedulerJobTimeoutMs} over the boot environment; omitted → every
      * job gets `timeoutMs`.
      */
-    resolveTimeoutMs?: (name: string) => number;
+    resolveTimeoutMs?: (name: string) => TimeoutPolicyMs;
     /** SIGTERM→SIGKILL escalation grace; defaults to {@link CHILD_KILL_GRACE_MS}. */
     killGraceMs?: number;
 }
@@ -73,17 +78,15 @@ export interface SchedulerCustomJobDeps {
 export const SCHEDULER_CUSTOM_TIMEOUT_MS = 600_000;
 
 /**
- * Resolve the scheduler.custom child timeout from the environment (task 0803 R1). Accepted:
- * a positive integer number of milliseconds. Absent or invalid values fall back to
- * {@link SCHEDULER_CUSTOM_TIMEOUT_MS} — a bad override must never disable the watchdog.
- * Resolved once at daemon boot; follows the ad-hoc env convention (`SPUR_TEAM_AUTOSTART`,
- * `SPUR_SKIP_GLOBAL_CONFIG`).
+ * Resolve the scheduler.custom child execution policy from the environment (task 0803 R1;
+ * `none` → explicit unlimited since task 0813 R2). Accepted: a positive integer number of
+ * milliseconds, or `none`. Absent or invalid values fall back to
+ * {@link SCHEDULER_CUSTOM_TIMEOUT_MS} — a bad override must never disable the deadline by
+ * accident. Resolved once at daemon boot; follows the ad-hoc env convention
+ * (`SPUR_TEAM_AUTOSTART`, `SPUR_SKIP_GLOBAL_CONFIG`).
  */
-export function resolveSchedulerCustomTimeoutMs(env: Record<string, string | undefined>): number {
-    const raw = env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
-    if (raw === undefined || raw.trim() === '') return SCHEDULER_CUSTOM_TIMEOUT_MS;
-    const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : SCHEDULER_CUSTOM_TIMEOUT_MS;
+export function resolveSchedulerCustomTimeoutMs(env: Record<string, string | undefined>): TimeoutPolicyMs {
+    return normalizeLegacyTimeoutMs(env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS, SCHEDULER_CUSTOM_TIMEOUT_MS);
 }
 
 /**
@@ -106,20 +109,17 @@ export function schedulerJobTimeoutEnvName(name: string): string {
 }
 
 /**
- * Resolve the effective budget for one configured job (task 0806 R3): the per-job
- * override when present and valid, else the global default. Invalid values fall
- * back rather than disabling the watchdog, mirroring
- * {@link resolveSchedulerCustomTimeoutMs}.
+ * Resolve the effective policy for one configured job (task 0806 R3): the per-job
+ * override when present and valid, else the global default. `none` maps to explicit
+ * unlimited (task 0813 R2); invalid values fall back rather than disabling the
+ * deadline, mirroring {@link resolveSchedulerCustomTimeoutMs}.
  */
 export function resolveSchedulerJobTimeoutMs(
     name: string,
     env: Record<string, string | undefined>,
-    fallbackMs: number,
-): number {
-    const raw = env[schedulerJobTimeoutEnvName(name)];
-    if (raw === undefined || raw.trim() === '') return fallbackMs;
-    const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackMs;
+    fallbackMs: TimeoutPolicyMs,
+): TimeoutPolicyMs {
+    return normalizeLegacyTimeoutMs(env[schedulerJobTimeoutEnvName(name)], fallbackMs);
 }
 
 /** Output cap. Buffered, so an unbounded-output command cannot exhaust server memory. */
@@ -173,10 +173,10 @@ const activeJobs = new Set<string>();
  * failure, timeout, signal, or non-zero exit throws so the queue records a failed attempt
  * and applies its existing retry policy. Success returns silently — no output is emitted.
  *
- * Containment is caller-owned (task 0806 R1): {@link runBoundedChild} aborts the
- * executor at the effective deadline, signals the detached process group, escalates to
- * a group SIGKILL after the termination grace, and preserves deadline vs. measured
- * elapsed vs. termination reason in the failure message (R5).
+ * Containment is native (task 0813 R1): the executor's finite `timeout` owns
+ * process-group containment — SIGTERM at the deadline, group SIGKILL after the
+ * termination grace — while {@link runBoundedChild} preserves deadline vs.
+ * measured elapsed vs. termination reason in the failure message (R5).
  */
 export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job: Job<unknown>): Promise<void> {
     const payload = validateSchedulerCustomJobPayload(job.payload);
@@ -190,7 +190,16 @@ export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job
         acquireExclusiveJob(exclusiveKey, `scheduler job "${payload.name}"`);
     }
     activeJobs.add(payload.name);
-    const timeoutMs = deps.resolveTimeoutMs?.(payload.name) ?? deps.timeoutMs ?? SCHEDULER_CUSTOM_TIMEOUT_MS;
+    // Task 0813 R2: ABSENT (undefined) falls through the chain; EXPLICIT UNLIMITED
+    // (null) must survive it — `??` would silently restore the ten-minute default
+    // timer the operator turned off.
+    const resolvedPerJob = deps.resolveTimeoutMs?.(payload.name);
+    const timeoutMs: TimeoutPolicyMs =
+        resolvedPerJob !== undefined
+            ? resolvedPerJob
+            : deps.timeoutMs !== undefined
+              ? deps.timeoutMs
+              : SCHEDULER_CUSTOM_TIMEOUT_MS;
     try {
         const outcome = await runBoundedChild(deps.executor, {
             command: '/bin/sh',

@@ -1392,6 +1392,62 @@ describe('startServer', () => {
         expect(String(swept?.reason)).toContain('watchdog');
     });
 
+    test('registerSchedulerEntries never age-sweeps an explicit-unlimited job (task 0813 R2)', async () => {
+        const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
+        const enqueued: Array<{ type: string; payload: unknown; options?: unknown }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const updates: Array<{ sql: string; params: unknown[] }> = [];
+        const scheduler = {
+            register: (cron: string, action: () => Promise<void>) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            jobQueue: async () => ({
+                enqueue: async (type: string, payload: unknown, options?: unknown) => {
+                    enqueued.push({ type, payload, options });
+                    return `${type}-id`;
+                },
+            }),
+            // A processing row far older than any finite threshold would be.
+            getDb: async () => ({
+                queryFirst: async (sql: string, ...params: unknown[]) => {
+                    if (sql.includes('scheduler.custom') && params[0] === 'slow-unlimited') {
+                        return { id: 'stale-2', status: 'processing', processing_at: 1000, updated_at: 1000 };
+                    }
+                    if (sql.includes('changes()')) return { n: 1 };
+                    return undefined;
+                },
+                run: async (sql: string, ...params: unknown[]) => {
+                    updates.push({ sql, params });
+                },
+            }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext;
+
+        registerSchedulerEntries(
+            scheduler,
+            ctx,
+            [{ name: 'slow-unlimited', cron: '*/15 7-23 * * *', command: 'bun apps/cli/src/index.ts slow' }],
+            // Explicit `null` = unlimited (0813 R2): must survive the option chain
+            // (`!== undefined`, never `??`) and disable age sweeping entirely.
+            { timeoutMs: null },
+        );
+        await registered[2]?.action();
+
+        // No sweep update, no re-enqueue — the unlimited row keeps the single-flight skip.
+        expect(updates).toEqual([]);
+        expect(enqueued).toEqual([]);
+        const skipped = emitted.map((e) => e.payload as Record<string, unknown>).find((p) => p.skipped === true);
+        expect(skipped?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:slow-unlimited`);
+    });
+
     test('registerSchedulerEntries keeps the single-flight skip for a young processing row (task 0803 R4)', async () => {
         const registered: Array<{ cron: string; action: () => Promise<void> }> = [];
         const enqueued: Array<{ type: string; payload: unknown }> = [];

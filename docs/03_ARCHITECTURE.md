@@ -371,10 +371,12 @@ synchronous filesystem and `bun:sqlite` work from the Hono/oRPC event loop. The 
 share the WAL database; the 30-second SQLite busy timeout (`SQLITE_BUSY_TIMEOUT_MS`) bounds lock
 contention.
 
-Task 0803 bounds the periodic child so a wedged run cannot pin the shared write lock: both the
-`history.refresh` and `scheduler.custom` spawn sites run the child under the daemon-resolved
-`SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` watchdog (default 600,000 ms), killing it at the deadline with a
-timeout-labelled failure; the `importAll` fan-out aborts after two consecutive source failures
+Task 0803 bounds the periodic child so a wedged run cannot pin the shared write lock; task 0813
+(ADR-112) moved enforcement native: both the `history.refresh` and `scheduler.custom` spawn sites
+forward the daemon-resolved deadline (`SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`, default 600,000 ms, plus
+`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` / `SPUR_HISTORY_REFRESH_TIMEOUT_MS` overrides; explicit `none`
+imposes none) to the `ProcessExecutor`, which kills the child at the deadline with a truthful
+timed-out outcome; the `importAll` fan-out aborts after two consecutive source failures
 classified as `SQLITE_BUSY` instead of burning each remaining source's 30s `busy_timeout`; and the
 daily retention pass checkpoints the WAL `PASSIVE` (exclusive TRUNCATE stays on the manual
 `spur self maintain` path). A `processing` row older than the timeout is failed in place by the next
@@ -1450,11 +1452,14 @@ bus-consumed, not catalog-registered (board presentation awaits ADR-110 catalog-
 ADR-111 records this delivery choice. Shapes, failure contracts, and rejected alternatives live
 in [executor availability](design/executor-availability.md).
 
-## 26. Execution policy and renewable job ownership — accepted design (A21)
+## 26. Execution policy and renewable job ownership — shipped (A21, task 0813)
 
 ADR-112 places scheduler/queue execution deadlines and cancellation context in `ts-infra`, process
 cleanup in `ts-runtime`, safe import cancellation in the importer, and atomic attempt ownership in
 `ts-db`. Spur consumes these contracts and resolves application defaults. Lease renewal remains
-finite even when execution is unlimited; retry follows cancellation settlement. This target replaces
-the current local watchdog/sweep policy only after compatible upstream release and verification.
-The target surface and delivery dependencies are in [execution deadlines](design/execution-deadlines.md).
+finite even when execution is unlimited; retry follows cancellation settlement. Adopted on released
+ts-libs 0.4.59: native `timeoutMs`/`killGraceMs` policies replaced the local caller watchdog across
+scheduler, history-refresh and bounded-child execution, and age sweeps exempt explicit-unlimited
+jobs. Remaining upstream: durable lease/claim ownership (`ts-db`, task 0812) — until then, age
+sweeps stay the finite-deadline recovery backstop. The target surface and delivery dependencies are
+in [execution deadlines](design/execution-deadlines.md).

@@ -1154,3 +1154,131 @@ describe('history report render-time narrowing (0564 R3)', () => {
         expect(parsed.bySession).toHaveLength(1);
     });
 });
+
+describe('history CLI usage-error coverage (0813 R3)', () => {
+    test('import --file with --source all is rejected before service construction (text)', async () => {
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'import', '--file', '/tmp/whatever.jsonl', '--source', 'all'], {
+            output,
+        });
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('--file requires a single --source');
+    });
+
+    test('import --file with --source all is rejected (enveloped json)', async () => {
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(
+            ['history', 'import', '--file', '/tmp/whatever.jsonl', '--source', 'all', '--json', '--json-envelope'],
+            { output },
+        );
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lines.join('')) as { ok: boolean; error?: { details?: { cliCode?: string } } };
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error?.details?.cliCode).toBe('usage');
+    });
+
+    test('import rejects malformed --source-timeout before import (text)', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(
+            ['history', 'import', '--source', 'pi', '--root', emptyRoot, '--source-timeout', 'abc'],
+            { output, cwd, dbUrl: ':memory:' },
+        );
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('spur history import:');
+    });
+
+    test('import rejects malformed --source-timeout (enveloped json)', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(
+            [
+                'history',
+                'import',
+                '--source',
+                'pi',
+                '--root',
+                emptyRoot,
+                '--source-timeout',
+                '-5',
+                '--json',
+                '--json-envelope',
+            ],
+            { output, cwd, dbUrl: ':memory:' },
+        );
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lines.join('')) as { ok: boolean; error?: { details?: { cliCode?: string } } };
+        expect(parsed.ok).toBe(false);
+        expect(parsed.error?.details?.cliCode).toBe('usage');
+    });
+
+    test('daily rejects malformed --source-timeout before service construction (text)', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'daily', '--root', emptyRoot, '--source-timeout', '1.5'], {
+            output,
+            cwd,
+            dbUrl: ':memory:',
+        });
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('spur history daily:');
+    });
+
+    test('daily rejects malformed --source-timeout (enveloped json)', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(
+            [
+                'history',
+                'daily',
+                '--root',
+                emptyRoot,
+                '--source-timeout',
+                '99999999999999',
+                '--json',
+                '--json-envelope',
+            ],
+            { output, cwd, dbUrl: ':memory:' },
+        );
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lines.join('')) as { ok: boolean };
+        expect(parsed.ok).toBe(false);
+    });
+
+    test('daily with malformed refresh context env fails before import (0717 R1)', async () => {
+        const cwd = makeTmpCwd();
+        const emptyRoot = join(cwd, 'empty-history');
+        mkdirSync(emptyRoot, { recursive: true });
+        const previous = process.env.SPUR_HISTORY_REFRESH_CONTEXT;
+        process.env.SPUR_HISTORY_REFRESH_CONTEXT = 'not-json{';
+        try {
+            const { output, lines } = capturingOutput();
+            const exitCode = await main(['history', 'daily', '--root', emptyRoot, '--source-timeout', 'none'], {
+                output,
+                cwd,
+                dbUrl: ':memory:',
+            });
+            expect(exitCode).toBe(1);
+            expect(lines.join('')).toContain('history daily failed:');
+        } finally {
+            if (previous === undefined) delete process.env.SPUR_HISTORY_REFRESH_CONTEXT;
+            else process.env.SPUR_HISTORY_REFRESH_CONTEXT = previous;
+        }
+    });
+
+    test('report surfaces read failures through the catch path (text)', async () => {
+        const cwd = makeTmpCwd();
+        const { output, lines } = capturingOutput();
+        const exitCode = await main(['history', 'report', join(cwd, 'missing.json')], { output, cwd });
+        expect(exitCode).toBe(1);
+        expect(lines.join('')).toContain('spur history report failed:');
+    });
+});

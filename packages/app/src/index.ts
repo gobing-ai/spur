@@ -151,6 +151,13 @@ export {
     systemEventCatalogEntry,
     systemEventProjectContext,
 } from './services/event-names';
+export type { TimeoutPolicyMs } from './services/execution-policy';
+export {
+    assertCanonicalTimeoutMs,
+    MAX_TIMEOUT_INPUT_MS,
+    normalizeLegacyTimeoutMs,
+    parseTimeoutInput,
+} from './services/execution-policy';
 export type { FailureRule } from './services/failure-classification';
 export { classifyDispatch, permissionFailureEvidence } from './services/failure-classification';
 export type {
@@ -203,6 +210,7 @@ export {
     enqueueHistoryRefresh,
     HISTORY_REFRESH_CONTEXT_ENV,
     HISTORY_REFRESH_JOB,
+    HISTORY_SOURCE_TIMEOUT_ENV,
     handleHistoryRefreshJob,
     parseHistoryRefreshContext,
     resolveHistoryRefreshTimeoutMs,
@@ -227,6 +235,7 @@ export type {
 export {
     assertPiImporterSafe,
     computeExitCode,
+    DEFAULT_SOURCE_TIMEOUT_MS,
     formatIssue,
     HistoryService,
     MIN_SAFE_PI_BASH_IMPORTER_VERSION,

@@ -82,6 +82,7 @@ import {
 } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { getExecutorTier } from './agent-service';
+import type { TimeoutPolicyMs } from './execution-policy';
 import { refreshHistoryRollups } from './history-analysis-service';
 import { attributeSessions } from './task-attribution';
 import { deriveVerifiedOutcome } from './verified-outcome';
@@ -167,8 +168,12 @@ export interface ImportAllOptions {
     root?: string;
     /** Scan without persisting. */
     dryRun?: boolean;
-    /** Per-source timeout in ms (default {@link DEFAULT_SOURCE_TIMEOUT_MS}). */
-    sourceTimeout?: number;
+    /**
+     * Per-source execution policy: a finite deadline in ms, or `null` for explicit
+     * unlimited (task 0813 R2 — no hidden timer is armed). Default
+     * {@link DEFAULT_SOURCE_TIMEOUT_MS}.
+     */
+    sourceTimeout?: TimeoutPolicyMs;
     /** Skip incremental rollup refresh at the end of import (testing / batch callers). */
     skipRollupRefresh?: boolean;
 }
@@ -181,8 +186,11 @@ export interface DailyOptions {
     since?: string;
     /** Inclusive upper bound on message timestamp for the analyze step only. */
     until?: string;
-    /** Per-source import timeout in ms (default {@link DEFAULT_SOURCE_TIMEOUT_MS}). */
-    sourceTimeout?: number;
+    /**
+     * Per-source import execution policy: a finite deadline in ms, or `null` for
+     * explicit unlimited (task 0813 R2). Default {@link DEFAULT_SOURCE_TIMEOUT_MS}.
+     */
+    sourceTimeout?: TimeoutPolicyMs;
     /** Spur CLI version stamped into the artifact. */
     spurVersion?: string;
     /** Project root. */
@@ -400,6 +408,37 @@ const DEFERRED_SOURCES: readonly string[] = ['gemini', 'opencode', 'antigravity'
  * fail; `skipped` = the unsupported set; `window` = the MIN/MAX message `ts` the
  * analyze covered (recency without touching the DB).
  */
+/**
+ * Caller-side finite-deadline race for one source import (task 0806 R2, task 0813 R2).
+ * Resolves `'timeout'` when the import is still running at `timeoutMs` — the losing
+ * import promise stays subscribed, so a post-timeout rejection is observed and cannot
+ * escape as an unhandled rejection — resolves `'completed'` when the import settles
+ * first, and rethrows non-timeout rejections unchanged. The timer is always cleared.
+ */
+async function raceSourceImport(
+    importPromise: Promise<HistoryImportResult>,
+    source: string,
+    timeoutMs: number,
+): Promise<'timeout' | 'completed'> {
+    const abort = new AbortController();
+    const timer = setTimeout(
+        () => abort.abort(new Error(`source '${source}' exceeded ${timeoutMs}ms timeout`)),
+        timeoutMs,
+    );
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        abort.signal.addEventListener('abort', () => reject(abort.signal.reason as Error));
+    });
+    try {
+        await Promise.race([importPromise, timeoutPromise]);
+        return 'completed';
+    } catch (e) {
+        if (abort.signal.aborted) return 'timeout';
+        throw e;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
 async function buildRefreshCoverage(
     db: DbAdapter,
     selector: ArtifactSelector,
@@ -412,8 +451,12 @@ async function buildRefreshCoverage(
 }
 const MODES: readonly ImportMode[] = ['full', 'incremental', 'force-file'];
 const MAX_ERROR_SAMPLES = 20;
-/** Per-source import timeout default (10 minutes, task 0470 R5). */
-const DEFAULT_SOURCE_TIMEOUT_MS = 600_000;
+/**
+ * Per-source import deadline default (10 minutes, task 0470 R5). Spur's application
+ * default (task 0813 R3) — an explicit `null` policy overrides it, and it is never
+ * silently restored for a scope that resolved to unlimited.
+ */
+export const DEFAULT_SOURCE_TIMEOUT_MS = 600_000;
 /**
  * Task 0803 R3: after this many CONSECUTIVE busy-classified source failures, `importAll`
  * aborts the remaining sources and throws instead of letting each one burn its own
@@ -838,7 +881,11 @@ export class HistoryService {
             dryRun: opts.dryRun === true,
             sources,
         });
-        const timeoutMs = opts.sourceTimeout ?? DEFAULT_SOURCE_TIMEOUT_MS;
+        // Task 0813 R2: ABSENT (undefined) falls back to the ten-minute application
+        // default; EXPLICIT UNLIMITED (null) must survive — `??` would silently
+        // restore the hidden ten-minute timer the operator turned off.
+        const timeoutMs: TimeoutPolicyMs =
+            opts.sourceTimeout !== undefined ? opts.sourceTimeout : DEFAULT_SOURCE_TIMEOUT_MS;
 
         const entries: CoverageEntry[] = [];
         const warnings: ArtifactWarning[] = [];
@@ -995,14 +1042,15 @@ export class HistoryService {
 
     /**
      * Isolated per-source import wrapper (task 0470 R2/R4/R5). Checks whether the source was
-     * non-empty on a previous run (checkpoint rows exist), runs {@link import} bounded by a
-     * timeout, builds the {@link CoverageEntry} from the result, and catches throw/timeout into
+     * non-empty on a previous run (checkpoint rows exist), runs {@link import} under the
+     * resolved execution policy (unlimited when `null` — no timer is armed, task 0813 R2),
+     * builds the {@link CoverageEntry} from the result, and catches throw/timeout into
      * a `failed` entry plus a `source-failed` warning.
      */
     private async importOneIsolated(
         source: LlmJsonlSource,
         opts: ImportAllOptions,
-        timeoutMs: number,
+        timeoutMs: TimeoutPolicyMs,
         runStartedAt: string,
     ): Promise<{
         coverageEntry: CoverageEntry;
@@ -1019,31 +1067,28 @@ export class HistoryService {
         const wasNonEmpty = checkpointCount > 0;
 
         try {
-            // Task 0806 R2: the importer has no AbortSignal (ImportOptions), so the deadline
-            // is a caller-side race, not a cooperative cancel. The losing importPromise may
-            // still finish later; Promise.race subscribes to it, so a post-timeout
-            // rejection is observed and cannot escape as an unhandled rejection. Its rows
-            // are checkpointed and a later run resumes safely (R7).
             const importPromise = this.import(source, {
                 file: opts.file,
                 root: opts.root,
                 mode: opts.mode ?? (opts.file !== undefined && opts.file.length > 0 ? 'force-file' : 'incremental'),
                 dryRun: opts.dryRun,
             });
-            const abort = new AbortController();
-            const timer = setTimeout(
-                () => abort.abort(new Error(`source '${source}' exceeded ${timeoutMs}ms timeout`)),
-                timeoutMs,
-            );
-            const timeoutPromise = new Promise<never>((_, reject) => {
-                abort.signal.addEventListener('abort', () => reject(abort.signal.reason as Error));
-            });
 
             let result: HistoryImportResult;
-            try {
-                result = await Promise.race([importPromise, timeoutPromise]);
-            } catch (e) {
-                if (abort.signal.aborted) {
+            if (timeoutMs === null) {
+                // Task 0813 R2: explicit unlimited — no timer is armed and no hidden
+                // ten-minute default is restored; the import runs to completion however
+                // long it takes. The promise is still awaited, so a late rejection is
+                // observed here and cannot escape as an unhandled rejection.
+                result = await importPromise;
+            } else {
+                // Task 0806 R2 / 0813: finite deadline — caller-side race (the importer has
+                // no AbortSignal; native containment stays deferred on the unreleased
+                // importer `signal` contract, task 0811). The losing importPromise may
+                // still finish later; the race subscribes to it, so a post-timeout
+                // rejection is observed and cannot escape as an unhandled rejection. Its
+                // rows are checkpointed and a later run resumes safely (R7).
+                if ((await raceSourceImport(importPromise, source, timeoutMs)) === 'timeout') {
                     const elapsedMs = Date.now() - attemptStartedAt;
                     const detail =
                         `source '${source}' exceeded its ${timeoutMs}ms budget ` +
@@ -1068,9 +1113,9 @@ export class HistoryService {
                         sourceAttribution: null,
                     };
                 }
-                throw e;
-            } finally {
-                clearTimeout(timer);
+                // Untimed winner (see raceSourceImport): the race already settled the
+                // promise, so this await returns immediately.
+                result = await importPromise;
             }
 
             // R2 (task 0504): a source that imported records while skipping malformed or
