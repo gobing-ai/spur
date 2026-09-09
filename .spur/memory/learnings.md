@@ -1346,3 +1346,89 @@ Per the §7 repair protocol, I verified frontmatter vs §4.1 (`owns`/`authority`
   A 04 edit that names an enforcement surface must be checked against the actual file.
 - **Upstream tasks don't create repo surface:** 0798 (upstream producer) required no 00/03/04
   repo-side surface — only the consuming side (0799) did.
+Wrapup complete for task batch [0815].
+
+**Doc-evolve wrapup — drift repair:**
+- **Drift audit (targeted to 0815's change surface):** zero delta in `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*`. The merge `39563d002` changed only `package.json`/`bun.lock` (ts-db ^0.4.62 catalog bump), two workaround deletions in `packages/app`, and four test assertion repairs — no CLI/flag/config/env/schema/DTO surface (no T3), no decision reversal (no T1/T2; 0784 R1 intent restored, not changed), no mechanism replacement (no 03 delta), no satellite added/changed (no T9). No doc claimed `queryFirst` returns null or documented the deleted workarounds; the version table in `history-incremental-materialization.md` is a frozen incident record, not a current claim.
+- **Contract-verify:** 00/03/04 frontmatter matches §4.1; `updated_at` plausible for 0815. *(Flagged, not edited: commit `5abb2d68b` — task 0817's own doc edits — made substantive 04 changes without bumping 04's `updated_at`; that's 0817's obligation, kept out of this diff.)*
+- **Lesson-append (§8):** three lessons appended to `docs/99_PROJECT_CONSTITUTION.md` (00: facade-fix scoping; 04: weakened-assertion, registry-package release coordination), frontmatter bumped 1.5.1→1.5.2 / `updated_at` 2026-09-09 in the same edit. No task/feature corpus written; pre-existing dirty files (`protected-files.yaml`, `docs/tasks4/0815_*.md`) untouched.
+- **Learnings artifact:** written to `/Users/robin/xprojects/spur-new/.spur/run/713a9136-cac5-44c4-a5dc-de498f61603d-wrapup-learnings.md`.
+
+---
+
+# Wrapup learnings — 2026-09-09
+
+Tasks: 0815
+
+## 2026-09-09 · 0815 — Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
+
+### Conventions
+
+- **Fix the facade, not the consumers.** When a declared type contradicts runtime behavior across a
+  package boundary, the adapter/facade lies — fix it once at that layer. The retype-15-DAO-
+  signatures and per-call-site normalization alternatives were rejected because they leave every
+  sibling call site broken. Hand-written call-site compensation (`?? undefined` workarounds with
+  explanatory comments) is the exact pattern AGENTS.md forbids — it accumulates because the facade's
+  runtime contradicts its declared contract.
+- **Assert the exact contract value a test's comment claims.** A regression test asserting
+  `toBeFalsy()` while commenting "queryFirst returns undefined" cannot fail when the contract
+  breaks. The weakened assertion sat directly on top of the defect and hid it for a release cycle;
+  the fix strengthened it to `toBeUndefined()`.
+- **A cross-repo dependency fix is a publish-then-bump flow, not a local edit.** `@gobing-ai/ts-db`
+  is consumed as a published registry package (resolved via bun's global cache), not a workspace
+  link — a local ts-libs edit never reaches Spur. Plan steps must name both sides: release/publish in
+  ts-libs, then catalog bump + install in Spur.
+- **Restore intent, don't widen scope.** The "no authoritative row" refusal string and trigger
+  condition (0809 R3) had to stay byte-identical; the workaround deletions were behavior-preserving
+  because the adapter now supplies what call sites compensated for. Sweeping every `=== undefined`
+  comparison into `== null` style was explicitly out of scope — the adapter fix makes them correct
+  as written.
+
+### Errors fixed
+
+- `BunSqliteAdapter.queryFirst` cast `bun:sqlite` `Statement.get()` to `T | undefined` without
+  normalizing — `get()` returns `null` on no match, so every no-row lookup resolved to `null`
+  against a type that said `undefined`. The D1 adapter already normalized (`?? undefined`); the two
+  adapters disagreed on the same `DbAdapter` interface. Fixed in ts-libs (inner cast corrected to
+  `T | null` + `?? undefined`), released as `@gobing-ai/ts-db@0.4.62`.
+- The `existing === undefined` identity-stamp guard at `workflow-service.ts:213` was semantically
+  wrong under `null` (a genuinely new row could skip stamping) — latent, not shipped-broken, because
+  the inline setup writes identity in the insert. After the adapter fix it is correct with no edit.
+- Two stale compensating `?? undefined` workarounds deleted from `run-artifact.ts` and
+  `inline-run-setup.ts`; surrounding refusal/attach branches unchanged.
+- Weakened not-found assertions repaired (`run-dao.test.ts` → `toBeUndefined()`), plus the
+  assertion suite in `db.test.ts`, `migrations.test.ts`, `inline-run-setup.test.ts` that had
+  codified the old null contract.
+
+### Patterns
+
+- **Retargeting a deferral to root cause.** The original 0815 framing blamed the declared return
+  type; triage proved the type correct at every layer and located the lie in the adapter
+  implementation. Scope was rewritten around the actual root cause, with the DAO signature left
+  alone. Evidence was graded HIGH (executed/reproduced) vs MEDIUM (read+reasoned) vs LOW
+  (unverified) so the implementer knew which claims still needed proving — e.g. "no shipped path is
+  broken" was an absence claim from partial call-graph tracing, explicitly re-rateable to P1.
+- **Blast-radius analysis before the fix.** Every `?.` / `??` / truthiness call site is unaffected
+  by null→undefined; only strict `=== undefined` comparisons change, and each one changed from
+  wrong to right. Known exposed sites were enumerated with their failure modes (identity stamp,
+  escalation-packet sink throw-then-swallow, unreachable aggregate).
+- **Behavior-preserving deletion verified by contract tests.** After removing workarounds, the
+  refusal-contract and malformed-metadata tests were re-run to prove the exact message strings and
+  branch triggers survived byte-identical.
+
+### Gotchas
+
+- **TS server stale module cache after dependency bumps.** After `bun install` version changes the
+  LSP keeps serving pre-bump types (6 false positives this session on `bounded-child-run*`).
+  Restart the TS server (or session) after dependency sync before trusting diagnostics.
+- **Importer-schema drift after dependency bumps.** `importer-schema-check` fails on
+  recorded-vs-installed version drift in gitignored `.spur/spur.db`; remedy is a manual
+  `spur migrate` per checkout — environment, not a regression.
+- **`spur task update` exposes no rename flag.** A task title can't be renamed, so a retargeted
+  task's frontmatter name keeps the stale symptom phrasing; Background/Requirements are
+  authoritative over the title until a rename surface exists.
+- **A bare-aggregate query always returns one row** — a `=== undefined` guard on it is unreachable;
+  leave it, document it, and don't sweep it into a "fix the whole class" change.
+- **Task references sections outlive the task.** 0815's References remained the durable parking
+  spot for unrelated session-review residuals (items 1–6) that predate and outlive the fix; if the
+  task closes, those items need a new owner surface first.

@@ -4,9 +4,10 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: done
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T19:30:51.441Z"
+updated_at: "2026-09-09T19:52:44.194Z"
 
 priority: P2
+feature_id: D6
 ---
 
 ## 0815. Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
@@ -299,11 +300,11 @@ Change-map for the shipped state (this worktree is zero non-corpus delta; implem
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 (R1, R2) — ts-db adapter returns undefined | MET | test | @gobing-ai/ts-db `tests/adapters/bun-sqlite.test.ts` line 82 — `toBeUndefined()` suite green fresh this run (bun test, 14 tests in file) |
-| AC2 (R1) — D1 parity holds | MET | test | @gobing-ai/ts-db `tests/adapters/d1.test.ts` line 1 — D1 adapter suite green fresh this run (bun test, 18 tests in file; `d1.ts` no-row path returns undefined) |
-| AC3 (R3, R5) — Spur sees undefined end to end | MET | test | `packages/domain/tests/dao/run-dao.test.ts:215` missing-run test green (20/20 suite) against installed @gobing-ai/ts-db 0.4.62 |
-| AC4 (R4, R7) — workarounds removed without behavior change | MET | command | `rg '?? undefined' packages/app/src/workflow/actions/run-artifact.ts packages/app/src/services/inline-run-setup.ts` exits 1 (absent); workaround-site suites 40 pass / 0 fail |
-| AC5 (R3, R6) — full gate green | MET | command | `bun run spur-check` exit 0: 7953 pass / 0 fail / 439 files + `rule run --preset recommended-post-check` all rules passed |
+| (R1, R2) — ts-db adapter returns undefined | MET | test | @gobing-ai/ts-db `tests/adapters/bun-sqlite.test.ts` line 82 — `toBeUndefined()` suite green fresh this run (bun test, 14 tests in file) |
+| (R1) — D1 parity holds | MET | test | @gobing-ai/ts-db `tests/adapters/d1.test.ts` line 1 — D1 adapter suite green fresh this run (bun test, 18 tests in file; `d1.ts` no-row path returns undefined) |
+| (R3, R5) — Spur sees undefined end to end | MET | test | `packages/domain/tests/dao/run-dao.test.ts:215` missing-run test green (20/20 suite) against installed @gobing-ai/ts-db 0.4.62 |
+| (R4, R7) — workarounds removed without behavior change | MET | command | `rg '?? undefined' packages/app/src/workflow/actions/run-artifact.ts packages/app/src/services/inline-run-setup.ts` exits 1 (absent); workaround-site suites 40 pass / 0 fail |
+| (R3, R6) — full gate green | MET | command | `bun run spur-check` exit 0: 7953 pass / 0 fail / 439 files + `rule run --preset recommended-post-check` all rules passed |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.5.1
+version: 1.5.2
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-09-07
+updated_at: 2026-09-09
 edit_rules: 99 §6.8
 sync: [T7]
 read_before: editing any numbered doc above
@@ -465,6 +465,13 @@ if it recurs, a new rule in §6.
   stderr line + `warnings[]` entry on `spur task update --section Requirements|Plan`) — no
   noun/verb/flag — and still required ADR-051 consent. Record the granted application as a dated
   amendment so behavior-only changes are never later exempted from the gate.
+- [2026-09-09] spur-new: Task 0815's original framing blamed `RunDao.traceRowById`'s declared
+  return type — retargeted when the type proved correct at every layer and the *adapter*
+  implementation lied (bun-sqlite `get()` returns `null`; the D1 adapter normalizes `?? undefined`).
+  A declared-type-vs-runtime mismatch across a package boundary is an adapter divergence, not a DAO
+  contract question: trace to the layer whose runtime contradicts its declared contract, fix the
+  facade once, and reject symptom-level fixes (retyping 15 DAO signatures, per-call-site
+  normalization) that leave every sibling call site still broken.
 
 ### Lessons for `docs/01_PRD.md`
 
@@ -545,6 +552,16 @@ if it recurs, a new rule in §6.
   row+ledger+checkpoint before the frozen pre-probe snapshot caught it — real-data writes need a
   backup + `--dry-run` pass before any mutation, and `--mode full` deletes stale rows by design
   (authoritative reconciliation, 0504).
+- [2026-09-09] spur-new: The 0815 defect hid for a release cycle under a weakened regression
+  assertion — `run-dao.test.ts` asserted `toBeFalsy()` while its own comment claimed "queryFirst
+  returns undefined for no row (SQLite null → undefined)". A test whose comment names a specific
+  contract value must assert that exact value (`toBeUndefined()`), never truthiness, or it cannot
+  fail when the contract breaks.
+- [2026-09-09] spur-new: A one-line facade fix (0815) still cost a cross-repo release because
+  `@gobing-ai/ts-db` is consumed as a published registry package, not a workspace link — a local
+  ts-libs edit never reaches Spur, and the LSP keeps serving pre-bump types until the TS server is
+  restarted. For ts-* package fixes, plan publish-then-bump explicitly and restart the server
+  before trusting diagnostics.
 
 ### Lessons for `docs/05_FEATURES.md`
 
