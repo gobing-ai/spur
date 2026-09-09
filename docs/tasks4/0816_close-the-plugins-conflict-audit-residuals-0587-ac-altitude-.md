@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Close the plugins conflict-audit residuals: 0587 AC-altitude ruling, bare-basename anchor re-authoring, and the six surface/gate drifts left open"
-status: wip
+status: done
 template: standard
 created_at: 2026-09-09T07:12:32.313Z
-updated_at: "2026-09-09T20:11:52.926Z"
+updated_at: "2026-09-09T20:19:32.000Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -381,7 +381,27 @@ and R8 touch nothing this task edits.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+#### Change map
+
+| Residual | Files | Change |
+| --- | --- | --- |
+| R1 — 0587 AC-altitude | `docs/tasks4/0587_*.md` (Acceptance Criteria, Q&A) | `ac_altitude: task-local` + dated Q&A ruling naming the five exempt ACs (AC2/AC3/AC6/AC7/AC8) with the stated cost |
+| R2 — stale anchors | `docs/tasks4/{0492,0568,0661,0755}_*.md` (Testing) | 13 bare/ambiguous anchors qualified or re-authored; 0492's external citation moved to package-scoped notation (`@gobing-ai/ts-llm-jsonl-importer` + `src/mappers.ts:347`); corpus stale-line-anchor 156 → 120 |
+| R3 — rename spellings | `docs/tasks4/*` (26 scenario/verdict rows) + 6 identity artifacts (`docs/features/INDEX.md`, `docs/features/F31/F92/F93`, `docs/05_FEATURES.md`, F91 Notes) | 26/32 `dev-featurechange` spellings renamed; identity artifacts refreshed with reasons; 16 residual `rg` hits classified |
+| R4 — README roster | `plugins/sp/README.md:169-174` | standalone technique-skill roster completed to 32 + completeness sentence |
+| R5 — enum validation | `plugins/sp/skills/conflict-finding/SKILL.md` Step 1, `docs/04_DESIGN.md` §dev-find-conflict | out-of-domain `--pillar`/`--mode`/`--agent` refuses the audit; `<scope>` exempt; design doc mirrored (same commit) |
+| R6 — checklist hygiene | `docs/tasks4/{0492,0568,0567,0569}_*.md` | 0492 (8) + 0568 (10) boxes flipped with command evidence; 0568 `feature_id: I5` + task-local altitude; 0567 R9 aligned in scenario + verdict row; 0569 task-local; dated acceptance reasons in Q&A |
+| R8 — F91 disposition | `docs/features/*F91*` Notes | scoped disposition entry for the external mappers notation |
+
+#### Rationale
+
+The audit's residual defects were stale provenance (anchors that no longer point at their subjects),
+drift between the plugin surface and its docs, and checklist boxes that stayed unchecked after the
+underlying work landed. Every anchor repair points at the live subject line (verified on disk), every
+status flip carries command evidence, and every non-mechanical judgment (0587/0568/0569 altitude,
+0567 R9 wording, accepted warnings) carries a dated reason in the task Q&A. `bun run spur-check`
+re-ran green after an isolated worktree-db ledger drift was cleared (Testing: R7); no test was
+weakened or suppressed.
 
 ### Testing
 
@@ -410,7 +430,17 @@ and R8 touch nothing this task edits.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review — 2026-09-09 (pipeline stage F, inline)
+
+Functional traceability (R1–R8 vs diff), SECUA quality, and architectural-depth pass over the 25-file change set. Verdict basis: every corpus write CLI-gated; enum domains consistent across `plugins/sp/commands/dev-find-conflict.md` argument-hint, SKILL.md Step 1, and `docs/04_DESIGN.md`; 0567's R9 rename applied to scenario and verdict row together; README roster programmatically cross-checked (missing=[] extra=[]).
+
+| Priority | Finding | Disposition |
+| --- | --- | --- |
+| P1 | — | None. No correctness, security, or data-integrity defects found; no code seams touched. |
+| P2 | — | None. No behavioral drift between skill text, command surface, and design doc (enum domains identical). |
+| P3 | `bunfig.toml:11` coverage-citation subject-mismatch warning is structural to the checker's row-label heuristic | Accepted with dated reason in Testing; citation kept verbatim per AC; heuristic distortion avoided |
+| P4 | `plugins/sp/README.md:169-174` subject-mismatch warning (same heuristic class) | Accepted with dated reason in Testing; lines verified on disk to carry the roster |
+| P4 | Worktree-local `.spur/spur.db` ledger drift blocked stage C (out-of-order `importer_schema@` stamps) | Environmental, zero tracked change; main tree verified clean before the fix; migration fast-path/read-model skew noted for a future rule/ADR candidate |
 
 ### References
 
@@ -476,4 +506,6 @@ and R8 touch nothing this task edits.
 
 - 2026-09-09T07:18:15.483Z backlog → todo (system)
 - 2026-09-09T20:01:03.889Z todo → wip (system)
+- 2026-09-09T20:17:06.506Z wip → testing (system)
+- 2026-09-09T20:19:32.000Z testing → done (system)
 
