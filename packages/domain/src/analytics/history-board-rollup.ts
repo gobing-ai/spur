@@ -1996,11 +1996,15 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
         return;
     }
 
+    console.error(`[dbg] rl-sourcescope-start ${new Date().toISOString()}`);
     const deltaSources = await sourceScopeRows(db, messageWm.importedAtWatermark);
+    console.error(`[dbg] rl-sourcescope-done ${new Date().toISOString()}`);
+    console.error(`[dbg] rl-alias-start ${new Date().toISOString()}`);
     if (deltaSources.length > 0) {
         await applyToolAliases(db, { sources: deltaSources, since: messageWm.importedAtWatermark });
     }
 
+    console.error(`[dbg] rl-alias-done ${new Date().toISOString()}`);
     const affected = await affectedBucketsWithRange(db, messageWm.importedAtWatermark);
     let advanced = messageWm.importedAtWatermark;
 
@@ -2063,18 +2067,24 @@ export async function refreshHistoryBoardRollupsIncremental(db: DbAdapter): Prom
     }
 
     // Nothing new and no interrupted post-pass pending → fully consistent.
+    console.error(`[dbg] rl-buckets-done ${new Date().toISOString()}`);
     if (affected.length === 0 && !(await postPassLags(db, advanced))) return;
 
     const days =
         affected.length > 0 ? [...new Set(affected.map((a) => bucketDay(a.bucket)))] : await allMaterializedDays(db);
     await recomputeDailyAndSourceDaily(db, days);
+    console.error(`[dbg] rl-daily-done ${new Date().toISOString()}`);
     // One deltaSessionScope call feeds both recomputeKeyedAggregates and
     // recomputeLoopFindings — same scope, two consumers. null (a delta wider than
     // SESSION_SCOPE_LIMIT) means both fall back to the full recompute.
     const sessionScope = affected.length > 0 ? await deltaSessionScope(db, messageWm.importedAtWatermark) : null;
+    console.error(`[dbg] rl-sessionscope-done ${new Date().toISOString()}`);
     await recomputeKeyedAggregates(db, sessionScope);
+    console.error(`[dbg] rl-keyed-done ${new Date().toISOString()}`);
     await recomputeRankedSteps(db);
+    console.error(`[dbg] rl-ranked-done ${new Date().toISOString()}`);
     await recomputeLoopFindings(db, sessionScope);
+    console.error(`[dbg] rl-loops-done ${new Date().toISOString()}`);
 
     // The post-pass tables are now consistent — advance their watermarks last.
     for (const table of POST_WATERMARK_TABLES) {

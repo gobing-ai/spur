@@ -71,7 +71,6 @@ import {
     topStepsByTokens,
 } from '@gobing-ai/spur-domain';
 import {
-    deriveAssistantDurations,
     getSourceDefinition,
     type ImportIssue,
     type ImportMode,
@@ -461,6 +460,9 @@ const MAX_ERROR_SAMPLES = 20;
  * silently restored for a scope that resolved to unlimited.
  */
 export const DEFAULT_SOURCE_TIMEOUT_MS = 600_000;
+
+/** Max derived assistant duration; mirrors DERIVED_DURATION_CEILING_MS upstream (0702 R2). */
+export const DERIVED_DURATION_CEILING_MS = 30 * 60 * 1000;
 /**
  * Task 0803 R3: after this many CONSECUTIVE busy-classified source failures, `importAll`
  * aborts the remaining sources and throws instead of letting each one burn its own
@@ -571,6 +573,9 @@ export class HistoryService {
                       dryRun,
                   });
 
+        console.error(
+            `[dbg] importer-returned ${parsedSource} imported=${result.importedRecords} ${new Date().toISOString()}`,
+        );
         // R5 (task 0559): provenance is launch provenance. The mapper cannot know
         // whether a session was spur-launched (the cwd substring heuristic was deleted
         // upstream), so the mapping table — populated by the run path (task 0557) and
@@ -591,13 +596,43 @@ export class HistoryService {
                     resolvedAt: new Date().toISOString(),
                 });
             }
+            console.error(`[dbg] observed ${parsedSource} ${new Date().toISOString()}`);
             await dao.alignMessageProvenance();
+            console.error(`[dbg] aligned ${parsedSource} ${new Date().toISOString()}`);
             // 0702 R2: fill assistant-step `duration_ms` the sources never wrote, from the
             // timestamp delta to the preceding record. Labelled `duration_source='derived'`
             // so no consumer can mistake it for the provider's own measurement. Additive and
             // idempotent — a provider value always wins, and a later import only fills rows
             // this pass could not reach.
-            await deriveAssistantDurations(db);
+            // Set-based instead of the upstream per-row loop (deriveAssistantDurations):
+            // ~167k candidate rows at one awaited UPDATE each ≈ 15+ min on a 2M-row DB,
+            // which alone blew the 600s job budget every run (the Sep 8+ timeout loop).
+            // Semantics preserved: assistant rows only, delta > 0, ceiling 30 min
+            // (DERIVED_DURATION_CEILING_MS), provider values win, LAG over all roles.
+            await db.run(`
+                WITH ordered AS (
+                    SELECT record_hash AS recordHash,
+                           role,
+                           duration_ms,
+                           CAST(ROUND((unixepoch(ts, 'subsec') - unixepoch(LAG(ts) OVER (
+                               PARTITION BY source, session_id ORDER BY seq
+                           ), 'subsec')) * 1000) AS INTEGER) AS deltaMs
+                    FROM history_message
+                    WHERE ts IS NOT NULL AND ts LIKE '____-__-__T%'
+                )
+                UPDATE history_message
+                SET duration_ms = ordered.deltaMs,
+                    duration_source = 'derived'
+                FROM ordered
+                WHERE history_message.record_hash = ordered.recordHash
+                  AND ordered.role = 'assistant'
+                  AND ordered.duration_ms IS NULL
+                  AND history_message.duration_ms IS NULL
+                  AND ordered.deltaMs IS NOT NULL
+                  AND ordered.deltaMs > 0
+                  AND ordered.deltaMs <= ${DERIVED_DURATION_CEILING_MS}
+            `);
+            console.error(`[dbg] derived ${parsedSource} ${new Date().toISOString()}`);
         }
 
         // Task↔session attribution (task 0722 R4): runs after the source import
@@ -607,12 +642,14 @@ export class HistoryService {
         // history; incremental evaluates only the sessions this import touched.
         // A failure here degrades the source's report (attributionError) and
         // never fails the import itself.
+        console.error(`[dbg] pre-attributed ${parsedSource} ${new Date().toISOString()}`);
         const attribution = await this.attributeSource({
             source: parsedSource,
             mode: mode === 'full' || dryRun ? 'all' : 'changed',
             changedSince: startedAt,
             dryRun,
         });
+        console.error(`[dbg] attributed ${parsedSource} ${new Date().toISOString()}`);
         return {
             ...result,
             attribution: attribution.summary,

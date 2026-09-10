@@ -59,11 +59,14 @@ export async function refreshHistoryRollups(db: DbAdapter): Promise<HistoryRollu
         return { status: 'unchanged', historyVersion: await historyBoardHistoryVersion(db), cacheWasteSteps: 0 };
     }
 
+    console.error(`[dbg] rollup-incremental-start ${new Date().toISOString()}`);
     await refreshHistoryBoardRollupsIncremental(db);
+    console.error(`[dbg] rollup-incremental-done ${new Date().toISOString()}`);
 
     const historyVersion = await historyBoardHistoryVersion(db);
     await recordHistoryBoardRollupMeta(db, historyVersion);
 
+    console.error(`[dbg] rollup-meta-done ${new Date().toISOString()}`);
     const waste = await cacheWasteAggregate(db, ALL_HISTORY);
     return { status: 'refreshed', historyVersion, cacheWasteSteps: waste?.steps ?? 0 };
 }
