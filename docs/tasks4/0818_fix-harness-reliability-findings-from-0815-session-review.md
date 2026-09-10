@@ -4,7 +4,7 @@ name: Fix harness reliability findings from 0815 session review
 status: todo
 template: issue
 created_at: 2026-09-09T20:10:01.996Z
-updated_at: "2026-09-09T22:24:54.483Z"
+updated_at: "2026-09-10T00:52:16.201Z"
 
 feature_id: D6
 ac_altitude: task-local
@@ -148,11 +148,44 @@ Counterevidence: `packages/config/src/loader.ts:180` already suppresses unpinned
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: FAIL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | UNMET | No launcher exists. `tests/setup.ts:71` prepends `scripts/test-shims` to PATH; `ls scripts/test-shims/` → "No such file or directory" and `git ls-files scripts/test-shims/` → empty. No child-process regression added. |
+| R2 | UNMET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:247` still reads "Send only: the stage id, the YAML's exact pure slash command, and …". No confirmed cwd, resolved Spur invocation, output path, or verifier answer-schema contract in the handoff. |
+| R3 | UNMET | `plugins/sp/agents/super-reviewer.md:134` still emits a word-only Severity cell (`\| 1 \| blocker \| security \| …`). Consumer `packages/app/src/services/task-check.ts:114` (`hasPopulatedPriorityTable`) requires a `P1`–`P4` cell. Producer/consumer mismatch unchanged. |
+| R4 | UNMET | `packages/app/src/workflow/proof-input-fingerprint.ts:142` returns `fileSystem.readFile(resolved)` immediately after the regular-file check; no task-document shape validation (canonical `## <WBS>. <title>` heading + recognized spec section) exists. |
+| R5 | UNMET | Command: `grep -c altitude plugins/sp/skills/spur-cli/references/tasks.md plugins/sp/skills/spur-cli/references/tasks/verbs.md` → 0 and 0 (exit 1, no matches). Neither owning reference documents the task-local altitude choice; the DD-09 subset paragraph is unchanged. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — Bare Spur resolves to the checkout under the test preload | UNMET | static-ref | Launcher absent (`tests/setup.ts:71` target missing); no spaced-path/sentinel-PATH child test exists. |
+| Scenario: R1 — Config isolation and historical correction remain truthful | UNMET | static-ref | Config suppression preserved at `packages/config/src/loader.ts:180`, but there is no repaired launcher to describe and no dated 0815 closure correction. |
+| Scenario: R2 — A delegated stage receives its execution and output contract | UNMET | static-ref | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:247` supplies neither absolute cwd nor a resolved Spur invocation to the delegate. |
+| Scenario: R2 — Verify examples round-trip through the real validators | UNMET | static-ref | No answer fixture authored from a handoff contract exists; the contract itself is absent from the driver reference. |
+| Scenario: R3 — Review output satisfies the existing priority and section contracts | UNMET | static-ref | `plugins/sp/agents/super-reviewer.md:134` word-only severity example would fail `hasPopulatedPriorityTable`; no P1–P4 examples and no substantive no-findings row. |
+| Scenario: R4 — Both proof actions reject a pointer before proof capture | UNMET | static-ref | `packages/app/src/workflow/proof-input-fingerprint.ts:142` accepts arbitrary readable content; task Q&A records a controlled pointer probe returning `ok: true`. |
+| Scenario: R4 — Valid and optional proof inputs retain their contracts | UNMET | static-ref | Preservation cannot be certified against a validation layer that does not exist at `packages/app/src/workflow/proof-input-fingerprint.ts:142`. |
+| Scenario: R5 — Fix-batch guidance uses the existing independent altitude controls | UNMET | command | `grep -c altitude` over both owning references returns 0 matches (exit 1); no documented altitude command, rationale requirement, or graduating-vs-task-local contrast exists to exercise. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: FAIL)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P1 | design-conformance | — | 0/7 Design claims implemented — no code, skill-source, or doc change exists for R1–R5. Absence of implementation, not deviation: `### Solution` is still the unfilled placeholder. |
+| P4 | scope-creep | — | 0818 in-scope diff (commit 4b0a844e3) is corpus markdown only; no unattributed hunks. |
+| P4 | verify-answer-lint | — | bun plugins/sp/scripts/verify-answer-lint.ts 0818 --answer .spur/run/0818-verify-answer.txt → PASS, 5 requirement rows, 8 AC rows, verdict FAIL (exit 0). |
+| P1 | shippable | — | spur feature check D6 --json → L4.verifying-incomplete-tasks: 1 linked task not done/cancelled (0818). |
 
 ### References
 

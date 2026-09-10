@@ -82,7 +82,9 @@ describe('createOrAttachInlineRun (task 0804 R1)', () => {
         writeFileSync(definitionPath, workflowBody);
         execSync('git init -q && git config user.email t@example.com && git config user.name t', { cwd: workdir });
         execSync('git add -A && git commit -qm init', { cwd: workdir });
-        const specContent = '---\nwbs: t9002\n---\n\n### Requirements\n- [ ] R1. authoritative inline identity\n';
+        // 0818 R4: a supplied taskFile must carry the canonical `## <WBS>. <title>` heading.
+        const specContent =
+            '---\nwbs: t9002\n---\n\n## 9002. Authoritative inline run identity\n\n### Requirements\n- [ ] R1. authoritative inline identity\n';
         const specPath = join(workdir, 'spec.md');
         writeFileSync(specPath, specContent);
         return {

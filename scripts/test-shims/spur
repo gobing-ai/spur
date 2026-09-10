@@ -1,0 +1,18 @@
+#!/bin/sh
+# Task 0818 R1: source-local `spur` for test-spawned children.
+#
+# `tests/setup.ts` prepends this directory to PATH so a bare `spur` in any test
+# child resolves to THIS checkout's CLI source rather than a stale global
+# install (0817 residual: a global `spur` stamped a false `importer_schema@`
+# row into a worktree DB mid-gate). Resolution is anchored to this script's own
+# location, not the caller's cwd, so a child running from a fixture directory
+# still reaches the checkout entry.
+#
+# `apps/cli/src/index.ts` is run directly by bun — no built bundle is required,
+# and the global Spur version is never consulted. `exec` leaves the caller's cwd
+# untouched and propagates the child's exit status verbatim. The environment
+# (SPUR_SKIP_PROJECT_CONFIG / SPUR_SKIP_GLOBAL_CONFIG) is inherited unmodified,
+# so the preload's config-skip precedence is unchanged.
+set -eu
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+exec bun "${repo_root}/apps/cli/src/index.ts" "$@"

@@ -67,6 +67,20 @@ frontmatter scalar.
   wholesale. No inline-body flag. Section names: `Background`, `Requirements`, `Acceptance Criteria`, `Q&A`, `Design`, `Plan`, `Solution`, `Testing`, `Review`, `References`, `History`, `Notes`.
 - **Frontmatter** (`--feature <id>`, `--priority <p>`): sets the scalar frontmatter field on an
   existing task — the only post-create path, allow-listed to `feature_id` / `parent_wbs` / `priority`.
+- **AC controls** (`--ac-altitude <graduating|task-local>`, `--ac-numbering task-local`) — independent
+  of each other (task 0818 R5). `--ac-altitude task-local` skips the **DD-09 feature-AC subset** rule
+  because the task's scenarios are intentionally not the feature's ship criteria; `--ac-numbering
+  task-local` opts the task into the **Requirements↔AC coverage** check inside the task. Setting one
+  never implies the other. `graduating` remains the default and DD-09 stays enforced for graduating
+  tasks. Use it for an issue/fix-batch task that is genuinely linked to a feature but whose
+  regression scenarios sit below that feature's ship criteria, and record the rationale in the task
+  body:
+
+  ```bash
+  # One frontmatter flag per call — `update` sets a single field and ignores the rest.
+  bun run apps/cli/src/index.ts task update 0818 --feature D6 --json
+  bun run apps/cli/src/index.ts task update 0818 --ac-altitude task-local --json
+  ```
 
 Exit code `2` when neither mode's required args are supplied (e.g. `--section` without `--from-file`,
 or no status and no `--section`/frontmatter flag).
@@ -183,7 +197,9 @@ traceability. Bare = whole corpus; with a WBS = one task. The matrix is loaded f
 
 **L4 traceability** resolves `feature_id` / `parent_wbs` / `dependencies` edges and checks **AC
 coverage** (DD-09): a task's scenarios must be a subset of its linked feature's AC by normalized
-title — orphans warn by default.
+title — orphans warn by default. A task declaring `ac_altitude: task-local` is exempt from that
+subset rule only (`--ac-altitude`, above); every graduating task is still enforced, and the exemption
+does not touch `ac_numbering`'s Requirements↔AC coverage or any other layer.
 
 `--json` emits an array of per-task results:
 

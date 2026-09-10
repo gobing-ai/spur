@@ -4,7 +4,7 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: done
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T21:39:27.174Z"
+updated_at: "2026-09-10T01:27:38.465Z"
 
 priority: P2
 feature_id: D6
@@ -350,6 +350,17 @@ Former parking spot for session-review residuals (2026-09-08 A21 batch session).
 6. **CLOSED: importer-schema drift after dependency bumps** — `importer-schema-check` now folds the remedy in: on drift it runs `applyCliMigrations` (genuine older-schema drift) plus `repairImporterSchemaVersion` (re-provision + re-stamp; deletes stale shadow ledger rows unreachable by migrate's journaled fast path — the 0817 worktree buglog shape), then re-verifies. Un-healable schemas still exit 1 with the manual remedy. Tests: 5/5 in `scripts/commands/importer-schema-check.test.ts` incl. the shadow-row regression.
 
 **Also closed (0817 run residual, buglog 2026-09-09):** bare `spur` invoked from inside `bun run test` now resolves to a source-local shim — `scripts/test-shims/spur` prepended to PATH in `tests/setup.ts`, so a stale global `spur` binary can no longer be picked up mid-gate.
+
+**Correction — 2026-09-09 (task 0818 R1).** The "Also closed" paragraph above was inaccurate when
+written: `scripts/test-shims/spur` was never created or tracked, so the PATH prepend at
+`tests/setup.ts:71` pointed at a nonexistent directory and protected nothing — a stale global `spur`
+remained reachable from inside the suite. The prepend also percent-encoded spaces
+(`URL.pathname`), so it could not have resolved in a checkout path containing a space. Both defects
+are fixed under task 0818 R1: the launcher now exists as a tracked `100755` shell script exec'ing
+this checkout's `apps/cli/src/index.ts` via bun, and the preload resolves it with `fileURLToPath`.
+Proven by `apps/cli/tests/test-shim-launcher.test.ts` (5/5 pass — sentinel global `spur` later on
+PATH stays unrun, caller cwd and a spaced argument survive, exit status 7 propagates). The original
+observation is retained above unedited; only this correction is appended.
 
 ### History
 

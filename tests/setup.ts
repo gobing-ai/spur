@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import util from 'node:util';
 import { setLoggerMuted } from '@gobing-ai/ts-infra';
 import { configure, reset } from '@logtape/logtape';
@@ -68,7 +69,11 @@ process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
 // reachable from inside the suite and writes with its own (older) ts-db provisioning
 // — observed stamping a false importer_schema@ row into a worktree DB mid-gate.
 // Prepended (not replaced) so every other tool keeps resolving normally.
-process.env.PATH = `${new URL('../scripts/test-shims', import.meta.url).pathname}:${process.env.PATH ?? ''}`;
+//
+// 0818 R1: `fileURLToPath`, not `URL.pathname` — a checkout whose path contains
+// a space percent-encodes to `/my%20checkout/scripts/test-shims`, a directory
+// that does not exist, so the prepend silently protected nothing.
+process.env.PATH = `${fileURLToPath(new URL('../scripts/test-shims', import.meta.url))}:${process.env.PATH ?? ''}`;
 
 // A pipeline's `test`/`test-recheck` gate runs as a child of the workflow run process,
 // inheriting its SPUR_WORKFLOW_RUN_ACTIVE=1 marker (task 0610 R4 nested-run refusal).

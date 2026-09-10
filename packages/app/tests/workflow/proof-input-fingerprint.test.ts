@@ -317,7 +317,8 @@ describe('readProofInputContents (task 0785 R1)', () => {
     test('reads supplied specs and returns their content', async () => {
         const { workdir, cleanup } = setup();
         try {
-            writeFileSync(join(workdir, 't.md'), 'task body');
+            // 0818 R4: taskFile must now be task-shaped markdown; featureFile is unchanged.
+            writeFileSync(join(workdir, 't.md'), '## 0042. A task\n\n### Requirements\n\ntask body\n');
             writeFileSync(join(workdir, 'f.md'), 'feature body');
             const res = await readProofInputContents(createNodeFileSystem(), workdir, {
                 taskFile: 't.md',
@@ -325,7 +326,7 @@ describe('readProofInputContents (task 0785 R1)', () => {
             });
             expect(res.ok).toBeTrue();
             if (res.ok) {
-                expect(res.taskContent).toBe('task body');
+                expect(res.taskContent).toContain('task body');
                 expect(res.featureContent).toBe('feature body');
             }
         } finally {
@@ -376,6 +377,162 @@ describe('readProofInputContents (task 0785 R1)', () => {
                 const res = await readProofInputContents(fs, workdir, options);
                 expect(res.ok).toBeFalse();
                 if (!res.ok) expect(res.error).toContain(`${name} must be a string`);
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+});
+
+// Task 0818 R4: task-document shape validation at the shared read boundary. A readable file that
+// is not a task specification — a path pointer, arbitrary text, a feature document — must fail
+// here, before any digest computation or artifact ledger write.
+describe('readProofInputContents task-document shape (task 0818 R4)', () => {
+    const VALID_TASK = [
+        '---',
+        'schema_version: 1',
+        'name: A real task',
+        '---',
+        '',
+        '## 0818. A real task',
+        '',
+        '### Background',
+        '',
+        'why',
+        '',
+        '### Requirements',
+        '',
+        '- [ ] **R1 — do the thing.**',
+        '',
+    ].join('\n');
+
+    function setup(): { workdir: string; cleanup: () => Promise<void> } {
+        const workdir = mkdtempSync(join(tmpdir(), 'proof-shape-'));
+        return { workdir, cleanup: () => rm(workdir, { recursive: true, force: true }) };
+    }
+
+    test('a path-pointer taskFile is rejected and never dereferenced', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            const real = join(workdir, 'real-task.md');
+            writeFileSync(real, VALID_TASK);
+            // The exact false-positive shape: one line holding the path of a genuine task.
+            writeFileSync(join(workdir, 'pointer.md'), `${real}\n`);
+
+            const res = await readProofInputContents(createNodeFileSystem(), workdir, { taskFile: 'pointer.md' });
+            expect(res.ok).toBeFalse();
+            if (!res.ok) {
+                expect(res.error).toContain('taskFile is not a task document');
+                expect(res.error).toContain('pointer.md'); // supplied path
+                expect(res.error).toContain(join(workdir, 'pointer.md')); // resolved path
+                expect(res.error).toContain('## <WBS>. <title>'); // expected shape
+                // The pointer's target must NOT have been followed.
+                expect(res.error).not.toContain('R1 — do the thing');
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('arbitrary text and a feature document are rejected by the same validation', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            const fs = createNodeFileSystem();
+            writeFileSync(join(workdir, 'prose.md'), 'just some notes about the task\n');
+            // Feature identity is `# <ID>: <title>` with a letter-prefixed id — no numeric `##` heading.
+            writeFileSync(
+                join(workdir, 'feature.md'),
+                '---\nid: "D6"\n---\n\n# D6: A feature\n\n## Goal\n\ng\n\n## Acceptance Criteria\n\nac\n',
+            );
+
+            for (const file of ['prose.md', 'feature.md']) {
+                const res = await readProofInputContents(fs, workdir, { taskFile: file });
+                expect(res.ok).toBeFalse();
+                if (!res.ok) {
+                    expect(res.error).toContain('taskFile is not a task document');
+                    expect(res.error).toContain('no canonical task heading');
+                }
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a canonical heading with no task specification section is rejected', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            writeFileSync(join(workdir, 'heading-only.md'), '## 0818. Title only\n\n### History\n\n- nothing\n');
+            const res = await readProofInputContents(createNodeFileSystem(), workdir, {
+                taskFile: 'heading-only.md',
+            });
+            expect(res.ok).toBeFalse();
+            if (!res.ok) expect(res.error).toContain('no task specification section');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('valid task markdown at a custom in-workdir path without wbs frontmatter is accepted', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            // Not a corpus folder, and no `wbs` frontmatter field — both must still pass.
+            mkdirSync(join(workdir, 'custom', 'nested'), { recursive: true });
+            const custom = join('custom', 'nested', 'spec.md');
+            writeFileSync(join(workdir, custom), VALID_TASK);
+            expect(VALID_TASK).not.toContain('wbs:');
+
+            const res = await readProofInputContents(createNodeFileSystem(), workdir, { taskFile: custom });
+            expect(res.ok).toBeTrue();
+            if (res.ok) expect(res.taskContent).toContain('R1 — do the thing');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('featureFile keeps its existing behaviour and is not shape-checked', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            // The same content that fails as a taskFile must still pass as a featureFile.
+            writeFileSync(join(workdir, 'anything.md'), 'not a document at all\n');
+            const res = await readProofInputContents(createNodeFileSystem(), workdir, {
+                featureFile: 'anything.md',
+            });
+            expect(res.ok).toBeTrue();
+            if (res.ok) expect(res.featureContent).toBe('not a document at all\n');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a changed valid task still yields a digest difference, not a shape error', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            const fs = createNodeFileSystem();
+            const spec = join(workdir, 'task.md');
+            writeFileSync(spec, VALID_TASK);
+            const before = await readProofInputContents(fs, workdir, { taskFile: 'task.md' });
+
+            writeFileSync(spec, VALID_TASK.replace('do the thing', 'do a different thing'));
+            const after = await readProofInputContents(fs, workdir, { taskFile: 'task.md' });
+
+            expect(before.ok).toBeTrue();
+            expect(after.ok).toBeTrue();
+            if (before.ok && after.ok) {
+                // Both read cleanly; the drift surfaces downstream as a digest mismatch.
+                expect(before.taskContent).not.toBe(after.taskContent);
+                const stubExecutor = {
+                    run: async () => ({
+                        exitCode: 0,
+                        stdout: 'tree-sha-fixed\n',
+                        stderr: '',
+                        command: 'git',
+                        args: [],
+                        durationMs: 0,
+                    }),
+                } as unknown as import('@gobing-ai/ts-runtime').ProcessExecutor;
+                const digestOf = (taskContent: string): Promise<string> =>
+                    ProofInputFingerprint.compute({ taskContent, processExecutor: stubExecutor });
+                expect(await digestOf(before.taskContent ?? '')).not.toBe(await digestOf(after.taskContent ?? ''));
             }
         } finally {
             await cleanup();

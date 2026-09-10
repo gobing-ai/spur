@@ -99,6 +99,51 @@ interface SpecReadOutcome {
  * mean omitted; anything else must be a string that resolves (relative paths resolve under the
  * workflow workdir) to a readable regular file. Non-string option values are rejected by name.
  */
+/** Task specification sections recognized as proof of task-document shape (task 0818 R4). */
+const TASK_SPEC_SECTIONS = ['Background', 'Requirements', 'Acceptance Criteria', 'Design', 'Plan'] as const;
+
+/**
+ * Canonical task title heading written by the task skeleton: `## <wbs>. <title>`.
+ *
+ * The WBS half is digits deliberately — a feature document's identity heading is `# <ID>: <title>`
+ * with a letter-prefixed id (`D6`), so a numeric-WBS `##` heading is what separates a task
+ * specification from a feature one. Task-domain parsing splits on `###`, so this heading stays in
+ * the preamble rather than becoming a section.
+ */
+const CANONICAL_TASK_HEADING_RE = /^##[ \t]+(\d+)\.[ \t]+(\S.*)$/m;
+
+/**
+ * Reject a supplied `taskFile` whose content is not a task specification (task 0818 R4).
+ *
+ * `readProofInputContents` previously proved only that the path resolved to a readable regular file
+ * under the workdir, so a **path-pointer** file — one line containing the path of a real task — was
+ * accepted and folded into the digest as `{ sections: {} }`. That silently degraded proof to
+ * tree-only for both `proof.fingerprint` and proof-bound `run.artifact`.
+ *
+ * Shape is deliberately the weakest check that separates a task spec from the observed
+ * false-positives: a nonempty canonical heading plus at least one recognized spec section. It is
+ * NOT a readiness or membership gate — no `wbs` frontmatter is required (CLI-created tasks omit
+ * it) and the file may live at any in-workdir path, so custom supplied specs keep working.
+ *
+ * @returns `null` when the content is task-shaped, else an actionable error detail.
+ */
+function taskDocumentShapeError(content: string): string | null {
+    const doc = MarkdownDocument.parse(content, 'task');
+    const heading = CANONICAL_TASK_HEADING_RE.exec(doc.bodyWithoutFrontmatter);
+    if (heading === null) {
+        return 'no canonical task heading (`## <WBS>. <title>`) was found';
+    }
+    if ((heading[2] ?? '').trim() === '') {
+        return `the canonical task heading for WBS ${heading[1]} has an empty title`;
+    }
+    const present = TASK_SPEC_SECTIONS.filter((section) => doc.hasSection(section));
+    if (present.length === 0) {
+        return `no task specification section (${TASK_SPEC_SECTIONS.join(', ')}) was found`;
+    }
+    return null;
+}
+
+/** Reads the task/feature spec files for a proof run; fails when an option is not a string or a file is unreadable. */
 export async function readProofInputContents(
     fileSystem: FileSystem,
     workdir: string,
@@ -138,11 +183,28 @@ export async function readProofInputContents(
         if (!stat.isFile()) {
             return { error: `${name} is not a regular file: ${resolved}` };
         }
+        let content: string;
         try {
-            return { content: await fileSystem.readFile(resolved) };
+            content = await fileSystem.readFile(resolved);
         } catch (error) {
             return { error: `${name} is not readable: ${(error as Error).message}` };
         }
+        // 0818 R4: shape validation is the last read-boundary check, so a readable non-task file
+        // fails here — before any digest computation or artifact ledger write. Only `taskFile` is
+        // shape-checked; `featureFile` semantics are unchanged.
+        if (name === 'taskFile') {
+            const shapeError = taskDocumentShapeError(content);
+            if (shapeError !== null) {
+                return {
+                    error:
+                        `taskFile is not a task document: ${raw} (resolved ${resolved}) — ${shapeError}. ` +
+                        'Supply the task specification markdown itself: a `## <WBS>. <title>` heading plus at ' +
+                        `least one of ${TASK_SPEC_SECTIONS.join(', ')}. A file containing only a path is not ` +
+                        'dereferenced.',
+                };
+            }
+        }
+        return { content };
     };
 
     const task = await readOne('taskFile');

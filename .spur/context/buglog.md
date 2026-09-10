@@ -6990,3 +6990,12 @@ spur workflow run config/workflows/task-pipe
 - **Fix direction:** test hermeticity — assert the `spur` invoked from inside tests is the source-local CLI (PATH prepend or exec path pinning); pair with 0815 References item 6 (fold migrate into the check's remedy path).
 - **Tags:** test-hermeticity, importer-schema, worktree, PATH-shadow
 - **Occurrences:** 1
+- **Correction (2026-09-09, task 0818 R1):** the fix direction above was recorded as *applied* in
+  0815's References, but only the PATH prepend landed — `scripts/test-shims/spur` was never created
+  or tracked, so the prepended directory did not exist and the stale global `spur` stayed reachable
+  from inside the suite. `tests/setup.ts` also used `URL.pathname`, which percent-encodes spaces and
+  so could not resolve in a spaced checkout path. Both are now fixed: tracked `100755`
+  `scripts/test-shims/spur` exec'ing `apps/cli/src/index.ts` via bun, and `fileURLToPath` in the
+  preload. Regression: `apps/cli/tests/test-shim-launcher.test.ts` (sentinel global `spur` later on
+  PATH, foreign cwd, spaced checkout path, exit-status propagation). Observations above are
+  unchanged; this is an appended correction only.

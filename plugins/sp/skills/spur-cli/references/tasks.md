@@ -157,12 +157,42 @@ spur task update 0040 --section Review --from-file /tmp/review.md
   first, then point `--from-file` at it.
 
 **Frontmatter set** (the only post-create path to scalar fields, allow-listed to
-`feature_id`/`parent_wbs`/`priority`):
+`feature_id`/`parent_wbs`/`priority`, plus the two AC controls below):
 
 ```bash
 spur task update 0040 --feature H2
 spur task update 0040 --priority P1
 ```
+
+### AC altitude — `--ac-altitude` (task 0818 R5)
+
+`--ac-altitude` and `--ac-numbering` are **independent** controls that are easy to confuse:
+
+| Flag | Controls | Default | `task-local` means |
+| --- | --- | --- | --- |
+| `--ac-altitude <graduating\|task-local>` | DD-09 **feature-AC subset** rule (task scenarios ⊆ linked feature AC) | `graduating` | the task's scenarios are deliberately **not** feature ship criteria — skip the subset rule |
+| `--ac-numbering <task-local>` | **Requirements↔AC coverage** inside the task | off | opt the task into the R-to-AC coverage check |
+
+Setting one says nothing about the other: a `task-local`-altitude task can still be under full
+R-to-AC coverage, and usually should be.
+
+**The standing pattern for an issue or fix-batch task.** Link it to the feature it substantively
+belongs to — do not leave it orphaned and do not relink unrelated corpus to silence a diagnostic.
+Then, *only* when its regression scenarios intentionally do not represent that feature's ship
+criteria, declare `--ac-altitude task-local` and record the rationale in the task body (Background
+or Design), so the choice is auditable rather than inferred:
+
+```bash
+# source-local CLI (before `bun link`, or when pinning to this checkout).
+# One frontmatter flag per call: `update` applies a single field, so a second
+# frontmatter flag in the same invocation is silently ignored.
+bun run apps/cli/src/index.ts task update 0818 --feature D6 --json
+bun run apps/cli/src/index.ts task update 0818 --ac-altitude task-local --json
+```
+
+`graduating` stays the default, and DD-09 stays enforced for every graduating task — this flag
+expresses a real altitude distinction, not a gate escape hatch. Ordinary orphan warnings are
+unchanged, and no checker policy changes.
 
 The section-write-then-replace pattern is the workflow agents use to fill in `Plan` / `Solution` /
 `Testing` / `Review` during a run. See

@@ -97,7 +97,8 @@ HITL gate unless `--auto` was passed.
 - [ ] Establish scope first: WBS mode (task diff) or path mode (source glob). Derive the diff
       scope the same way `sp:code-verification` Step 3 does.
 - [ ] Dispatch each requested dimension to its owning skill — do not inline the review logic.
-- [ ] Merge findings into a single ranked report (severity: blocker > major > minor > advisory).
+- [ ] Merge findings into a single ranked report, emitting native priority cells
+      (`P1 (blocker)` > `P2 (major)` > `P3 (minor)` > `P4 (advisory)` — see Output Format).
 - [ ] In pipeline mode, write the merged report to the task's `## Review` section via
       `spur task update <wbs> --section Review --from-file`; in standalone mode, emit as output.
 - [ ] Cite `file:line` evidence for every finding — no vague "implemented correctly."
@@ -109,6 +110,8 @@ HITL gate unless `--auto` was passed.
 - [ ] Never edit `task-pipeline.yaml` or reach into a pipeline step.
 - [ ] Never auto-approve a HITL gate unless `--auto` was passed.
 - [ ] Never soften a FAIL to PARTIAL, or PARTIAL to PASS, to avoid surfacing.
+- [ ] Never emit a word-only Severity cell, an empty priority scaffold, or a `##`/`###` heading
+      inside a `### Review` body — all three fail the existing checkers.
 - [ ] Never skip a dimension the operator requested with `--focus`.
 
 ## Definition of Done Housekeeping
@@ -120,22 +123,44 @@ enforcement checklist. Reference:
 
 ## Output Format
 
+### Priority vocabulary (task 0818 R3)
+
+Emit priorities **natively** — the consumer (`hasPopulatedPriorityTable`,
+`packages/app/src/services/task-check.ts`) requires a `P1`–`P4` cell, and a word-only severity cell
+fails it. One explicit mapping, no transcription step anywhere downstream:
+
+| Priority cell | Severity | Meaning |
+| --- | --- | --- |
+| `P1 (blocker)` | blocker | Ships broken or unsafe; blocks the verdict |
+| `P2 (major)` | major | Real defect or structural problem; must be dispositioned |
+| `P3 (minor)` | minor | Localized issue; fix or accept explicitly |
+| `P4 (advisory)` | advisory | Observation, non-blocking |
+
+Severity words stay visible in the same cell — the mapping adds the machine-readable label, it does
+not replace the semantics.
+
+**Section-relative headings.** In pipeline mode the report body is written *into* the task's
+`### Review` section, so every heading inside it MUST be `####` or deeper. A `##`/`###` heading in
+the body becomes a new top-level task section and corrupts the document. In standalone mode
+(emitted as output, not written to a task) the same body may be rendered one level shallower.
+
 ```markdown
-## Review Report — <wbs|path>
+#### Review Report — <wbs|path>
 
 **Scope:** <wbs diff | path glob>
 **Dimensions:** functional, security, efficiency, correctness, usability, architecture
 **Verdict:** PASS | PARTIAL | FAIL
 
-### Findings (ranked)
+##### Findings (ranked)
 
-| # | Severity | Dimension | Finding | Location |
+| # | Priority | Dimension | Finding | Location |
 |---|----------|-----------|---------|----------|
-| 1 | blocker | security | SQL injection in query builder | `src/api/users.ts:42` |
-| 2 | major | architecture | Shallow pass-through UserService | `src/services/users.ts:15` |
-| 3 | minor | correctness | Missing error branch in createUser | `src/api/users.ts:48` |
+| 1 | P1 (blocker) | security | SQL injection in query builder | `src/api/users.ts:42` |
+| 2 | P2 (major) | architecture | Shallow pass-through UserService | `src/services/users.ts:15` |
+| 3 | P3 (minor) | correctness | Missing error branch in createUser | `src/api/users.ts:48` |
+| 4 | P4 (advisory) | usability | `createUser` error text omits the field name | `src/api/users.ts:51` |
 
-### Functional Traceability
+##### Functional Traceability
 
 | Req | Status | Evidence |
 |-----|--------|----------|
@@ -143,6 +168,16 @@ enforcement checklist. Reference:
 | R2 | PARTIAL | basic only; MISSING duplicate-email handling |
 
 **Next:** <one-line action>
+```
+
+**No findings.** Never invent a defect to populate the table. Emit one substantive `P4 (advisory)`
+row that states what was reviewed and what was found — placeholder cells (empty, `—`, `n/a`) are
+rejected by the checker, and so they should be:
+
+```markdown
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | — | No P1–P3 findings: 6 changed files reviewed across all six dimensions; R1–R3 traceable to tests | `packages/app/src/workflow/proof-input-fingerprint.ts:102-160` |
 ```
 
 With `--json`, emit the same shape as a JSON object for machine consumption.

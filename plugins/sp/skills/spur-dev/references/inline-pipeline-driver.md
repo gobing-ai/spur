@@ -244,10 +244,52 @@ No token estimate, stage-size threshold, model heuristic, or configuration switc
 resolved absolute path, not the YAML's relative string, is what the dispatched agent is instructed
 to write and what post-join validation reads. Resolving once at the dispatch boundary fixes every
 surface at once; a relative path would resolve against whatever cwd the writer process happens to
-have. Send only: the stage id, the YAML's exact pure slash command, and
-`execution surface already resolved: native subagent; do not dispatch this stage again`. The WBS/path
-already carried by the slash command is the handoff — do not paste task/session transcripts or embed
-machine-specific session paths. Dispatch exactly one native subagent and wait for it; the inline FSM
+have.
+
+**Dispatch payload (task 0818 R2).** Send exactly these five fields. The earlier "send only the
+stage id, the slash command, and the no-recursion notice" restriction is **deliberately replaced**:
+the execution-tree cwd, the Spur invocation, and the output path are all already resolved at this
+boundary, and a delegate left to re-derive them re-derives them against its own cwd and PATH.
+
+1. The stage id.
+2. The YAML's **exact** pure slash command — unchanged, never reformulated.
+3. `execution surface already resolved: native subagent; do not dispatch this stage again`.
+4. The **confirmed execution-tree cwd** (absolute) and the **resolved absolute Spur invocation** —
+   `vars.spurBin`, i.e. `resolveSpurBin()`'s `<runtime> <mainModule>` form
+   (`apps/cli/src/workflow/resolve-spur-bin.ts`). The delegate MUST run every Spur command through
+   that invocation and MUST NOT rely on a bare `spur`: a competing `spur` earlier on the delegate's
+   PATH otherwise wins. Setting `SPUR_BIN` alone does **not** change bare-command resolution — only
+   using the supplied invocation does. Spur-owned scripted calls take it through the existing
+   `--spur-bin` flag rather than a new mechanism.
+5. The **resolved absolute output path** (`answerFile`/`expectFile`, resolved as above) and the
+   **owning stage's artifact contract** — for a verify stage, the compact contract below.
+
+Nothing else: no task/session transcripts, no machine-specific session paths. The WBS/path already
+carried by the slash command remains the task handoff.
+
+**Verify-stage artifact contract.** A verify handoff names
+[`code-verification/references/verdict-schema.md`](../../code-verification/references/verdict-schema.md)
+as the canonical answer schema and carries this compact form verbatim:
+
+```text
+Verdict: PASS|PARTIAL|FAIL                    top-level, one line
+| Req | Status | Evidence |                   Status = MET | PARTIAL | UNMET
+                                              (N/A and PASS are NOT valid requirement statuses)
+| AC | Status | Evidence Type | Evidence |    Status = MET | PARTIAL | UNMET | N/A (justified)
+Evidence Type = test | command | static-ref | manual-review | llm-judge | n/a
+AC rows use the task's exact AC identities (verbatim `Scenario:` titles / checklist text).
+A behavioral AC marked MET requires executable evidence (test | command);
+static-ref or llm-judge alone cannot carry it.
+```
+
+**Review-stage artifact contract.** A review handoff carries the Review output contract owned by
+`plugins/sp/agents/super-reviewer.md` — native `P1 (blocker)` / `P2 (major)` / `P3 (minor)` /
+`P4 (advisory)` priority cells and section-relative headings — **not** the verify answer schema.
+
+This is an invocation and handoff fix, not a runtime PATH-injection subsystem: it makes no guarantee
+about arbitrary bare commands in host shells or agent-generated shells.
+
+Dispatch exactly one native subagent and wait for it; the inline FSM
 must not advance actions or guards concurrently (one writer at a time). After join, validate
 `answerFile`, `expectFile`, `requireDiff`, task scope, and the action's error policy from the shared
 filesystem — a subagent success message is not evidence. On success append exactly:
