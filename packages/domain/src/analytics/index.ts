@@ -40,6 +40,7 @@ export {
     type TimeDecomposition,
     type TodoToolCallRow,
 } from './derived';
+export { deriveMissingAssistantDurations } from './derived-assistant-duration';
 export {
     type BucketedTokenRow,
     bucketedTokenSeries,
