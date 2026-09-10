@@ -629,6 +629,66 @@ describe('migration 0027: history refresh active single-flight (task 0716)', () 
             db.close();
         }
     });
+});
+
+describe('migration 0041: queue_jobs deadline/lease columns (task 0817)', () => {
+    test('ALTERs the four A21 columns into a legacy pre-0005 queue_jobs table', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            // Rewind to the pre-ts-db-0005 shape: no timeout/lease columns.
+            const legacy = await db.queryAll<{ name: string }>('PRAGMA table_info(queue_jobs)');
+            const kept = legacy.filter(
+                (c) => !['timeout_ms', 'timeout_unlimited', 'attempt_token', 'lease_expires_at'].includes(c.name),
+            );
+            await db.exec('ALTER TABLE queue_jobs DROP COLUMN timeout_ms');
+            await db.exec('ALTER TABLE queue_jobs DROP COLUMN timeout_unlimited');
+            await db.exec('ALTER TABLE queue_jobs DROP COLUMN attempt_token');
+            await db.exec('ALTER TABLE queue_jobs DROP COLUMN lease_expires_at');
+            await db.run(
+                `INSERT INTO queue_jobs (id, type, payload, created_at, updated_at)
+                 VALUES ('legacy-row', 'other.kind', '{}', 1000, 1000)`,
+            );
+            await db.run('DELETE FROM "__spur_cli_migrations" WHERE id LIKE "0041%"');
+
+            const applied = await applyCliMigrations(db);
+
+            expect(applied).toBe(1);
+            const columns = await db.queryAll<{ name: string }>('PRAGMA table_info(queue_jobs)');
+            for (const c of kept) expect(columns.map((x) => x.name)).toContain(c.name);
+            for (const name of ['timeout_ms', 'timeout_unlimited', 'attempt_token', 'lease_expires_at']) {
+                expect(columns.map((x) => x.name)).toContain(name);
+            }
+            // The guard default landed: legacy rows read back as non-unlimited.
+            const row = await db.queryFirst<{ timeout_unlimited: number }>(
+                'SELECT timeout_unlimited FROM queue_jobs LIMIT 1',
+            );
+            expect(row?.timeout_unlimited).toBe(0);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('journals without executing when queue_jobs is absent (foundation-only DBs)', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await db.exec('DROP TABLE queue_jobs');
+            await db.run('DELETE FROM "__spur_cli_migrations" WHERE id LIKE "0041%"');
+
+            const applied = await applyCliMigrations(db);
+
+            expect(applied).toBe(1);
+            const journaled = await db.queryFirst<{ id: string }>(
+                'SELECT id FROM "__spur_cli_migrations" WHERE id LIKE "0041%"',
+            );
+            expect(journaled?.id).toBe('0041_spur_cli_queue_jobs_deadline_lease_columns');
+            const recreatedMissing = await db.queryFirst<{ n: number }>(
+                "SELECT COUNT(*) AS n FROM sqlite_master WHERE name = 'queue_jobs'",
+            );
+            expect(recreatedMissing?.n).toBe(0);
+        } finally {
+            db.close();
+        }
+    });
 
     test('an already-migrated DB is a pure read — no write lock taken', async () => {
         // Every CLI invocation calls applyCliMigrations, including read-only ones.

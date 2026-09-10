@@ -1070,6 +1070,24 @@ ALTER TABLE history_board_source_daily ADD COLUMN raw_messages INTEGER NOT NULL 
 ALTER TABLE history_board_source_daily ADD COLUMN last_imported_at TEXT;
 `;
 
+/**
+ * Add the A21 execution-deadline/lease columns to legacy `queue_jobs` tables
+ * created before ts-infra/ts-db 0.4.62 (ts-db embedded migration `0005`). The
+ * package's enqueue/claim SQL writes these columns unconditionally, and
+ * `CREATE TABLE IF NOT EXISTS` never adds columns to an existing table, so
+ * every enqueue on a pre-0005 database failed with `SQLiteError: table
+ * queue_jobs has no column named timeout_ms` — silencing the scheduler's
+ * history-refresh ticks entirely. Narrow ALTERs, the `0005_run_pid` precedent.
+ * The four columns ship together in ts-db 0005, so `timeout_ms` is the
+ * representative guard column for `addColumnIfMissing`.
+ */
+export const QUEUE_JOBS_DEADLINE_LEASE_COLUMNS_SCHEMA_SQL = `
+ALTER TABLE queue_jobs ADD COLUMN timeout_ms INTEGER;
+ALTER TABLE queue_jobs ADD COLUMN timeout_unlimited INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE queue_jobs ADD COLUMN attempt_token TEXT;
+ALTER TABLE queue_jobs ADD COLUMN lease_expires_at INTEGER;
+`;
+
 export const CLI_MIGRATIONS: CliMigration[] = [
     { id: '0000_spur_cli_foundation', sql: CLI_SCHEMA_SQL },
     // Renamed from `0001_spur_team_inbox` so the filename carries the
@@ -1238,6 +1256,14 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // unconditionally on any database, the 0028 precedent.
         id: '0040_spur_cli_agent_executor_updates',
         sql: AGENT_EXECUTOR_UPDATES_SCHEMA_SQL,
+    },
+    {
+        // 0817: A21 execution-deadline/lease columns on legacy queue_jobs tables
+        // (the 0.4.62-era enqueue/claim SQL writes them). addColumnIfMissing
+        // guards with `timeout_ms`; table-absent DBs skip via the 0027 precedent.
+        id: '0041_spur_cli_queue_jobs_deadline_lease_columns',
+        sql: QUEUE_JOBS_DEADLINE_LEASE_COLUMNS_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'queue_jobs', column: 'timeout_ms' },
     },
 ];
 
@@ -1455,6 +1481,11 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0027_spur_cli_history_refresh_active_unique' &&
             !(await tableExists(adapter, 'queue_jobs'));
 
+        // Migration 0041 ALTERs queue_jobs — same table-absence shape as 0027.
+        const queueJobsDeadlineLeaseSkip =
+            migration.id === '0041_spur_cli_queue_jobs_deadline_lease_columns' &&
+            !(await tableExists(adapter, 'queue_jobs'));
+
         const historyToolIdentitySkip =
             migration.id === '0034_spur_cli_history_tool_identity' &&
             !(await tableExists(adapter, 'history_tool_call'));
@@ -1495,6 +1526,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !callIdSkip &&
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip &&
+            !queueJobsDeadlineLeaseSkip &&
             !historyToolIdentitySkip &&
             !historyMeasureVectorSkip &&
             !historyRollupWatermarkSkip &&

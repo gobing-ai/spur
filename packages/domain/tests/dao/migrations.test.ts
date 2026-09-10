@@ -119,8 +119,8 @@ describe('db migrations', () => {
             );
         });
 
-        test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, and the 0722 task↔session attribution table', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(41);
+        test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, the 0722 task↔session attribution table, and the 0817 queue-jobs deadline/lease columns', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(42);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -175,6 +175,13 @@ describe('db migrations', () => {
             expect(CLI_MIGRATIONS[37]?.id).toBe('0037_spur_cli_history_dimension_marts');
             // 0746: retention compaction run-marker table.
             expect(CLI_MIGRATIONS[38]?.id).toBe('0038_spur_cli_retention_compaction_meta');
+            // 0039: bounded rollup derivations on source_file/board columns.
+            expect(CLI_MIGRATIONS[39]?.id).toBe('0039_spur_cli_bounded_rollup_derivations');
+            // ADR-111: standalone agent-executor UPDATE table.
+            expect(CLI_MIGRATIONS[40]?.id).toBe('0040_spur_cli_agent_executor_updates');
+            // 0817 A21: execution-deadline/lease columns on legacy queue_jobs tables.
+            expect(CLI_MIGRATIONS[41]?.id).toBe('0041_spur_cli_queue_jobs_deadline_lease_columns');
+            expect(CLI_MIGRATIONS[41]?.addColumnIfMissing).toEqual({ table: 'queue_jobs', column: 'timeout_ms' });
         });
 
         test('run-pid migration adds a pid column to runs', () => {
@@ -257,8 +264,10 @@ describe('db migrations', () => {
             // + 0037 dimension marts + 0038 retention compaction meta.
             // 0039 bounded rollup derivations journals but skips (the stub history_message
             // lacks source_file and the board table is absent) — journaled counts as applied.
+            // 0041 journal + applies: the stub's queue_jobs (from 0004) exists but predates
+            // the deadline/lease columns, so the guarded ALTERs run.
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(37);
+            expect(applied).toBe(38);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -307,7 +316,9 @@ describe('db migrations', () => {
             // + 0037 dimension marts + 0038 retention compaction meta.
             // 0039 bounded rollup derivations journals but skips (the stub history_message
             // lacks source_file and the board table is absent) — journaled counts as applied.
-            expect(applied).toBe(40);
+            // 0041 journals; CLI_SCHEMA_SQL already ships the four columns, so
+            // addColumnIfMissing reduces its ALTERs to no-ops (journal counts regardless).
+            expect(applied).toBe(41);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -512,8 +523,10 @@ describe('db migrations', () => {
             // + 0036 rollup watermark (applies) + 0037 dimension marts (applies)
             // + 0038 retention compaction meta (applies) + 0039 bounded rollup derivations
             // (journaled — whether it executes depends on the stub's history_message source_file
-            // and board table, but the journal entry always counts as applied).
-            expect(await applyCliMigrations(adapter)).toBe(32);
+            // and board table, but the journal entry always counts as applied)
+            // + 0041 deadline/lease columns (journaled: this journal never creates queue_jobs,
+            // so the table-absent skip applies — the 0027 precedent — and still counts).
+            expect(await applyCliMigrations(adapter)).toBe(33);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -570,10 +583,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0040 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0041 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(19);
+            expect(await applyCliMigrations(upgraded)).toBe(20);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
