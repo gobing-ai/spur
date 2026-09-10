@@ -23,8 +23,6 @@ rules:
             - "packages/config/src/**/*.ts"
             - "packages/contracts/src/**/*.ts"
           exclude:
-            - "**/node_modules/**"
-            - "**/tests/**"
             # apps/cli/src/index.ts carries a side-effect import of ts-db as a
             # bundler hint for Bun --compile. The import does not use ts-db APIs;
             # it ensures the dynamic import('@gobing-ai/ts-db') calls from within
@@ -52,10 +50,9 @@ rules:
           include:
             - "apps/**/src/**/*.ts"
             - "packages/**/src/**/*.ts"
-          exclude:
-            - "packages/domain/src/schema/**"
-            - "**/node_modules/**"
-            - "**/tests/**"
+          # (no schema/** exemption: schema files author via defineTable and
+          # import zero drizzle modules today — verified by strip probe)
+          exclude: []
 
   - id: tables-via-defineTable
     description: >
@@ -70,9 +67,6 @@ rules:
     include:
       - "apps/**/src/**/*.ts"
       - "packages/**/src/**/*.ts"
-    exclude:
-      - "**/node_modules/**"
-      - "**/tests/**"
 
   - id: no-hand-written-ddl-for-drizzle-tables
     description: >
@@ -91,9 +85,8 @@ rules:
       - "apps/**/src/**/*.ts"
       - "packages/**/src/**/*.ts"
     exclude:
+      # the CLI migration journal — 43 DDL statements (verified load-bearing)
       - "packages/domain/src/migrations.ts"
-      - "**/node_modules/**"
-      - "**/tests/**"
 
   - id: raw-sql-only-in-domain
     description: >
@@ -110,9 +103,6 @@ rules:
       - "packages/app/src/**/*.ts"
       - "packages/config/src/**/*.ts"
       - "packages/contracts/src/**/*.ts"
-    exclude:
-      - "**/node_modules/**"
-      - "**/tests/**"
 
   - id: no-sql-text-imports
     description: >
@@ -127,6 +117,3 @@ rules:
     include:
       - "apps/**/src/**/*.ts"
       - "packages/**/src/**/*.ts"
-    exclude:
-      - "**/node_modules/**"
-      - "**/tests/**"

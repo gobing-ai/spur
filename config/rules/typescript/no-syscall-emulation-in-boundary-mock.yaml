@@ -28,9 +28,6 @@ include:
   - "packages/**/tests/**/*.test.tsx"
   - "plugins/**/tests/**/*.test.ts"
   - "plugins/**/tests/**/*.test.tsx"
-exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
 
 rules:
   - id: no-syscall-emulation-in-boundary-mock

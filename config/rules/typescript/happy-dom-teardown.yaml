@@ -20,8 +20,6 @@ include:
   - "apps/web/tests/**/*.test.ts"
   - "apps/web/tests/**/*.test.tsx"
 exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
   # The shared teardown helper is the sanctioned place that calls unregister().
   - "apps/web/tests/happy-dom.ts"
 

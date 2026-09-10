@@ -23,10 +23,12 @@ rules:
           exclude:
             - "/tests/"
             - ".test.ts"
-            - "/node_modules/"
-            - "/dist/"
             # nested engine scratch dirs under the included app/package trees;
             # root .spur/ is outside this rule's include scope
+            # `/`.spur/` is load-bearing: the secrets-scanner's in-process walker
+            # does NOT skip dot-dirs, so nested .spur/ scratch dirs under app/package
+            # trees are scanned. `vendors/` fires today (LOOSE include fragments match
+            # `vendors/*/scripts/**`), so it must stay excluded.
             - "/.spur/"
             - "vendors/"
 
@@ -57,7 +59,6 @@ rules:
       - "**/.env.*"
     exclude:
       - "**/.env.example"
-      - "**/node_modules/**"
 
 # NOTE: the ts-libs `no-github-workflows` rule (asserting .github/workflows must be
 # ABSENT) was intentionally NOT absorbed — ts-libs is a library repo with no CI,

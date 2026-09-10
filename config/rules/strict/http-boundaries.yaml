@@ -6,11 +6,9 @@
 include:
   - "apps/**/src/**/*.ts"
   - "packages/**/src/**/*.ts"
-exclude:
-  - "**/tests/**"
-  - "**/*.test.ts"
-  - "**/node_modules/**"
-  - "**/dist/**"
+# NOTE: no doc-level tests exclusion — the globalThis.fetch* rules deliberately
+# include tests, and a doc-level `**/tests/**` would neuter them (verified:
+# zero globalThis.fetch usage in tests today, so removing it stays green).
 
 rules:
   - id: no-direct-fetch
@@ -21,9 +19,9 @@ rules:
       config:
         pattern: "(^|[^.[:alnum:]_])fetch\\("
     exclude:
-      # Hono/Cloudflare Workers entrypoint — `fetch` is the platform contract.
+      # Hono/Cloudflare Workers entrypoint — `fetch` is the platform contract
+      # (worker.ts:55 `async fetch(` matches the pattern when stripped).
       - "apps/server/src/worker.ts"
-      - "apps/server/src/app.ts"
 
   - id: no-globalthis-fetch
     description: "Avoid globalThis.fetch(...); route HTTP through a client seam when one exists."
@@ -86,4 +84,3 @@ rules:
           exclude:
             - "**/tests/**"
             - "**/*.test.ts"
-            - "**/dist/**"

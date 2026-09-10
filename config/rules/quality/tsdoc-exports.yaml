@@ -5,17 +5,14 @@
 # are public integration points that warrant doc comments. The post-check gate
 # keeps those boundaries documented.
 #
-# Scope tightened from the evaluator's default (**/*.ts) to production source only.
-# Excluded: tests (no public API contract), stubs (declaration-only), schema/
-# migrations/db (implementation internals, not public API), dist, node_modules.
+# Scope tightened from the evaluator's default (**/*.ts) to production source
+# only (src-scoped includes make tests unreachable). Excluded: schema/,
+# migrations/db (implementation internals — DDL/journals/adapter wiring, not
+# public API surface; verified load-bearing: 6 doc violations when stripped).
 include:
   - "apps/**/src/**/*.ts"
   - "packages/**/src/**/*.ts"
 exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
-  - "**/tests/**"
-  - "**/stubs/**"
   - "**/schema/**"   # drizzle DDL definitions — not public API surface
   - "**/migrations.ts"
   - "**/db.ts"

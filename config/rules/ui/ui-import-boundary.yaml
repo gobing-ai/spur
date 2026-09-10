@@ -26,8 +26,6 @@ rules:
             - "apps/web/src/**/*.tsx"
           exclude:
             - "apps/web/src/ui.ts"
-            - "**/tests/**"
-            - "**/node_modules/**"
 
   - id: no-daisyui-class-leak
     description: >
@@ -47,7 +45,5 @@ rules:
     include:
       - "apps/web/src/**/*.tsx"
     exclude:
+      # Sanctioned class-authoring site (Rule B seam).
       - "apps/web/src/components/ui/**"
-      - "apps/web/src/ui.ts"
-      - "**/tests/**"
-      - "**/node_modules/**"

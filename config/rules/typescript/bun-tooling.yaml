@@ -7,11 +7,6 @@ include:
   - "apps/**/*.ts"
   - "packages/**/*.ts"
   - "scripts/**/*.ts"
-  - ".spur/**/*.yaml"
-exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
-
 rules:
   - id: no-npm-pnpm-yarn-scripts
     description: "Use bun scripts instead of npm, pnpm, or yarn commands (AGENTS.md: no npm/pnpm/yarn)."
@@ -29,8 +24,9 @@ rules:
       - "**/*.yaml"
     exclude:
       # Rule-definition YAML legitimately names these tools in patterns/descriptions.
+      # (`.spur/rules/**` was de-listed: ripgrep never descends into hidden dirs,
+      # so that tree is unreachable by the rg evaluator.)
       - "config/rules/**"
-      - ".spur/rules/**"
 
   - id: enforce-bun-test
     description: "Unit/integration tests must use bun:test, not Jest or Mocha. The server's Cloudflare Workers suite (*.cf.ts) is the only sanctioned Vitest runner."
@@ -56,6 +52,8 @@ rules:
       - "packages/**/*.ts"
       - "scripts/**/*.ts"
     exclude:
-      - "apps/server/tests/cf/**"
+      # Sanctioned Cloudflare Workers Vitest wiring; `**/*.cf.ts` covers the
+      # test files themselves (apps/server/tests/cf/** was redundant — its only
+      # occupant is worker-runtime.cf.ts).
       - "apps/server/vitest.cf.config.ts"
       - "**/*.cf.ts"

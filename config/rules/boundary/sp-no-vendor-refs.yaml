@@ -11,8 +11,9 @@ include:
   - "plugins/sp/**/*.json"
   - "plugins/sp/**/*.ts"
 exclude:
-  - "**/node_modules/**"
-  - "plugins/sp/tests/**"
+  # skill-structure.test.ts legitimately names vendors/ paths in its R20
+  # structural assertions; no other plugins/sp test does (verified 2026-09).
+  - "plugins/sp/tests/skill-structure.test.ts"
 rules:
   - id: sp-no-vendor-refs
     description: >

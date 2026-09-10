@@ -33,9 +33,6 @@ include:
   - "apps/**/tests/**/*.test.tsx"
   - "packages/**/tests/**/*.test.ts"
   - "packages/**/tests/**/*.test.tsx"
-exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
   # All known side-effect modules are resolved. When a new one is discovered,
   # exclude files that already mock the dependency before importing it.
 

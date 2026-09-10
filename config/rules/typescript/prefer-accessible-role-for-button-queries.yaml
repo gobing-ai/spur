@@ -12,9 +12,6 @@
 include:
   - "apps/web/tests/**/*.test.ts"
   - "apps/web/tests/**/*.test.tsx"
-exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
 
 rules:
   - id: prefer-accessible-role-for-button-queries

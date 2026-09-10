@@ -12,8 +12,6 @@ include:
   - "apps/**/tests/**/*.test.tsx"
   - "packages/**/tests/**/*.test.ts"
   - "packages/**/tests/**/*.test.tsx"
-exclude:
-  - "**/node_modules/**"
 rules:
   - id: no-focused-or-skipped-tests
     description: >

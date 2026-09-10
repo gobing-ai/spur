@@ -17,8 +17,6 @@ include:
   - "packages/**/src/**/*.tsx"
   - "scripts/**/*.tsx"
 exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
   - "**/tests/**"
 rules:
   - id: no-biome-suppressions

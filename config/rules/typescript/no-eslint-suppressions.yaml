@@ -11,10 +11,6 @@ include:
   - "packages/**/*.tsx"
   - "plugins/**/*.ts"
   - "scripts/**/*.ts"
-exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
-  - "**/vendors/**"
 rules:
   - id: no-eslint-suppressions
     description: >

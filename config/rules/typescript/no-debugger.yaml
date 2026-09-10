@@ -12,8 +12,6 @@ include:
   - "packages/**/src/**/*.ts"
   - "scripts/**/*.ts"
 exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
   - "**/tests/**"
 rules:
   - id: no-debugger-statement

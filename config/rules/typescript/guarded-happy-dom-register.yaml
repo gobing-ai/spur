@@ -19,8 +19,6 @@ include:
   - "apps/web/tests/**/*.test.ts"
   - "apps/web/tests/**/*.test.tsx"
 exclude:
-  - "**/node_modules/**"
-  - "**/dist/**"
   # The shared helper is the one legitimate caller of register().
   - "apps/web/tests/happy-dom.ts"
 

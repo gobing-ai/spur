@@ -32,13 +32,10 @@ rules:
         requireCorrespondingTest: true
     include:
       - "packages/**/src/**/*.ts"
-      - "packages/**/src/**/*.tsx"
       - "apps/**/src/**/*.ts"
-      - "apps/**/src/**/*.tsx"
 
     exclude:
       - "**/index.ts"
-      - "**/*.tsx"
       - "**/*.d.ts"
       - "**/types.ts"
       - "**/schema/**"
@@ -47,8 +44,6 @@ rules:
       - "**/db.ts"
       ## Entity declarations — contracts are transport DTOs tested by the single contract.test.ts
       - "packages/contracts/src/**"
-      - "**/node_modules/**"
-      - "**/tests/**"
       ## pure re-export for UI components
       - "apps/web/src/ui.ts"
       - "apps/web/src/modules/config.ts"

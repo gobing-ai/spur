@@ -28,7 +28,6 @@ rules:
       - "packages/**/src/**/*.ts"
     exclude:
       - "packages/config/src/**"
-      - "**/node_modules/**"
       - "**/tests/**"
 
   - id: no-legacy-tasks-config-jsonc
@@ -49,7 +48,6 @@ rules:
       - "apps/**/src/**/*.tsx"
       - "packages/**/src/**/*.ts"
     exclude:
-      - "**/node_modules/**"
       - "**/tests/**"
 
   - id: spur-config-loader-only-at-composition-roots
@@ -70,5 +68,4 @@ rules:
       - "apps/cli/src/index.ts"
       - "apps/server/src/serve.ts"
       - "apps/server/src/context.ts"
-      - "**/node_modules/**"
       - "**/tests/**"

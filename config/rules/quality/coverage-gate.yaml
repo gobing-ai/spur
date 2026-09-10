@@ -9,11 +9,9 @@
 #   - threshold kept at 90 matching bunfig.toml coverageThreshold
 #   - no drizzle exclude needed (Spur doesn't vendor generated SQL in src/)
 #
-# Scope tightened to production source only and aligned with the tsdoc-export
-# gate's exclusions: tests carry no coverage obligation, stubs are
-# declaration-only, and schema/migrations/db are implementation internals
-# (DDL, journals, adapter wiring) whose per-file coverage is noise rather than
-# a meaningful test-gap signal.
+# Scope tightened to production source only. No per-file exclusions: every
+# measured source file must meet the threshold. (Former vendors/stubs/schema/
+# migrations/db exclusions were verified stale — all measured files pass 90%.)
 rules:
   - id: coverage-gate
     description: "Per-file line coverage meets 90% threshold (read from lcov)"
@@ -26,12 +24,3 @@ rules:
         include:
           - "apps/**/src/**"
           - "packages/**/src/**"
-        exclude:
-          - "**/node_modules/**"
-          - "**/vendors/**"
-          - "**/dist/**"
-          - "**/tests/**"
-          - "**/stubs/**"
-          - "**/schema/**"
-          - "**/migrations.ts"
-          - "**/db.ts"
