@@ -25,7 +25,7 @@ bootstrap:
     driver: bun-sqlite
     url: .spur/spur.db
   scheduler:
-    enabled: true
+    enabled: false
     # Periodic executions live here and nowhere else (task 0750). A tick
     # enqueues `scheduler.custom`, which the server's job worker runs through
     # /bin/sh -c in the project root. Use the repo-local CLI, never a global
