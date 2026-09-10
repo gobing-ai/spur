@@ -202,8 +202,11 @@ describe('terminateJobChildren (Sep 2026 orphan fix)', () => {
         const registry = createInMemoryProcessRegistry();
         const executor = new NodeProcessExecutor({ registry });
         // No timeout → not detached → shares our group → kill(-pid) must not be
-        // attempted; the pid itself is signaled.
-        const run = executor.run({ command: 'sh', args: ['-c', 'sleep 30'], cwd: tmpdir() });
+        // attempted; the pid itself is signaled. `exec` pins the pid to the sleeper:
+        // without it, whether the shell tail-execs or forks+waits is implementation-
+        // defined, and a forked shell leaves `sleep` orphaned holding the inherited
+        // stdio pipes, so the run promise never settles (CI hang, Sep 2026).
+        const run = executor.run({ command: 'sh', args: ['-c', 'exec sleep 30'], cwd: tmpdir() });
         await sleep(300);
         const pid = registry.listExecutions({ running: true })[0]?.pid;
         if (pid === undefined) throw new Error('child never registered a pid');
