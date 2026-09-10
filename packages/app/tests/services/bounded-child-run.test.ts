@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { tmpdir } from 'node:os';
 import {
+    createInMemoryProcessRegistry,
     NodeProcessExecutor,
     type ProcessExecutor,
     type ProcessOptions,
@@ -11,6 +13,7 @@ import {
     describeBoundedFailure,
     resolveKillGraceMs,
     runBoundedChild,
+    terminateJobChildren,
 } from '../../src/services/bounded-child-run';
 
 interface RecordedRun {
@@ -163,5 +166,55 @@ describe('runBoundedChild native containment (task 0806 R1 / 0813 R1)', () => {
         expect(outcome.deadlineMs).toBe(20);
         // Deadline + SIGTERM + grace escalation all fit well under a second.
         expect(outcome.elapsedMs).toBeLessThan(1000);
+    });
+});
+
+describe('terminateJobChildren (Sep 2026 orphan fix)', () => {
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const assertDead = (pid: number): void => {
+        let alive = true;
+        try {
+            process.kill(pid, 0);
+        } catch {
+            alive = false;
+        }
+        expect(alive).toBe(false);
+    };
+
+    test('kills a group-owned child (finite deadline → detached) via its process group', async () => {
+        const registry = createInMemoryProcessRegistry();
+        const executor = new NodeProcessExecutor({ registry });
+        // Finite timeout → the executor spawns detached/group-owned, exactly like
+        // every scheduler.custom / history-refresh job run in production.
+        const run = executor.run({ command: 'sh', args: ['-c', 'sleep 30'], cwd: tmpdir(), timeout: 60_000 });
+        await sleep(300);
+        const running = registry.listExecutions({ running: true });
+        expect(running).toHaveLength(1);
+        const pid = running[0]?.pid;
+        if (pid === undefined) throw new Error('child never registered a pid');
+
+        expect(terminateJobChildren(registry, 'SIGTERM')).toEqual([pid]);
+        await run;
+        assertDead(pid as number);
+    });
+
+    test('signals a plain (non-group) child directly when no process group exists', async () => {
+        const registry = createInMemoryProcessRegistry();
+        const executor = new NodeProcessExecutor({ registry });
+        // No timeout → not detached → shares our group → kill(-pid) must not be
+        // attempted; the pid itself is signaled.
+        const run = executor.run({ command: 'sh', args: ['-c', 'sleep 30'], cwd: tmpdir() });
+        await sleep(300);
+        const pid = registry.listExecutions({ running: true })[0]?.pid;
+        if (pid === undefined) throw new Error('child never registered a pid');
+
+        expect(terminateJobChildren(registry, 'SIGTERM')).toEqual([pid]);
+        await run;
+        assertDead(pid as number);
+    });
+
+    test('returns [] when nothing is running (no phantom pids)', () => {
+        const registry = createInMemoryProcessRegistry();
+        expect(terminateJobChildren(registry, 'SIGTERM')).toEqual([]);
     });
 });

@@ -1079,7 +1079,13 @@ describe('startServer', () => {
             }),
         });
 
-        await startServer({ port: 5001, host: '127.0.0.1', openBrowser: false, keepAlive: false }, deps);
+        await startServer(
+            { port: 5001, host: '127.0.0.1', openBrowser: false, keepAlive: false, jobWorkerStartDelayMs: 0 },
+            deps,
+        );
+        // Deferred start (Sep 2026): the worker start is armed on a post-listen
+        // timer; with delay 0 the next macrotask runs it.
+        await new Promise((resolve) => setTimeout(resolve, 20));
 
         // Scheduler start/stop are absent: the upstream runtime owns both (0734 R4).
         expect(order).toEqual(['worker.start']);
@@ -1105,6 +1111,67 @@ describe('startServer', () => {
         sigint();
         await exitCalled;
         expect(order).toEqual(['worker.start', 'worker.stop', 'server.stop', 'runtime.stop']);
+    });
+
+    test('job worker never runs during boot: shutdown before the start delay skips it entirely (Sep 2026)', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const order: string[] = [];
+
+        Bun.serve = (() => ({
+            stop: () => {
+                order.push('server.stop');
+            },
+        })) as unknown as typeof Bun.serve;
+
+        const queueConsumer = {
+            register: () => {},
+            start: async () => {
+                order.push('worker.start');
+            },
+            stop: async () => {
+                order.push('worker.stop');
+            },
+            stats: async () => ({ pending: 0, processing: 0, completed: 0, failed: 0 }),
+            processOnce: async () => 0,
+        };
+
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: true },
+                scheduler: { enabled: false },
+                teamAutostart: [],
+            }),
+            createServerContext: (() =>
+                ({
+                    queueConsumer: async () => queueConsumer,
+                    getDb: async () => {
+                        throw new Error('boot must not touch the DB for the jobqueue');
+                    },
+                    eventBus: () => ({ emit: () => {}, on: () => {}, off: () => {} }),
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            runNodeApplication: runNodeApplicationWith(() => {
+                const rt = fakeRuntime();
+                rt.stop = (async () => {
+                    order.push('runtime.stop');
+                }) as ApplicationRuntime['stop'];
+                return rt;
+            }),
+        });
+
+        // No jobWorkerStartDelayMs: the production default (30s) applies. The
+        // worker — and its startup orphan sweep with its SQLite writes — must
+        // never run before the delay elapses, and shutdown must disarm the timer.
+        await startServer({ port: 5001, host: '127.0.0.1', openBrowser: false, keepAlive: false }, deps);
+        expect(order).toEqual([]);
+        const sigint = sigHandlers.SIGINT;
+        if (!sigint) throw new Error('SIGINT handler not registered');
+        sigint();
+        await exitCalled;
+        // Only listener + runtime teardown ran: no worker.start/stop, no sweep.
+        expect(order).toEqual(['server.stop', 'runtime.stop']);
     });
 
     test('registerSchedulerEntries enqueues built-in prune and smoke jobs and emits scheduler events', async () => {
@@ -1587,9 +1654,12 @@ describe('startServer', () => {
                     openBrowser: false,
                     keepAlive: false,
                     spurInvocation: `bun ${sleeper}`,
+                    jobWorkerStartDelayMs: 0,
                 },
                 deps,
             );
+            // Deferred start (Sep 2026): handlers register on the post-listen timer.
+            await new Promise((resolve) => setTimeout(resolve, 20));
             shutdownSigint = sigHandlers.SIGINT;
             await expect(
                 registeredHandlers[SCHEDULER_CUSTOM_JOB]?.({ payload: { name: 'slow', command: 'sleep 5' } }),

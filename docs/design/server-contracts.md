@@ -132,6 +132,18 @@ daemon restart needed. Younger processing rows and any pending row keep the sing
 No new table, column, event name, API route, or UI component: the Jobs tab and System Events
 already render both families.
 
+**Worker lifecycle — nothing on the boot path (Sep 2026 orphan fix).** The queue worker never
+touches the database during startup: the whole jobqueue block (orphan sweep, handler registration,
+`consumer.start()`) runs behind a post-listen timer, `JOB_WORKER_START_DELAY_MS` (30,000 ms,
+overridable via `StartServerOptions.jobWorkerStartDelayMs`; tests pass 0). The port opens and the
+server serves even when the project DB's write lock is held by something heavy — a restart
+response is no longer serialized behind a 30 s busy timeout. Job children run through one shared
+`NodeProcessExecutor` bound to a `ProcessRegistry`, so the server knows their pids: graceful
+shutdown terminates every still-running job child via `terminateJobChildren` (`SIGTERM` to the
+detached process group `kill(-pid)`, plain-pid fallback when the child is not group-owned,
+`SIGKILL` escalation at exit) before the worker drains — a job child can never outlive
+`spur serve` and hold the DB write lock against the next boot.
+
 <a id="6-plugin-system-removed--adr-012-amended-2026-06-09"></a>
 
 ## 6. Plugin System (Removed — ADR-012 amended 2026-06-09)

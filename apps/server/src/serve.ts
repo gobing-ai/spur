@@ -24,6 +24,7 @@ import {
     SCHEDULER_CUSTOM_JOB,
     startAgentQuotaUpdateConsumer,
     type TaskActionJob,
+    terminateJobChildren,
 } from '@gobing-ai/spur-app';
 import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
 import {
@@ -41,7 +42,12 @@ import {
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
 import { runNodeApplication } from '@gobing-ai/ts-infra/application-node';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import {
+    createInMemoryProcessRegistry,
+    createNodeFileSystem,
+    NodeProcessExecutor,
+    type ProcessRegistry,
+} from '@gobing-ai/ts-runtime';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
 import { registerSystemEventTap } from './modules/events/system-event-tap';
@@ -100,6 +106,15 @@ export { HISTORY_REFRESH_JOB, SCHEDULER_CUSTOM_JOB } from '@gobing-ai/spur-app';
 const SYSTEM_EVENTS_PRUNE_CRON = '300000';
 const SMOKE_CRON = '600000';
 /** Options for {@link startServer}. */
+/**
+ * Delay between the HTTP server accepting requests and the job worker (plus its
+ * startup orphan sweep) running (Sep 2026 slowness fix: boot-time queue writes
+ * serialized behind a long-running importer's SQLite write lock and stalled the
+ * listen by the full busy-timeout). Tests pass 0.
+ */
+export const JOB_WORKER_START_DELAY_MS = 30_000;
+
+/** Options accepted by {@link startServer} (see member docs for defaults). */
 export interface StartServerOptions {
     port: number;
     host: string;
@@ -117,6 +132,12 @@ export interface StartServerOptions {
      * and passes the absolute result. Omitted → `process.cwd()` (previous behavior).
      */
     cwd?: string;
+    /**
+     * Delay (ms) before the job worker — and its startup orphan sweep — runs,
+     * measured from the HTTP server accepting requests. Job work is never on
+     * the boot path; tests pass 0.
+     */
+    jobWorkerStartDelayMs?: number;
 }
 
 /**
@@ -611,6 +632,8 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 ...(spurConfig !== undefined ? { spurConfig } : {}),
             });
             let jobWorker: JobWorkerService<unknown> | undefined;
+            let jobProcessRegistry: ProcessRegistry | undefined;
+            let jobWorkerStartTimer: ReturnType<typeof setTimeout> | undefined;
 
             // 0799 R5: the ONE project-scoped quota-update consumer starts BEFORE
             // autostart or any dispatch acceptance, so exhaustion/recovery
@@ -731,7 +754,15 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // on one policy.
             const schedulerCustomTimeoutMs = resolveSchedulerCustomTimeoutMs(env);
 
-            if (bootConfig.jobqueue.enabled) {
+            // Sep 2026 slowness fix: job work is never on the boot path — this
+            // whole setup (orphan sweep + worker start, and every SQLite write
+            // they perform) only runs on the post-listen timer below.
+            const startJobQueueWorker = async (): Promise<void> => {
+                if (jobWorker !== undefined) return;
+                // One shared registry records every child this executor spawns;
+                // graceful shutdown SIGTERMs their process groups so no importer
+                // outlives the server (root cause of the recurring orphans).
+                jobProcessRegistry = createInMemoryProcessRegistry();
                 const registry = new JobHandlerRegistry();
                 // Scheduled per-prefix retention prune (task 0368 R2): every
                 // catalog prefix is pruned to its resolved quota on the cron.
@@ -748,7 +779,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // by CLI trigger points; consumed here. Since 0717 the job body runs
                 // `history daily` in an isolated child process, so the server only
                 // awaits its exit — the child owns every `history.*` event.
-                const childExecutor = new NodeProcessExecutor();
+                const childExecutor = new NodeProcessExecutor({ registry: jobProcessRegistry });
                 registry.register(HISTORY_REFRESH_JOB, async (job) => {
                     await emitQueueJobStarted(ctx, job);
                     return handleHistoryRefreshJob(
@@ -806,7 +837,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 });
                 await jobWorker.start();
                 appRt.logger.info('Job worker started');
-            }
+            };
 
             if (scheduler) {
                 // Register built-in + configured entries before the upstream
@@ -835,6 +866,20 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 appRt.logger.warn('Failed to register project in ProjectRegistry', { error: String(err) });
             }
 
+            // The listener is open: only now arm the job worker (and its startup
+            // orphan sweep). A long importer's write lock can delay the worker by
+            // the busy-timeout, but never the listen. unref: the timer must not
+            // hold the process alive on its own.
+            if (bootConfig.jobqueue.enabled) {
+                jobWorkerStartTimer = setTimeout(() => {
+                    jobWorkerStartTimer = undefined;
+                    void startJobQueueWorker().catch((error: unknown) => {
+                        appRt.logger.error('Job worker startup failed', { error: String(error) });
+                    });
+                }, options.jobWorkerStartDelayMs ?? JOB_WORKER_START_DELAY_MS);
+                jobWorkerStartTimer.unref?.();
+            }
+
             // Named handlers so shutdown can detach them before process.exit —
             // otherwise tests (and double-signals) keep firing into a dying process.
             let shuttingDown = false;
@@ -851,6 +896,16 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 process.off('SIGINT', onSigInt);
                 process.off('SIGTERM', onSigTerm);
                 appRt.logger.info('Shutting down server', { signal });
+                // Die-with-server for job children: a restarted server must never
+                // inherit an orphaned importer holding the SQLite write lock. Kill
+                // BEFORE the drains below so in-flight handlers resolve immediately.
+                if (jobWorkerStartTimer) {
+                    clearTimeout(jobWorkerStartTimer);
+                    jobWorkerStartTimer = undefined;
+                }
+                if (jobProcessRegistry) {
+                    terminateJobChildren(jobProcessRegistry, 'SIGTERM');
+                }
                 // 0799 R5: detach quota subscriptions and drain active persistence
                 // writes (plus one final drain) before supervisor teardown and DB
                 // close — a shutdown must never race or drop a recorded update.
@@ -874,6 +929,11 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 }
                 server.stop(true);
                 await appRt.stop('shutdown' as ApplicationStopReason);
+                // Escalation for children that ignored SIGTERM; nothing after this
+                // point drains handlers, so SIGKILL cannot corrupt an in-flight write.
+                if (jobProcessRegistry) {
+                    terminateJobChildren(jobProcessRegistry, 'SIGKILL');
+                }
                 process.exit(0);
             };
 

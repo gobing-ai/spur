@@ -95,6 +95,7 @@ export {
     CHILD_KILL_GRACE_MS,
     resolveKillGraceMs,
     runBoundedChild,
+    terminateJobChildren,
 } from './services/bounded-child-run';
 export type { CorpusSeverity } from './services/corpus-check';
 export { resolveFogRange, runCorpusCheck } from './services/corpus-check';

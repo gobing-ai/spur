@@ -1,4 +1,4 @@
-import type { ProcessExecutor, ProcessResult } from '@gobing-ai/ts-runtime';
+import type { ProcessExecutor, ProcessRegistry, ProcessResult } from '@gobing-ai/ts-runtime';
 import type { TimeoutPolicyMs } from './execution-policy';
 
 /**
@@ -143,4 +143,33 @@ export function describeBoundedFailure(parts: {
         `${base}; shell chain did not complete, so later configured stages did not run ` +
         `and any exit_code in the tail is a subcommand result, not the chain verdict: ${outputTail}`
     );
+}
+
+/**
+ * Signal every live child this server's job executor spawned (Sep 2026 slowness
+ * fix: an orphaned `history import` child outlived its server across restarts
+ * and held the SQLite write lock against the next boot). Group-owned children —
+ * every finite-deadline run, spawned detached — lead their own process group, so
+ * `kill(-pid)` reaches the whole `sh -c` tree including grandchildren. A plain
+ * child (explicit-unlimited run, no detach) shares our group; only its pid is
+ * signaled, and any deeper descendants of an unlimited job are the operator's
+ * declared concern. Returns the signaled pids.
+ */
+export function terminateJobChildren(registry: ProcessRegistry, signal: 'SIGTERM' | 'SIGKILL'): number[] {
+    const signaled: number[] = [];
+    for (const execution of registry.listExecutions({ running: true })) {
+        if (execution.pid === undefined) continue;
+        try {
+            process.kill(-execution.pid, 0); // succeeds only when the pid leads its own process group
+            process.kill(-execution.pid, signal);
+        } catch {
+            try {
+                process.kill(execution.pid, signal);
+            } catch {
+                // already gone — fine
+            }
+        }
+        signaled.push(execution.pid);
+    }
+    return signaled;
 }
