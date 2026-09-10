@@ -14,9 +14,11 @@ const SOURCE = new URL('../../config', import.meta.url).pathname;
 
 // Skip anything that is not a shippable config asset. `cp`'s filter runs per
 // entry: returning false prunes the entry (and, for a directory, its subtree).
+// `fixtures` = authoring smoke samples (spur-cli operations.md convention:
+// .spur/rules/fixtures/<rule-id>/should-{fire,pass}.*), never shipped.
 const EXCLUDE = /(^|\/)(\.DS_Store|fixtures)($|\/)/;
 
-/** Bundle `config/` into `target`, excluding fixtures and OS junk, then inject `$schema`. */
+/** Bundle `config/` into `target`, excluding authoring fixtures and OS junk, then inject `$schema`. */
 export async function bundleConfig(target: string | undefined): Promise<{ target: string; injected: number }> {
     if (!target) {
         throw new Error('Usage: spur-dev bundle-config <dist-config-dir>');
