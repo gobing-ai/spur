@@ -185,6 +185,14 @@ traceability. Bare = whole corpus; with a WBS = one task. The matrix is loaded f
 coverage** (DD-09): a task's scenarios must be a subset of its linked feature's AC by normalized
 title — orphans warn by default.
 
+**AC altitude** scopes that rule (task 0818 R5). The default is `graduating`: DD-09 subset
+enforcement applies and ordinary orphan warnings are retained. `--ac-altitude task-local` skips the
+subset rule for that one task — opt in only when the task's scenarios intentionally do **not**
+represent the feature's ship criteria (e.g. a defect/regression batch linked to the feature it
+hardens), and record that rationale in the task. This differs from `--ac-numbering task-local`,
+which concerns R→AC numbering/coverage shape, not the feature-subset rule. No checker-policy
+change: the L4 layer enforces the same rule either way; altitude only selects whether it applies.
+
 `--json` emits an array of per-task results:
 
 ```json

@@ -74,6 +74,30 @@ spur task create "Add email validation" --feature H2 --parent 0040
   `standard·feature-impl·issue·review·meta·brainstorm`. The default is **`feature-impl` when
   `--feature` is given, else `standard`**. An unknown variant is exit `2`.
 
+### AC altitude: linking fix-batches without weakening DD-09 (standing pattern)
+
+When a follow-up batch (issue fixes, review findings, a harness-reliability cleanup) touches several
+features, link the task to the **substantively relevant** feature — the one whose ship criteria the
+work genuinely advances — not just the nearest one to satisfy traceability. The task's regression
+scenarios may then intentionally describe the defect fix, not the feature's full ship criteria.
+That is what **`--ac-altitude task-local`** is for: it skips the DD-09 feature-subset rule for that
+task because the mismatch is deliberate.
+
+- **Default stays `graduating`**: DD-09 enforcement (task scenarios ⊆ linked feature AC, normalized
+  title) applies, and L4 orphan warnings are unchanged. No checker policy changed.
+- **Opt in only with a recorded rationale** — say in the task (e.g. its `Background`) why the
+  scenarios intentionally do not represent feature ship criteria.
+- **Not the same axis as `--ac-numbering task-local`**, which concerns R→AC *numbering/coverage*
+  shape, not the feature-subset rule.
+
+Source-local example (issue batch against feature A1):
+
+```bash
+spur task update 0818 --feature A1 --ac-altitude task-local --json
+```
+
+Detail: [tasks/verbs.md](tasks/verbs.md).
+
 The same `--template` axis drives both *which sections the new file carries* (per the
 Section-Status-Matrix) and *its creation status*: a spec'd task (a `--feature` link, or a batch item
 with `background`/`requirements`) is created at **`todo`**; a bare capture is created at **`backlog`**.

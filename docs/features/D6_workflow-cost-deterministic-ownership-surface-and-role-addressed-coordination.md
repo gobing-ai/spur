@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D6"
 name: "Workflow cost, deterministic ownership surface, and role-addressed coordination"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-08-20T00:08:14.252Z"
-updated_at: "2026-09-09T19:50:55.443Z"
+updated_at: "2026-09-10T00:34:13.173Z"
 ---
 
 # D6: Workflow cost, deterministic ownership surface, and role-addressed coordination
@@ -191,6 +191,10 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 | 0784 | Align workflow resume identity and checkpoint freshness with persisted runs | done |
 | 0785 | Close remaining proof-input and physical artifact confinement gaps | done |
 | 0786 | Remove stale corpus-sweep and task-record instructions from canonical capability sources | done |
+| 0814 | Move dev workflow isolation and visible planning ahead of comprehensive checks | done |
+| 0815 | Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics | done |
+| 0817 | Fix test hermeticity and dogfood-harness findings from run 20260908-2330-devrun-0815 | done |
+| 0818 | Fix harness reliability findings from 0815 session review | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -202,3 +206,5 @@ Feature: Workflow cost, deterministic ownership surface, and role-addressed coor
 - 2026-08-20T21:55:08.156Z verifying → done (system)
 - 2026-08-30T19:42:38.148Z done → active (system)
 - 2026-09-06T22:53:04.389Z active → verifying (system)
+- 2026-09-10T00:34:13.173Z verifying → active (system)
+

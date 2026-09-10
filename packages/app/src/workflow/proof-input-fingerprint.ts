@@ -91,6 +91,38 @@ interface SpecReadOutcome {
 }
 
 /**
+ * Task spec sections recognized by proof normalization (`extractTaskProofData`). A supplied task
+ * document must carry at least one of these so a pointer file, arbitrary text, or a feature doc
+ * cannot silently fingerprint as a task spec (task 0818 R4).
+ */
+const TASK_SPEC_SECTIONS = ['Background', 'Requirements', 'Acceptance Criteria', 'Design', 'Plan'];
+
+/**
+ * Validate that the supplied taskFile content is task markdown: a nonempty canonical
+ * `## <WBS>. <title>` heading and at least one recognized task spec section (task 0818 R4).
+ * Uses the shared MarkdownDocument parser; does not require frontmatter, lifecycle readiness,
+ * or corpus-folder membership. Returns an error message, or undefined when the shape holds.
+ */
+function validateTaskDocumentShape(content: string): string | undefined {
+    const doc = MarkdownDocument.parse(content, 'task');
+    // Fence-aware scan for the `## <WBS>. <title>` heading — `## ` exact level, so `### ` sections
+    // never match, and headings inside code blocks are ignored (same rule as findHeadings).
+    let titleLine = '';
+    let inFence = false;
+    for (const line of doc.bodyWithoutFrontmatter.split('\n')) {
+        if (line.startsWith('```')) inFence = !inFence;
+        else if (!inFence && titleLine === '' && /^##\s/.test(line)) titleLine = line;
+    }
+    if (!/^##\s+\S+\.\s+\S/.test(titleLine)) {
+        return `expected task markdown with a canonical "## <WBS>. <title>" heading`;
+    }
+    if (!TASK_SPEC_SECTIONS.some((section) => doc.hasSection(section))) {
+        return `expected at least one task spec section (${TASK_SPEC_SECTIONS.join(', ')})`;
+    }
+    return undefined;
+}
+
+/**
  * Resolve and validate the optional task/feature spec inputs shared by `proof.fingerprint` and
  * bound `run.artifact` (task 0785 R1).
  *
@@ -139,7 +171,20 @@ export async function readProofInputContents(
             return { error: `${name} is not a regular file: ${resolved}` };
         }
         try {
-            return { content: await fileSystem.readFile(resolved) };
+            const content = await fileSystem.readFile(resolved);
+            // Task-shape gate (task 0818 R4): before any digest computation or artifact write, a
+            // supplied taskFile must actually be task markdown. A path-pointer file, arbitrary
+            // text, or a feature document fails closed here — pointer contents are never
+            // auto-dereferenced.
+            if (name === 'taskFile') {
+                const shapeError = validateTaskDocumentShape(content);
+                if (shapeError !== undefined) {
+                    return {
+                        error: `${name} is not a task document: ${raw} (resolved ${resolved}) — ${shapeError}`,
+                    };
+                }
+            }
+            return { content };
         } catch (error) {
             return { error: `${name} is not readable: ${(error as Error).message}` };
         }

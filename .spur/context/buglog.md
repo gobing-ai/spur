@@ -6990,3 +6990,9 @@ spur workflow run config/workflows/task-pipe
 - **Fix direction:** test hermeticity — assert the `spur` invoked from inside tests is the source-local CLI (PATH prepend or exec path pinning); pair with 0815 References item 6 (fold migrate into the check's remedy path).
 - **Tags:** test-hermeticity, importer-schema, worktree, PATH-shadow
 - **Occurrences:** 1
+
+### 2026-09-09 — Correction to the above: `scripts/test-shims/spur` did not exist when the PATH-prepend fix was recorded (found by 0815 session review; fixed by 0818 R1)
+
+- **Correction:** the 0817-run fix direction ("PATH prepend or exec path pinning") was implemented as a `tests/setup.ts` PATH prepend to `scripts/test-shims/`, and 0815's closure recorded the shim as in place — but the directory was never created, so the prepend was inert and a stale global `spur` remained reachable from the suite.
+- **Fix (0818 R1):** executable `scripts/test-shims/spur` launcher (resolves `apps/cli/src/index.ts` relative to the launcher; preserves caller cwd, spaced args, exit status; no bundle/global dependence; git-tracked 100755). Child-process regression: `apps/cli/tests/workflow/test-shims.test.ts` (sentinel-shadow, spaced-checkout cwd/args/status, tracked-executable). Config hermeticity precedence preserved (packages/config SPUR_SKIP_PROJECT_CONFIG suite 4/4).
+- **Tags:** correction, test-hermeticity, PATH-shadow

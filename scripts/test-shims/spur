@@ -1,0 +1,9 @@
+#!/bin/sh
+# Source-local test launcher (task 0818 R1). `tests/setup.ts` prepends this
+# directory to PATH so any bare `spur` spawned by the suite resolves to THIS
+# checkout's source entry — never a stale global install or a built bundle.
+# The entry is resolved relative to this file, not the caller's cwd; the
+# caller's cwd, spaced arguments and the child's exit status are preserved
+# by exec-ing bun directly.
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd -P) || exit 127
+exec bun "$ROOT/apps/cli/src/index.ts" "$@"

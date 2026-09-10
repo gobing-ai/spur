@@ -185,7 +185,7 @@ describe('RunArtifactActionRunner bound verify-verdict registration (task 0785 R
         execSync('git add -A && git commit -qm init', { cwd: workdir });
 
         const specPath = join(workdir, 'spec.md');
-        const specContent = '---\nwbs: t9001\n---\n\n### Requirements\n- [ ] R1. x\n';
+        const specContent = '---\nwbs: t9001\n---\n\n## t9001. Bound run fixture\n\n### Requirements\n- [ ] R1. x\n';
         writeFileSync(specPath, specContent);
 
         const digest = await computeProofInputFingerprint({ cwd: workdir, taskContent: specContent });

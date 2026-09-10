@@ -97,9 +97,13 @@ HITL gate unless `--auto` was passed.
 - [ ] Establish scope first: WBS mode (task diff) or path mode (source glob). Derive the diff
       scope the same way `sp:code-verification` Step 3 does.
 - [ ] Dispatch each requested dimension to its owning skill — do not inline the review logic.
-- [ ] Merge findings into a single ranked report (severity: blocker > major > minor > advisory).
-- [ ] In pipeline mode, write the merged report to the task's `## Review` section via
+- [ ] Merge findings into a single ranked report. One explicit mapping: `P1 (blocker)` >
+      `P2 (major)` > `P3 (minor)` > `P4 (advisory)` — the Severity cell carries the P-label with the
+      word in parentheses, exactly as `hasPopulatedPriorityTable` anchors it (`^P[1-4]`).
+- [ ] In pipeline mode, write the merged report to the task's `### Review` section via
       `spur task update <wbs> --section Review --from-file`; in standalone mode, emit as output.
+      When writing into `### Review`, use section-relative headings (`#### …` or bold labels) —
+      never `##`/`###` — so report subheadings do not become new task sections.
 - [ ] Cite `file:line` evidence for every finding — no vague "implemented correctly."
 - [ ] Apply the honesty gate: no PASS verdict without fresh, pasted verification evidence.
 
@@ -129,11 +133,20 @@ enforcement checklist. Reference:
 
 ### Findings (ranked)
 
+Severity cells are canonical priorities (`P1 (blocker)`, `P2 (major)`, `P3 (minor)`, `P4 (advisory)`);
+severity order and disposition semantics are unchanged. With no findings, write one substantive
+no-findings row instead of an empty scaffold — never invent a defect to populate the table:
+
 | # | Severity | Dimension | Finding | Location |
 |---|----------|-----------|---------|----------|
-| 1 | blocker | security | SQL injection in query builder | `src/api/users.ts:42` |
-| 2 | major | architecture | Shallow pass-through UserService | `src/services/users.ts:15` |
-| 3 | minor | correctness | Missing error branch in createUser | `src/api/users.ts:48` |
+| 1 | P1 (blocker) | security | SQL injection in query builder | `src/api/users.ts:42` |
+| 2 | P2 (major) | architecture | Shallow pass-through UserService | `src/services/users.ts:15` |
+| 3 | P3 (minor) | correctness | Missing error branch in createUser | `src/api/users.ts:48` |
+| 1 | P4 (advisory) | scope | No findings — auth flow reviewed clean | `src/auth/` (full diff) |
+
+When this report is written into the task's `### Review` section, demote every heading below by
+two levels (`#### Findings (ranked)`, `#### Functional Traceability`) so no report subheading
+becomes a new task section.
 
 ### Functional Traceability
 

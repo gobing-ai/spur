@@ -143,10 +143,10 @@ describe('proof.fingerprint action', () => {
                 { cwd: dir },
             );
             const taskFile = join(dir, 'task.md');
-            await writeFile(taskFile, '# 0001\n\n### Requirements\n- [ ] R1. original\n');
+            await writeFile(taskFile, '## 0001. Proof fixture\n\n### Requirements\n- [ ] R1. original\n');
             const dirCtx: ActionRunContext = { ...ctx, workdir: dir };
             const before = await runner.execute({ var: 'd', taskFile: 'task.md' }, dirCtx);
-            await writeFile(taskFile, '# 0001\n\n### Requirements\n- [ ] R1. edited\n');
+            await writeFile(taskFile, '## 0001. Proof fixture\n\n### Requirements\n- [ ] R1. edited\n');
             const after = await runner.execute({ var: 'd', taskFile: 'task.md' }, dirCtx);
             expect(digestFor(before, 'd')).not.toBe(digestFor(after, 'd'));
         } finally {

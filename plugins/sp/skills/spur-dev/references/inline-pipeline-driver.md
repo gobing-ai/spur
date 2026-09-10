@@ -244,13 +244,36 @@ No token estimate, stage-size threshold, model heuristic, or configuration switc
 resolved absolute path, not the YAML's relative string, is what the dispatched agent is instructed
 to write and what post-join validation reads. Resolving once at the dispatch boundary fixes every
 surface at once; a relative path would resolve against whatever cwd the writer process happens to
-have. Send only: the stage id, the YAML's exact pure slash command, and
-`execution surface already resolved: native subagent; do not dispatch this stage again`. The WBS/path
-already carried by the slash command is the handoff — do not paste task/session transcripts or embed
-machine-specific session paths. Dispatch exactly one native subagent and wait for it; the inline FSM
-must not advance actions or guards concurrently (one writer at a time). After join, validate
+have. The handoff must carry, explicitly (task 0818 R2):
+
+1. the stage id;
+2. the YAML's exact pure slash command (never reformulated);
+3. the confirmed execution-tree cwd (absolute);
+4. the resolved absolute Spur invocation — from `resolveSpurBin`/`vars.spurBin`, or the plugin's
+   `--spur-bin` where a scripted call takes one. The delegate must use this supplied invocation for
+   every Spur command it runs; a `SPUR_BIN` env value alone does not change bare-command
+   resolution, and this contract makes no claim over arbitrary host shells or agent-generated bare
+   commands — it is an explicit invocation/handoff fix, not a PATH-injection subsystem;
+5. the resolved absolute output path (`answerFile`/`expectFile`);
+6. the owning stage's artifact contract:
+   - **verify** stages: name the canonical answer-schema reference (`plugins/sp/skills/code-verification/SKILL.md`
+     §"Answer-File Schema Contract") and carry the compact vocabulary: top-level `Verdict: PASS|PARTIAL|FAIL`;
+     requirement Status cells `MET|PARTIAL|UNMET` (never PASS, never N/A); AC Status cells additionally
+     allow a justified `N/A`; evidence types exactly `test|command|static-ref|manual-review|llm-judge|n/a`
+     (+ `+` compounds); AC ids exactly as the task defines them; a behavioral AC marked MET needs
+     executable evidence (`test`/`command`), not `static-ref` alone;
+   - **review** stages: the reviewer output contract (`plugins/sp/agents/super-reviewer.md` priority
+     vocabulary and section layout) — not the verify-answer schema.
+
+Keep `execution surface already resolved: native subagent; do not dispatch this stage again` — the
+no-recursive-dispatch rule is unchanged. The WBS/path already carried by the slash command is the
+handoff identity — do not paste task/session transcripts or embed machine-specific session paths.
+Dispatch exactly one native subagent and wait for it; the inline FSM must not advance actions or
+guards concurrently (one writer at a time). After join, validate
 `answerFile`, `expectFile`, `requireDiff`, task scope, and the action's error policy from the shared
-filesystem — a subagent success message is not evidence. On success append exactly:
+filesystem — a subagent success message is not evidence; the host keeps applying `expectFile`, its
+lint gate, verdict derivation, proof checks, and no-replay-on-started-failure exactly as before. On
+success append exactly:
 
 ```text
 stage <id> executed via subagent <agent-id> (host session <session-id>)

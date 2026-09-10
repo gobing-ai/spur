@@ -4,7 +4,7 @@ name: Align RunDao.traceRowById return type with queryFirst SQL-NULL semantics
 status: done
 template: issue
 created_at: 2026-09-09T01:51:22.437Z
-updated_at: "2026-09-09T21:39:27.174Z"
+updated_at: "2026-09-09T23:24:13.729Z"
 
 priority: P2
 feature_id: D6
@@ -349,7 +349,7 @@ Former parking spot for session-review residuals (2026-09-08 A21 batch session).
 5. **CLOSED: cog rejects default merge-commit messages** — `.lefthook.yml` gained a `prepare-commit-msg` hook rewriting git's default `Merge branch …` message to `chore: merge <branch> into <target>` before `cog verify` runs (both quoted/unquoted shapes verified; cog accepts the rewrite). Hand-written messages pass through untouched.
 6. **CLOSED: importer-schema drift after dependency bumps** — `importer-schema-check` now folds the remedy in: on drift it runs `applyCliMigrations` (genuine older-schema drift) plus `repairImporterSchemaVersion` (re-provision + re-stamp; deletes stale shadow ledger rows unreachable by migrate's journaled fast path — the 0817 worktree buglog shape), then re-verifies. Un-healable schemas still exit 1 with the manual remedy. Tests: 5/5 in `scripts/commands/importer-schema-check.test.ts` incl. the shadow-row regression.
 
-**Also closed (0817 run residual, buglog 2026-09-09):** bare `spur` invoked from inside `bun run test` now resolves to a source-local shim — `scripts/test-shims/spur` prepended to PATH in `tests/setup.ts`, so a stale global `spur` binary can no longer be picked up mid-gate.
+**Also closed (0817 run residual, buglog 2026-09-09):** bare `spur` invoked from inside `bun run test` resolves to a source-local launcher — `tests/setup.ts` prepends `scripts/test-shims/` to PATH, so a stale global `spur` binary can no longer be picked up mid-gate. **Amended 2026-09-09 (task 0818 R1):** the original closure named `scripts/test-shims/spur` as in place, but the directory did not exist — the PATH prepend was inert. Task 0818 R1 supplied the executable launcher (entry resolved relative to the launcher, caller cwd/spaced args/exit status preserved, source-local `apps/cli/src/index.ts`, tracked 100755) with a child-process regression in `apps/cli/tests/workflow/test-shims.test.ts`.
 
 ### History
 

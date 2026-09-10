@@ -317,7 +317,8 @@ describe('readProofInputContents (task 0785 R1)', () => {
     test('reads supplied specs and returns their content', async () => {
         const { workdir, cleanup } = setup();
         try {
-            writeFileSync(join(workdir, 't.md'), 'task body');
+            // taskFile content must be task markdown (0818 R4 shape gate).
+            writeFileSync(join(workdir, 't.md'), '## 0726. Fixture\n\n### Requirements\n\n- [ ] R1\n');
             writeFileSync(join(workdir, 'f.md'), 'feature body');
             const res = await readProofInputContents(createNodeFileSystem(), workdir, {
                 taskFile: 't.md',
@@ -325,7 +326,7 @@ describe('readProofInputContents (task 0785 R1)', () => {
             });
             expect(res.ok).toBeTrue();
             if (res.ok) {
-                expect(res.taskContent).toBe('task body');
+                expect(res.taskContent).toContain('### Requirements');
                 expect(res.featureContent).toBe('feature body');
             }
         } finally {
@@ -377,6 +378,62 @@ describe('readProofInputContents (task 0785 R1)', () => {
                 expect(res.ok).toBeFalse();
                 if (!res.ok) expect(res.error).toContain(`${name} must be a string`);
             }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('supplied taskFile without task-markdown shape fails closed (task 0818 R4)', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            const fs = createNodeFileSystem();
+            const realTask = join(workdir, 'real-task.md');
+            writeFileSync(realTask, '## 0726. Real task\n\n### Requirements\n\n- [ ] R1\n');
+
+            const cases: Array<[string, string, string]> = [
+                // A path-pointer file whose content is a path — never auto-dereferenced.
+                ['pointer.md', 'docs/tasks4/0726_real.md', 'not a task document'],
+                // Arbitrary text with no task shape.
+                ['text.md', 'just some notes, nothing task-shaped', 'not a task document'],
+                // A feature document has the wrong heading level/shape for a task.
+                ['feature.md', '# F9: Feature name\n\n## Scenarios\n\nScenario: X\n', 'not a task document'],
+                // Canonical title but no recognized spec section.
+                ['hollow.md', '## 0726. Hollow task\n\nSome prose.\n', 'at least one task spec section'],
+            ];
+            for (const [file, content, fragment] of cases) {
+                writeFileSync(join(workdir, file), content);
+                const res = await readProofInputContents(fs, workdir, { taskFile: file });
+                expect(res.ok).toBeFalse();
+                if (!res.ok) {
+                    expect(res.error).toContain('taskFile');
+                    expect(res.error).toContain(file);
+                    expect(res.error).toContain(join(workdir, file));
+                    expect(res.error).toContain(fragment);
+                }
+            }
+            // The pointer's target is never read: the error names the supplied pointer, not the target.
+            const pointer = await readProofInputContents(fs, workdir, { taskFile: 'pointer.md' });
+            if (!pointer.ok) expect(pointer.error).not.toContain('0726. Real task');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('task-shaped content without frontmatter or corpus paths is accepted (task 0818 R4)', async () => {
+        const { workdir, cleanup } = setup();
+        try {
+            // No wbs frontmatter; lives under a custom in-workdir path (not a corpus folder).
+            const custom = join(workdir, 'custom', 'nested');
+            mkdirSync(custom, { recursive: true });
+            writeFileSync(
+                join(custom, 'spec.md'),
+                '---\nfeature_id: F9\n---\n## 0818. Custom-path task\n\n### Acceptance Criteria\n\n- [ ] AC1\n',
+            );
+            const res = await readProofInputContents(createNodeFileSystem(), workdir, {
+                taskFile: 'custom/nested/spec.md',
+            });
+            expect(res.ok).toBeTrue();
+            if (res.ok) expect(res.taskContent).toContain('## 0818. Custom-path task');
         } finally {
             await cleanup();
         }
