@@ -390,6 +390,23 @@ CREATE INDEX IF NOT EXISTS idx_history_message_request_id
  * `.spur/spur.db`. The importer now creates generic targets lazily; this
  * migration removes tables left by older eager schema application.
  */
+/**
+ * Partial index for the History Board rollup `effective_model` fallback subquery
+ * (`SELECT model FROM history_message WHERE source = ? AND session_id = ? AND model
+ * IS NOT NULL AND model != '' AND model != 'unknown' LIMIT 1`, duplicated across the
+ * message/tool/skill bucket derivations). Without it the subquery walks the session's
+ * `(source, session_id, seq)` slice row by row until the first well-formed model; on the
+ * real corpus the NULL-ts sentinel rows map to sessions of up to 574k rows, so one
+ * sentinel-bucket rebuild spent minutes in that scan and the incremental refresh never
+ * finished inside the worker timeout. The partial index hands `LIMIT 1` the first
+ * qualifying row directly (O(log n)); measured full per-bucket batch: >300s -> <1s.
+ */
+export const HISTORY_MESSAGE_MODEL_FALLBACK_INDEX_SCHEMA_SQL = `
+CREATE INDEX IF NOT EXISTS idx_history_message_session_model
+    ON history_message (source, session_id)
+    WHERE model IS NOT NULL AND model != '' AND model != 'unknown';
+`;
+
 export const HISTORY_ETL_TABLES_DROP_SCHEMA_SQL = `
 DROP TABLE IF EXISTS history_etl_pi;
 DROP TABLE IF EXISTS history_etl_claude;
@@ -1265,6 +1282,12 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         sql: QUEUE_JOBS_DEADLINE_LEASE_COLUMNS_SCHEMA_SQL,
         addColumnIfMissing: { table: 'queue_jobs', column: 'timeout_ms' },
     },
+    {
+        // 0824: partial index serving the rollup effective_model fallback subquery;
+        // standalone `CREATE INDEX IF NOT EXISTS` (0028 precedent).
+        id: '0042_spur_cli_history_model_fallback_index',
+        sql: HISTORY_MESSAGE_MODEL_FALLBACK_INDEX_SCHEMA_SQL,
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -1512,6 +1535,14 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
                 !(await columnExists(adapter, 'history_message', 'source_file')) ||
                 !(await tableExists(adapter, 'history_board_source_daily')));
 
+        // 0042 partial index for the rollup effective_model fallback subquery.
+        // Journaled without executing when the legacy history_message predates the
+        // model column — fresh/importer-provisioned DBs ship it (0022 precedent).
+        const historyModelFallbackIndexSkip =
+            migration.id === '0042_spur_cli_history_model_fallback_index' &&
+            (!(await tableExists(adapter, 'history_message')) ||
+                !(await columnExists(adapter, 'history_message', 'model')));
+
         if (
             shouldApplySql &&
             !sequenceIndexSkip &&
@@ -1530,7 +1561,8 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !historyToolIdentitySkip &&
             !historyMeasureVectorSkip &&
             !historyRollupWatermarkSkip &&
-            !boundedRollupDerivationsSkip
+            !boundedRollupDerivationsSkip &&
+            !historyModelFallbackIndexSkip
         ) {
             for (const statement of splitSqlStatements(migration.sql)) {
                 await adapter.exec(statement);
