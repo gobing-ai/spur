@@ -62,6 +62,7 @@ import {
     historyBoardSummaryFromMart,
     historyBoardSummaryFromRollup,
     historyKpiTrend,
+    latestHistoryImportedAt,
     loopRepeatedCallsQuery,
     loops,
     type MartDimension,
@@ -1744,8 +1745,7 @@ export class LiveHistoryBoardService implements HistoryBoardService {
         };
     }
 
-    async getSources(): Promise<HistorySourcesResponse['data']> {
-        const db = await this.resolveDb();
+    private async buildSources(db?: DbAdapter): Promise<HistorySourcesResponse['data']> {
         if (!db) {
             return {
                 overview: {
@@ -1837,6 +1837,17 @@ export class LiveHistoryBoardService implements HistoryBoardService {
             toolCalls: row.toolCalls,
         }));
         return projectSources(Array.from(sources.values()), daily, databaseBytes);
+    }
+
+    async getSources(): Promise<HistorySourcesResponse['data']> {
+        const db = await this.resolveDb();
+        const data = await this.buildSources(db);
+        if (!db) return data;
+        const lastImportedAt = await latestHistoryImportedAt(db);
+        return {
+            ...data,
+            overview: { ...data.overview, lastImportedAt: lastImportedAt ?? data.overview.lastImportedAt },
+        };
     }
 
     async triggerImport(mode: 'full' | 'incremental'): Promise<HistoryTriggerImportResponse['data']> {

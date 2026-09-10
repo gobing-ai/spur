@@ -585,7 +585,9 @@ describe('LiveHistoryBoardService', () => {
             (entry) =>
                 !entry.startsWith('timeline::') &&
                 /history_message|history_tool_call/.test(entry) &&
-                !entry.includes('ORDER BY rowid DESC LIMIT 1'),
+                !entry.includes('ORDER BY rowid DESC LIMIT 1') &&
+                // 0817: header chip reads the live last-import scalar (single MAX probe).
+                !entry.includes('MAX(imported_at)'),
         );
         expect(rawReads).toEqual([]);
 

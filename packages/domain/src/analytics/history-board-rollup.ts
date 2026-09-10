@@ -2109,6 +2109,17 @@ export async function recordHistoryBoardRollupMeta(
     );
 }
 
+/**
+ * Live scalar `MAX(history_message.imported_at)` instead of the materialized
+ * `history_board_source_stats.last_imported_at` rollup, which only advances when
+ * `history analyze` rebuilds rollups — the header chip must agree with the charts,
+ * which read history_message directly (0817).
+ */
+export async function latestHistoryImportedAt(db: DbAdapter): Promise<string | null> {
+    const rows = await db.queryAll<{ v: string | null }>('SELECT MAX(imported_at) AS v FROM history_message');
+    return rows[0]?.v ?? null;
+}
+
 /** Check whether a rollup table has at least one materialized row. */
 export async function hasHistoryBoardRollupRows(db: DbAdapter, table: HistoryBoardRollupProbeTable): Promise<boolean> {
     const validTables: Record<HistoryBoardRollupProbeTable, true> = {
