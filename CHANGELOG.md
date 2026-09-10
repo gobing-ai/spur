@@ -1,5 +1,63 @@
 # Changelog
 
+## [0.3.79] - 2026-09-10
+
+### Added
+
+- scripts: auto-remedy drift in importer-schema-check (dd076f99b)
+- domain: add repairImporterSchemaVersion for stale shadow rows (95a794184)
+
+### Fixed
+
+- sp: close the 0815 session-review reliability findings (0818) (5e80e787b)
+- server: defer job worker start and reap job children at exit (a0b1c406f)
+- app: show live last-imported time in the history board header (909f7904b)
+- domain: add queue_jobs deadline/lease columns for pre-0005 databases (57a89cc92)
+- workflow: harness reliability fixes from 0815 session review (4adc3aa8f)
+- server: rename watchdog sweep-reason to age-sweep (2279f56bb)
+- plugins: close plugins conflict-audit residuals (task 0816) (27f62af3a)
+- harden test hermeticity and close 0815 dogfood residuals (0817) (5abb2d68b)
+- db: align no-row queryFirst handling with ts-db 0.4.62 contract (39563d002)
+
+### Changed
+
+- app: use AbortSignal.timeout in raceSourceImport (15c1eeaf0)
+
+### Other
+
+- docs(sp): repair 0818 verify evidence to lint-clean AC identities (cdfd0bc10)
+- docs(sp): close 0818 as verified done with PASS evidence (8fa0088b0)
+- docs(design): document 0818 proof-input and shim launcher contracts (728282fea)
+- docs: clarify document ownership and slim project guides (5f4b7a33a)
+- docs(tasks): consolidate 0818/0819/0820 session-review findings into 0818 (4b0a844e3)
+- docs(tasks): refresh 0816 verdict evidence with 2026-09-09 rerun (a66f299fb)
+- docs(tasks): add new tasks (7468db50a)
+- docs(tasks): add new tasks (112dd7dc5)
+- docs: close 0815/0817 parking spots + parser contract + new task 0818 (6f04e0f00)
+- docs(tasks): reword 0816 solution notation to avoid bare anchor warning (333c9f06e)
+- docs(tasks): record 0816 solution/review, verify verdict, status done (92729a13f)
+- docs(tasks): update task status after verification (7220e6c9e)
+- docs(corpus): close out 0815 — D6 feature link, wrap learnings, constitution lessons (407294849)
+- docs(tasks): refresh 0815 testing evidence from --force re-audit (verdict PASS) (4b2e21f45)
+- docs(tasks): record 0815 pipeline completion — verify PASS, task done (run 8ab8448a) (44db4b04c)
+- docs(tasks): update task status after refinement (4a98984be)
+- docs(tasks): update task status after refinement (beb015712)
+- docs(tasks): add new tasks (beead5151)
+- docs(tasks): markdownlint blank-line fix on 0815 review section (a2c0dac8a)
+- docs(tasks): add new tasks (2d59a07fa)
+- docs(plugin): sync README and 04_DESIGN with current wrapper and operation counts (c99ddfa1a)
+- docs(tasks4): drop stale dev-history-load anchors and fix featurechange paths (8df54c147)
+- docs(tasks): update task status after refinement (3f11b875f)
+- chore(config): add sandbix permission (8f48464a5)
+- chore: merge 'sp/run-0818-9c498886' into main (58ef74d90)
+- chore(spur): disable scheduler in local bootstrap config (67d22eb77)
+- chore(config): update the spur config file (58cc87e27)
+- chore(tests): pin bare spur to source-local shim + record 0817 buglog (7f4cb940e)
+- chore: rewrite default merge-commit messages before cog verify (1c6fc55a3)
+- chore: merge sp/run-0816-68654e6e into main (11e136493)
+- chore(rules): exclude 0816 run bootstrap env from protected-files (a003b3da5)
+- chore: merge sp/run-0815-d872 into main (1a0d3af5d)
+
 ## [0.3.78] - 2026-09-08
 
 ### Added
