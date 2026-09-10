@@ -186,6 +186,17 @@ sections `['Background', 'Requirements', 'Acceptance Criteria', 'Design', 'Plan'
 `['Goal', 'Scope', 'Acceptance Criteria']` (`proof-input-fingerprint.ts:282`) via `featureSpecPath`.
 `Solution` / `Testing` / `Review` are out of the input set by design, so post-verification prose does not
 re-open the gate; editing a `Requirements`, `Design`, or `Plan` section after capture does.
+**Task-input shape validation (task 0818 R4):** `readProofInputContents`
+(`packages/app/src/workflow/proof-input-fingerprint.ts`) is the shared read boundary for the
+task-spec half and rejects a `taskFile` that is not a task specification before any digest input is
+derived: the body must carry the canonical `## <WBS>. <title>` heading
+(`CANONICAL_TASK_HEADING_RE`, numeric WBS only — letter-prefixed feature docs stay out) plus a
+task-specification section under it. A path pointer, arbitrary text, or a linked feature document
+fails with `ProofCaptureError` naming the supplied path and the missing canonical shape, and the
+pointer line is never dereferenced — `record` / `run.artifact` can therefore never stamp a
+fingerprint over the wrong input class. `featureFile` keeps its prior behavior and is not
+shape-checked. Regression: the `readProofInputContents task-document shape` describe in
+`packages/app/tests/workflow/proof-input-fingerprint.test.ts`.
 **Canonical verdict contract (task 0592, F92):** the verify artifact is validated and aggregated
 by one runtime contract — `packages/app/src/services/verify-verdict.ts` owns the Zod schema
 (`verifyVerdictSchema`), the parser (`parseVerifyVerdict` / `readVerifyVerdict`, distinguishing

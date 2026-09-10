@@ -196,7 +196,11 @@ dependency graph stays Workers-safe:
   (in-process `main()`, spawned helpers, tests) never resolves the checkout's own
   `.spur/config.yaml`. A caller that passes an explicit `cwd` always keeps its config regardless
   of the env (fixture projects are unaffected); `tests/setup.ts` sets both vars so `bun run test`
-  is hermetic.
+  is hermetic. The preload also prepends `scripts/test-shims/` to PATH (task 0818 R1): the tracked
+  `100755` launcher there exec's this checkout's `apps/cli/src/index.ts` via bun, resolving to its
+  own location (`fileURLToPath`, space-safe) rather than the caller's cwd, preserving caller cwd and
+  exit status — so a bare `spur` spawned inside a test child resolves to the checkout's CLI source,
+  never a stale global install. Regression: `apps/cli/tests/test-shim-launcher.test.ts`.
 - `resolvePlanningFolders(fs)` derives the active + registered task/feature folders, degrading to
   defaults on any error (a broken config must not wedge folder resolution). `@gobing-ai/spur-app`
   re-exports it so app/CLI consumers import from the application layer, not the config package.
