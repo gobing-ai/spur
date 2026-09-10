@@ -25,7 +25,7 @@ bootstrap:
     driver: bun-sqlite
     url: .spur/spur.db
   scheduler:
-    enabled: false
+    enabled: true
     # Periodic executions live here and nowhere else (task 0750). A tick
     # enqueues `scheduler.custom`, which the server's job worker runs through
     # /bin/sh -c in the project root. Use the repo-local CLI, never a global
@@ -77,7 +77,11 @@ agent:
     - name: pi-dsv4-flash-volc
       agent: pi
       tier: standard
-      disabled: false
+      # Disabled 2026-09-10: volc account monthly quota exhausted (HTTP 429
+      # AccountQuotaExceeded, resets 2026-09-18). Every agent.run stage started
+      # here and burned ~10min before the escalation ladder climbed. Flip back
+      # to `disabled: false` after the reset.
+      disabled: true
       executionCapabilities:
         version: 1
         axes:
