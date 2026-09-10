@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix harness reliability findings from 0815 session review
-status: todo
+status: done
 template: issue
 created_at: 2026-09-09T20:10:01.996Z
-updated_at: "2026-09-10T00:52:16.201Z"
+updated_at: "2026-09-10T05:12:39.131Z"
 
 feature_id: D6
 ac_altitude: task-local
@@ -24,15 +24,15 @@ This is a D6 harness follow-up, following predecessor 0817. Its regression scena
 
 ### Requirements
 
-- [ ] **R1 — Restore the missing source-local test launcher (P2).** Supply the executable `scripts/test-shims/spur` expected by `tests/setup.ts`, using the checkout's `apps/cli/src/index.ts`. Resolve that entry relative to the launcher, quote paths/arguments, preserve the caller's cwd, propagate exit status, and commit executable mode. Do not depend on a prior bundle or the global Spur version. Retain the existing test-config skip precedence. Add a real child-process regression with a sentinel global `spur` later on PATH, a working directory different from the checkout root, and a checkout path containing spaces; prove the local entry runs, the sentinel does not, and cwd/arguments/status survive. Amend the inaccurate 0815 closure claim through `spur task update` after the fix is verified; append a dated correction to existing local buglog evidence if present, without deleting historical observations.
+- [x] **R1 — Restore the missing source-local test launcher (P2).** Supply the executable `scripts/test-shims/spur` expected by `tests/setup.ts`, using the checkout's `apps/cli/src/index.ts`. Resolve that entry relative to the launcher, quote paths/arguments, preserve the caller's cwd, propagate exit status, and commit executable mode. Do not depend on a prior bundle or the global Spur version. Retain the existing test-config skip precedence. Add a real child-process regression with a sentinel global `spur` later on PATH, a working directory different from the checkout root, and a checkout path containing spaces; prove the local entry runs, the sentinel does not, and cwd/arguments/status survive. Amend the inaccurate 0815 closure claim through `spur task update` after the fix is verified; append a dated correction to existing local buglog evidence if present, without deleting historical observations.
 
-- [ ] **R2 — Make delegated execution provenance and verify artifacts explicit (P2).** Update the native dispatch contract in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` to include the confirmed execution-tree cwd, the resolved absolute Spur invocation, the resolved output path, and the owning stage's artifact contract. Preserve the exact slash command and no-recursive-dispatch rule. Replace the conflicting "Send only" restriction deliberately. Delegates must use the supplied invocation for Spur commands; do not claim that `SPUR_BIN` alone changes bare-command resolution. Reuse the existing `resolveSpurBin`/`vars.spurBin`/plugin `--spur-bin` mechanisms for Spur-owned scripted calls. Verify handoffs must name the canonical answer-schema reference and carry this compact contract: top-level `Verdict: PASS|PARTIAL|FAIL`; requirement rows `MET|PARTIAL|UNMET`; AC rows additionally allow justified `N/A`; canonical evidence types `test|command|static-ref|manual-review|llm-judge|n/a`; exact AC identities; behavioral MET ACs require executable evidence. Keep `expectFile`, host lint, verdict derivation, proof checks and no-replay-on-started-failure intact. Review handoffs refer to R3, not the verify-answer schema. This is an explicit invocation/handoff fix, not a generic runtime PATH-injection subsystem or a guarantee over arbitrary host shells.
+- [x] **R2 — Make delegated execution provenance and verify artifacts explicit (P2).** Update the native dispatch contract in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` to include the confirmed execution-tree cwd, the resolved absolute Spur invocation, the resolved output path, and the owning stage's artifact contract. Preserve the exact slash command and no-recursive-dispatch rule. Replace the conflicting "Send only" restriction deliberately. Delegates must use the supplied invocation for Spur commands; do not claim that `SPUR_BIN` alone changes bare-command resolution. Reuse the existing `resolveSpurBin`/`vars.spurBin`/plugin `--spur-bin` mechanisms for Spur-owned scripted calls. Verify handoffs must name the canonical answer-schema reference and carry this compact contract: top-level `Verdict: PASS|PARTIAL|FAIL`; requirement rows `MET|PARTIAL|UNMET`; AC rows additionally allow justified `N/A`; canonical evidence types `test|command|static-ref|manual-review|llm-judge|n/a`; exact AC identities; behavioral MET ACs require executable evidence. Keep `expectFile`, host lint, verdict derivation, proof checks and no-replay-on-started-failure intact. Review handoffs refer to R3, not the verify-answer schema. This is an explicit invocation/handoff fix, not a generic runtime PATH-injection subsystem or a guarantee over arbitrary host shells.
 
-- [ ] **R3 — Emit canonical review priorities at the authoring boundary (P2).** Correct the source coordinator template in `plugins/sp/agents/super-reviewer.md` and directly conflicting review examples so task Review findings carry `P1 (blocker)`, `P2 (major)`, `P3 (minor)`, or `P4 (advisory)` cells natively. Use one explicit mapping; preserve severity and disposition, evidence locations, aggregate verdict and functional traceability. Preserve a substantive no-findings row accepted by the existing checker; do not invent a defect merely to populate a table. Use section-relative headings when writing into `### Review` so report subheadings do not become new task sections. Keep `hasPopulatedPriorityTable` strict; do not accept word-only severity tables or add manual transcription to the driver. Author source capabilities through the Superskill lifecycle; generated adapters remain install-owned.
+- [x] **R3 — Emit canonical review priorities at the authoring boundary (P2).** Correct the source coordinator template in `plugins/sp/agents/super-reviewer.md` and directly conflicting review examples so task Review findings carry `P1 (blocker)`, `P2 (major)`, `P3 (minor)`, or `P4 (advisory)` cells natively. Use one explicit mapping; preserve severity and disposition, evidence locations, aggregate verdict and functional traceability. Preserve a substantive no-findings row accepted by the existing checker; do not invent a defect merely to populate a table. Use section-relative headings when writing into `### Review` so report subheadings do not become new task sections. Keep `hasPopulatedPriorityTable` strict; do not accept word-only severity tables or add manual transcription to the driver. Author source capabilities through the Superskill lifecycle; generated adapters remain install-owned.
 
-- [ ] **R4 — Reject non-task proof input at the shared read boundary (P2).** Add task-document shape validation to `readProofInputContents` in `packages/app/src/workflow/proof-input-fingerprint.ts`, shared by `proof.fingerprint` and proof-bound `run.artifact`. After the existing type/readability/regular-file/workdir checks, a supplied nonempty `taskFile` must contain task markdown: a nonempty canonical `## <WBS>. <title>` heading and at least one recognized task specification section (Background, Requirements, Acceptance Criteria, Design or Plan), parsed using the existing MarkdownDocument machinery. Reject a path-pointer file, arbitrary text, or a feature document with an error naming `taskFile`, the supplied/resolved path and the expected task-document shape before digest computation or artifact writes. Do not auto-dereference pointer contents. Do not require a `wbs` frontmatter field (normal CLI-created tasks omit it), full lifecycle readiness, or hardcoded/configured corpus-folder membership: valid supplied task specs can live under custom in-workdir paths. Preserve omitted/empty optional spec compatibility for `proof.fingerprint`, bound registration's mandatory taskFile rule, existing featureFile behavior, and all proof/run identity checks. Keep genuine changed-spec failures distinguishable as digest mismatches.
+- [x] **R4 — Reject non-task proof input at the shared read boundary (P2).** Add task-document shape validation to `readProofInputContents` in `packages/app/src/workflow/proof-input-fingerprint.ts`, shared by `proof.fingerprint` and proof-bound `run.artifact`. After the existing type/readability/regular-file/workdir checks, a supplied nonempty `taskFile` must contain task markdown: a nonempty canonical `## <WBS>. <title>` heading and at least one recognized task specification section (Background, Requirements, Acceptance Criteria, Design or Plan), parsed using the existing MarkdownDocument machinery. Reject a path-pointer file, arbitrary text, or a feature document with an error naming `taskFile`, the supplied/resolved path and the expected task-document shape before digest computation or artifact writes. Do not auto-dereference pointer contents. Do not require a `wbs` frontmatter field (normal CLI-created tasks omit it), full lifecycle readiness, or hardcoded/configured corpus-folder membership: valid supplied task specs can live under custom in-workdir paths. Preserve omitted/empty optional spec compatibility for `proof.fingerprint`, bound registration's mandatory taskFile rule, existing featureFile behavior, and all proof/run identity checks. Keep genuine changed-spec failures distinguishable as digest mismatches.
 
-- [ ] **R5 — Document the existing AC-altitude choice without weakening gates (P3).** Update `plugins/sp/skills/spur-cli/references/tasks.md` and its owning detailed task reference to document the standing pattern: link an issue/fix-batch to a substantively relevant feature; choose `--ac-altitude task-local` only when its regression scenarios intentionally do not represent feature ship criteria, and record that rationale. Explain that this differs from `--ac-numbering task-local` (R-to-AC coverage). Keep graduating as the default and retain DD-09 enforcement for graduating tasks. Include a source-local CLI example and retain ordinary orphan warnings; no checker-policy change is needed. Task 0816 already owns the individual 0587 ruling; do not reopen it or relink unrelated corpus to silence diagnostics.
+- [x] **R5 — Document the existing AC-altitude choice without weakening gates (P3).** Update `plugins/sp/skills/spur-cli/references/tasks.md` and its owning detailed task reference to document the standing pattern: link an issue/fix-batch to a substantively relevant feature; choose `--ac-altitude task-local` only when its regression scenarios intentionally do not represent feature ship criteria, and record that rationale. Explain that this differs from `--ac-numbering task-local` (R-to-AC coverage). Keep graduating as the default and retain DD-09 enforcement for graduating tasks. Include a source-local CLI example and retain ordinary orphan warnings; no checker-policy change is needed. Task 0816 already owns the individual 0587 ruling; do not reopen it or relink unrelated corpus to silence diagnostics.
 
 ### Acceptance Criteria
 
@@ -144,48 +144,53 @@ Counterevidence: `packages/config/src/loader.ts:180` already suppresses unpinned
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Fix batch for the 0815 session-review reliability findings (commit `5e80e787b`; this verification run also adds the two contract-satellite doc paragraphs listed under R1/R4 documentation):
+
+- **R1 — hermetic test CLI shim:** `scripts/test-shims/spur` (tracked `100755`) exec's this checkout's `apps/cli/src/index.ts` via bun, resolving relative to its own location so caller cwd and spaces in the checkout path cannot misroute; `tests/setup.ts:74-76` prepends the shim dir with `fileURLToPath` (fixing the `URL.pathname` percent-encoding) so a bare `spur` in any test child shadows stale globals. Regression: `apps/cli/tests/test-shim-launcher.test.ts` (sentinel global shadowing, non-root cwd, spaced path, exit-status propagation). Dated correction appended to the 0815 doc + `.spur/context/buglog.md`.
+- **R2 — inline-pipeline-driver handoff:** the driver reference now names the execution-tree `cd`, confirmed absolute cwd, CLI/process/model invocation identity, and the owning artifact contract; `plugins/sp/tests/dispatch-handoff-contract.test.ts` pins cwd/invocation/output-path/artifact elements, exact slash command, no-recursive-dispatch, SPUR_BIN truth, and untouched post-join gates.
+- **R3 — super-reviewer priority vocabulary:** `plugins/sp/agents/super-reviewer.md` carries the canonical `P1 (blocker)`–`P4 (advisory)` vocabulary with severity-word mapping, example and no-findings tables, and the never-invent rule; `packages/app/tests/services/review-priority-contract.test.ts` blocks placeholder scaffolds and word-only severity rows without loosening the checker.
+- **R4 — proof-input shape validation:** `readProofInputContents` (shared read boundary in `packages/app/src/workflow/proof-input-fingerprint.ts`) rejects a non-task `taskFile` (path pointer / arbitrary text / feature document) via `taskDocumentShapeError` before any digest input is derived, never dereferencing the pointer; `featureFile` unchanged. Regression: 6 shape tests in `proof-input-fingerprint.test.ts` + run-artifact/inline-run-setup rejection coverage.
+- **R5 — AC altitude docs:** `tasks.md` "AC altitude" section (independence table, rationale, source-local example) + `verbs.md` AC controls bullet and L4 exemption; checker behavior pinned by 3 `task-check` altitude tests (`task-local` skips DD-09, graduating still reports, R↔AC coverage independent).
 
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | UNMET | No launcher exists. `tests/setup.ts:71` prepends `scripts/test-shims` to PATH; `ls scripts/test-shims/` → "No such file or directory" and `git ls-files scripts/test-shims/` → empty. No child-process regression added. |
-| R2 | UNMET | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:247` still reads "Send only: the stage id, the YAML's exact pure slash command, and …". No confirmed cwd, resolved Spur invocation, output path, or verifier answer-schema contract in the handoff. |
-| R3 | UNMET | `plugins/sp/agents/super-reviewer.md:134` still emits a word-only Severity cell (`\| 1 \| blocker \| security \| …`). Consumer `packages/app/src/services/task-check.ts:114` (`hasPopulatedPriorityTable`) requires a `P1`–`P4` cell. Producer/consumer mismatch unchanged. |
-| R4 | UNMET | `packages/app/src/workflow/proof-input-fingerprint.ts:142` returns `fileSystem.readFile(resolved)` immediately after the regular-file check; no task-document shape validation (canonical `## <WBS>. <title>` heading + recognized spec section) exists. |
-| R5 | UNMET | Command: `grep -c altitude plugins/sp/skills/spur-cli/references/tasks.md plugins/sp/skills/spur-cli/references/tasks/verbs.md` → 0 and 0 (exit 1, no matches). Neither owning reference documents the task-local altitude choice; the DD-09 subset paragraph is unchanged. |
+| R1 | MET | scripts/test-shims/spur:1-18; tests/setup.ts:74-76; apps/cli/tests/test-shim-launcher.test.ts 5/5 pass; .spur/context/buglog.md:6993; docs/tasks4/0815_*.md:354 |
+| R2 | MET | plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:112,175; plugins/sp/tests/dispatch-handoff-contract.test.ts:25-69 10/10 pass |
+| R3 | MET | plugins/sp/agents/super-reviewer.md:101,134-161,173; packages/app/tests/services/review-priority-contract.test.ts:28-78 pass |
+| R4 | MET | packages/app/src/workflow/proof-input-fingerprint.ts:113,130,196; packages/app/tests/workflow/proof-input-fingerprint.test.ts:390-520 6/6 shape tests; run-artifact/inline-run-setup in 77/77 suite |
+| R5 | MET | plugins/sp/skills/spur-cli/references/tasks.md:167-194; tasks/verbs.md:70-82,200-201; task-check.ts:1058; task-check.test.ts 3/3 altitude; task update --help flags |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — Bare Spur resolves to the checkout under the test preload | UNMET | static-ref | Launcher absent (`tests/setup.ts:71` target missing); no spaced-path/sentinel-PATH child test exists. |
-| Scenario: R1 — Config isolation and historical correction remain truthful | UNMET | static-ref | Config suppression preserved at `packages/config/src/loader.ts:180`, but there is no repaired launcher to describe and no dated 0815 closure correction. |
-| Scenario: R2 — A delegated stage receives its execution and output contract | UNMET | static-ref | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:247` supplies neither absolute cwd nor a resolved Spur invocation to the delegate. |
-| Scenario: R2 — Verify examples round-trip through the real validators | UNMET | static-ref | No answer fixture authored from a handoff contract exists; the contract itself is absent from the driver reference. |
-| Scenario: R3 — Review output satisfies the existing priority and section contracts | UNMET | static-ref | `plugins/sp/agents/super-reviewer.md:134` word-only severity example would fail `hasPopulatedPriorityTable`; no P1–P4 examples and no substantive no-findings row. |
-| Scenario: R4 — Both proof actions reject a pointer before proof capture | UNMET | static-ref | `packages/app/src/workflow/proof-input-fingerprint.ts:142` accepts arbitrary readable content; task Q&A records a controlled pointer probe returning `ok: true`. |
-| Scenario: R4 — Valid and optional proof inputs retain their contracts | UNMET | static-ref | Preservation cannot be certified against a validation layer that does not exist at `packages/app/src/workflow/proof-input-fingerprint.ts:142`. |
-| Scenario: R5 — Fix-batch guidance uses the existing independent altitude controls | UNMET | command | `grep -c altitude` over both owning references returns 0 matches (exit 1); no documented altitude command, rationale requirement, or graduating-vs-task-local contrast exists to exercise. |
+| Scenario: bare spur resolves to checkout even with stale global first on PATH, non-root cwd, spaced checkout path | MET | test | apps/cli/tests/test-shim-launcher.test.ts 5/5 pass |
+| Scenario: 0815 correction is a dated amendment + buglog entry without rewriting the original observation | MET | static-ref | docs/tasks4/0815_*.md:354; .spur/context/buglog.md:6993-6999 |
+| Scenario: driver doc carries every required handoff element | MET | test | plugins/sp/tests/dispatch-handoff-contract.test.ts:25 10/10 pass |
+| Scenario: super-reviewer priority vocabulary is the canonical P1-P4 table | MET | test | packages/app/tests/services/review-priority-contract.test.ts:28-78 pass |
+| Scenario: both proof actions reject a pointer, never dereference it, write no ledger row | MET | test | packages/app/tests/workflow/proof-input-fingerprint.test.ts:414 + run-artifact rejection tests (77/77 suite) |
+| Scenario: arbitrary text + feature doc rejected; canonical task at custom in-workdir path accepted | MET | test | packages/app/tests/workflow/proof-input-fingerprint.test.ts:437,461,475,492 |
+| Scenario: task-local altitude skips DD-09; graduating still reports; coverage check independently controlled | MET | test | packages/app/tests/services/task-check.test.ts 3/3 pass; spur task update --help; tasks.md:190 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: FAIL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P1 | design-conformance | — | 0/7 Design claims implemented — no code, skill-source, or doc change exists for R1–R5. Absence of implementation, not deviation: `### Solution` is still the unfilled placeholder. |
-| P4 | scope-creep | — | 0818 in-scope diff (commit 4b0a844e3) is corpus markdown only; no unattributed hunks. |
-| P4 | verify-answer-lint | — | bun plugins/sp/scripts/verify-answer-lint.ts 0818 --answer .spur/run/0818-verify-answer.txt → PASS, 5 requirement rows, 8 AC rows, verdict FAIL (exit 0). |
-| P1 | shippable | — | spur feature check D6 --json → L4.verifying-incomplete-tasks: 1 linked task not done/cancelled (0818). |
+| P4 | test-shim-launcher (R1) | — | apps/cli: 5 pass / 0 fail |
+| P4 | dispatch-handoff-contract (R2) | — | plugins/sp: 10 pass / 0 fail |
+| P4 | app workflow+services suite (R3/R4) | — | packages/app 5 files: 77 pass / 0 fail |
+| P4 | task-check altitude (R5) | — | packages/app -t altitude: 3 pass / 0 fail |
+| P4 | rule run recommended-post-check | — | All 2 rules passed — no violations found |
+| P4 | SECUA review (all dimensions) | — | No P1-P3 findings across functional/quality/security/architecture; launcher quoted-args + fail-closed validation |
 
 ### References
 
@@ -209,4 +214,7 @@ Counterevidence: `packages/config/src/loader.ts:180` already suppresses unpinned
 ### History
 
 - 2026-09-09: Operator requested consolidation of 0818/0819/0820 into 0818 and removal of 0819/0820. Requirements, AC, Q&A, Design, Plan, Root Cause and References refined through the source-local `spur task update --section --from-file` surface. Original WBS/created_at retained; status remains todo. This is a refinement entry, not a retroactive creation or implementation-verification claim.
+- 2026-09-10T05:11:46.803Z todo → wip (system)
+- 2026-09-10T05:12:38.594Z wip → testing (system)
+- 2026-09-10T05:12:39.131Z testing → done (system)
 
