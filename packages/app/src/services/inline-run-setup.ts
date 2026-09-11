@@ -33,13 +33,17 @@ const { mkdirSync } = await import('node:fs');
 
 import { join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
-import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb, normalizePersistedWorkflowLayer, RunDao } from '@gobing-ai/spur-domain';
 import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
-import { type ResolvedWorkflowDefinition, resolveWorkflowDefinition } from '../workflow/workflow-resolver';
+import {
+    type ResolvedWorkflowDefinition,
+    resolveWorkflowDefinition,
+    type WorkflowLayerId,
+} from '../workflow/workflow-resolver';
 import { workflowVersionLiteral } from './workflow-service';
 
 /** Input for {@link createOrAttachInlineRun}. */
@@ -67,7 +71,7 @@ export interface InlineRunSetupSuccess {
     readonly definitionDigest: string;
     readonly workflowVersion: string | null;
     readonly resolvedPath: string;
-    readonly layer: 'project' | 'bundled';
+    readonly layer: WorkflowLayerId;
     readonly workdir: string;
     /** Lifecycle status of the attached/created row (`running` for a fresh row). */
     readonly status: string;
@@ -213,7 +217,8 @@ export async function createOrAttachInlineRun(input: InlineRunSetupInput): Promi
         const sourceMatches =
             typeof existingSource.path === 'string' &&
             resolve(existingSource.path) === resolved.path &&
-            existingSource.layer === resolved.layer &&
+            // ADR-113: a pre-rename row persisted `bundled`; it reads as `shared`.
+            normalizePersistedWorkflowLayer(existingSource.layer) === resolved.layer &&
             typeof existingSource.workdir === 'string' &&
             resolve(existingSource.workdir) === workdir;
         if (!sourceMatches) {

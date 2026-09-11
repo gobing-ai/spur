@@ -1,4 +1,5 @@
 import { basename, isAbsolute, join, resolve } from 'node:path';
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import { loadWorkflowDef, type WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
@@ -12,12 +13,105 @@ export const EMBEDDED_SCHEMA_PREFIX = '\0embedded-spur';
 export const SPUR_SCHEMA_MANIFEST = '@gobing-ai/spur/package.json';
 
 /**
+ * The ordered workflow-layer vocabulary (ADR-113 / task 0819): `project`
+ * (`<cwd>/.spur/workflows`), `registered` (each extra `workflows.paths` folder)
+ * and `shared` (the installed package's shared root from `bundledConfigRoot()`).
+ * Rule layers keep their own vocabulary — `bundled` stays there.
+ */
+export type WorkflowLayerId = 'project' | 'registered' | 'shared';
+
+/** One ordered workflow layer: `id` names the tier, `path` the absolute folder. */
+export interface WorkflowLayer {
+    id: WorkflowLayerId;
+    path: string;
+}
+
+/** Prefix marking a `workflows.paths` entry as relative to the installed package's config root. */
+export const BUNDLED_PATH_PREFIX = 'bundled:';
+
+/**
+ * `workflows.paths` entries as registered-layer candidates (ADR-113): `bundled:`-prefixed
+ * entries expand against the installed package's config root at read time (no bundled
+ * root under `bun build --compile` — the entry is skipped); other entries are returned
+ * as configured and resolved against cwd by {@link workflowLayers}. Sync & pure: the
+ * merged config is threaded from the composition root (A5 / ADR-082).
+ */
+export function registeredWorkflowPaths(config: SpurConfig | null): string[] {
+    const paths = config?.workflows?.paths ?? ['.spur/workflows/'];
+    const bundledRoot = bundledConfigRoot();
+    const expanded: string[] = [];
+    for (const path of paths) {
+        if (path.startsWith(BUNDLED_PATH_PREFIX)) {
+            if (bundledRoot !== null) expanded.push(join(bundledRoot, path.slice(BUNDLED_PATH_PREFIX.length)));
+        } else {
+            expanded.push(path);
+        }
+    }
+    return expanded;
+}
+
+/** Normalize a layer folder for dedupe: absolute, resolved, no trailing slash (ADR-113 §1). */
+function normalizeLayerPath(cwd: string, path: string): string {
+    return resolve(cwd, path);
+}
+
+/** Options for {@link workflowLayers}. */
+export interface WorkflowLayersOptions {
+    cwd: string;
+    /** Registered extra folders (`workflows.paths`, expanded) in config order. */
+    registered: readonly string[];
+    /**
+     * Shared-layer root override. Defaults to `bundledConfigRoot()` (the
+     * installed package's shared root); `null` models the compiled-binary case
+     * where the package tree does not resolve and the shared layer is absent.
+     */
+    sharedRoot?: string | null;
+}
+
+/**
+ * The one ordered layer list backing both `WorkflowService.list` and bare-name
+ * resolution (ADR-113 / task 0819), so the catalog shown is exactly what a name
+ * can resolve from:
+ *
+ * 1. `project` — `<cwd>/.spur/workflows`, always listed even when the folder is
+ *    missing or empty.
+ * 2. `registered` — each extra `workflows.paths` entry as an absolute path, in
+ *    config order, deduped by normalized absolute path against earlier layers
+ *    (legacy entries like `.spur/workflows/` or `bundled:workflows` collapse into
+ *    the project or shared layer, so existing configs keep working).
+ * 3. `shared` — the installed package's shared root (`bundledConfigRoot()`);
+ *    absent only when the package tree does not resolve (compiled binary).
+ */
+export function workflowLayers(opts: WorkflowLayersOptions): WorkflowLayer[] {
+    const sharedRoot = opts.sharedRoot !== undefined ? opts.sharedRoot : bundledConfigRoot();
+    const sharedPath = sharedRoot !== null ? normalizeLayerPath(opts.cwd, join(sharedRoot, 'workflows')) : null;
+    const layers: WorkflowLayer[] = [];
+    const seen = new Set<string>();
+    const add = (id: WorkflowLayerId, path: string): void => {
+        if (seen.has(path)) return;
+        seen.add(path);
+        layers.push({ id, path });
+    };
+
+    add('project', normalizeLayerPath(opts.cwd, join(opts.cwd, '.spur', 'workflows')));
+    for (const entry of opts.registered) {
+        // A registered entry equal to the package workflows folder collapses into the
+        // shared layer — the folder keeps its `shared` id (legacy `bundled:workflows`).
+        if (sharedPath !== null && normalizeLayerPath(opts.cwd, entry) === sharedPath) continue;
+        add('registered', normalizeLayerPath(opts.cwd, entry));
+    }
+    if (sharedPath !== null) add('shared', sharedPath);
+
+    return layers;
+}
+
+/**
  * Result of {@link resolveWorkflowFile}: either a resolved path with its source
  * layer, or a not-found pair of probed absolute paths. `probed[1]` is `null` when
  * `bundledConfigRoot()` returned `null` (the compiled-binary case).
  */
 export type ResolveWorkflowFileResult =
-    | { path: string; source: 'project' | 'bundled' }
+    | { path: string; source: WorkflowLayerId }
     | { path: null; probed: [string, string | null] };
 
 /**
@@ -27,13 +121,20 @@ export interface ResolvedWorkflowDefinition {
     path: string;
     workflow: WorkflowDef;
     digest: string;
-    layer: 'project' | 'bundled';
+    layer: WorkflowLayerId;
 }
 
 /** Options configuring workflow definition resolution and schema validation. */
 export interface ResolveWorkflowDefinitionOptions {
     validateSchema?: boolean;
     embeddedSchemas?: ReadonlyMap<string, string>;
+    /**
+     * Registered extra folders (`workflows.paths`, expanded) probed by bare-name
+     * resolution between the project and shared layers. Explicit file paths never
+     * consult them; `list` passes the same value so it shows exactly the folders
+     * a name can resolve from (ADR-113).
+     */
+    registered?: readonly string[];
 }
 
 /**
@@ -75,45 +176,24 @@ async function readWorkflowNameFast(fs: FileSystem, filePath: string): Promise<s
 async function scanWorkflowByName(
     cwd: string,
     name: string,
-): Promise<{ path: string; source: 'project' | 'bundled' } | null> {
+    registered: readonly string[],
+): Promise<{ path: string; source: WorkflowLayerId } | null> {
     const fs = createNodeFileSystem();
 
-    // 1. Scan project files by workflow name
-    const projectSpurDir = resolve(cwd, '.spur', 'workflows');
-    if (fs.exists(projectSpurDir)) {
+    // Probe the ordered layer list in precedence order (ADR-113): the first folder
+    // holding a definition with this name wins, so resolution and `list` agree.
+    for (const layer of workflowLayers({ cwd, registered })) {
         try {
-            const files = (await fs.readDir(projectSpurDir)).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
+            const files = (await fs.readDir(layer.path)).filter((f) => f.endsWith('.yaml') || f.endsWith('.yml'));
             for (const f of files) {
-                const abs = join(projectSpurDir, f);
+                const abs = join(layer.path, f);
                 const wfName = await readWorkflowNameFast(fs, abs);
                 if (wfName === name) {
-                    return { path: abs, source: 'project' };
+                    return { path: abs, source: layer.id };
                 }
             }
         } catch {
-            // ignore readdir errors
-        }
-    }
-
-    // 2. Scan bundled files by workflow name
-    const bundledRoot = bundledConfigRoot();
-    if (bundledRoot !== null) {
-        const bundledWorkflowsDir = join(bundledRoot, 'workflows');
-        if (fs.exists(bundledWorkflowsDir)) {
-            try {
-                const files = (await fs.readDir(bundledWorkflowsDir)).filter(
-                    (f) => f.endsWith('.yaml') || f.endsWith('.yml'),
-                );
-                for (const f of files) {
-                    const abs = join(bundledWorkflowsDir, f);
-                    const wfName = await readWorkflowNameFast(fs, abs);
-                    if (wfName === name) {
-                        return { path: abs, source: 'bundled' };
-                    }
-                }
-            } catch {
-                // ignore readdir errors
-            }
+            // Missing or unreadable layer folder — keep probing.
         }
     }
 
@@ -121,13 +201,15 @@ async function scanWorkflowByName(
 }
 
 /**
- * Resolve a workflow path across project and bundled tiers (task 0752 / ADR-099).
+ * Resolve a workflow file path across the workflow layers (task 0752 / ADR-113).
  *
- * Precedence is project-first on every surface (R4):
- * 1. Project exact path (cwd-relative or absolute).
- * 2. Project `.spur/workflows/<file>.yaml`, `<file>.yaml`, etc.
- * 3. Bundled config root `workflows/<file>.yaml`.
+ * Precedence keeps explicit file paths first, labeled `project`:
+ * 1. Explicit path (cwd-relative or absolute).
+ * 2. Project layer candidates: `.spur/workflows/<file>.yaml`, `<file>.yaml`, etc.
+ * 3. Shared layer: the installed package's `workflows/<file>.yaml`.
  *
+ * Bare-name resolution that must also see registered folders probes
+ * {@link workflowLayers} via {@link resolveWorkflowDefinition} instead.
  * Returns `{ path, source }` or a not-found probe pair.
  */
 export function resolveWorkflowFile(cwd: string, file: string): ResolveWorkflowFileResult {
@@ -164,22 +246,22 @@ export function resolveWorkflowFile(cwd: string, file: string): ResolveWorkflowF
 
     const bundledRoot = bundledConfigRoot();
     if (bundledRoot !== null) {
-        const bundledName = isYaml ? base : `${base}.yaml`;
-        const bundledPath = join(bundledRoot, 'workflows', bundledName);
-        if (fs.exists(bundledPath)) {
-            return { path: bundledPath, source: 'bundled' };
+        const sharedName = isYaml ? base : `${base}.yaml`;
+        const sharedPath = join(bundledRoot, 'workflows', sharedName);
+        if (fs.exists(sharedPath)) {
+            return { path: sharedPath, source: 'shared' };
         }
         if (!isYaml) {
-            const bundledPipeline = join(bundledRoot, 'workflows', `${base}-pipeline.yaml`);
-            if (fs.exists(bundledPipeline)) {
-                return { path: bundledPipeline, source: 'bundled' };
+            const sharedPipeline = join(bundledRoot, 'workflows', `${base}-pipeline.yaml`);
+            if (fs.exists(sharedPipeline)) {
+                return { path: sharedPipeline, source: 'shared' };
             }
-            const bundledLiteral = join(bundledRoot, 'workflows', base);
-            if (fs.exists(bundledLiteral)) {
-                return { path: bundledLiteral, source: 'bundled' };
+            const sharedLiteral = join(bundledRoot, 'workflows', base);
+            if (fs.exists(sharedLiteral)) {
+                return { path: sharedLiteral, source: 'shared' };
             }
         }
-        return { path: null, probed: [projectPath, bundledPath] };
+        return { path: null, probed: [projectPath, sharedPath] };
     }
     return { path: null, probed: [projectPath, null] };
 }
@@ -196,15 +278,16 @@ export async function resolveWorkflowDefinition(
     fileOrName: string,
     options: ResolveWorkflowDefinitionOptions = {},
 ): Promise<ResolvedWorkflowDefinition> {
+    const registered = options.registered ?? [];
     let resolved = resolveWorkflowFile(cwd, fileOrName);
     if (resolved.path === null) {
-        const scanned = await scanWorkflowByName(cwd, fileOrName);
+        const scanned = await scanWorkflowByName(cwd, fileOrName, registered);
         if (scanned !== null) {
             resolved = scanned;
         } else {
-            const [probedProject, probedBundled] = resolved.probed;
+            const [probedProject, probedShared] = resolved.probed;
             throw new Error(
-                `Workflow not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+                `Workflow not found: ${probedProject}${probedShared !== null ? ` (shared: ${probedShared})` : ''}`,
             );
         }
     }

@@ -13,6 +13,7 @@ import {
     parseWorkflowInventory,
     type ResolvedWorkflowDefinition,
     redactAndBound,
+    registeredWorkflowPaths,
     renderActionHeartbeat,
     renderRunPlan,
     renderStepLine,
@@ -26,7 +27,6 @@ import {
     type SystemEventBus,
     type TimelineEvent,
     WorkflowAppService,
-    type WorkflowListEntry,
     type WorkflowListResult,
     type WorkflowObservabilityBus,
     type WorkflowOutputDetail,
@@ -42,7 +42,6 @@ import {
     parseRequiresCapabilities,
 } from '@gobing-ai/spur-app/capability-attestation';
 import type { SpurConfig } from '@gobing-ai/spur-config';
-import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import type { ActionCost } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -354,32 +353,15 @@ export function submitSteeringLine(
 }
 
 /**
- * Prefix for config-driven workflow paths that resolve against the installed
- * package's bundled config root at read time (`bundled:workflows` →
- * `<package>/<bundled-config>/workflows`). Read-time expansion keeps machine-specific
- * absolute paths out of user-owned config files — the shipped global default
- * survives reinstalls, package-manager switches, and dotfiles sync.
- */
-const BUNDLED_PATH_PREFIX = 'bundled:';
-
-/**
- * Read configured workflow search paths, defaulting to `['.spur/workflows/']`.
- * Sync & pure (A5/ADR-082): the merged config is threaded from the composition
- * root; `bundled:` prefix expansion is unchanged, only the config read moves out.
+ * Read the registered workflow layer candidates (ADR-113): the configured
+ * `workflows.paths` entries with `bundled:` prefix expansion applied. The project
+ * layer is always `<cwd>/.spur/workflows` and the shared layer comes from the
+ * installed package, both computed by the app layer — this returns only the
+ * registered extras. Sync & pure (A5/ADR-082): the merged config is threaded from
+ * the composition root.
  */
 function resolveWorkflowPaths(config: SpurConfig | null): string[] {
-    const paths = config?.workflows?.paths ?? ['.spur/workflows/'];
-    const bundledRoot = bundledConfigRoot();
-    const expanded: string[] = [];
-    for (const path of paths) {
-        if (path.startsWith(BUNDLED_PATH_PREFIX)) {
-            // No bundled root under `bun build --compile` — skip the tier.
-            if (bundledRoot !== null) expanded.push(join(bundledRoot, path.slice(BUNDLED_PATH_PREFIX.length)));
-        } else {
-            expanded.push(path);
-        }
-    }
-    return expanded;
+    return registeredWorkflowPaths(config);
 }
 
 /** Register `spur workflow` commands. */
@@ -606,6 +588,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 try {
                     resolvedDefinition = await resolveWorkflowDefinition(context.cwd, file, {
                         embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+                        registered: resolveWorkflowPaths(context.spurConfig ?? null),
                     });
                     planArtifactPath = await writeWorkflowPlanArtifact(
                         context.cwd,
@@ -760,6 +743,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 try {
                     resolvedDefinition = await resolveWorkflowDefinition(context.cwd, file, {
                         embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+                        registered: resolveWorkflowPaths(context.spurConfig ?? null),
                     });
                 } catch (error) {
                     if (expectedDigest !== undefined) {
@@ -1217,11 +1201,11 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             }
             const resolved = resolveWorkflowFile(context.cwd, file);
             if (resolved.path === null) {
-                const [probedProject, probedBundled] = resolved.probed;
+                const [probedProject, probedShared] = resolved.probed;
                 writeJsonError(
                     context.output,
                     options,
-                    `workflow show: file not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+                    `workflow show: file not found: ${probedProject}${probedShared !== null ? ` (shared: ${probedShared})` : ''}`,
                     'NOT_FOUND',
                 );
                 context.setExitCode(1);
@@ -1236,6 +1220,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             try {
                 resolvedDefinition = await resolveWorkflowDefinition(context.cwd, file, {
                     embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
+                    registered: resolveWorkflowPaths(context.spurConfig ?? null),
                 });
             } catch (err) {
                 writeJsonError(
@@ -1262,6 +1247,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         // (known-unversioned); canonical definition digest.
                         version: resolvedDefinition.workflow.version ?? null,
                         definitionDigest: resolvedDefinition.digest,
+                        // 0819 R4: the layer the definition resolved from — the same
+                        // vocabulary `workflow list --json` reports.
+                        source: { layer: resolvedDefinition.layer, path: resolvedDefinition.path },
                         steps: buildWorkflowSteps(def),
                     };
                     const parsed = parseWorkflowInventory(projection);
@@ -1284,6 +1272,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             format: 'mermaid',
                             version: resolvedDefinition.workflow.version ?? null,
                             definitionDigest: resolvedDefinition.digest,
+                            // 0819 R4: resolution layer, same vocabulary as `workflow list --json`.
+                            source: { layer: resolvedDefinition.layer, path: resolvedDefinition.path },
                             diagram: renderWorkflowMermaid(def),
                         }),
                     );
@@ -1397,40 +1387,41 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
 
 const SOURCE_LABELS: Record<string, string> = {
     project: 'project layer',
-    global: 'user layer',
+    registered: 'registered layer',
+    shared: 'shared layer',
 };
 
 function formatListHuman(result: WorkflowListResult): string {
-    if (result.totalFiles === 0) {
-        return 'No workflows found.';
-    }
     const lines: string[] = [];
     const layerLabels = result.layers.map((l) => `${l.id} (${l.path})`).join(', ');
     lines.push(`Sources: ${layerLabels} (layered mode)`);
     lines.push(`Total files: ${result.totalFiles}`);
     lines.push('');
 
-    // Group entries by source layer
-    const byLayer = new Map<string, WorkflowListEntry[]>();
-    for (const entry of result.entries) {
-        const list = byLayer.get(entry.source) ?? [];
-        list.push(entry);
-        byLayer.set(entry.source, list);
-    }
-
-    for (const [layerId, entries] of byLayer) {
-        lines.push(`  ${layerId}/`);
-        for (const entry of entries) {
+    // Entries are pushed layer-by-layer in layer order, so each layer's entries are a
+    // contiguous run with that layer's id — including multiple `registered` folders.
+    // Every layer gets a header even when it has no workflows (0819 R2: the project
+    // layer is listed even when the folder is missing or empty).
+    let idx = 0;
+    for (const layer of result.layers) {
+        lines.push(`  ${layer.id}/`);
+        let layerEntries = 0;
+        while (idx < result.entries.length) {
+            const entry = result.entries[idx];
+            if (entry === undefined || entry.source !== layer.id) break;
+            idx++;
+            layerEntries++;
             if (entry.valid) {
                 lines.push(
-                    `    ✓ ${entry.name.padEnd(30)} ${entry.kind.padEnd(20)} ${entry.path}  [${SOURCE_LABELS[layerId] ?? layerId}]`,
+                    `    ✓ ${entry.name.padEnd(30)} ${entry.kind.padEnd(20)} ${entry.path}  [${SOURCE_LABELS[layer.id] ?? layer.id}]`,
                 );
             } else {
                 lines.push(
-                    `    ❌ ${entry.name.padEnd(30)} ${entry.kind.padEnd(20)} ${entry.path}  [${SOURCE_LABELS[layerId] ?? layerId}] (${entry.error ?? 'unknown'})`,
+                    `    ❌ ${entry.name.padEnd(30)} ${entry.kind.padEnd(20)} ${entry.path}  [${SOURCE_LABELS[layer.id] ?? layer.id}] (${entry.error ?? 'unknown'})`,
                 );
             }
         }
+        if (layerEntries === 0) lines.push('    (no workflows)');
     }
 
     return lines.join('\n').trimEnd();

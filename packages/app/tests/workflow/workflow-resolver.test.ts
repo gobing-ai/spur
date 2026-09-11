@@ -3,8 +3,15 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SpurConfig } from '@gobing-ai/spur-config';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import { createMigratedDb, RunDao } from '@gobing-ai/spur-domain';
-import { resolveWorkflowDefinition, resolveWorkflowFile, WorkflowAppService } from '../../src';
+import {
+    registeredWorkflowPaths,
+    resolveWorkflowDefinition,
+    resolveWorkflowFile,
+    WorkflowAppService,
+    workflowLayers,
+} from '../../src';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 
@@ -372,5 +379,108 @@ terminalStates:
         expect(plain.digest).not.toBe(resolved.digest);
 
         await rm(dir, { recursive: true, force: true });
+    });
+});
+
+describe('Task 0819: workflow layers (project | registered | shared)', () => {
+    const MINIMAL = (name: string, description = 'minimal layered flow') => `name: ${name}
+kind: state-machine
+description: "${description}"
+initialState: start
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates:
+  - done
+`;
+
+    test('R2: the project layer is always listed, even when the folder is missing', () => {
+        const cwd = '/tmp/absent-project-0819';
+        const layers = workflowLayers({ cwd, registered: [] });
+        expect(layers[0]).toEqual({ id: 'project', path: join(cwd, '.spur', 'workflows') });
+    });
+
+    test('R1: the shared layer is the installed package workflows folder, ordered last', () => {
+        const root = bundledConfigRoot();
+        expect(root).not.toBeNull();
+        const layers = workflowLayers({ cwd: '/tmp/proj-0819', registered: [] });
+        const shared = layers.at(-1);
+        expect(shared?.id).toBe('shared');
+        expect(shared?.path).toBe(join(root as string, 'workflows'));
+        expect(layers.map((l) => l.id)).toEqual(['project', 'shared']);
+    });
+
+    test('R3: registered entries are deduped by normalized absolute path, in config order', () => {
+        const layers = workflowLayers({
+            cwd: '/tmp/proj-0819',
+            registered: ['shared-ops', '/tmp/proj-0819/shared-ops/', 'other'],
+        });
+        expect(layers.filter((l) => l.id === 'registered').map((l) => l.path)).toEqual([
+            join('/tmp/proj-0819', 'shared-ops'),
+            join('/tmp/proj-0819', 'other'),
+        ]);
+    });
+
+    test('R3: a registered entry equal to the shared folder collapses into the shared layer', () => {
+        const root = bundledConfigRoot();
+        expect(root).not.toBeNull();
+        const layers = workflowLayers({ cwd: '/tmp/proj-0819', registered: [join(root as string, 'workflows')] });
+        expect(layers.map((l) => l.id)).toEqual(['project', 'shared']);
+    });
+
+    test('R3: a registered entry equal to the project folder collapses into the project layer', () => {
+        const layers = workflowLayers({ cwd: '/tmp/proj-0819', registered: ['.spur/workflows/'] });
+        expect(layers.map((l) => l.id)).toEqual(['project', 'shared']);
+    });
+
+    test('R4: with a null shared root (compiled binary), the shared layer is absent', () => {
+        const layers = workflowLayers({ cwd: '/tmp/proj-0819', registered: [], sharedRoot: null });
+        expect(layers.map((l) => l.id)).toEqual(['project']);
+    });
+
+    test('registeredWorkflowPaths expands bundled: entries and defaults to the project folder', () => {
+        const root = bundledConfigRoot();
+        expect(root).not.toBeNull();
+        const config = { workflows: { paths: ['bundled:workflows', 'ops'] } } as unknown as SpurConfig;
+        expect(registeredWorkflowPaths(config)).toEqual([join(root as string, 'workflows'), 'ops']);
+        expect(registeredWorkflowPaths(null)).toEqual(['.spur/workflows/']);
+    });
+
+    test('R4: bare-name resolution probes registered folders between project and shared', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-0819-reg-'));
+        const registeredDir = join(dir, 'ops-workflows');
+        await mkdir(registeredDir, { recursive: true });
+        const regFile = join(registeredDir, 'ops-only-0819.yaml');
+        await writeFile(regFile, MINIMAL('ops-only-0819'));
+
+        try {
+            const def = await resolveWorkflowDefinition(dir, 'ops-only-0819', { registered: [registeredDir] });
+            expect(def.layer).toBe('registered');
+            expect(def.path).toBe(regFile);
+
+            // Without the registered list the same bare name is not found.
+            await expect(resolveWorkflowDefinition(dir, 'ops-only-0819')).rejects.toThrow('Workflow not found');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('R4: a bare name present in both project and shared resolves from the project layer', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-0819-shadow-'));
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        const projectFile = join(wfDir, 'shadowed-0819.yaml');
+        await writeFile(projectFile, MINIMAL('shadowed-0819', 'project copy'));
+
+        try {
+            const def = await resolveWorkflowDefinition(dir, 'shadowed-0819');
+            expect(def.layer).toBe('project');
+            expect(def.path).toBe(projectFile);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
     });
 });

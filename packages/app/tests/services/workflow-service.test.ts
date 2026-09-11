@@ -15,6 +15,7 @@ import {
     resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     WorkflowAppService,
+    type WorkflowListResult,
 } from '../../src/services/workflow-service';
 
 const PAUSING_YAML = `name: pauser-svc
@@ -670,13 +671,17 @@ describe('WorkflowAppService', () => {
     });
 
     describe('list', () => {
+        // 0819: list always includes the installed package's shared layer, so project-layer
+        // assertions filter on `source === 'project'` to stay independent of the shipped catalog.
+        const projectEntries = (result: Pick<WorkflowListResult, 'entries'>) =>
+            result.entries.filter((e) => e.source === 'project');
+
         test('returns empty entries when no workflow files exist', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
             const svc = new WorkflowAppService(makeCtx(dir));
             const result = await svc.list([join(dir, '.spur', 'workflows')]);
             expect(Array.isArray(result.entries)).toBe(true);
-            expect(result.entries.length).toBe(0);
-            expect(result.totalFiles).toBe(0);
+            expect(projectEntries(result).length).toBe(0);
             expect(result.layers.length).toBeGreaterThanOrEqual(1);
             await rm(dir, { recursive: true, force: true });
         });
@@ -709,14 +714,18 @@ describe('WorkflowAppService', () => {
             const svc = new WorkflowAppService(makeCtx(dir));
             const result = await svc.list([join(dir, '.spur', 'workflows')]);
 
-            expect(result.totalFiles).toBe(2);
-            const names = result.entries.map((e) => e.name).sort();
+            expect(projectEntries(result).length).toBe(2);
+            const names = projectEntries(result)
+                .map((e) => e.name)
+                .sort();
             expect(names).toEqual(['ci-pipeline', 'test-flow']);
-            const kinds = result.entries.map((e) => e.kind).sort();
+            const kinds = projectEntries(result)
+                .map((e) => e.kind)
+                .sort();
             expect(kinds).toEqual(['state-machine', 'transition-flow']);
             // 0768 R1: every valid entry carries run identity — version (null =
             // known-unversioned) + the canonical digest a run of the file would stamp.
-            for (const entry of result.entries) {
+            for (const entry of projectEntries(result)) {
                 expect(entry.valid).toBe(true);
                 expect(entry.source).toBe('project');
                 expect(entry.version).toBeNull();
@@ -738,7 +747,7 @@ describe('WorkflowAppService', () => {
             const svc = new WorkflowAppService(makeCtx(dir));
             const result = await svc.list([join(dir, '.spur', 'workflows')]);
 
-            expect(result.totalFiles).toBe(2);
+            expect(projectEntries(result).length).toBe(2);
             const versioned = result.entries.find((e) => e.name === 'test-flow' && e.path.endsWith('v1.yaml'));
             expect(versioned?.valid).toBe(true);
             expect(versioned?.version).toBe('1.2.0');
@@ -757,9 +766,9 @@ describe('WorkflowAppService', () => {
             const svc = new WorkflowAppService(makeCtx(dir));
             const result = await svc.list([join(dir, '.spur', 'workflows')]);
 
-            expect(result.totalFiles).toBe(1);
-            expect(result.entries[0]?.valid).toBe(false);
-            expect(result.entries[0]?.error).toBeDefined();
+            expect(projectEntries(result).length).toBe(1);
+            expect(projectEntries(result)[0]?.valid).toBe(false);
+            expect(projectEntries(result)[0]?.error).toBeDefined();
             await rm(dir, { recursive: true, force: true });
         });
 
@@ -767,7 +776,7 @@ describe('WorkflowAppService', () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-'));
             const svc = new WorkflowAppService(makeCtx(dir));
             const result = await svc.list([join(dir, 'nonexistent')]);
-            expect(result.totalFiles).toBe(0);
+            expect(projectEntries(result).length).toBe(0);
             await rm(dir, { recursive: true, force: true });
         });
 
@@ -785,9 +794,72 @@ describe('WorkflowAppService', () => {
             const svc = new WorkflowAppService(makeCtx(dir));
             const result = await svc.list([join(dir, '.spur', 'workflows')]);
 
-            expect(result.totalFiles).toBe(1);
-            expect(result.entries[0]?.valid).toBe(true);
-            expect(result.entries[0]?.name).toBe('test-flow');
+            expect(projectEntries(result).length).toBe(1);
+            expect(projectEntries(result)[0]?.valid).toBe(true);
+            expect(projectEntries(result)[0]?.name).toBe('test-flow');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        // --- Task 0819: layered list (project | registered | shared) ---
+
+        test('0819 R2: the project layer is always listed even when its folder is missing', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0819-'));
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([]);
+            expect(result.layers[0]?.id).toBe('project');
+            expect(result.layers[0]?.path).toBe(join(dir, '.spur', 'workflows'));
+            expect(projectEntries(result).length).toBe(0);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('0819 R1/R3: entries carry their layer id in layer order; no global layer exists', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0819-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            const regDir = join(dir, 'ops');
+            await mkdir(wfDir, { recursive: true });
+            await mkdir(regDir, { recursive: true });
+            await writeFile(join(wfDir, 'mine.yaml'), MINIMAL_WORKFLOW_YAML);
+            await writeFile(
+                join(regDir, 'ops.yaml'),
+                MINIMAL_WORKFLOW_YAML.replace('name: test-flow', 'name: ops-flow'),
+            );
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([regDir]);
+
+            expect(result.layers.map((l) => l.id)).toEqual(['project', 'registered', 'shared']);
+            // The `global` layer is gone entirely: WorkflowLayerId no longer contains it,
+            // so the type system now enforces what this suite used to assert at runtime.
+            expect(result.layers.find((l) => l.id === 'registered')?.path).toBe(regDir);
+            // Entries appear as contiguous per-layer runs, in layer order — collapse
+            // consecutive duplicates and compare against the layer id order.
+            const sources = result.entries.map((e) => e.source);
+            const runs = sources.filter((s, i) => s !== sources[i - 1]);
+            expect(runs).toEqual(['project', 'registered', 'shared']);
+            expect(sources.at(-1)).toBe('shared');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('0819 R5: every entry carries its top-level description, or null when absent', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0819-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(
+                join(wfDir, 'described.yaml'),
+                `description: "Runs the described flow"
+${MINIMAL_WORKFLOW_YAML}`,
+            );
+            await writeFile(
+                join(wfDir, 'undescribed.yaml'),
+                MINIMAL_WORKFLOW_YAML.replace('name: test-flow', 'name: undescribed-flow'),
+            );
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const result = await svc.list([join(dir, '.spur', 'workflows')]);
+            const described = projectEntries(result).find((e) => e.name === 'test-flow');
+            const undescribed = projectEntries(result).find((e) => e.name === 'undescribed-flow');
+            expect(described?.description).toBe('Runs the described flow');
+            expect(undescribed?.description).toBeNull();
             await rm(dir, { recursive: true, force: true });
         });
     });
@@ -3210,7 +3282,7 @@ terminalStates:
             });
             expect(runResult.status).toBe('paused');
             const meta = JSON.parse((await new RunDao(await ctx.getDb()).traceRowById('bnd-1'))?.metadata_json ?? '{}');
-            expect(meta.definitionSource.layer).toBe('bundled');
+            expect(meta.definitionSource.layer).toBe('shared');
             expect(meta.definitionSource.path).toBe(bundledPath);
             spy.mockRestore();
 
@@ -3251,7 +3323,7 @@ describe('resolveWorkflowFile — two-tier resolution (task 0648)', () => {
         const resolved = resolveWorkflowFile('/tmp/nonexistent-project-dir-0648', '.spur/workflows/basic.yaml');
         expect(resolved.path).not.toBeNull();
         if (resolved.path !== null) {
-            expect(resolved.source).toBe('bundled');
+            expect(resolved.source).toBe('shared');
             expect(resolved.path).toBe(join(bundledRoot as string, 'workflows', 'basic.yaml'));
         }
     });

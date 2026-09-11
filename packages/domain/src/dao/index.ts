@@ -23,6 +23,8 @@ export { type CreatePlanningEventInput, PlanningEventDao, type PlanningEventRow 
 export { RuleEvalRunDao, type RuleEvalRunRow, RuleRunDao, type RuleRunRow } from './rule-run-dao';
 export {
     type CreateRunInput,
+    normalizePersistedWorkflowLayer,
+    type PersistedWorkflowLayer,
     RunDao,
     type RunDefinitionSource,
     type RunRecord,

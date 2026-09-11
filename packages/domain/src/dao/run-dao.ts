@@ -7,6 +7,24 @@ import { createId } from './base';
 export type RunRecord = typeof runs.$inferSelect;
 
 /**
+ * Current workflow layer vocabulary persisted in `definitionSource.layer`
+ * (ADR-113 / task 0819). Rows written before the rename may carry the legacy
+ * alias instead — read them through {@link normalizePersistedWorkflowLayer}.
+ */
+export type PersistedWorkflowLayer = 'project' | 'registered' | 'shared';
+
+/**
+ * Map a persisted `definitionSource.layer` to the current vocabulary. The legacy
+ * `bundled` alias reads as `shared` (ADR-113), so an inline run started before the
+ * rename still resumes; anything else outside the vocabulary is `null` (malformed).
+ */
+export function normalizePersistedWorkflowLayer(layer: unknown): PersistedWorkflowLayer | null {
+    if (layer === 'bundled') return 'shared';
+    if (layer === 'project' || layer === 'registered' || layer === 'shared') return layer;
+    return null;
+}
+
+/**
  * Resolved launch source recorded alongside run identity (0784 R1): resume must
  * replay this exact file from this exact workdir instead of re-deriving a path
  * from `workflow_name` (which can silently resolve a same-named replacement).
@@ -14,8 +32,8 @@ export type RunRecord = typeof runs.$inferSelect;
 export interface RunDefinitionSource {
     /** Absolute path of the launched definition file. */
     path: string;
-    /** Resolver layer the launch resolved through. */
-    layer: 'project' | 'bundled';
+    /** Resolver layer the launch resolved through (ADR-113 vocabulary). */
+    layer: PersistedWorkflowLayer;
     /** Absolute working directory the run was launched from. */
     workdir: string;
 }

@@ -605,11 +605,15 @@ export {
     type ResolvedWorkflowDefinition,
     type ResolveWorkflowDefinitionOptions,
     type ResolveWorkflowFileResult,
+    registeredWorkflowPaths,
     resolveOutputLogConfig,
     resolveWorkflowDefinition,
     resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     WorkflowAppService,
+    type WorkflowLayer,
+    type WorkflowLayerId,
+    workflowLayers,
 } from './services/workflow-service';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';

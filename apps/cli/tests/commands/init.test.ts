@@ -74,7 +74,7 @@ describe('init command', () => {
 
         const resolved = resolveWorkflowFile(cwd, '.spur/workflows/task-pipeline.yaml');
         expect(resolved.path).not.toBeNull();
-        if (resolved.path !== null) expect(resolved.source).toBe('bundled');
+        if (resolved.path !== null) expect(resolved.source).toBe('shared');
 
         const messages: string[] = [];
         const exitCode = await main(['workflow', 'validate', '.spur/workflows/task-pipeline.yaml', '--json'], {
@@ -296,11 +296,14 @@ describe('init command', () => {
         expect(result.misplacedGlobalKeys).toBeUndefined();
     });
 
-    test('the shipped global default carries a top-level workflows key (0649 R5)', async () => {
+    test('the shipped global default carries a top-level workflows key (0649 R5, 0819 R3)', async () => {
         const configRoot = bundledConfigRoot();
         expect(configRoot).not.toBeNull();
         const text = await readFile(join(configRoot as string, 'config.global.yaml'), 'utf8');
-        expect(text).toMatch(/^workflows:\n\s+paths:\n\s+- bundled:workflows$/m);
+        // 0819 R3: the shared layer needs no config entry — the top-level key stays
+        // (0649 R5) with an empty paths list; projects append registered extras.
+        expect(text).toMatch(/^workflows:\n\s+paths: \[\]$/m);
+        expect(text).not.toContain('bundled:');
     });
 
     test('SCAFFOLD_MANIFEST ships exactly one task template per TASK_VARIANTS entry', () => {

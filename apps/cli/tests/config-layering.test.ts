@@ -172,10 +172,21 @@ describe('config layering — composition-root merged-config (A5)', () => {
         const res = await runCli(['workflow', 'list', '--json'], dirs.projectDir, dirs.env);
         expect(res.code).toBe(0);
         const json = res.json as { layers?: Array<{ id?: string; path?: string }> };
-        expect(json.layers).toContainEqual({
-            id: 'project',
+        // The global-only `workflows.paths` entry surfaces as a `registered` layer
+        // (ADR-113/task 0819 vocabulary: project → registered → shared), resolved
+        // against cwd — proving the threaded merged config reached the command.
+        const layers = json.layers ?? [];
+        expect(layers).toContainEqual({
+            id: 'registered',
             path: join(await realpath(dirs.projectDir), 'global-only-workflows'),
         });
+        const layerIds = layers.map((l) => l.id);
+        const projectIdx = layerIds.indexOf('project');
+        const registeredIdx = layerIds.indexOf('registered');
+        const sharedIdx = layerIds.indexOf('shared');
+        expect(projectIdx).toBeGreaterThanOrEqual(0);
+        expect(registeredIdx).toBeGreaterThan(projectIdx);
+        if (sharedIdx !== -1) expect(sharedIdx).toBeGreaterThan(registeredIdx);
     });
 
     test('R7: no config layer defines agent.roles → doctor reports rolesSource: fallback (explicit fallback proven)', async () => {

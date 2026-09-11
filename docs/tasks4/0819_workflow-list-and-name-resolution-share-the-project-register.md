@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Workflow list and name resolution share the project, registered and shared layers
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T22:18:37.281Z
-updated_at: "2026-09-11T15:56:11.411Z"
+updated_at: "2026-09-11T18:39:01.725Z"
 feature_id: I21
 priority: P2
 tags:
@@ -33,11 +33,11 @@ Rubric: E7 D1 L3 C0 R1 = 12 → own task: its own subsystem (app + CLI TypeScrip
 
 ### Requirements
 
-- [ ] R1. `spur workflow list --json` labels the installed package's `config/workflows` folder (`bundledConfigRoot()/workflows`) as layer `shared`, and no `project` layer points outside the project.
-- [ ] R2. The `project` layer (`<cwd>/.spur/workflows`) is always listed, in `--json` `layers` and as a human-output header, even when the folder is missing or empty.
-- [ ] R3. Each `workflows.paths` entry that is not the project or shared folder is listed as a `registered` layer with its absolute path, in config order, deduped by normalized absolute path. Its entries carry `source: "registered"`, and the `~/.config/spur/` `global` mirror is removed.
-- [ ] R4. One application function returns the ordered layers for both `WorkflowService.list` and bare-name resolution. The layer union is `project | registered | shared`, `spur workflow show <name> --json` carries `source: {layer, path}`, and readers of persisted `definitionSource.layer` map legacy `bundled` to `shared`.
-- [ ] R5. Each `list --json` entry carries its definition's top-level `description` (or `null`), and a parity test fails when a `config/workflows/*.yaml` definition has no non-empty `description`.
+- [x] R1. `spur workflow list --json` labels the installed package's `config/workflows` folder (`bundledConfigRoot()/workflows`) as layer `shared`, and no `project` layer points outside the project.
+- [x] R2. The `project` layer (`<cwd>/.spur/workflows`) is always listed, in `--json` `layers` and as a human-output header, even when the folder is missing or empty.
+- [x] R3. Each `workflows.paths` entry that is not the project or shared folder is listed as a `registered` layer with its absolute path, in config order, deduped by normalized absolute path. Its entries carry `source: "registered"`, and the `~/.config/spur/` `global` mirror is removed.
+- [x] R4. One application function returns the ordered layers for both `WorkflowService.list` and bare-name resolution. The layer union is `project | registered | shared`, `spur workflow show <name> --json` carries `source: {layer, path}`, and readers of persisted `definitionSource.layer` map legacy `bundled` to `shared`.
+- [x] R5. Each `list --json` entry carries its definition's top-level `description` (or `null`), and a parity test fails when a `config/workflows/*.yaml` definition has no non-empty `description`.
 
 ### Acceptance Criteria
 
@@ -126,18 +126,150 @@ function workflowLayers(opts: { cwd: string; registered: readonly string[] }): W
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/workflow.ts:1204` |
+| `apps/cli/src/commands/workflow.ts:1208` |
+| `apps/cli/src/commands/workflow.ts:1223` |
+| `apps/cli/src/commands/workflow.ts:1250` |
+| `apps/cli/src/commands/workflow.ts:1275` |
+| `apps/cli/src/commands/workflow.ts:1390` |
+| `apps/cli/src/commands/workflow.ts:1394` |
+| `apps/cli/src/commands/workflow.ts:1401` |
+| `apps/cli/src/commands/workflow.ts:1416` |
+| `apps/cli/src/commands/workflow.ts:1420` |
+| `apps/cli/src/commands/workflow.ts:1424` |
+| `apps/cli/src/commands/workflow.ts:16` |
+| `apps/cli/src/commands/workflow.ts:29` |
+| `apps/cli/src/commands/workflow.ts:356` |
+| `apps/cli/src/commands/workflow.ts:364` |
+| `apps/cli/src/commands/workflow.ts:44` |
+| `apps/cli/src/commands/workflow.ts:591` |
+| `apps/cli/src/commands/workflow.ts:746` |
+| `apps/cli/tests/commands/init.test.ts:299` |
+| `apps/cli/tests/commands/init.test.ts:303` |
+| `apps/cli/tests/commands/init.test.ts:77` |
+| `apps/cli/tests/commands/workflow.test.ts:146` |
+| `apps/cli/tests/commands/workflow.test.ts:155` |
+| `apps/cli/tests/commands/workflow.test.ts:2493` |
+| `apps/cli/tests/commands/workflow.test.ts:2549` |
+| `apps/cli/tests/config-layering.test.ts:175` |
+| `apps/cli/tests/config-layering.test.ts:183` |
+| `packages/app/src/index.ts:608` |
+| `packages/app/src/index.ts:614` |
+| `packages/app/src/services/inline-run-setup.ts:220` |
+| `packages/app/src/services/inline-run-setup.ts:36` |
+| `packages/app/src/services/inline-run-setup.ts:42` |
+| `packages/app/src/services/inline-run-setup.ts:74` |
+| `packages/app/src/services/workflow-service.ts:1` |
+| `packages/app/src/services/workflow-service.ts:1098` |
+| `packages/app/src/services/workflow-service.ts:11` |
+| `packages/app/src/services/workflow-service.ts:1100` |
+| `packages/app/src/services/workflow-service.ts:1106` |
+| `packages/app/src/services/workflow-service.ts:1111` |
+| `packages/app/src/services/workflow-service.ts:1151` |
+| `packages/app/src/services/workflow-service.ts:1388` |
+| `packages/app/src/services/workflow-service.ts:1396` |
+| `packages/app/src/services/workflow-service.ts:1397` |
+| `packages/app/src/services/workflow-service.ts:1399` |
+| `packages/app/src/services/workflow-service.ts:1401` |
+| `packages/app/src/services/workflow-service.ts:1404` |
+| `packages/app/src/services/workflow-service.ts:1558` |
+| `packages/app/src/services/workflow-service.ts:1567` |
+| `packages/app/src/services/workflow-service.ts:1990` |
+| `packages/app/src/services/workflow-service.ts:1993` |
+| `packages/app/src/services/workflow-service.ts:2107` |
+| `packages/app/src/services/workflow-service.ts:2112` |
+| `packages/app/src/services/workflow-service.ts:2148` |
+| `packages/app/src/services/workflow-service.ts:2154` |
+| `packages/app/src/services/workflow-service.ts:2171` |
+| `packages/app/src/services/workflow-service.ts:2174` |
+| `packages/app/src/services/workflow-service.ts:2186` |
+| `packages/app/src/services/workflow-service.ts:374` |
+| `packages/app/src/services/workflow-service.ts:382` |
+| `packages/app/src/services/workflow-service.ts:388` |
+| `packages/app/src/services/workflow-service.ts:545` |
+| `packages/app/src/services/workflow-service.ts:550` |
+| `packages/app/src/services/workflow-service.ts:556` |
+| `packages/app/src/services/workflow-service.ts:59` |
+| `packages/app/src/services/workflow-service.ts:62` |
+| `packages/app/src/services/workflow-service.ts:664` |
+| `packages/app/src/workflow/workflow-resolver.ts:114` |
+| `packages/app/src/workflow/workflow-resolver.ts:124` |
+| `packages/app/src/workflow/workflow-resolver.ts:131` |
+| `packages/app/src/workflow/workflow-resolver.ts:15` |
+| `packages/app/src/workflow/workflow-resolver.ts:179` |
+| `packages/app/src/workflow/workflow-resolver.ts:183` |
+| `packages/app/src/workflow/workflow-resolver.ts:187` |
+| `packages/app/src/workflow/workflow-resolver.ts:189` |
+| `packages/app/src/workflow/workflow-resolver.ts:192` |
+| `packages/app/src/workflow/workflow-resolver.ts:196` |
+| `packages/app/src/workflow/workflow-resolver.ts:2` |
+| `packages/app/src/workflow/workflow-resolver.ts:204` |
+| `packages/app/src/workflow/workflow-resolver.ts:206` |
+| `packages/app/src/workflow/workflow-resolver.ts:211` |
+| `packages/app/src/workflow/workflow-resolver.ts:249` |
+| `packages/app/src/workflow/workflow-resolver.ts:255` |
+| `packages/app/src/workflow/workflow-resolver.ts:259` |
+| `packages/app/src/workflow/workflow-resolver.ts:264` |
+| `packages/app/src/workflow/workflow-resolver.ts:281` |
+| `packages/app/src/workflow/workflow-resolver.ts:284` |
+| `packages/app/src/workflow/workflow-resolver.ts:288` |
+| `packages/app/src/workflow/workflow-resolver.ts:290` |
+| `packages/app/tests/services/workflow-service.test.ts:18` |
+| `packages/app/tests/services/workflow-service.test.ts:3285` |
+| `packages/app/tests/services/workflow-service.test.ts:3326` |
+| `packages/app/tests/services/workflow-service.test.ts:674` |
+| `packages/app/tests/services/workflow-service.test.ts:684` |
+| `packages/app/tests/services/workflow-service.test.ts:717` |
+| `packages/app/tests/services/workflow-service.test.ts:722` |
+| `packages/app/tests/services/workflow-service.test.ts:728` |
+| `packages/app/tests/services/workflow-service.test.ts:750` |
+| `packages/app/tests/services/workflow-service.test.ts:769` |
+| `packages/app/tests/services/workflow-service.test.ts:779` |
+| `packages/app/tests/services/workflow-service.test.ts:797` |
+| `packages/app/tests/workflow/workflow-resolver.test.ts:384` |
+| `packages/app/tests/workflow/workflow-resolver.test.ts:6` |
+| `packages/app/tests/workflow/workflow-resolver.test.ts:8` |
+| `packages/domain/src/dao/index.ts:26` |
+| `packages/domain/src/dao/run-dao.ts:35` |
+| `packages/domain/src/dao/run-dao.ts:9` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | shared layer = bundledConfigRoot()/workflows, ordered last (workflow-resolver.ts:85,104); project always resolve(cwd,'.spur/workflows') (:90); test asserts shared=package folder ordered last (workflow-resolver.test.ts:406-413) |
+| R2 | MET | project layer added unconditionally when folder missing (workflow-resolver.ts:90); list keeps layer on scan throw (workflow-service.ts:1399-1405); human header prints every layer with "(no workflows)" (workflow.ts:1413-1439); tests resolver:400-404, service:805-813 |
+| R3 | MET | registeredWorkflowPaths expands bundled: and returns extras only (workflow-resolver.ts:39-56); layers carry registered ids in config order, deduped, legacy collapse (:92-99, tests :416-437); entry source=layer id (workflow-service.ts:376,2139); config.global.yaml:140 paths:[] drops bundled:workflows; e2e config-layering.test.ts:170-186 |
+| R4 | MET | one workflowLayers() backs list (workflow-service.ts:1396) and bare-name scan (workflow-resolver.ts:199-227); union project-registered-shared (:23); show --json source:{layer,path} (workflow.ts:1252,1276; workflow.test.ts:2494,2550); legacy bundled→shared via normalizePersistedWorkflowLayer (run-dao.ts:22) wired in resume (workflow-service.ts:1102) and attach (inline-run-setup.ts:221); project shadows shared (resolver tests :471-482) |
+| R5 | MET | WorkflowListEntry.description string-or-null (workflow-service.ts:382-383) filled from definition (:1558), null on all failure paths (:1567,2159-2186); parity test fails on any shared-corpus workflow lacking non-empty description (workflow-catalog-parity.test.ts:13-27) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-11T18:03:37.244Z todo → wip (system)
+- 2026-09-11T18:38:43.494Z wip → testing (system)
+- 2026-09-11T18:39:01.725Z testing → done (system)
+

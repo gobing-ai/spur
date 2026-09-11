@@ -1,5 +1,4 @@
 import { realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
@@ -9,6 +8,7 @@ import {
     ActionRunDao,
     attributeActionCost,
     createId,
+    normalizePersistedWorkflowLayer,
     PhaseRunDao,
     RunDao,
     type RunDefinitionSource,
@@ -56,8 +56,11 @@ import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../wor
 import type { WorkflowSteeringController } from '../workflow/steering';
 import {
     type ResolvedWorkflowDefinition,
+    registeredWorkflowPaths,
     resolveWorkflowDefinition,
     resolveWorkflowFile,
+    type WorkflowLayerId,
+    workflowLayers,
 } from '../workflow/workflow-resolver';
 import type { AgentService } from './agent-service';
 import { bridgeEventBus, withWorkflowIdentity } from './event-bridge';
@@ -368,18 +371,21 @@ export interface WorkflowListEntry {
     name: string;
     kind: string;
     path: string;
-    source: 'project' | 'global';
+    /** Id of the workflow layer (ADR-113) the file was listed from. */
+    source: WorkflowLayerId;
     valid: boolean;
     error?: string;
     /** Declared version literal, or null for a known-unversioned definition (0768 R1). */
     version?: string | null;
     /** Canonical definition digest, identical to what a run of this file stamps (0768 R1). */
     definitionDigest?: string;
+    /** Definition's top-level description — the catalog intent (0819 R5); null when absent or unparseable. */
+    description: string | null;
 }
 
 /** Result of a workflow list operation — available workflow files. */
 export interface WorkflowListResult {
-    layers: Array<{ id: string; path: string }>;
+    layers: Array<{ id: WorkflowLayerId; path: string }>;
     entries: WorkflowListEntry[];
     totalFiles: number;
 }
@@ -536,17 +542,18 @@ export class WorkflowAppService {
             resolved = await resolveWorkflowDefinition(this.ctx.cwd, file, {
                 validateSchema: opts.validateSchema !== false,
                 embeddedSchemas: this.ctx.embeddedSchemas?.(),
+                registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
             });
         } catch (error) {
             const probeMatch = resolveWorkflowFile(this.ctx.cwd, file);
             if (probeMatch.path === null) {
-                const [probedProject, probedBundled] = probeMatch.probed;
+                const [probedProject, probedShared] = probeMatch.probed;
                 return {
                     ok: false,
                     valid: false,
                     file,
                     errors: [
-                        `File not found: ${probedProject}${probedBundled !== null ? ` (bundled: ${probedBundled})` : ''}`,
+                        `File not found: ${probedProject}${probedShared !== null ? ` (shared: ${probedShared})` : ''}`,
                     ],
                 };
             }
@@ -654,6 +661,7 @@ export class WorkflowAppService {
             (await resolveWorkflowDefinition(this.ctx.cwd, file, {
                 validateSchema: true,
                 embeddedSchemas: this.ctx.embeddedSchemas?.(),
+                registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
             }));
         const absolute = resolved.path;
         const workflow = resolved.workflow;
@@ -1088,17 +1096,19 @@ export class WorkflowAppService {
             }
             const candidate = rawSource as Record<string, unknown>;
             const sourcePath = candidate.path;
-            const sourceLayer = candidate.layer;
             const sourceWorkdir = candidate.workdir;
+            // 0819 R4: the layer vocabulary is project|registered|shared; a pre-rename row
+            // carrying the legacy `bundled` alias still resumes and reads as `shared`.
+            const sourceLayer = normalizePersistedWorkflowLayer(candidate.layer);
             if (
                 typeof sourcePath !== 'string' ||
                 sourcePath === '' ||
-                (sourceLayer !== 'project' && sourceLayer !== 'bundled') ||
+                sourceLayer === null ||
                 typeof sourceWorkdir !== 'string' ||
                 sourceWorkdir === ''
             ) {
                 throw new Error(
-                    `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected an absolute path, a project|bundled layer, and a workdir). Resume refused.`,
+                    `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected an absolute path, a project|registered|shared layer — legacy "bundled" accepted — and a workdir). Resume refused.`,
                 );
             }
             pinned = { path: sourcePath, layer: sourceLayer, workdir: sourceWorkdir };
@@ -1138,6 +1148,7 @@ export class WorkflowAppService {
                 resolved = await resolveWorkflowDefinition(this.ctx.cwd, row.workflow_name, {
                     validateSchema: true,
                     embeddedSchemas: this.ctx.embeddedSchemas?.(),
+                    registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
                 });
             } catch {
                 throw new Error(
@@ -1374,40 +1385,23 @@ export class WorkflowAppService {
     }
 
     /**
-     * List available workflow YAML files across project and global layers.
-     * `workflowPaths` are the configured search paths (default: `['.spur/workflows/']`).
+     * List available workflow YAML files across the ordered workflow layers (ADR-113):
+     * `project` (always listed), each registered extra folder from `workflowPaths`, then
+     * the installed package's shared root (`bundledConfigRoot()`). `workflowPaths` are the registered
+     * candidates (default: the legacy `.spur/workflows/` entry, which collapses into the
+     * project layer), and bare-name resolution probes the same list, so `list` shows
+     * exactly the folders a name can resolve from.
      */
     async list(workflowPaths: string[] = ['.spur/workflows/']): Promise<WorkflowListResult> {
-        const projectRoot = this.ctx.cwd;
-        const globalRoot = join(homedir(), '.config', 'spur');
-
-        const layers: Array<{ id: string; path: string }> = [];
+        const layers = workflowLayers({ cwd: this.ctx.cwd, registered: workflowPaths });
         const entries: WorkflowListEntry[] = [];
-        const scannedPaths = new Set<string>();
 
-        // Project layer
-        for (const relPath of workflowPaths) {
-            const absPath = resolve(projectRoot, relPath);
-            layers.push({ id: 'project', path: absPath });
-            scannedPaths.add(absPath);
+        for (const layer of layers) {
             try {
-                const found = await scanWorkflowFiles(absPath, 'project', (filePath) => this.loadListEntry(filePath));
+                const found = await scanWorkflowFiles(layer.path, layer.id, (filePath) => this.loadListEntry(filePath));
                 entries.push(...found);
             } catch {
-                // Directory doesn't exist — skip gracefully
-            }
-        }
-
-        // Global layer — mirror the project paths under ~/.config/spur/, skip duplicates
-        for (const relPath of workflowPaths) {
-            const absPath = resolve(globalRoot, relPath);
-            if (scannedPaths.has(absPath)) continue;
-            layers.push({ id: 'global', path: absPath });
-            try {
-                const found = await scanWorkflowFiles(absPath, 'global', (filePath) => this.loadListEntry(filePath));
-                entries.push(...found);
-            } catch {
-                // Directory doesn't exist — skip gracefully
+                // Directory doesn't exist — skip gracefully (the layer stays listed).
             }
         }
 
@@ -1561,6 +1555,7 @@ export class WorkflowAppService {
                 valid: true,
                 version: workflowVersionLiteral(resolved.workflow),
                 definitionDigest: resolved.digest,
+                description: typeof resolved.workflow.description === 'string' ? resolved.workflow.description : null,
             };
         } catch (error) {
             const meta = await extractWorkflowMeta(filePath);
@@ -1569,6 +1564,7 @@ export class WorkflowAppService {
                 kind: meta.kind,
                 valid: false,
                 error: error instanceof Error ? error.message : String(error),
+                description: null,
             };
         }
     }
@@ -1991,8 +1987,12 @@ export {
     type ResolvedWorkflowDefinition,
     type ResolveWorkflowDefinitionOptions,
     type ResolveWorkflowFileResult,
+    registeredWorkflowPaths,
     resolveWorkflowDefinition,
     resolveWorkflowFile,
+    type WorkflowLayer,
+    type WorkflowLayerId,
+    workflowLayers,
 } from '../workflow/workflow-resolver';
 
 /**
@@ -2104,12 +2104,12 @@ async function outputArtifactForRun(cwd: string, runId: string): Promise<string 
 /**
  * Per-file identity payload for `list`, produced by the shared resolver (0768 R1).
  */
-type WorkflowListEntryIdentity = Pick<WorkflowListEntry, 'name' | 'kind' | 'valid'> &
+type WorkflowListEntryIdentity = Pick<WorkflowListEntry, 'name' | 'kind' | 'valid' | 'description'> &
     Partial<Pick<WorkflowListEntry, 'error' | 'version' | 'definitionDigest'>>;
 
 async function scanWorkflowFiles(
     rootPath: string,
-    source: 'project' | 'global',
+    source: WorkflowLayerId,
     loadEntry: (filePath: string) => Promise<WorkflowListEntryIdentity>,
 ): Promise<WorkflowListEntry[]> {
     const entries: WorkflowListEntry[] = [];
@@ -2145,13 +2145,19 @@ async function scanWorkflowFiles(
 /** Parse a workflow YAML file to extract name and kind. Returns partial entry on failure. */
 async function extractWorkflowMeta(
     filePath: string,
-): Promise<Pick<WorkflowListEntry, 'name' | 'kind' | 'valid' | 'error'>> {
+): Promise<Pick<WorkflowListEntry, 'name' | 'kind' | 'valid' | 'error' | 'description'>> {
     try {
         const fs = createNodeFileSystem();
         const text = await fs.readFile(filePath);
         const parsed = parseYamlObject(text);
         if (typeof parsed !== 'object' || parsed === null) {
-            return { name: '<unparseable>', kind: 'unknown', valid: false, error: 'Top-level value is not an object' };
+            return {
+                name: '<unparseable>',
+                kind: 'unknown',
+                valid: false,
+                error: 'Top-level value is not an object',
+                description: null,
+            };
         }
         const obj = parsed as Record<string, unknown>;
         const wfName = obj.name;
@@ -2162,15 +2168,22 @@ async function extractWorkflowMeta(
                 kind: typeof wfKind === 'string' ? wfKind : 'state-machine',
                 valid: false,
                 error: 'Missing or empty "name" field',
+                description: null,
             };
         }
-        return { name: wfName, kind: typeof wfKind === 'string' ? wfKind : 'state-machine', valid: true };
+        return {
+            name: wfName,
+            kind: typeof wfKind === 'string' ? wfKind : 'state-machine',
+            valid: true,
+            description: null,
+        };
     } catch (err) {
         return {
             name: '<unparseable>',
             kind: 'unknown',
             valid: false,
             error: err instanceof Error ? err.message : String(err),
+            description: null,
         };
     }
 }

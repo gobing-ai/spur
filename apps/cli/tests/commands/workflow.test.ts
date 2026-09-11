@@ -143,7 +143,7 @@ describe('workflow command (main)', () => {
         expect(exitCode).toBe(0);
     });
 
-    test('list subcommand (plain) shows empty when no workflows found', async () => {
+    test('list subcommand (plain) always lists the project layer header, even when empty (0819 R2)', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'spur-wf-list-empty-'));
         const lines: string[] = [];
         const exitCode = await main(['workflow', 'list'], {
@@ -152,7 +152,41 @@ describe('workflow command (main)', () => {
             dbUrl: ':memory:',
         });
         expect(exitCode).toBe(0);
-        expect(lines).toContain('No workflows found.');
+        const text = lines.join('\n');
+        // 0819 R2: the project layer header + its empty marker print even with no
+        // workflows; the shared layer (shipped catalog) is still listed.
+        expect(text).toContain('project/');
+        expect(text).toContain('(no workflows)');
+        expect(text).toContain('shared/');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('list subcommand (plain) labels entries per layer, including registered extras (0819 R1/R3)', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        const regDir = join(dir, 'ops-workflows');
+        await mkdir(wfDir, { recursive: true });
+        await mkdir(regDir, { recursive: true });
+        await writeFile(join(wfDir, 'test.yaml'), MINIMAL_WORKFLOW_YAML);
+        await writeFile(
+            join(regDir, 'ops.yaml'),
+            MINIMAL_WORKFLOW_YAML.replace('name: cli-test-flow', 'name: cli-ops-flow'),
+        );
+        await writeFile(join(dir, '.spur', 'config.yaml'), `workflows:\n  paths:\n    - ops-workflows\n`);
+        const output = createCapturedOutput();
+
+        const exitCode = await main(['workflow', 'list'], { output, cwd: dir, dbUrl: ':memory:' });
+
+        expect(exitCode).toBe(0);
+        const text = output.messages.join('\n');
+        expect(text).toContain('project/');
+        expect(text).toContain('registered/');
+        expect(text).toContain('shared/');
+        expect(text).toContain('cli-test-flow');
+        expect(text).toContain('cli-ops-flow');
+        expect(text).toContain('[registered layer]');
+        expect(text).toContain('[shared layer]');
+        expect(text).not.toContain('global');
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -2456,6 +2490,8 @@ transitions:
             format: 'todo',
             definitionDigest: 'sha256:671f9be44a311087ce05057074e7b8b5ca0ccdd4bc2ecc5b79f8d5ccfa1620ac',
             version: null,
+            // 0819 R4: explicit paths always resolve from the project layer.
+            source: { layer: 'project', path: wf },
             steps: [
                 {
                     id: 'start',
@@ -2510,6 +2546,8 @@ transitions:
             format: 'mermaid',
             definitionDigest: 'sha256:2cd0a58183d3f75b3fc783e28e1adbe566da06af53938ecb067b738196e3774b',
             version: null,
+            // 0819 R4: explicit paths always resolve from the project layer.
+            source: { layer: 'project', path: wf },
             diagram: renderWorkflowMermaid(await loadWorkflowDef(wf, { validateSchema: true })),
         });
         await rm(dir, { recursive: true, force: true });

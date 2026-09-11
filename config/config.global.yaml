@@ -132,13 +132,9 @@ agent:
           model: gpt-5.6
           tier: capable-3
 
-# `bundled:workflows` resolves against the installed package's own config root
-# at read time (BUNDLED_PATH_PREFIX in apps/cli/src/commands/workflow.ts), so
-# every project discovers the shipped workflows without a machine-specific
-# absolute path ever being persisted here. A project's own `workflows.paths`
-# concatenates over this (loader merge), and the run-time adapter resolves
-# bundled → project on its own (make-lifecycle-adapter.ts, two tiers since
-# task 0648).
+# Workflow layers (ADR-113): the project layer is always `<cwd>/.spur/workflows`
+# and the shared layer is the installed package's own `config/workflows`, so no
+# config entry is needed to discover the shipped workflows. A project registers
+# extra workflow folders by concatenating them here (loader merge):
 workflows:
-    paths:
-        - bundled:workflows
+    paths: []
