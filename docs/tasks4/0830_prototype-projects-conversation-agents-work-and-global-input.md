@@ -4,7 +4,7 @@ name: Prototype Projects conversation, agents, work, and global input interactio
 status: todo
 template: feature-impl
 created_at: 2026-09-11T18:07:39.271Z
-updated_at: "2026-09-11T18:08:05.634Z"
+updated_at: "2026-09-11T23:05:59.117Z"
 feature_id: G6
 priority: P2
 tags:
@@ -17,21 +17,25 @@ dependencies: ["0828"]
 
 ### Background
 
-G6 replaces overlapping Workspace/Inbox/Teams navigation with one Projects context and connects GlobalAgentBar to a durable orchestrator conversation. Use runtime inventory evidence to make state displays honest. Existing GlobalAgentBar is UI-only. The requested open-design capability was unavailable during charting; use it if available in the prototype session, otherwise create a local reviewable artifact.
+Robin approved the G6 Projects structure (Conversation, Agents, Work), rest/GTD defaults, and managed-loop v1 boundary on 2026-09-11. This task makes that direction concrete for product review through an isolated interactive prototype.
+
+The current GlobalAgentBar is UI-only, ProjectSwitcher navigates between project servers, and Workspace composes team-scoped views. The prototype must model the proposed request/receipt/result behavior without claiming those production paths are already connected. Consume the completed 0828 runtime inventory for honest state labels and capability/route migration.
 
 ### Requirements
 
-- [ ] R1. Produce a reviewable Projects prototype with Conversation, Agents, and Work views, existing project switching, role/executor/current-run detail, and contextual process/message inspection.
-- [ ] R2. Exercise global input destination capture, task/feature references, receipt-before-clear, preserved failure drafts, duplicate submission, result navigation, and project switching during a pending request.
-- [ ] R3. Show zero-agent, missing/offline orchestrator, rest-held request, unavailable executor, blocked work, failed delivery, and unknown execution-outcome states using explicit mock data.
-- [ ] R4. Apply DESIGN.md and verify keyboard/IME behavior, status announcements, visible focus, and mobile layout. Provide route/control migration mapping and list operator feedback without treating the prototype as production.
+- [ ] R1. Deliver a locally reviewable Projects prototype with Conversation, Agents and Work, one project switcher, per-agent role/executor/run details, and contextual lifecycle/terminal/message/activity controls.
+- [ ] R2. Demonstrate project-bound input and task/feature references, receipt-before-clear, failure draft preservation, idempotent retry, result navigation, and switching projects while a submission is pending.
+- [ ] R3. Make zero-agent, missing/offline orchestrator, rest-held, executor-unavailable, blocked, failed-delivery and outcome-unknown states selectable using labeled mock data; explain the available action in each state.
+- [ ] R4. Verify keyboard/IME, focus and announcements, narrow-screen layout and the retained-control/legacy-route mapping; publish a review package with explicit mock/runtime limitations.
+
+Out of scope: modifying live Board routes or components, production API calls, launching/stopping agents or project servers, new dependencies, actual team/config migration, backend implementation, or treating visual review as runtime verification.
 
 ### Acceptance Criteria
 
-- [ ] R1: A linked prototype exposes the proposed three views and all retained operational capabilities in project context.
-- [ ] R2: Interaction evidence covers each submission/switch case and prevents silent draft loss or cross-project delivery.
-- [ ] R3: Every listed unavailable/held/failure state is inspectable and accurately labeled as mocked.
-- [ ] R4: Accessibility/responsive checks and migration mapping are recorded; open feedback remains a design decision, not an implementation task.
+- [ ] R1: Given the local prototype, when its three views and agent detail are opened, then all retained capabilities are discoverable under one project context and every mutation is visibly simulated.
+- [ ] R2: Given two projects with colliding labels and delayed/failing responses, when the user submits, edits, retries, switches and refreshes, then requests/results remain bound to the captured project and no newer or other-project draft is cleared.
+- [ ] R3: Given the fixture controls, when each required state is selected, then its honest status and recovery/next action are visible and no mock result is presented as a production receipt.
+- [ ] R4: Given the review package, when checks are inspected, then automated interaction results, keyboard/IME/focus evidence, 390/1440 px views and complete legacy control/route mapping are recorded; unavailable browser evidence remains explicitly unverified.
 
 ### Q&A
 
@@ -39,16 +43,53 @@ G6 replaces overlapping Workspace/Inbox/Teams navigation with one Projects conte
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-11T23:05:58.812Z
+
+Ready-depth refinement, 2026-09-11:
+- CLOSED — Conversation/Agents/Work and one project selector are approved. Detailed visual feedback is collected after the artifact is reviewable.
+- CLOSED — All dispatch/lifecycle controls are mocked; no real backend, agent process or project server is contacted.
+- CLOSED — open-design is optional tooling for this deliverable; a self-contained local HTML prototype is the fixed fallback and portable output.
+- CLOSED — Drafts are revision-aware and project-bound; late acknowledgments cannot clear newly typed text or the active draft of another project.
+- CLOSED — Use existing happy-dom for an automated interaction check; it does not substitute for browser evidence of layout or native IME behavior.
+- DEFERRED — Robin owns final visual feedback and cutover timing. Public API/schema naming belongs to the later implementation design, not this mock.
+
 ### Design
 
-Reuse existing Board components and tokens where practical. One project selector and one conversation authority; no nested team selector or new Inbox module. Keep source changes in an isolated prototype artifact rather than changing live navigation. Avoid new dependencies. Mocked backend behavior must be labeled.
+#### WHAT / WHY / WHERE
+
+Freeze deliverables: `docs/prototypes/g6-projects/index.html` (self-contained HTML/CSS/JavaScript with labeled fixtures) and `docs/reports/g6-projects-prototype.md` (viewing instructions, scenarios, screenshots/check evidence and migration mapping). No new production API, route, package or shared component abstraction. Use the DESIGN.md surface/ink/accent/spacing values and semantic native controls; no CDN, network font, dependency install or build pipeline is needed.
+
+Existing components are behavior references: GlobalAgentBar, ProjectSwitcher, BoardLayout, WorkspaceShell, InboxShell, TeamsShell, MemberTerminal and task/feature views. Reuse their useful labels/control hierarchy, not their stub submission or duplicate navigation. Existing production files remain untouched by this prototype.
+
+The requested open-design tool may be used if available, but the local interactive artifact is the required portable output. Tool absence is resolved by this fallback, not an approval blocker.
+
+#### Frozen interaction contract
+
+Show one project selector and a header with worktree, strategy, orchestrator availability and capacity. Conversation is the default view. Agents exposes member details plus contextual process/terminal/message/activity inspection. Work links the selected task/feature to the same conversation; it does not maintain a second task backlog. All lifecycle controls simulate outcomes and visibly identify the simulation.
+
+Fixtures include two distinct project paths with identical display/member labels to expose accidental name-based addressing. Private prototype request fields are projectPath, requestId, text and optional taskId/featureId. Capture these at submission; subsequent navigation cannot change their destination. Store drafts and conversation independently by project path in a versioned prototype-only localStorage key, `spur:g6:projects-prototype:v1`; invalid/unavailable storage shows a nonfatal persistence notice. Do not read or write production Board storage.
+
+Send creates a pending receipt row; clear only the submitted draft revision after a simulated durable acceptance. If the user edits while waiting, retain the newer text. On failure keep the draft and retry with the same requestId for the same immutable payload; changed payload gets a new ID. A late receipt/result updates its original project's conversation, never the currently focused project's draft. A successful queued receipt with no active orchestrator is labeled queued-awaiting-orchestrator, not working.
+
+Provide explicit fixture controls for delayed acceptance, network failure, duplicate retry, result arrival, refresh, and every R3 state. rest accepts requests into a visible hold; results from already-running work remain visible. Unknown outcome offers inspect/reconcile guidance, not an unconditional retry. Mock work completion distinguishes run exit from a verified result.
+
+Enter submits; Shift+Enter inserts a newline; Enter during IME composition never submits. Escape closes detail/floating surfaces and restores focus to the opener. Tabs work by keyboard, selected state is announced, status updates use an appropriate live region, errors preserve readable text, and state is not communicated by color alone. Check 390 px and 1440 px layouts; the composer cannot obscure content or focused controls.
+
+#### Dependency and verification contract
+
+0828 supplies observable states and the preserve/convert/retire mapping. Keep its current-versus-proposed distinction visible. 0829 is not a dependency: both prototypes share the approved strategy semantics; UI mock labels must not imply that its simulator is a production backend.
+
+The report records steps and actual outcomes for every R2/R3 case, keyboard/IME/focus behavior, both viewports, and a control/route mapping for Workspace/Inbox/Teams. At least one automated interaction check belongs under `apps/web/tests/prototypes/g6-projects.test.ts`, using existing happy-dom where useful, and must fail on cross-project receipt/draft corruption. Run it inside apps/web. Browser inspection is required for layout and real focus/IME evidence when available; DOM-only checks cannot establish those. If the browser is unavailable, name the unverified cases and leave verification partial rather than claiming visual PASS.
+
+Do not freeze new production DTOs or endpoint names from this private mock. Robin owns visual/taste feedback after the prototype exists; that does not block building the approved three-view structure. Execution checkpoint after 60 minutes: save artifact and unverified scenarios under `.spur/run/0830/`, then continue. Production mutationPolicy: none; prototype/report/check files satisfy requireDiff.
 
 ### Plan
 
-1. Read DESIGN.md, runtime findings, GlobalAgentBar, ProjectSwitcher, and existing Workspace/Inbox/Teams views.
-2. Create the smallest reviewable prototype with shared conversation state and all R3 scenarios.
-3. Exercise keyboard, IME, project switch, mobile, draft retention, and receipt/result flows; record evidence and unavailable checks.
-4. Publish prototype location, control/route migration mapping, and feedback questions for Robin.
+- [ ] R1/R4: Read approved G6, DESIGN.md, completed 0828 Handoff and existing Board components; map retained controls before drawing views.
+- [ ] R1/R3: Build the self-contained three-view prototype with two project fixtures and all required availability/hold/failure states.
+- [ ] R2: Implement simulated asynchronous receipts/results, per-project drafts and immutable retry identity; exercise delayed receipts while editing and switching projects.
+- [ ] R2/R4: Add and run the existing-toolchain interaction check inside apps/web; inspect keyboard/IME/focus and the two viewports in an available browser.
+- [ ] R3/R4: Publish viewing instructions, scenario receipts, visual evidence, route/control migration and explicit limitations for Robin's review.
 
 ### Solution
 
@@ -64,6 +105,15 @@ Reuse existing Board components and tokens where practical. One project selector
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+- [G6 map and approval](../features/G6_projects-and-agent-fleet-unification-design.md)
+- [Approved design direction](../plans/2026-09-11-project-agent-fleet-brainstorm.md)
+- [0828 — Runtime and migration investigation](0828_inventory-and-probe-project-fleet-identity-delivery-and-lega.md)
+- [DESIGN.md](../../DESIGN.md)
+- [GlobalAgentBar](../../apps/web/src/components/GlobalAgentBar.tsx)
+- [ProjectSwitcher](../../apps/web/src/components/ProjectSwitcher.tsx)
+- [Existing input-bar test setup](../../apps/web/tests/components/GlobalAgentBar.test.tsx)
+- [Workspace ownership](../design/workspace-design.md)
+- [Inbox message-plane boundary](../design/inbox-board-module.md)
+- Required future input: `docs/reports/g6-runtime-inventory.md` from 0828. Required outputs listed in Design are planned artifacts, not existing evidence.
 
 ### History
