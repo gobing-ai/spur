@@ -10,24 +10,61 @@ than `spur agent run`, which delegates to the agents already on your machine.
 
 ## What you need
 
-- **Bun ≥ 1.3.14** on PATH (Spur runs as TypeScript under Bun).
+- **Bun ≥ 1.3.0** on PATH for the recommended install (or use the standalone installer below).
 - At least one supported coding agent installed and authenticated.
 
 ## Install
 
+Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both expose a global
+`spur` command and seed defaults into `~/.config/spur/` on first run.
+
+**With Bun (`>= 1.3.0`) — recommended:**
+
 ```bash
-# From npm (published bundle; a Bun installation must be on PATH)
-npm i -g @gobing-ai/spur
+# go with bun, suggested
+bun add -g @gobing-ai/superskill @gobing-ai/spur
 
-# From source
-git clone <repo> && cd spur && bun install
-bun run apps/cli/src/index.ts --help
+# or, run ad-hoc, no install:
+bunx @gobing-ai/spur --help
 
-# Standalone binary (Bun-less machines)
-curl -fsSL https://<release-host>/install.sh | bash
+# or, go with npm
+npm i -g @gobing-ai/superskill @gobing-ai/spur
 ```
 
-Per-platform binaries are published as release assets for darwin/linux on arm64/x64.
+`@gobing-ai/superskill` ships alongside Spur because the `sp` plugin (the `/sp:*` slash commands
+and subagents) is distributed through superskill. The npm package ships the `sp` plugin and its
+marketplace manifest, so you can install the plugin into your supported coding agents without
+cloning the repo:
+
+```bash
+# owner/repo shorthand → GitHub
+superskill install sp --marketplace gobing-ai/spur
+# or, the full GitHub URL
+superskill install sp --marketplace https://github.com/gobing-ai/spur
+# or, pre-installed via bun
+superskill install sp --marketplace $(bun pm bin -g)/@gobing-ai/spur
+# or, pre-installed via npm
+superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
+# or, already-downloaded source code
+superskill install sp --marketplace /path/to/spur
+```
+
+**Without Bun — standalone binary (macOS / Linux):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install.sh | sh
+```
+
+Installs to `~/.local/bin` (override via `SPUR_INSTALL`), embeds the Bun runtime, and runs
+`spur init` for you. Per-platform binaries (darwin/linux, arm64/x64) are published as release
+assets.
+
+```bash
+spur --help
+```
+
+> Developing Spur itself? Run from source: `git clone <repo> && cd spur && bun install`, then
+> `bun run apps/cli/src/index.ts --help`. See the repo README for the full development setup.
 
 ## Verify the installation
 

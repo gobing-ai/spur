@@ -6,12 +6,12 @@ coding agent — the [slash commands](./dev-slash-commands.md) call exactly thes
 
 ```mermaid
 flowchart LR
-    A[Plan\nfeature + tasks] --> B[Implement\nagent run / pipeline]
-    B --> C[Check\nrules + task check]
-    C -->|findings| D[Fix]
+    A["Plan<br/>feature + tasks"] --> B["Implement<br/>agent run / pipeline"]
+    B --> C["Check<br/>rules + task check"]
+    C -->|findings| D["Fix"]
     D --> C
-    C -->|clean| E[Verify\nverdict + record]
-    E --> F[Close\ndone + feature sync]
+    C -->|clean| E["Verify<br/>verdict + record"]
+    E --> F["Close<br/>done + feature sync"]
 ```
 
 ## 1. Plan: features and tasks
