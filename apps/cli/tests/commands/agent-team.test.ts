@@ -580,3 +580,240 @@ describe('spur agent run --drain', () => {
         }
     });
 });
+
+type G6MockRunner = {
+    runPromptCommand(
+        _agent: unknown,
+        opts: { input?: string },
+    ): Promise<{ exitCode: number; stdout: string; stderr: string; durationMs: number }>;
+};
+type G6MockDetector = {
+    detectOne(_agent: string): Promise<{ version: string }>;
+};
+type G6MockDoctor = {
+    runOne(_agent: string): Promise<DoctorResult>;
+    runAll(): Promise<DoctorResult[]>;
+};
+function g6Doctor() {
+    const result = {
+        agent: 'claude',
+        installed: true,
+        version: '1',
+        authenticated: 'authenticated' as const,
+        usable: true,
+        tier: 1 as const,
+        channels: [],
+        error: null,
+    };
+    return { runOne: async () => result, runAll: async () => [result] };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// G6 characterization block (task 0828) — fault-probe evidence for report
+// `docs/reports/g6-runtime-inventory.md`. Characterization ONLY: each test
+// observes current behavior; a passing test names the unmet target invariant
+// explicitly and does NOT assert conformance to it. No production change.
+// ═══════════════════════════════════════════════════════════════════════════════
+import { createMigratedDb, InboxMessageDao } from '@gobing-ai/spur-domain';
+
+describe('G6 characterization (0828) — delivery faults', () => {
+    test('probe drain-before-spawn: inbox rows are injected BEFORE the invocation runs', async () => {
+        // Setup: one queued message; fake runner records the pending count it sees
+        // at invocation entry. Boundary: drainIntoPrompt (agent.ts:543) → svc.run.
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.sendMessage('operator', 'planner', 'characterize me');
+            const db = await ctx.getDb();
+            const dao = new InboxMessageDao(db);
+
+            let pendingAtInvocation = -1;
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => {
+                        // Observed state INSIDE the invocation: what status are the rows in?
+                        pendingAtInvocation = await dao.countPending('planner');
+                        return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
+                    },
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
+            expect(code).toBe(0);
+            expect(pendingAtInvocation).toBe(0); // queued rows already flipped to injected
+
+            // Target invariant UNMET: delivery is finalized (queued→injected,
+            // injectAttempts++) before any invocation attempt is verifiable. If spawn
+            // fails after drain, the message is irrecoverably 'injected' — no redelivery.
+            const rows = await new InboxMessageDao(db).inbox('planner', 10);
+            expect(rows.length).toBe(1);
+            expect(rows[0]?.status).toBe('injected');
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('probe throwing invocation: the run is converted to exitCode 2 and the loop continues silently', async () => {
+        // Injected fault: the runner throws during invocation. Boundary:
+        // AgentService.executeRun catch at agent-service.ts:1292 converts the throw
+        // into { ok:false, exitCode:2 } WITHOUT a persisted message failure; svc.run
+        // returns that code; runAgentLoop (agent.ts:736) discards the return value.
+        const { ctx, out, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.sendMessage('operator', 'planner', 'will crash');
+            const db = await ctx.getDb();
+            const dao = new InboxMessageDao(db);
+
+            const deps = {
+                runner: {
+                    runPromptCommand: async (): Promise<never> => {
+                        throw new Error('injected invocation failure');
+                    },
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            // Observed: the loop does NOT propagate the failure — it iterates 3 times
+            // (idle-sleeping the remaining two) and resolves 0.
+            const code = await runAgentLoop(
+                ctx,
+                { agent: 'planner' },
+                { maxIterations: 3, sleep: async () => {} },
+                deps,
+            );
+            expect(code).toBe(0);
+            expect(out.errors.join('\n')).toContain('injected invocation failure');
+
+            const rows = await dao.inbox('planner', 10);
+            expect(rows.length).toBe(1);
+            // Observed: row is 'injected' (consumed) despite the failed invocation.
+            expect(rows[0]?.status).toBe('injected');
+            // No requeue seam exists: further drains return nothing.
+            expect((await team.drainPending('planner')).count).toBe(0);
+
+            // Target invariant UNMET: a failed invocation leaves no durable recovery
+            // path — the message is neither requeued, marked failed, nor surfaced as a
+            // delivery failure to any caller; recovery depends wholly on the supervisor
+            // process-restart, which then finds an empty inbox. A long-lived loop
+            // swallows this loss without an exit nonzero or a durable trace beyond the
+            // stderr line on the (no-op) captured console.
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('probe duplicate submission: two identical bodies enqueue two distinct msgIds, both deliver', async () => {
+        // Boundary: TeamService.sendMessage → InboxMessageDao.enqueue (ts-db 0.4.62).
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const db = await ctx.getDb();
+            const dao = new InboxMessageDao(db);
+            await dao.enqueue('operator', 'planner', 'same body');
+            await dao.enqueue('operator', 'planner', 'same body');
+
+            const rows = await dao.inbox('planner', 10);
+            expect(rows.length).toBe(2);
+            // Observed: per-send UUIDs — same-body requests are NOT unified.
+            expect(rows[0]?.id).not.toBe(rows[1]?.id);
+
+            // Target invariant UNMET: no idempotency/dedup key exists. A retried
+            // send (client crash + resend, double-click, operator retry)
+            // duplicates the invocation payload rather than coalescing to one row.
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('probe competing consumers: the same queued row is claimed at most once on the shared adapter', async () => {
+        // Two TeamService instances share one SQLite connection/db (two configs of
+        // the same consumer process). Boundary: InboxMessageDao.drainPending's
+        // conditional UPDATE ... WHERE status='queued' ... RETURNING (ts-db 0.4.62).
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const dao = new InboxMessageDao(db);
+            await dao.enqueue('operator', 'planner', 'consumed once');
+            await dao.enqueue('operator', 'planner', 'consumed twice');
+            const a = new TeamService({
+                cwd: process.cwd(),
+                env: {},
+                output: { write: () => {}, error: () => {} },
+                getDb: async () => db,
+                fs: createNodeFileSystem(process.cwd()),
+            });
+            const b = new TeamService({
+                cwd: process.cwd(),
+                env: {},
+                output: { write: () => {}, error: () => {} },
+                getDb: async () => db,
+                fs: createNodeFileSystem(process.cwd()),
+            });
+
+            const [aRows, bRows] = await Promise.all([a.drainPending('planner'), b.drainPending('planner')]);
+            const claimed = [...aRows.messages, ...bRows.messages];
+            // Observed: exactly the two distinct rows; no row appears on both sides.
+            expect(claimed.map((m) => m.id).length).toBe(new Set(claimed.map((m) => m.id)).size);
+            expect(claimed.length).toBe(2);
+            const rows = await dao.inbox('planner', 10);
+            for (const row of rows) expect(row.injectAttempts).toBe(1);
+
+            // Target invariant met on this seam: the claim is statement-atomic —
+            // duplicate consumption of the same row does NOT occur here. Recorded
+            // residual risk for the report: this holds per DB statement; a
+            // non-SQLite adapter or a drain spread over multiple statements could
+            // reopen the window, and there is no cross-process leader/lease today.
+        } finally {
+            db.close();
+        }
+    });
+
+    test('probe completion-without-notification: a successful run writes no completion-to-message association', async () => {
+        // Suppress the notification sink: there is none to suppress. Boundary:
+        // runAgentRun --drain with a successful fake runner; inspect what survives.
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.sendMessage('operator', 'planner', 'complete and tell me');
+            const db = await ctx.getDb();
+            const systemDao = new (await import('@gobing-ai/spur-domain')).SystemEventDao(db);
+
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => ({ exitCode: 0, stdout: 'done!', stderr: '', durationMs: 1 }),
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
+            expect(code).toBe(0);
+
+            // Observed: (a) the message row is stuck at 'injected' forever — markDelivered
+            // (ts-db) is never called on this path; (b) no message.* event family exists;
+            // (c) nothing in the ledger associates the runId with a message id.
+            const rows = await new InboxMessageDao(db).inbox('planner', 10);
+            expect(rows[0]?.status).toBe('injected');
+            const messageEvents = await systemDao.query({
+                names: ['message.enqueued', 'message.injected', 'message.delivered'],
+                limit: 100,
+            });
+            expect(messageEvents.length).toBe(0);
+            const sent = await team.getInbox('operator', 10);
+            expect(sent.count).toBe(0); // no completion message back to the sender
+
+            // Target invariant ABSENT (seam named): AgentService.executeRun persists
+            // the run result + occupant exit pin (agent-service.ts ~1434–1483) but has
+            // no completion-notification sink into InboxMessageDao. The durable
+            // completion→message association the future control plane needs does not
+            // exist; this probe demonstrates its absence rather than manufacturing one.
+        } finally {
+            await cleanup();
+        }
+    });
+});

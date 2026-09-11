@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Inventory and probe project fleet identity, delivery, and legacy migration
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.267Z
-updated_at: "2026-09-11T18:45:28.826Z"
+updated_at: "2026-09-11T23:33:06.222Z"
 feature_id: G6
 priority: P1
 tags:
@@ -24,19 +24,19 @@ The approved policy is rest draining active work, GTD dispatching already-author
 
 ### Requirements
 
-- [ ] R1. Produce a source-cited inventory of the project registry → config/spec → supervisor → loop → inbox → run/result path, including every CLI/HTTP/Board/plugin entry point, cwd/DB isolation, role propagation, mailbox identity, and occupant replacement.
-- [ ] R2. Produce runnable isolated evidence for drain-before-spawn, nonzero/throwing invocation, duplicate submission, competing consumers, stale-generation wait, and completion-without-notification. Record both actual behavior and the desired recovery invariant; do not label an unimplemented invariant as passing.
-- [ ] R3. Produce a preserve/convert/retire matrix covering team config, generated/manual/orphan specs, duplicate roles, roster reordering, conflicting worktree paths, legacy CLI/routes, workspace schema consumers, and unfinished related work. Distinguish inventory facts from an unchosen cutover policy.
-- [ ] R4. Deliver an ownership-correct extension and migration proposal, including reversible conversion, stable-ID preservation, rollback constraints, and explicit handoff inputs for 0829 and 0830.
+- [x] R1. Produce a source-cited inventory of the project registry → config/spec → supervisor → loop → inbox → run/result path, including every CLI/HTTP/Board/plugin entry point, cwd/DB isolation, role propagation, mailbox identity, and occupant replacement.
+- [x] R2. Produce runnable isolated evidence for drain-before-spawn, nonzero/throwing invocation, duplicate submission, competing consumers, stale-generation wait, and completion-without-notification. Record both actual behavior and the desired recovery invariant; do not label an unimplemented invariant as passing.
+- [x] R3. Produce a preserve/convert/retire matrix covering team config, generated/manual/orphan specs, duplicate roles, roster reordering, conflicting worktree paths, legacy CLI/routes, workspace schema consumers, and unfinished related work. Distinguish inventory facts from an unchosen cutover policy.
+- [x] R4. Deliver an ownership-correct extension and migration proposal, including reversible conversion, stable-ID preservation, rollback constraints, and explicit handoff inputs for 0829 and 0830.
 
 Out of scope: production fixes, new public APIs/roles/config keys, schema migrations, dependency changes, live agent invocation, host registry/config writes, and execution of downstream tasks.
 
 ### Acceptance Criteria
 
-- [ ] R1: Given the checked-out source and consuming-workspace dependencies, when the report is read, then every hop and caller category in R1 has an owner, source citation, identity/context carrier, and evidence classification.
-- [ ] R2: Given isolated fake-executor probes, when their documented commands run, then all six fault categories are reproducible with observed state and call counts; duplicate submission and duplicate consumption are distinguished, and unmet target invariants are explicitly named.
-- [ ] R3: Given the legacy inventory, when migration coverage is reviewed, then every R3 category has a disposition, conflict/rollback note and source evidence, while live data and old task statuses remain unchanged.
-- [ ] R4: Given the completed report, when 0829 or 0830 starts, then Handoff provides capability limits and observable state/control mappings; each proposed extension names its owning package and deferred cutover decisions have an owner.
+- [x] R1: Given the checked-out source and consuming-workspace dependencies, when the report is read, then every hop and caller category in R1 has an owner, source citation, identity/context carrier, and evidence classification.
+- [x] R2: Given isolated fake-executor probes, when their documented commands run, then all six fault categories are reproducible with observed state and call counts; duplicate submission and duplicate consumption are distinguished, and unmet target invariants are explicitly named.
+- [x] R3: Given the legacy inventory, when migration coverage is reviewed, then every R3 category has a disposition, conflict/rollback note and source evidence, while live data and old task statuses remain unchanged.
+- [x] R4: Given the completed report, when 0829 or 0830 starts, then Handoff provides capability limits and observable state/control mappings; each proposed extension names its owning package and deferred cutover decisions have an owner.
 
 ### Q&A
 
@@ -81,23 +81,55 @@ Execution budget: one bounded inventory pass, then one focused probe pass; check
 
 ### Plan
 
-- [ ] R1: Read approved G6, owning ADRs/satellites and current manifests; record commit, source-local CLI and consuming-workspace dependency provenance.
-- [ ] R1/R3: Trace callers and ownership; fill Runtime path and Migration matrix, resolving related task records through Spur.
-- [ ] R2: Reuse existing fake-executor/DB/pin fixtures; add only missing characterization cases and run them inside their owning workspaces.
-- [ ] R2/R4: Compare observations with approved invariants; record missing guarantees and recovery limits without implementing them.
-- [ ] R3/R4: Complete Handoff and reversible migration proposal. Check every cited path, probe command and required matrix row; verify the report and task evidence before closing this investigation.
+- [x] R1: Read approved G6, owning ADRs/satellites and current manifests; record commit, source-local CLI and consuming-workspace dependency provenance.
+- [x] R1/R3: Trace callers and ownership; fill Runtime path and Migration matrix, resolving related task records through Spur.
+- [x] R2: Reuse existing fake-executor/DB/pin fixtures; add only missing characterization cases and run them inside their owning workspaces.
+- [x] R2/R4: Compare observations with approved invariants; record missing guarantees and recovery limits without implementing them.
+- [x] R3/R4: Complete Handoff and reversible migration proposal. Check every cited path, probe command and required matrix row; verify the report and task evidence before closing this investigation.
+
+#
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (no production code; deliverables = report + characterization probes + task evidence):
+
+- `docs/reports/g6-runtime-inventory.md:1-157` (new, whole file) — R1/R3/R4 current-state report with frozen sections Provenance / Runtime path / Fault probes / Migration matrix / Handoff; every hop owner-cited `path:line`, provenance pinned to commit 6070879e8 + ts-db/ts-ai-runner 0.4.62. Why: 0829/0830 need verified capability limits instead of prose claims.
+- `apps/cli/tests/commands/agent-team.test.ts:584-819` (appended) — G6 characterization block: local `G6MockRunner/G6MockDetector/G6MockDoctor/g6Doctor` helpers plus five probes (drain-before-spawn, throwing invocation, duplicate submission, competing consumers, completion-without-notification) using the existing `makeCtx`+`createCliContext(cwd,:memory:)`+fake `AgentRunDeps` seams; each probe names its unmet target invariant. Why: R2 requires runnable, isolated evidence per fault category without a parallel harness.
+- `packages/app/tests/services/occupant-wait.test.ts:283-325` (appended) — sixth probe: stale-generation wait (typed `run_replaced` failure + observable successor, no retarget/link) reusing the file's `buildFakeDeps`/`pin`/`occupant` fixtures. Why: completes R2 with the fake-clock/pin seam.
+- Task status left at `wip` — pipeline owns transitions.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | docs/reports/g6-runtime-inventory.md#runtime-path — registry→config/spec→supervisor→loop→inbox→run/result, all entry points, cwd/DB isolation, role propagation, mailbox identity, occupant replacement cited |
+| R2 | MET | apps/cli/tests/commands/agent-team.test.ts G6 probes + packages/app/tests/services/occupant-wait.test.ts stale-generation probe; six categories runnable, unmet invariants named |
+| R3 | MET | docs/reports/g6-runtime-inventory.md#migration-matrix — every R3 category with disposition, conflict, rollback note; no live data touched |
+| R4 | MET | docs/reports/g6-runtime-inventory.md#handoff — existing/absent/proposed split with 0829/0830 handoff inputs |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1-AC | MET | report | every hop has owner, citation, identity/context carrier, evidence classification |
+| R2-AC | MET | test | six probe commands runnable; duplicate submission vs consumption separated; unmet invariants asserted in-test |
+| R3-AC | MET | report | matrix rows complete; G4/M3/M6/K1/K2/A7 resolved via spur; statuses untouched |
+| R4-AC | MET | report | capability limits + state/control mappings delivered; extensions name owning packages; cutover deferred to operator |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | secua-review | — | 2xP3 fixed (call-count assertions, citation drift); 3xP4 advisory left (roster row fold, comment typo fixed, supervisor identity column) |
+| P4 | quality-gate | — | bun run spur-check exit 0 twice; post-check rules pass; apps/cli 33 pass / packages/app 16 pass |
+| P4 | traceability-verify | — | per-requirement MET with file:line evidence; verdict PASS |
 
 ### References
 
@@ -112,3 +144,8 @@ Execution budget: one bounded inventory pass, then one focused probe pass; check
 - Handoff: 0829 — Prototype rest and GTD dispatch traces with capacity and restart failures; 0830 — Prototype Projects conversation, agents, work, and global input interactions.
 
 ### History
+
+- 2026-09-11T23:14:38.040Z todo → wip (system)
+- 2026-09-11T23:32:59.213Z wip → testing (system)
+- 2026-09-11T23:33:06.222Z testing → done (system)
+
