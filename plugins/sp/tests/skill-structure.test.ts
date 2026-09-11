@@ -766,7 +766,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const ROUTER_SKILLS = new Set(['spur-dev', 'spur-cli']);
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
-        const AGGREGATE_BUDGET = 8900; // scales with skill count (31 skills incl. redesign-web-ui); per-skill caps below are the real bloat guard
+        // 0820: +2 skills (spur-composer, spur-doctor) at the same per-skill allowance
+        // (~287 chars/skill when the cap was frozen at 31 skills; 34 x ~287 ≈ 9750).
+        const AGGREGATE_BUDGET = 9750;
 
         let aggregate = 0;
         const offenders: string[] = [];
@@ -1982,5 +1984,143 @@ describe('task 0786 — canonical capability guidance matches T10/T11, guarded r
         expect(text).toContain('read-only measured verification');
         expect(text).toContain('`.spur/run/<wbs>-verdict.json`');
         expect(text).toContain('missing or non-PASS evidence is a refusal');
+    });
+});
+
+// ─── (task 0820 / feature I21 / ADR-114) spur-composer + spur-doctor skills ──
+
+describe('task 0820 — spur-composer and spur-doctor skills compose, evaluate and evolve spur artifacts', () => {
+    const composerPath = join(SKILLS_DIR, 'spur-composer', 'SKILL.md');
+    const doctorPath = join(SKILLS_DIR, 'spur-doctor', 'SKILL.md');
+    const composer = readFileSync(composerPath, 'utf8');
+    const doctor = readFileSync(doctorPath, 'utf8');
+    const operations = readFileSync(join(SKILLS_DIR, 'spur-cli', 'references', 'workflows', 'operations.md'), 'utf8');
+    const fitTuning = readFileSync(
+        join(SKILLS_DIR, 'spur-cli', 'references', 'workflows', 'workflow-fit-and-tuning.md'),
+        'utf8',
+    );
+
+    test('R1 — spur-composer exists, covers the five nouns, and links sp:spur-cli instead of restating it', () => {
+        statSync(composerPath);
+        for (const row of ['| task |', '| feature |', '| rule |', '| workflow |', '| agent spec |']) {
+            expect(composer, `composer must cover ${row}`).toContain(row);
+        }
+        for (const method of ['catalog selection', 'Composition ladder', 'Rule tuning loop']) {
+            expect(composer, `composer must own its ${method} section`).toContain(method);
+        }
+        // Link, never restate: the facade and the taught tuning reference are linked by path.
+        expect(composer).toContain('../spur-cli/SKILL.md');
+        expect(composer).toContain('workflow-fit-and-tuning.md');
+        // Loops route to super-planner; the forbidden surfaces are named as forbidden; agent
+        // specs are reached only through the --specs verbs.
+        expect(composer).toContain('sp:super-planner');
+        expect(composer).toContain('`spur team`');
+        expect(composer).toContain('`spur agent loop`');
+        expect(composer).toContain('spur agent create|edit|delete|list --specs');
+    });
+
+    test('R6 — the composition ladder gates every step on validate + dry-run; shared needs recorded consent', () => {
+        expect(composer).toContain('`spur workflow validate`');
+        expect(composer).toContain('`spur workflow run --dry-run`');
+        expect(composer).toContain('| ephemeral |');
+        expect(composer).toContain('`.spur/workflows/<name>.yaml`');
+        // The shared row still names its repository location, without the shipped config path literal.
+        expect(composer).toContain("the spur repository's shipped shared workflow layer");
+        expect(composer).toContain('recorded operator consent');
+        expect(composer).toContain('build:bundle');
+    });
+
+    test('R7 — rule tuning starts from rule trace evidence and ends with validate + re-run', () => {
+        expect(composer).toContain('`spur rule trace <runId> --json`');
+        expect(composer).toContain('`spur rule validate`');
+        expect(composer).toContain('`spur rule run`');
+        expect(composer).toContain('references/rules/fine-tuning.md');
+        // Tuning starts from evidence, never from a guess.
+        expect(composer).toContain('Start from trace evidence');
+    });
+
+    test('R2 — spur-doctor exists, diagnoses artifacts not runtime environments, and names evidence per noun', () => {
+        statSync(doctorPath);
+        const fm = doctor.split('---')[1] ?? '';
+        expect(fm).toContain('not runtime environments');
+        expect(fm).toContain('spur agent doctor');
+        const evidence: Array<[string, string]> = [
+            ['task', 'spur task check'],
+            ['feature', 'spur feature check'],
+            ['rule', 'spur rule trace'],
+            ['workflow', 'spur workflow validate'],
+            ['agent spec', 'spur agent list --specs'],
+            ['history', 'sp:history-anatomy'],
+        ];
+        for (const [noun, source] of evidence) {
+            expect(doctor, `doctor needs ${source} as the ${noun} evidence source`).toContain(source);
+        }
+        // Read-only invariant + loop routing + forbidden surfaces.
+        expect(doctor).toContain('writes nothing');
+        expect(doctor).toContain('sp:super-planner');
+        expect(doctor).toContain('`spur team`');
+        expect(doctor).toContain('`spur agent loop`');
+    });
+
+    test('R3 — doctor reflects only through history-anatomy findings and maps the five closed action classes', () => {
+        for (const actionClass of ['task', 'rule candidate', 'workflow optimization', 'doc or learning', 'no-op']) {
+            expect(doctor, `doctor must name the action class ${actionClass}`).toContain(actionClass);
+        }
+        // First-match-wins map over history-anatomy fields; raw records stay out of scope.
+        expect(doctor).toContain('first matching row wins');
+        expect(doctor).toContain('environment-lens.md#placement-rule');
+        expect(doctor).toContain('never re-interpreted');
+        expect(doctor).toContain('only history interpreter');
+    });
+
+    test('R4 — doctor proposes only (no mutating spur verb); composer applies rows and re-runs verify', () => {
+        for (const forbidden of [
+            'spur task create',
+            'spur task update',
+            'spur task record',
+            'spur task deps',
+            'spur feature create',
+            'spur feature update',
+            'spur feature refresh',
+            'spur rule update',
+            'spur rule add',
+            'spur rule run',
+            'spur workflow add',
+            'spur workflow run',
+            'spur workflow refine',
+            'spur agent create',
+            'spur agent edit',
+            'spur agent delete',
+        ]) {
+            expect(doctor, `doctor must not name the mutating surface ${forbidden}`).not.toContain(forbidden);
+        }
+        expect(doctor).toContain('| `key` |');
+        expect(doctor).toContain('| `verify` |');
+        // Composer is the applier: each accepted row runs its apply route and re-runs its verify.
+        expect(composer).toContain('Applying doctor proposals');
+        expect(composer).toContain("row's `verify` evidence");
+    });
+
+    test('R5 — find-existing-workflow enumerates candidates from spur workflow list --json across all layers', () => {
+        const start = operations.indexOf('## Sub-procedure: find-existing-workflow');
+        expect(start).toBeGreaterThan(-1);
+        const section = operations.slice(start, operations.indexOf('## Sub-procedure: validate-and-dry-run'));
+        expect(section).toContain('spur workflow list --json');
+        expect(section).toContain('all layers');
+        // The folder glob is gone: layer enumeration is the CLI's job (ADR-113).
+        expect(section).not.toContain('.spur/workflows/*.yaml');
+    });
+
+    test('R8 — workflow-fit-and-tuning teaches the consolidation and cache-window rules next to the budgets', () => {
+        expect(fitTuning).toContain('### Consolidation and cache windows (ADR-115)');
+        expect(fitTuning).toContain('one model step per judgment');
+        expect(fitTuning).toContain('cache window');
+        expect(fitTuning).toContain('`freshSession: true`');
+        expect(fitTuning).toContain('independence boundary');
+        // The rules link their owner instead of replacing it.
+        expect(fitTuning).toContain('workflow-composition-contract.md');
+        // Composer links the taught rules and applies them with the ADR-115 budgets.
+        expect(composer).toContain('workflow-fit-and-tuning.md#consolidation-and-cache-windows-adr-115');
+        expect(composer).toContain('Composition budgets (ADR-115)');
     });
 });

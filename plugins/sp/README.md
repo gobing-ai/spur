@@ -185,7 +185,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (32 skills)
+├── skills/                          # Domain knowledge + workflow docs (34 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -227,6 +227,8 @@ plugins/sp/
 │   │       ├── features.md  +  features/{verbs, acceptance-criteria, roadmap-priority}.md
 │   │       ├── rules.md  +  rules/{operations, authoring-rules, fine-tuning, validation-and-extension}.md
 │   │       └── workflows.md  +  workflows/{operations, authoring-workflows, validation-and-extension}.md
+│   ├── spur-composer/               # Cross-noun selection, composition ladder, rule tuning; applies doctor proposals
+│   ├── spur-doctor/                 # Read-only artifact evaluation → proposal table (backs spur-composer)
 │   ├── spur-dev/                    # Thin planning→execution orchestration spine
 │   │   └── references/  # ac-style-guide, cross-cutting, decision-brief, dev-operations,
 │   │                      execution-batch, execution-workflow, feature-link-helper,
@@ -330,6 +332,8 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `indexed-context`           | 1.0   | Cross-agent project context — anatomy/learnings/pitfalls/buglog/memory in `.spur/context/`; hook-tracked token-ledger; graceful degradation on agents without hooks                                                                        |
 | `history-anatomy`           | 1.0   | Diagnostic interpretation owner over already-imported history — daily/ad-hoc mode contract, closed finding taxonomy, twelve-section report contract, `enrich`/`validate` rubrics; no workflow launch, no JSONL fallback, no corpus mutation                                                                   |
 | `session-review`            | 1.1   | Inline review of the active coding-agent session — compact outcomes, evidence-backed resolved/open issue classification, proposal-only improvements, and next actions; no workflow, import, delegation, or mutation                                                                                           |
+| `spur-composer`             | 1.0   | Cross-noun composition — workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning; applies accepted `spur-doctor` proposals through `spur` verbs; never judges its own output and never runs a recurring loop                                              |
+| `spur-doctor`               | 1.0   | Cross-noun evaluation — read-only CLI evidence per noun (task/feature/rule/workflow/agent spec), reflection over `history-anatomy` findings through a closed action-class map, and a proposal table; writes nothing; diagnoses artifacts, not runtime environments (`spur agent doctor`'s job)                |
 | `redesign-web-ui`           | 1.0   | Existing-UI visual upgrade — audit generic AI fingerprints, apply in-stack polish against `DESIGN.md` / live tokens, verify behavior and viewports; does not migrate frameworks                                                                                                                            |
 
 #### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)

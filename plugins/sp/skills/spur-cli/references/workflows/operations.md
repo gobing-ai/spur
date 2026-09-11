@@ -65,9 +65,12 @@ Reconciliation core — run this **before authoring anything**. Authoring withou
 workflows breeds redundant, diverged definitions (two near-identical approval flows, an import flow
 re-implemented under a new name). Inputs: the clarified process intent. Steps:
 
-1. **Enumerate existing workflows** — list `.spur/workflows/*.yaml` (and any `--file`-adjacent
-   directory); read each one's `name`, `kind`, and the states/nodes it defines so matches are found by
-   *substance*, not just by filename.
+1. **Enumerate existing workflows** — `spur workflow list --json` across **all layers**
+   (`project`, `registered`, `shared` — the listed `layers` are the folders a name can resolve
+   from). Never glob `.spur/workflows`: a folder scan misses the registered and shared layers.
+   Match from each entry's `name`, `kind`, `source` (the layer it came from) and `description`
+   (the intent), then read the strongest candidates' definitions — states/nodes — so matches are
+   found by *substance*, not just by filename.
 2. **Classify the strongest match** against the new intent:
 
    | Match | Meaning | Action |

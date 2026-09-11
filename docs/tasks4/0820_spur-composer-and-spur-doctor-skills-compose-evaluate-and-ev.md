@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: spur-composer and spur-doctor skills compose, evaluate and evolve spur artifacts
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T22:18:37.284Z
-updated_at: "2026-09-11T15:56:11.813Z"
+updated_at: "2026-09-11T19:21:53.805Z"
 feature_id: I21
 priority: P2
 tags:
@@ -37,14 +37,14 @@ Rubric: E8 D1 L1 C1 R1 = 12 → own task: a markdown-only plugin surface with a 
 
 ### Requirements
 
-- [ ] R1. `plugins/sp/skills/spur-composer/SKILL.md` validates and covers selection, composition and tuning for tasks, features, rules, workflows and agent specs. It links `sp:spur-cli` references instead of restating verb or flag catalogs, routes recurring loops and coordination to `sp:super-planner`, and forbids `spur team` and `spur agent loop`.
-- [ ] R2. `plugins/sp/skills/spur-doctor/SKILL.md` validates and names a read-only evidence source for each covered noun. Its description says it diagnoses spur artifacts, not runtime environments like `spur agent doctor`. It routes recurring loops to `sp:super-planner` and forbids `spur team` and `spur agent loop`.
-- [ ] R3. spur-doctor reflects over history only through `sp:history-anatomy` findings. It maps every finding class to exactly one action class (task, rule candidate, workflow optimization, doc or learning, no-op) and never re-interprets raw history records.
-- [ ] R4. spur-doctor returns a proposal table and performs no task, feature, rule or workflow write. spur-composer applies the rows the operator accepts through `spur` verbs and re-runs each row's verify evidence.
-- [ ] R5. The `sp:spur-cli` find-existing-workflow procedure (`references/workflows/operations.md`) takes its candidates from `spur workflow list --json` across all layers instead of globbing `.spur/workflows`.
-- [ ] R6. spur-composer's composition ladder (ephemeral → project → shared) gates each step on `spur workflow validate` and `spur workflow run --dry-run`, and writes `config/workflows` only after recorded operator consent.
-- [ ] R7. spur-composer's rule tuning procedure starts from `spur rule trace --json` evidence and ends with `spur rule validate` and a re-run on the affected inputs.
-- [ ] R8. `plugins/sp/skills/spur-cli/references/workflows/workflow-fit-and-tuning.md` teaches the consolidation and cache-window rules of the workflow composition contract (rules 5 and 7). spur-composer applies them with the ADR-115 budgets whenever it composes or tunes a workflow. It merges adjacent model steps only when no gate, HITL state or independence boundary sits between them, and keeps author and certifier steps apart. It also runs long deterministic work outside `agent.run`.
+- [x] R1. `plugins/sp/skills/spur-composer/SKILL.md` validates and covers selection, composition and tuning for tasks, features, rules, workflows and agent specs. It links `sp:spur-cli` references instead of restating verb or flag catalogs, routes recurring loops and coordination to `sp:super-planner`, and forbids `spur team` and `spur agent loop`.
+- [x] R2. `plugins/sp/skills/spur-doctor/SKILL.md` validates and names a read-only evidence source for each covered noun. Its description says it diagnoses spur artifacts, not runtime environments like `spur agent doctor`. It routes recurring loops to `sp:super-planner` and forbids `spur team` and `spur agent loop`.
+- [x] R3. spur-doctor reflects over history only through `sp:history-anatomy` findings. It maps every finding class to exactly one action class (task, rule candidate, workflow optimization, doc or learning, no-op) and never re-interprets raw history records.
+- [x] R4. spur-doctor returns a proposal table and performs no task, feature, rule or workflow write. spur-composer applies the rows the operator accepts through `spur` verbs and re-runs each row's verify evidence.
+- [x] R5. The `sp:spur-cli` find-existing-workflow procedure (`references/workflows/operations.md`) takes its candidates from `spur workflow list --json` across all layers instead of globbing `.spur/workflows`.
+- [x] R6. spur-composer's composition ladder (ephemeral → project → shared) gates each step on `spur workflow validate` and `spur workflow run --dry-run`, and writes `config/workflows` only after recorded operator consent.
+- [x] R7. spur-composer's rule tuning procedure starts from `spur rule trace --json` evidence and ends with `spur rule validate` and a re-run on the affected inputs.
+- [x] R8. `plugins/sp/skills/spur-cli/references/workflows/workflow-fit-and-tuning.md` teaches the consolidation and cache-window rules of the workflow composition contract (rules 5 and 7). spur-composer applies them with the ADR-115 budgets whenever it composes or tunes a workflow. It merges adjacent model steps only when no gate, HITL state or independence boundary sits between them, and keeps author and certifier steps apart. It also runs long deterministic work outside `agent.run`.
 
 ### Acceptance Criteria
 
@@ -164,18 +164,49 @@ Refined at depth=ready (refineall I21, 2026-09-11). Closed decisions:
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/tests/skill-structure.test.ts:1989` |
+| `plugins/sp/tests/skill-structure.test.ts:769` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | spur-composer/SKILL.md:44-53 covers task/feature/rule/workflow/agent spec; :33-36 links sp:spur-cli, never restates catalogs; :37-39 loops to sp:super-planner, forbids spur team and spur agent loop; test skill-structure.test.ts:2003 |
+| R2 | MET | spur-doctor/SKILL.md:41-49 names a read-only evidence source per noun; :3 description says diagnoses spur artifacts not runtime environments like spur agent doctor; :30-33 loop routing plus forbidden surfaces; test skill-structure.test.ts:2042 |
+| R3 | MET | spur-doctor/SKILL.md:28-29 history enters only via sp:history-anatomy, never raw records; :60-79 first-match-wins map; :72-75 five closed action classes; test skill-structure.test.ts:2065 |
+| R4 | MET | spur-doctor/SKILL.md:25-27 read-only invariant, no task/feature/rule/workflow write; :84-101 proposal table key/evidence/action/change/apply/verify; spur-composer/SKILL.md:121-135 applies accepted rows via spur verbs and re-runs verify; test skill-structure.test.ts:2076 |
+| R5 | MET | operations.md:62-88 find-existing-workflow step 1 enumerates via spur workflow list --json across all layers using source and description; :70 never glob .spur/workflows; test skill-structure.test.ts:2104 |
+| R6 | MET | spur-composer/SKILL.md:72-87 ephemeral-project-shared ladder, each step gated on spur workflow validate and run --dry-run; :82-84 shared step adds recorded operator consent plus build:bundle parity; test skill-structure.test.ts:2022 |
+| R7 | MET | spur-composer/SKILL.md:109-119 loop starts from spur rule trace --json, tunes via fine-tuning levers, ends with spur rule validate and spur rule run on affected inputs plus trace compare; test skill-structure.test.ts:2033 |
+| R8 | MET | workflow-fit-and-tuning.md:152-179 teaches consolidation and cache-window rules (gate/HITL/independence splits, author vs certifier freshSession, work outside agent.run) linking the composition contract at :156; spur-composer/SKILL.md:90-101 applies them with ADR-115 budgets; test skill-structure.test.ts:2114 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-11T18:58:47.631Z todo → wip (system)
+- 2026-09-11T19:21:53.020Z wip → testing (system)
+- 2026-09-11T19:21:53.805Z testing → done (system)
+

@@ -149,6 +149,35 @@ recorded stays-shell exception along with the suppression snapshot.)
 exit status, and are never a reason to hot-edit an executing pipeline. Surface them; fix on operator
 acceptance.
 
+### Consolidation and cache windows (ADR-115)
+
+Two composition rules sit next to this budget: the table above stays the measure surface, these
+decide where steps are cut. The rules are owned by the
+[workflow composition contract](../../../../../../docs/design/workflow-composition-contract.md#composition-budgets-adr-115);
+the text below is the operating summary, not a second owner.
+
+**Consolidation — one model step per judgment.** Merge adjacent `agent.run` steps only when they
+share a role and an executor **and** nothing between them must stay separate: a deterministic gate,
+a HITL state, or an independence boundary. Never merge an author step with the review or verify
+step that certifies it — those keep `freshSession: true`. A new model step in a shared workflow
+raises its `pipeline-budgets` `modelQueries`, which needs a recorded decision, and every shared
+workflow with a model query carries a budget entry.
+
+**Cache windows — step boundaries follow the cache window, not the clock.** Provider prompt caches
+expire after an idle window and refresh on every hit (Anthropic: 5 minutes by default; OpenAI:
+5–10 minutes in memory). The window W defaults to 300 s, the shortest common default:
+
+- A tool call inside `agent.run` that runs longer than W idles the model — its next request
+  re-reads a cold prefix. Run that work in a deterministic step instead.
+- An `agent.run` that resumes the inherited session after a gap longer than W (a HITL wait, a slow
+  deterministic step) rewrites the whole session into the cache. When the prior step's artifact
+  carries what the step needs, prefer `freshSession: true` with that artifact as the handoff.
+- A deterministic step should finish within W at p50. An `agent.run` with p50 above 2W is a split
+  candidate only at a real artifact seam — each split adds a model query and a cold prefix, so it
+  must pay for itself in retry granularity or observability.
+
+These are runtime budgets, judged from run traces and step profiles — never `validate` findings.
+
 ---
 
 ## 4. Refactor — moving across the boundary
