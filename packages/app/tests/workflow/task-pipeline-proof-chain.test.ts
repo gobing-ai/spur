@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
@@ -221,7 +221,17 @@ describe('task-path lookup fails closed (task 0751 R2)', () => {
         // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
         expect(options?.featureFile).toBe('${vars.featureSpecPath}');
         const recordShells = (record?.onEnter ?? []).filter((a) => a.kind === 'shell');
-        expect(recordShells.length).toBeGreaterThanOrEqual(2);
+        expect(recordShells.length).toBeGreaterThanOrEqual(1);
+        // 0823: the record write itself is a `command.gate` action (classified transient retry,
+        // governance §1.1 (c)); assert the verb survived the owner move.
+        const recordGate = (record?.onEnter ?? []).find((a) => a.kind === 'command.gate');
+        expect(recordGate).toBeDefined();
+        const gateArgs = JSON.stringify(recordGate?.options ?? {});
+        expect(gateArgs).toContain('task');
+        expect(gateArgs).toContain('record');
+        expect(gateArgs).toContain('--solution-from-diff');
+        expect(gateArgs).toContain('--transition');
+        expect(gateArgs).toContain('testing');
         const done = DEF.states.find((st) => st.id === 'done');
         expect(done?.onEnter?.find((a) => a.kind === 'run.artifact')).toBeUndefined();
     });
@@ -325,17 +335,20 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
     test('the verify stamp marks review completed only on a matching marker (R4)', () => {
         const stamp = shellCommandsOf('verify').find((c) => c.includes('-verdict.json'));
         expect(stamp).toBeDefined();
-        // Default is skipped — an unexecuted review is never reported completed.
-        expect(stamp).toContain('RV="skipped"');
+        // Default is skipped — an unexecuted review is never reported completed. 0823 moved the
+        // marker compare into the jq program itself (`--arg rp` + inline if), same semantics.
         expect(stamp).toContain('$__runId-review-proof.digest');
-        expect(stamp).toContain('--arg rv "$RV"');
-        expect(stamp).toContain('review: {status: $rv, digest: $d}');
+        expect(stamp).toContain('--arg rp "$(cat .spur/run/$__runId-review-proof.digest');
+        expect(stamp).toContain('review: {status: (if $rp == $d then "completed" else "skipped" end)');
         expect(stamp).not.toContain('review: {status: "completed"');
     });
 
     test('the verify→record guard demands completed review evidence (R4/R5)', () => {
         const guard = cmdOf('verify', 'record');
-        expect(guard).toContain('.proof.stages.review.status // ""\' "$V" 2>/dev/null)" = "completed"');
+        // 0823: one `jq -e` predicate over the verdict file (same proof fields as the former
+        // 9-command test chain).
+        expect(guard).toContain('jq -e');
+        expect(guard).toContain('(.proof.stages.review.status // "") == "completed"');
         // The rest of the proof-block pinning stays intact.
         expect(guard).toContain('.proof.stages.review.digest');
         expect(guard).toContain('.proof.definitionDigest');
@@ -344,17 +357,6 @@ describe('task-pipeline proof-input completeness and honest review evidence (tas
 });
 
 describe('task-pipeline busy-retry classifiers, done guard projection, route-id safety (task 0804 R3/R6/R8)', () => {
-    // Raw YAML text (not the parsed tree) so classifier expressions are pinned verbatim.
-    const RAW = readFileSync(join(WORKFLOWS_DIR, 'task-pipeline.yaml'), 'utf8');
-
-    /** Extract a `name() { ... };` shell function body from a YAML command string. */
-    const fnOf = (command: string, name: string): string => {
-        const start = command.indexOf(`${name}() {`);
-        if (start < 0) return '';
-        const end = command.indexOf('\n};', start);
-        return command.slice(start, end + 3);
-    };
-
     const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number; stderr: string } => {
         const proc = Bun.spawnSync(['sh', '-c', script], {
             cwd,
@@ -372,94 +374,37 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
         return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
     }
 
-    // ── R3: all five retry classifiers recognize raw locks, SQLITE_BUSY and the
-    // path-bearing busy message; budgets and non-lock behavior stay unchanged.
+    // ── R3 (0823): the three lifecycle transitions and the quality-gate loop moved to owners
+    // (governance §1.1 (c)/(d)). The classified transient retry lives in the command.gate retry
+    // options; the gate lock-classifier behavior is behavioral-tested in
+    // plugins/sp/tests/quality-gate.test.ts against plugins/sp/scripts/quality-gate.ts.
 
-    test('all five classifier sites carry the expanded path-aware alternation (R3)', () => {
-        // Three retry-once sites (task update transitions) + two quality-gate loop sites.
-        const retrySites =
-            RAW.match(
-                /grep -Eq 'ENOENT\|EBUSY\|ENOTEMPTY\|database is locked\|SQLite database \.\*is busy\|SQLITE_BUSY'/g,
-            ) ?? [];
-        const gateSites =
-            RAW.match(/grep -Eq 'SQLiteError: database is locked\|SQLite database \.\*is busy\|SQLITE_BUSY'/g) ?? [];
-        expect(retrySites.length).toBe(3);
-        expect(gateSites.length).toBe(2);
-        // Every `database is locked`-bearing classifier now carries the full expansion —
-        // no leftover narrow expression.
-        const narrow = RAW.match(/grep -Eq '[^']*database is locked[^']*'/g) ?? [];
-        expect(narrow.length).toBe(5);
-        // Existing budgets preserved: retry-once keeps its 2s delay, gate loops keep at
-        // most five attempts with 10s delays.
-        expect((RAW.match(/sleep 2;/g) ?? []).length).toBe(3);
-        expect((RAW.match(/sleep 10;/g) ?? []).length).toBe(2);
-        expect((RAW.match(/-ge 5 \]/g) ?? []).length).toBe(2);
-    });
-
-    test('behavioral: the retry-once classifier retries only lock-class failures (R3)', () => {
-        // The three retry-once sites share one byte-identical function; proving the
-        // shared body pins all three sites.
-        const bodies = DEF.states
-            .flatMap((s) => (s.onEnter ?? []).map((a) => String(a.options?.command ?? '')))
-            .filter((c) => c.includes('retry_transient() {'))
-            .map((c) => fnOf(c, 'retry_transient'));
-        expect(bodies.length).toBe(3);
-        expect(new Set(bodies).size).toBe(1);
-        const fn = bodies[0];
-        expect(fn).not.toBe('');
-
-        const { dir, cleanup } = makeTmpDir();
-        try {
-            writeFileSync(
-                join(dir, 'busy.sh'),
-                '#!/bin/sh\necho "SQLite database $PWD/.spur/spur.db is busy" >&2\necho call >> calls.log\nexit 16\n',
-            );
-            writeFileSync(
-                join(dir, 'other.sh'),
-                '#!/bin/sh\necho "ENOCONFIG: totally unrelated failure" >&2\necho call >> calls.log\nexit 5\n',
-            );
-            writeFileSync(join(dir, 'ok.sh'), '#!/bin/sh\necho call >> calls.log\nexit 0\n');
-            const run = (stub: string): { code: number; calls: number } => {
-                rmSync(join(dir, 'calls.log'), { force: true });
-                const res = runSh(`${fn}\nretry_transient sh ${dir}/${stub}`, dir);
-                const calls = readFileSync(join(dir, 'calls.log'), 'utf8').trim().split('\n').length;
-                return { code: res.code, calls };
-            };
-            // Path-bearing busy message → exactly one retry, then the original rc.
-            expect(run('busy.sh')).toEqual({ code: 16, calls: 2 });
-            // Non-lock failure → no retry, original rc, single invocation.
-            expect(run('other.sh')).toEqual({ code: 5, calls: 1 });
-            // First-attempt success → never retries.
-            expect(run('ok.sh')).toEqual({ code: 0, calls: 1 });
-        } finally {
-            cleanup();
+    test('the three lifecycle transitions are command.gate actions with classified transient retry (R3)', () => {
+        const gates = DEF.states
+            .flatMap((s) => (s.onEnter ?? []).map((a) => ({ state: s.id, action: a })))
+            .filter(({ action }) => action.kind === 'command.gate');
+        expect(gates.map((g) => g.state).sort()).toEqual(['done', 'implement', 'record']);
+        for (const { action } of gates) {
+            const options = action.options as Record<string, unknown>;
+            const retry = options.retry as Record<string, unknown>;
+            expect(retry.maxAttempts).toBe(2);
+            expect(retry.delayMs).toBe(2000);
+            for (const cls of ['sqlite-busy', 'ENOENT', 'EBUSY', 'ENOTEMPTY']) {
+                expect(retry.on).toContain(cls);
+            }
+            expect(options.softFail).toBe(false);
+            expect(String(options.resultFile)).toMatch(/^\.spur\/run\/\$\{vars\.__runId\}-.*\.status$/);
         }
-    });
-
-    test('behavioral: the quality-gate classifier rejects only lock-class failures (R3)', () => {
-        // The two gate sites classify one captured attempt log line with the same
-        // `grep -Eq` alternation (verbatim pin) — the loop budget shape (`-ge 5`,
-        // `sleep 10`) is pinned structurally above; here the classification predicate
-        // is proven against both stub classes.
-        const gateLine =
-            /grep -Eq 'SQLiteError: database is locked\|SQLite database \.\*is busy\|SQLITE_BUSY' "\$ATTEMPT_LOG" && gate_locked=1/;
-        expect((RAW.match(new RegExp(gateLine.source, 'g')) ?? []).length).toBe(2);
-        // Extract the alternation verbatim from the YAML (not from a regex source, whose
-        // escaping would change grep -E semantics).
-        const anchor = RAW.indexOf("grep -Eq 'SQLiteError");
-        const alternation = RAW.slice(RAW.indexOf("'", anchor) + 1, RAW.indexOf("'", RAW.indexOf("'", anchor) + 1));
-        expect(alternation).toContain('SQLITE_BUSY');
-        const { dir, cleanup } = makeTmpDir();
-        try {
-            const probe = (text: string): boolean =>
-                runSh(`printf '%s' "$PROBE" | grep -Eq '${alternation}'`, dir, { PROBE: text }).code === 0;
-            expect(probe('SQLiteError: database is locked')).toBe(true);
-            expect(probe('SQLite database /tmp/x/.spur/spur.db is busy')).toBe(true);
-            expect(probe('SQLITE_BUSY: checkpoint starvation')).toBe(true);
-            expect(probe('ENOCONFIG: unrelated failure')).toBe(false);
-        } finally {
-            cleanup();
-        }
+        // Verb shapes preserved: wip update, record with transition, done update.
+        const argsOf = (state: string): string =>
+            JSON.stringify(
+                DEF.states.find((s) => s.id === state)?.onEnter?.find((a) => a.kind === 'command.gate')?.options ?? {},
+            );
+        expect(argsOf('implement')).toContain('--no-lifecycle');
+        expect(argsOf('implement')).toContain('"wip"');
+        expect(argsOf('record')).toContain('--solution-from-diff');
+        expect(argsOf('record')).toContain('"testing"');
+        expect(argsOf('done')).toContain('--no-lifecycle');
     });
 
     // ── R6: the record→done guard projects the structural check onto the done target.

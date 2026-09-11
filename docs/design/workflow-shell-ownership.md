@@ -179,23 +179,33 @@ path with `runId` stamped inside.
 
 ### task-pipeline.yaml
 
+0823 rebuilt the over-budget programs under the ADR-115 caps: the three lifecycle transitions are
+now `command.gate` built-ins (option c), the quality gate is the `quality-gate.ts` extension
+(option d), and the remaining compounds are condensed in place (option e). Dispositions marked
+`warn` sit in the advisory band; each keeps its one-line reason as a YAML comment directly above
+the action (R1) — as does the warn-band `verify → test-fix` guard, whose sibling `verify → record`
+collapsed to the single `jq -e` verdict predicate.
+
 | Program | Disposition | Reason |
 | --- | --- | --- |
-| `precheck:onEnter:0` | GLUE | git-status hygiene WARNING/NOTE; advisory, no reusable semantics beyond `git status` |
-| `precheck:onEnter:2` | GLUE | auto-profile feature reopen (`feature sync`, one `feature update` fallback); single-shot; a real reactivation failure exits non-zero and blocks implementation (0723 R3) |
-| `precheck:onEnter:3` | EXT | count-only size precheck via `plugins/sp/scripts/task-size-precheck.ts` (option d); no `--executor`/doctor path since 0723; missing-checker fallback writes FAIL (fail closed) |
-| `implement:onEnter:1` | GLUE | `retry_transient` wrapper around `task update wip`; transient-retry idiom repeats in `record:onEnter:1` / `done:onEnter:0` — follow-up promotion candidate |
+| `precheck:onEnter:0` | GLUE (warn) | git-status hygiene WARNING/NOTE; advisory |
+| `precheck:onEnter:2` | GLUE (warn) | auto-profile feature reopen; a failed reactivation exits 1 (0723 R3) |
+| `precheck:onEnter:3` | EXT (warn) | wrapper for `task-size-precheck.ts` (option d); a missing checker writes FAIL |
+| `precheck:onEnter:4` | EXT (warn) | wrapper for `task-evidence-precheck.ts` (option d); a missing checker writes FAIL |
+| `precheck:onEnter:5` | GLUE (warn) | route-reason lookup + routes log |
+| `implement:onEnter:1` | BUILTIN | `command.gate` `task update wip --no-lifecycle` with transient retry |
 | `implement:onEnter:2` | POLICY | `$formatCmd ; exit 0`; project-only formatter, best-effort |
-| `test:onEnter:0` | POLICY | **`qualityGateCmd` soft probe** — per-project command string via `sh -c` with db-lock retry + findings extraction |
-| `test-fix:onEnter:0` | GLUE | fixall attempt counter |
-| `test-recheck:onEnter:0` | POLICY | `gateProbeCmd` fast-path + `qualityGateCmd` recheck (same exception as `test`) |
-| `verify:onEnter:1` | SIMPLE | single `task verdict --from-answer` |
-| `verify:onEnter:2` | GLUE | task path extraction + jq |
-| `verify:onEnter:5` | GLUE | proof-digest injection into verdict json (jq mutation; workflow-local proof wiring; follow-up built-in candidate) |
-| `record:onEnter:1` | GLUE | `retry_transient` around `task record` |
-| `record:onEnter:2` | EXT | feature sync via `feature-sync-bounded.ts` (option d) + `feature sync` fallback + orphan note |
-| `done:onEnter:0` | GLUE | `retry_transient` around `task update done` |
-| `done:onEnter:3` | GLUE | checkpoint write |
+| `test:onEnter:6` | EXT (warn) | wrapper for `quality-gate.ts run` (option d); runs the per-project `qualityGateCmd` |
+| `test-fix:onEnter:0` | GLUE | mutation-policy gate |
+| `test-fix:onEnter:1` | GLUE (warn) | fixall attempt counter + verdict hand-off |
+| `test-recheck:onEnter:1` | EXT (warn) | wrapper for `quality-gate.ts recheck`; `gateProbeCmd` fast path, then `qualityGateCmd` |
+| `verify:onEnter:2` | EXT | wrapper for `verify-answer-lint.ts` (option d) |
+| `verify:onEnter:3` | SIMPLE | single `task verdict --from-answer` |
+| `verify:onEnter:4` | GLUE (warn) | proof-digest injection into the verdict json (one jq mutation) |
+| `record:onEnter:1` | BUILTIN | `command.gate` `task record --solution-from-diff --transition testing` with transient retry |
+| `record:onEnter:2` | EXT (warn) | `feature-sync-bounded.ts` (option d) + `feature sync` fallback + orphan note |
+| `done:onEnter:0` | BUILTIN | `command.gate` `task update done --no-lifecycle` with transient retry |
+| `done:onEnter:2` | GLUE (warn) | terminal checkpoint write |
 
 ### basic.yaml (3 compound)
 

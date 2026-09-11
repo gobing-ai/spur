@@ -50,6 +50,11 @@
             "twin": "pr-reviewing.mjs"
         },
         {
+            "rel": "quality-gate.ts",
+            "contract": "standard",
+            "twin": "quality-gate.mjs"
+        },
+        {
             "rel": "script-contract-check.ts",
             "contract": "repo-only"
         },

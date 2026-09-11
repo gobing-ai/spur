@@ -58,7 +58,10 @@ function sleep(ms: number): Promise<void> {
 function matchesRetryCondition(output: string, condition: string): boolean {
     const lower = condition.toLowerCase();
     if (lower === 'sqlite-busy' || lower === 'sqlite-locked') {
-        return /database is locked|sqlite_busy|sqliteerror:\s*database is locked/i.test(output);
+        // 0823: the WAL busy error also surfaces as `SQLite database <n> is busy` — the
+        // shape the task-pipeline quality-gate retry loop has always matched — so the
+        // classifier covers it alongside the locked/busy message forms.
+        return /database is (?:locked|busy)|sqlite database .*is busy|sqlite_busy/i.test(output);
     }
     return output.toLowerCase().includes(lower);
 }

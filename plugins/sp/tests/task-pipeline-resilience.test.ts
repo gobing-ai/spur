@@ -208,103 +208,58 @@ esac`,
         }
     });
 
-    test('a transient transition error retries once and preserves the broken path in output', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0503-transition-'));
-        const counter = join(dir, 'counter');
-        const spur = executable(
-            dir,
-            'spur-fake',
-            `n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"; if [ "$n" -eq 1 ]; then echo "ENOENT reading $BROKEN_PATH" >&2; exit 1; fi; echo transitioned`,
-        );
-        const command = commandFor('implement').replace('sleep 2', 'sleep 0');
-        const result = runShell(command, dir, {
-            wbs: '0503',
-            spurBin: spur,
-            COUNTER: counter,
-            BROKEN_PATH: join(dir, 'node_modules/@gobing-ai/missing'),
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(readFileSync(counter, 'utf8').trim()).toBe('2');
-        expect(result.output).toContain('node_modules/@gobing-ai/missing');
-        expect(result.output).toContain('transitioned');
+    // 0823 (c): the implement/record/done transitions are `command.gate` actions — the
+    // classified transient retry (once, 2s delay, ENOENT/EBUSY/ENOTEMPTY + lock forms) lives
+    // in the gate; retry behavior is covered by plugins/sp/tests/command-gate.test.ts.
+    test('lifecycle transitions are command.gate actions with the classified transient retry (0823 c)', () => {
+        const gateOf = (stateId: string): Record<string, unknown> => {
+            const action = PIPELINE.states
+                .find((state) => state.id === stateId)
+                ?.onEnter?.find((a) => a.kind === 'command.gate');
+            expect(action).toBeDefined();
+            return (action?.options ?? {}) as Record<string, unknown>;
+        };
+        for (const stateId of ['implement', 'record', 'done']) {
+            const options = gateOf(stateId);
+            expect(options.executable).toBe(`\${vars.spurBin}`); // escaped template: literal YAML text, not interpolation
+            expect(options.softFail).toBe(false);
+            const retry = options.retry as Record<string, unknown>;
+            expect(retry.maxAttempts).toBe(2);
+            expect(retry.delayMs).toBe(2000);
+            for (const cls of ['sqlite-busy', 'ENOENT', 'EBUSY', 'ENOTEMPTY']) {
+                expect(retry.on).toContain(cls);
+            }
+            expect(String(options.resultFile)).toContain(`.spur/run/\${vars.__runId}-`);
+            expect(String(options.resultFile).endsWith('.status')).toBe(true);
+        }
+        const argsOf = (stateId: string): string => JSON.stringify(gateOf(stateId).args);
+        expect(argsOf('implement')).toContain('--no-lifecycle');
+        expect(argsOf('record')).toContain('--solution-from-diff');
+        expect(argsOf('record')).toContain('testing');
+        expect(argsOf('done')).toContain('--no-lifecycle');
     });
 
-    test('a persistent transient dependency error retries once and emits the bun install hint', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0503-transition-fail-'));
-        const counter = join(dir, 'counter');
-        const spur = executable(
-            dir,
-            'spur-fake',
-            `n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"; echo "ENOENT reading $BROKEN_PATH" >&2; exit 1`,
-        );
-        const command = commandFor('record').replace('sleep 2', 'sleep 0');
-        const result = runShell(command, dir, {
-            wbs: '0503',
-            spurBin: spur,
-            COUNTER: counter,
-            BROKEN_PATH: join(dir, 'node_modules/@gobing-ai/missing'),
-        });
-
-        expect(result.exitCode).toBe(1);
-        expect(readFileSync(counter, 'utf8').trim()).toBe('2');
-        expect(result.output).toContain('node_modules/@gobing-ai/missing');
-        expect(result.output).toContain('run bun install and retry');
+    // 0823 (d): the gate shells are thin resolvers — quality-gate.ts owns the retry loop,
+    // findings cap, bounded summary and status artifact (behavioral coverage lives in
+    // plugins/sp/tests/quality-gate.test.ts). Here: resolution order and fail-closed shape.
+    test('gate shells resolve quality-gate.ts, fall back to superskill, and fail closed (0823 d)', () => {
+        for (const [stateId, shellIndex, mode] of [
+            ['test', 2, 'run'],
+            ['test-recheck', 0, 'recheck'],
+        ] as const) {
+            const command = commandFor(stateId, shellIndex);
+            expect(command).toContain(`quality-gate.ts ${mode}`);
+            expect(command).toContain('superskill script path sp quality-gate.mjs');
+            expect(command).toContain(`node "$Q" ${mode}`);
+            // Fail closed: an unresolvable gate writes FAIL (never PASS) and stays soft.
+            expect(command).toContain('failed closed');
+            expect(command).toContain(`printf 'FAIL\\n' > ".spur/run/$wbs-test-gate.status"`);
+            expect(command.trim().endsWith('exit 0')).toBe(true);
+            // The retired loop is gone: no inline classifier or gate command remains.
+            expect(command).not.toContain('qualityGateCmd');
+            expect(command).not.toContain('grep -Eq');
+        }
     });
-
-    test('quality gate retries only lock failures and passes when the lock clears', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0503-gate-'));
-        const counter = join(dir, 'counter');
-        const gate = executable(
-            dir,
-            'gate-fake',
-            `n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"; if [ "$n" -eq 1 ]; then echo 'SQLiteError: database is locked' >&2; exit 1; fi; echo PASS`,
-        );
-        // 0703 R2: test.onEnter resolves the task-spec path in a first shell before the gate;
-        // 0785 R2: a second lookup shell (linked feature-spec path) now precedes the capture,
-        // so the gate shell lives at shell index 2.
-        const command = commandFor('test', 2).replace('sleep 10', 'sleep 0');
-        const result = runShell(command, dir, {
-            wbs: '0503',
-            qualityGateCmd: gate,
-            COUNTER: counter,
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(readFileSync(counter, 'utf8').trim()).toBe('2');
-        expect(readFileSync(join(dir, '.spur/run/0503-test-gate.status'), 'utf8').trim()).toBe('PASS');
-        const log = readFileSync(join(dir, '.spur/run/0503-test-gate.log'), 'utf8');
-        expect(log).toContain('SQLiteError: database is locked');
-        expect(log).toContain('retrying (1/5)');
-    });
-
-    test('quality gate stops after five persistent lock failures and retains the lock error', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0503-gate-fail-'));
-        const counter = join(dir, 'counter');
-        const gate = executable(
-            dir,
-            'gate-fake',
-            `n=$(cat "$COUNTER" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "$COUNTER"; echo 'SQLiteError: database is locked' >&2; exit 1`,
-        );
-        const command = commandFor('test-recheck').replace('sleep 10', 'sleep 0');
-        // Pin the probe off: the workflow engine exports gateProbeCmd into shell-action env,
-        // which leaks into this process — the default probe would run `bun run lint` in the
-        // scratch dir (no package.json), fail, and skip the full-gate loop this test asserts.
-        const result = runShell(command, dir, {
-            wbs: '0503',
-            qualityGateCmd: gate,
-            gateProbeCmd: '',
-            COUNTER: counter,
-        });
-
-        expect(result.exitCode).toBe(0);
-        expect(readFileSync(counter, 'utf8').trim()).toBe('5');
-        expect(readFileSync(join(dir, '.spur/run/0503-test-gate.status'), 'utf8').trim()).toBe('FAIL');
-        expect(readFileSync(join(dir, '.spur/run/0503-test-gate.log'), 'utf8')).toContain(
-            'SQLiteError: database is locked',
-        );
-    });
-
     test('precheck dirty-tree action names task-corpus dirt without the non-corpus warning', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-dirty-'));
         initGitRepo(dir);
@@ -329,47 +284,7 @@ esac`,
         expect(result.output).not.toContain('precheck: WARNING');
     });
 
-    // 0772 R1: gate output is a bounded summary — green gates print status/attempt/path/
-    // bytes, red gates print at most the last 40 lines plus the log path; the durable full
-    // log on disk is never truncated and the old full-log `cat` echo is gone.
-    test('quality gate output is a bounded summary; full log stays on disk (0772 R1)', () => {
-        for (const stateId of ['test', 'test-recheck']) {
-            const shells =
-                PIPELINE.states
-                    .find((state) => state.id === stateId)
-                    ?.onEnter?.filter((action) => action.kind === 'shell') ?? [];
-            for (const { options } of shells) {
-                const command = options?.command ?? '';
-                if (command.includes('test-gate.status')) {
-                    expect(command).not.toMatch(/cat "\$LOG_FILE" *&&/);
-                    expect(command).toContain('tail -n 40 "$LOG_FILE"');
-                }
-            }
-        }
-
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0772-summary-'));
-        const noisyGate = executable(dir, 'gate-noisy', 'for i in $(seq 1 60); do echo "line-$i"; done; exit 1');
-        // 0785 R2: gate shell is index 2 (after task-path and feature-spec lookups).
-        const command = commandFor('test', 2).replace('sleep 10', 'sleep 0');
-        const red = runShell(command, dir, { wbs: '0772', qualityGateCmd: noisyGate });
-
-        expect(red.exitCode).toBe(0);
-        expect(red.output).toContain(
-            'quality gate FAIL — last 40 lines follow (full log: .spur/run/0772-test-gate.log)',
-        );
-        expect(red.output).toContain('line-60');
-        expect(red.output).not.toContain('line-1\n');
-        expect(readFileSync(join(dir, '.spur/run/0772-test-gate.status'), 'utf8').trim()).toBe('FAIL');
-        const log = readFileSync(join(dir, '.spur/run/0772-test-gate.log'), 'utf8');
-        expect(log).toContain('line-1');
-        expect(log).toContain('line-60');
-
-        const greenGate = executable(dir, 'gate-green', 'echo gate-ok; exit 0');
-        const green = runShell(command, dir, { wbs: '0772', qualityGateCmd: greenGate });
-
-        expect(green.exitCode).toBe(0);
-        expect(green.output).toContain('quality gate PASS (attempts: 1; log: .spur/run/0772-test-gate.log; bytes:');
-        expect(green.output).not.toContain('gate-ok\n');
-        expect(readFileSync(join(dir, '.spur/run/0772-test-gate.status'), 'utf8').trim()).toBe('PASS');
-    });
+    // 0772 R1 (behavior moved into quality-gate.ts, 0823 d): the bounded-summary contract —
+    // green gates print a one-line status, red gates print at most the last 40 lines, and the
+    // durable log keeps everything — is asserted in plugins/sp/tests/quality-gate.test.ts.
 });

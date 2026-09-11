@@ -124,8 +124,14 @@ describe('task-pipeline proportional routing (task 0759, S5)', () => {
         const toRecord = verifyTransitions.find((t) => t.to === 'record');
         expect(toRecord).toBeDefined();
         const recordCmd = String(toRecord?.guard?.options?.command ?? '');
+        // 0823: the guard is one jq -e predicate — a strict superset of the former "= PASS"
+        // marker: PASS verdict AND a proof block whose top-level and per-stage digests all
+        // equal the captured proofDigest, with review honestly completed (0703 R3/R5, 0785 R4).
         expect(recordCmd).toContain('.verdict');
-        expect(recordCmd).toContain('= PASS');
+        expect(recordCmd).toContain('.verdict == "PASS"');
+        expect(recordCmd).toContain('(.proof.digest // "") == $d');
+        expect(recordCmd).toContain('(.proof.stages.verification.digest // "") == $d');
+        expect(recordCmd).toContain('(.proof.stages.review.status // "") == "completed"');
 
         // done-bound registration: the verify verdict is ledger-registered against a freshly
         // captured proof digest at record ENTRY — before any task record or status mutation

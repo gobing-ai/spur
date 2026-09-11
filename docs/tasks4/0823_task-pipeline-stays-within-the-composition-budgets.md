@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: task-pipeline stays within the composition budgets
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.072Z
-updated_at: "2026-09-11T05:44:42.892Z"
+updated_at: "2026-09-11T23:12:17.833Z"
 feature_id: I21
 priority: P2
 tags:
@@ -46,7 +46,7 @@ Consent: granted 2026-09-10 (governance §4) for behavior-preserving edits to th
 
 ### Requirements
 
-- [ ] R1. `spur workflow validate config/workflows/task-pipeline.yaml --json` reports no error-level composition finding and no `agent-run-output` finding. Each over-cap program and guard moves to an owner from the closed fix vocabulary (governance §1.1 (a)–(d)); a stays-shell reason is valid only inside the warn band. Every remaining warn-band program carries a one-line reason as a YAML comment directly above its action or guard. Routes, `.spur/run` artifacts, exit semantics, test-pinned messages and the `qualityGateCmd`/`gateProbeCmd` contract for adopting projects stay the same. The proof-chain suite passes and the `run --dry-run` graph is unchanged. `build:bundle` parity holds and no model query is added. A new public `spur` verb or flag lands only with its own consent entry.
+- [x] R1. `spur workflow validate config/workflows/task-pipeline.yaml --json` reports no error-level composition finding and no `agent-run-output` finding. Each over-cap program and guard moves to an owner from the closed fix vocabulary (governance §1.1 (a)–(d)); a stays-shell reason is valid only inside the warn band. Every remaining warn-band program carries a one-line reason as a YAML comment directly above its action or guard. Routes, `.spur/run` artifacts, exit semantics, test-pinned messages and the `qualityGateCmd`/`gateProbeCmd` contract for adopting projects stay the same. The proof-chain suite passes and the `run --dry-run` graph is unchanged. `build:bundle` parity holds and no model query is added. A new public `spur` verb or flag lands only with its own consent entry.
 
 Non-goals:
 - `stateEffect`/`evidenceEffect` declarations. The progress projection hard-codes them and ADR-115 asks for none.
@@ -312,18 +312,65 @@ jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" '
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/workflow/actions/command-gate.ts:61` |
+| `packages/app/tests/workflow/actions/command-gate.test.ts:272` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:2` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:224` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:338` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:341` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:348` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:359` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:377` |
+| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:398` |
+| `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts:127` |
+| `packages/app/tests/workflow/task-pipeline-proportional-routing.test.ts:131` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:184` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:210` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:226` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:232` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:260` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:285` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:291` |
+| `packages/domain/tests/planning/lifecycle-drift.test.ts:295` |
+| `plugins/sp/tests/inline-pipeline-driver.test.ts:235` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:211` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:242` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:262` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:287` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | All 4 agent.run actions declare output checks (task-pipeline.yaml:213,226 requireDiff; :353,365-366; :403,416-417; :470,484 expectFile), so the sole agent-run-output trigger (workflow-service.ts:2055-2060: fires only when expectFile undefined AND requireDiff !== true) cannot fire; over-cap programs moved to owners: command.gate at task-pipeline.yaml:236-250, :545-558, :572-585 with classified retry on: sqlite-busy,ENOENT,EBUSY,ENOTEMPTY and resultFiles under .spur/run; command-gate.ts:52-68 extends the sqlite-busy class with sqlite database .*is busy plus test command-gate.test.ts:272-297; quality-gate.ts plugin script (contract per quality-gate.ts:1-198: run resets attempt counter :127, recheck probe-first :135-142, 5-attempt lock-only retry :145-158, findings capped 20 code-unit sorted :57-64, soft exit 0 with usage exit 2 :178-192, proof-digest trailer :172) with registered .mjs twin (config/plugin-scripts.json entries quality-gate.ts standard twin quality-gate.mjs; twin mirrors caps/messages quality-gate.mjs:9,97-112) and build:scripts convert appended (package.json:61); condensed warn-band programs each carry a one-line YAML comment directly above the action or guard (task-pipeline.yaml:166,177,182,187,192,283,306,322,341,393,489,506,557,587 and guard :759), clean test-fix:0 has no reason per design; verify→record guard is the single jq -e predicate (task-pipeline.yaml:751) asserting verdict PASS plus digest/runId/definitionDigest/review-completed; 23 transitions identical to baseline (baseline .spur/run/0823-baseline-graph.json lists 23 transitions; current task-pipeline.yaml:603-793 has exactly 23 with matching from,to,guard.kind; pre-change error findings documented in .spur/run/0823-baseline-validate.json); model queries pinned implement,test-fix,review,verify (composition-baseline.test.ts:43, matches baseline-graph modelQueries); proof-chain suite 22 tests with the jq-guard pin (task-pipeline-proof-chain.test.ts:346-354) and command.gate assertions (:382); proportional-routing 11 tests with jq-guard literal pins (:55-60) and REASON_FILE/run-id fallback behavior (:179-220); command-gate 14 tests; inline-pipeline-driver 4 tests; lifecycle-drift excludes quality-gate.ts from spur-shell filter (lifecycle-drift.test.ts:260-266) and asserts delegation plus -test-gate.log/findings and the 20-anchor cap (:285-295); driver observed validate exit 0 with 15 warn-band findings and zero error-level and zero agent-run-output on this exact tree, full spur-check PASS — reviewer runtime has no shell tool so the command was verified statically plus by the driver observation. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-11T22:02:11.947Z todo → wip (system)
+- 2026-09-11T23:12:16.986Z wip → testing (system)
+- 2026-09-11T23:12:17.833Z testing → done (system)
+

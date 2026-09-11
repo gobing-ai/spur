@@ -232,6 +232,20 @@ function runInlineSmoke(
                 if (command.includes('verify-answer-lint.ts')) {
                     command = 'test -f ".spur/run/$wbs-verify-answer.txt"';
                 }
+                // 0823: the quality gate is a plugin script (quality-gate.ts run|recheck) the
+                // shell resolves like the other checkers, so the smoke simulates its verdict
+                // contract (plugins/sp/tests/quality-gate.test.ts owns the script): run resets
+                // the attempt counter and executes qualityGateCmd; recheck runs gateProbeCmd
+                // first (bun run lint is red in this sandbox, so the probe IS the recheck
+                // verdict, gate skipped). Both always leave status/findings/log for the guards.
+                if (command.includes('quality-gate.ts run')) {
+                    command =
+                        'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; echo 0 > ".spur/run/$wbs-test-fix-attempt"; if $qualityGateCmd; then s=PASS; else s=FAIL; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
+                }
+                if (command.includes('quality-gate.ts recheck')) {
+                    command =
+                        'mkdir -p .spur/run; : > ".spur/run/$wbs-test-gate.log"; if $gateProbeCmd; then s=PASS; else s=FAIL; fi; if [ "$s" = PASS ]; then if $qualityGateCmd; then s=PASS; else s=FAIL; fi; fi; printf "%s\\n" "$s" > ".spur/run/$wbs-test-gate.status"; : > ".spur/run/$wbs-test-gate.findings"; printf "proof-digest: %s\\n" "$proofDigest" >> ".spur/run/$wbs-test-gate.log"';
+                }
                 command = command.replaceAll('sleep 2', 'sleep 0').replaceAll('sleep 10', 'sleep 0');
                 expect(runShell(command, cwd, env), `${state.id}: ${command}`).toBe(0);
             }

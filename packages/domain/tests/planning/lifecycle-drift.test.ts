@@ -181,14 +181,15 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(String(registration.proofBinding ?? '')).toBe('current');
         expect(String(registration.taskFile ?? '')).toContain('taskSpecPath');
         expect(String(registration.featureFile ?? '')).toContain('featureSpecPath');
-        expect(
-            cmds.some(
-                (c) =>
-                    c.includes('task record') &&
-                    c.includes('--solution-from-diff') &&
-                    c.includes('--transition testing'),
-            ),
-        ).toBe(true);
+        // 0823: the record write is a `command.gate` action (classified transient retry);
+        // assert the verb shape on the gate's args.
+        const recordGate = (record?.onEnter ?? []).find((a) => a.kind === 'command.gate');
+        const gateArgs = JSON.stringify(recordGate?.options ?? {});
+        expect(gateArgs).toContain('"task"');
+        expect(gateArgs).toContain('"record"');
+        expect(gateArgs).toContain('--solution-from-diff');
+        expect(gateArgs).toContain('"--transition"');
+        expect(gateArgs).toContain('"testing"');
         // The post-record hop must still sync feature status, but the mechanism is free: task 0411
         // routes it through `feature-sync-bounded.ts`, which wraps `spur feature sync --json` with
         // retry suppression. Assert the intent (a feature-sync hop exists), not one spelling.
@@ -206,13 +207,29 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         // (`task update <wbs> <status>` / `task record <wbs>`), not the variable syntax.
         const wbsRef = /(?:\$\{vars\.wbs\}|\$wbs)/;
         const wbsArg = `"?${wbsRef.source}"?`;
-        expect(allCmds.some((c) => new RegExp(`task update ${wbsArg} wip`).test(c))).toBe(true);
+        // 0823: transitions may live in `command.gate` args (JSON array) instead of shell
+        // commands — the verb shape is the invariant, not the transport.
+        const gateText = JSON.stringify(
+            yaml.states
+                .flatMap((s) => s.onEnter ?? [])
+                .filter((a) => a.kind === 'command.gate')
+                .map((a) => a.options?.args ?? []),
+        );
+        const wbsJson = '"(?:\\$\\{vars\\.wbs\\}|\\$wbs)"';
+        expect(
+            allCmds.some((c) => new RegExp(`task update ${wbsArg} wip`).test(c)) ||
+                new RegExp(`"task","update",${wbsJson},"wip"`).test(gateText),
+        ).toBe(true);
         // The testing transition is now inside `task record --transition testing` (a single verb),
         // not a separate shell step. Record owns the transition; the gate guard still verifies.
         expect(
-            allCmds.some((c) => new RegExp(`task record ${wbsArg}`).test(c) && c.includes('--transition testing')),
+            allCmds.some((c) => new RegExp(`task record ${wbsArg}`).test(c) && c.includes('--transition testing')) ||
+                (new RegExp(`"task","record",${wbsJson}`).test(gateText) && gateText.includes('"testing"')),
         ).toBe(true);
-        expect(allCmds.some((c) => new RegExp(`task update ${wbsArg} done`).test(c))).toBe(true);
+        expect(
+            allCmds.some((c) => new RegExp(`task update ${wbsArg} done`).test(c)) ||
+                new RegExp(`"task","update",${wbsJson},"done"`).test(gateText),
+        ).toBe(true);
     });
 
     test('R4: approve is a HITL gate (hitl.confirm)', () => {
@@ -240,7 +257,13 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
             .flatMap((s) => s.onEnter ?? [])
             .filter((a) => a.kind === 'shell')
             .map((a) => String(a.options?.command ?? ''));
-        const spurShellingScripts = allCmds.filter((c) => c.includes('bun plugins/sp/scripts/'));
+        const spurShellingScripts = allCmds.filter(
+            (c) =>
+                c.includes('bun plugins/sp/scripts/') &&
+                // 0823 (d): quality-gate.ts never shells spur (it runs the gate command),
+                // so it needs no --spur-bin.
+                !c.includes('quality-gate.ts'),
+        );
         expect(spurShellingScripts.length).toBeGreaterThan(0);
         for (const cmd of spurShellingScripts) {
             expect(cmd).toContain('--spur-bin');
@@ -259,13 +282,19 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
                 .filter((a) => a.kind === 'shell')
                 .map((a) => String(a.options?.command ?? ''));
 
-        // 1. Both gate hops extract anchors into the digest file.
+        // 1. Both gate hops extract anchors into the digest file. 0823 (d): the extraction moved
+        // into quality-gate.ts — assert the wrappers delegate and the script owns the log and
+        // findings artifacts with the bounded cap (MAX_FINDINGS = 20).
+        const gateScript = readFileSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'quality-gate.ts'), 'utf-8');
         for (const gateState of ['test', 'test-recheck']) {
             const cmds = shellCmds(gateState).join('\n');
-            expect(cmds, `${gateState}: must capture the gate log`).toContain('-test-gate.log');
-            expect(cmds, `${gateState}: must extract file:line anchors`).toContain('-test-gate.findings');
-            expect(cmds, `${gateState}: anchors must be bounded`).toContain('head -20');
+            expect(cmds, `${gateState}: gate hop must delegate to quality-gate.ts`).toContain(
+                `quality-gate.ts ${gateState === 'test' ? 'run' : 'recheck'}`,
+            );
         }
+        expect(gateScript).toContain('-test-gate.log');
+        expect(gateScript).toContain('-test-gate.findings');
+        expect(gateScript).toContain('MAX_FINDINGS = 20');
 
         // 2. test-fix projects the digest into a var (a vars template cannot shell out).
         const fixSteps = yaml.states.find((s) => s.id === 'test-fix')?.onEnter ?? [];

@@ -269,6 +269,39 @@ describe('CommandGateActionRunner', () => {
         expect(content.trim()).toBe('FAIL');
     });
 
+    // 0823 R1: the pipeline's command.gate lifecycle hops retry on `sqlite-busy`, whose
+    // WAL error also surfaces as `SQLite database <n> is busy` — the message shape the
+    // former quality-gate shell retry loop matched. Without it a busy write during the
+    // `task update wip` / `task record` transition aborts the run instead of retrying.
+    test('retries sqlite-busy on the `SQLite database <n> is busy` message shape', async () => {
+        const workdir = join(tmpdir(), `test-gate-busy-${crypto.randomUUID()}`);
+        const fs = createNodeFileSystem(workdir);
+        await fs.ensureDir(join(workdir, '.spur', 'run'));
+
+        const runner = new CommandGateActionRunner(undefined, fs);
+        const resultFile = '.spur/run/gate-busy.status';
+
+        const res = await runner.execute(
+            {
+                id: 'test-gate-busy-retry',
+                executable: 'bun',
+                args: ['-e', 'console.error("SQLite database 5 is busy"); process.exit(1);'],
+                resultFile,
+                retry: {
+                    maxAttempts: 2,
+                    delayMs: 10,
+                    on: ['sqlite-busy'],
+                },
+            },
+            { runId: 'r1', stateOrNodeId: 's1', workdir, vars: {}, env: {} },
+        );
+
+        expect(res.ok).toBe(false);
+        const failData = res.data as { status?: string; attempts?: number } | undefined;
+        expect(failData?.status).toBe('FAIL');
+        expect(failData?.attempts).toBe(2);
+    });
+
     // R6 / 0753 R1: A declared timeout must reach the executor under the contract's name
     // (`timeout`) and actually fire. The pre-repair code spread `timeoutMs` into
     // `ProcessOptions`, but the executor contract declares `timeout`

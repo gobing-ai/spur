@@ -163,142 +163,38 @@ states:
           Fast deterministic task readiness and size checks. Failures route to the
           `failed` terminal state (not a raw lifecycle abort mid-enter).
       onEnter:
-          # R6 (0487): pre-launch hygiene WARNING (never a block) — starting a task on
-          # a tree already dirty with another task's implementation is how 0485's diff
-          # got swept into 0486's run. Corpus dirs are excluded: the pipeline writes
-          # those itself.
-          # R1 (0511): task-corpus dirt gets its own advisory NOTE — docs/tasks* is
-          # excluded from the non-corpus warning, so pre-existing task-corpus edits are
-          # invisible at launch yet can be accidentally staged with the current task
-          # later. Advisory only (never a block): the pipeline legitimately updates
-          # task files, so corpus dirt is launch-time visibility, not a lifecycle guard.
+          # (e) git-status hygiene advisory; never fails the run (0487 R6 / 0511 R1).
           - kind: shell
             options:
                 command: >-
-                    DIRTY=$(git status --porcelain -- . ':(exclude)docs/tasks*' ':(exclude)docs/features' 2>/dev/null);
-                    if [ -n "$DIRTY" ]; then
-                      echo "precheck: WARNING - working tree has uncommitted non-corpus changes; commit or stash before starting a new task:";
-                      echo "$DIRTY";
-                    fi;
-                    CORPUS_DIRTY=$(git status --porcelain -- ':(glob)docs/tasks*/**' 2>/dev/null);
-                    if [ -n "$CORPUS_DIRTY" ]; then
-                      echo "precheck: NOTE - task corpus has uncommitted changes; review before staging with this task:";
-                      echo "$CORPUS_DIRTY";
-                    fi;
-                    exit 0
+                    D=$(git status --porcelain -- . ':(exclude)docs/tasks*' ':(exclude)docs/features' 2>/dev/null); [ -z "$D" ] || printf 'precheck: WARNING - working tree has uncommitted non-corpus changes — commit or stash before starting a new task:\n%s\n' "$D"; C=$(git status --porcelain -- ':(glob)docs/tasks*/**' 2>/dev/null); [ -z "$C" ] || printf 'precheck: NOTE - task corpus has uncommitted changes — review before staging with this task:\n%s\n' "$C"; exit 0
           - kind: note
             options:
                 # R4 task_run_links linkage (kind=pipeline) is written by a WorkflowService
                 # hook at run start — see the 0062 follow-up note; there is no link-writing
                 # CLI verb to call from a shell step, so it cannot live in pure YAML.
                 message: "Pipeline start for task ${vars.wbs}."
-          # R1 (0453): auto-profile precheck reopens a done feature before task check.
-          # Under profile=auto, resolve feature_id, sync (preferred) or update to active.
-          # Under non-auto, leave R4 message to guide the operator.
-          # R3 (0723): a real reactivation failure is surfaced, not swallowed —
-          # the default 'fail' onEnter policy halts the sequence and routes the
-          # run to `failed` before implementation. Verbs stay single-shot:
-          # one sync, then one update fallback, never retried in a loop.
+          # (e) auto-profile feature reopen; exit 1 when reactivation fails (0723 R3).
           - kind: shell
             options:
                 command: >-
-                    if [ "$profile" = auto ]; then
-                      FID=$($spurBin task show $wbs --json 2>/dev/null |
-                      jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null);
-                      if [ -n "$FID" ]; then
-                        if ! $spurBin feature sync "$FID" --force 2>/dev/null; then
-                        if ! $spurBin feature update "$FID" active 2>/dev/null; then
-                        echo "precheck: FAIL - feature reactivation $FID failed;" >&2;
-                        echo "precheck: feature sync + feature update both errored" >&2;
-                        exit 1;
-                        fi;
-                        fi;
-                      fi;
-                    fi;
-                    exit 0
-          # R2 (0454, 0723): task size precheck — deterministic count-only
-          # evaluation of R-item and Plan-item counts. No executor-tier policy:
-          # dispatch-time requiresCapabilities at `agent.run` is the
-          # authoritative capability check. Writes PASS/FAIL to
-          # .spur/run/<wbs>-precheck-size.status. Always exit 0 (soft action);
-          # the precheck→implement guard reads the file, so a missing checker
-          # fails closed (writes FAIL, never PASS).
+                    [ "$profile" = auto ] || exit 0; FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null); [ -z "$FID" ] || $spurBin feature sync "$FID" --force 2>/dev/null || $spurBin feature update "$FID" active 2>/dev/null || { echo "precheck: FAIL - feature reactivation $FID failed — feature sync + feature update both errored" >&2; exit 1; }; exit 0
+          # (d) task-size-precheck.ts owns the check; shell only resolves it and fails closed (0454 R2 / 0723 R2).
           - kind: shell
             options:
                 command: >-
-                    SIZE_FILE=".spur/run/$wbs-precheck-size.status" &&
-                    mkdir -p .spur/run &&
-                    SIZE_SCRIPT="plugins/sp/scripts/task-size-precheck.ts";
-                    [ -f "$SIZE_SCRIPT" ] ||
-                    SIZE_SCRIPT="$(superskill script path sp task-size-precheck.ts 2>/dev/null)";
-                    if [ -n "$SIZE_SCRIPT" ] && [ -f "$SIZE_SCRIPT" ]; then
-                    bun "$SIZE_SCRIPT" "$wbs"
-                    --spur-bin "$spurBin" --max-reqs "$maxImplementReqs"
-                    --max-plan-items "$maxImplementPlanItems";
-                    else
-                      echo "task-size-precheck failed closed — checker not found in" >&2 &&
-                      echo "plugins/sp/scripts/ nor staged; run 'superskill install sp'." >&2 &&
-                      echo "FAIL" > "$SIZE_FILE";
-                    fi &&
-                    exit 0
-          # 0726 R2: task evidence precheck — deterministic live-data
-          # evidence-channel proof before implement dispatch. Writes PASS/FAIL to
-          # .spur/run/<wbs>-precheck-evidence.status. Always exit 0 (soft action);
-          # the precheck→implement guard reads the file, so a missing checker
-          # fails closed (writes FAIL, never PASS).
+                    mkdir -p .spur/run; S=plugins/sp/scripts/task-size-precheck.ts; [ -f "$S" ] || S="$(superskill script path sp task-size-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"; else echo "task-size-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-size.status"; fi; exit 0
+          # (d) task-evidence-precheck.ts owns the check; shell only resolves it and fails closed (0726 R2).
           - kind: shell
             options:
                 command: >-
-                    EVID_FILE=".spur/run/$wbs-precheck-evidence.status" &&
-                    mkdir -p .spur/run &&
-                    EVID_SCRIPT="plugins/sp/scripts/task-evidence-precheck.ts";
-                    [ -f "$EVID_SCRIPT" ] ||
-                    EVID_SCRIPT="$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)";
-                    if [ -n "$EVID_SCRIPT" ] && [ -f "$EVID_SCRIPT" ]; then
-                    bun "$EVID_SCRIPT" "$wbs"
-                    --spur-bin "$spurBin";
-                    else
-                      echo "task-evidence-precheck failed closed — checker not found" >&2 &&
-                      echo "in plugins/sp/scripts/ nor staged; run 'superskill install sp'." >&2 &&
-                      echo "FAIL" > "$EVID_FILE";
-                    fi &&
-                    exit 0
-          # Proportional route table evaluation (0759 R1/R4). The reason artifact is RUN-scoped, not
-          # wbs-scoped: ADR-107 names `.spur/run/<runId>-route-reason.txt`, and a wbs-scoped path lets
-          # a re-run of the same task overwrite the earlier run's route claim, so the artifact could
-          # not attribute a route to the run that took it (0759 R5). `__runId` is injected by
-          # WorkflowAppService.run(); the wbs fallback keeps a driver-less invocation from writing to
-          # a bare "-route-reason.txt". The log line carries the run id for the same reason — an
-          # unattributed append is log scraping, which R5 explicitly rejects as evidence.
-          # 0804 R8: the run id must be a single safe filename component before it
-          # becomes REASON_FILE — unresolved interpolation ($ { } vars.), path
-          # separators and dot traversal are a failed action (nonzero, no artifact).
-          # NOTE: no `#` comments inside the folded scalar — `>-` joins all same-indent
-          # lines into ONE shell line, so an in-scalar `#` comments out the rest of the
-          # command (the original R8 draft broke exactly this way; the case statement
-          # must stay one line).
+                    mkdir -p .spur/run; S=plugins/sp/scripts/task-evidence-precheck.ts; [ -f "$S" ] || S="$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin"; else echo "task-evidence-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-evidence.status"; fi; exit 0
+          # (e) route-reason lookup and routes log; proportional-routing tests locate it
+          # (0759 R1/R5 run-scoped artifact; 0804 R8 run-id safety — one line, no in-scalar `#`).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run .spur/memory &&
-                    RUN_ID="$__runId" &&
-                    if [ -z "$RUN_ID" ]; then RUN_ID="pipeline-$wbs"; fi &&
-                    case "$RUN_ID" in *'$'*|*'{'*|*'}'*|*vars.*|*/*|*'\'*|*..*) echo "route-reason: refusing unsafe run id: $RUN_ID" >&2; exit 1 ;; *) : ;; esac &&
-                    REASON_FILE=".spur/run/$RUN_ID-route-reason.txt" &&
-                    if [ "$mode" = "fast" ]; then
-                      echo "fast:evidence complete+consistent" > "$REASON_FILE";
-                    elif [ -z "$mode" ]; then
-                      echo "safety:standard verification" > "$REASON_FILE";
-                    elif [ "$mode" = "unknown" ]; then
-                      echo "safety:unknown evidence quality" > "$REASON_FILE";
-                    elif [ "$mode" = "conflict" ]; then
-                      echo "safety:conflicting evidence" > "$REASON_FILE";
-                    else
-                      echo "safety:unrecognized evidence (mode=$mode)" > "$REASON_FILE";
-                    fi &&
-                    printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(cat "$REASON_FILE")"
-                    >> .spur/memory/task-pipeline-routes.log &&
-                    exit 0
+                    mkdir -p .spur/run .spur/memory; RUN_ID="$__runId"; [ -n "$RUN_ID" ] || RUN_ID="pipeline-$wbs"; case "$RUN_ID" in *'$'*|*'{'*|*'}'*|*vars.*|*/*|*'\'*|*..*) echo "route-reason: refusing unsafe run id: $RUN_ID" >&2; exit 1 ;; esac; REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"; jq -rn --arg m "$mode" '{"fast":"fast:evidence complete+consistent","":"safety:standard verification","unknown":"safety:unknown evidence quality","conflict":"safety:conflicting evidence"}[$m] // "safety:unrecognized evidence (mode=\($m))"' > "$REASON_FILE"; printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(cat "$REASON_FILE")" >> .spur/memory/task-pipeline-routes.log; exit 0
 
     - id: implement
       description: >
@@ -336,23 +232,19 @@ states:
                 requiresCapabilities:
                     fsWrite: available
                     processSpawn: available
-          - kind: shell
+          # (c) command.gate owns the wip transition with classified transient retry.
+          - kind: command.gate
             options:
-                command: >-
-                    retry_transient() {
-                      RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
-                      printf '%s\n' "$RETRY_OUTPUT";
-                      if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
-                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked|SQLite database .*is busy|SQLITE_BUSY'; then return "$RETRY_RC"; fi;
-                      sleep 2;
-                      RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
-                      printf '%s\n' "$RETRY_SECOND_OUTPUT";
-                      if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
-                        echo "node_modules link/dependency broken — run bun install and retry";
-                      fi;
-                      return "$RETRY_RC";
-                    };
-                    retry_transient $spurBin task update "$wbs" wip --no-lifecycle
+                id: task-implement-transition
+                executable: "${vars.spurBin}"
+                args: ["task", "update", "${vars.wbs}", "wip", "--no-lifecycle"]
+                retry:
+                    maxAttempts: 2
+                    delayMs: 2000
+                    on: ["sqlite-busy", "ENOENT", "EBUSY", "ENOTEMPTY"]
+                resultFile: .spur/run/${vars.__runId}-implement-transition.status
+                softFail: false
+                timeoutMs: 120000
           # Post-implement cleanup: auto-format any unformatted output the agent produced.
           # The agent may leave files that don't pass `biome check`, which then fails
           # `bun run lint` downstream. Running format here is cheap (< 1 s) and prevents
@@ -388,6 +280,7 @@ states:
       onEnter:
           # R6/R2 (0703): resolve the task-spec path BEFORE the digest capture. `docs/tasks*` is excluded
           # from the digest's git-tree half, so the spec is folded in explicitly via `taskSpecPath`.
+          # (e) task path + priority resolution; fail-closed on an unresolvable spec (0751 R2, 0710 R4).
           - kind: shell
             options:
                 # 0710 R4: resolve the spec path, then extract `priority:` from the TASK FILE itself (not the
@@ -410,6 +303,7 @@ states:
           # orphan task (no feature_id) resolves to empty — legitimately omitted via empty-string
           # compatibility; a declared feature whose spec path does not resolve fails closed instead
           # of silently folding a stale spec into the proof.
+          # (e) linked feature-spec path resolution; fail-closed when a declared feature does not resolve (0785 R2).
           - kind: shell
             options:
                 command: 'mkdir -p .spur/run; FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r ".feature_id // .frontmatter.feature_id // empty" 2>/dev/null); FPATH_OUT=""; if [ -n "$FID" ]; then FPATH_OUT=$($spurBin feature show "$FID" --json | jq -r ".filePath // .path // empty"); if [ -z "$FPATH_OUT" ]; then echo "fail-closed proof chain (0785 R2): feature $FID linked to task $wbs but its spec path did not resolve" >&2; exit 1; fi; fi; printf "%s" "$FPATH_OUT" > ".spur/run/$wbs-featurepath.txt"'
@@ -425,43 +319,11 @@ states:
                 var: proofDigest
                 taskFile: ${vars.taskSpecPath}
                 featureFile: ${vars.featureSpecPath}
+          # (d) quality-gate.ts owns the gate; shell only resolves it and fails closed.
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run &&
-                    STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
-                    LOG_FILE=".spur/run/$wbs-test-gate.log" &&
-                    ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
-                    echo 0 > "$ATTEMPT_FILE" &&
-                    : > "$LOG_FILE" &&
-                    gate_attempt=1;
-                    while [ "$gate_attempt" -le 5 ]; do
-                      ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
-                      sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
-                      gate_locked=0;
-                      grep -Eq 'SQLiteError: database is locked|SQLite database .*is busy|SQLITE_BUSY' "$ATTEMPT_LOG" && gate_locked=1;
-                      cat "$ATTEMPT_LOG" >> "$LOG_FILE";
-                      rm -f "$ATTEMPT_LOG";
-                      if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
-                      printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
-                      sleep 10;
-                      gate_attempt=$((gate_attempt + 1));
-                    done &&
-                    if [ "$gate_rc" -eq 0 ]; then
-                      printf 'quality gate PASS (attempts: %s; log: %s; bytes: %s)\n' "$gate_attempt" "$LOG_FILE" "$(wc -c < "$LOG_FILE" | tr -d "[:space:]")";
-                    else
-                      printf 'quality gate FAIL — last 40 lines follow (full log: %s)\n' "$LOG_FILE";
-                      tail -n 40 "$LOG_FILE";
-                    fi &&
-                    FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
-                    set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
-                    if [ "$gate_rc" -eq 0 ]; then
-                      printf 'PASS\n' > "$STATUS_FILE";
-                    else
-                      printf 'FAIL\n' > "$STATUS_FILE";
-                    fi &&
-                    printf 'proof-digest: %s\n' "$proofDigest" >> "$LOG_FILE" &&
-                    exit 0
+                    mkdir -p .spur/run; if [ -f plugins/sp/scripts/quality-gate.ts ]; then bun plugins/sp/scripts/quality-gate.ts run; elif Q="$(superskill script path sp quality-gate.mjs 2>/dev/null)" && [ -f "$Q" ]; then node "$Q" run; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: test-fix
       description: >
@@ -475,22 +337,12 @@ states:
           - kind: shell
             options:
                 command: >-
-                    TASK_POLICY=$($spurBin task show "$wbs" --json |
-                      jq -er '.frontmatter.mutationPolicy // ([.content | scan("(?m)^mutationPolicy:[ \t]*([^ \r\n]+)[ \t]*$") | .[0]] | if length == 0 then "code" elif length == 1 then .[0] else "ambiguous" end)') || exit 1;
-                    if [ "$mutationPolicy:$TASK_POLICY" != "code:code" ]; then
-                      echo "test-fix: mutation policy forbids automatic code repair (run=$mutationPolicy, task=$TASK_POLICY); gate failure preserved, no agent dispatched" >&2;
-                      exit 1;
-                    fi;
-                    mkdir -p .spur/run &&
-                    ATTEMPT_FILE=".spur/run/$wbs-test-fix-attempt" &&
-                    n=$(cat "$ATTEMPT_FILE" 2>/dev/null || echo 0) &&
-                    printf '%s\n' "$((n + 1))" > "$ATTEMPT_FILE" &&
-                    if [ -f ".spur/run/$wbs-verdict.json" ]; then
-                      { echo '--- verify verdict (remediation input, task 0703 R4) ---';
-                        cat ".spur/run/$wbs-verdict.json";
-                      } >> ".spur/run/$wbs-test-gate.log";
-                    fi;
-                    exit 0
+                    TASK_POLICY=$($spurBin task show "$wbs" --json | jq -er '.frontmatter.mutationPolicy // ([.content | scan("(?m)^mutationPolicy:[ \t]*([^ \r\n]+)[ \t]*$") | .[0]] | if length == 0 then "code" elif length == 1 then .[0] else "ambiguous" end)') || exit 1; [ "$mutationPolicy:$TASK_POLICY" = "code:code" ] || { echo "test-fix: mutation policy forbids automatic code repair (run=$mutationPolicy, task=$TASK_POLICY) — gate failure preserved, no agent dispatched" >&2; exit 1; }
+          # (e) fixall attempt counter and verdict hand-off to the remediation log.
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; A=".spur/run/$wbs-test-fix-attempt"; n=$(cat "$A" 2>/dev/null || echo 0); printf '%s\n' "$((n + 1))" > "$A"; [ ! -f ".spur/run/$wbs-verdict.json" ] || { echo '--- verify verdict (remediation input, task 0703 R4) ---'; cat ".spur/run/$wbs-verdict.json"; } >> ".spur/run/$wbs-test-gate.log"; exit 0
           # R3 (0482): project the extracted gate anchors into a var so the dispatch input
           # can NAME the failing file:line, not merely point at a log. A vars template cannot
           # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
@@ -507,6 +359,11 @@ states:
                 # the full-context escape hatch when the digest is not enough.
                 input: /sp:dev-fixall "${vars.qualityGateCmd}" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings "${vars.gateFindings}"
                 timeoutMs: ${vars.stepTimeoutMs}
+                # The captured remediation answer is the run's dispatch evidence (0823 R1):
+                # expectFile fails the step when no answer was captured. Quality stays with
+                # the review proof digest and the verify verdict.
+                answerFile: .spur/run/${vars.__runId}-test-fix-answer.txt
+                expectFile: .spur/run/${vars.__runId}-test-fix-answer.txt
                 # 0706 R6: bounded remediation hop — unattended and tree-mutating,
                 # so it declares the same minimum requirements as `implement`.
                 requiresCapabilities:
@@ -533,51 +390,12 @@ states:
           # a green probe (or empty gateProbeCmd) falls through to the full-gate loop unchanged.
           # Only the full gate writes PASS, so the `test-recheck → review` guard (reads PASS)
           # still means a full green qualityGateCmd ran — invariant preserved by construction.
+          # (d) quality-gate.ts owns the recheck; shell only resolves it and fails closed
+          # (0587 R3 probe-then-full: a red gateProbeCmd is the recheck verdict, the full gate is skipped).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run &&
-                    STATUS_FILE=".spur/run/$wbs-test-gate.status" &&
-                    LOG_FILE=".spur/run/$wbs-test-gate.log" &&
-                    FINDINGS_FILE=".spur/run/$wbs-test-gate.findings" &&
-                    : > "$LOG_FILE" &&
-                    probe_rc=0;
-                    if [ -n "$gateProbeCmd" ]; then
-                      sh -c "$gateProbeCmd" > "$LOG_FILE.probe" 2>&1; probe_rc=$?;
-                      cat "$LOG_FILE.probe" >> "$LOG_FILE";
-                      rm -f "$LOG_FILE.probe";
-                    fi;
-                    if [ "$probe_rc" -ne 0 ]; then
-                      gate_rc=$probe_rc;
-                    else
-                      gate_attempt=1;
-                      while [ "$gate_attempt" -le 5 ]; do
-                        ATTEMPT_LOG="$LOG_FILE.attempt-$gate_attempt";
-                        sh -c "$qualityGateCmd" > "$ATTEMPT_LOG" 2>&1; gate_rc=$?;
-                        gate_locked=0;
-                        grep -Eq 'SQLiteError: database is locked|SQLite database .*is busy|SQLITE_BUSY' "$ATTEMPT_LOG" && gate_locked=1;
-                        cat "$ATTEMPT_LOG" >> "$LOG_FILE";
-                        rm -f "$ATTEMPT_LOG";
-                        if [ "$gate_rc" -eq 0 ] || [ "$gate_locked" -ne 1 ] || [ "$gate_attempt" -ge 5 ]; then break; fi;
-                        printf 'quality gate: database is locked; retrying (%s/5) in 10s\n' "$gate_attempt" | tee -a "$LOG_FILE";
-                        sleep 10;
-                        gate_attempt=$((gate_attempt + 1));
-                      done;
-                    fi &&
-                    if [ "$gate_rc" -eq 0 ]; then
-                      printf 'quality gate PASS (attempts: %s; log: %s; bytes: %s)\n' "$gate_attempt" "$LOG_FILE" "$(wc -c < "$LOG_FILE" | tr -d "[:space:]")";
-                    else
-                      printf 'quality gate FAIL — last 40 lines follow (full log: %s)\n' "$LOG_FILE";
-                      tail -n 40 "$LOG_FILE";
-                    fi &&
-                    set +e; grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+' "$LOG_FILE" | sort -u | head -20 | tr '\n' ' ' > "$FINDINGS_FILE"; set -e &&
-                    if [ "$gate_rc" -eq 0 ]; then
-                      printf 'PASS\n' > "$STATUS_FILE";
-                    else
-                      printf 'FAIL\n' > "$STATUS_FILE";
-                    fi &&
-                    printf 'proof-digest: %s\n' "$proofDigest" >> "$LOG_FILE" &&
-                    exit 0
+                    mkdir -p .spur/run; if [ -f plugins/sp/scripts/quality-gate.ts ]; then bun plugins/sp/scripts/quality-gate.ts recheck; elif Q="$(superskill script path sp quality-gate.mjs 2>/dev/null)" && [ -f "$Q" ]; then node "$Q" recheck; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: review
       description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
@@ -592,6 +410,11 @@ states:
                 # fail-closed) that a P0/P1 task's review resolves a DIFFERENT executor
                 # spec than the implement stage recorded in __agentRouting_implement.
                 input: /sp:dev-review ${vars.wbs} --auto
+                # The captured review answer is the run's dispatch evidence (0823 R1):
+                # expectFile fails the step when no answer was captured. Quality stays with
+                # the review proof digest and the verify verdict.
+                answerFile: .spur/run/${vars.__runId}-review-answer.txt
+                expectFile: .spur/run/${vars.__runId}-review-answer.txt
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: reviewer
                 freshSession: true
@@ -663,6 +486,7 @@ states:
           # evidence-row identity, before the verdict derivation reads it.
           # Hard action: a malformed answer halts the sequence here instead of
           # poisoning the verdict parse downstream.
+          # (d) verify-answer-lint.ts owns the answer lint; shell only resolves it.
           - kind: shell
             options:
                 command: >-
@@ -679,43 +503,12 @@ states:
           - kind: shell
             options:
                 command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
-          # R3 (0703): write the required proof block into the verdict artifact — the digest, the
-          # certifying run id, the capture point, and the named per-stage results, each stage carrying
-          # the SAME digest value (prose asserting proof validity is insufficient). `runId` closes
-          # 0730 §B.2 (task 0757 R4): without it the verified-outcome fold has to accept ANY linked
-          # run as certifying, so a dry-run probe linked to the same wbs reads as proof of completion.
-          # `definitionDigest` closes 0759 R5: the record binds to the certifying run AND the exact
-          # workflow definition it executed — a stale-definition resume or a definition edited
-          # between run and record cannot certify silently. `__definitionDigest` is injected at run
-          # start (workflow-service.ts) and equals the digest stamped on the run row (task 0603).
-          # 0785 R4: review is stamped `completed` only when the run-scoped marker written by the
-          # review stage equals the current digest; otherwise `skipped` — an unexecuted review is
-          # never reported completed, and the verify→record guard plus the bound record registration
-          # refuse a skipped review (the D9 fast route stays dormant, honestly).
-          # Also keeps the flat
-          # `proof-input-digest` check row for consumers that read `checks[]`. Soft action + hard
-          # guard: a missing/malformed stamp fails the `verify → record` guard below, not this step.
+          # (e) one jq mutation binds the verdict to the proof digest (0703 R3; runId 0730 §B.2 /
+          # 0757 R4; definitionDigest 0759 R5; honest review stamp 0785 R4; soft action + hard guard).
           - kind: shell
             options:
-                # One folded line: every content line sits at the block's base indentation so
-                # `>-` joins them with spaces. A more-indented continuation would preserve a
-                # literal newline and split the jq invocation from its program argument.
                 command: >-
-                    V=".spur/run/$wbs-verdict.json";
-                    RV="skipped";
-                    if [ -f ".spur/run/$__runId-review-proof.digest" ] && [ "$(cat ".spur/run/$__runId-review-proof.digest")" = "$proofDigest" ]; then
-                    RV="completed";
-                    fi;
-                    if [ -f "$V" ] && [ -n "$proofDigest" ]; then
-                    jq --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg rv "$RV" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)"
-                    '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: "quality-gate-entry", stages: {
-                    qualityGate: {status: $g, digest: $d},
-                    review: {status: $rv, digest: $d},
-                    verification: {status: .verdict, digest: $d}}}}
-                    | .checks += [{name: "proof-input-digest", status: "pass", evidence: $d}]'
-                    "$V" > "$V.tmp" && mv "$V.tmp" "$V";
-                    fi;
-                    exit 0
+                    V=".spur/run/$wbs-verdict.json"; [ -f "$V" ] && [ -n "$proofDigest" ] || exit 0; jq --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" --arg rp "$(cat .spur/run/$__runId-review-proof.digest 2>/dev/null)" --arg g "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null || echo UNKNOWN)" '. + {proof: {digest: $d, runId: $r, definitionDigest: $dd, capturePoint: "quality-gate-entry", stages: {qualityGate: {status: $g, digest: $d}, review: {status: (if $rp == $d then "completed" else "skipped" end), digest: $d}, verification: {status: .verdict, digest: $d}}}} | .checks += [{name: "proof-input-digest", status: "pass", evidence: $d}]' "$V" > "$V.tmp" && mv "$V.tmp" "$V"; exit 0
 
     - id: record
       description: >
@@ -748,46 +541,26 @@ states:
                 proofBinding: current
                 taskFile: ${vars.taskSpecPath}
                 featureFile: ${vars.featureSpecPath}
+          # (c) command.gate owns the record write with classified transient retry.
+          - kind: command.gate
+            options:
+                id: task-record-transition
+                executable: "${vars.spurBin}"
+                args: ["task", "record", "${vars.wbs}", "--solution-from-diff", "--transition", "testing"]
+                retry:
+                    maxAttempts: 2
+                    delayMs: 2000
+                    on: ["sqlite-busy", "ENOENT", "EBUSY", "ENOTEMPTY"]
+                resultFile: .spur/run/${vars.__runId}-record-transition.status
+                softFail: false
+                timeoutMs: 120000
+          # (d) feature-sync-bounded.ts owns the sync; shell adds the orphan note and fallbacks
+          # (0411 retry-suppression; 0328 / ADR-0322). Best-effort `exit 0` — feature status sync is a
+          # follow-up, not a completion gate; `record → done` runs `spur task check`.
           - kind: shell
             options:
                 command: >-
-                    retry_transient() {
-                      RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
-                      printf '%s\n' "$RETRY_OUTPUT";
-                      if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
-                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked|SQLite database .*is busy|SQLITE_BUSY'; then return "$RETRY_RC"; fi;
-                      sleep 2;
-                      RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
-                      printf '%s\n' "$RETRY_SECOND_OUTPUT";
-                      if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
-                        echo "node_modules link/dependency broken — run bun install and retry";
-                      fi;
-                      return "$RETRY_RC";
-                    };
-                    retry_transient $spurBin task record "$wbs" --solution-from-diff --transition testing
-          # Best-effort, and portable across layouts. `feature-sync-bounded.ts` is a
-          # Spur-monorepo path — `spur init` never scaffolds `plugins/sp/`, so a seeded
-          # project must fall back to the plain `spur feature sync` verb rather than
-          # abort a run that already produced a PASS verdict. Trailing `exit 0` keeps the
-          # whole step advisory for the same reason (feature status sync is a follow-up,
-          # not a completion gate — `record → done` runs `spur task check`).
-          - kind: shell
-            options:
-                command: >-
-                    FID=$($spurBin task show $wbs --json 2>/dev/null |
-                    jq -r ".feature_id // .frontmatter.feature_id // empty" 2>/dev/null);
-                    if [ -n "$FID" ]; then
-                      if [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then
-                        bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "$spurBin" --json;
-                      elif SYNC_MJS="$(superskill script path sp feature-sync-bounded.mjs 2>/dev/null)" && [ -f "$SYNC_MJS" ]; then
-                        node "$SYNC_MJS" "$FID" --spur-bin "$spurBin" --json;
-                      else
-                        $spurBin feature sync "$FID" --json;
-                      fi;
-                    else
-                      echo "Orphan task $wbs — no feature_id linked; proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt";
-                    fi;
-                    exit 0
+                    FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null); if [ -z "$FID" ]; then echo "Orphan task $wbs — no feature_id linked — proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt"; elif [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "$spurBin" --json; elif M="$(superskill script path sp feature-sync-bounded.mjs 2>/dev/null)" && [ -f "$M" ]; then node "$M" "$FID" --spur-bin "$spurBin" --json; else $spurBin feature sync "$FID" --json; fi; exit 0
 
     - id: done
       description: >
@@ -795,38 +568,27 @@ states:
           guard runs `spur task check` before certifying; a genuinely non-compliant
           task routes to `failed` instead of a silent bad `done`.
       onEnter:
-          - kind: shell
+          # (c) command.gate owns the done transition with classified transient retry.
+          - kind: command.gate
             options:
-                command: >-
-                    retry_transient() {
-                      RETRY_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
-                      printf '%s\n' "$RETRY_OUTPUT";
-                      if [ "$RETRY_RC" -eq 0 ]; then return 0; fi;
-                      if ! printf '%s' "$RETRY_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY|database is locked|SQLite database .*is busy|SQLITE_BUSY'; then return "$RETRY_RC"; fi;
-                      sleep 2;
-                      RETRY_SECOND_OUTPUT=$("$@" 2>&1); RETRY_RC=$?;
-                      printf '%s\n' "$RETRY_SECOND_OUTPUT";
-                      if [ "$RETRY_RC" -ne 0 ] && printf '%s\n%s' "$RETRY_OUTPUT" "$RETRY_SECOND_OUTPUT" | grep -Eq 'ENOENT|EBUSY|ENOTEMPTY'; then
-                        echo "node_modules link/dependency broken — run bun install and retry";
-                      fi;
-                      return "$RETRY_RC";
-                    };
-                    retry_transient $spurBin task update "$wbs" done --no-lifecycle
+                id: task-done-transition
+                executable: "${vars.spurBin}"
+                args: ["task", "update", "${vars.wbs}", "done", "--no-lifecycle"]
+                retry:
+                    maxAttempts: 2
+                    delayMs: 2000
+                    on: ["sqlite-busy", "ENOENT", "EBUSY", "ENOTEMPTY"]
+                resultFile: .spur/run/${vars.__runId}-done-transition.status
+                softFail: false
+                timeoutMs: 120000
           - kind: note
             options:
                 message: "Pipeline complete for task ${vars.wbs} (done gate cleared)."
-          # Checkpoint write: record session state for resume (0711 R1–R3;
-          # run-id/artifact binding corrected by 0784 R4) — canonical frontmatter
-          # contract; mirrors the Session Checkpoint Convention in
-          # plugins/sp/skills/spur-dev/references/cross-cutting.md.
-          # Advisory only: the task file and the persisted run row stay authoritative.
+          # (e) advisory terminal checkpoint, one printf (0711 R1–R3; binding corrected 0784 R4).
           - kind: shell
             options:
-                # Single logical line: the composition-baseline argument-split lint flags any
-                # command whose continuation lines look like argument lists (heredocs with
-                # `- item` entries trip it), so the checkpoint body is one printf with \n escapes.
                 command: >-
-                    mkdir -p .spur/memory/sessions; CP_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; CP_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"; CP_DIGEST="$proofDigest"; CP_RUN="$__runId"; printf '%s\n' '---' 'schema_version: 1' "session_id: $(date -u +%Y-%m-%d)-$wbs" 'workflow: task-pipeline' "run_id: $CP_RUN" "task_wbs: $wbs" 'feature_id: ""' 'phase: done' 'status: done' 'last_gate: record' "source_commit: $CP_COMMIT" "digest: $CP_DIGEST" "generated_at: $CP_TS" "updated_at: $CP_TS" "next_action: none - task $wbs complete (terminal; advisory only)" 'artifacts:' "  - .spur/run/$wbs-verdict.json" "  - .spur/run/$wbs-test-gate.log" '---' '' '## Session Notes' '' "Terminal checkpoint for task $wbs (task-pipeline done)." 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0
+                    mkdir -p .spur/memory/sessions; CP_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; CP_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"; printf '%s\n' '---' 'schema_version: 1' "session_id: $(date -u +%Y-%m-%d)-$wbs" 'workflow: task-pipeline' "run_id: $__runId" "task_wbs: $wbs" 'feature_id: ""' 'phase: done' 'status: done' 'last_gate: record' "source_commit: $CP_COMMIT" "digest: $proofDigest" "generated_at: $CP_TS" "updated_at: $CP_TS" "next_action: none - task $wbs complete (terminal; advisory only)" 'artifacts:' "  - .spur/run/$wbs-verdict.json" "  - .spur/run/$wbs-test-gate.log" '---' '' '## Session Notes' '' "Terminal checkpoint for task $wbs (task-pipeline done)." 'Advisory only; the task file is authoritative.' > .spur/memory/sessions/$wbs-checkpoint.md; exit 0
 
     - id: failed
       description: >
@@ -981,18 +743,12 @@ transitions:
       to: record
       description: Verification verdict is PASS and its proof block names the captured digest on every stage — record results and proceed to done.
       guard:
+          # (one jq -e predicate) PASS verdict; proof, quality-gate, review and verification digests
+          # equal to proofDigest; review completed; matching run id and definition digest (0703 R5, 0785 R4).
           kind: shell
           options:
               command: >-
-                  V=".spur/run/$wbs-verdict.json";
-                  test "$(jq -r .verdict "$V" 2>/dev/null)" = PASS &&
-                  test "$(jq -r '.proof.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
-                  test "$(jq -r '.proof.stages.qualityGate.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
-                  test "$(jq -r '.proof.stages.review.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
-                  test "$(jq -r '.proof.stages.review.status // ""' "$V" 2>/dev/null)" = "completed" &&
-                  test "$(jq -r '.proof.stages.verification.digest // ""' "$V" 2>/dev/null)" = "$proofDigest" &&
-                  test "$(jq -r '.proof.runId // ""' "$V" 2>/dev/null)" = "$__runId" &&
-                  test "$(jq -r '.proof.definitionDigest // ""' "$V" 2>/dev/null)" = "$__definitionDigest"
+                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" '.verdict == "PASS" and (.proof.digest // "") == $d and (.proof.stages.qualityGate.digest // "") == $d and (.proof.stages.review.digest // "") == $d and (.proof.stages.review.status // "") == "completed" and (.proof.stages.verification.digest // "") == $d and (.proof.runId // "") == $r and (.proof.definitionDigest // "") == $dd' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
     - from: verify
       to: test-fix
       description: >-
@@ -1000,6 +756,7 @@ transitions:
           bounded remediation hop (task 0703 R4); the chain re-enters quality → review → verify on a
           freshly captured digest. Never reached on PASS: remediation cannot follow certification.
       guard:
+          # (e) remediation route: verdict not PASS and fix attempts below qualityGateMaxFixAttempts (0703 R4).
           kind: shell
           options:
               command: >-
