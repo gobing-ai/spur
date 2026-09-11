@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-09-10T21:40:11.646Z"
-updated_at: "2026-09-10T21:42:19.289Z"
+updated_at: "2026-09-10T23:48:16.123Z"
 ---
 
 # I21: Spur artifact composition and evolution: spur-composer, spur-doctor, expert-spur and workflow layers
@@ -23,6 +23,10 @@ ephemeral → project → shared promotion ladder) and `sp:spur-doctor` (evidenc
 LLM-history reflection through `sp:history-anatomy` findings, yielding evolution proposals).
 `sp:expert-spur` loads them to run bounded corpus campaigns. It never becomes a coordinator or
 orchestrator (that stays `sp:super-planner`) and never uses `spur team`, which is retiring.
+The composer and doctor pair also carries the workflow composition budgets (ADR-115). Shared
+workflows stay within hard caps on shell programs, shell guards and `agent.run` inputs. Model steps
+stay few and leave checked results, and doctor judges step duration, idle gaps and cache hits from
+trace evidence.
 
 ## Scope
 
@@ -34,12 +38,19 @@ orchestrator (that stays `sp:super-planner`) and never uses `spur team`, which i
   - History reflection: each `sp:history-anatomy` finding class routes to one action class
   - `plugins/sp/agents/expert-spur.md` charter: loads spur-cli, spur-composer and spur-doctor; `spur team` ban; non-orchestrator boundary
   - `sp:spur-cli` references the above touches (workflows, rules, agent, message, team banner) and tests pinning role boundaries, catalog parity and layer listing
+  - Workflow composition budgets (ADR-115):
+    - error-level caps and a `level` field in `spur workflow validate` (an observable-output change; operator consent requested 2026-09-10)
+    - a `spur-check` shared-workflow composition gate and `pipeline-budgets` coverage
+    - behavior-preserving extraction of the shared workflows over the caps, each change under recorded consent
+    - the doctor step profile as a plugin script
 - Out:
   - Any coordinator or orchestrator role for expert-spur, and recurring self-evolution loops (owned by `sp:super-planner` or a workflow)
   - Using or extending `spur team`; retiring the `team` noun itself
   - Behavior changes to shared `config/workflows/*.yaml` without per-change operator consent
   - Agent and message runtime changes owned by B1, G4 and D6
   - Other CLI surface changes not named at design-approval
+  - Composition findings that block `workflow run`, `run --dry-run` or `continue`
+  - Merging or splitting model steps in shared workflows; doctor proposes those from step-profile evidence
 
 ## Acceptance Criteria
 
@@ -157,11 +168,84 @@ Feature: Spur artifact composition and evolution: spur-composer, spur-doctor, ex
     When the skill-structure tests, the CLI surface parity test and `bun run spur-check` run
     Then all pass
     And the `superskill agent evaluate` score for expert-spur is not below its recorded baseline
+
+  @core
+  Scenario: R17 — composition caps are error-level validate findings
+    Given a workflow with an 11-command shell action, a 6-command shell guard and a 1001-character slash-led agent.run input
+    When `spur workflow validate <file> --json` runs
+    Then each is reported with level "error" and the command exits 1
+    And a workflow with only warn-level findings exits 0
+
+  @core
+  Scenario: R18 — composition findings never block a run
+    Given a workflow with an error-level composition finding
+    When `spur workflow run`, `spur workflow run --dry-run` and `spur workflow continue` process it
+    Then none of them computes or reports composition findings
+    And each behaves as it does for a definition with no findings
+
+  @core
+  Scenario: R19 — the shared-workflow composition gate fails on error-level findings
+    Given a definition in config/workflows with an error-level composition finding
+    When `bun run spur-check` runs
+    Then the composition gate fails and names the workflow, state and action
+    And warn-level findings do not fail it
+    And the gate passes on the shipped config/workflows
+
+  @core
+  Scenario: R20 — every shared workflow with a model query has a pipeline budget
+    Given config/pipeline-budgets.json and the definitions in config/workflows
+    When the pipeline budget gate runs
+    Then every definition with at least one model query has a budget entry
+    And a definition without one fails the gate by name
+
+  @core
+  Scenario: R21 — task-pipeline stays within the composition budgets
+    Given config/workflows/task-pipeline.yaml
+    When `spur workflow validate --json` runs on it
+    Then it reports no error-level composition finding
+    And every agent.run action declares expectFile or requireDiff
+    And the proof-chain suite passes and the `run --dry-run` graph is unchanged
+
+  @core
+  Scenario: R22 — idea and wrap-up pipelines stay within the composition budgets
+    Given config/workflows/idea-pipeline.yaml and config/workflows/wrapup-pipeline.yaml
+    When `spur workflow validate --json` runs on each
+    Then neither reports an error-level composition finding
+    And every agent.run action declares expectFile or requireDiff
+    And their workflow tests pass and their `run --dry-run` graphs are unchanged
+
+  @core
+  Scenario: R23 — feature-dev, pr-review, wayfinder, docs and basic stay within the composition budgets
+    Given feature-dev.yaml, pr-review.yaml, wayfinder-resolution.yaml, docs-pipeline.yaml and basic.yaml in config/workflows
+    When `spur workflow validate --json` runs on each
+    Then none reports an error-level composition finding
+    And every agent.run action declares expectFile or requireDiff
+    And their workflow tests pass and their `run --dry-run` graphs are unchanged
+
+  @core
+  Scenario: R24 — spur-doctor judges workflows by composition findings and step profiles
+    Given completed runs of a workflow and its `spur workflow validate --json` output
+    When spur-doctor evaluates the workflow
+    Then the step profile reports per node the run count, p50 and max duration, p50 idle gap, session mode and cacheHit p50 with coverage
+    And cache evidence is unknown, not zero, when the executor reports no usage
+    And each composition finding and each flagged cache-window budget becomes a workflow-optimization proposal
+
+  @core
+  Scenario: R25 — spur-composer composes to the composition budgets
+    Given the workflow-fit-and-tuning reference and plugins/sp/skills/spur-composer/SKILL.md
+    When the plugin structure tests run
+    Then the reference teaches the consolidation and cache-window rules
+    And spur-composer applies them with the ADR-115 budgets when it composes or tunes a workflow
 ```
 
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0819 | Workflow list and name resolution share the project, registered and shared layers | todo |
+| 0820 | spur-composer and spur-doctor skills compose, evaluate and evolve spur artifacts | todo |
+| 0821 | expert-spur binds the spur-* skills and stays a corpus agent | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

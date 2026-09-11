@@ -1,60 +1,73 @@
 # Harness surface governance
 
-**Area:** the two detectable composition measures (shell / agent.run), the advisory-only posture, and
-the four-surface script placement table with dated operator-consent applications.
+**Area:** the composition measures (shell actions, shell guards, agent.run), their warn and error
+tiers and enforcement posture, and the four-surface script placement table with dated
+operator-consent applications.
 **Status:** authority landed (ADR-069 amendment + promotion, ADR-051 amendment); advisory tooling is
-sibling tasks 0614/0615; consent record updated by task 0695 on 2026-08-27.
-**Authority:** derived; ADR-069 (composition measures, advisory posture), ADR-051 (surface boundary,
-consent gate), ADR-065 (plugin-script entrypoint contract, cross-referenced), ADR-043 (slash-command
-preference). On conflict, `00_ADR.md` wins (lower number wins on content, constitution §4.1).
+sibling tasks 0614/0615; consent record updated by task 0695 on 2026-08-27. The ADR-115 tiers in §1
+are accepted (feature I21; §4 consent of 2026-09-10).
+**Authority:** derived; ADR-069 (composition measures), ADR-115 (composition budgets, enforcement
+posture), ADR-051 (surface boundary, consent gate), ADR-065 (plugin-script entrypoint contract,
+cross-referenced), ADR-043 (slash-command preference). On conflict, `00_ADR.md` wins (lower number
+wins on content, constitution §4.1).
 
 ---
 
-## 1. Composition measures (ADR-069 R1–R3)
+## 1. Composition measures (ADR-069 R1–R3, ADR-115)
 
-### 1.1 Shell measure
+### 1.1 Measures
 
-- **Unit:** non-comment shell line of a `shell` action's `command` (split on newline and `;`),
-  counted per action in `config/workflows/*.yaml` state hooks (`onEnter`/`onExit`).
-- **Report:** an action above the threshold is **to-be-enhanced**, never a validation failure.
+- **Unit — logical command (ADR-115):** a `shell` `command` split on newline, `;`, `&&` and `||`,
+  skipping blank segments, `#` comments and bare structure tokens (`then`, `else`, `fi`, `do`,
+  `done`, `esac`, `{`, `}`, `(`, `)`, `;;`). A pipeline counts once. ADR-069 split on newline and
+  `;` only, so `&&` chains hid whole programs.
+- **Scope:** every state-hook `shell` action (`onEnter`/`onExit`), every shell transition guard and
+  every `agent.run` action of the definition being validated. The ADR-069 guard exemption ends.
 - **Fix vocabulary (closed):** the five owner options recorded in
   `docs/design/workflow-shell-ownership.md` — (a) public `spur` verb, (b) application service,
   (c) least-privilege built-in action kind, (d) workflow-relative external extension,
-  (e) deliberately-stays-shell exception.
-- **Threshold status: deliberately unfrozen.** Measured on this tree (2026-08-21, task 0613):
+  (e) deliberately-stays-shell exception with a `#` reason. Option (e) applies only inside the
+  warn band; above a cap the program moves to (a)–(d).
+- **agent.run:** a non-slash `input` is the ADR-043 preference made detectable; the fix moves the
+  operation behind a centralized agent skill or slash command.
 
-  | Disposition | n | min | median | max |
-  | --- | --- | --- | --- | --- |
-  | SIMPLE | 7 | 1 | 1 | 2 |
-  | GLUE | 36 | 1 | 2 | 19 |
-  | EXT | 9 | 4 | 6 | 10 |
-  | POLICY | 4 | 2 | 22 | 32 |
-  | DUAL | 1 | 43 | 43 | 43 |
+### 1.2 Tiers
 
-  58 state-hook shell programs total (all 58 classified programs join a disposition; the
-  transition-guard bulk exception stays outside the measure per the ownership doc's ruling). Flag
-  rates: **>3→30, >4→25, >5→21, >6→18, >8→14**. `>5` is the candidate: it flags every
-  qualityGateCmd-class compound (POLICY 22–32) and the DUAL program while never touching SIMPLE
-  (≤2) — trivial glue is never flagged at ≥3. Task 0614 calibrates against the full dispositions and
-  freezes the number; the ADR records it after that.
+| Element | Clean | Warn (advisory) | Error |
+| --- | --- | --- | --- |
+| `shell` action | ≤5 logical commands | 6–10 | >10, or `command` >800 chars |
+| Shell transition guard | ≤3 | 4–5 | >5 |
+| `agent.run` `input` | slash-led, ≤1000 chars | non-slash (severity by raw length: <200 low, ≤1000 medium) | >1000 chars, slash-led or not |
+| `agent.run` output check | `expectFile` or `requireDiff` declared | neither declared | — |
 
-### 1.2 agent.run measure
+Measured 2026-09-10 across the 11 shared definitions:
 
-- **Trigger:** a **non-slash `input`** on an `agent.run` action reports the action as
-  to-be-enhanced (ADR-043 preference made detectable).
-- **Severity:** raw prompt length sets the reported severity **only** — it never triggers a report.
-- **Fix:** move the operation behind a centralized agent skill or slash command.
+| Element | n | Warn | Error |
+| --- | --- | --- | --- |
+| `shell` action | 84 | 17 | 27 (25 by commands, 2 by characters) |
+| Shell transition guard | 99 | 12 | 2 |
+| `agent.run` input | 22 | 9 non-slash | 3 |
+| `agent.run` output check | 22 | 7 | — |
 
-### 1.3 Advisory posture (binding)
+The warn threshold (>5) was calibrated by task 0613 and frozen by task 0614 (2026-08-21).
 
-Composition findings:
+**Ratchet.** Lowering a number changes this table, the validator constant and the taught reference
+(`workflow-fit-and-tuning.md` §3) together. Raising one needs an ADR-115 amendment with measured
+evidence, like a `pipeline-budgets` raise.
 
-1. never change a `workflow validate` exit status;
-2. never block a workflow run;
-3. are **not** added to `spur-check` / `spur-check-new`.
+### 1.3 Posture (ADR-115 amends ADR-069)
 
-They surface as advisory output of `workflow validate` (task 0614) and in the taught references
-(task 0615).
+1. Warn-level findings never change a `workflow validate` exit status, never block a run and are
+   not in `spur-check` / `spur-check-new`.
+2. An error-level finding makes `workflow validate` exit 1 and fails the `spur-check`
+   shared-workflow composition gate over `config/workflows/*.yaml`. The composition ladder's
+   validate gate therefore stops promotion (`spur-artifact-evolution.md` §7).
+3. No composition finding blocks `workflow run`, `run --dry-run` or `continue`. Findings are
+   computed on the validate path only, so an adopting project's workflows keep running after an
+   upgrade and surface their findings the next time they are validated.
+
+Runtime budgets (step duration, idle gaps, cache hits) are not validate findings; `sp:spur-doctor`
+judges them from step profiles ([workflow composition](workflow-composition-contract.md#composition-budgets-adr-115)).
 
 ## 2. Four-surface script placement (ADR-051 R4 amendment)
 
@@ -99,6 +112,7 @@ without one, the command stays internal under `scripts/commands/`.
 | 2026-08-21 | 0625 | `spur feature refresh` adds `--all`; a bare invocation now exits 2 unless `--feature <id>` is supplied | Require an explicit one-feature or all-feature breadth token. The A3 wrap-up's bare refresh rewrote unrelated D3/D5/D6/E5 rosters, so implicit global mutation is no longer an acceptable default. |
 | 2026-08-27 | 0695 | `spur workflow show` adds `--format <mermaid\|todo>` (mermaid stays default; `todo` is a declared-step checklist projection) and `--json` (machine envelope for both formats) | Extend the existing read-only `show` verb for feature D7 per the idea-evaluation gate. Rejected shapes recorded at the gate: a boolean `--todo` flag and a separate `spur workflow todo` verb (flag-not-action); no output caching. |
 | 2026-08-29 | 0719 | New root-level global option `--no-logo` (feature A31): listed once in top-level help, accepted before or after nested noun/verb tokens; suppresses only the startup ASCII logo. Exact-token `--json`/`--quiet`/`--silent` auto-suppression preserved and made explicit via the `shouldRenderBanner()` composition-root seam | Give scripts and agents an explicit decoration opt-out without forcing machine mode. Observable-output change is limited to the startup banner: no verb signatures, JSON envelopes, exit codes, or command-owned banners change. |
+| 2026-09-10 | 0822, 0826 | `spur workflow validate` adds a finding `level` (`warn`/`error`) and the measure kinds `shell-chars`, `guard-lines`, `agent-run-chars` and `agent-run-output`, and exits 1 on any error-level finding; `bun run spur-check` gains the shared-workflow composition gate | Make the ADR-115 caps enforceable at authoring time. Warn stays advisory; an error-level finding fails validate and the gate but never blocks a run. Operator consent 2026-09-10 (feature I21). |
 
 The 2026-08-21 grant changes only refresh breadth selection. It does not change the `## Tasks` marker format,
 the deterministic global `INDEX.md` regeneration, or lifecycle status; those shapes are in

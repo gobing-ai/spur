@@ -546,8 +546,9 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   transitions" (no `--vars` prediction). `--json` wraps the selected projection: `{name, kind,
   format: 'todo', steps: WorkflowStep[]}` (each step: `id` + `initial`/`terminal`/`failure`/
   `pause`/`loopBack`/`conditional`, optional `nodeType`) or `{name, kind, format: 'mermaid',
-  diagram}`; bare `--json` returns the mermaid envelope. Unknown `--format` exits 1 naming both
-  values before file resolution; not-found and schema-invalid errors are identical for every
+  diagram}`; bare `--json` returns the mermaid envelope. Both envelopes carry `source: {layer,
+  path}`, the layer and file that name resolution picked (ADR-113). Unknown `--format` exits 1
+  naming both values before file resolution; not-found and schema-invalid errors are identical for every
   format. Consumer: the inline driver's layer-1 todo (0696, `inline-pipeline-driver.md`).
 - `validate <file>` — load + Zod-validate a workflow definition.
 - **YAML extensions (0533/D4):** a workflow may declare `extensions.actions: [./module.ts]` /
@@ -557,17 +558,23 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   gate; a missing module, a module without the declared capability, an absolute path, or `..`
   traversal fails the command before any workflow step. Schema: both workflow JSON schemas carry
   `extensions` (0431 parity).
-- **Composition advisory (0614/ADR-069):** on the valid path `validate` also emits a warn-only
-  composition advisory: `--json` adds `composition: {findings[], suppressed}` where each finding is
-  `{workflow, state, actionKey, measure: {kind: 'shell-lines'|'agent-run-chars', measured,
-  threshold?, severity?}, recommendation}`; human mode prints the advisory to stderr and stays
-  exit 0. Rules (frozen): a `shell` action flags when its command has **≥6** non-comment units
-  (split on newline and `;`, blank/`#` units skipped); an `agent.run` action flags when its
-  `input` is a **non-slash** prompt, severity by raw length (<200 low / ≤1000 medium / >1000
-  high); guards are exempt (actions only). Findings are derived from the workflow definition itself
-  (`extractResolvedWorkflowFacts`); 0775 retired the suppression snapshot, so every finding is
-  reported — none are suppressed. The advisory never changes exit status and is not part of
-  `spur-check` / `spur-check-new`.
+- **Composition findings (0614/ADR-069, ADR-115):** on the valid path `validate` also reports
+  composition findings: `--json` adds `composition: {findings[], suppressed}` where each finding is
+  `{workflow, state, actionKey, level, measure: {kind, measured, threshold?, severity?},
+  recommendation}`. `level` is `warn` or `error`; `measure.kind` is `shell-lines`, `shell-chars`,
+  `guard-lines`, `agent-run-chars` or `agent-run-output`. A guard finding names its source state in
+  `state` and `<from>-><to>` in `actionKey`. `shell-lines` and `guard-lines` count logical commands
+  (split on newline, `;`, `&&` and `||`; blank, `#` and bare structure tokens skipped). Tiers are
+  owned by [surface governance](harness-surface-governance.md) §1.2: a `shell` action warns at 6–10
+  and errors above 10 or above 800 characters; a shell guard warns at 4–5 and errors above 5; an
+  `agent.run` `input` errors above 1000 characters whatever its shape and otherwise warns when it
+  is not slash-led (severity by raw length: <200 low / ≤1000 medium); an `agent.run` with neither
+  `expectFile` nor `requireDiff` warns. Human mode prints findings to stderr. Any error-level
+  finding exits 1; warn-only findings keep exit 0. Findings are derived from the definition itself
+  (`extractResolvedWorkflowFacts`) on the validate path only; `run`, `run --dry-run` and `continue`
+  never compute or act on them. `spur-check` fails on an error-level finding in
+  `config/workflows/*.yaml` and ignores warn-level ones. 0775 retired the suppression snapshot, so
+  none are suppressed.
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.
@@ -597,8 +604,12 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   pipeline runs; exit 1 if no paused run, the run isn't paused, or it doesn't resolve to `done`.
   (A state pauses when it declares `pause: true`; the workspace schema supports `pause`.)
 - `cancel <run-id>` — mark a single non-terminal run failed; SIGTERM the worker process group when live. Idempotent: already-terminal runs report no change. Bulk/stale variant is `clean`.
-- `list` — list available workflow YAML files across project (`.spur/workflows/`) and global
-  (`~/.config/spur/workflows/`) layers, grouped by source.
+- `list` — list workflow YAML files by layer, in resolution order (ADR-113): `project`
+  (`<cwd>/.spur/workflows`, always listed, even when missing), one `registered` layer per extra
+  `workflows.paths` folder, then `shared` (the installed package's `config/workflows`). `--json`
+  returns `{layers: [{id, path}], entries, totalFiles}`; an entry's `source` is its layer id and its
+  `description` is the definition's top-level `description`, or `null`. Human output prints every
+  layer header, including empty ones.
 - `trace` — query persisted workflow run history. No argument: list recent runs (default last 20,
   newest first) with filters `--workflow`, `--status`, `--since`, `--last`. With `<run-id>`:
   per-run timeline of state entries, transitions, and action executions interleaved by `created_at`.

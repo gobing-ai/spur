@@ -42,6 +42,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Spur Team Mode — Design Document | [spur-team-mode-design.md](design/spur-team-mode-design.md) |
 | Workflow run observability | [workflow-observability.md](design/workflow-observability.md) |
 | Workflow composition contract | [workflow-composition-contract.md](design/workflow-composition-contract.md) |
+| Spur artifact composition and evolution: workflow layers, spur-composer, spur-doctor (feature I21) | [spur-artifact-evolution.md](design/spur-artifact-evolution.md) |
 | Workflow shell ownership surface (feature D6, task 0608; amended by 0625) | [workflow-shell-ownership.md](design/workflow-shell-ownership.md) |
 | Design — `/sp:dev-plan` design-doc generation (design by default / `--skip-design`) | [dev-plan-design-doc-generation.md](design/dev-plan-design-doc-generation.md) |
 | Design — `--agent` on critical dev-* commands + `sp:dogfood-testing` extraction | [dev-agent-flag-and-dogfood-skill.md](design/dev-agent-flag-and-dogfood-skill.md) |

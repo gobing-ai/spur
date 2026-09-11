@@ -49,10 +49,11 @@ spur task create "Investigate flaky login test" --skip-ready
 ## Global conventions
 
 - **`--help` everywhere:** `spur <noun> --help` (and `spur <noun> <verb> --help`) prints the
-  authoritative usage for that command.
+  authoritative usage for that command; `spur help [command]` is a shortcut for the same output.
 - **Top-level flags:** `-V, --version`, `-v, --cli-verbose` (internal diagnostics),
   `--no-logo` (suppress the startup banner).
-- **Machine-readable output:** every command supports `--json`; `--json-envelope` additionally
+- **Machine-readable output:** most commands support `--json` (exceptions: `agent delete`,
+  `agent edit`, `agent loop`, `team assign`); `--json-envelope` additionally
   wraps the output in the standard `{ok, data|error}` envelope for scripting.
 - **CLI-gated entities:** tasks, features, agent specs, and workflow runs are files and database
   rows — always edit them through the CLI, never by hand.

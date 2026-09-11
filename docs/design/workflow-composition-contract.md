@@ -32,10 +32,10 @@ workflow definitions remain regression fixtures or examples unless a later ADR c
 | D5-O | idea handoff onto `finalizeIdeaHandoff` | landed as monorepo writer + portable shell fallback |
 | D5-P | advisory integration review at the feature boundary | landed in `feature-dev.yaml` |
 
-**Known baseline gap (carried forward by design).** The composition advisory is heuristic — it
-measures shell length and slash-invocation shape only, so a semantic rewrite of a shell body can
-still go undetected. Task 0775 retired the manifest that was proposed to close this; the residual
-risk is accepted and documented here.
+**Known baseline gap (carried forward by design).** The composition measures are heuristic. They
+measure shell size, prompt size and slash-invocation shape, so a semantic rewrite of a shell body
+within its budget can still go undetected. Task 0775 retired the manifest that was proposed to close
+this; the residual risk is accepted and documented here. ADR-115 caps size, not meaning.
 
 ## Composition facts (post-0775)
 
@@ -237,6 +237,54 @@ invalid. Continue/replay retains the launch digest; a different current digest r
 Detailed metadata and projection shapes are in
 [`workflow-observability.md`](workflow-observability.md#d5-detailed-progress-projection).
 
+## Composition budgets (ADR-115)
+
+[Surface governance](harness-surface-governance.md) §1 owns the measures, tiers and enforcement
+posture. This section owns the composition rules those numbers serve.
+
+1. **Deterministic first.** Work that needs no judgment (tests, builds, installs, file and status
+   probes, corpus writes) runs as `shell`, `command.gate`, `run.artifact` or another built-in
+   action, never inside `agent.run`.
+2. **Shell is glue.** A `shell` action calls owned capabilities and routes on their results. A
+   program past the warn band moves to an owner from the closed fix vocabulary; above the cap no
+   stays-shell exception exists.
+3. **Guards are predicates.** A guard reads state and decides; side effects belong in `onEnter`. A
+   guard past its cap reads a result file written by a probe action, an `extensions.guards`
+   predicate, or one verb's exit status.
+4. **`agent.run` invokes a skill or slash command.** The `input` names the operation and its vars;
+   the method lives in the skill. Move a long prompt behind a skill or command before it reaches
+   the cap.
+5. **One model step per judgment.** Merge adjacent `agent.run` steps when they share a role and an
+   executor and nothing between them must stay separate: a deterministic gate, a HITL state or an
+   independence boundary. Never merge an author step with the review or verify step that
+   certifies it; those keep `freshSession: true`. A new model step in a shared workflow raises its
+   `pipeline-budgets` `modelQueries`, which needs a recorded decision, and every shared workflow
+   with a model query carries a budget entry.
+6. **Every step leaves a checked result.** An `agent.run` declares `expectFile` or `requireDiff`,
+   and the next deterministic step reads that result fail-closed. Trace keeps each action's
+   `durationMs`, invocation and cost, so every step is observable on its own.
+7. **Step boundaries follow the cache window, not the clock.** Provider prompt caches expire after
+   an idle window and refresh on every hit (Anthropic: 5 minutes by default, 1 hour at extra cost;
+   OpenAI: 5–10 minutes in memory, longer with extended retention). A long step that keeps calling
+   the model stays warm; an idle gap longer than the window does not. The window W defaults to
+   300 s, the shortest common default.
+   - A tool call inside `agent.run` that runs longer than W idles the model, so its next request
+     re-reads a cold prefix. Run that work in a deterministic step.
+   - An `agent.run` that resumes the inherited session after a gap longer than W (a HITL wait or a
+     slow deterministic step) rewrites the whole session into the cache. When the prior step's
+     artifact carries what the step needs, prefer `freshSession: true` with that artifact as the
+     handoff.
+   - A deterministic step should finish within W at p50. An `agent.run` with p50 above 2W is a
+     split candidate only at a real artifact seam: each split adds a model query and a cold
+     prefix, so it must pay for itself in retry granularity or observability.
+   - These are runtime budgets, judged by `sp:spur-doctor` from step profiles
+     ([spur artifact evolution](spur-artifact-evolution.md) §10), not validate findings.
+
+Evidence (2026-09-10): gaps between consecutive actions are mostly zero, and the long ones follow
+HITL states (up to 8.3 hours at idea `design-approval`). Four idea-pipeline `agent.run` steps are
+entered from HITL states and resume the inherited session (`feature-create`, `ac-generate`,
+`system-design`, `decompose`). Shell steps peak at 63 s; model steps run 53–1418 s.
+
 ## Exit and promotion gates
 
 | Boundary | Required exit evidence |
@@ -265,4 +313,8 @@ and bundle parity, and explicit operator approval before deleting a live definit
 
 This contract adds no public `spur` noun, verb, flag, JSON field, or human-output contract. Internal
 projection use may extend existing application interfaces. Exposing it through `spur workflow`
-requires a separate ADR-051 surface decision with operator consent.
+requires a separate ADR-051 surface decision with operator consent. ADR-115 is that kind of change:
+the `level` field, the new `measure.kind` values and the validate exit status on error-level
+findings are observable-output changes to `spur workflow validate` and need a consent entry in
+[surface governance](harness-surface-governance.md) §4 before they land. An extraction that adds a
+public verb or flag needs its own entry.

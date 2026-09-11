@@ -767,6 +767,10 @@ prompt length determines severity, not whether a non-slash input is reported. Ex
 bands and historical dispositions belong in the surface contract.
 **Amendment (2026-09-05).** ADR-108 retires disposition snapshots and exact-mirroring machinery.
 Measures and advisory-only behavior remain; live findings cannot be hidden by stored dispositions.
+**Amendment (2026-09-10).** ADR-115 adds error-level caps above the advisory band and
+extends the measures to shell guards and every `agent.run` input. Warn-level findings stay advisory;
+an error-level finding fails `workflow validate` and the shared-workflow gate. No finding blocks a
+run.
 
 **Detail:** [workflow composition](design/workflow-composition-contract.md) and
 [surface governance](design/harness-surface-governance.md).
@@ -1591,3 +1595,72 @@ execution from becoming duplicate execution after a visibility interval. This bi
 history, and queue persistence consumers while preserving ADR-004's published-package boundary.
 
 **Detail:** `03 §26`; [execution deadline design](design/execution-deadlines.md).
+
+## ADR-113: Workflow Layers (Project, Registered, Shared) Back Both Listing and Resolution
+
+**Status:** Accepted (design) · **Date:** 2026-09-10 · **Feature:** I21
+
+**Decision.** Workflow definitions come from three layer kinds in fixed precedence: `project`
+(`<cwd>/.spur/workflows`, always present even when missing), `registered` (each extra
+`workflows.paths` folder, in config order) and `shared` (the installed package's
+`config/workflows`). One application function computes the ordered layers; `spur workflow list`
+scans them and bare-name resolution probes them in the same order. The workflow-layer value
+`bundled` becomes `shared`, and readers map a legacy persisted `bundled` to `shared`. The seeded
+global workflow copy and the old `global` list mirror are not layers. Rule layers are unchanged.
+
+**Why.** `list` labeled the installed package `project`, never showed the real project folder, and
+read `workflows.paths`, which resolution ignored, so what `list` showed was not what ran. One layer
+function removes that divergence and gives agents a truthful catalog to select from. This refines
+ADR-015's tier order for workflows.
+
+**Detail:** `03 §6.4`; [spur artifact evolution](design/spur-artifact-evolution.md) §1;
+[CLI contracts](design/cli-contracts.md) (`workflow list`, `workflow show`).
+
+## ADR-114: Spur Artifact Skills — Composer Applies, Doctor Proposes, expert-spur Stays a Corpus Agent
+
+**Status:** Accepted (design) · **Date:** 2026-09-10 · **Feature:** I21
+
+**Decision.** Two cross-noun skills join the ADR-054 split. `sp:spur-composer` selects, composes,
+tunes and promotes tasks, features, rules, workflows and agent specs, and applies accepted
+proposals through `spur` verbs. `sp:spur-doctor` evaluates those artifacts from CLI evidence,
+reflects over history only through `sp:history-anatomy` findings, and returns proposals; it writes
+nothing. `sp:spur-cli` keeps verbs and per-noun procedures, which both skills link rather than
+copy. `sp:expert-spur` binds the three skills and runs one bounded campaign per dispatch. It never
+drives the lifecycle, batches, recurring loops or coordination, which belong to `sp:super-planner`
+or a workflow, and it never uses `spur team` or `spur agent loop`.
+
+**Why.** Composition and evaluation cut across every noun, so per-noun references scatter them.
+Splitting propose from apply keeps evaluation read-only and puts every write behind operator
+acceptance. Keeping loops out of expert-spur preserves the four-agent split (R56) that routing
+accuracy depends on.
+
+**Detail:** `03 §15`; [spur artifact evolution](design/spur-artifact-evolution.md) §2–§8.
+
+## ADR-115: Workflow Composition Budgets — Hard Authoring Caps and Cache-Window Step Boundaries
+
+**Status:** Accepted · **Date:** 2026-09-10 · **Feature:** I21
+
+**Decision.** ADR-069's composition measures gain an error tier above the advisory band. A `shell`
+state action over 10 logical commands or 800 characters, a shell transition guard over 5 logical
+commands, and an `agent.run` `input` over 1000 characters, slash-led or not, are error-level
+findings. Error-level findings fail `spur workflow validate` and a shared-workflow gate in
+`spur-check`, so they stop authoring and promotion but never a run. Model steps stay few: every
+shared workflow with a model query has a `pipeline-budgets` entry, and adjacent model steps merge
+unless a gate, a HITL state or an independence boundary separates them. Step boundaries follow the
+provider cache window: long deterministic work stays out of `agent.run`, and `sp:spur-doctor` judges
+step duration, idle gaps and cache hits from trace evidence. A cap can be lowered freely; raising
+one needs an amendment to this ADR.
+
+**Why.** The advisory did not move the catalog: on 2026-09-10, 27 of 84 shared shell programs
+exceeded 10 logical commands or 800 characters, and slash-led prompts escaped the length check.
+Enforcing at authoring time pushes logic into owned capabilities without breaking the workflows
+adopting projects already run. Provider caches expire on idle time and refresh on every hit, so
+cutting steps under five minutes would add model queries and cold prefixes without saving cache.
+The misses come from idle gaps: in 30 days of local history, 99.1% of Claude requests arrived
+within five minutes of the previous one, and requests after an idle gap of over an hour wrote 33
+times the cache of those within five minutes.
+
+**Detail:** [surface governance](design/harness-surface-governance.md) §1 (measures, tiers,
+posture); [workflow composition](design/workflow-composition-contract.md#composition-budgets-adr-115)
+(rules); [spur artifact evolution](design/spur-artifact-evolution.md) §10 (doctor evidence);
+[CLI contracts](design/cli-contracts.md) (`workflow validate`).

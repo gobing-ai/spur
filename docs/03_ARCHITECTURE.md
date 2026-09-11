@@ -234,6 +234,15 @@ the host's supported execution surface. Operator decisions stay host-owned. Head
 uses the workflow service and subprocess runner.
 See [execution selector contract](design/dev-agent-flag-and-dogfood-skill.md).
 
+### 6.4 Workflow layers (ADR-113)
+
+One application function returns the ordered workflow layers: `project` (`<cwd>/.spur/workflows`,
+always present), each `registered` `workflows.paths` folder, then `shared` (the package's
+`config/workflows`), deduped by normalized absolute path. `spur workflow list` scans those layers,
+and bare-name resolution probes them in the same order after explicit paths, so the catalog an
+agent reads is the set a name can resolve from. Persisted run sources record the layer id, and
+`bundled` is read as `shared`. Shapes: [spur artifact evolution](design/spur-artifact-evolution.md) §1.
+
 ## 7. History Import & Analytics (`ts-llm-jsonl-importer`, `spur history`)
 
 The importer owns source-independent ingestion:
@@ -275,7 +284,7 @@ Execution/lease ownership: §26.
 | Location | Purpose |
 | ---------- | --------- |
 | `.spur/` | Project config `config.yaml` (ADR-017), local rule/workflow definitions, team agent specs (`agents/`) |
-| `~/.config/spur/` | Global config layer, seeded from bundled assets; resolution is bundled > global > local (ADR-015) |
+| `~/.config/spur/` | Global config layer, seeded from bundled assets; resolution is bundled > global > local (ADR-015). Its seeded `workflows/` copy is not a workflow layer (§6.4) |
 | SQLite DB (`DATABASE_URL` or `.spur/spur.db`) | CLI domain tables + history ETL/ledger/checkpoint + workflow/rule run history + inbox |
 | Agent JSONL files | Canonical raw history (never copied into the DB) |
 | Task/feature markdown | Planning SSOT (ADR-020); the DB holds only derived data (§12.1) |
@@ -560,6 +569,11 @@ navigation. Superskill generates platform adapters from those sources.
 A parity check compares source-local CLI help with each documented surface in both directions,
 including explicit exclusions. This is a build-time documentation boundary, not a runtime seam.
 See [plugin parity](design/plugin-surface-parity.md).
+
+Two cross-noun skills sit beside the facade and the spine (ADR-114). `sp:spur-composer` writes
+artifacts through `spur` verbs; `sp:spur-doctor` evaluates them read-only and proposes changes.
+`sp:expert-spur` binds both for bounded corpus campaigns, while loops and coordination stay with
+`sp:super-planner`. See [spur artifact evolution](design/spur-artifact-evolution.md).
 
 ## 16. Actionable Observability Context (foundation current — ADR-056; task 0526)
 

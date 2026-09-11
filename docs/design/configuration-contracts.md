@@ -76,8 +76,7 @@ rules:
   paths:
     - .spur/rules/**/*.yaml
 workflows:
-  paths:
-    - .spur/workflows/
+  paths: [] # extra registered folders only; the project and shared layers are implicit (ADR-113)
 redaction:
   enabled: false
 tasks:
@@ -152,7 +151,7 @@ config/
 | Install (`bun install -g`) | Package-root `config/` ships inside `@gobing-ai/spur` — no `postinstall` (unreliable for global installs). Legacy installs may still have `spur-cli/config/` (pre-0.3.9); `bundledConfigRoot()` accepts both.                                                                                                                                         |
 | First run / `spur init`    | `seedGlobalConfig()` copies bundled `config/{rules,workflows,tasks,…}` (YAML/JSON) → `~/.config/spur/` (never overwrites).                                                                                                                                                                                                                            |
 | `spur init` scaffold       | Seed only project-owned assets under `.spur/` (`rules/**`, `tasks/**`, and the `templates/task` → `tasks/templates` remap), plus root-scoped `docs/` + `AGENTS.md`. Workflows and natural-path templates stay bundled; no `.spur/workflows` or `.spur/templates` shadow is created. |
-| Workflow runtime resolution | Explicit project path first, then bundled `config/workflows/<basename>` fallback. Shipped workflows are invoked by bare name; the global workflow copy is not a runtime tier. |
+| Workflow runtime resolution | Explicit path first, then the ADR-113 layers in order: `project` (`.spur/workflows`), each `registered` `workflows.paths` folder, then `shared` (package `config/workflows/<basename>`). `spur workflow list` shows the same layers. Shipped workflows are invoked by bare name; the seeded global workflow copy is not a layer unless registered. |
 
 **Ownership split.** `@gobing-ai/ts-rule-engine` ships only generic demo rules (one per builtin
 evaluator) + a generic `example.yaml` preset for its own tests. Spur owns its presets and workflows
