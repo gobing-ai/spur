@@ -232,19 +232,38 @@ export type WorkflowValidateResult =
     | { ok: true; valid: true; workflow: WorkflowDef; digest?: string; composition?: CompositionAdvisory }
     | { ok: false; valid: false; file: string; errors: string[] };
 
-/** Warn-only composition advisory for a validated workflow (0614). */
+/** Composition advisory for a validated workflow (0614; two-tier budgets per ADR-115). */
 export interface CompositionAdvisory {
     findings: CompositionFinding[];
 }
 
-/** One advisory finding under the frozen composition measures. */
+/** One composition finding under the ADR-115 measures and tiers. */
 export interface CompositionFinding {
     workflow: string;
     state: string;
     actionKey: string;
-    measure: { kind: 'shell-lines' | 'agent-run-chars'; measured: number; threshold?: number; severity?: string };
+    level: 'warn' | 'error';
+    measure: {
+        kind: 'shell-lines' | 'shell-chars' | 'guard-lines' | 'agent-run-chars' | 'agent-run-output';
+        measured: number;
+        threshold?: number;
+        severity?: string;
+    };
     recommendation: string;
 }
+
+/**
+ * ADR-115 composition tier caps — the parity anchor for the governance §1.2 tier
+ * table (`docs/design/harness-surface-governance.md`), the composition paragraph in
+ * `docs/design/cli-contracts.md` and the §3 table in
+ * `plugins/sp/skills/spur-cli/references/workflows/workflow-fit-and-tuning.md`.
+ * A ratchet changes all four together.
+ */
+export const COMPOSITION_CAPS = {
+    shell: { warnAbove: 5, errorAbove: 10, charsErrorAbove: 800 },
+    guard: { warnAbove: 3, errorAbove: 5 },
+    agentRunInput: { charsErrorAbove: 1000, lowSeverityBelow: 200 },
+} as const;
 
 /**
  * Result of a workflow run operation: the engine's run result, widened with an
@@ -1909,69 +1928,173 @@ export function collectUndeclaredShellVarViolations(def: WorkflowDef): string[] 
     return violations;
 }
 
+/** Bare shell structure tokens never count as a logical command (ADR-115 unit). */
+const STRUCTURE_TOKENS = new Set(['then', 'else', 'fi', 'do', 'done', 'esac', '{', '}', '(', ')', ';;']);
+
 /**
- * Warn-only composition advisory walk (0614). Measures shell actions and
- * non-slash agent.run prompts against the frozen ADR-069 thresholds. Guards
- * are excluded wholesale (bulk exception, `docs/design/workflow-shell-ownership.md`).
- * Never affects the validate exit status.
+ * Count the logical commands of a shell program (ADR-115): split on newline,
+ * `;`, `&&` and `||`, skipping blank segments, `#` comment segments and bare
+ * structure tokens. A pipeline counts once. The split is deliberately naive —
+ * it also splits inside `$(…)` and quotes, so a `;` in a quoted message counts;
+ * a single `|` never splits. This is the same algorithm that produced the
+ * 2026-09-10 governance §1.2 measurements.
+ */
+export function countLogicalCommands(command: string): number {
+    return command
+        .split(/\n|;|&&|\|\|/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0 && !s.startsWith('#') && !STRUCTURE_TOKENS.has(s)).length;
+}
+
+/**
+ * Composition advisory walk (0614, ADR-115). Measures shell actions, shell
+ * transition guards and `agent.run` steps against the governance §1.2 tier caps
+ * (`COMPOSITION_CAPS`). Guards are measured since ADR-115 — the ADR-069 bulk
+ * exemption ended. Each element yields at most one size finding, plus a separate
+ * `agent-run-output` finding when an `agent.run` declares no output check.
+ * Findings are derived from the definition; no snapshot or suppression list
+ * returns (ADR-108). Warn-level findings never affect anything; error-level
+ * findings make `workflow validate` exit 1 (CLI-side) but still never block a
+ * run — run/dry-run/continue never call this walk.
  */
 function collectCompositionAdvisory(def: WorkflowDef, workflowFile: string): CompositionAdvisory {
     const findings: CompositionFinding[] = [];
     const workflowName = basename(workflowFile, '.yaml');
 
-    /** Frozen measure (ADR-069 amendment): shell lines = non-blank, non-comment
-     *  units after splitting `options.command` on `\n` and `;`. */
-    const shellLines = (command: string): number =>
-        command
-            .split(/\n|;/)
-            .map((u) => u.trim())
-            .filter((u) => u.length > 0 && !u.startsWith('#')).length;
-
-    const agentRunSeverity = (prompt: string): 'low' | 'medium' | 'high' => {
-        if (prompt.length < 200) return 'low';
-        if (prompt.length <= 1000) return 'medium';
-        return 'high';
+    const measureShellAction = (stateId: string, actionKey: string, command: string): void => {
+        const caps = COMPOSITION_CAPS.shell;
+        const lines = countLogicalCommands(command);
+        // Precedence: error lines, then error chars, then warn lines — one size
+        // finding per element keeps the counts equal to the §1.2 measured table.
+        if (lines > caps.errorAbove) {
+            findings.push({
+                workflow: workflowName,
+                state: stateId,
+                actionKey,
+                level: 'error',
+                measure: { kind: 'shell-lines', measured: lines, threshold: caps.errorAbove },
+                recommendation: `shell action at ${actionKey} measures ${lines} logical commands (error above ${caps.errorAbove}, ADR-115) — move it to an owner from the governance §1.1 fix vocabulary`,
+            });
+        } else if (command.length > caps.charsErrorAbove) {
+            findings.push({
+                workflow: workflowName,
+                state: stateId,
+                actionKey,
+                level: 'error',
+                measure: { kind: 'shell-chars', measured: command.length, threshold: caps.charsErrorAbove },
+                recommendation: `shell action at ${actionKey} is ${command.length} chars (error above ${caps.charsErrorAbove}, ADR-115) — move it to an owner from the governance §1.1 fix vocabulary`,
+            });
+        } else if (lines > caps.warnAbove) {
+            findings.push({
+                workflow: workflowName,
+                state: stateId,
+                actionKey,
+                level: 'warn',
+                measure: { kind: 'shell-lines', measured: lines, threshold: caps.warnAbove },
+                recommendation: `shell action at ${actionKey} measures ${lines} logical commands (warn above ${caps.warnAbove}, ADR-115) — move it to an owner from the governance §1.1 fix vocabulary`,
+            });
+        }
     };
 
-    const visitAction = (stateId: string, action: ActionDef, idx: number, phase: 'onEnter' | 'onExit'): void => {
-        const actionKey = `${stateId}:${phase}:${idx}`;
+    const measureShellGuard = (from: string, to: string, command: string): void => {
+        const caps = COMPOSITION_CAPS.guard;
+        const lines = countLogicalCommands(command);
+        const actionKey = `${from}→${to}`; // same location format as the shell-var walk
+        if (lines > caps.errorAbove || lines > caps.warnAbove) {
+            const level: CompositionFinding['level'] = lines > caps.errorAbove ? 'error' : 'warn';
+            const threshold = lines > caps.errorAbove ? caps.errorAbove : caps.warnAbove;
+            findings.push({
+                workflow: workflowName,
+                state: from,
+                actionKey,
+                level,
+                measure: { kind: 'guard-lines', measured: lines, threshold },
+                recommendation: `shell guard ${actionKey} measures ${lines} logical commands (${level} above ${threshold}, ADR-115) — reduce it to one predicate over a result file`,
+            });
+        }
+    };
+
+    const measureAgentRun = (
+        stateId: string,
+        actionKey: string,
+        options: Record<string, unknown> | undefined,
+    ): void => {
+        const caps = COMPOSITION_CAPS.agentRunInput;
+        const input = options?.input;
+        if (typeof input === 'string' && input.length > 0) {
+            const severity =
+                input.length < caps.lowSeverityBelow ? 'low' : input.length <= caps.charsErrorAbove ? 'medium' : 'high';
+            if (input.length > caps.charsErrorAbove) {
+                // Over the cap is an error whatever the shape — slash-led or not.
+                findings.push({
+                    workflow: workflowName,
+                    state: stateId,
+                    actionKey,
+                    level: 'error',
+                    measure: {
+                        kind: 'agent-run-chars',
+                        measured: input.length,
+                        threshold: caps.charsErrorAbove,
+                        severity,
+                    },
+                    recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, over the ${caps.charsErrorAbove}-char cap (error, severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
+                });
+            } else if (!input.trimStart().startsWith('/')) {
+                findings.push({
+                    workflow: workflowName,
+                    state: stateId,
+                    actionKey,
+                    level: 'warn',
+                    measure: { kind: 'agent-run-chars', measured: input.length, severity },
+                    recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, not slash-pinned (warn, severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
+                });
+            }
+        }
+        if (options?.expectFile === undefined && options?.requireDiff !== true) {
+            findings.push({
+                workflow: workflowName,
+                state: stateId,
+                actionKey,
+                level: 'warn',
+                measure: { kind: 'agent-run-output', measured: 0 },
+                recommendation: `agent.run at ${actionKey} declares neither expectFile nor requireDiff — declare the artifact it must produce`,
+            });
+        }
+    };
+
+    const visitAction = (stateId: string, actionKey: string, action: ActionDef): void => {
         if (action.kind === 'shell') {
             const cmd = action.options?.command;
-            if (typeof cmd !== 'string' || cmd.length === 0) return;
-            const measured = shellLines(cmd);
-            if (measured < 6) return;
-            findings.push({
-                workflow: workflowName,
-                state: stateId,
-                actionKey,
-                measure: { kind: 'shell-lines', measured, threshold: 6 },
-                recommendation: `shell action at ${actionKey} measures ${measured} lines (>5 frozen threshold, ADR-069) — extract to a script under scripts/ or plugins/sp/scripts`,
-            });
+            if (typeof cmd === 'string' && cmd.length > 0) measureShellAction(stateId, actionKey, cmd);
         } else if (action.kind === 'agent.run') {
-            const input = action.options?.input;
-            if (typeof input !== 'string' || input.length === 0) return;
-            if (input.trimStart().startsWith('/')) return; // slash-pinned steps are fine
-            const severity = agentRunSeverity(input);
-            findings.push({
-                workflow: workflowName,
-                state: stateId,
-                actionKey,
-                measure: { kind: 'agent-run-chars', measured: input.length, severity },
-                recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, not slash-pinned (severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
-            });
+            measureAgentRun(stateId, actionKey, action.options);
         }
     };
 
     if (def.kind === 'transition-flow' || def.kind === undefined) {
         const flowDef = def as TransitionFlowWorkflowDef;
         for (const node of flowDef.nodes ?? []) {
-            if (node.action) visitAction(node.id, node.action, 0, 'onEnter');
+            if (node.action) visitAction(node.id, `${node.id}:onEnter:0`, node.action);
+        }
+        // ADR-115 measures flow edges as guards for completeness; no shipped
+        // definition uses them today.
+        for (const edge of flowDef.edges ?? []) {
+            const cmd = edge.condition?.kind === 'shell' ? edge.condition.options?.command : undefined;
+            if (typeof cmd === 'string' && cmd.length > 0) measureShellGuard(edge.from, edge.to, cmd);
         }
     } else {
         const smDef = def as StateMachineWorkflowDef;
         for (const state of smDef.states ?? []) {
-            for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i, 'onEnter');
-            for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.id, action, i, 'onExit');
+            for (const [i, action] of (state.onEnter ?? []).entries()) {
+                visitAction(state.id, `${state.id}:onEnter:${i}`, action);
+            }
+            for (const [i, action] of (state.onExit ?? []).entries()) {
+                visitAction(state.id, `${state.id}:onExit:${i}`, action);
+            }
+        }
+        for (const trans of smDef.transitions ?? []) {
+            const cmd = trans.guard?.kind === 'shell' ? trans.guard.options?.command : undefined;
+            if (typeof cmd === 'string' && cmd.length > 0) measureShellGuard(trans.from, trans.to, cmd);
         }
     }
 

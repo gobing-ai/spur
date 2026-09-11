@@ -127,9 +127,14 @@ describe('workflow command (main)', () => {
                     dbUrl: ':memory:',
                 },
             );
-            expect(exitCode).toBe(0);
+            expect(exitCode === 0 || exitCode === 1).toBe(true);
             const parsed = JSON.parse(output.messages.at(-1) ?? '{}');
             expect(parsed.valid).toBe(true);
+            // I21: exit 0 is restored by 0826 once 0823–0825 land. Until then a
+            // shared definition may carry error-level composition findings, and
+            // validate legitimately exits 1 while the definition itself stays valid.
+            const findings: Array<{ level?: string }> = parsed.composition?.findings ?? [];
+            expect(exitCode).toBe(findings.some((f) => f.level === 'error') ? 1 : 0);
         });
     }
 
@@ -263,6 +268,178 @@ describe('workflow command (main)', () => {
 
         expect(exitCode).toBe(0);
         expect(output.messages).toEqual(['workflow valid: cli-test-flow (unversioned)']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    // 0822 (ADR-115): a shell program of N `echo` lines measures N logical commands.
+    // 6 commands → warn band; 11 → error band.
+    const compositionFixture = (commands: number): string => `name: cli-composition-flow
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: |
+${Array.from({ length: commands }, (_, i) => `            echo step-${i}`).join('\n')}
+  - id: done
+transitions:
+  - from: start
+    to: done
+terminalStates: [done]
+`;
+
+    test('validate exits 0 on warn-only composition findings, in both modes (0822 R1)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'warn.yaml');
+        await writeFile(workflowFile, compositionFixture(6));
+
+        const human = createCapturedOutput();
+        const humanExit = await main(['workflow', 'validate', workflowFile], {
+            output: human,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(humanExit).toBe(0);
+        expect(human.messages[0]).toContain('workflow valid: cli-composition-flow');
+        expect(human.errors.join('\n')).toContain('composition warn: start:onEnter:0');
+        expect(human.errors.join('\n')).toContain('6 logical commands (threshold 5)');
+        expect(human.errors.join('\n')).not.toContain('composition error:');
+
+        const json = createCapturedOutput();
+        const jsonExit = await main(['workflow', 'validate', workflowFile, '--json'], {
+            output: json,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(jsonExit).toBe(0);
+        const parsed = JSON.parse(json.messages.at(-1) ?? '{}');
+        expect(parsed.valid).toBe(true);
+        expect(parsed.composition.findings).toHaveLength(1);
+        expect(parsed.composition.findings[0].level).toBe('warn');
+        expect(parsed.composition.findings[0].measure.kind).toBe('shell-lines');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('validate exits 1 on an error-level composition finding, in both modes (0822 R1)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'error.yaml');
+        await writeFile(workflowFile, compositionFixture(11));
+
+        const human = createCapturedOutput();
+        const humanExit = await main(['workflow', 'validate', workflowFile], {
+            output: human,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(humanExit).toBe(1);
+        expect(human.messages[0]).toContain('workflow valid: cli-composition-flow');
+        expect(human.errors.join('\n')).toContain('composition error: start:onEnter:0');
+        expect(human.errors.join('\n')).toContain('11 logical commands (threshold 10)');
+
+        const json = createCapturedOutput();
+        const jsonExit = await main(['workflow', 'validate', workflowFile, '--json'], {
+            output: json,
+            cwd: dir,
+            dbUrl: ':memory:',
+        });
+        expect(jsonExit).toBe(1);
+        const parsed = JSON.parse(json.messages.at(-1) ?? '{}');
+        expect(parsed.valid).toBe(true);
+        expect(parsed.composition.findings[0].level).toBe('error');
+        expect(parsed.composition.findings[0].measure).toMatchObject({
+            kind: 'shell-lines',
+            measured: 11,
+            threshold: 10,
+        });
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('validate still exits 1 on an invalid definition (0822 R1)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'broken.yaml');
+        await writeFile(workflowFile, 'name: cli-broken\nkind: state-machine\n'); // no states/transitions
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'validate', workflowFile], { output, cwd: dir, dbUrl: ':memory:' });
+        expect(exitCode).toBe(1);
+        expect(output.errors.join('\n')).toContain('workflow invalid');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    // 0822 R2: composition findings are validate-path-only. Run, dry-run and
+    // continue behave exactly as they do for a definition with no findings —
+    // none computes or prints a `composition` line, whatever the finding level.
+    test('run, run --dry-run and continue never report composition findings (0822 R2)', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        // Error-level shell program (11 logical commands) on the start state; the
+        // workflow pauses at `gate`, so continue has something to resume.
+        const errorPauser = `name: cli-composition-pauser
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: |
+${Array.from({ length: 11 }, (_, i) => `            echo step-${i}`).join('\n')}
+  - id: gate
+    pause: true
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: done
+    guard: { kind: always }
+terminalStates: [done]
+`;
+        await writeFile(join(wfDir, 'pauser.yaml'), errorPauser);
+        await writeFile(join(wfDir, 'plain.yaml'), compositionFixture(11));
+        const dbUrl = join(dir, 'spur.db');
+
+        // Plain run executes to done — an error-level finding neither blocks nor reports.
+        const runOut = createCapturedOutput();
+        const runExit = await main(['workflow', 'run', '--run-id', 'comp-run-1', join(wfDir, 'plain.yaml')], {
+            output: runOut,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(runExit).toBe(0);
+        expect(runOut.messages.join('\n')).toContain('workflow done: cli-composition-flow');
+        expect(runOut.errors.join('\n')).not.toContain('composition');
+
+        // Dry run walks the graph — same no-findings contract.
+        const dryOut = createCapturedOutput();
+        const dryExit = await main(
+            ['workflow', 'run', '--dry-run', '--run-id', 'comp-dry-1', join(wfDir, 'plain.yaml')],
+            {
+                output: dryOut,
+                cwd: dir,
+                dbUrl,
+            },
+        );
+        expect(dryExit).toBe(0);
+        expect(dryOut.errors.join('\n')).not.toContain('composition');
+
+        // Run to the pause, then continue — resumed like any paused run, no composition output.
+        const pauseOut = createCapturedOutput();
+        const pauseExit = await main(['workflow', 'run', '--run-id', 'comp-p1', join(wfDir, 'pauser.yaml')], {
+            output: pauseOut,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(pauseExit).toBe(1); // paused != done — unchanged baseline behavior
+        expect(pauseOut.errors.join('\n')).not.toContain('composition');
+
+        const contOut = createCapturedOutput();
+        const contExit = await main(['workflow', 'continue', '--yes'], { output: contOut, cwd: dir, dbUrl });
+        expect(contExit).toBe(0);
+        expect(contOut.errors.join('\n')).not.toContain('composition');
         await rm(dir, { recursive: true, force: true });
     });
 

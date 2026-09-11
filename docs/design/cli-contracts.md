@@ -559,22 +559,22 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   traversal fails the command before any workflow step. Schema: both workflow JSON schemas carry
   `extensions` (0431 parity).
 - **Composition findings (0614/ADR-069, ADR-115):** on the valid path `validate` also reports
-  composition findings: `--json` adds `composition: {findings[], suppressed}` where each finding is
+  composition findings: `--json` adds `composition: {findings[]}` where each finding is
   `{workflow, state, actionKey, level, measure: {kind, measured, threshold?, severity?},
   recommendation}`. `level` is `warn` or `error`; `measure.kind` is `shell-lines`, `shell-chars`,
-  `guard-lines`, `agent-run-chars` or `agent-run-output`. A guard finding names its source state in
-  `state` and `<from>-><to>` in `actionKey`. `shell-lines` and `guard-lines` count logical commands
-  (split on newline, `;`, `&&` and `||`; blank, `#` and bare structure tokens skipped). Tiers are
-  owned by [surface governance](harness-surface-governance.md) §1.2: a `shell` action warns at 6–10
-  and errors above 10 or above 800 characters; a shell guard warns at 4–5 and errors above 5; an
-  `agent.run` `input` errors above 1000 characters whatever its shape and otherwise warns when it
-  is not slash-led (severity by raw length: <200 low / ≤1000 medium); an `agent.run` with neither
+  `guard-lines`, `agent-run-chars` or `agent-run-output`; `threshold` is the cap the measure
+  exceeded. A guard finding names its source state in `state` and `<from>→<to>` in `actionKey`.
+  `shell-lines` and `guard-lines` count logical commands (split on newline, `;`, `&&` and `||`;
+  blank, `#` and bare structure tokens skipped). Tiers are owned by
+  [surface governance](harness-surface-governance.md) §1.2: a `shell` action warns at 6–10 and
+  errors >10 logical commands or >800 characters; a shell guard warns at 4–5 and errors >5; an
+  `agent.run` `input` errors >1000 characters whatever its shape and otherwise warns when it is
+  not slash-led (severity by raw length: <200 low / ≤1000 medium); an `agent.run` with neither
   `expectFile` nor `requireDiff` warns. Human mode prints findings to stderr. Any error-level
   finding exits 1; warn-only findings keep exit 0. Findings are derived from the definition itself
   (`extractResolvedWorkflowFacts`) on the validate path only; `run`, `run --dry-run` and `continue`
   never compute or act on them. `spur-check` fails on an error-level finding in
-  `config/workflows/*.yaml` and ignores warn-level ones. 0775 retired the suppression snapshot, so
-  none are suppressed.
+  `config/workflows/*.yaml` and ignores warn-level ones.
 - `run <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan]` — execute; prints `<status>: <name> -> <finalState>`;
   exit 1 unless `done`. `--vars` takes a JSON object of per-run variable overrides
   (e.g. `--vars '{"taskId":"0042"}'`), merged over the workflow's `vars` for `${vars.*}` resolution.

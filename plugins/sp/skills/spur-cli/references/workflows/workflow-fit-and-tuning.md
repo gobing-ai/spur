@@ -130,24 +130,34 @@ The flags (`--detail`, `--verbose`, `--trace-file`, `--follow`, `--output`) are 
 ## 3. Node simplicity budget
 
 Simplicity is the operating constraint, and it is already measurable — `spur workflow validate`
-reports it. Do not invent a second threshold; author to the one that is frozen (ADR-069, task 0614).
+reports it with a `warn`/`error` level. Do not invent a second threshold; author to the ADR-115
+tiers frozen in [surface governance §1.2](../../../../../../docs/design/harness-surface-governance.md).
 
-| Element | Budget | What breaching it means |
-| --- | --- | --- |
-| `shell` action `command` | **<= 5** non-comment units (split on newline and `;`) | >= 6 flags the composition advisory: the program holds reusable behavior that wants an owner |
-| `agent.run` action `input` | A **slash command or skill invocation** | A raw prose prompt flags: the operation belongs behind a centralized command (ADR-043). Prompt length sets severity only |
-| Transition guard | **One** boolean predicate | Guards are exempt from the shell measure by design. A guard needing five lines is a probe node in disguise — make it one |
-| Node count | Every node earns its transition round-trip | A node that always runs immediately after another, with no guard between them, is one node |
+| Element | Clean | Warn (advisory) | Error |
+| --- | --- | --- | --- |
+| `shell` action `command` | ≤5 logical commands (split on newline, `;`, `&&`, `||`; blank/`#`/structure tokens skipped) | **6–10** | **>10** commands or **>800** characters |
+| Shell transition guard | ≤3 logical commands — one predicate over a result file | **4–5** | **>5** |
+| `agent.run` `input` | A slash command or skill invocation (ADR-043), ≤1000 chars | non-slash prompt (severity by raw length: <200 low, ≤1000 medium) | **>1000** chars, slash-led or not |
+| `agent.run` output check | `expectFile` or `requireDiff` declared | neither declared | — |
+| Node count | Every node earns its transition round-trip | A node that always runs immediately after another, with no guard between them, is one node | — |
 
-**When a node breaches the budget, do not reformat to dodge the measure.** Joining five lines with
-`&&` moves the complexity, not the ownership. Pick one of the four remaining owners from
-`docs/design/workflow-shell-ownership.md`: public `spur` verb (consent-gated), application service,
-least-privilege built-in action kind, or workflow-relative external extension. (0775 retired the
-recorded stays-shell exception along with the suppression snapshot.)
+**When a program breaches a cap, do not reformat to dodge the measure.** Joining lines with `&&`
+moves the complexity, not the ownership. Move the program to one of the five recorded owners from
+`docs/design/workflow-shell-ownership.md`: (a) public `spur` verb (consent-gated), (b) application
+service, (c) least-privilege built-in action kind, (d) workflow-relative external extension, or
+(e) a deliberately-stays-shell exception. (e) is valid only inside the warn band — above an error
+cap the program moves to (a)–(d).
 
-**Advisory posture is binding.** Composition findings never block a run, never change a `validate`
-exit status, and are never a reason to hot-edit an executing pipeline. Surface them; fix on operator
-acceptance.
+**Every remaining warn-band shell program carries a one-line `#` reason**: a YAML comment directly
+above the action or guard, e.g. `# (e) <why it stays shell>` or `# (d) <script> owns <what>`. Never
+write it as a shell `#` line inside a folded `>-` scalar — folding joins the lines, so the `#`
+comments out the rest of the program. YAML comments do not count toward the measure.
+
+**Posture is binding (ADR-115).** Warn-level findings never change a `validate` exit status and
+never block a run. An error-level finding makes `validate` exit 1 and gates the spur repository's
+shipped shared workflow layer (layer id `shared` in `spur workflow list --json`) in `spur-check`
+(task 0826). No composition finding ever blocks `run`, `run --dry-run` or `continue`, and a finding
+is never a reason to hot-edit an executing pipeline.
 
 ### Consolidation and cache windows (ADR-115)
 

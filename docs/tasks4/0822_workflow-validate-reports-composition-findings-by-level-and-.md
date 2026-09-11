@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Workflow validate reports composition findings by level and fails on the caps
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.069Z
-updated_at: "2026-09-11T05:44:52.374Z"
+updated_at: "2026-09-11T21:09:17.979Z"
 feature_id: I21
 priority: P2
 tags:
@@ -33,7 +33,7 @@ Consent: granted 2026-09-10 (governance §4) for the `level` field, the new `mea
 
 ### Requirements
 
-- [ ] R1. `collectCompositionAdvisory` (`packages/app/src/services/workflow-service.ts`) counts logical commands and applies the governance §1.2 tiers to three element types:
+- [x] R1. `collectCompositionAdvisory` (`packages/app/src/services/workflow-service.ts`) counts logical commands and applies the governance §1.2 tiers to three element types:
   - `shell` actions: state-machine `onEnter`/`onExit` and transition-flow nodes;
   - shell transition guards: state-machine `transitions[].guard` and transition-flow `edges[].condition`;
   - `agent.run` actions.
@@ -43,7 +43,7 @@ Consent: granted 2026-09-10 (governance §4) for the `level` field, the new `mea
   Each finding carries `level: 'warn'|'error'` and a `measure.kind` of `shell-lines`, `shell-chars`, `guard-lines`, `agent-run-chars` or `agent-run-output`. A guard finding names its source state in `state` and `<from>→<to>` in `actionKey`.
 
   `spur workflow validate` exits 1 when the definition is invalid or carries any error-level finding, in human and `--json` mode alike. It exits 0 on warn-only findings. Human mode prints every finding to stderr. A parity test keeps the cap constants, `docs/design/cli-contracts.md`, the governance §1.2 tier table and the `workflow-fit-and-tuning.md` §3 table in agreement.
-- [ ] R2. `spur workflow run`, `spur workflow run --dry-run` and `spur workflow continue` never compute or act on composition findings, for shared, project and explicit-path definitions alike.
+- [x] R2. `spur workflow run`, `spur workflow run --dry-run` and `spur workflow continue` never compute or act on composition findings, for shared, project and explicit-path definitions alike.
 
 Non-goals:
 - `stateEffect`/`evidenceEffect` declarations. The progress projection hard-codes them and ADR-115 asks for none.
@@ -228,18 +228,77 @@ Assert each appears in the matching row of the governance §1.2 tier table and o
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/workflow.ts:436` |
+| `apps/cli/src/commands/workflow.ts:453` |
+| `apps/cli/tests/commands/init.test.ts:84` |
+| `apps/cli/tests/commands/workflow.test.ts:130` |
+| `apps/cli/tests/commands/workflow.test.ts:133` |
+| `apps/cli/tests/commands/workflow.test.ts:274` |
+| `packages/app/src/services/workflow-service.ts:1931` |
+| `packages/app/src/services/workflow-service.ts:1935` |
+| `packages/app/src/services/workflow-service.ts:1964` |
+| `packages/app/src/services/workflow-service.ts:1999` |
+| `packages/app/src/services/workflow-service.ts:2008` |
+| `packages/app/src/services/workflow-service.ts:2010` |
+| `packages/app/src/services/workflow-service.ts:2014` |
+| `packages/app/src/services/workflow-service.ts:2058` |
+| `packages/app/src/services/workflow-service.ts:2065` |
+| `packages/app/src/services/workflow-service.ts:2077` |
+| `packages/app/src/services/workflow-service.ts:2088` |
+| `packages/app/src/services/workflow-service.ts:235` |
+| `packages/app/src/services/workflow-service.ts:240` |
+| `packages/app/src/services/workflow-service.ts:245` |
+| `packages/app/src/services/workflow-service.ts:255` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:15` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:156` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:161` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:167` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:171` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:174` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:18` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:191` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:35` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:4` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:402` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:408` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:415` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:469` |
+| `packages/app/tests/workflow/composition-advisory.test.ts:8` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | workflow-service.ts:1942-1952 countLogicalCommands splits on newline semicolon and-or-or (single pipe never splits), skips blank/hash/structure tokens; :1960-2113 walks shell onEnter/onExit and flow nodes, state-machine transitions[].guard and flow edges[].condition, and agent.run; one size finding per element via precedence :1966-1994, separate agent-run-output :2049-2057; level and five measure kinds at :241-254; caps :262-266; guard state=from and actionKey from→to :2000-2008; exit rule workflow.ts:453-458 (invalid or any error level exits 1 in both modes), stderr per-finding print :436-447; parity test composition-advisory.test.ts:416-458 ties COMPOSITION_CAPS to governance §1.2, fit-and-tuning §3 and cli-contracts.md:558-575; AC evidence: 11-command/6-command-guard/1001-char error fixtures + warn-only exit 0 in both modes (composition-advisory.test.ts:210-319, workflow.test.ts:293-356) |
+| R2 | MET | Sole call site of collectCompositionAdvisory is validate (workflow-service.ts:637); run() :667 and continuePaused() :1067 resolve and schema-check only; dry-run is run(file,{dryRun}) (workflow.ts:630,:922); CLI composition handling only in the validate action (workflow.ts:437-456); error-level fixture through run/dry-run/continue shows no composition output and identical behavior (workflow.test.ts:373-446); cli-contracts.md:573-574 states the invariant |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-11T20:50:20.437Z todo → wip (system)
+- 2026-09-11T21:09:17.176Z wip → testing (system)
+- 2026-09-11T21:09:17.979Z testing → done (system)
+

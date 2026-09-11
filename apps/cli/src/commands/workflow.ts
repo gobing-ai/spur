@@ -433,22 +433,28 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.output.write(
                     `workflow valid: ${result.workflow.name} (${formatWorkflowVersion(result.workflow.version)})`,
                 );
-                const c = result.composition;
-                if (c && c.findings.length > 0) {
-                    for (const f of c.findings) {
-                        const m =
-                            f.measure.kind === 'shell-lines'
-                                ? `${f.measure.measured} shell lines (threshold ${f.measure.threshold})`
-                                : `${f.measure.measured} prompt chars (severity ${f.measure.severity})`;
-                        context.output.error(`composition advisory: ${f.actionKey} — ${m} — ${f.recommendation}`);
-                    }
+                // 0822: every finding prints to stderr, prefixed with its level.
+                for (const f of result.composition?.findings ?? []) {
+                    const m =
+                        f.measure.kind === 'shell-lines' || f.measure.kind === 'guard-lines'
+                            ? `${f.measure.measured} logical commands (threshold ${f.measure.threshold})`
+                            : f.measure.kind === 'shell-chars'
+                              ? `${f.measure.measured} chars (threshold ${f.measure.threshold})`
+                              : f.measure.kind === 'agent-run-chars'
+                                ? `${f.measure.measured} prompt chars (severity ${f.measure.severity})`
+                                : 'no output check';
+                    context.output.error(`composition ${f.level}: ${f.actionKey} — ${m} — ${f.recommendation}`);
                 }
             } else {
                 context.output.error(
                     `workflow invalid: ${result.file}\n${result.errors.map((m) => `  - ${m}`).join('\n')}`,
                 );
             }
-            context.setExitCode(result.valid ? 0 : 1);
+            // 0822: any error-level composition finding fails validate, in human
+            // and --json mode alike; warn-only findings keep exit 0. Run/dry-run/
+            // continue never see composition findings at all.
+            const hasError = result.valid && (result.composition?.findings ?? []).some((f) => f.level === 'error');
+            context.setExitCode(!result.valid || hasError ? 1 : 0);
         });
 
     workflow
