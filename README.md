@@ -50,28 +50,29 @@ Get the `spur` harness tool. Two paths, depending on whether you run Bun. Both e
 **With Bun (`>= 1.3.0`) — recommended:**
 
 ```bash
-bun add -g @gobing-ai/spur   # global `spur` command
+# go with bun, suggested
+bun add -g @gobing-ai/superskill @gobing-ai/spur
 
-# or run ad-hoc, no install:
+# or, run ad-hoc, no install:
 bunx @gobing-ai/spur --help
+
+# or, go with npm
+npm i -g @gobing-ai/superskill @gobing-ai/spur
 ```
 
-The npm package also ships the `sp` plugin and its marketplace manifest. Install the plugin into
-your supported coding agents without cloning this repo:
+As we also need `@gobing-ai/superskill` to installed `sp` plugin, so I also installed it. The npm package also ships the `sp` plugin and its marketplace manifest. Install the plugin into your supported coding agents without cloning this repo:
 
 ```bash
-# install superskill, we will use it to install claude code style plugin
-bun add -g @gobing-ai/superskill
-# or
-npm install -g @gobing-ai/superskill
-
-# install plugin sp via npm tarball
-superskill install sp --marketplace $(bun pm bin -g)/@gobing-ai/spur
-# or
-superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
-
-# install plugin sp via github URL
+# go with owner/repo shorthand → GitHub
+superskill install sp --marketplace gobing-ai/spur
+# or, go with the full path of the github URL
 superskill install sp --marketplace https://github.com/gobing-ai/spur
+# or, go with pre-installed via bun
+superskill install sp --marketplace $(bun pm bin -g)/@gobing-ai/spur
+# or, go with pre-installed via npm
+superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
+# or, go with already downloaded source code
+superskill install sp --marketplace /Users/robin/xprojects/spur-new
 ```
 
 **Without Bun — standalone binary (macOS / Linux):**

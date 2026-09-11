@@ -1,4 +1,4 @@
-# Getting Started with Spur
+# Quick Start
 
 Spur is a **local-first harness engineering toolkit** for mainstream coding agents (Claude Code,
 Codex, Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). It wraps agents you
