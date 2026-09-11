@@ -1722,6 +1722,41 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(planner.toLowerCase()).toContain('product');
         expect(planner.toLowerCase()).toContain('project management');
         expect(planner.toLowerCase()).toContain('orchestration');
+
+        // 0821 / feature I21: expert-spur binds the spur-* skills and stays a corpus agent. The
+        // charter widens (composer + doctor); the boundary does not: no batch driving, recurring
+        // loop, or coordination dispatch duty; loops and coordination hand off to sp:super-planner
+        // or a workflow; `spur team` / `spur agent loop` are forbidden surfaces across all three
+        // artifact-composition surfaces, and the team reference carries a retiring banner.
+        const composer = readFileSync(join(SKILLS_DIR, 'spur-composer', 'SKILL.md'), 'utf8');
+        const doctor = readFileSync(join(SKILLS_DIR, 'spur-doctor', 'SKILL.md'), 'utf8');
+        const teamRef = readFileSync(join(SKILLS_DIR, 'spur-cli', 'references', 'team.md'), 'utf8');
+
+        // The frontmatter binds exactly the three spur-* skills.
+        expect(fm(spur)).toContain('skills: [sp:spur-cli, sp:spur-composer, sp:spur-doctor]');
+        // The lifecycle line stays verbatim beside the widened charter (R56 invariant).
+        expect(spur).toContain('Never drive the planning/execution lifecycle');
+        // One bounded campaign per dispatch: no batch-driving, recurring-loop or coordination duty.
+        expect(spur).toContain('One bounded campaign per dispatch');
+        expect(spur).toContain('not a coordinator, and not a');
+        expect(spur).toContain('no batch driving, no recurring loops, no coordination dispatch');
+        expect(spur).toContain('## Hand-offs');
+        // Loops and coordination hand off to super-planner or a workflow; the forbidden surfaces
+        // are named as forbidden in all three artifact-composition surfaces.
+        expect(spur).toContain('hand off to `sp:super-planner` or a workflow');
+        for (const [label, text] of [
+            ['expert-spur', spur],
+            ['spur-composer', composer],
+            ['spur-doctor', doctor],
+        ] as const) {
+            expect(text, `${label} must name sp:super-planner as the loop/coordination owner`).toContain(
+                'sp:super-planner',
+            );
+            expect(text, `${label} must forbid \`spur team\``).toContain('`spur team`');
+            expect(text, `${label} must forbid \`spur agent loop\``).toContain('`spur agent loop`');
+        }
+        // The spur-cli team reference carries the retiring banner.
+        expect(teamRef).toContain('> **Retiring:** `spur team`');
     });
 });
 

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: expert-spur binds the spur-* skills and stays a corpus agent
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T22:18:37.285Z
-updated_at: "2026-09-10T22:21:33.391Z"
+updated_at: "2026-09-11T19:41:50.059Z"
 feature_id: I21
 priority: P2
 tags:
@@ -33,10 +33,10 @@ Rubric: E3 D1 L1 C0 R1 = 6 → own task: the operator's explicit role-boundary c
 
 ### Requirements
 
-- [ ] R1. `plugins/sp/agents/expert-spur.md` binds `sp:spur-cli`, `sp:spur-composer` and `sp:spur-doctor`, keeps "Never drive the planning/execution lifecycle", and declares no batch driving, recurring loop or coordination dispatch duty.
-- [ ] R2. expert-spur, spur-composer and spur-doctor hand recurring evolution loops and multi-agent coordination to `sp:super-planner` or a workflow.
-- [ ] R3. expert-spur, spur-composer and spur-doctor forbid `spur team` and `spur agent loop`, and `plugins/sp/skills/spur-cli/references/team.md` carries a retiring banner.
-- [ ] R4. The skill-structure tests, the CLI surface parity test and `bun run spur-check` pass, and `superskill agent evaluate plugins/sp/agents/expert-spur.md --json` scores at least the recorded 0.98 baseline.
+- [x] R1. `plugins/sp/agents/expert-spur.md` binds `sp:spur-cli`, `sp:spur-composer` and `sp:spur-doctor`, keeps "Never drive the planning/execution lifecycle", and declares no batch driving, recurring loop or coordination dispatch duty.
+- [x] R2. expert-spur, spur-composer and spur-doctor hand recurring evolution loops and multi-agent coordination to `sp:super-planner` or a workflow.
+- [x] R3. expert-spur, spur-composer and spur-doctor forbid `spur team` and `spur agent loop`, and `plugins/sp/skills/spur-cli/references/team.md` carries a retiring banner.
+- [x] R4. The skill-structure tests, the CLI surface parity test and `bun run spur-check` pass, and `superskill agent evaluate plugins/sp/agents/expert-spur.md --json` scores at least the recorded 0.98 baseline.
 
 ### Acceptance Criteria
 
@@ -115,18 +115,44 @@ Feature: expert-spur binds the spur-* skills and stays a corpus agent
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/tests/skill-structure.test.ts:1725` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | expert-spur.md:15 binds exactly the three skills; :85 keeps the lifecycle line verbatim; :46 One bounded campaign per dispatch; :88 no batch driving, no recurring loops, no coordination dispatch; :30 not a coordinator, and not a recurring loop; test-pinned at skill-structure.test.ts:1736-1743 |
+| R2 | MET | expert-spur.md:48-49 and :88-89 hand loops and coordination to sp:super-planner or a workflow, plus a dedicated Hand-offs section at :121-127; spur-composer SKILL.md:37-38 and :142-143; spur-doctor SKILL.md:43-44 and :111; asserted in skill-structure.test.ts:1746-1754 |
+| R3 | MET | expert-spur.md:90 Never list names spur team and spur agent loop as forbidden surfaces and :127 repeats the ban; spur-composer SKILL.md:39-40 and spur-doctor SKILL.md:45-46 name both as forbidden; team.md:7-11 carries the Retiring banner; asserted at skill-structure.test.ts:1755-1759 |
+| R4 | MET | Driver-verified: full bun run spur-check PASS (includes skill-structure tests and cli-surface-parity.test.ts) and 1033 plugin tests; superskill agent evaluate expert-spur.md --json 0.98 grade A PASS equals the recorded 0.98 baseline; extended R56 test present at skill-structure.test.ts:1726-1759 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-11T19:30:38.967Z todo → wip (system)
+- 2026-09-11T19:41:49.316Z wip → testing (system)
+- 2026-09-11T19:41:50.059Z testing → done (system)
+

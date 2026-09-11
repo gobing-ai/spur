@@ -7,6 +7,12 @@ see_also:
 
 # spur team - team coordination and supervision
 
+> **Retiring:** `spur team` is a retiring surface for spur-* guidance. `sp:expert-spur`,
+> `sp:spur-composer` and `sp:spur-doctor` forbid it, and coordination or recurring loops belong to
+> `sp:super-planner` or a workflow. Reach agent specs through `spur agent ... --specs` and use
+> `spur message` for coordination transport. This reference is retained for CLI parity while the
+> noun still ships; do not build new guidance on it.
+
 `spur team` is the CLI for **coordinating team agent assignments and supervision**. It sits above
 `spur agent` specs: `up` / `down` materialize and tear down rosters, `start` / `stop` manage
 supervised processes (requiring `spur serve`), `assign` wires tasks to agents, and `status` reports
