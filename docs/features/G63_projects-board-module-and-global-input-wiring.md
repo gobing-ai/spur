@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.189Z"
-updated_at: "2026-09-12T04:45:20.841Z"
+updated_at: "2026-09-12T15:12:40.165Z"
 ---
 
 # G63: Projects board module and global input wiring
@@ -128,7 +128,7 @@ Reviewable prototype for this module already exists and should be the implementa
 (`apps/web/tests/prototypes/g6-projects.test.ts`, 200 assertions) and Chrome evidence at 390/1440 px —
 see [projects prototype report](../reports/g6-projects-prototype.md) for the full scenario matrix
 (R2-1…R2-7, R3-1…R3-8, KB-1…KB-4, ST-1, LB-1). Robin approved the Conversation/Agents/Work structure
-on 2026-09-11 and asked to review the concrete prototype before the detailed interactions are built.
+on 2026-09-11.
 
 Depends on G61 (durable receipts and result correlation) and G62 (strategy, capacity, orchestrator
 availability shown in the header). The prototype's fixtures simulate both; wiring them to the real
@@ -137,10 +137,49 @@ runtime is this feature's work.
 Retained production transports the module reuses rather than replaces: `/api/messages*`,
 `/api/team/*` process/terminal/stream, `/api/projects*`. Existing Board routes stay usable until G64.
 
-### Open decisions (Robin)
+### Decisions closed at implement-ready refinement (2026-09-12, Robin may override)
 
-- Review the prototype before the detailed interactions are implemented (carried from G6).
-- Whether Projects ships behind a nav flag alongside Workspace/Inbox/Teams, or replaces the nav entry
-  in the same release as G64's route retirement.
+- **Prototype review → gate moved to implementation, not planning.** The prototype was read line by
+  line during this refine and is now frozen into the task specs: its STATUS vocabulary
+  (`index.html:285-307`) is lifted verbatim into 0844's `RECEIPT_LABELS`, its live-region pattern
+  (`index.html:115,135-136`) into 0845, and its scenario matrix into 0845's port table. The prototype
+  suite is **kept**, not deleted — 0845 ports scenarios beside it rather than replacing it. Robin's
+  visual review remains an operator gate before 0841–0845 merge; it no longer blocks task refinement.
+- **Nav flag vs. replacement → ships additively, no flag.** Projects registers as a new module
+  alongside Workspace/Inbox/Teams (task 0840 R6); no route is removed and no config knob is added.
+  Route retirement and redirects stay with G64 task 0849, which already owns that migration. A flag
+  would be a config value that only ever flips once.
+
+### Premise corrections made during this refine
+
+Each was a factual claim in the feature or an earlier task draft that did not survive verification
+against the current tree; all are corrected in the tasks, not deferred.
+
+- **Single project per server.** The Board serves one project, so `/api/project` gains the canonical
+  `path` rather than a second project selector; `ProjectSwitcher.handleSelect` navigates to another
+  server's port (0840).
+- **Cross-project draft leakage is impossible** — separate ports are separate origins, so
+  `localStorage` cannot leak across projects. The real hazard is **port reuse** by a different
+  project, closed by a stored-`path` guard rather than by namespacing keys (0841).
+- **`KanbanBoard`, not `TaskKanbanView`, is the Work-view embed seam** — `useTaskParams.selectTask`
+  navigates out of the module, while `KanbanBoard`'s `onSelectTask` prop keeps selection inside it (0843).
+- **Work needs no project filter** — the corpus endpoints already serve exactly one project (0843).
+- **`ProjectProvider` and `ConversationDraftContext` are provided in `BoardLayout`**, not in
+  `ProjectsShell`: `GlobalAgentBar` mounts at `BoardLayout.tsx:161`, outside `<Outlet/>` (0840, 0841).
+- **`blocked` now has a first-class source.** The prototype records at `index.html:301` that the
+  runtime had none. G62's 0838 `DispatchHold` supplies it, joined to the request through 0833's
+  `coordination_runs.task_id`; `rest-after-drain` and `executor-unavailable` are the same enum's other
+  reasons. No occupancy heuristic is used (0844).
+- **A browser GET must not mutate.** 0834's `reconcile()` writes the terminal `attempts-exhausted`
+  marking, so 0844 consumes a new pure `classify()` and adds a read-only `GET /api/project/requests`
+  instead of widening `TeamService.getInbox`, which would push three joins onto `spur message inbox`
+  and change an existing CLI `--json` shape (0844).
+- **`capabilityState: 'unknown'` is not unavailable** (`packages/config/src/index.ts:233`) — it
+  classifies as `queued-awaiting-orchestrator`, never `executor-unavailable` (0844).
+- **happy-dom cannot prove the 390 px overflow requirement** — it has no layout engine, and the
+  repo's own responsive test asserts labels rather than geometry. 0845 splits R4 into a structural
+  half in happy-dom and a geometric half in an untracked `.spur/run/g63-projects/browser-check.mjs`
+  using the operator-local Playwright install, leaving `package.json` and harness-surface governance
+  untouched.
 
 ## History
