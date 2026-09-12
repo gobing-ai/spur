@@ -89,8 +89,12 @@ justify it - but ensure the run executes in a context that can write the target 
 spur agent loop --agent worker-1 --poll 2000
 ```
 
-`loop` is the **persistent self-draining wrapper** used by the team supervisor. It polls the
-addressed agent's inbox, drains each pending message into an `agent run` invocation, and idles
+`loop` is the **persistent self-draining wrapper** used by the team supervisor. It waits for a
+wake on the `system_events` ledger — a human request (`message.sent`), a strategy change
+(`strategy.changed`), a capacity change (`fleet.capacity.changed`), or a completion receipt
+(`agent.invoke.exit`) — then drains the inbox into an `agent run` invocation. An idle wake
+records the hold reason instead of dispatching; with no wake event at all it still drains every
+`--poll` ms (backstop). It
 between drains. It is not typically invoked directly by the operator - `spur team start` launches it
 under supervision.
 
@@ -99,10 +103,10 @@ under supervision.
 | Flag | Purpose |
 |------|---------|
 | `--spec <id>` | **Required.** Team agent spec id / message recipient (0542 R1; legacy `--agent <spec-id>` still read with a one-time warning). |
-| `--poll <ms>` | Idle poll interval in milliseconds (default: `2000`). |
+| `--poll <ms>` | Wakeup backstop timeout in milliseconds — drains at least this often (default: `2000`). |
 
 The loop runs until `SIGINT` / `SIGTERM`. Each iteration: check inbox -> if messages, drain each
-into `run` with `--drain` -> else sleep for `--poll` ms.
+into `run` with `--drain` -> else record the idle hold (an empty drain dispatches nothing).
 
 ## `wait` - identity-pinned occupant wait (G4 wave 2)
 

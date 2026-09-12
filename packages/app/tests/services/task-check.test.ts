@@ -3994,3 +3994,66 @@ describe('F21 0787: requiredSections reporting and candidate content policy', ()
         expect(findings.some((f) => f.severity === 'error')).toBe(true);
     });
 });
+
+// ── 0838: firstBlockingPrerequisite — the L4 readiness rule as a value (the strategy's injected gate) ──
+
+describe('TaskCheckService.firstBlockingPrerequisite (0838)', () => {
+    test('direct not-done prerequisite returns its wbs', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskFm({ dependencies: ['0002'] }),
+            extraTasks: { '0002': taskFm({ name: 'Dep 1', status: 'wip' }) },
+        });
+        const svc = new TaskCheckService(fs, matrix);
+        const blocked = await svc.firstBlockingPrerequisite(join(path, '..', ''), '0001');
+        cleanup();
+        expect(blocked).toBe('0002');
+    });
+
+    test('transitive prerequisite surfaces through the same walk (0002 done → 0003 todo)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskFm({ dependencies: ['0002'] }),
+            extraTasks: {
+                '0002': taskFm({ name: 'Dep 1', status: 'done', dependencies: ['0003'] }),
+                '0003': taskFm({ name: 'Dep 2', status: 'todo' }),
+            },
+        });
+        const svc = new TaskCheckService(fs, matrix);
+        const blocked = await svc.firstBlockingPrerequisite(join(path, '..', ''), '0001');
+        cleanup();
+        expect(blocked).toBe('0003');
+    });
+
+    test('all prerequisites done → null (dispatch-satisfied)', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskFm({ dependencies: ['0002', '0003'] }),
+            extraTasks: {
+                '0002': taskFm({ name: 'Dep 1', status: 'done' }),
+                '0003': taskFm({ name: 'Dep 2', status: 'done' }),
+            },
+        });
+        const svc = new TaskCheckService(fs, matrix);
+        const blocked = await svc.firstBlockingPrerequisite(join(path, '..', ''), '0001');
+        cleanup();
+        expect(blocked).toBeNull();
+    });
+
+    test('prerequisite cycle hits the guard and returns null without hanging', async () => {
+        const { fs, path, cleanup } = seedEnv({
+            taskContent: taskFm({ dependencies: ['0002'] }),
+            // both done, so the cycle is the ONLY anomaly on the walk
+            extraTasks: { '0002': taskFm({ name: 'Dep 1', status: 'done', dependencies: ['0001'] }) },
+        });
+        const svc = new TaskCheckService(fs, matrix);
+        const blocked = await svc.firstBlockingPrerequisite(join(path, '..', ''), '0001');
+        cleanup();
+        expect(blocked).toBeNull();
+    });
+
+    test('no declared dependencies → null', async () => {
+        const { fs, path, cleanup } = seedEnv({ taskContent: taskFm() });
+        const svc = new TaskCheckService(fs, matrix);
+        const blocked = await svc.firstBlockingPrerequisite(join(path, '..', ''), '0001');
+        cleanup();
+        expect(blocked).toBeNull();
+    });
+});

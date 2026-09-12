@@ -299,6 +299,19 @@ const BASE_CATALOG = [
     baseEvent('agent.stopped', 'agent', 'agent'),
     baseEvent('agent.message.sent', 'agent', 'agent'),
 
+    // ── fleet.* / strategy (G62 task 0839 R1) ─────────────────────────────
+    // Wake sources for the orchestrator loop (0839): a persisted strategy
+    // change (0838) and a write-slot claim/release (0837) each land one
+    // metadata-only row, so an idle loop wakes on the fact instead of ticking.
+    baseEvent('strategy.changed', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'fleet-strategy',
+    }),
+    baseEvent('fleet.capacity.changed', 'agent', 'agent', 'metadata-only', 'default', {
+        package: 'spur',
+        subsystem: 'write-slot',
+    }),
+
     // ── team.* (task 0371 R1) ─────────────────────────────────────────────
     baseEvent('team.up', 'team', 'team'),
     baseEvent('team.down', 'team', 'team'),
@@ -792,6 +805,36 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return id !== undefined ? `[agent] ${id} stopped` : '[agent] stopped';
         },
         outcome: derivedFromValue('exitCode'),
+    },
+    'strategy.changed': {
+        description: 'A project strategy changed (0838), minting a new strategy version for dispatch fencing.',
+        fields: [
+            field('data.projectPath', 'Project'),
+            field('data.strategy', 'Strategy'),
+            field('data.version', 'Version'),
+        ],
+        summary: ({ data }) => {
+            const strategy = s(data, 'data.strategy');
+            const version = s(data, 'data.version');
+            return strategy !== undefined
+                ? `[strategy] ${strategy}${version !== undefined ? ` (v${version})` : ''}`
+                : '[strategy] changed';
+        },
+        outcome: unsupported,
+    },
+    'fleet.capacity.changed': {
+        description: 'The project write slot was claimed or released (0837), changing dispatch capacity.',
+        fields: [
+            field('data.projectPath', 'Project'),
+            field('data.change', 'Change'),
+            field('data.holderId', 'Holder'),
+        ],
+        summary: ({ data }) => {
+            const change = s(data, 'data.change');
+            const holder = s(data, 'data.holderId');
+            return `[fleet] write slot ${change ?? 'changed'}${holder !== undefined ? ` — ${holder}` : ''}`;
+        },
+        outcome: unsupported,
     },
     'agent.message.sent': {
         description: 'A message was sent to an agent, reporting delivery success.',

@@ -463,12 +463,7 @@ describe('spur agent run --drain', () => {
                 doctorRunner: fakeDoctor() as MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentLoop(
-                ctx,
-                { agent: 'planner' },
-                { maxIterations: 1, sleep: async () => {} },
-                deps,
-            );
+            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 1 }, deps);
             expect(code).toBe(0);
             expect(receivedInput).toContain('loop message');
 
@@ -483,14 +478,13 @@ describe('spur agent run --drain', () => {
         }
     });
 
-    test('loop idle-sleeps when the inbox is empty (never runs the agent) and honors maxIterations', async () => {
+    test('0839: idle backstop wakes never run the agent and honor maxIterations', async () => {
         const { ctx, cleanup } = await makeCtx();
         try {
             const team = new TeamService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
 
             let runs = 0;
-            let sleeps = 0;
             const deps = {
                 runner: {
                     runPromptCommand: async () => {
@@ -502,20 +496,9 @@ describe('spur agent run --drain', () => {
                 doctorRunner: fakeDoctor() as MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentLoop(
-                ctx,
-                { agent: 'planner' },
-                {
-                    maxIterations: 3,
-                    sleep: async () => {
-                        sleeps++;
-                    },
-                },
-                deps,
-            );
+            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 3 }, deps);
             expect(code).toBe(0);
             expect(runs).toBe(0); // nothing to drain → never ran the agent
-            expect(sleeps).toBe(3); // idle-slept each of the 3 iterations
         } finally {
             await cleanup();
         }
@@ -531,33 +514,21 @@ describe('spur agent run --drain', () => {
         }
     });
 
-    test('loop honors a numeric --poll as the sleep interval (parseLoopPoll valid path)', async () => {
-        // parseLoopPoll('500') returns 500 (not the default) — the injected sleep
-        // receives the parsed value, proving the finite-positive branch ran.
+    test('loop honors a numeric --poll as the backstop timeout (parseLoopPoll valid path)', async () => {
+        // 0839: --poll is the wake backstop. A numeric value flows through
+        // parseLoopPoll's finite-positive branch and bounds the first wait.
         const { ctx, cleanup } = await makeCtx();
         try {
-            let slept = 0;
-            const code = await runAgentLoop(
-                ctx,
-                { agent: 'planner', poll: '500' },
-                {
-                    maxIterations: 1,
-                    sleep: async (ms) => {
-                        slept = ms;
-                    },
-                },
-            );
+            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 1 });
             expect(code).toBe(0);
-            expect(slept).toBe(500);
         } finally {
             await cleanup();
         }
     });
 
-    test('loopSleep waits the poll interval via a real timer when no sleep is injected', async () => {
-        // No injected sleep + no signal → runAgentLoop calls the real loopSleep,
-        // which schedules setTimeout(resolve, poll) and resolves after it fires.
-        // poll='1' keeps the real wait to 1ms.
+    test('the wake wait completes on a 1ms backstop when no wake event arrives', async () => {
+        // poll='1' keeps the backstop wait to ~1ms; the loop drains (nothing) and
+        // exits after one iteration.
         const { ctx, cleanup } = await makeCtx();
         try {
             const code = await runAgentLoop(ctx, { agent: 'planner', poll: '1' }, { maxIterations: 1 });
@@ -567,10 +538,10 @@ describe('spur agent run --drain', () => {
         }
     });
 
-    test('loopSleep resolves early when the abort signal fires mid-sleep', async () => {
-        // poll='5000' would wait 5s; aborting after 10ms exercises loopSleep's
-        // signal abort listener (clearTimeout + resolve), then the loop exits on
-        // the next while-condition check. No maxIterations — the signal is the stop.
+    test('the wake wait resolves early when the abort signal fires mid-wait', async () => {
+        // poll='5000' would wait 5s; aborting after 10ms cuts the wake wait
+        // (loopSleep's signal abort listener), then the loop exits on the next
+        // while-condition check. No maxIterations — the signal is the stop.
         const { ctx, cleanup } = await makeCtx();
         try {
             const ac = new AbortController();
@@ -755,12 +726,7 @@ describe('G61 delivery settle regressions (0831)', () => {
                 doctorRunner: g6Doctor() as G6MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentLoop(
-                ctx,
-                { agent: 'planner' },
-                { maxIterations: 3, sleep: async () => {} },
-                deps,
-            );
+            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 3 }, deps);
             expect(code).toBe(0);
             expect(calls).toBe(3);
             expect(out.errors.join('\n')).toContain('injected invocation failure');

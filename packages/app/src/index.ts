@@ -200,6 +200,15 @@ export {
     type FindingCode,
     isFindingCode,
 } from './services/finding-codes';
+export type {
+    FleetServiceContext,
+    OrchestratorBinding,
+    OrchestratorState,
+    ResolvedFleet,
+    ResolvedFleetMember,
+} from './services/fleet-service';
+// Project fleet declaration (0835) + orchestrator binding (0836)
+export { FleetService } from './services/fleet-service';
 export {
     type HistoryRollupRefreshResult,
     refreshHistoryRollups,
@@ -422,6 +431,23 @@ export {
     schedulerJobTimeoutEnvName,
     validateSchedulerCustomJobPayload,
 } from './services/scheduler-custom-job-service';
+// Persisted rest/GTD strategy runtime (0838)
+export {
+    DEFAULT_STRATEGY,
+    type DispatchHold,
+    type DispatchHoldReason,
+    FLEET_AUTO_TAG,
+    gtdStrategy,
+    type ResumeReport,
+    restStrategy,
+    STRATEGIES,
+    type Strategy,
+    type StrategyContext,
+    type StrategyName,
+    type StrategyResult,
+    StrategyRuntime,
+    type StrategyRuntimeContext,
+} from './services/strategy-runtime';
 export type {
     ProcessEntry,
     ProcessEventBus,
@@ -561,6 +587,7 @@ export type {
     MessageEventPayload,
     RecentMessageRow,
     RecentMessagesResult,
+    RosterProjection,
     SendResult,
     TeamLifecycleEventPayload,
     TeamListing,
@@ -619,6 +646,15 @@ export {
     resolveWorkflowLogRetentionDays,
     WorkflowAppService,
 } from './services/workflow-service';
+// Write-slot lease (0837) over the 0836 claim table
+export {
+    type ClaimOutcome,
+    type ClaimRefusal,
+    type DispatchDecision,
+    type ResultRef,
+    WRITE_SLOT_TTL_MS,
+    WriteSlotService,
+} from './services/write-slot-service';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';

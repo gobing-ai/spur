@@ -276,6 +276,64 @@ CREATE TABLE IF NOT EXISTS agent_executor_updates (
 );
 `;
 
+/**
+ * DDL for the `project_claims` table (0836, feature G62): one mutable holder per
+ * `(project_path, slot)` — the runtime claim boundary that makes orchestrator
+ * ownership exclusive across processes (R3). NOT append-per-run history (that is
+ * `coordination_runs`) and NOT the ts-db-owned `queue_jobs` (its
+ * `attempt_token`/`lease_expires_at` is the *pattern* copied here: fencing token
+ * plus expiry). The composite primary key IS the exclusivity mechanism: a single
+ * `INSERT … ON CONFLICT(project_path, slot) DO UPDATE … WHERE` statement decides
+ * claim/refuse with no read-then-write race. `owner_epoch` and `strategy_version`
+ * are declared here but only written from 0837/0838 on — declared once so those
+ * tasks need no `ALTER` on this table.
+ *
+ * SPEC-DRIFT CORRECTION (G61 0833 precedent): the frozen task spec names migration
+ * id `0044_spur_cli_project_claims`, but 0043 (0832 inbox mirror) and 0044 (0833
+ * coordination_runs receipt columns) are both registered — the id is `0045_…`.
+ * Kept byte-compatible with `drizzle/0045_spur_cli_project_claims.sql` (the
+ * regenerate-on-release mirror).
+ */
+export const PROJECT_CLAIMS_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS project_claims (
+    project_path     TEXT    NOT NULL,
+    slot             TEXT    NOT NULL,         -- 'orchestrator' (0836) | 'write' (0837)
+    holder_id        TEXT    NOT NULL,         -- spec id, verbatim
+    owner_epoch      INTEGER NOT NULL DEFAULT 1,
+    strategy_version INTEGER,                  -- written by 0838 (NULL until then)
+    claimed_at       INTEGER NOT NULL,
+    heartbeat_at     INTEGER NOT NULL,
+    expires_at       INTEGER NOT NULL,
+    PRIMARY KEY (project_path, slot)
+);
+`;
+
+/**
+ * DDL for the `project_strategy` table (0838, feature G62): ONE row per project
+ * holding the persisted dispatch strategy — runtime state that must outlive
+ * every claim (claims expire; the strategy survives with nobody holding
+ * anything), which is why it is neither `fleet.json` (operator-authored; a
+ * runtime writer would fight the operator's editor) nor `project_claims`
+ * (per-slot, expiring). `strategy_version` increments on EVERY
+ * `ProjectStrategyDao.set` — including a no-op re-set of the same name — so
+ * 0837's `stale-strategy` fence stays monotonic and never depends on the value
+ * having changed.
+ *
+ * SPEC-DRIFT CORRECTION (0833/0836 precedent): the frozen task spec names
+ * migration id `0045_spur_cli_project_strategy`, but 0045 is taken by 0836's
+ * `project_claims` — the id is `0046_…`. Kept byte-compatible with
+ * `drizzle/0046_spur_cli_project_strategy.sql` (the regenerate-on-release
+ * mirror).
+ */
+export const PROJECT_STRATEGY_SCHEMA_SQL = `
+CREATE TABLE IF NOT EXISTS project_strategy (
+    project_path     TEXT    PRIMARY KEY,
+    strategy         TEXT    NOT NULL,
+    strategy_version INTEGER NOT NULL DEFAULT 1,
+    updated_at       INTEGER NOT NULL
+);
+`;
+
 /** SQL that creates the Spur CLI-owned domain tables plus package-owned tables. */
 
 export const CLI_SCHEMA_SQL = `
@@ -298,6 +356,10 @@ ${QUEUE_JOBS_SCHEMA_SQL}
 ${SYSTEM_EVENTS_SCHEMA_SQL}
 
 ${COORDINATION_RUNS_SCHEMA_SQL}
+
+${PROJECT_CLAIMS_SCHEMA_SQL}
+
+${PROJECT_STRATEGY_SCHEMA_SQL}
 
 ${HISTORY_RUN_SESSION_SCHEMA_SQL}
 
@@ -1363,6 +1425,23 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0044_spur_cli_coordination_runs_receipt_columns',
         sql: COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL,
         addColumnIfMissing: { table: 'coordination_runs', column: 'message_ids_json' },
+    },
+    {
+        // 0836: project_claims — the runtime claim boundary for single active
+        // orchestrator ownership (R3). Standalone `CREATE TABLE IF NOT EXISTS` —
+        // applies unconditionally on any database, the 0040 precedent.
+        id: '0045_spur_cli_project_claims',
+        sql: PROJECT_CLAIMS_SCHEMA_SQL,
+    },
+    {
+        // 0838: project_strategy — the persisted per-project dispatch strategy
+        // (rest|gtd) with its monotonic version fence. Standalone
+        // `CREATE TABLE IF NOT EXISTS` — applies unconditionally on any
+        // database, the 0045 precedent. (SPEC-DRIFT CORRECTION: the frozen
+        // task spec names id 0045_spur_cli_project_strategy; 0045 was taken by
+        // 0836's project_claims — the id is 0046.)
+        id: '0046_spur_cli_project_strategy',
+        sql: PROJECT_STRATEGY_SCHEMA_SQL,
     },
 ];
 

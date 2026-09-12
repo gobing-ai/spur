@@ -52,6 +52,7 @@ spur projects list [options]
 | Flag | Description |
 |---|---|
 | `--json` | Output JSON array of projects |
+| `--fleet` | Also resolve each project's .spur/fleet.json declaration (0835), orchestrator binding state (0836), and persisted strategy (0838) |
 
 ## spur projects start
 

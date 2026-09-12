@@ -12,6 +12,8 @@ import {
     COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL,
     HISTORY_PERFORMANCE_INDEXES_SCHEMA_SQL,
     loadSqlMigrations,
+    PROJECT_CLAIMS_SCHEMA_SQL,
+    PROJECT_STRATEGY_SCHEMA_SQL,
     RUNS_EXTERNAL_KEY_COLUMN_SCHEMA_SQL,
     SYSTEM_EVENTS_CORRELATION_COLUMNS_SCHEMA_SQL,
 } from '../../src/migrations';
@@ -120,8 +122,8 @@ describe('db migrations', () => {
             );
         });
 
-        test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, the 0722 task↔session attribution table, the 0817 queue-jobs deadline/lease columns, the 0832 inbox request key, and the 0833 coordination-runs receipt columns', () => {
-            expect(CLI_MIGRATIONS).toHaveLength(45);
+        test('has foundation through History Board indexes, rollups, checkpoint identity, the history-refresh single-flight index, the 0722 task↔session attribution table, the 0817 queue-jobs deadline/lease columns, the 0832 inbox request key, the 0833 coordination-runs receipt columns, the 0836 project_claims table, and the 0838 project_strategy table', () => {
+            expect(CLI_MIGRATIONS).toHaveLength(47);
             expect(CLI_MIGRATIONS[0]?.id).toBe('0000_spur_cli_foundation');
             expect(CLI_MIGRATIONS[1]?.id).toBe('0001_spur_cli_team_inbox');
             expect(CLI_MIGRATIONS[2]?.id).toBe('0002_spur_cli_rule_history');
@@ -192,6 +194,16 @@ describe('db migrations', () => {
                 column: 'message_ids_json',
             });
             expect(CLI_MIGRATIONS[44]?.sql).toBe(COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL);
+            // 0836: the runtime claim boundary for single active orchestrator ownership
+            // (SPEC-DRIFT CORRECTION: the frozen task spec said 0044; 0044 was taken by
+            // 0833's receipt columns, so the id is 0045).
+            expect(CLI_MIGRATIONS[45]?.id).toBe('0045_spur_cli_project_claims');
+            expect(CLI_MIGRATIONS[45]?.sql).toBe(PROJECT_CLAIMS_SCHEMA_SQL);
+            // 0838: the persisted per-project dispatch strategy (SPEC-DRIFT
+            // CORRECTION: the frozen task spec said 0045; 0045 was taken by 0836's
+            // project_claims, so the id is 0046).
+            expect(CLI_MIGRATIONS[46]?.id).toBe('0046_spur_cli_project_strategy');
+            expect(CLI_MIGRATIONS[46]?.sql).toBe(PROJECT_STRATEGY_SCHEMA_SQL);
             for (const column of [
                 "message_ids_json TEXT NOT NULL DEFAULT '[]'",
                 'task_id TEXT',
@@ -288,8 +300,9 @@ describe('db migrations', () => {
             // the deadline/lease columns, so the guarded ALTERs run.
             // 0042 journals but skips (the stub history_message lacks model — 0022 precedent).
             // 0044 journals but skips (the stub has no coordination_runs — 0041 precedent).
+            // 0046 journals + applies: standalone CREATE TABLE IF NOT EXISTS (0045 precedent).
             const applied = await applyCliMigrations(adapter);
-            expect(applied).toBe(41);
+            expect(applied).toBe(43);
             // 0005 and 0007 backfilled columns on the legacy runs table.
             const cols = await adapter.queryAll<{ name: string }>('PRAGMA table_info(runs)');
             expect(cols.some((c) => c.name === 'pid')).toBe(true);
@@ -341,7 +354,8 @@ describe('db migrations', () => {
             // 0041 journals; CLI_SCHEMA_SQL already ships the four columns, so
             // addColumnIfMissing reduces its ALTERs to no-ops (journal counts regardless).
             // 0044 likewise: CLI_SCHEMA_SQL already ships the receipt columns.
-            expect(applied).toBe(44);
+            // 0046 likewise: CLI_SCHEMA_SQL already ships project_strategy (journal counts).
+            expect(applied).toBe(46);
             await adapter.run(
                 'INSERT INTO inbox_messages (id, to_id, body, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
                 'm1',
@@ -550,7 +564,9 @@ describe('db migrations', () => {
             // + 0041 deadline/lease columns (journaled: this journal never creates queue_jobs,
             // so the table-absent skip applies — the 0027 precedent — and still counts).
             // + 0044 receipt columns (journaled: no coordination_runs here — 0041 precedent).
-            expect(await applyCliMigrations(adapter)).toBe(36);
+            // + 0046 project_strategy (journaled + applies: standalone CREATE TABLE IF
+            // NOT EXISTS — the table is absent in this journal's schema, 0045 precedent).
+            expect(await applyCliMigrations(adapter)).toBe(38);
             const columns = await adapter.queryAll<{ name: string }>(
                 'PRAGMA index_info(idx_history_message_provenance_run)',
             );
@@ -607,10 +623,10 @@ describe('db migrations', () => {
             adapter.close();
         });
 
-        test('upgraded DB journaled through 0021 receives 0022-0044 and converges with a fresh DB', async () => {
+        test('upgraded DB journaled through 0021 receives 0022-0046 and converges with a fresh DB', async () => {
             const upgraded = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(upgraded, CLI_MIGRATIONS.slice(0, 22));
-            expect(await applyCliMigrations(upgraded)).toBe(23);
+            expect(await applyCliMigrations(upgraded)).toBe(25);
 
             const fresh = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
             await applyCliMigrations(fresh);
@@ -859,6 +875,36 @@ describe('db migrations', () => {
                     .join('\n')
                     .trim();
             expect(stripComments(receipt?.sql ?? '')).toBe(stripComments(COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL));
+        });
+
+        test('repo drizzle folder includes the 0046 project_strategy table (0838 folder-load)', async () => {
+            const migrations = await loadSqlMigrations(join(import.meta.dir, '../../../../drizzle'));
+            const strategy = migrations.find((m) => m.id === '0046_spur_cli_project_strategy');
+            expect(strategy).toBeDefined();
+            // Byte-compatible at the statement level: the file carries only a
+            // leading `--` comment ahead of the constant's exact SQL.
+            const stripComments = (sql: string): string =>
+                sql
+                    .split('\n')
+                    .filter((line) => !line.trimStart().startsWith('--'))
+                    .join('\n')
+                    .trim();
+            expect(stripComments(strategy?.sql ?? '')).toBe(stripComments(PROJECT_STRATEGY_SCHEMA_SQL));
+        });
+
+        test('repo drizzle folder includes the 0045 project_claims table (0836 folder-load)', async () => {
+            const migrations = await loadSqlMigrations(join(import.meta.dir, '../../../../drizzle'));
+            const claims = migrations.find((m) => m.id === '0045_spur_cli_project_claims');
+            expect(claims).toBeDefined();
+            // Byte-compatible at the statement level: the file carries only a
+            // leading `--` comment ahead of the constant's exact SQL.
+            const stripComments = (sql: string): string =>
+                sql
+                    .split('\n')
+                    .filter((line) => !line.trimStart().startsWith('--'))
+                    .join('\n')
+                    .trim();
+            expect(stripComments(claims?.sql ?? '')).toBe(stripComments(PROJECT_CLAIMS_SCHEMA_SQL));
         });
     });
 

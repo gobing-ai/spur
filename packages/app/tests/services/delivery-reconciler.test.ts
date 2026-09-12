@@ -190,3 +190,49 @@ describe('0834 idempotence and late receipts', () => {
         expect((await inbox.getById(id))?.status).toBe('injected');
     });
 });
+
+// ── 0838 carried advisory (0834 P3): multi-receipt tie-break — newest evidence wins ──
+// A redelivered/consumed-twice message can be listed by >1 coordination_runs row;
+// the reconciler takes [0] of listByMessageId (newest-start first). These tests pin
+// that deterministic tie-break from the reconcile caller side.
+
+describe('0838 advisory: multi-receipt tie-break (newest receipt decides)', () => {
+    async function receiptAt(
+        runId: string,
+        messageIds: string[],
+        outcome: 'run-exit-only' | 'errored' | 'verified',
+        startedAt: string,
+    ): Promise<void> {
+        await runs.insertStart({
+            specId: 'worker',
+            agentKind: 'claude-code',
+            processId: null,
+            runId,
+            generation: 1,
+            startedAt,
+        });
+        await runs.updateExit(runId, outcome === 'errored' ? 'errored' : 'exited', startedAt, '[]', {
+            messageIds,
+            outcome,
+        });
+    }
+
+    test('older errored receipt superseded by a newer verified one → finished, omitted (no hold)', async () => {
+        const id = await seedQueued();
+        await claim();
+        await receiptAt('run-old', [id], 'errored', '2026-09-12T10:00:00.000Z');
+        await receiptAt('run-new', [id], 'verified', '2026-09-12T11:00:00.000Z');
+        const report = await reconciler.reconcile('worker');
+        expect(report.unresolved).toEqual([]);
+    });
+
+    test('older verified receipt superseded by a newer errored one → delivery-failed (newest wins)', async () => {
+        const id = await seedQueued();
+        await claim();
+        await receiptAt('run-old', [id], 'verified', '2026-09-12T10:00:00.000Z');
+        await receiptAt('run-new', [id], 'errored', '2026-09-12T11:00:00.000Z');
+        const report = await reconciler.reconcile('worker');
+        expect(reasons(report)).toEqual([[id, 'delivery-failed']]);
+        expect(report.unresolved[0]?.runId).toBe('run-new');
+    });
+});

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Project fleet declaration with stable instance identity
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.720Z
-updated_at: "2026-09-12T05:14:57.434Z"
+updated_at: "2026-09-12T16:42:40.866Z"
 feature_id: G62
 priority: P1
 tags:
@@ -228,15 +228,62 @@ to decide who may take the write slot; 0838 selects among enabled members; 0847 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+## Change map
+
+| Requirement | Implementation |
+| --- | --- |
+| R1 declaration schema | `packages/config/src/index.ts:509` `FleetMemberSchema`, `packages/config/src/index.ts:535` `FleetDeclarationSchema` (version 1, members with optional id/role/executor/purpose/enabled, `enabled` default true; superRefine requires role-or-executor per member). `.spur/fleet.json` is the sole authoring surface. |
+| R3 stable instance ids | ids are `<projectSlug>-<memberLocalId>` over the FULL roster (disabled included), allocator shared with teams: `packages/app/src/services/team-service.ts:392` (`materializeRoster` → `memberLocalId` at `:406`) and `packages/app/src/services/fleet-service.ts:8` — frozen-index, stable across roster reorder and executor replacement. |
+| R4 write capability | `packages/app/src/services/fleet-service.ts:170-184`: `writeCapable` reads the resolved executor's `fsWrite` axis (`enforced`/`available` grant); missing executor data is `unknown` and never grants; role is never consulted. |
+| Shared roster loop | `packages/app/src/services/team-service.ts:318` `resolveMemberExecutor` (pinned-executor-or-tier-ladder funnel) and `:398` `materializeRoster` are module-level exports; `materializeTeam` (`:924`) and `FleetService.materialize` both route through them — one projection loop, no second convention. |
+| Load/resolve/materialize | `packages/app/src/services/fleet-service.ts:83` `FleetService`; `load` (`:101`, null when absent, loud on malformed JSON/schema violation), `resolve` (`:134`, pure desired state R5 — no liveness fields), `materialize` (`:203`, projection into `.spur/agents/`, `--check` diff mode, prunes only `team:<slug>` + `spur:generated` tagged specs not desired — hand-authored specs are never touched, R2). |
+| Launch ground truth (R6) | `packages/app/src/services/fleet-service.ts:316` `assertLaunchGroundTruth` — cwd and `normalizeProjectPath` of the resolved project root must both match the declaration's project path; loud error names both paths; SPUR_* env is not accepted as proof. Scoped to `materialize` (the launch boundary); `load`/`resolve` normalize paths only so the CLI can list foreign projects. |
+| CLI surface | `apps/cli/src/commands/projects.ts:100` `spur projects list --fleet` (existing verb, no new noun): per-project config re-layering, per-project error isolation (`fleet: unavailable (<reason>)` for a broken declaration), text and JSON output (`fleet` / `fleetError` fields). Public help rows: `docs/help/cmd_projects.md:55` and skill reference `plugins/sp/skills/spur-cli/references/projects.md:22,39`. |
+| Slug choice | Project slug = registry entry `name` when the project is registered, else path basename; feeds both instance ids and the `team:<slug>` prune tag. |
+
+## Notes
+
+- `FleetServiceContext` takes an injected `fs: FileSystem` port (no-direct-fs-io boundary rule) and optional `registry` so tests avoid touching the machine registry.
+- Missing declaration / all-disabled resolve cleanly (`missing: ['no-declaration']` / `['no-enabled-members']`) rather than erroring — R7.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | FleetMemberSchema/FleetDeclarationSchema (packages/config/src/index.ts:509,535); FleetService.load/resolve (packages/app/src/services/fleet-service.ts:101,134); authoring file .spur/fleet.json; CLI `projects list --fleet` (apps/cli/src/commands/projects.ts:100); test fleet-service.test.ts:147 (18 pass) |
+| R2 | MET | Specs are a projection: prune only `spur:generated`+`fleet:generated` (fleet-service.ts:253-267); hand-authored skip in shared loop (team-service.ts:436-437); tests fleet-service.test.ts:352 (hand-authored untouched) and :420 (prune never takes a hand-authored spec) |
+| R3 | MET | id = `<slug>-<memberLocalId(member, members, index)>` delegated, never re-derived (fleet-service.ts:148-149; team-service.ts:418); tests fleet-service.test.ts:183 (explicit id survives executor replacement + reorder) and :213 (byte-identical with team derivation) |
+| R4 | MET | writeCapable from resolved executor fsWrite axis only; unavailable/unknown/absent never grant; role never consulted (fleet-service.ts:170-184); test fleet-service.test.ts:234 (reviewer+available writes, coder+absent axis does not) |
+| R5 | MET | ResolvedFleetMember/ResolvedFleet carry desired state only, no process/liveness fields (fleet-service.ts:75-83); schema forbids liveness fields (packages/config/src/index.ts:501-504); resolve() reads no supervisor/occupant state |
+| R6 | MET | assertLaunchGroundTruth compares process.cwd() and storage root against normalizeProjectPath, loud error names both paths, SPUR_* env never consulted (fleet-service.ts:316-366); test fleet-service.test.ts:337 rejects mismatch naming both paths |
+| R7 | MET | no declaration → missing:['no-declaration'] (fleet-service.ts:136-140), all-disabled → ['no-enabled-members'] (:186), ENOENT-only resolves null, EACCES rethrown (:105-114); tests fleet-service.test.ts:106,262,274; CLI bare-project resolves empty fleet (projects.test.ts:76) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — A project declares its fleet and one orchestrator | MET | test | fleet-service.test.ts:147: members resolve stable instanceId/role/executor/capabilityState, missing=[]; orchestrator binding field itself deferred to 0836 by closed Q&A decision (task doc), orchestrator member present as id 'lead' |
+| Identity survives executor replacement and reorder | MET | test | fleet-service.test.ts:183: id 'lead' unchanged when executor replaced and roster reordered; :213 coder-1/coder-2/reviewer-1 from shared memberLocalId; inbox/coordination ids are the instanceId, unorphaned |
+| Read-only is proven, not assumed | MET | test | fleet-service.test.ts:234: reviewer role with fsWrite available is writeCapable=true; coder with absent axis is unknown/false — role name grants nothing |
+| Launch validates its own ground truth | MET | test | fleet-service.test.ts:337: materialize outside project cwd rejects /Ground-truth mismatch/ naming both paths (fleet-service.ts:352-364); SPUR_* env read as context only, never proof |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review fixes applied (post-review pass, bounded to the review findings)
+
+| Finding | Fix | Evidence |
+| --- | --- | --- |
+| P2 prune-namespace collision | Fleet specs are now written with tags `fleet:<slug>`, `spur:generated`, `fleet:generated` (never `team:<slug>` — the group tag was the collision vector, required so the mandated collision test can hold), and `FleetService.materialize` prunes ONLY specs carrying BOTH `spur:generated` + `fleet:generated` that are not desired. `packages/app/src/services/fleet-service.ts:253-267`. TeamService prune untouched. | Collision test: registry name `shared` == `agent.team.shared`; both materializations run over one spec dir; re-running either side reports `orphaned: []` and both specs survive (`fleet-service.test.ts` namespace-disjoint test). |
+| P3 ENOENT masking | `load` rethrows when the readFile error code is not `ENOENT` — EACCES/EISDIR are environment failures, not absence. `packages/app/src/services/fleet-service.ts:105-114`. | EACCES test: stubbed `fs.readFile` rejects with `code: 'EACCES'`; `load` rejects with /EACCES/ instead of returning null. |
+| P3 disabled-member executor resolution | Guard in the shared `materializeRoster` loop: `enabled === false` members keep their frozen-index id in the desired set but are never sent through `resolveMemberExecutor` (team configs have no `enabled` field, so the guard is fleet-only in effect). `packages/app/src/services/team-service.ts:448-455`. | Test: disabled member pinning executor `nonexistent` does not block materialization; only the enabled member is upserted and the disabled member's stale generated spec is pruned (`fleet-service.test.ts` review-P3 test). |
+| P4 disabled-pin error wording | Restored verbatim pre-extraction wording `member "${localId}"` — `resolveMemberExecutor` now takes the optional roster and re-derives the frozen-index local id for the error text (falls back to `member.id ?? member.executor` when no roster is threaded). `packages/app/src/services/team-service.ts:330-337`. | Existing team-service disabled-pin test still passes unchanged. |
+| P4 storage-root leg no-op | `assertLaunchGroundTruth` now derives the actual storage root (`join(cwd, '.spur')`) and compares it against `join(projectPath, '.spur')` instead of a `join(cwd,'.spur','..')` cwd identity. `packages/app/src/services/fleet-service.ts:352-364`. | Existing R6 mismatch test passes against the new derivation. |
+| P6 non-strict schema unknown keys | Accepted as-is (forward compatibility) — no change. | — |
+
+Post-fix gate: `bun run spur-check` rc=0, **8091 pass / 0 fail** (`.spur/run/0835-test-gate.log` / `.status`). Proof re-bound: `bun .spur/host/host-proof-fingerprint.ts 0835 .spur/run/proofDigest` → `sha256:7ff0e7af696205ca1899acb50b4dbadca2b01ce933a09633e826a8706e0c023b`.
 
 ### References
 
@@ -247,3 +294,8 @@ to decide who may take the write slot; 0838 selects among enabled members; 0847 
 - Preserved owner: G4 (occupant identity) — reuse, do not fork
 
 ### History
+
+- 2026-09-12T15:18:22.029Z todo → wip (system)
+- 2026-09-12T16:41:46.638Z wip → testing (system)
+- 2026-09-12T16:42:40.866Z testing → done (system)
+

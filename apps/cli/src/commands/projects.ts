@@ -1,6 +1,14 @@
-import { basename, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { isPortLive, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
+import {
+    FleetService,
+    type FleetServiceContext,
+    isPortLive,
+    type OrchestratorBinding,
+    ProjectRegistry,
+    startRegisteredProject,
+} from '@gobing-ai/spur-app';
+import { createMigratedDb, type DbAdapter, type ProjectStrategy, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
@@ -91,6 +99,10 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
     projectsCmd
         .command('list')
         .option(...SHARED_OPTIONS.jsonProjectsArray)
+        .option(
+            '--fleet',
+            "Also resolve each project's .spur/fleet.json declaration and orchestrator binding (0835/0836)",
+        )
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
@@ -104,17 +116,159 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     })),
                 );
 
+                // --fleet (0835/0836): resolve each project's fleet declaration and
+                // orchestrator binding under the existing verb (no new noun —
+                // public-surface rule). Per-project config is re-layered so
+                // executor/capability resolution reads THAT project's config, not the
+                // caller's; a project that fails resolution reports the error instead of
+                // failing the whole listing.
+                //
+                // 0836: orchestrator state reads `project_claims` from the PROJECT's own
+                // db, opened lazily through `openDb` — only projects whose pointer
+                // actually resolves touch SQLite; missing/unresolvable states never do.
+                // The adapter is process-transient (the CLI exits after listing), so it
+                // is not closed here.
+                const openProjectDb = async (projectPath: string): Promise<DbAdapter> => {
+                    const url = join(projectPath, '.spur', 'spur.db');
+                    await context.fs.ensureDir(dirname(url));
+                    return createMigratedDb({ url });
+                };
+                const fleets = options.fleet
+                    ? await Promise.all(
+                          projects.map(async (p) => {
+                              const fleetCtx: FleetServiceContext = {
+                                  spurConfig: await context.loadAgentConfig(p.path),
+                                  roles: context.agentRoles,
+                                  fs: context.fs,
+                                  openDb: openProjectDb,
+                              };
+                              let fleet: Awaited<ReturnType<FleetService['resolve']>> | null = null;
+                              let error: string | undefined;
+                              try {
+                                  fleet = await new FleetService(fleetCtx).resolve(p.path);
+                              } catch (err) {
+                                  error = err instanceof Error ? err.message : String(err);
+                              }
+                              let orchestrator: OrchestratorBinding | null = null;
+                              let orchestratorError: string | undefined;
+                              try {
+                                  orchestrator = await new FleetService(fleetCtx).resolveOrchestrator(p.path);
+                              } catch (err) {
+                                  orchestratorError = err instanceof Error ? err.message : String(err);
+                              }
+                              // 0838: the persisted strategy (R1) — read-only here; a
+                              // project with no row reports the `rest` default and never
+                              // writes one (the Board/runtime owns persistence).
+                              let strategy: ProjectStrategy | null = null;
+                              let strategyError: string | undefined;
+                              try {
+                                  strategy = await new ProjectStrategyDao(await openProjectDb(p.path)).get(p.path);
+                              } catch (err) {
+                                  strategyError = err instanceof Error ? err.message : String(err);
+                              }
+                              return {
+                                  path: p.path,
+                                  fleet,
+                                  ...(error !== undefined ? { error } : {}),
+                                  orchestrator,
+                                  ...(orchestratorError !== undefined ? { orchestratorError } : {}),
+                                  strategy,
+                                  ...(strategyError !== undefined ? { strategyError } : {}),
+                              };
+                          }),
+                      )
+                    : null;
+
                 if (options.json) {
-                    context.output.write(toEnvelopeJson({ projects }, { enveloped: options.jsonEnvelope }));
+                    context.output.write(
+                        toEnvelopeJson(
+                            {
+                                projects: fleets
+                                    ? projects.map((p, i) => {
+                                          const f = fleets[i];
+                                          return {
+                                              ...p,
+                                              fleet: f?.fleet ?? null,
+                                              ...(f?.error !== undefined ? { fleetError: f.error } : {}),
+                                              orchestrator: f?.orchestrator ?? null,
+                                              ...(f?.orchestratorError !== undefined
+                                                  ? { orchestratorError: f.orchestratorError }
+                                                  : {}),
+                                              strategy: f?.strategy ?? null,
+                                              ...(f?.strategyError !== undefined
+                                                  ? { strategyError: f.strategyError }
+                                                  : {}),
+                                          };
+                                      })
+                                    : projects,
+                            },
+                            { enveloped: options.jsonEnvelope },
+                        ),
+                    );
                 } else {
                     if (projects.length === 0) {
                         context.output.write('No projects registered.');
                         return;
                     }
                     context.output.write('Registered Projects:\n');
-                    for (const p of projects) {
+                    for (const [i, p] of projects.entries()) {
                         const status = p.running ? `[RUNNING: ${p.port}]` : '[STOPPED]';
                         context.output.write(`- ${p.name} ${status} (${p.path})`);
+                        const f = fleets?.[i];
+                        if (f === undefined) continue;
+                        if (f.fleet === null) {
+                            context.output.write(`    fleet: unavailable (${f.error})`);
+                            continue;
+                        }
+                        if (f.fleet.missing.includes('no-declaration')) {
+                            context.output.write('    fleet: no declaration (.spur/fleet.json)');
+                            continue;
+                        }
+                        for (const m of f.fleet.members) {
+                            const flag = m.enabled ? '' : ' [disabled]';
+                            const role = m.role ?? '-';
+                            context.output.write(
+                                `    - ${m.instanceId}${flag} role=${role} executor=${m.executor} fsWrite=${m.capabilityState} write=${m.writeCapable}`,
+                            );
+                        }
+                        if (f.fleet.missing.includes('no-enabled-members')) {
+                            context.output.write('    fleet: no enabled members');
+                        }
+                        // 0836 R4: `missing` (nothing bound) and `bound-offline` (bound,
+                        // no live claim) are different lines with different next actions.
+                        const o = f.orchestrator;
+                        if (o !== null) {
+                            switch (o.state) {
+                                case 'bound-online':
+                                    context.output.write(
+                                        `    orchestrator: bound-online ${o.instanceId} (holder ${o.holderId})`,
+                                    );
+                                    break;
+                                case 'bound-offline':
+                                    context.output.write(
+                                        `    orchestrator: bound-offline ${o.instanceId} (no live claim)`,
+                                    );
+                                    break;
+                                case 'missing':
+                                    context.output.write(`    orchestrator: missing (${o.reason})`);
+                                    break;
+                                case 'unresolvable':
+                                    context.output.write(`    orchestrator: unresolvable (${o.reason})`);
+                                    break;
+                            }
+                        } else if (f.orchestratorError !== undefined) {
+                            context.output.write(`    orchestrator: unavailable (${f.orchestratorError})`);
+                        }
+                        // 0838 R1: the persisted strategy, or the `rest` default (never written by a read).
+                        if (f.strategy !== null) {
+                            context.output.write(
+                                `    strategy: ${f.strategy.strategy} (v${f.strategy.strategyVersion})`,
+                            );
+                        } else if (f.strategyError !== undefined) {
+                            context.output.write(`    strategy: unavailable (${f.strategyError})`);
+                        } else {
+                            context.output.write('    strategy: rest (default)');
+                        }
                     }
                 }
             } catch (err) {

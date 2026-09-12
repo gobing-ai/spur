@@ -22,6 +22,18 @@ export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';
 export { type CreatePhaseRunInput, PhaseRunDao, type PhaseRunRecord } from './phase-run-dao';
 export { type CreatePlanningEventInput, PlanningEventDao, type PlanningEventRow } from './planning-event-dao';
+export {
+    CLAIM_TTL_MS,
+    type ClaimSlot,
+    type ProjectClaim,
+    ProjectClaimDao,
+    type ProjectClaimRow,
+} from './project-claim-dao';
+export {
+    type ProjectStrategy,
+    ProjectStrategyDao,
+    type ProjectStrategyRow,
+} from './project-strategy-dao';
 export { RuleEvalRunDao, type RuleEvalRunRow, RuleRunDao, type RuleRunRow } from './rule-run-dao';
 export {
     type CreateRunInput,

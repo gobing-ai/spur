@@ -58,7 +58,7 @@ export const SHARED_OPTIONS = {
     nameProjectDisplay: ['--name <name>', 'Display name for the project'] as const,
     nameProjectInit: ['--name <name>', 'Project name (default: current directory name)'] as const,
     pollWorkflow: ['--poll <ms>', 'Follow polling interval in milliseconds'] as const,
-    pollAgent: ['--poll <ms>', 'Idle poll interval in milliseconds'] as const,
+    pollAgent: ['--poll <ms>', 'Wakeup backstop timeout in milliseconds (drain at least this often)'] as const,
     portProjects: ['--port <n>', 'Explicit port to bind'] as const,
     portServe: ['--port <n>', 'Server port (env: PORT, default: 3000)'] as const,
     priorityFilter: ['--priority <p>', 'Filter by priority'] as const,
