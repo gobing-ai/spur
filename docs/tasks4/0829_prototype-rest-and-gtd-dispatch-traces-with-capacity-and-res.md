@@ -4,7 +4,7 @@ name: Prototype rest and GTD dispatch traces with capacity and restart failures
 status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.271Z
-updated_at: "2026-09-12T01:08:42.982Z"
+updated_at: "2026-09-12T04:16:35.850Z"
 feature_id: G6
 priority: P1
 tags:
@@ -32,10 +32,10 @@ Out of scope: a production scheduler, workflow engine, daemon, plugin loader, br
 
 ### Acceptance Criteria
 
-- [x] R1: Given fake tasks, instances and input events, when the documented workspace test command runs, then request-to-result traces carry project/request/instance/run correlation and distinguish answers, holds and assignments.
-- [x] R2: Given each listed fault/race case, when its event sequence runs, then expected final state and dispatch counts are asserted, snapshots restore strategy, and ambiguous work is held rather than blindly replayed.
-- [x] R3: Given competing writers, repeated roles, unauthorized/unready work, idle ticks and a zero exit without verification, when selection/completion is evaluated, then all named invariants are enforced by failing assertions.
-- [x] R4: Given the report and executable traces, when downstream planning consumes them, then the reused owners, simulated guarantees, missing production seams, and scope boundaries are explicit and consistent with 0828.
+- [x] AC-1 (R1): Given fake tasks, instances and input events, when the documented workspace test command runs, then request-to-result traces carry project/request/instance/run correlation and distinguish answers, holds and assignments.
+- [x] AC-2 (R2): Given each listed fault/race case, when its event sequence runs, then expected final state and dispatch counts are asserted, snapshots restore strategy, and ambiguous work is held rather than blindly replayed.
+- [x] AC-3 (R3): Given competing writers, repeated roles, unauthorized/unready work, idle ticks and a zero exit without verification, when selection/completion is evaluated, then all named invariants are enforced by failing assertions.
+- [x] AC-4 (R4): Given the report and executable traces, when downstream planning consumes them, then the reused owners, simulated guarantees, missing production seams, and scope boundaries are explicit and consistent with 0828.
 
 ### Q&A
 
@@ -97,7 +97,7 @@ Test-local simulation only. Re-verification corrected unsafe behavior; no produc
 - `apps/cli/tests/fixtures/g6/strategy-prototype.ts:511` — result identity includes task and owner epoch; persisted counters prevent restart ID/generation collisions.
 - `apps/cli/tests/fixtures/g6/strategy-prototype.ts:351` — per-event before/after snapshots and fake-call deltas, optional supplied clock; capability and numeric WBS gates.
 - `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — regression cases reproduced the defects before the fix; 23 tests now pass.
-- `docs/reports/g6-strategy-prototype.md:124` — re-audit corrections, traces and remaining simulated-only recovery boundary.
+- `docs/reports/g6-strategy-prototype.md:127` — re-audit corrections, traces and remaining simulated-only recovery boundary.
 
 ### Testing
 
@@ -110,14 +110,14 @@ Test-local simulation only. Re-verification corrected unsafe behavior; no produc
 | R1 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — question answer vs assignment/hold and event snapshots; workspace `bun test tests/commands/g6-strategy-prototype.test.ts` exit 0. |
 | R2 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — replacement holds reservation; forged task/epoch results rejected; restart counters persist. All 23 tests / 109 assertions pass. |
 | R3 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — numeric WBS, capability gates; existing tests cover authorization, rest races, single writer, idle and verified completion. Same test command exit 0. |
-| R4 | MET | `docs/reports/g6-strategy-prototype.md:124` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
+| R4 | MET | `docs/reports/g6-strategy-prototype.md:127` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1: Given fake tasks, instances and input events, when the documented workspace test command runs, then request-to-result traces carry project/request/instance/run correlation and distinguish answers, holds and assignments. | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — question answer vs assignment/hold and event snapshots; workspace `bun test tests/commands/g6-strategy-prototype.test.ts` exit 0. |
-| R2: Given each listed fault/race case, when its event sequence runs, then expected final state and dispatch counts are asserted, snapshots restore strategy, and ambiguous work is held rather than blindly replayed. | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — replacement holds reservation; forged task/epoch results rejected; restart counters persist. All 23 tests / 109 assertions pass. |
-| R3: Given competing writers, repeated roles, unauthorized/unready work, idle ticks and a zero exit without verification, when selection/completion is evaluated, then all named invariants are enforced by failing assertions. | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — numeric WBS, capability gates; existing tests cover authorization, rest races, single writer, idle and verified completion. Same test command exit 0. |
-| R4: Given the report and executable traces, when downstream planning consumes them, then the reused owners, simulated guarantees, missing production seams, and scope boundaries are explicit and consistent with 0828. | MET | test | `docs/reports/g6-strategy-prototype.md:124` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
+| AC-1 (R1) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — question answer vs assignment/hold and event snapshots; workspace `bun test tests/commands/g6-strategy-prototype.test.ts` exit 0. |
+| AC-2 (R2) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — replacement holds reservation; forged task/epoch results rejected; restart counters persist. All 23 tests / 109 assertions pass. |
+| AC-3 (R3) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — numeric WBS, capability gates; existing tests cover authorization, rest races, single writer, idle and verified completion. Same test command exit 0. |
+| AC-4 (R4) | MET | test | `docs/reports/g6-strategy-prototype.md:127` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
