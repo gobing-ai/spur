@@ -77,7 +77,7 @@
     ├── [done] **G3**: Workspace module ([G3_workspace-module.md](./G3_workspace-module.md))
     ├── [verifying] **G4**: Inter-agent control plane ([G4_inter-agent-control-plane.md](./G4_inter-agent-control-plane.md))
     ├── [done] **G5**: Restore inline --agent with host-session-only semantics ([G5_restore-inline-agent-with-host-session-only-semantics.md](./G5_restore-inline-agent-with-host-session-only-semantics.md))
-    └── [backlog] **G6**: Projects and agent fleet unification design ([G6_projects-and-agent-fleet-unification-design.md](./G6_projects-and-agent-fleet-unification-design.md))
+    └── [done] **G6**: Projects and agent fleet unification design ([G6_projects-and-agent-fleet-unification-design.md](./G6_projects-and-agent-fleet-unification-design.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
     ├── [active] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
         ├── [verifying] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))
