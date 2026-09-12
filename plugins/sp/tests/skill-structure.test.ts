@@ -639,8 +639,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     });
 
     test('R40 — idea-pipeline decompose prompt matches task-batch schema fields', () => {
-        const idea = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
-        const decompose = idea.split('  - id: decompose\n')[1]?.split('  - id: batch-create\n')[0] ?? '';
+        // 0824: the decompose prompt moved out of the idea-pipeline.yaml agent input into the
+        // spec-decomposition skill; per the 0824 design table these same field pins re-anchor
+        // on the decomposition.md `## Idea-pipeline emission` slice.
+        const md = readFileSync(join(SKILLS_DIR, 'spec-decomposition', 'references', 'decomposition.md'), 'utf8');
+        const decompose = (md.split('## Idea-pipeline emission\n')[1]?.split('\n## ')[0] ?? '').replace(/\s+/g, ' ');
         for (const field of [
             'name',
             'background',
@@ -651,7 +654,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'tags',
             'template',
         ]) {
-            expect(decompose).toContain(field);
+            expect(decompose).toContain(`\`${field}\``);
         }
         expect(decompose).toContain('Schema-permitted fields per entry');
         // 0769: the prose was repaired — design/plan/acceptance_criteria ARE schema-permitted

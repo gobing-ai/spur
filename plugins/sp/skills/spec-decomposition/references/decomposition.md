@@ -525,6 +525,35 @@ The payload is a top-level JSON **array** (no `tasks` wrapper):
 ]
 ```
 
+## Idea-pipeline emission
+
+When the idea-pipeline workflow dispatches you for a feature, read the brainstorm artifact, the
+feature AC, and the design doc, then emit two run-scoped artifacts.
+
+**Sizing first, before any JSON.** Apply the `Default to NOT decomposing` rubric to the whole
+unit of work — if it scores 0–2 the correct output is a ONE-entry batch, not many.
+
+**Scenario count is not task count.** Merge scenarios that one task delivers (same file surface,
+same subsystem, or unreadable apart in review), and list every scenario a task covers in its
+background. Merging never costs AC coverage — one task may carry several scenarios. Do not emit
+one entry per scenario or per requirement by reflex.
+
+**The batch.** Produce a task-batch JSON array at the workflow-provided batch path
+(`.spur/run/<runId>-idea-task-batch.json`), validated against `task-batch.schema.json`.
+Schema-permitted fields per entry: `name`, `background`, `requirements`, `design`, `plan`,
+`acceptance_criteria`, `feature_id`, `parent_wbs`, `priority`, `tags`, `template` — schema
+validation rejects anything else. `design`, `plan`, and `acceptance_criteria` are supported batch
+fields and normal default planning fills them from your analysis; the per-task refine step after
+batch-create still deepens them when a task needs more detail. Validate locally against the
+schema before emitting.
+
+**The order sidecar.** Also emit the private task-order sidecar at
+`.spur/run/<runId>-idea-task-order.json`: a JSON array (one entry per batch item) of
+`{ name: <exact batch item name>, depends_on_names: [<batch item names>] }` declaring
+ordering/dependencies between the batch items; state `depends_on_names: []` per item when no
+ordering exists. Every `name` and every dependency must match exactly one batch item `name` —
+it is private workflow data, not part of task-batch.schema.json.
+
 ## Common schema violations
 
 | Violation | Fix |

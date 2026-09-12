@@ -270,6 +270,30 @@ missing title match. After batch creation, `handoff-finalize`:
    (runall is then omitted), otherwise `/sp:dev-runall --feature <id> --auto`. The terminal
    handoff note points at this report.
 
+**Ready preparation (ready-prepare, 0788).** The input is the `.wbs` array in
+`.spur/run/<runId>-idea-batch-create-result.json`. For EACH wbs: resolve the task file with
+`spur task path <wbs> --json` and apply the ready-refinement checklist — make requirements,
+design, plan, acceptance criteria, decisions, dependencies and premises present and
+non-placeholder so `spur task check <wbs> --json` exits 0. Write planning sections only, through
+`spur task update <wbs> --section <Name> --from-file <file>` — never Solution, Testing, Review
+or History. Record one checklist row per id, with concrete evidence of how you verified it.
+Compute the planning digest with the project's own implementation when this is a monorepo
+checkout — resolve the file with `spur task path <wbs> --json`, then run:
+
+```bash
+bun -e 'const m = await import("./packages/app/src/services/task-readiness"); console.log(m.computePlanningDigest(await Bun.file(process.argv[1]).text()))' <task-file>
+```
+
+When that is impossible in this checkout, set status `skipped` instead of guessing a digest.
+Finally write `.spur/run/<runId>-idea-ready.json` with exactly this shape:
+
+```json
+{"runId":"<runId>","depth":"ready","tasks":[{"wbs":"<wbs>","status":"ready" | "failed" | "skipped","planningDigest":"<sha256 hex>","checks":[{"id":"requirements" | "design" | "plan" | "ac" | "decisions" | "dependencies" | "premises","pass":true,"evidence":"<how verified>"}]}]}
+```
+
+A task you cannot fully prepare gets status `failed` or `skipped` — never fabricate evidence;
+the handoff degrades to refineall.
+
 ## Step 6: Refine before execute (the spec-completion gate)
 
 `batch-create` accepts optional `design` / `plan` / `acceptance_criteria` fields (plus

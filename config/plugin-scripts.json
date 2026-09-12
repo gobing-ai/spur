@@ -32,6 +32,16 @@
             "twin": "feature-sync-bounded.mjs"
         },
         {
+            "rel": "idea-handoff.ts",
+            "contract": "standard",
+            "twin": "idea-handoff.mjs"
+        },
+        {
+            "rel": "wrapup-steps.ts",
+            "contract": "standard",
+            "twin": "wrapup-steps.mjs"
+        },
+        {
             "rel": "history-anatomy-cache.ts",
             "contract": "standard",
             "twin": "history-anatomy-cache.mjs"

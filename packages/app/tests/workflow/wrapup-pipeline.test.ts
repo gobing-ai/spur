@@ -27,6 +27,8 @@ import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
+/** 0824: the wrapup-steps plugin script the wrappers delegate to (exec pins live in its suite). */
+const WRAPUP_STEPS = join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'wrapup-steps.ts');
 
 interface ShellAction {
     kind: string;
@@ -69,25 +71,13 @@ function shellOf(def: WorkflowYaml, stateId: string, index: number): ShellAction
     return shell;
 }
 
-/** Runs one shell action in a fresh temp dir with the given env; returns cwd for artifact reads. */
-function runShell(
-    action: ShellAction,
-    env: Record<string, string>,
-): { status: number; stdout: string; stderr: string; cwd: string } {
-    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0770-'));
-    const result = spawnSync('sh', ['-c', String(action.options?.command ?? '')], {
-        cwd,
-        encoding: 'utf8',
-        env: { ...process.env, ...env },
-    });
-    return { status: result.status ?? -1, stdout: result.stdout ?? '', stderr: result.stderr ?? '', cwd };
-}
-
 function cleanup(cwd: string): void {
     rmSync(cwd, { recursive: true, force: true });
 }
 
-/** Stub spurBin that resolves any task show to a completed status. */
+/**
+ * Stub spurBin that resolves any task show to a completed status.
+ */
 function stubSpur(cwd: string, json: string): string {
     const stub = join(cwd, 'stub-spur');
     writeFileSync(stub, `#!/bin/sh\necho '${json}'\n`);
@@ -95,54 +85,12 @@ function stubSpur(cwd: string, json: string): string {
     return stub;
 }
 
-interface SyncStubOptions {
-    syncOut: string;
-    syncRc?: number;
-    showStatus?: string;
-    checkRc?: number;
-}
-
 /**
- * Stub environment for the feature-transition shell: a spurBin dispatching
- * `feature sync` / `feature show` / `feature check`, plus a failing
- * `superskill` on PATH so the producer chain deterministically takes the
- * plain `spur feature sync` branch (the temp cwd has no plugins/ scaffold).
+ * 0824: task-capture, metrics and feature-sync execution moved into the wrapup-steps plugin
+ * script — `plugins/sp/tests/wrapup-steps.test.ts` spawns it with the exec pins. This file
+ * pins the workflow definition: wrapper delegation, the route writer, guards, and the
+ * fail-closed wrapper contract.
  */
-function stubSyncEnv(cwd: string, opts: SyncStubOptions): Record<string, string> {
-    const { syncOut, syncRc = 0, showStatus = 'active', checkRc = 0 } = opts;
-    const stub = join(cwd, 'stub-spur');
-    writeFileSync(
-        stub,
-        [
-            '#!/bin/sh',
-            'case "$1 $2" in',
-            `  "feature sync") printf '%s' '${syncOut}'; exit ${syncRc};;`,
-            `  "feature show") printf '{"status":"${showStatus}"}\\n';;`,
-            `  "feature check") exit ${checkRc};;`,
-            'esac',
-            'exit 99',
-            '',
-        ].join('\n'),
-    );
-    chmodSync(stub, 0o755);
-    const superskill = join(cwd, 'superskill');
-    writeFileSync(superskill, '#!/bin/sh\nexit 1\n');
-    chmodSync(superskill, 0o755);
-    return { spurBin: stub, PATH: `${cwd}:${process.env.PATH ?? ''}` };
-}
-
-function runSyncShell(def: WorkflowYaml, cwd: string, env: Record<string, string>) {
-    return spawnSync('sh', ['-c', String(shellOf(def, 'feature-transition', 0).options?.command ?? '')], {
-        cwd,
-        encoding: 'utf8',
-        // The engine injects vars.featureGateCmd at run time; tests default to the pipeline value
-        // (an unset variable would make `sh -c ""` trivially pass and hide gate outcomes).
-        env: { ...process.env, featureGateCmd: '$spurBin feature check "$feature"', ...env },
-    });
-}
-
-const syncResult = (proposal: Record<string, unknown>, applied: boolean): string =>
-    JSON.stringify({ proposal, applied, appliedHops: applied ? ['active->done'] : [] });
 
 describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)', () => {
     const def = loadDef('wrapup-pipeline');
@@ -162,8 +110,11 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const result = spawnSync('sh', ['-c', def.vars?.featureGateCmd ?? 'exit 99'], { env, encoding: 'utf8' });
             expect(result.status).toBe(0);
             expect(result.stdout).toBe('feature\ncheck\nD61\n');
+            // 0824: the feature-transition shell is a locator wrapper; the gate itself is spawned
+            // by the wrapup-steps script (the script suite pins `sh -c` with $featureGateCmd).
             const command = String(shellsOf(def, 'feature-transition')[0]?.options?.command ?? '');
-            expect(command).toContain('sh -c "$featureGateCmd"');
+            expect(command).toContain('wrapup-steps');
+            expect(command).toContain('feature-transition');
         } finally {
             cleanup(cwd);
         }
@@ -193,84 +144,23 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('task-resolve validates wrap input exactly once', () => {
-        test('the validation shell is the FIRST action; the route writer reads the validated capture', () => {
+        test('the validation shell is the wrapup-steps locator; the route writer reads the validated capture', () => {
             const shells = shellsOf(def, 'task-resolve');
             expect(shells.length).toBeGreaterThanOrEqual(2);
-            // 0783 R1/R5: validation parses raw vars.tasks exactly once, here.
+            // 0824: shells[0] locates the wrapup-steps script (monorepo first, registered twin
+            // under node) and fails closed to FAIL — it never re-parses raw vars.tasks. The
+            // canonical-id validation lives in the script (wrapup-steps suite pins the regex).
             const validate = String(shells[0]?.options?.command ?? '');
+            expect(validate).toContain('wrapup-steps');
+            expect(validate).toContain('resolve');
             expect(validate).toContain('wrapup-resolve.status');
-            expect(validate).toContain('wrapup-tasks.json');
-            expect(validate).toContain('test("^[0-9]{4}$")');
+            expect(validate).toContain('failed closed');
+            expect(validate).not.toContain('"$tasks"');
             // 0783 R2/R5: the route writer consumes the capture, never raw input.
             const route = String(shells[1]?.options?.command ?? '');
             expect(route).toContain('skipped:empty task list');
             expect(route).toContain('wrapup-tasks.json');
             expect(route).not.toContain('"$tasks"');
-        });
-
-        test('malformed JSON records FAIL and never produces a normalized list', () => {
-            const run = runShell(shellOf(def, 'task-resolve', 0), {
-                __runId: 'r-bad',
-                tasks: '{oops',
-                spurBin: 'true',
-            });
-            try {
-                expect(run.status).toBe(0);
-                expect(run.stderr).toContain('canonical four-digit WBS strings');
-                expect(readFileSync(join(run.cwd, '.spur/run/r-bad-wrapup-resolve.status'), 'utf8')).toContain('FAIL');
-                expect(readFileSync(join(run.cwd, '.spur/run/r-bad-route-reason.txt'), 'utf8')).toContain(
-                    'failed:tasks is not a JSON array',
-                );
-                expect(() => readFileSync(join(run.cwd, '.spur/run/r-bad-wrapup-tasks.json'))).toThrow();
-            } finally {
-                cleanup(run.cwd);
-            }
-        });
-
-        test('an empty run id fails loud instead of the legacy fixed-path fallback', () => {
-            const run = runShell(shellOf(def, 'task-resolve', 0), { __runId: '', tasks: '[]', spurBin: 'true' });
-            cleanup(run.cwd);
-            expect(run.status).toBe(1);
-            expect(run.stderr).toContain('__runId is empty');
-        });
-
-        test('a task that does not resolve to a completed status records FAIL', () => {
-            const run = runShell(shellOf(def, 'task-resolve', 0), {
-                __runId: 'r-unres',
-                tasks: '["0001"]',
-                spurBin: 'true',
-            });
-            try {
-                expect(run.status).toBe(0);
-                expect(readFileSync(join(run.cwd, '.spur/run/r-unres-wrapup-resolve.status'), 'utf8')).toContain(
-                    'FAIL',
-                );
-                expect(readFileSync(join(run.cwd, '.spur/run/r-unres-route-reason.txt'), 'utf8')).toContain(
-                    'failed:unresolved or non-completed task',
-                );
-            } finally {
-                cleanup(run.cwd);
-            }
-        });
-
-        test('a done task normalizes and dedupes into the run-scoped artifact with PASS', () => {
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0770-ok-'));
-            try {
-                const spurBin = stubSpur(cwd, '{"frontmatter":{"status":"done"}}');
-                const shell = shellOf(def, 'task-resolve', 0);
-                const result = spawnSync('sh', ['-c', String(shell.options?.command ?? '')], {
-                    cwd,
-                    encoding: 'utf8',
-                    env: { ...process.env, __runId: 'r-ok', tasks: '["0770","0770","0772"]', spurBin },
-                });
-                expect(result.status).toBe(0);
-                expect(readFileSync(join(cwd, '.spur/run/r-ok-wrapup-tasks.json'), 'utf8').trim()).toBe(
-                    '["0770","0772"]',
-                );
-                expect(readFileSync(join(cwd, '.spur/run/r-ok-wrapup-resolve.status'), 'utf8')).toContain('PASS');
-            } finally {
-                cleanup(cwd);
-            }
         });
 
         test('the failed edge is declared before the route edges and keys on the resolve status', () => {
@@ -298,72 +188,29 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('0783 R1: only canonical four-digit task ids validate', () => {
-        test('malformed, non-array, non-string, whitespace and non-canonical entries all FAIL', () => {
-            const badInputs = [
-                '"0770"', // JSON string, not array
-                '["0770", 770]', // non-string entry
-                '["0770 "]', // trailing whitespace
-                '[" 0770"]', // leading whitespace
-                '["  "]', // whitespace-only
-                '["07a0"]', // non-digit
-                '["07700"]', // five digits
-                '["770"]', // three digits
-                '[]', // empty entries cannot exist, but an empty array is validated below
-            ];
-            for (const tasks of badInputs.slice(0, -1)) {
-                const run = runShell(shellOf(def, 'task-resolve', 0), {
-                    __runId: 'r-shape',
-                    tasks,
-                    spurBin: 'true',
-                });
-                try {
-                    expect(readFileSync(join(run.cwd, '.spur/run/r-shape-wrapup-resolve.status'), 'utf8')).toContain(
-                        'FAIL',
-                    );
-                    expect(() => readFileSync(join(run.cwd, '.spur/run/r-shape-wrapup-tasks.json'))).toThrow();
-                } finally {
-                    cleanup(run.cwd);
-                }
-            }
-        });
-
-        test('duplicate valid ids keep first-seen order (not sorted)', () => {
-            const run = runShell(shellOf(def, 'task-resolve', 0), {
-                __runId: 'r-order',
-                tasks: '["0772","0770","0772"]',
-                spurBin: 'true',
-            });
-            try {
-                expect(readFileSync(join(run.cwd, '.spur/run/r-order-wrapup-tasks.json'), 'utf8').trim()).toBe(
-                    '["0772","0770"]',
-                );
-            } finally {
-                cleanup(run.cwd);
-            }
-        });
-
         test('two run ids produce independent run-scoped captures and attributed route lines', () => {
             const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-two-runs-'));
             try {
                 const spurBin = stubSpur(cwd, '{"frontmatter":{"status":"done"}}');
-                const shell = shellOf(def, 'task-resolve', 0);
                 const route = shellOf(def, 'task-resolve', 1);
-                for (const runId of ['r-a', 'r-b']) {
-                    for (const action of [shell, route]) {
-                        const result = spawnSync('sh', ['-c', String(action.options?.command ?? '')], {
-                            cwd,
-                            encoding: 'utf8',
-                            env: {
-                                ...process.env,
-                                __runId: runId,
-                                tasks: `["0${runId === 'r-a' ? 783 : 784}"]`,
-                                spurBin,
-                                mode: '',
-                            },
-                        });
-                        expect(result.status).toBe(0);
-                    }
-                }
+                // 0824: the resolve step runs through the wrapup-steps script; the route writer
+                // stays a workflow shell, so run attribution stays a definition-level pin.
+                const runThrough = (runId: string, wbs: string): void => {
+                    const script = spawnSync(process.execPath, [WRAPUP_STEPS, 'resolve'], {
+                        cwd,
+                        encoding: 'utf8',
+                        env: { ...process.env, __runId: runId, tasks: `["${wbs}"]`, spurBin },
+                    });
+                    expect(script.status).toBe(0);
+                    const writer = spawnSync('sh', ['-c', String(route.options?.command ?? '')], {
+                        cwd,
+                        encoding: 'utf8',
+                        env: { ...process.env, __runId: runId, tasks: `["${wbs}"]`, spurBin, mode: '' },
+                    });
+                    expect(writer.status).toBe(0);
+                };
+                runThrough('r-a', '0783');
+                runThrough('r-b', '0784');
                 expect(readFileSync(join(cwd, '.spur/run/r-a-wrapup-tasks.json'), 'utf8').trim()).toBe('["0783"]');
                 expect(readFileSync(join(cwd, '.spur/run/r-b-wrapup-tasks.json'), 'utf8').trim()).toBe('["0784"]');
                 const log = readFileSync(join(cwd, '.spur/memory/wrapup-routes.log'), 'utf8');
@@ -436,161 +283,15 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('metrics-record consumes the normalized artifact', () => {
-        test('the shell never re-parses raw $tasks, revalidates the capture, and serializes rows with jq', () => {
+        test('the shell is the wrapup-steps locator; it never re-parses raw $tasks or writes rows itself', () => {
             const cmd = String(shellsOf(def, 'metrics-record')[0]?.options?.command ?? '');
-            expect(cmd).toContain('wrapup-tasks.json');
-            expect(cmd).not.toContain("'$tasks'");
+            expect(cmd).toContain('wrapup-steps');
+            expect(cmd).toContain('metrics');
             expect(cmd).toContain('wrapup-metrics.status');
-            // 0783 R3: jq serialization, no interpolated printf JSON.
-            expect(cmd).toContain('jq -cn');
-            expect(cmd).not.toContain(`printf '{"wbs"`);
-        });
-
-        test('an unresolvable task records FAIL — a missing row is not silently absorbed', () => {
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0770-miss-'));
-            try {
-                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
-                writeFileSync(join(cwd, '.spur/run/r-miss-wrapup-tasks.json'), '["0001"]\n');
-                const shell = shellOf(def, 'metrics-record', 0);
-                const result = spawnSync('sh', ['-c', String(shell.options?.command ?? '')], {
-                    cwd,
-                    encoding: 'utf8',
-                    env: { ...process.env, __runId: 'r-miss', spurBin: 'true' },
-                });
-                expect(result.status).toBe(0);
-                expect(result.stderr).toContain('recording FAIL');
-                expect(readFileSync(join(cwd, '.spur/run/r-miss-wrapup-metrics.status'), 'utf8')).toContain('FAIL');
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R3: a missing or corrupted capture refuses to record metrics', () => {
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-mcap-'));
-            try {
-                const shell = shellOf(def, 'metrics-record', 0);
-                const spurBin = stubSpur(cwd, '{"frontmatter":{"status":"done"}}');
-                const run = (runId: string, capture?: string): string => {
-                    if (capture !== undefined) {
-                        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
-                        writeFileSync(join(cwd, `.spur/run/${runId}-wrapup-tasks.json`), capture);
-                    }
-                    const result = spawnSync('sh', ['-c', String(shell.options?.command ?? '')], {
-                        cwd,
-                        encoding: 'utf8',
-                        env: { ...process.env, __runId: runId, spurBin },
-                    });
-                    expect(result.status).toBe(0);
-                    return readFileSync(join(cwd, `.spur/run/${runId}-wrapup-metrics.status`), 'utf8');
-                };
-                expect(run('r-missing')).toContain('FAIL');
-                expect(run('r-corrupt', '{oops')).toContain('FAIL');
-                expect(run('r-noncanon', '["0783","x1"]')).toContain('FAIL');
-                expect(() => readFileSync(join(cwd, '.spur/memory/wrapup-metrics.jsonl'))).toThrow();
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R3: a malformed lookup output records FAIL instead of a row', () => {
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-mbad-'));
-            try {
-                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
-                writeFileSync(join(cwd, '.spur/run/r-badlookup-wrapup-tasks.json'), '["0783"]\n');
-                const spurBin = stubSpur(cwd, '<html>service unavailable</html>');
-                const shell = shellOf(def, 'metrics-record', 0);
-                const result = spawnSync('sh', ['-c', String(shell.options?.command ?? '')], {
-                    cwd,
-                    encoding: 'utf8',
-                    env: { ...process.env, __runId: 'r-badlookup', spurBin },
-                });
-                expect(result.status).toBe(0);
-                expect(readFileSync(join(cwd, '.spur/run/r-badlookup-wrapup-metrics.status'), 'utf8')).toContain(
-                    'FAIL',
-                );
-                expect(() => readFileSync(join(cwd, '.spur/memory/wrapup-metrics.jsonl'))).toThrow();
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R3: an append failure records FAIL and prior valid rows survive', () => {
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-mappend-'));
-            try {
-                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
-                mkdirSync(join(cwd, '.spur/memory'), { recursive: true });
-                writeFileSync(join(cwd, '.spur/run/r-appfail-wrapup-tasks.json'), '["0783"]\n');
-                const prior = '{"wbs":"0770","feature_id":"D61","status":"done","verdict":"PASS","timestamp":"t"}\n';
-                const metricsPath = join(cwd, '.spur/memory/wrapup-metrics.jsonl');
-                writeFileSync(metricsPath, prior);
-                chmodSync(metricsPath, 0o444);
-                const spurBin = stubSpur(cwd, '{"frontmatter":{"status":"done"}}');
-                const shell = shellOf(def, 'metrics-record', 0);
-                const result = spawnSync('sh', ['-c', String(shell.options?.command ?? '')], {
-                    cwd,
-                    encoding: 'utf8',
-                    env: { ...process.env, __runId: 'r-appfail', spurBin },
-                });
-                expect(result.status).toBe(0);
-                expect(result.stderr).toContain('append failed');
-                expect(readFileSync(join(cwd, '.spur/run/r-appfail-wrapup-metrics.status'), 'utf8')).toContain('FAIL');
-                expect(readFileSync(metricsPath, 'utf8')).toBe(prior);
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('a resolvable task appends exactly one well-formed metrics row and PASSes', () => {
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0770-m-'));
-            try {
-                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
-                writeFileSync(join(cwd, '.spur/run/r-m-ok-wrapup-tasks.json'), '["0770"]\n');
-                const spurBin = stubSpur(cwd, '{"frontmatter":{"status":"done","feature_id":"D61"}}');
-                const shell = shellOf(def, 'metrics-record', 0);
-                const result = spawnSync('sh', ['-c', String(shell.options?.command ?? '')], {
-                    cwd,
-                    encoding: 'utf8',
-                    env: { ...process.env, __runId: 'r-m-ok', spurBin },
-                });
-                expect(result.status).toBe(0);
-                expect(readFileSync(join(cwd, '.spur/run/r-m-ok-wrapup-metrics.status'), 'utf8')).toContain('PASS');
-                const row = readFileSync(join(cwd, '.spur/memory/wrapup-metrics.jsonl'), 'utf8').trim();
-                // 0783 R3: a missing verdict is UNKNOWN telemetry, never proof of completion.
-                expect(JSON.parse(row)).toMatchObject({
-                    wbs: '0770',
-                    feature_id: 'D61',
-                    status: 'done',
-                    verdict: 'UNKNOWN',
-                });
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R3: escaped JSON fields survive serialization as parseable rows', () => {
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-mesc-'));
-            try {
-                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
-                writeFileSync(join(cwd, '.spur/run/r-esc-wrapup-tasks.json'), '["0783"]\n');
-                const payload = JSON.stringify({ frontmatter: { status: 'done', feature_id: 'D"61\\x' } });
-                const jsonFile = join(cwd, 'stub-payload.json');
-                writeFileSync(jsonFile, payload);
-                const stub = join(cwd, 'stub-spur');
-                writeFileSync(stub, '#!/bin/sh\ncase "$1 $2" in "task show") cat "$STUB_JSON";; esac\nexit 0\n');
-                chmodSync(stub, 0o755);
-                const shell = shellOf(def, 'metrics-record', 0);
-                const result = spawnSync('sh', ['-c', String(shell.options?.command ?? '')], {
-                    cwd,
-                    encoding: 'utf8',
-                    env: { ...process.env, __runId: 'r-esc', spurBin: stub, STUB_JSON: jsonFile },
-                });
-                expect(result.status).toBe(0);
-                expect(readFileSync(join(cwd, '.spur/run/r-esc-wrapup-metrics.status'), 'utf8')).toContain('PASS');
-                const row = JSON.parse(readFileSync(join(cwd, '.spur/memory/wrapup-metrics.jsonl'), 'utf8').trim());
-                expect(row.feature_id).toBe('D"61\\x');
-            } finally {
-                cleanup(cwd);
-            }
+            expect(cmd).toContain('failed closed');
+            // 0783 R2/R3: neither the wrapper nor (via the suite) the script re-parses raw
+            // vars.tasks — both consume the run-scoped capture only.
+            expect(cmd).not.toContain('$tasks');
         });
 
         test('the FAIL edge is declared first among metrics-record edges', () => {
@@ -604,160 +305,16 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     describe('doc-sync and feature-transition record truthful outcomes', () => {
-        test('feature-transition validates the sync result and writes a sync status', () => {
+        test('the feature-transition shell is the wrapup-steps locator and writes a sync status', () => {
             const cmd = String(shellsOf(def, 'feature-transition')[0]?.options?.command ?? '');
-            // 0783 R4: proposal-based classification, not a bare has("applied") probe.
-            expect(cmd).toContain('.proposal.gateBlocked');
-            expect(cmd).toContain('requiresConfirm');
+            // 0824: proposal-based classification moved into the script (its suite pins
+            // gateBlocked / requiresConfirm / explicit no-change); the wrapper only locates
+            // and fails closed.
+            expect(cmd).toContain('wrapup-steps');
+            expect(cmd).toContain('feature-transition');
             expect(cmd).toContain('wrapup-sync.status');
-            expect(cmd).toContain('explicit no-change');
+            expect(cmd).toContain('failed closed');
             expect(cmd).not.toContain('has("applied")');
-        });
-
-        test('0783 R4: an applied, verified sync passes', () => {
-            const def2 = loadDef('wrapup-pipeline');
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-sync-ok-'));
-            try {
-                const env = stubSyncEnv(cwd, {
-                    syncOut: syncResult({ featureId: 'D6', from: 'active', to: 'done', reason: 'wrap' }, true),
-                    showStatus: 'done',
-                });
-                const result = runSyncShell(def2, cwd, { ...env, __runId: 's-ok', feature: 'D6' });
-                expect(result.status).toBe(0);
-                expect(result.stdout).toContain('feature gate PASS');
-                expect(readFileSync(join(cwd, '.spur/run/s-ok-wrapup-sync.status'), 'utf8')).toContain('PASS');
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R4: a gate-blocked rc=0 sync is a failure, not a no-change success (F-04)', () => {
-            const def2 = loadDef('wrapup-pipeline');
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-sync-blocked-'));
-            try {
-                const env = stubSyncEnv(cwd, {
-                    syncOut: syncResult(
-                        { featureId: 'D6', from: 'active', to: 'done', reason: 'L4 gate blocked', gateBlocked: true },
-                        false,
-                    ),
-                    showStatus: 'active',
-                });
-                const result = runSyncShell(def2, cwd, { ...env, __runId: 's-blocked', feature: 'D6' });
-                expect(result.status).toBe(0);
-                expect(result.stderr).toContain('gate-blocked');
-                expect(readFileSync(join(cwd, '.spur/run/s-blocked-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R4: confirmation-required and mismatched-proposal results fail explicitly', () => {
-            const def2 = loadDef('wrapup-pipeline');
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-sync-mismatch-'));
-            try {
-                const confirm = runSyncShell(def2, cwd, {
-                    ...stubSyncEnv(cwd, {
-                        syncOut: syncResult(
-                            { featureId: 'D6', from: 'active', to: 'done', reason: 'r', requiresConfirm: true },
-                            false,
-                        ),
-                        showStatus: 'active',
-                    }),
-                    __runId: 's-confirm',
-                    feature: 'D6',
-                });
-                expect(readFileSync(join(cwd, '.spur/run/s-confirm-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-                runSyncShell(def2, cwd, {
-                    ...stubSyncEnv(cwd, {
-                        syncOut: syncResult({ featureId: 'D99', from: 'active', to: 'done', reason: 'r' }, true),
-                        showStatus: 'done',
-                    }),
-                    __runId: 's-mismatch',
-                    feature: 'D6',
-                });
-                expect(readFileSync(join(cwd, '.spur/run/s-mismatch-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-                expect(confirm.stderr).toContain('confirmation');
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R4: a partial sync fails even when the affected-feature gate passes', () => {
-            const def2 = loadDef('wrapup-pipeline');
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-sync-partial-'));
-            try {
-                const env = stubSyncEnv(cwd, {
-                    syncOut: syncResult({ featureId: 'D6', from: 'active', to: 'done', reason: 'partial' }, true),
-                    showStatus: 'active', // applied claimed done; observed status never reached the target
-                    checkRc: 0, // gate PASS cannot convert a failed sync into success
-                });
-                const result = runSyncShell(def2, cwd, { ...env, __runId: 's-partial', feature: 'D6' });
-                expect(result.status).toBe(0);
-                expect(result.stderr).toContain('did not land on the proposal target');
-                expect(readFileSync(join(cwd, '.spur/run/s-partial-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R4: applied:false is a successful explicit no-change only for from==to observed', () => {
-            const def2 = loadDef('wrapup-pipeline');
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-sync-noop-'));
-            try {
-                const env = stubSyncEnv(cwd, {
-                    syncOut: syncResult({ featureId: 'D6', from: 'done', to: 'done', reason: 'noop' }, false),
-                    showStatus: 'done',
-                });
-                const result = runSyncShell(def2, cwd, { ...env, __runId: 's-noop', feature: 'D6' });
-                expect(result.status).toBe(0);
-                expect(result.stdout).toContain('explicit no-change');
-                expect(readFileSync(join(cwd, '.spur/run/s-noop-wrapup-sync.status'), 'utf8')).toContain('PASS');
-                // Same proposal shape but the observed status is not the target: failure.
-                const env2 = stubSyncEnv(cwd, {
-                    syncOut: syncResult({ featureId: 'D6', from: 'done', to: 'done', reason: 'noop' }, false),
-                    showStatus: 'active',
-                });
-                runSyncShell(def2, cwd, { ...env2, __runId: 's-noop-bad', feature: 'D6' });
-                expect(readFileSync(join(cwd, '.spur/run/s-noop-bad-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-            } finally {
-                cleanup(cwd);
-            }
-        });
-
-        test('0783 R4: malformed stdout (rc 0), a nonzero sync, and a failing gate all fail', () => {
-            const def2 = loadDef('wrapup-pipeline');
-            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-sync-bad-'));
-            try {
-                const malformed = runSyncShell(def2, cwd, {
-                    ...stubSyncEnv(cwd, { syncOut: 'ok tuned (plain text)', showStatus: 'done' }),
-                    __runId: 's-malformed',
-                    feature: 'D6',
-                });
-                expect(readFileSync(join(cwd, '.spur/run/s-malformed-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-                const nonzero = runSyncShell(def2, cwd, {
-                    ...stubSyncEnv(cwd, {
-                        syncOut: '{"proposal":{"featureId":"D6","from":"active","to":"done"},"applied":true}',
-                        syncRc: 3,
-                        showStatus: 'done',
-                    }),
-                    __runId: 's-nonzero',
-                    feature: 'D6',
-                });
-                expect(readFileSync(join(cwd, '.spur/run/s-nonzero-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-                runSyncShell(def2, cwd, {
-                    ...stubSyncEnv(cwd, {
-                        syncOut: syncResult({ featureId: 'D6', from: 'active', to: 'done', reason: 'r' }, true),
-                        showStatus: 'done',
-                        checkRc: 7,
-                    }),
-                    __runId: 's-gatefail',
-                    feature: 'D6',
-                });
-                expect(readFileSync(join(cwd, '.spur/run/s-gatefail-wrapup-sync.status'), 'utf8')).toContain('FAIL');
-                expect(malformed.stderr + nonzero.stderr).toContain('malformed or unreadable');
-            } finally {
-                cleanup(cwd);
-            }
         });
 
         test('feature-transition fail edge is first; sibling edges require sync PASS', () => {
@@ -782,12 +339,54 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('route reason writers remain run-attributed (0758 R4/R5 pins survive; 0783 R5 drops the fixed fallback)', () => {
-        for (const shell of shellsOf(def, 'task-resolve')) {
-            const cmd = String(shell.options?.command ?? '');
-            expect(cmd).toContain('REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"');
-            expect(cmd).not.toContain('.spur/run/wrapup-route-reason.txt');
-            expect(cmd).not.toContain('RUN_ID="wrapup"');
-        }
+        // 0824: shells[0] is the wrapup-steps locator wrapper; only the route writer (index 1)
+        // writes reasons.
+        const route = String(shellOf(def, 'task-resolve', 1)?.options?.command ?? '');
+        expect(route).toContain('REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"');
+        expect(route).not.toContain('.spur/run/wrapup-route-reason.txt');
+        expect(route).not.toContain('RUN_ID="wrapup"');
+        // The locator wrapper writes no reason at all — fixed-path or otherwise.
+        const wrapper = String(shellOf(def, 'task-resolve', 0)?.options?.command ?? '');
+        expect(wrapper).not.toContain('route-reason');
+    });
+
+    describe('0824 wrapper fail-closed contract', () => {
+        test('each wrap-up wrapper writes FAIL and exits 0 when neither the monorepo script nor the twin exists', () => {
+            const cases: Array<{ state: string; statusFile: string }> = [
+                { state: 'task-resolve', statusFile: 'wrapup-resolve.status' },
+                { state: 'metrics-record', statusFile: 'wrapup-metrics.status' },
+                { state: 'feature-transition', statusFile: 'wrapup-sync.status' },
+            ];
+            for (const { state, statusFile } of cases) {
+                const cwd = mkdtempSync(join(tmpdir(), 'wrapup-failclosed-'));
+                try {
+                    // Temp cwd has no plugins/ scaffold; a failing superskill stub keeps the
+                    // registered-twin branch deterministic.
+                    const superskill = join(cwd, 'superskill');
+                    writeFileSync(superskill, '#!/bin/sh\nexit 1\n');
+                    chmodSync(superskill, 0o755);
+                    const result = spawnSync('sh', ['-c', String(shellOf(def, state, 0).options?.command ?? '')], {
+                        cwd,
+                        encoding: 'utf8',
+                        env: {
+                            ...process.env,
+                            __runId: `r-fc-${state}`,
+                            spurBin: 'true',
+                            featureGateCmd: '$spurBin feature check "$feature"',
+                            feature: 'D61',
+                            PATH: `${cwd}:${process.env.PATH ?? ''}`,
+                        },
+                    });
+                    expect(result.status, state).toBe(0);
+                    expect(result.stderr, state).toContain('failed closed');
+                    expect(readFileSync(join(cwd, `.spur/run/r-fc-${state}-${statusFile}`), 'utf8'), state).toContain(
+                        'FAIL',
+                    );
+                } finally {
+                    cleanup(cwd);
+                }
+            }
+        });
     });
 
     test('0783 R5: contradictory soft-success comments are gone; truthful routing stays', () => {

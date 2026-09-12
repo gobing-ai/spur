@@ -148,7 +148,7 @@ consumes the recorded run-scoped PASS/FAIL instead of re-running `spur feature c
 | `decompose:onEnter:2` | GLUE | jq validation of batch order/dep uniqueness (workflow-local predicate) |
 | `batch-create-run:onEnter:0` | GLUE | idempotent `task batch-create --skip-ready` + jq verify + done/failed markers |
 | `ready-prepare:onEnter:1` | GLUE | normalize absent ready-evidence sidecar to empty + jq fail-closed shape validation (0788) |
-| `handoff-finalize:onEnter:0` | DUAL | monorepo app-service writer (`idea-handoff-cli.ts`) + portable jq/shell fallback for seeded projects — the R5 steady state |
+| `handoff-finalize:onEnter:0` | EXT | bundled plugin script over the shared `finalizeIdeaHandoff` (0824): the monorepo runs the TS writer directly; seeded projects run the registered `idea-handoff.mjs` twin over the generated `plugins/sp/lib/idea-handoff.generated.mjs`, and a missing script fails closed |
 | `handoff:onEnter:2` | GLUE | checkpoint write |
 
 ### docs-pipeline.yaml
@@ -215,13 +215,21 @@ collapsed to the single `jq -e` verdict predicate.
 | `check:onEnter:0` | POLICY | `qualityGateCmd` soft probe (same exception as task-pipeline `test`) |
 | `fix:onEnter:0` | GLUE | fix-attempt counter increment |
 
-### wrapup-pipeline.yaml (4 compound)
+### wrapup-pipeline.yaml (6 compound)
+
+0824 moved the run-local JSON handling, the status probes and the bounded feature sync out of the
+workflow: the `wrapup-steps.ts resolve|metrics|feature-transition` extension (option d) owns them,
+and the workflow keeps the locator wrappers (which fail closed writing FAIL for their defense
+effect) plus the route writer. Dispositions marked `warn` sit in the advisory band with a one-line
+YAML-comment reason directly above the action.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
+| `task-resolve:onEnter:1` | EXT | wrapper for `wrapup-steps.ts resolve` (option d): task capture validation, status resolution and the run-scoped artifacts; a missing script writes FAIL |
+| `task-resolve:onEnter:2` | GLUE | route-reason writer: one jq table lookup over the mode var over the validated capture (0758/0783) |
 | `doc-sync:onEnter:1` | GLUE | append learnings if present (7 lines; re-keyed from `learning-capture:onEnter:1` after task 0607 renamed the state) |
-| `metrics-record:onEnter:0` | GLUE | per-task metrics loop (jq + `task show` + verdict) → wrapup-metrics.jsonl |
-| `feature-transition:onEnter:0` | EXT + POLICY | feature sync via `feature-sync-bounded.ts` (option d) + `feature sync` fallback; after an applied sync, trusted `featureGateCmd` runs through `sh -c` (option e) and reports PASS/FAIL softly |
+| `metrics-record:onEnter:0` | EXT | wrapper for `wrapup-steps.ts metrics` (option d): per-task metrics loop (`task show` + verdict) → wrapup-metrics.jsonl |
+| `feature-transition:onEnter:0` | EXT + POLICY | wrapper for `wrapup-steps.ts feature-transition`: bounded sync (`feature-sync-bounded.ts` → `feature sync` fallback); after an applied sync, trusted `featureGateCmd` runs through `sh -c` (option e) and reports PASS/FAIL softly |
 | `done:onEnter:1` | GLUE | checkpoint write |
 
 ### feature-dev.yaml (2 compound)
@@ -241,13 +249,15 @@ invokes must resolve in a seeded project or degrade deliberately:
 - **External extensions** under `plugins/sp/scripts/` resolve via
   `bun "$(superskill script path sp <name>.ts)"`; the workflows that use them carry a `spur`-verb
   fallback for projects without the plugin.
-- **Application services** in `packages/app` are monorepo-only. The idea-handoff dual
-  implementation (`packages/app/src/workflow/idea-handoff-cli.ts` plus its portable jq/shell
-  fallback in `idea-pipeline handoff-finalize:onEnter:0`) is **recorded as the correct steady
-  state**, not retired: the monorepo gets the typed writer; seeded projects get the portable shell
-  program; both halves share one handoff contract. Retiring the split would require either
-  bundling the app service into the CLI (a public-surface change needing consent) or duplicating
-  `packages/app` logic into a standalone script — the exact duplication D5 exists to prevent.
+- **Application services** in `packages/app` are monorepo-only by source, but a plugin script can
+  reach one through a generated bundle: `scripts/commands/bundle-plugin-lib.ts` emits a committed,
+  standalone `plugins/sp/lib/*.generated.mjs` ESM module (the 0669 `artifact-digest` precedent),
+  and the registered ADR-065 twin imports it by relative URL, so bare `node` in a seeded project
+  runs the same tested application function the monorepo branch executes. The idea handoff has
+  used this bridge since 0824 (`idea-handoff.ts` over `lib/idea-handoff.generated.mjs`, with the
+  bundle's `import.meta.main` pinned off and the workflow failing closed when the script is
+  absent). A shell copy of the application logic stays rejected — one implementation, two
+  transports.
 
 ## Precedent this record sets
 

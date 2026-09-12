@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
@@ -200,6 +200,13 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
 
     const runResolveShells = (command: string[], vars: Record<string, string>, cwd: string): void => {
         const spurBin = doneStubSpur(cwd);
+        // 0824: the first task-resolve shell is the wrapup-steps locator wrapper, which resolves
+        // `plugins/sp/scripts/wrapup-steps.ts` relative to the run cwd. The engine runs workflows
+        // from the project root, so mirror that scaffold into the temp cwd to execute exactly
+        // what the YAML invokes (deterministically the monorepo branch, never an installed twin).
+        mkdirSync(join(cwd, 'plugins/sp'), { recursive: true });
+        const scaffold = join(cwd, 'plugins/sp/scripts');
+        if (!existsSync(scaffold)) symlinkSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts'), scaffold);
         for (const cmd of command) {
             const res = spawnSync('sh', ['-c', cmd], { cwd, env: { ...process.env, ...vars, spurBin } });
             expect(res.status).toBe(0);

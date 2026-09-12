@@ -29,8 +29,9 @@ export interface IdeaHandoffCliOutcome {
  * Run the deterministic idea handoff finalization for one pipeline run.
  *
  * This is the monorepo writer the `idea-pipeline.yaml` `handoff-finalize` state prefers;
- * seeded projects fall back to the portable shell program in the same state, which
- * implements the identical contract (0604 Q&A).
+ * seeded projects fall back to the registered plugin-script twin `idea-handoff.mjs`,
+ * generated from this entrypoint by `bun run build:scripts` (`scripts/commands/
+ * bundle-plugin-lib.ts`).
  *
  * @param env - Environment slice carrying the run id, feature id, and spur invocation.
  * @param run - Finalization implementation; injectable for tests.
@@ -43,6 +44,8 @@ export async function runIdeaHandoffCli(
     const runId = env.__runId ?? '';
     const featureId = env.featureId ?? '';
     if (runId === '' || featureId === '') {
+        // Pinned verbatim by idea-handoff-cli.test.ts and the idea-handoff.mjs twin (0824 R1:
+        // test-pinned messages stay the same; 'failed closed' is the script-missing wrapper).
         echoError('idea-handoff: __runId and featureId env vars are required');
         return { exitCode: 1 };
     }

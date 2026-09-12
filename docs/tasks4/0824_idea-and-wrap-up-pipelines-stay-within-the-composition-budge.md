@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: idea and wrap-up pipelines stay within the composition budgets
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.073Z
-updated_at: "2026-09-11T06:08:29.664Z"
+updated_at: "2026-09-12T01:52:56.339Z"
 feature_id: I21
 priority: P2
 tags:
@@ -47,7 +47,7 @@ Consent: granted 2026-09-10 (governance §4) for behavior-preserving edits to th
 
 ### Requirements
 
-- [ ] R1. `spur workflow validate --json` on `idea-pipeline.yaml` and `wrapup-pipeline.yaml` reports no error-level composition finding and no `agent-run-output` finding. Over-cap programs move to owners from the closed fix vocabulary (governance §1.1 (a)–(d)); a stays-shell reason is valid only inside the warn band. Every remaining warn-band program and guard carries a one-line reason as a YAML comment directly above it. The `decompose` and `ready-prepare` prompt bodies move into the skill references they paraphrase, and their inputs carry only the operation, its vars and its output paths. Routes, `.spur/run` artifacts, handoff output, corpus writes, exit semantics and test-pinned messages stay the same, except that a seeded project without the `sp` plugin now fails closed at `handoff-finalize`. Existing workflow assertions pass, moved with the logic they pin. The `run --dry-run` graphs are unchanged, `build:bundle` parity holds and no model query is added. A new public `spur` verb or flag lands only with its own consent entry.
+- [x] R1. `spur workflow validate --json` on `idea-pipeline.yaml` and `wrapup-pipeline.yaml` reports no error-level composition finding and no `agent-run-output` finding. Over-cap programs move to owners from the closed fix vocabulary (governance §1.1 (a)–(d)); a stays-shell reason is valid only inside the warn band. Every remaining warn-band program and guard carries a one-line reason as a YAML comment directly above it. The `decompose` and `ready-prepare` prompt bodies move into the skill references they paraphrase, and their inputs carry only the operation, its vars and its output paths. Routes, `.spur/run` artifacts, handoff output, corpus writes, exit semantics and test-pinned messages stay the same, except that a seeded project without the `sp` plugin now fails closed at `handoff-finalize`. Existing workflow assertions pass, moved with the logic they pin. The `run --dry-run` graphs are unchanged, `build:bundle` parity holds and no model query is added. A new public `spur` verb or flag lands only with its own consent entry.
 
 Non-goals:
 - `stateEffect`/`evidenceEffect` declarations. The progress projection hard-codes them and ADR-115 asks for none.
@@ -350,18 +350,95 @@ It is equivalent to the current program: a failed `jq length` leaves `N` empty, 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/workflow/idea-handoff-cli.ts:32` |
+| `packages/app/src/workflow/idea-handoff-cli.ts:47` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:0` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:10` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:135` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:154` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:161` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:163` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:170` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:28` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:383` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:389` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:419` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:424` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:425` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:448` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:467` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:478` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:482` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:505` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:507` |
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:519` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:203` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:3` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:113` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:116` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:147` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:150` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:154` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:157` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:165` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:190` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:194` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:196` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:286` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:288` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:291` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:30` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:308` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:310` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:316` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:319` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:342` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:73` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:78` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:87` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:89` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:93` |
+| `plugins/sp/tests/skill-structure.test.ts:642` |
+| `plugins/sp/tests/skill-structure.test.ts:657` |
+| `scripts/commands/bundle-plugin-lib.test.ts:27` |
+| `scripts/commands/bundle-plugin-lib.test.ts:4` |
+| `scripts/commands/bundle-plugin-lib.ts:111` |
+| `scripts/commands/bundle-plugin-lib.ts:15` |
+| `scripts/commands/bundle-plugin-lib.ts:61` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | config/workflows/idea-pipeline.yaml:429-430 sets both answerFile and expectFile to the spec-literal `.spur/run/${vars.__runId}-ready-prepare-answer.txt` matching spec:164; spec:168 semantics hold since the output check is the answer file while ready-prepare:1 (yaml:432-445) still seeds an empty idea-ready sidecar when absent then runs the unchanged fail-closed jq shape check so a missing sidecar degrades to refineall and never fails the run; test pin updated at idea-pipeline-definition.test.ts:457-458 asserting the new literal plus expectFile === answerFile with a comment at :454-456 citing spec:168 and spec:316; input pin idea-ready.json kept per spec:282 (test:453, yaml input block :426-428 unchanged); ready-prepare:1 jq pins intact (test:461-464) and handoff-finalize locator-wrapper pins unchanged (test:482-484, :515-517); full gate spur-check PASS with digest 5ddef904225b0b1aa676a5afaf0450b809d89fa970d0234d95b932bbe423e89f per task statement |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-12T00:30:17.379Z todo → wip (system)
+- 2026-09-12T01:52:55.380Z wip → testing (system)
+- 2026-09-12T01:52:56.339Z testing → done (system)
+

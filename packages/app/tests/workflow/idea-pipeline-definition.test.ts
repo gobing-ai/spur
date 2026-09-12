@@ -1,8 +1,3 @@
-import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
-
 /**
  * R4/R5 (0366): the pre-approval bypass is implemented purely by transition
  * *declaration order* — the state-machine driver takes the first passing edge.
@@ -11,6 +6,13 @@ import { parse as parseYaml } from 'yaml';
  * taste gate, which is exactly the defect 0366 fixed. Only ordering encodes
  * that contract, so it needs its own regression guard.
  */
+
+import { describe, expect, test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 interface Guard {
     kind: string;
@@ -23,7 +25,7 @@ interface Transition {
 }
 interface Action {
     kind: string;
-    options?: { command?: string; input?: string };
+    options?: { command?: string; input?: string; answerFile?: string; expectFile?: string };
 }
 interface WorkflowDef {
     states: { id: string; pause?: boolean; onEnter?: Action[] }[];
@@ -130,6 +132,9 @@ describe('idea-pipeline definition — run-scoped artifacts (R4 of 0425)', () =>
     test('discovery/eval/gate paths are __runId-scoped', () => {
         const raw = readFileSync(join(WORKFLOWS_DIR, 'idea-pipeline.yaml'), 'utf8');
         // Every former fixed idea-* run path must carry the run-id prefix.
+        // 0824: batch-create-run condenses the sentinel/result paths behind the shared base
+        // `P=".spur/run/$__runId-idea-batch-create"`; those stems stay run-scoped through $P.
+        const pDerivedStems = ['idea-batch-create-result.json', 'idea-batch-create.done', 'idea-batch-create.failed'];
         for (const stem of [
             'idea-precheck-doctor.status',
             'idea-eval-report.md',
@@ -147,23 +152,26 @@ describe('idea-pipeline definition — run-scoped artifacts (R4 of 0425)', () =>
             'idea-batch-create-result.json',
             'idea-batch-create.done',
             'idea-batch-create.failed',
-            'idea-dep-map.tsv',
-            'idea-check-results.jsonl',
             'idea-handoff.md',
         ]) {
             // Two spellings are both run-scoped and both valid: engine template resolution
             // (`${vars.__runId}`) in non-shell options, and the env-var handoff (`$__runId`) in
             // shell action and guard commands, where embedding a value would make it executable
             // (tasks 0432 / 0435). The invariant is that the path is scoped, not how it is spelled.
+            const pScoped = pDerivedStems.includes(stem) && raw.includes('P=".spur/run/$__runId-idea-batch-create"');
             const scoped =
-                raw.includes(`.spur/run/\${vars.__runId}-${stem}`) || raw.includes(`.spur/run/$__runId-${stem}`);
+                raw.includes(`.spur/run/\${vars.__runId}-${stem}`) ||
+                raw.includes(`.spur/run/$__runId-${stem}`) ||
+                pScoped;
             expect(scoped, `${stem} must be run-id scoped in either spelling`).toBe(true);
             // No unscoped live path remains (comments may still mention idea-*).
             expect(raw).not.toMatch(new RegExp(`\\.spur/run/${stem.replace('.', '\\.')}`));
         }
-        // 0518: the per-task check scratch file in handoff-finalize is dynamic (`<wbs>`), so the
-        // fixed-stem loop above cannot cover it — assert the run-scoped prefix directly.
-        expect(raw).toContain('.spur/run/$__runId-idea-check-');
+        // 0824: the per-task check scratch file (dynamic `<wbs>` stem) and the dep-map TSV
+        // were handoff-finalize shell scratch — finalizeIdeaHandoff keeps them in memory, so
+        // the definition must not grow a fixed-path (unscoped) replacement either.
+        expect(raw).not.toMatch(/\.spur\/run\/\d{4}-idea-check-/);
+        expect(raw).not.toContain('.spur/run/idea-dep-map.tsv');
     });
 
     test('discovery instructs a run_id provenance footer on the emitted report', () => {
@@ -372,9 +380,24 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
     test('decompose instructs the task-order sidecar emission (R1)', () => {
         const agent = decomposeActions.find((a) => a.kind === 'agent.run');
 
+        // 0824: the prompt body moved into the skill reference; the input only names the
+        // operation, the reference slice and both artifact paths.
+        expect(agent?.input).toContain('sp:spec-decomposition');
+        expect(agent?.input).toContain('Idea-pipeline emission');
+        expect(agent?.input).toContain(`\${vars.__runId}-idea-task-batch.json`);
         expect(agent?.input).toContain(`\${vars.__runId}-idea-task-order.json`);
-        expect(agent?.input).toContain('depends_on_names');
-        expect(agent?.input).toContain('exactly one batch item');
+    });
+
+    test('the decompose order-sidecar contract lives in the skill reference slice (0824)', () => {
+        const ref = readFileSync(
+            join(import.meta.dir, '../../../../plugins/sp/skills/spec-decomposition/references/decomposition.md'),
+            'utf8',
+        );
+        const slice = ref.split('## Idea-pipeline emission')[1]?.split('## Common schema violations')[0] ?? '';
+        expect(slice).toContain('depends_on_names');
+        // State [] per item — the shape the decompose validator accepts.
+        expect(slice).toContain('depends_on_names: []');
+        expect(slice).toContain('exactly one batch item');
     });
 
     test('decompose validates the sidecar fails closed: array, unique batch names, name/dep coverage (R1)', () => {
@@ -393,10 +416,13 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
     });
 
     test('batch-create-run captures --json result atomically before the done sentinel (R1)', () => {
+        // 0824: the condensed program derives sentinel/result paths from the shared base P;
+        // temp/mv atomicity and the jq verdict gate are unchanged.
+        expect(batchRunCmd).toContain('P=".spur/run/$__runId-idea-batch-create"');
+        expect(batchRunCmd).toContain('"$P-result.json.tmp"');
+        expect(batchRunCmd).toContain('"$P.done"');
         expect(batchRunCmd).toContain('--json');
-        expect(batchRunCmd).toContain('$__runId-idea-batch-create-result.json.tmp');
         expect(batchRunCmd).toContain('.created == (.wbs | length)');
-        expect(batchRunCmd).toContain('$__runId-idea-batch-create.done');
     });
 
     test('batch-create-run success flows through ready-prepare to finalize, then terminal handoff', () => {
@@ -419,9 +445,17 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
         const agent = (prepare?.onEnter ?? []).find((a) => a.kind === 'agent.run');
         const shell = (prepare?.onEnter ?? []).find((a) => a.kind === 'shell');
 
-        expect(agent?.options?.input).toContain('\u0024{vars.__runId}-idea-ready.json');
-        expect(agent?.options?.input).toContain('computePlanningDigest');
-        expect(agent?.options?.input).toContain('planningDigest');
+        // 0824: the input carries only the operation, its vars and its output paths; the
+        // checklist/digest guidance moved into the skill reference.
+        expect(agent?.options?.input).toContain('references/planning-workflow.md');
+        expect(agent?.options?.input).toContain('Ready preparation');
+        expect(agent?.options?.input).toContain(`\${vars.__runId}-idea-batch-create-result.json`);
+        expect(agent?.options?.input).toContain(`\${vars.__runId}-idea-ready.json`);
+        // 0824 (spec:168): the output check is the answer file; expectFile was rejected on
+        // idea-ready.json (spec:316) because a missing sidecar must degrade the handoff
+        // recommendation to refineall, not fail the run.
+        expect(agent?.options?.answerFile).toBe(`.spur/run/\${vars.__runId}-ready-prepare-answer.txt`);
+        expect(agent?.options?.expectFile).toBe(agent?.options?.answerFile);
         // Fail-closed shape validation; absence is normalized to an empty sidecar so
         // the handoff degrades to refineall instead of failing the run.
         expect(shell?.options?.command).toContain('$__runId-idea-ready.json');
@@ -430,35 +464,32 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
         expect(shell?.options?.command).toContain('planningDigest');
     });
 
+    test('the ready-prepare checklist and digest live in the planning-workflow reference (0824)', () => {
+        const ref = readFileSync(
+            join(import.meta.dir, '../../../../plugins/sp/skills/spur-dev/references/planning-workflow.md'),
+            'utf8',
+        );
+        const slice = ref.split('**Ready preparation (ready-prepare, 0788).**')[1]?.split('## Step 6')[0] ?? '';
+        expect(slice).toContain('computePlanningDigest');
+        expect(slice).toContain('planningDigest');
+        expect(slice).toContain('never fabricate evidence');
+    });
+
     test('batch-create-run creates with --skip-ready; preparation is the ready-prepare stage (0788)', () => {
         expect(batchRunCmd).toContain('--skip-ready');
     });
 
-    test('seeded fallback NEXT is gated on ready evidence, not just task checks (0788)', () => {
-        expect(finalizeCmd).toContain('--slurpfile k "$READY"');
-        expect(finalizeCmd).toContain('.status != "ready"');
-        expect(finalizeCmd).toContain('length == 0');
-    });
-
-    test('handoff-finalize applies ordering through spur task deps and refreshes the roster (R1/R2)', () => {
-        expect(finalizeCmd).toContain('task deps');
-        expect(finalizeCmd).toContain(' set ');
-        expect(finalizeCmd).toContain('feature refresh --feature "$featureId" --json');
-    });
-
-    test('handoff-finalize checks every created task and writes the run-scoped report with one next command (R3)', () => {
-        expect(finalizeCmd).toContain('task check');
-        expect(finalizeCmd).toContain('$__runId-idea-handoff.md');
-        // mutually exclusive recommendation: ready-depth refineall OR auto runall
-        expect(finalizeCmd).toContain('--depth ready');
-        expect(finalizeCmd).toContain('dev-runall');
-        // F1 (0518 verify): the check loop fails closed — a non-JSON `task check --json`
-        // exception must abort the run, not drop the task from the JSONL results and flip
-        // the recommendation to runall. Guarded by `|| exit 1` on the JSONL append plus a
-        // row-count assertion (CHECKS lines == WBS count) before the recommendation.
-        expect(finalizeCmd).toContain('>> "$CHECKS" || exit 1');
-        expect(finalizeCmd).toContain('wc -l < "$CHECKS"');
-        expect(finalizeCmd).toContain('test "$CHECK_ROWS" = "$WBS_COUNT"');
+    test('handoff-finalize delegates to the bundled finalizeIdeaHandoff and fails closed (0824)', () => {
+        // 0824: the finalize shell is a locator wrapper. The zip/deps/refresh/check/report
+        // contract is pinned by finalizeIdeaHandoff unit tests (idea-handoff.test.ts); no
+        // second shell implementation may remain in the definition.
+        expect(finalizeCmd).toContain('packages/app/src/workflow/idea-handoff-cli.ts');
+        expect(finalizeCmd).toContain('superskill script path sp idea-handoff.mjs');
+        expect(finalizeCmd).toContain('failed closed');
+        expect(finalizeCmd).toContain('exit 1');
+        expect(finalizeCmd).not.toContain('task deps');
+        expect(finalizeCmd).not.toContain('task check');
+        expect(finalizeCmd).not.toContain('feature refresh');
     });
 
     test('terminal note points at the handoff report and no longer hardcodes runall', () => {
@@ -471,13 +502,12 @@ describe('idea-pipeline definition — task ordering, roster refresh, handoff re
  * 0519: the four dogfood findings, locked as regression invariants, plus the no-surface guard.
  *
  * The 0515/0518 describe blocks above assert the presence of the hardened behavior. This block
- * pins the exact decision/validation markers the findings depend on, so a future edit that
- * re-introduces any one of the four defects (Goal/Scope intent lost, silent design rejection,
- * empty dependencies, static runall handoff) fails a focused assertion:
+ * pins the invariants a future edit must not break:
  *
- *   F1 — handoff-finalize zips batch names to result WBS values only after equal-length and
- *        unique-name validation; the NEXT recommendation is computed from per-task checks and is
- *        mutually exclusive (any-fail ⇒ refineall, all-pass ⇒ runall).
+ *   F1 — the handoff-finalize shell stays a locator wrapper around the bundled
+ *        finalizeIdeaHandoff (zip → deps → refresh → check → report); a missing writer and a
+ *        missing plugin twin fail closed (0824). The finalize contract itself is pinned on
+ *        finalizeIdeaHandoff in idea-handoff.test.ts — no shell copy may return.
  *   F2 — the private order sidecar stays OUT of the public task-batch schema (R2 no-surface guard):
  *        the schema remains closed and carries no depends_on_names / dependencies / order field.
  */
@@ -486,23 +516,28 @@ describe('idea-pipeline definition — regression invariants and no-surface guar
         DEF.states.find((s) => s.id === 'handoff-finalize')?.onEnter?.find((a) => a.kind === 'shell')?.options
             ?.command ?? '';
 
-    test('handoff-finalize validates batch/result equal length and unique batch names before zipping', () => {
-        // F1 (0518 verify): a length mismatch or duplicate batch name would make the index-based
-        // name→WBS zip silently wrong. The zip is gated on both before any `task deps` runs.
-        expect(finalizeCmd).toContain('(.wbs | length) == ($b[0] | length)');
-        expect(finalizeCmd).toContain('($b[0] | map(.name) | unique | length) == ($b[0] | length)');
-    });
-
-    test('handoff recommendation is mutually exclusive: any-fail ⇒ refineall, all-pass ⇒ runall', () => {
-        // Finding 4: the old static runall recommendation ignored task readiness. The single NEXT
-        // computation keys off the per-task checks (`any(.[]; .pass == false)`) and emits exactly
-        // one command — ready-depth refineall when any check fails, auto runall only when clean.
-        expect(finalizeCmd).toContain('any(.[]; .pass == false)');
-        expect(finalizeCmd).toContain('"/sp:dev-refineall --feature \\($feature) --auto --depth ready"');
-        expect(finalizeCmd).toContain('"/sp:dev-runall --feature \\($feature) --auto"');
-        // The report writes the variable, never a second hardcoded recommendation.
-        expect(finalizeCmd).toContain('echo "$NEXT"');
-        expect(finalizeCmd).not.toContain('echo "/sp:dev-runall');
+    test('handoff-finalize fails closed with exit 1 when neither the monorepo writer nor the plugin twin exists (0824)', () => {
+        // R1 (0824): a seeded project without the sp plugin must not silently skip
+        // finalization. In a temp cwd (no packages/, no plugins/) with a failing
+        // `superskill` on PATH, the wrapper exits 1 naming the failure.
+        const cwd = mkdtempSync(join(tmpdir(), 'idea-handoff-failclosed-'));
+        try {
+            const superskill = join(cwd, 'superskill');
+            writeFileSync(superskill, '#!/bin/sh\necho "stub: superskill unavailable" >&2\nexit 1\n');
+            chmodSync(superskill, 0o755);
+            const result = spawnSync('sh', ['-c', finalizeCmd], {
+                cwd,
+                encoding: 'utf8',
+                env: { ...process.env, __runId: 'r-fc', featureId: 'F1', PATH: `${cwd}:${process.env.PATH ?? ''}` },
+            });
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain('failed closed');
+            expect(result.stderr).toContain('superskill install sp');
+            // No partial handoff report may appear.
+            expect(() => readFileSync(join(cwd, '.spur/run/r-fc-idea-handoff.md'))).toThrow();
+        } finally {
+            rmSync(cwd, { recursive: true, force: true });
+        }
     });
 
     test('static runall recommendation is gone from the whole workflow definition, not just the note', () => {
