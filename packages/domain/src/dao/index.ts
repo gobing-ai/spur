@@ -13,11 +13,13 @@ export {
     type CoordinationArtifactRef,
     type CoordinationRun,
     CoordinationRunDao,
+    type CoordinationRunReceipt,
     type CoordinationRunRow,
     type OccupantRef,
     type StartCoordinationRunInput,
 } from './coordination-run-dao';
 export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
+export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';
 export { type CreatePhaseRunInput, PhaseRunDao, type PhaseRunRecord } from './phase-run-dao';
 export { type CreatePlanningEventInput, PlanningEventDao, type PlanningEventRow } from './planning-event-dao';
 export { RuleEvalRunDao, type RuleEvalRunRow, RuleRunDao, type RuleRunRow } from './rule-run-dao';

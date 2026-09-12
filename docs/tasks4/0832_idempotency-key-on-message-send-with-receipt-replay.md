@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Idempotency key on message send with receipt replay
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:30.146Z
-updated_at: "2026-09-12T05:11:49.348Z"
+updated_at: "2026-09-12T06:51:32.964Z"
 feature_id: G61
 
 ---
@@ -188,15 +188,86 @@ this task — a replayed send returns the original row, which settles under its 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- ts-libs `packages/db/src/embedded-migrations.ts:49-53` — frozen migration `0014_inbox_messages_request_key` (nullable `request_key` TEXT + partial unique index `idx_inbox_messages_request_key WHERE request_key IS NOT NULL`; sha256-journaled).
+- ts-libs `packages/db/src/schema/inbox-messages.ts:20` — drizzle column `requestKey`.
+- ts-libs `packages/db/src/inbox-message-dao.ts:92-110` (`RequestKeyConflictError`), `:111-118` (`isRequestKeyUniqueViolation`), `:159-204` (`enqueueIdempotent` — insert-first, constraint arbitration, replay vs conflict). `enqueue` untouched.
+- ts-libs `packages/db/src/index.ts` — export `RequestKeyConflictError`.
+- spur `package.json` catalog `^0.4.64 → ^0.4.65` + regenerated `bun.lock` (stale nested 0.4.64 pins required a full lock regen).
+- spur `packages/app/src/services/team-service.ts:154-162` (`SendResult.replayed?`), `:315-346` (`sendMessage` 5th arg `requestKey`; keyed path routes to `enqueueIdempotent`, keyless untouched).
+- spur `apps/cli/src/commands/message.ts:37` (`--request-key`), `:96-101` (trim/normalize), `:241` (pass-through), `:248-253` (`replayed ... already accepted` receipt).
+- spur `apps/server/src/modules/messages/index.ts:60-62` (`requestKey` validation), `:65` (pass-through), `:95` (parseJsonBody type).
+- spur `packages/domain/src/migrations.ts:36-49` (fresh-DB mirror DDL extension), `:66-83` (`INBOX_MESSAGES_REQUEST_KEY_SCHEMA_SQL`), `:1319-1327` (`0043_spur_cli_inbox_messages_request_key` with `addColumnIfMissing` + table-absent skip, 0041 precedent).
+- spur `drizzle/0001_spur_cli_team_inbox.sql` + `drizzle/0043_spur_cli_inbox_messages_request_key.sql` (regenerate-on-release mirrors).
+- spur probe 3 rewritten in `apps/cli/tests/commands/agent-team.test.ts:828-864` — one row, one delivery, `replayed` marker, conflict rejection; probe 4 untouched.
+- **Deviation (root cause)**: the frozen anti-pattern "no Spur-local migration for inbox_messages" was based on the belief ts-db embedded migrations provision spur DBs — they do not; spur provisions from its own mirror (`drizzle/0001` + `__spur_cli_migrations`). Verified empirically: the new tests failed with `table inbox_messages has no column named request_key` before the mirror + 0043 step. The 0817/0041 queue-jobs precedent documents the same provision path. Root-cause fix: extend the mirror + ship 0043.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `enqueue` byte-untouched by ts-libs 15cd79b (diff adds only RequestKeyConflictError/isRequestKeyUniqueViolation/enqueueIdempotent after it); keyless branch unchanged: `packages/app/src/services/team-service.ts:331` (`requestKey !== undefined ? enqueueIdempotent : null` → falls to `dao.enqueue` :332) and keyless return shape without `replayed` :343; CLI absent flag → keyless `apps/cli/src/commands/message.ts:101-103`; keyless coexist test ts-libs `packages/db/tests/inbox-message-dao.test.ts:401` (many NULL request_key rows) — fresh run 23 pass / 0 fail |
+| R2 | MET | Insert-first replay on same key + same body + same to_id: ts-libs `packages/db/src/inbox-message-dao.ts:168-213`; probe-3 regression `apps/cli/tests/commands/agent-team.test.ts:831-866`: `second.msgId === first.msgId`, `replayed: true`, 1 row, exactly 1 drained delivery, conflict attempt leaves 1 row; no second `message.enqueued` asserted at ts-libs test :355 (1 event, 1 row) — fresh run 80 pass / 0 fail (spur) + 23 pass / 0 fail (ts-db) |
+| R3 | MET | Same key + different body or to_id throws `RequestKeyConflictError(requestKey, existingId)` (ts-libs `packages/db/src/inbox-message-dao.ts:95-109`), original row untouched (asserted :369-388), never a silent overwrite nor a second identity (probe-3 rejects.toThrow + row count still 1, `agent-team.test.ts:855-861`); typed error exported from ts-db `dist/index.d.ts:5` |
+| R4 | MET | Key threads from all three surfaces: `packages/app/src/services/team-service.ts:318-331` (5th arg → enqueueIdempotent), `apps/cli/src/commands/message.ts:38` (`--request-key`), :96-103 (trim/normalize), :245 (pass-through), :251-255 (`replayed … already accepted` receipt), `apps/server/src/modules/messages/index.ts:53,60-62,65` (body field, validation, pass-through; result incl. `replayed` returned 201 at :67); readable back: probe-3 asserts `rows[0].requestKey === 'retry-key-1'` (:846) and ts-db test :342 asserts persisted requestKey |
+| R5 | MET | Additive + reversible: nullable `request_key` TEXT (no NOT NULL, no default; ts-libs `packages/db/src/schema/inbox-messages.ts:20`) + partial unique index `WHERE request_key IS NOT NULL` (embedded migration `0014_inbox_messages_request_key`, `embedded-migrations.ts:50-52`, sha256-journaled 7277e79f…); spur mirror for fresh DBs `drizzle/0001_spur_cli_team_inbox.sql:17,25` and for legacy DBs `drizzle/0043_spur_cli_inbox_messages_request_key.sql:8-9` + `packages/domain/src/migrations.ts:66-83,1319-1327` (addColumnIfMissing, 0041 precedent); keyless clients unaffected (test :401) |
+| R6 | MET | Uniqueness by database constraint, not read-then-write: `enqueueIdempotent` inserts first via `create()` and arbitrates in the unique-violation catch (ts-libs `packages/db/src/inbox-message-dao.ts:168-213` — no pre-INSERT SELECT); concurrent same-key test :389: exactly 1 fresh + 1 replay, 1 row; probe-3's duplicate suppresses at TeamService level too |
+| R7 | MET | Probe 3 rewritten as the repeated-key suppression regression `apps/cli/tests/commands/agent-team.test.ts:831` ("regression (was 0828 probe 3, flipped by 0832)"); probe 4 (competing consumers) intact and separate at :868; both in the fresh 80 pass / 0 fail run |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| A retried submission is idempotent | MET | test | `apps/cli/tests/commands/agent-team.test.ts:831-866` (same key + same payload → same msgId, `replayed: true`, 1 row, 1 delivery; fresh run) + ts-libs `packages/db/tests/inbox-message-dao.test.ts:355-368` (no new row, exactly 1 `message.enqueued`) |
+| A changed payload mints a new identity | MET | test | New key → new row: ts-libs `packages/db/tests/inbox-message-dao.test.ts:342-354` (`replayed: false`, row persisted with its key); changed payload under the SAME key mints no second identity — conflict, row count unchanged (`agent-team.test.ts:855-861`, ts-db :369-388) |
+| Replay survives a restart | MET | command | `.spur/run/0832-restart-check.ts` this session, exit 0: keyed send accepted on a durable file DB, adapter closed, brand-new adapter + DAO reopened over the same file → `{id: same, replayed: true}`, 1 row, `request_key` read back from storage (replay lookup is stateless `findBy(requestKey)` on the durable row, ts-libs `inbox-message-dao.ts:199-204`) |
+| Competing consumers still claim at most once | MET | test | `apps/cli/tests/commands/agent-team.test.ts:868+` (probe 4, kept asserted per 0832 R7; fresh 80 pass / 0 fail run); at-most-once guard is drainPending's conditional UPDATE (ts-libs `packages/db/src/inbox-message-dao.ts:215+`) |
+| Attempts are bounded | MET | test | `apps/cli/tests/commands/agent-team.test.ts:734-782` (never-started invocation redelivered within budget, then rests failed; fresh run re-asserts it — regression owned by 0831, co-located in the same gate file) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0832 (2026-09-11, /sp:dev-review --auto, profile=auto, mode=safety)
+
+**Scope:** ts-libs commit 15cd79b (migration 0014 + enqueueIdempotent + RequestKeyConflictError + tests) + spur surface (team-service.ts:315-346, message.ts flag/receipt, messages/index.ts:53-65, domain mirror migrations + drizzle/0001 + drizzle/0043, agent-team.test.ts probe-3 regression, 3 doc satellites). 0831's surface excluded per dispatch.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS (2026-09-11) — no P1/P2; 1×P3 dispositioned to 0834/0844; fresh gate evidence below.
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | usability | Conflict error is not machine-distinguishable at the surface boundaries: server catches the typed error and returns a generic 400 `{error: <message>}` with no `instanceof RequestKeyConflictError` branch (no 409, no code field); the CLI `--json` error path bypasses the JSON envelope (plain text to stderr, exit 1). R3 is fully met at the library boundary (typed error, `requestKey`/`existingId` fields); surface distinction is text-only. Fold into 0834's operator-visible delivery states. | `apps/server/src/modules/messages/index.ts:63-67`; `apps/cli/src/index.ts:210-214` |
+| 2 | P4 (advisory) | correctness | A replayed send still emits the TeamService-level `message.sent` feed event (no `replayed` marker in the payload), so SSE/feed watchers see a second event for the same `msgId`. The frozen DAO contract ("replay emits nothing") is honored — `message.enqueued` is correctly suppressed and no delivery is duplicated. Consider suppressing or flagging when 0844 wires the Board feed. | `packages/app/src/services/team-service.ts:332-341` |
+| 3 | P4 (advisory) | correctness | The thin pass-through layers have no direct tests: the server `requestKey` validation branch and the CLI trim/empty→keyless normalization are unexercised. The typed core is well covered (5 ts-db cases + probe-3 regression through TeamService), so this is gap bookkeeping, not a defect. | `apps/server/src/modules/messages/index.ts:60-61`; `apps/cli/src/commands/message.ts:101-103` |
+| 4 | P4 (advisory) | correctness | `isRequestKeyUniqueViolation` arbitrates by matching SQLite error-message text (both observed forms covered: partial-index and `table.column`). Standard approach; if a future adapter surfaces `error.code`, prefer a code-based match. | ts-libs `packages/db/src/inbox-message-dao.ts:111-118` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `enqueue` byte-untouched (ts-libs diff adds only after it); keyless branch identical (`team-service.ts:326-329`); CLI absent flag → `undefined` (`message.ts:101-103`); keyless coexistence test (ts-db `inbox-message-dao.test.ts`: many NULL keys) |
+| R2 | MET | Insert-first replay on `body===body && toId===toId` (`inbox-message-dao.ts:172-204`); probe-3 regression: `second.msgId === first.msgId`, `replayed: true`, 1 row, 1 drained delivery, no second `message.enqueued` (`agent-team.test.ts:830-864`) |
+| R3 | MET | Same key + different body or to_id throws `RequestKeyConflictError(requestKey, existingId)`; original row untouched (asserted); never silent overwrite or second identity. Surface-level distinction is the P3 above |
+| R4 | MET | Key threads from all three surfaces — `team-service.ts:318-326` (5th arg), `message.ts:245` + `--request-key` (`:37`), `messages/index.ts:65` + body field (`:53,60-61`); readable back (`rows[0].requestKey` asserted in probe 3); `replayed` on both receipts (`message.ts:248-253`, `SendResult.replayed` `team-service.ts:154-162`) |
+| R5 | MET | Nullable `request_key TEXT`, no default; partial unique index `WHERE request_key IS NOT NULL` (ts-db 0014, hash-verified sha256 `7277e79f…`; mirror 0043 + drizzle/0001:17,25); keyless clients unaffected; legacy null-key rows first-class |
+| R6 | MET | Insert-first via `create()` — the constraint is the arbiter, no read-then-write window (`inbox-message-dao.ts:159-171`); concurrent same-key test: 1 row, 1 fresh + 1 replay |
+| R7 | MET | Probe 3 rewritten as the repeated-key regression (`agent-team.test.ts:830`); probe 4 competing-consumers intact and separate (`:868`) |
+
+##### Anti-pattern audit
+
+All frozen prohibitions held: no check-then-insert; no body hash; no row mutation on conflict; `enqueue` signature/return untouched; no `NOT NULL`/default on `request_key`. The one deviation — Spur-local migration 0043 against "do not add a Spur-local migration" — is **accepted**: the frozen premise was factually wrong (spur DBs are provisioned from the spur mirror `drizzle/0001` + `__spur_cli_migrations`, not ts-db embedded migrations; empirically re-verified with the `no column named request_key` failure), the fix follows the 0041/0817 precedent, journals via `addColumnIfMissing`, and is documented in-code (`migrations.ts:66-83,1319-1327`).
+
+##### Gate evidence (fresh, 2026-09-11)
+
+- ts-libs `packages/db`: 218 pass / 0 fail, 527 expect() calls (this review re-run).
+- spur `bun run spur-check`: 8047 pass / 0 fail, 32682 expect() calls + post-check `recommended-post-check` all rules passed (this review re-run).
+- Installed `@gobing-ai/ts-db@0.4.65` verified in `node_modules` with `enqueueIdempotent` present in dist.
+
+##### Residual risk
+
+The two-statement embedded migration (ALTER + CREATE INDEX) is executed statement-by-statement with the journal hash inserted after both (`ts-db migrate.ts:97-110`) — a crash in the window leaves the column present without the index and a duplicate-column error on re-apply. Pre-existing infrastructure pattern shared with all prior embedded migrations (0013 identical), not introduced by this diff; probability negligible on local SQLite. No other residual risk identified.
 
 ### References
 
@@ -208,4 +279,7 @@ this task — a replayed send returns the original row, which settles under its 
 ### History
 
 - 2026-09-12T04:57:17.749Z backlog → todo (system)
+- 2026-09-12T05:54:14.063Z todo → wip (system)
+- 2026-09-12T06:51:23.635Z wip → testing (system)
+- 2026-09-12T06:51:32.964Z testing → done (system)
 

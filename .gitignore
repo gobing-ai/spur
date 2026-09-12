@@ -143,6 +143,7 @@ spur.js
 /.spur/memory/sessions/*-checkpoint.md
 /.spur/reports/
 /.spur/tmp/
+/.spur/host/
 
 logs/
 .tmp/

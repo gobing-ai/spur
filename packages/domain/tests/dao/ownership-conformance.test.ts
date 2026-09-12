@@ -113,14 +113,14 @@ describe('history schema ownership conformance (task 0749 / ADR-105)', () => {
     });
 
     describe('HISTORY_RESET_TABLES split and coverage (R1a, R1b, R1d)', () => {
-        test('contains exactly 34 tables: 15 importer-owned + 19 spur-owned', () => {
-            expect(IMPORTER_OWNED_TABLES.length).toBe(15);
+        test('contains exactly 35 tables: 16 importer-owned + 19 spur-owned', () => {
+            expect(IMPORTER_OWNED_TABLES.length).toBe(16);
             expect(SPUR_OWNED_HISTORY_TABLES.length).toBe(19);
-            expect(HISTORY_RESET_TABLES.length).toBe(34);
+            expect(HISTORY_RESET_TABLES.length).toBe(35);
         });
 
-        test('matches expected 34 table names exactly (regression check)', () => {
-            const expected34 = [
+        test('matches expected 35 table names exactly (regression check)', () => {
+            const expected35 = [
                 'history_message',
                 'history_tool_call',
                 'history_skill_call',
@@ -131,6 +131,7 @@ describe('history schema ownership conformance (task 0749 / ADR-105)', () => {
                 'history_etl_antigravity',
                 'history_etl_claude',
                 'history_etl_codex',
+                'history_etl_deepseek',
                 'history_etl_gemini',
                 'history_etl_grok',
                 'history_etl_omp',
@@ -157,7 +158,7 @@ describe('history schema ownership conformance (task 0749 / ADR-105)', () => {
                 'history_import_ledger',
             ];
 
-            expect([...HISTORY_RESET_TABLES].sort()).toEqual([...expected34].sort());
+            expect([...HISTORY_RESET_TABLES].sort()).toEqual([...expected35].sort());
         });
 
         test('R1c: upstream-added source landing table automatically covered without Spur edit', () => {

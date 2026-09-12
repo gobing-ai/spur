@@ -35,10 +35,38 @@ CREATE TABLE IF NOT EXISTS inbox_messages (
     updated_at INTEGER NOT NULL,
     delivered_at INTEGER,
     inject_attempts INTEGER NOT NULL DEFAULT 0,
-    inject_error TEXT
+    inject_error TEXT,
+    request_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_to_status ON inbox_messages (to_id, status);
+
+-- 0832: caller-minted idempotency key on send. Partial unique index — SQLite
+-- allows unlimited NULLs, so keyless sends are unaffected while keyed sends are
+-- collision-proof (the constraint arbitrates concurrent submissions).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_messages_request_key ON inbox_messages (request_key) WHERE request_key IS NOT NULL;
+`;
+
+/**
+ * 0832: add the `request_key` column (nullable, no default) plus the partial
+ * unique index `idx_inbox_messages_request_key` to legacy `inbox_messages`
+ * tables created before task 0832. Fresh databases already get both from
+ * `INBOX_MESSAGES_SCHEMA_SQL` (`0000`/`0001`), so this migration journals
+ * itself without executing when the column is present (`addColumnIfMissing`,
+ * the `0041` queue-jobs precedent). The partial index mirrors ts-db 0.4.65's
+ * embedded migration `0014_inbox_messages_request_key` — the constraint is the
+ * race arbiter behind `enqueueIdempotent`.
+ *
+ * Ownership note: the frozen spec said "no Spur-local migration for
+ * inbox_messages; the table belongs to ts-db" — but spur DBs are provisioned
+ * from THIS mirror (drizzle/0001 + `__spur_cli_migrations` journal), not from
+ * ts-db's embedded migrations, so without a Spur-side incremental step
+ * `InboxMessageDao.enqueueIdempotent` fails with `no column named request_key`
+ * on every existing database (the 0817/0041 shape, empirically re-verified).
+ */
+export const INBOX_MESSAGES_REQUEST_KEY_SCHEMA_SQL = `
+ALTER TABLE inbox_messages ADD COLUMN request_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_messages_request_key ON inbox_messages (request_key) WHERE request_key IS NOT NULL;
 `;
 
 /**
@@ -118,6 +146,13 @@ CREATE INDEX IF NOT EXISTS idx_system_events_sequence ON system_events (sequence
  * occupant pins + path-only artifact refs so a sibling agent can address a run
  * by runId. Never stdout/stderr bodies (design §4). `run_id` is the primary
  * key (one row per invoke); `generation` is monotonic per specId.
+ *
+ * 0833 receipt columns: `message_ids_json` (originating inbox message ids — a
+ * JSON array because one drain can claim up to 100 messages into one
+ * invocation, mirroring `artifact_refs_json`), `task_id` (the `--task` flag
+ * when the run came from task work), and `outcome` (closed vocabulary
+ * 'run-exit-only' | 'errored' | 'verified'; the exit sink never writes
+ * 'verified' — only the workflow verification path may).
  */
 export const COORDINATION_RUNS_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS coordination_runs (
@@ -129,10 +164,34 @@ CREATE TABLE IF NOT EXISTS coordination_runs (
     status TEXT NOT NULL,
     started_at TEXT NOT NULL,
     completed_at TEXT,
-    artifact_refs_json TEXT NOT NULL DEFAULT '[]'
+    artifact_refs_json TEXT NOT NULL DEFAULT '[]',
+    message_ids_json TEXT NOT NULL DEFAULT '[]',
+    task_id TEXT,
+    outcome TEXT NOT NULL DEFAULT 'run-exit-only'
 );
 
 CREATE INDEX IF NOT EXISTS idx_coordination_runs_spec ON coordination_runs (spec_id, generation DESC);
+CREATE INDEX IF NOT EXISTS idx_coordination_runs_task ON coordination_runs (task_id);
+`;
+
+/**
+ * Add the 0833 completion-receipt columns to legacy `coordination_runs` tables
+ * created before this migration (ADR-057 wave 1 DDL had none of them). The exit
+ * sink in `AgentService.executeRun` writes the receipt on every invocation, and
+ * `CREATE TABLE IF NOT EXISTS` never adds columns to an existing table, so
+ * without this step every pre-0833 database's first run exit failed with
+ * `SQLiteError: table coordination_runs has no column named message_ids_json`.
+ * Narrow ALTERs, byte-compatible with `COORDINATION_RUNS_SCHEMA_SQL` above and
+ * mirrored in `drizzle/0044_spur_cli_coordination_runs_receipt_columns.sql`
+ * (the 0041 queue-jobs precedent). The columns ship together, so
+ * `message_ids_json` is the representative guard column for
+ * `addColumnIfMissing`.
+ */
+export const COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL = `
+ALTER TABLE coordination_runs ADD COLUMN message_ids_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE coordination_runs ADD COLUMN task_id TEXT;
+ALTER TABLE coordination_runs ADD COLUMN outcome TEXT NOT NULL DEFAULT 'run-exit-only';
+CREATE INDEX IF NOT EXISTS idx_coordination_runs_task ON coordination_runs (task_id);
 `;
 
 /**
@@ -1288,6 +1347,23 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0042_spur_cli_history_model_fallback_index',
         sql: HISTORY_MESSAGE_MODEL_FALLBACK_INDEX_SCHEMA_SQL,
     },
+    {
+        // 0832: request_key column + partial unique index on legacy inbox_messages
+        // tables (ts-db 0.4.65 enqueueIdempotent writes the column). addColumnIfMissing
+        // guards with `request_key`; table-absent DBs skip via the 0041 precedent.
+        id: '0043_spur_cli_inbox_messages_request_key',
+        sql: INBOX_MESSAGES_REQUEST_KEY_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'inbox_messages', column: 'request_key' },
+    },
+    {
+        // 0833: completion-receipt columns on legacy coordination_runs tables
+        // (the exit sink writes them on every invocation). addColumnIfMissing
+        // guards with `message_ids_json`; table-absent DBs skip via the 0041
+        // precedent (the drizzle/ folder-load path ships no 0010 step).
+        id: '0044_spur_cli_coordination_runs_receipt_columns',
+        sql: COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'coordination_runs', column: 'message_ids_json' },
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -1509,6 +1585,17 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0041_spur_cli_queue_jobs_deadline_lease_columns' &&
             !(await tableExists(adapter, 'queue_jobs'));
 
+        // 0043 ALTERs inbox_messages — same table-absence shape as 0041/0027.
+        const inboxRequestKeySkip =
+            migration.id === '0043_spur_cli_inbox_messages_request_key' &&
+            !(await tableExists(adapter, 'inbox_messages'));
+
+        // 0044 ALTERs coordination_runs — same table-absence shape as 0041/0043
+        // (the drizzle folder-load path has no 0010 step creating the table).
+        const coordinationReceiptColumnsSkip =
+            migration.id === '0044_spur_cli_coordination_runs_receipt_columns' &&
+            !(await tableExists(adapter, 'coordination_runs'));
+
         const historyToolIdentitySkip =
             migration.id === '0034_spur_cli_history_tool_identity' &&
             !(await tableExists(adapter, 'history_tool_call'));
@@ -1558,6 +1645,8 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip &&
             !queueJobsDeadlineLeaseSkip &&
+            !inboxRequestKeySkip &&
+            !coordinationReceiptColumnsSkip &&
             !historyToolIdentitySkip &&
             !historyMeasureVectorSkip &&
             !historyRollupWatermarkSkip &&

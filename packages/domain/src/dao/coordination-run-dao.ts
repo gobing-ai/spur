@@ -44,6 +44,26 @@ export interface CoordinationRunRow {
     started_at: string;
     completed_at: string | null;
     artifact_refs_json: string;
+    message_ids_json: string;
+    task_id: string | null;
+    outcome: string;
+}
+
+/**
+ * 0833 completion receipt: the durable association between a finished run and
+ * the request that caused it, written by the exit sink in
+ * `AgentService.executeRun` (R1). `messageIds` are the inbox messages claimed
+ * by the drain that produced the invocation — empty for a run with no
+ * originating request (R7: an empty list, never an invented association).
+ * `outcome` is a closed vocabulary: the exit sink writes only
+ * 'run-exit-only' (zero exit, no verification result — R4) or 'errored';
+ * 'verified' is reserved for the workflow verification path (R3: run exit is
+ * not task completion).
+ */
+export interface CoordinationRunReceipt {
+    messageIds: string[];
+    taskId?: string;
+    outcome: 'run-exit-only' | 'errored' | 'verified';
 }
 
 /** Input for inserting a run at invoke start (status=running). */
@@ -81,19 +101,59 @@ export class CoordinationRunDao {
         );
     }
 
-    /** Update a run's terminal status, completion timestamp, and artifact refs. */
+    /**
+     * Update a run's terminal status, completion timestamp, artifact refs, and
+     * completion receipt (0833 R1). The receipt is required so no caller can
+     * forget the correlation — `{ messageIds: [], outcome: … }` is the
+     * legitimate empty case (R7).
+     */
     async updateExit(
         runId: string,
         status: 'exited' | 'errored',
         completedAt: string,
         artifactRefsJson: string,
+        receipt: CoordinationRunReceipt,
     ): Promise<void> {
         await this.db.run(
-            `UPDATE coordination_runs SET status = ?, completed_at = ?, artifact_refs_json = ? WHERE run_id = ?`,
+            `UPDATE coordination_runs
+             SET status = ?, completed_at = ?, artifact_refs_json = ?, message_ids_json = ?, task_id = ?, outcome = ?
+             WHERE run_id = ?`,
             status,
             completedAt,
             artifactRefsJson,
+            JSON.stringify(receipt.messageIds),
+            receipt.taskId ?? null,
+            receipt.outcome,
             runId,
+        );
+    }
+
+    /**
+     * Runs whose receipt records the given originating message id (0833 R5).
+     * json1 `json_each` over `message_ids_json`; ordering is newest-start first.
+     */
+    async listByMessageId(messageId: string): Promise<CoordinationRunRow[]> {
+        return (
+            (await this.db.queryAll<CoordinationRunRow>(
+                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
+                 FROM coordination_runs r, json_each(r.message_ids_json)
+                 WHERE json_each.value = ?
+                 ORDER BY r.started_at DESC`,
+                messageId,
+            )) ?? []
+        );
+    }
+
+    /** Runs whose receipt records the given task id (0833 R5). */
+    async listByTaskId(taskId: string): Promise<CoordinationRunRow[]> {
+        return (
+            (await this.db.queryAll<CoordinationRunRow>(
+                `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
+                 FROM coordination_runs
+                 WHERE task_id = ?
+                 ORDER BY started_at DESC`,
+                taskId,
+            )) ?? []
         );
     }
 
@@ -102,7 +162,7 @@ export class CoordinationRunDao {
         try {
             return (
                 (await this.db.queryFirst<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
                      FROM coordination_runs WHERE run_id = ?`,
                     runId,
                 )) ?? null
@@ -120,7 +180,7 @@ export class CoordinationRunDao {
         try {
             return (
                 (await this.db.queryFirst<CoordinationRunRow>(
-                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json
+                    `SELECT spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id, outcome
                      FROM coordination_runs
                      WHERE spec_id = ?
                      ORDER BY generation DESC, started_at DESC

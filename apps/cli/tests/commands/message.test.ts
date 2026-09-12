@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TeamService } from '@gobing-ai/spur-app';
-import { CoordinationRunDao, createMigratedDb, SystemEventDao } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, createMigratedDb, InboxMessageDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { defaultSleep, parseInterval, runMessageWatch } from '../../src/commands/message';
 import { main } from '../../src/index';
@@ -144,6 +144,105 @@ describe('spur message inbox', () => {
         } finally {
             await cleanup();
         }
+    });
+
+    // 0834 R6: --unresolved filters to the reconciler's holds; --json rows carry
+    // attempts, last error, hold reason, and the run↔message correlation.
+    test('0834: --unresolved --json shows held messages with reason, attempts, error, run correlation', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const out = createCapturedOutput();
+        const inbox = new InboxMessageDao(db);
+        // In-flight, receipt missing → outcome-unknown.
+        const stuck = await inbox.enqueue('operator', 'planner', 'ambiguous work');
+        await inbox.drainPending('planner');
+        // Normal redeliverable queued row → omitted from --unresolved.
+        const normal = await inbox.enqueue('operator', 'planner', 'normal work');
+        // Over budget → attempts-exhausted (the reconciler's only write marks it failed).
+        const budget = await inbox.enqueue('operator', 'planner', 'exhausted work');
+        await db.run('UPDATE inbox_messages SET inject_attempts = ?1 WHERE id = ?2', 3, budget);
+        // Terminal delivery failure with its recorded error.
+        const broken = await inbox.enqueue('operator', 'planner', 'broken delivery');
+        await inbox.markFailed(broken, 'invocation never started');
+
+        const code = await main(['message', 'inbox', '--agent', 'planner', '--unresolved', '--json'], {
+            db,
+            output: out,
+        });
+        expect(code).toBe(0);
+        const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+        const byId = new Map<string, Record<string, unknown>>(
+            payload.messages.map((m: Record<string, unknown>) => [m.id as string, m]),
+        );
+        expect(payload.count).toBe(3);
+        expect(new Set(byId.keys())).toEqual(new Set([stuck, budget, broken]));
+
+        const stuckRow = byId.get(stuck) as Record<string, unknown>;
+        expect(stuckRow.reason).toBe('outcome-unknown');
+        expect(stuckRow.injectAttempts).toBe(1);
+        expect(stuckRow.artifacts).toEqual([]);
+
+        const budgetRow = byId.get(budget) as Record<string, unknown>;
+        expect(budgetRow.reason).toBe('attempts-exhausted');
+        expect(budgetRow.status).toBe('failed'); // marked by this pass
+        expect(budgetRow.injectError).toBe('attempts exhausted after 3 deliveries');
+
+        const brokenRow = byId.get(broken) as Record<string, unknown>;
+        expect(brokenRow.reason).toBe('delivery-failed');
+        expect(brokenRow.injectError).toBe('invocation never started');
+        expect(byId.has(normal)).toBe(false);
+    });
+
+    test('0834: run-correlated rows carry runId, taskId, and artifacts in --json', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const out = createCapturedOutput();
+        const inbox = new InboxMessageDao(db);
+        const runs = new CoordinationRunDao(db);
+        const msg = await inbox.enqueue('operator', 'planner', 'exit-only work');
+        await inbox.drainPending('planner');
+        await runs.insertStart({
+            specId: 'planner',
+            agentKind: 'claude-code',
+            processId: null,
+            runId: 'run-x',
+            generation: 1,
+            startedAt: new Date().toISOString(),
+        });
+        await runs.updateExit(
+            'run-x',
+            'exited',
+            new Date().toISOString(),
+            JSON.stringify([{ kind: 'result', path: '/tmp/x.json' }]),
+            {
+                messageIds: [msg],
+                taskId: 'task-7',
+                outcome: 'run-exit-only',
+            },
+        );
+
+        const code = await main(['message', 'inbox', '--agent', 'planner', '--json'], { db, output: out });
+        expect(code).toBe(0);
+        const payload = JSON.parse(out.messages.at(-1) ?? '{}');
+        const row = payload.messages[0];
+        expect(row.reason).toBe('run-exit-only');
+        expect(row.runId).toBe('run-x');
+        expect(row.taskId).toBe('task-7');
+        expect(row.artifacts).toEqual([{ kind: 'result', path: '/tmp/x.json' }]);
+        expect(row.injectAttempts).toBe(1);
+    });
+
+    test('0834: plain-text --unresolved lists only held messages', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        const out = createCapturedOutput();
+        const inbox = new InboxMessageDao(db);
+        const stuck = await inbox.enqueue('operator', 'planner', 'ambiguous work');
+        await inbox.drainPending('planner');
+        await inbox.enqueue('operator', 'planner', 'normal work');
+
+        const code = await main(['message', 'inbox', '--agent', 'planner', '--unresolved'], { db, output: out });
+        expect(code).toBe(0);
+        const text = out.messages.join('\n');
+        expect(text).toContain(stuck);
+        expect(text).not.toContain('normal work');
     });
 
     test('requires --agent', async () => {

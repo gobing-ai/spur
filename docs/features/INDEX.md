@@ -78,7 +78,7 @@
     ├── [verifying] **G4**: Inter-agent control plane ([G4_inter-agent-control-plane.md](./G4_inter-agent-control-plane.md))
     ├── [done] **G5**: Restore inline --agent with host-session-only semantics ([G5_restore-inline-agent-with-host-session-only-semantics.md](./G5_restore-inline-agent-with-host-session-only-semantics.md))
     └── [done] **G6**: Projects and agent fleet unification design ([G6_projects-and-agent-fleet-unification-design.md](./G6_projects-and-agent-fleet-unification-design.md))
-        ├── [backlog] **G61**: Durable project command and result loop ([G61_durable-project-command-and-result-loop.md](./G61_durable-project-command-and-result-loop.md))
+        ├── [done] **G61**: Durable project command and result loop ([G61_durable-project-command-and-result-loop.md](./G61_durable-project-command-and-result-loop.md))
         ├── [backlog] **G62**: Project fleet, orchestrator binding, and rest/GTD strategy runtime ([G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md](./G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md))
         ├── [backlog] **G63**: Projects board module and global input wiring ([G63_projects-board-module-and-global-input-wiring.md](./G63_projects-board-module-and-global-input-wiring.md))
         └── [backlog] **G64**: Retire Workspace, Inbox, Teams, and spur team ([G64_retire-workspace-inbox-teams-and-spur-team.md](./G64_retire-workspace-inbox-teams-and-spur-team.md))

@@ -18,6 +18,7 @@ agent that is not running right now still receives them — senders and receiver
 spur message send <body> --to <id> [--from <id>] [--json]
 spur message send <body> --to <id> --wait [--until <state>] [--timeout <ms>]
 spur message send <body> --role <name> [--json]
+spur message send <body> --to <id> --request-key <key> [--json]
 ```
 
 | Flag | Description |
@@ -25,6 +26,7 @@ spur message send <body> --role <name> [--json]
 | `--to <id>` | Recipient agent id (mutually exclusive with `--role`) |
 | `--role <name>` | Address by role or executor name; must resolve to exactly one instance |
 | `--from <id>` | Sender id (default: `operator`) |
+| `--request-key <key>` | Caller-minted idempotency key. The same key with the same body + recipient replays the original receipt (`replayed: true`, no second row/delivery); the same key with a different payload fails with a request-key-conflict error (0832). |
 | `--wait` | Block until the recipient reaches the `--until` state (default: `invoke-exit`) |
 | `--until <state>` | Wait target: `injected` \| `invoke-exit` |
 | `--timeout <ms>` | Caller deadline in milliseconds |
@@ -43,12 +45,15 @@ spur message send "Build the report" --to builder --wait --timeout 60000
 ## spur message inbox / reply / watch
 
 ```bash
-spur message inbox --agent <id> [--json]
+spur message inbox --agent <id> [--unresolved] [--json]
 spur message reply <msg-id> <body> [--json]
 spur message watch --agent <id> [--interval <ms>] [--json]
 ```
 
-`inbox` lists what an agent has received. `reply` threads a conversation onto a message.
+`inbox` lists what an agent has received; `--unresolved` filters to messages the 0834 delivery
+reconciler holds (`delivery-failed` | `attempts-exhausted` | `outcome-unknown` | `run-exit-only`),
+and `--json` rows carry `injectAttempts`, `injectError`, `reason`, `runId`, `taskId`, `artifacts`.
+`reply` threads a conversation onto a message.
 `watch` polls an inbox (default every 2000 ms) and prints new messages as they arrive — the
 session-side half of team coordination (Ctrl-C to exit). With `--json`, each new message is one
 JSON object, suitable for machine consumption.

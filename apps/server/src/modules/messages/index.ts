@@ -50,16 +50,19 @@ export const messagesModule: ServerModule = {
         app.post('/api/messages', async (c) => {
             const parsed = await parseJsonBody(c);
             if ('error' in parsed) return c.json({ error: parsed.error }, 400);
-            const { to, body, from } = parsed;
+            const { to, body, from, requestKey } = parsed;
             if (typeof to !== 'string' || to.length === 0) return c.json({ error: 'field "to" is required' }, 400);
             if (typeof body !== 'string' || body.length === 0)
                 return c.json({ error: 'field "body" is required' }, 400);
             if (from !== undefined && (typeof from !== 'string' || from.length === 0)) {
                 return c.json({ error: 'field "from" must be a non-empty string when present' }, 400);
             }
+            if (requestKey !== undefined && (typeof requestKey !== 'string' || requestKey.length === 0)) {
+                return c.json({ error: 'field "requestKey" must be a non-empty string when present' }, 400);
+            }
             const svc = ctx.teamService();
             try {
-                const result = await svc.sendMessage(from ?? null, to, body);
+                const result = await svc.sendMessage(from ?? null, to, body, undefined, requestKey);
                 return c.json(result, 201);
             } catch (err) {
                 return c.json({ error: errMsg(err) }, 400);
@@ -89,7 +92,7 @@ export const messagesModule: ServerModule = {
 /** Read and validate a JSON object body; returns `{ error }` on malformed input. */
 async function parseJsonBody(
     c: Context,
-): Promise<{ to?: unknown; body?: unknown; from?: unknown } | { error: string }> {
+): Promise<{ to?: unknown; body?: unknown; from?: unknown; requestKey?: unknown } | { error: string }> {
     let json: unknown;
     try {
         json = await c.req.json();
