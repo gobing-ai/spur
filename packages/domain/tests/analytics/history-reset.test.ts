@@ -40,12 +40,12 @@ describe('resetHistoryTables', () => {
 
         const result = await resetHistoryTables(db);
 
-        // The other nine importer-created etl tables don't exist pre-import.
+        // The other ten importer-created etl tables don't exist pre-import.
         expect(result.skipped).toEqual(
             HISTORY_RESET_TABLES.filter((t) => t.startsWith('history_etl_') && t !== 'history_etl_pi'),
         );
         expect(result.unknown).toEqual([]);
-        expect(result.cleared.length).toBe(HISTORY_RESET_TABLES.length - 9);
+        expect(result.cleared.length).toBe(HISTORY_RESET_TABLES.length - 10);
 
         const remaining = await db.queryAll<{ n: number }>(
             `SELECT (SELECT COUNT(*) FROM history_message)
@@ -56,7 +56,7 @@ describe('resetHistoryTables', () => {
 
         // Idempotent second run.
         const again = await resetHistoryTables(db);
-        expect(again.cleared.length).toBe(HISTORY_RESET_TABLES.length - 9);
+        expect(again.cleared.length).toBe(HISTORY_RESET_TABLES.length - 10);
         expect(again.unknown).toEqual([]);
     });
 

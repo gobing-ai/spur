@@ -156,6 +156,8 @@ export interface SendResult {
     toId: string;
     status: 'queued' | 'injected';
     injected: boolean;
+    /** Present only on a keyed send (0832): true when the request key replayed an earlier submission. */
+    replayed?: boolean;
 }
 
 /** A single inbox row in display form. */
@@ -166,6 +168,10 @@ export interface InboxEntry {
     status: string;
     createdAt: string;
     inReplyTo: string | null;
+    /** Delivery attempt count (0834 R6); populated by {@link TeamService.getInbox}. */
+    injectAttempts?: number;
+    /** Last delivery error, when the drain recorded one (0834 R6). */
+    injectError?: string | null;
 }
 
 /** Result of listing an agent's inbox. */
@@ -313,11 +319,21 @@ export class TeamService {
      * deferred `--drain` delivery). In Phase 1-3 there is no live daemon, so the
      * message stays queued.
      */
-    async sendMessage(fromId: string | null, toId: string, body: string, replyTo?: string): Promise<SendResult> {
+    async sendMessage(
+        fromId: string | null,
+        toId: string,
+        body: string,
+        replyTo?: string,
+        requestKey?: string,
+    ): Promise<SendResult> {
         validateAgentId(toId);
         if (fromId !== null) validateAgentId(fromId);
         const dao = await this.inboxDao();
-        const msgId = await dao.enqueue(fromId, toId, body, replyTo);
+        // Keyed send (0832): routes through `enqueueIdempotent` — same key + same payload
+        // replays the original row (no second row, no second delivery). Keyless path unchanged.
+        const keyed =
+            requestKey !== undefined ? await dao.enqueueIdempotent(fromId, toId, body, requestKey, replyTo) : null;
+        const msgId = keyed?.id ?? (await dao.enqueue(fromId, toId, body, replyTo));
         // Emit a single lifecycle event: `message.replied` when this send is a reply
         // (thread context), otherwise `message.sent`. Metadata only — never the body.
         this.emitMessageEvent(replyTo !== undefined ? 'message.replied' : 'message.sent', {
@@ -327,7 +343,9 @@ export class TeamService {
             threadId: replyTo ?? null,
             createdAt: new Date().toISOString(),
         });
-        return { msgId, toId, status: 'queued', injected: false };
+        return keyed === null
+            ? { msgId, toId, status: 'queued', injected: false }
+            : { msgId, toId, status: 'queued', injected: false, replayed: keyed.replayed };
     }
 
     /** List the pending + delivered messages addressed to an agent. */
@@ -343,6 +361,8 @@ export class TeamService {
                 status: row.status,
                 createdAt: new Date(row.createdAt).toISOString(),
                 inReplyTo: row.inReplyTo,
+                injectAttempts: row.injectAttempts,
+                injectError: row.injectError,
             })),
             count: rows.length,
         };
@@ -368,6 +388,40 @@ export class TeamService {
             })),
             count: rows.length,
         };
+    }
+
+    /**
+     * Release claimed (injected) messages back to queued for redelivery (0831 R1).
+     * Only rows currently at `injected` match the guard, so settling a message
+     * twice is a no-op; `injectAttempts` is left untouched — the claim counter
+     * IS the bounded attempt budget (0831 R3). Returns the released count.
+     */
+    async releasePending(msgIds: string[]): Promise<number> {
+        if (msgIds.length === 0) return 0;
+        const dao = await this.inboxDao();
+        return dao.release(msgIds);
+    }
+
+    /**
+     * Settle claimed messages as delivered — the invocation was ACCEPTED (0831 R2).
+     * Delivery state stays separate from run outcome: an accepted invocation
+     * settles `delivered` regardless of the exit code (0831 Q&A).
+     */
+    async settleDelivered(msgIds: string[]): Promise<void> {
+        if (msgIds.length === 0) return;
+        const dao = await this.inboxDao();
+        for (const msgId of msgIds) await dao.markDelivered(msgId);
+    }
+
+    /**
+     * Settle claimed messages as failed — delivery cannot be completed (0831 R3).
+     * Reserved for budget exhaustion and unrecoverable delivery; a failing RUN
+     * is never a message failure (0831 R2, task 0833 owns run receipts).
+     */
+    async settleFailed(msgIds: string[], error: string): Promise<void> {
+        if (msgIds.length === 0) return;
+        const dao = await this.inboxDao();
+        for (const msgId of msgIds) await dao.markFailed(msgId, error);
     }
 
     /** Count pending (queued) messages for an agent — used by the drain loop to idle (0253). */

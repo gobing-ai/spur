@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _resetAgentServiceShimsForTest, type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
-import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
+import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { runAgentLoop, runAgentRun, splitEditorCommand, validateAgentSelector } from '../../src/commands/agent';
 import { type CliContext, createCliContext, resolveAgentRoles } from '../../src/context';
@@ -825,6 +825,47 @@ describe('runAgentLoop', () => {
         expect(code).toBe(0);
         expect(run).toHaveBeenCalledTimes(1);
         expect(sleepCallCount).toBe(0);
+    });
+
+    // 0834 R2/R7: restart with in-flight work through the real call path — the
+    // loop reconciles BEFORE its first drain, marks the over-budget row failed
+    // (its only write), names the receipt-less row outcome-unknown, and never
+    // gates on the report.
+    test('0834: loop startup reconciles in-flight work before its first drain', async () => {
+        const output = captureOutput();
+        const ctx = createCliContext({ cwd: tempDir, output, db });
+        const team = new TeamService(ctx);
+        await team.createAgentSpec({ id: 'reconcile-worker', type: 'claude-code' });
+        const inbox = new InboxMessageDao(db);
+        // In-flight: consumed by a previous drain that never settled (no receipt).
+        const stuck = await inbox.enqueue('operator', 'reconcile-worker', 'ambiguous work');
+        await inbox.drainPending('reconcile-worker');
+        // Over-budget redelivery still waiting in the queue.
+        const overBudget = await inbox.enqueue('operator', 'reconcile-worker', 'exhausted work');
+        await db.run('UPDATE inbox_messages SET inject_attempts = ?1 WHERE id = ?2', 3, overBudget);
+
+        const run = mock(() => Promise.resolve(0));
+        const customCtx = {
+            ...ctx,
+            agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
+        };
+
+        const code = await runAgentLoop(
+            customCtx,
+            { spec: 'reconcile-worker', poll: '100' },
+            { maxIterations: 1, sleep: async () => {} },
+        );
+        expect(code).toBe(0);
+        const stdout = output.stdout.join('\n');
+        expect(stdout).toContain('reconcile: scanned=2 unresolved=2 exhausted=1');
+        expect(stdout).toContain(`${stuck} outcome-unknown`);
+        expect(stdout).toContain(`${overBudget} attempts-exhausted`);
+        // The reconciler's only write: the budget row is terminally failed.
+        const row = await inbox.getById(overBudget);
+        expect(row?.status).toBe('failed');
+        expect(row?.injectError).toBe('attempts exhausted after 3 deliveries');
+        // Reconciliation preceded dispatch: nothing re-claimed, no agent run.
+        expect(run).not.toHaveBeenCalled();
     });
 
     test('runAgentLoop sleeps using default sleep helper when idle', async () => {

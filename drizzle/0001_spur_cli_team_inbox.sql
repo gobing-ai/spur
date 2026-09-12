@@ -13,7 +13,13 @@ CREATE TABLE IF NOT EXISTS inbox_messages (
     updated_at INTEGER NOT NULL,
     delivered_at INTEGER,
     inject_attempts INTEGER NOT NULL DEFAULT 0,
-    inject_error TEXT
+    inject_error TEXT,
+    request_key TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_inbox_messages_to_status ON inbox_messages (to_id, status);
+
+-- 0832: caller-minted idempotency key on send. Partial unique index — SQLite
+-- allows unlimited NULLs, so keyless sends are unaffected while keyed sends are
+-- collision-proof (the constraint arbitrates concurrent submissions).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_messages_request_key ON inbox_messages (request_key) WHERE request_key IS NOT NULL;

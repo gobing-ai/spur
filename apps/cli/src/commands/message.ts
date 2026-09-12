@@ -2,11 +2,13 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     type AgentService,
     DEFAULT_STALL_MS,
+    DeliveryReconciler,
     followSystemEventsAfter,
     type InboxEntry,
     resolveAgentSelector,
     type SendWaitUntil,
     TeamService,
+    type UnresolvedDelivery,
     WaitError,
     waitForOccupant,
 } from '@gobing-ai/spur-app';
@@ -34,6 +36,10 @@ export function registerMessageCommand(program: Command, context: CliContext): v
             'Address by Layer-1 role or executor name; must resolve to exactly one materialized instance',
         )
         .option('--from <id>', 'Sender id', DEFAULT_FROM)
+        .option(
+            '--request-key <key>',
+            'Caller-minted idempotency key: the same key + payload replays the original receipt instead of enqueuing twice (0832)',
+        )
         .option('--wait', 'Block until the recipient occupant reaches --until (default: invoke-exit)')
         .option(...SHARED_OPTIONS.untilMessage, collectSendUntil, [])
         .option(...SHARED_OPTIONS.timeout, parseTimeout)
@@ -94,6 +100,10 @@ export function registerMessageCommand(program: Command, context: CliContext): v
             const code = await runMessageSend(svc, context, body, {
                 ...options,
                 to: toId ?? '',
+                requestKey:
+                    typeof options.requestKey === 'string' && options.requestKey.length > 0
+                        ? options.requestKey.trim()
+                        : undefined,
             });
             context.setExitCode(code);
         });
@@ -101,6 +111,10 @@ export function registerMessageCommand(program: Command, context: CliContext): v
     noun.command('inbox')
         .description('List messages addressed to an agent.')
         .requiredOption(...SHARED_OPTIONS.agentIdMessage)
+        .option(
+            '--unresolved',
+            'Only messages the 0834 reconciler holds (delivery-failed | attempts-exhausted | outcome-unknown | run-exit-only)',
+        )
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
@@ -175,6 +189,7 @@ async function runMessageSend(
         timeout?: number;
         json?: boolean;
         jsonEnvelope?: boolean;
+        requestKey?: string;
     },
 ): Promise<number> {
     const trimmed = body.trim();
@@ -233,13 +248,17 @@ async function runMessageSend(
         pinnedBeforeSend = { specId: options.to, runId: occupant.runId, generation: occupant.generation };
     }
 
-    const result = await svc.sendMessage(from, options.to, trimmed);
+    const result = await svc.sendMessage(from, options.to, trimmed, undefined, options.requestKey);
 
     if (options.wait !== true) {
         if (options.json) {
             context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
         } else {
-            context.output.write(`queued ${result.msgId} → ${result.toId}`);
+            context.output.write(
+                result.replayed === true
+                    ? `replayed ${result.msgId} → ${result.toId} (already accepted)`
+                    : `queued ${result.msgId} → ${result.toId}`,
+            );
         }
         return 0;
     }
@@ -335,23 +354,70 @@ async function runMessageSend(
     }
 }
 
-/** `spur message inbox --agent <id> [--json]` */
+/**
+ * `spur message inbox --agent <id> [--unresolved] [--json]`.
+ *
+ * 0834 R6: the operator read for delivery failure states. When classifying,
+ * the reconciler runs FIRST (its one authorized write — marking budget-
+ * exhausted rows failed — is reflected in the listing it filters), then each
+ * `--json` row is widened with the attempt/error/run-correlation fields.
+ * Plain-text output without `--unresolved` is untouched.
+ */
 async function runMessageInbox(
     svc: TeamService,
     context: CliContext,
-    options: { agent: string; json?: boolean; jsonEnvelope?: boolean },
+    options: { agent: string; json?: boolean; jsonEnvelope?: boolean; unresolved?: boolean },
 ): Promise<number> {
+    const classify = options.json === true || options.unresolved === true;
+    let holds = new Map<string, UnresolvedDelivery>();
+    if (classify) {
+        const reconciler = new DeliveryReconciler(context);
+        const report = await reconciler.reconcile(options.agent);
+        holds = new Map(report.unresolved.map((u) => [u.messageId, u]));
+    }
     const inbox = await svc.getInbox(options.agent);
+    const messages = options.unresolved === true ? inbox.messages.filter((m) => holds.has(m.id)) : inbox.messages;
     if (options.json) {
-        context.output.write(toEnvelopeJson(inbox, { enveloped: options.jsonEnvelope }));
+        context.output.write(
+            toEnvelopeJson(
+                {
+                    messages: messages.map((m) => widenInboxRow(m, holds.get(m.id))),
+                    count: messages.length,
+                },
+                { enveloped: options.jsonEnvelope },
+            ),
+        );
         return 0;
     }
-    if (inbox.count === 0) {
+    if (messages.length === 0) {
         context.output.write(`No messages for ${options.agent}`);
         return 0;
     }
-    context.output.write(inbox.messages.map(formatInboxLine).join('\n'));
+    context.output.write(messages.map(formatInboxLine).join('\n'));
     return 0;
+}
+
+/** Widen one inbox row with the 0834 fields: attempts, last error, hold reason, run correlation. */
+function widenInboxRow(
+    entry: InboxEntry,
+    hold?: UnresolvedDelivery,
+): InboxEntry & {
+    injectAttempts?: number;
+    injectError?: string | null;
+    reason?: string;
+    runId?: string;
+    taskId?: string;
+    artifacts: UnresolvedDelivery['artifacts'];
+} {
+    return {
+        ...entry,
+        injectAttempts: entry.injectAttempts,
+        injectError: entry.injectError,
+        reason: hold?.reason,
+        runId: hold?.runId,
+        taskId: hold?.taskId,
+        artifacts: hold?.artifacts ?? [],
+    };
 }
 
 /** `spur message reply <msg-id> <body> [--json]` */

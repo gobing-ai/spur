@@ -108,6 +108,14 @@ export type {
 } from './services/corpus-migrator';
 // R3 (0452): CorpusMigrator is @internal — no public CLI surface.
 export { CorpusMigrator } from './services/corpus-migrator';
+export {
+    DeliveryReconciler,
+    type DeliveryReconcilerContext,
+    type HoldReason,
+    MAX_INJECT_ATTEMPTS,
+    type ReconcileReport,
+    type UnresolvedDelivery,
+} from './services/delivery-reconciler';
 export type {
     GuardInput,
     GuardOutcome,

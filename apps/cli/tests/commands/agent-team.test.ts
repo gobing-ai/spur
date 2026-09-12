@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { TeamService } from '@gobing-ai/spur-app';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
+import { RequestKeyConflictError } from '@gobing-ai/ts-db';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
 import { type AgentRunDeps, runAgentLoop, runAgentRun, splitEditorCommand } from '../../src/commands/agent';
@@ -442,6 +444,7 @@ describe('spur agent run --drain', () => {
 
     test('loop drains the inbox, runs the agent, and consumes the message (idempotent)', async () => {
         const { ctx, cleanup } = await makeCtx();
+        const accepted = captureInvokeStart();
         try {
             const team = new TeamService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
@@ -452,6 +455,7 @@ describe('spur agent run --drain', () => {
                 runner: {
                     runPromptCommand: async (_agent: unknown, opts: { input?: string }) => {
                         receivedInput = opts.input ?? '';
+                        accepted.fire();
                         return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
                     },
                 } as MockRunner,
@@ -468,11 +472,13 @@ describe('spur agent run --drain', () => {
             expect(code).toBe(0);
             expect(receivedInput).toContain('loop message');
 
-            // drainPending (queued→injected) consumed it: a follow-up drain is empty — the
-            // loop won't re-prepend the same message next iteration (the idempotency fix).
+            // The started invocation settles the message `delivered`: a follow-up
+            // drain is empty — the loop won't re-run the same message next
+            // iteration (once-consumed stays once-delivered).
             const after = await team.drainPending('planner');
             expect(after.count).toBe(0);
         } finally {
+            accepted.restore();
             await cleanup();
         }
     });
@@ -609,33 +615,64 @@ function g6Doctor() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// G6 characterization block (task 0828) — fault-probe evidence for report
-// `docs/reports/g6-runtime-inventory.md`. Characterization ONLY: each test
-// observes current behavior; a passing test names the unmet target invariant
-// explicitly and does NOT assert conformance to it. No production change.
+// Delivery-settle regression block. Grew out of the G6 characterization block
+// (task 0828): probes 1 and 2 asserted today's broken delivery behavior and
+// were FLIPPED by task 0831 to assert the fixed commit-after-confirm contract.
+// Probe 3 (duplicate submission) was flipped by task 0832 into a regression
+// asserting idempotent suppression. Probe 4 (at-most-once claiming) keeps
+// asserting the MET SQL property.
 // ═══════════════════════════════════════════════════════════════════════════════
-import { createMigratedDb, InboxMessageDao } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, createMigratedDb, InboxMessageDao } from '@gobing-ai/spur-domain';
 
-describe('G6 characterization (0828) — delivery faults', () => {
-    test('probe drain-before-spawn: inbox rows are injected BEFORE the invocation runs', async () => {
-        // Setup: one queued message; fake runner records the pending count it sees
-        // at invocation entry. Boundary: drainIntoPrompt (agent.ts:543) → svc.run.
+/**
+ * Capture the handlers registered for `agent.invoke.start` while a test runs.
+ * The fake runner does not emit the lifecycle event (that is the real AiRunner's
+ * job, wired through `context.agentService({ events })`), so this seams the
+ * subscription directly: `fire()` invokes every handler registered for
+ * `agent.invoke.start` on ANY EventBus — the same moment the real runner emits
+ * at spawn time. Mirror of `EventBus.prototype.on`; failed subscriptions skip.
+ */
+function captureInvokeStart(): { restore: () => void; fire: () => void } {
+    const proto = EventBus.prototype as unknown as {
+        on: (event: string, handler: (...args: unknown[]) => void, opts?: unknown) => void;
+    };
+    const origOn = proto.on;
+    const handlers: Array<() => void> = [];
+    proto.on = function (event, handler, opts) {
+        if (event === 'agent.invoke.start') {
+            handlers.push(() => handler({ agent: 'claude', operation: 'prompt', severity: 'info' }));
+        }
+        return origOn.call(this, event, handler, opts);
+    };
+    return {
+        restore: () => {
+            proto.on = origOn;
+        },
+        fire: () => {
+            for (const fire of handlers) fire();
+        },
+    };
+}
+
+describe('G61 delivery settle regressions (0831)', () => {
+    test('a successful drain+invocation settles the message delivered (R2 — was 0828 probe 1)', async () => {
+        // The claim happens before spawn, but 0831's settle step runs after the
+        // invocation attempt. Delivery state is final only after the run, and an
+        // accepted run settles delivered (exit code irrelevant to delivery).
         const { ctx, cleanup } = await makeCtx();
+        const accepted = captureInvokeStart();
         try {
             const team = new TeamService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'characterize me');
             const db = await ctx.getDb();
-            const dao = new InboxMessageDao(db);
 
-            let pendingAtInvocation = -1;
-            let calls = 0;
+            let claims = 0;
             const deps = {
                 runner: {
                     runPromptCommand: async () => {
-                        calls++;
-                        // Observed state INSIDE the invocation: what status are the rows in?
-                        pendingAtInvocation = await dao.countPending('planner');
+                        claims++;
+                        accepted.fire();
                         return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
                     },
                 } as G6MockRunner,
@@ -645,51 +682,79 @@ describe('G6 characterization (0828) — delivery faults', () => {
 
             const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
             expect(code).toBe(0);
-            expect(calls).toBe(1);
-            expect(pendingAtInvocation).toBe(0); // queued rows already flipped to injected
+            expect(claims).toBe(1);
 
-            // Target invariant UNMET: delivery is finalized (queued→injected,
-            // injectAttempts++) before any invocation attempt is verifiable. If spawn
-            // fails after drain, the message is irrecoverably 'injected' — no redelivery.
+            // Fixed contract: the invocation ran, so the message settles delivered —
+            // not stranded at 'injected' forever.
             const rows = await new InboxMessageDao(db).inbox('planner', 10);
             expect(rows.length).toBe(1);
-            expect(rows[0]?.status).toBe('injected');
+            expect(rows[0]?.status).toBe('delivered');
+            expect((await team.drainPending('planner')).count).toBe(0);
+        } finally {
+            accepted.restore();
+            await cleanup();
+        }
+    });
+
+    test('a drain whose invocation never starts releases the row to queued, attempts preserved (R1)', async () => {
+        // Spawn never reaches the runner: the spec's `type` is not an invocable
+        // agent name, so validateAgentSelector rejects AFTER the drain (exit 2,
+        // pre-spawn) — the claim happened inside drainIntoPrompt, and the settle
+        // step must release it for redelivery within the attempt budget.
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'bogus-exec' });
+            await team.sendMessage('operator', 'planner', 'release me');
+            const db = await ctx.getDb();
+
+            const deps = {
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentRun('work', ctx, { spec: 'planner', drain: true, json: true }, deps);
+            expect(code).toBe(2);
+
+            const dao = new InboxMessageDao(db);
+            const rows = await dao.inbox('planner', 10);
+            expect(rows.length).toBe(1);
+            // Released back to queued — redeliverable, attempts preserved (the
+            // claim counter IS the budget; release never resets it).
+            expect(rows[0]?.status).toBe('queued');
+            expect(rows[0]?.injectAttempts).toBe(1);
+            expect((await team.drainPending('planner')).count).toBe(1);
+            const again = await dao.inbox('planner', 10);
+            expect(again[0]?.injectAttempts).toBe(2);
         } finally {
             await cleanup();
         }
     });
 
-    test.each([
-        'throw',
-        'nonzero',
-    ] as const)('probe %s invocation: the loop consumes the message and continues', async (failure) => {
-        // Injected fault: the runner throws during invocation. Boundary:
-        // AgentService.executeRun catch at agent-service.ts:1292 converts the throw
-        // into { ok:false, exitCode:2 } WITHOUT a persisted message failure; svc.run
-        // returns that code; runAgentLoop (agent.ts:736) discards the return value.
+    test('a never-started invocation in the loop is redelivered within the budget, then rests failed (R3, R4)', async () => {
+        // maxIterations=3, the runner always throws: claims 1 and 2 release for
+        // the next iteration; claim 3 exhausts MAX_INJECT_ATTEMPTS and rests the
+        // row at failed with a queryable reason. The loop keeps iterating — no
+        // iteration is lost, and the message is not consumed-without-execution.
         const { ctx, out, cleanup } = await makeCtx();
         try {
             const team = new TeamService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'will crash');
             const db = await ctx.getDb();
-            const dao = new InboxMessageDao(db);
 
             let calls = 0;
             const deps = {
                 runner: {
                     runPromptCommand: async () => {
                         calls++;
-                        if (failure === 'throw') throw new Error('injected invocation failure');
-                        return { exitCode: 7, stdout: '', stderr: 'injected nonzero exit', durationMs: 1 };
+                        throw new Error('injected invocation failure');
                     },
                 } as G6MockRunner,
                 detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
                 doctorRunner: g6Doctor() as G6MockDoctor,
             } as unknown as AgentRunDeps;
 
-            // Observed: the loop does NOT propagate the failure — it iterates 3 times
-            // (idle-sleeping the remaining two) and resolves 0.
             const code = await runAgentLoop(
                 ctx,
                 { agent: 'planner' },
@@ -697,47 +762,104 @@ describe('G6 characterization (0828) — delivery faults', () => {
                 deps,
             );
             expect(code).toBe(0);
-            expect(calls).toBe(1);
-            if (failure === 'throw') expect(out.errors.join('\n')).toContain('injected invocation failure');
+            expect(calls).toBe(3);
+            expect(out.errors.join('\n')).toContain('injected invocation failure');
 
-            const rows = await dao.inbox('planner', 10);
+            const dao = new InboxMessageDao(db);
+            let rows = await dao.inbox('planner', 10);
             expect(rows.length).toBe(1);
-            // Observed: row is 'injected' (consumed) despite the failed invocation.
-            expect(rows[0]?.status).toBe('injected');
-            // No requeue seam exists: further drains return nothing.
+            // Terminal failed state with a reason — not stranded at 'injected'.
+            expect(rows[0]?.status).toBe('failed');
+            expect(rows[0]?.injectAttempts).toBe(3);
+            expect(rows[0]?.injectError).toContain('never started');
+            // Budget exhausted: no further redelivery.
             expect((await team.drainPending('planner')).count).toBe(0);
-
-            // Target invariant UNMET: a failed invocation leaves no durable recovery
-            // path — the message is neither requeued, marked failed, nor surfaced as a
-            // delivery failure to any caller; recovery depends wholly on the supervisor
-            // process-restart, which then finds an empty inbox. A long-lived loop
-            // swallows this loss without an exit nonzero or a durable trace beyond the
-            // stderr line on the (no-op) captured console.
+            rows = await dao.inbox('planner', 10);
+            expect(rows.length).toBe(1);
         } finally {
             await cleanup();
         }
     });
 
-    test('probe duplicate submission: two identical bodies enqueue two distinct msgIds, both deliver', async () => {
-        // Boundary: TeamService.sendMessage → InboxMessageDao.enqueue (ts-db 0.4.62).
+    test('an invocation that started settles delivered even on a nonzero exit (R2, R5)', async () => {
+        // Acceptance is detected from the `agent.invoke.start` lifecycle event on
+        // the run bus — never from the exit code. The fake runner does not emit
+        // the event (that is the real AiRunner's job), so this test drives the
+        // subscription seam directly: capture the handlers registered for
+        // `agent.invoke.start` on any EventBus while the run executes, and fire
+        // them from inside the runner — the same moment the real runner emits.
+        const { ctx, cleanup } = await makeCtx();
+        const captured = captureInvokeStart();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            await team.sendMessage('operator', 'planner', 'start then fail');
+            const db = await ctx.getDb();
+
+            let calls = 0;
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => {
+                        calls++;
+                        // Emit the acceptance signal BEFORE the nonzero exit —
+                        // the real runner emits `agent.invoke.start` at spawn time.
+                        captured.fire();
+                        return { exitCode: 7, stdout: '', stderr: 'nonzero but started', durationMs: 1 };
+                    },
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
+            // The run's failure is the run's to report — the exit code surfaces
+            // (executeRun maps a nonzero runner exit onto its own failure code).
+            expect(code).not.toBe(0);
+            expect(calls).toBe(1);
+
+            // Delivery: settled delivered because the invocation STARTED, exit
+            // code irrelevant (0831 R2/Q&A — no delivery/run-outcome conflation).
+            const rows = await new InboxMessageDao(db).inbox('planner', 10);
+            expect(rows.length).toBe(1);
+            expect(rows[0]?.status).toBe('delivered');
+        } finally {
+            captured.restore();
+            await cleanup();
+        }
+    });
+
+    test('regression (was 0828 probe 3, flipped by 0832): a repeated request key suppresses duplicate rows and duplicate deliveries', async () => {
+        // Boundary: TeamService.sendMessage → InboxMessageDao.enqueueIdempotent
+        // (ts-db 0.4.65, partial unique index idx_inbox_messages_request_key).
         const { ctx, cleanup } = await makeCtx();
         try {
             const db = await ctx.getDb();
             const dao = new InboxMessageDao(db);
-            await dao.enqueue('operator', 'planner', 'same body');
-            await dao.enqueue('operator', 'planner', 'same body');
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
 
+            const first = await team.sendMessage('operator', 'planner', 'same body', undefined, 'retry-key-1');
+            const second = await team.sendMessage('operator', 'planner', 'same body', undefined, 'retry-key-1');
+
+            // Same receipt identity, marked replayed — no second row exists.
+            expect(second.msgId).toBe(first.msgId);
+            expect(first.replayed).toBe(false);
+            expect(second.replayed).toBe(true);
             const rows = await dao.inbox('planner', 10);
-            expect(rows.length).toBe(2);
-            // Observed: per-send UUIDs — same-body requests are NOT unified.
-            expect(rows[0]?.id).not.toBe(rows[1]?.id);
-            const drained = await dao.drainPending('planner');
-            expect(drained).toHaveLength(2);
+            expect(rows.length).toBe(1);
+            expect(rows[0]?.requestKey).toBe('retry-key-1');
+
+            // One delivery for the repeated key: the drain emits exactly one row.
+            const drained = await team.drainPending('planner');
+            expect(drained.messages).toHaveLength(1);
             expect(await dao.countPending('planner')).toBe(0);
 
-            // Target invariant UNMET: no idempotency/dedup key exists. A retried
-            // send (client crash + resend, double-click, operator retry)
-            // duplicates the invocation payload rather than coalescing to one row.
+            // Same key + different payload fails loudly — never a silent overwrite
+            // nor a second identity.
+            await expect(
+                team.sendMessage('operator', 'planner', 'different body', undefined, 'retry-key-1'),
+            ).rejects.toThrow(RequestKeyConflictError);
+            expect((await dao.inbox('planner', 10)).length).toBe(1);
         } finally {
             await cleanup();
         }
@@ -784,23 +906,26 @@ describe('G6 characterization (0828) — delivery faults', () => {
             db.close();
         }
     });
+});
 
-    test('probe completion-without-notification: a successful run writes no completion-to-message association', async () => {
-        // Suppress the notification sink: there is none to suppress. Boundary:
-        // runAgentRun --drain with a successful fake runner; inspect what survives.
+describe('G61 completion receipt regressions (0833)', () => {
+    test('probe 6, flipped by 0833: a finished run is correlated to its message and task at exit (R1, R4, R8)', async () => {
+        // The exit sink in AgentService.executeRun writes the receipt into the
+        // coordination_runs row it already finalizes — runId, originating message
+        // id(s), task id, and the outcome, all durable.
         const { ctx, cleanup } = await makeCtx();
+        const accepted = captureInvokeStart();
         try {
             const team = new TeamService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
-            await team.sendMessage('operator', 'planner', 'complete and tell me');
+            const sent = await team.sendMessage('operator', 'planner', 'complete and correlate me');
             const db = await ctx.getDb();
-            const systemDao = new (await import('@gobing-ai/spur-domain')).SystemEventDao(db);
+            const dao = new CoordinationRunDao(db);
 
-            let calls = 0;
             const deps = {
                 runner: {
                     runPromptCommand: async () => {
-                        calls++;
+                        accepted.fire();
                         return { exitCode: 0, stdout: 'done!', stderr: '', durationMs: 1 };
                     },
                 } as G6MockRunner,
@@ -808,28 +933,93 @@ describe('G6 characterization (0828) — delivery faults', () => {
                 doctorRunner: g6Doctor() as G6MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
+            const code = await runAgentRun(
+                'work',
+                ctx,
+                { agent: 'planner', drain: true, task: '0833', json: true },
+                deps,
+            );
             expect(code).toBe(0);
 
-            expect(calls).toBe(1);
-            // Observed: (a) the message row is stuck at 'injected' forever — markDelivered
-            // (ts-db) is never called on this path; (b) no DAO delivery events reach this CLI ledger;
-            // (c) nothing in the ledger associates the runId with a message id.
-            const rows = await new InboxMessageDao(db).inbox('planner', 10);
-            expect(rows[0]?.status).toBe('injected');
-            const messageEvents = await systemDao.query({
-                names: ['message.enqueued', 'message.injected', 'message.delivered'],
-                limit: 100,
-            });
-            expect(messageEvents.length).toBe(0);
-            const sent = await team.getInbox('operator', 10);
-            expect(sent.count).toBe(0); // no completion message back to the sender
+            // Query by message id (R5): the drained message id is on the receipt.
+            const byMessage = await dao.listByMessageId(sent.msgId);
+            expect(byMessage).toHaveLength(1);
+            const row = byMessage[0];
+            expect(row?.task_id).toBe('0833');
+            // R4: zero exit with no verification result is run-exit-only — stored,
+            // never inferred later; this sink never writes 'verified'.
+            expect(row?.outcome).toBe('run-exit-only');
+            // The row survives as a restart-readable receipt (R5): readable by run id.
+            const byRun = await dao.getByRunId(row?.run_id ?? '');
+            expect(byRun?.message_ids_json).toBe(JSON.stringify([sent.msgId]));
 
-            // Target invariant ABSENT (seam named): AgentService.executeRun persists
-            // the run result + occupant exit pin (agent-service.ts ~1434–1483) but has
-            // no completion-notification sink into InboxMessageDao. The durable
-            // completion→message association the future control plane needs does not
-            // exist; this probe demonstrates its absence rather than manufacturing one.
+            // R3: states stay distinct — delivery is 0831's (`delivered`), the run
+            // exit is this receipt's, and the task is NOT advanced by the exit.
+            const rows = await new InboxMessageDao(db).inbox('planner', 10);
+            expect(rows[0]?.status).toBe('delivered');
+            expect((await team.drainPending('planner')).count).toBe(0);
+        } finally {
+            accepted.restore();
+            await cleanup();
+        }
+    });
+
+    test('a run with no originating request still writes a receipt with an empty message list (R7)', async () => {
+        // No --drain, no messages: the receipt exists, with `[]` — never an
+        // invented association (the anti-pattern the spec forbids).
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            const db = await ctx.getDb();
+            const dao = new CoordinationRunDao(db);
+
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => ({ exitCode: 0, stdout: '', stderr: '', durationMs: 1 }),
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentRun('work', ctx, { spec: 'planner', task: 'T-9', json: true }, deps);
+            expect(code).toBe(0);
+
+            const byTask = await dao.listByTaskId('T-9');
+            expect(byTask).toHaveLength(1);
+            expect(byTask[0]?.message_ids_json).toBe('[]');
+            expect(byTask[0]?.outcome).toBe('run-exit-only');
+            // The task id is recorded; the task itself is untouched — only the
+            // workflow verification path may advance it (R3).
+            expect(await team.getInbox('operator', 10)).toMatchObject({ count: 0 });
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a run that exits nonzero records outcome errored, not run-exit-only (R4)', async () => {
+        const { ctx, cleanup } = await makeCtx();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            const sent = await team.sendMessage('operator', 'planner', 'fail loudly');
+            const db = await ctx.getDb();
+            const dao = new CoordinationRunDao(db);
+
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => ({ exitCode: 7, stdout: '', stderr: 'boom', durationMs: 1 }),
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+
+            const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
+            expect(code).not.toBe(0);
+
+            const byMessage = await dao.listByMessageId(sent.msgId);
+            expect(byMessage).toHaveLength(1);
+            expect(byMessage[0]?.outcome).toBe('errored');
         } finally {
             await cleanup();
         }

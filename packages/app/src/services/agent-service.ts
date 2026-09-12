@@ -6,6 +6,7 @@ import {
     type CoordinationArtifactRef,
     type CoordinationRun,
     CoordinationRunDao,
+    type CoordinationRunReceipt,
     type DbAdapter,
     getCanonicalStage,
     getNextFallback,
@@ -1033,6 +1034,14 @@ export class AgentService {
         const taskId = stringFlag(flags, 'task', '') || undefined;
         const sessionDir = stringFlag(flags, 'session-dir', '') || stringFlag(flags, 'sessionDir', '') || undefined;
         const sessionId = stringFlag(flags, 'session-id', '') || stringFlag(flags, 'sessionId', '') || undefined;
+        // Originating request message ids (0833 R1): the CLI drain path writes the
+        // claimed inbox message ids as a comma-joined list (dual-spelling flag per
+        // the sessionDir convention). Never inferred from the recipient or the most
+        // recent queued row — absent flag means an empty correlation list (R7).
+        const requestMessageIds = (stringFlag(flags, 'requestMessage', '') || stringFlag(flags, 'request-message', ''))
+            .split(',')
+            .map((id) => id.trim())
+            .filter((id) => id !== '');
         // Capability gate input (0706 R4): JSON-serialized axis → minimum-state
         // requirements from the workflow action. Parsed+validated once here;
         // invalid shapes fail closed (exit 2) before any resolution/spawn.
@@ -1436,7 +1445,24 @@ export class AgentService {
                     const dao = new CoordinationRunDao(await this.ctx.getDb());
                     const status: 'exited' | 'errored' = result?.exitCode === 0 ? 'exited' : 'errored';
                     const refs = await this.resolveArtifactRefs(coordinationRunId);
-                    await dao.updateExit(coordinationRunId, status, new Date().toISOString(), JSON.stringify(refs));
+                    // Completion receipt (0833 R1): correlates the run with its
+                    // originating message(s) and task, persisted before any
+                    // notification is attempted (R2). Outcome precedence: a zero
+                    // exit with no verification result is 'run-exit-only' (R4) —
+                    // this sink NEVER writes 'verified'; only the workflow
+                    // verification path may (R3).
+                    const receipt: CoordinationRunReceipt = {
+                        messageIds: requestMessageIds,
+                        ...(taskId !== undefined ? { taskId } : {}),
+                        outcome: result?.exitCode === 0 ? 'run-exit-only' : 'errored',
+                    };
+                    await dao.updateExit(
+                        coordinationRunId,
+                        status,
+                        new Date().toISOString(),
+                        JSON.stringify(refs),
+                        receipt,
+                    );
                 } catch (error) {
                     if (!jsonOutput) {
                         this.ctx.output.error(

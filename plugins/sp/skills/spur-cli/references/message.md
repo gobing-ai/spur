@@ -19,8 +19,8 @@ use it well*.
 
 | Verb | Purpose | Key flags |
 | ---- | ------- | --------- |
-| `send <body>` | Enqueue a message for an agent | `--to <id>` `--role <name>` `--from <id>` `--wait` `--until <state>` `--timeout <ms>` `--json` |
-| `inbox` | List messages addressed to an agent | `--agent <id>` `--json` |
+| `send <body>` | Enqueue a message for an agent | `--to <id>` `--role <name>` `--from <id>` `--request-key <key>` `--wait` `--until <state>` `--timeout <ms>` `--json` |
+| `inbox` | List messages addressed to an agent | `--agent <id>` `--unresolved` `--json` |
 | `reply <msg-id> <body>` | Thread a reply to a message | `--json` |
 | `watch` | Follow an agent inbox - surface new messages as they arrive | `--agent <id>` `--interval <ms>` `--json` |
 
@@ -34,6 +34,7 @@ spur message send "Please review PR 42" --to reviewer
 spur message send "Task 0040 is blocked" --to worker-1 --from operator
 spur message send "Done" --to planner --json
 spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeout 30000
+spur message send "Done" --to manager --request-key 0695-report-42      # retry-safe: same key replays the original receipt
 spur message send "Start the pass" --role reviewer          # resolves to exactly one instance
 ```
 
@@ -51,6 +52,8 @@ wait; enqueue is **not** rolled back if the wait later fails.
 | `--to <id>` | Recipient agent id. Mutually exclusive with `--role`; exactly one of the two is required. |
 | `--role <name>` | Address by Layer-1 role or executor name. Must resolve to exactly one materialized instance; zero (`count=0`, candidates `none`) or multi (`count=N` + candidates) matches are hard errors (exit 1); unknown name exits 2 naming the accepted vocabulary (`AGENT_ROLE_NAMES` ∪ executor names). Resolution yields the same spec-id path as `--to`; `--wait` snapshots that occupant pin. (0685 R6 / ADR-075 amendment) |
 | `--from <id>` | Sender id (default: `operator`). |
+| `--request-key <key>` | Caller-minted idempotency key. The same key with the same body + recipient replays the original receipt (`replayed: true`, no second row/delivery); the same key with a different payload fails with a request-key-conflict error (0832). |
+| `replayed` receipt field | Present on keyed sends: `true` when this submission was a replay of an earlier accepted send. |
 | `--wait` | Block until the recipient reaches `--until` (snapshots occupant before send). |
 | `--until <state>` | Wait target: `injected` \| `invoke-exit` (repeatable OR). Default `invoke-exit`. |
 | `--timeout <ms>` | Caller deadline in milliseconds. |
@@ -64,10 +67,29 @@ wait; enqueue is **not** rolled back if the wait later fails.
 ```bash
 spur message inbox --agent worker-1
 spur message inbox --agent worker-1 --json
+spur message inbox --agent worker-1 --unresolved --json
 ```
 
 Lists messages addressed to `--agent <id>`, oldest first. The body is truncated in plain-text output;
 `--json` returns the full body.
+
+### Delivery failure states (0834)
+
+`--unresolved` filters the listing to messages the delivery reconciler holds, and every `--json` row
+gains the operator-read fields: `injectAttempts`, `injectError`, `reason`, `runId`, `taskId`,
+`artifacts`. The hold reasons are distinct and durable — never one overloaded status column:
+
+| `reason` | Meaning |
+| -------- | --------- |
+| `delivery-failed` | The drain marked the delivery failed (`injectError` carries why), or its run's receipt outcome is `errored`. |
+| `attempts-exhausted` | The message burned its bounded redelivery budget (`MAX_INJECT_ATTEMPTS`, 0831); the reconciler marks it `failed` — the reconciler's only write. |
+| `outcome-unknown` | The drain consumed it and no completion receipt ever arrived: the agent may have edited files. **Never requeued, never auto-released** — a human decides. |
+| `run-exit-only` | Its run exited (receipt outcome `run-exit-only`) with no workflow verification result. |
+
+`runId`, `taskId`, and `artifacts` (path-only refs) come only from the persisted run row that lists
+the message in its receipt; nothing is inferred from terminal output or process lists. The same
+reconciler runs once at `spur agent loop` startup and writes a `reconcile:` summary to the run log
+before the first drain.
 
 ## `reply` - thread a reply
 

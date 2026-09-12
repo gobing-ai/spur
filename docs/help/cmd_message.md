@@ -25,9 +25,10 @@ spur message send [options] <body>
 
 | Flag | Default | Description |
 |---|---|---|
-| `--to <id>` | — | Recipient agent id (required) |
+| `--to <id>` | — | Recipient agent id (required unless `--role`) |
 | `--from <id>` | `operator` | Sender id |
 | `--role <name>` | — | Address by Layer-1 role or executor name; must resolve to exactly one materialized instance |
+| `--request-key <key>` | — | Caller-minted idempotency key. The same key with the same body + recipient replays the original receipt (`replayed: true`; no second row or delivery); the same key with a different payload fails with a request-key-conflict error (0832) |
 | `--wait` | — | Block until the recipient occupant reaches `--until` (snapshots occupant **before** enqueue) |
 | `--until <state>` | `invoke-exit` | Wait target when `--wait` is set: `injected` \| `invoke-exit` (repeatable OR) |
 | `--timeout <ms>` | — | Caller deadline for `--wait` |
@@ -60,12 +61,13 @@ spur message send "Review 0042" --to reviewer --wait --until invoke-exit --timeo
 ## spur message inbox
 
 ```
-spur message inbox --agent <id> [--json]
+spur message inbox --agent <id> [--unresolved] [--json]
 ```
 
 | Flag | Description |
 |---|---|
 | `--agent <id>` | Agent id whose inbox to list (required) |
+| `--unresolved` | Only messages the delivery reconciler holds (0834): `delivery-failed` \| `attempts-exhausted` \| `outcome-unknown` \| `run-exit-only` |
 | `--json` | Output machine-readable JSON |
 
 ### Example
@@ -86,12 +88,24 @@ spur message inbox --agent reviewer --json
       "body": "Please review the auth endpoint",
       "status": "queued",
       "createdAt": "2026-06-19T05:42:00.577Z",
-      "inReplyTo": null
+      "inReplyTo": null,
+      "injectAttempts": 1,
+      "injectError": null,
+      "reason": "outcome-unknown",
+      "runId": "run-abc",
+      "taskId": "task-9",
+      "artifacts": [{ "kind": "result", "path": "/tmp/x.json" }]
     }
   ],
   "count": 1
 }
 ```
+
+`injectAttempts`/`injectError` are the delivery attempt count and last error (0831). `reason`,
+`runId`, `taskId`, and `artifacts` are present when the 0834 delivery reconciler classifies the row
+(with `--json` or `--unresolved`); `artifacts` is always an array. `--unresolved` runs the
+reconciler first, so an over-budget `queued` row is reported (and marked) `attempts-exhausted`
+without requeue.
 
 ## spur message reply
 

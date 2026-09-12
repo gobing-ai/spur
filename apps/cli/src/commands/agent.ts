@@ -4,7 +4,9 @@ import {
     type AgentRunDeps,
     AgentService,
     type AgentSpecInput,
+    DeliveryReconciler,
     followSystemEventsAfter,
+    MAX_INJECT_ATTEMPTS,
     resolveAgentSelector,
     type SystemEventBus,
     TeamService,
@@ -13,7 +15,7 @@ import {
     waitForOccupant,
 } from '@gobing-ai/spur-app';
 import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
-import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
+import { InboxMessageDao, SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -456,6 +458,47 @@ function jsonFlags(flags: Record<string, string | boolean>): { json?: boolean; j
     };
 }
 
+/**
+ * Settle messages claimed by a drain (0831): a claimed row ends in exactly one of
+ * `delivered` (invocation accepted — seen `agent.invoke.start` on the run bus),
+ * `queued` (released for redelivery — the invocation never started and the row
+ * still has attempt budget), or `failed` (never started AND the budget is
+ * exhausted). The exit code is irrelevant to delivery: a run that started is
+ * delivered (0831 R2), and delivery failure is never inferred from the exit
+ * code (0831 R5). Called from a `finally` so an abort still settles.
+ */
+export async function settleClaimedMessages(
+    context: CliContext,
+    claimed: string[],
+    outcome: 'accepted' | 'not-started',
+): Promise<void> {
+    if (claimed.length === 0) return;
+    const team = new TeamService(context);
+    if (outcome === 'accepted') {
+        await team.settleDelivered(claimed);
+        return;
+    }
+    // Not started: release within the claim budget, else a queryable terminal failure.
+    const dao = new InboxMessageDao(await context.getDb());
+    const releasable: string[] = [];
+    const exhausted: string[] = [];
+    for (const id of claimed) {
+        const row = await dao.getById(id);
+        // Already settled on another path (e.g. the live stdin-injection delivery)
+        // or gone — never re-settle someone else's row.
+        if (row?.status !== 'injected') continue;
+        if (row.injectAttempts >= MAX_INJECT_ATTEMPTS) exhausted.push(id);
+        else releasable.push(id);
+    }
+    if (releasable.length > 0) await team.releasePending(releasable);
+    for (const id of exhausted) {
+        await team.settleFailed(
+            [id],
+            `delivery not accepted: invocation never started after ${MAX_INJECT_ATTEMPTS} inject attempts`,
+        );
+    }
+}
+
 /** Execute `spur agent run <prompt> [flags]`. */
 export async function runAgentRun(
     prompt: string | undefined,
@@ -478,6 +521,14 @@ export async function runAgentRun(
     // bridge, same crossing the ledger attach performs above).
     const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
     const svc = context.agentService({ events: bus });
+    // 0831: acceptance is detected from the `agent.invoke.start` lifecycle event —
+    // never from an exit code (exit 2 is both a pre-spawn validation failure and a
+    // legitimate agent exit). The sync listener flips before `svc.run` resolves.
+    let invocationStarted = false;
+    bus.on('agent.invoke.start', () => {
+        invocationStarted = true;
+    });
+    let claimed: string[] = [];
     try {
         // `--spec <id>` (canonical, 0542 R1) or the legacy `--agent <spec-id>`
         // names the occupant address; `--drain` is DB-backed, so it is resolved in
@@ -488,7 +539,14 @@ export async function runAgentRun(
         // executor/type so resolution still works; in Phase 1-3 there is no live
         // stdin, so prepending is how deferred messages reach the agent.
         if (flags.drain === true || typeof flags.spec === 'string') {
-            const { prompt: drained, flags: rewritten } = await drainIntoPrompt(prompt, context, flags);
+            const {
+                prompt: drained,
+                flags: rewritten,
+                claimed: drainedIds,
+            } = await drainIntoPrompt(prompt, context, flags);
+            // Track the claim immediately: a validation failure BEFORE the run
+            // must still settle (release) the rows, not strand them at injected.
+            claimed = drainedIds;
             // R1 (0542): an explicit --spec must resolve to a real team spec — a
             // typo'd id must not silently fall through to auto resolution.
             if (typeof flags.spec === 'string' && flags.spec !== '' && rewritten['spec-id'] !== flags.spec) {
@@ -518,6 +576,11 @@ export async function runAgentRun(
         }
         return await svc.run(prompt, flags, deps);
     } finally {
+        // Settle AFTER the run attempt (0831 R1/R3): in a finally so an abort or
+        // early validation failure still settles the claim. Only the drained path
+        // (drainIntoPrompt above) claims messages — the released ids go back to
+        // `queued` for redelivery; rows whose invocation started settle `delivered`.
+        await settleClaimedMessages(context, claimed, invocationStarted ? 'accepted' : 'not-started');
         await ledger.flush();
         ledger.unsubscribe();
         // 0799 R1: flush recorded quota observations before process exit.
@@ -544,13 +607,13 @@ async function drainIntoPrompt(
     prompt: string | undefined,
     context: CliContext,
     flags: Record<string, string | boolean>,
-): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean> }> {
+): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean>; claimed: string[] }> {
     const specFlag = typeof flags.spec === 'string' ? flags.spec : '';
     const agentFlag = typeof flags.agent === 'string' ? flags.agent : '';
     const recipient = specFlag !== '' ? specFlag : agentFlag;
     if (recipient === '' || recipient === 'auto') {
         context.output.error('--drain requires an explicit --spec <id> matching a message recipient');
-        return { prompt, flags };
+        return { prompt, flags, claimed: [] };
     }
 
     const team = new TeamService(context);
@@ -563,15 +626,26 @@ async function drainIntoPrompt(
         spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: drainAgentSelector(spec, context) };
 
     // `--spec` without `--drain`: address the occupant, leave the inbox alone.
-    if (flags.drain !== true) return { prompt, flags: flagsOut };
+    if (flags.drain !== true) return { prompt, flags: flagsOut, claimed: [] };
 
     const inbox = await team.drainPending(recipient);
-    if (inbox.count === 0) return { prompt, flags: flagsOut };
+    if (inbox.count === 0) return { prompt, flags: flagsOut, claimed: [] };
 
     const header = inbox.messages.map((m) => `- ${m.fromId ?? 'operator'}: ${m.body}`).join('\n');
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
-    return { prompt: merged, flags: flagsOut };
+    const claimed = inbox.messages.map((m) => m.id);
+    // Claimed ids (0831): the caller must settle these rows once it knows whether
+    // the invocation started — spawned-but-settled-later is the whole 0831 contract.
+    // 0833: the same ids ride into executeRun as the requestMessage flag (comma-
+    // joined, dual spelling per the sessionDir convention) so the exit sink can
+    // persist the run↔message receipt.
+    const requestMessage = claimed.join(',');
+    return {
+        prompt: merged,
+        flags: { ...flagsOut, requestMessage, 'request-message': requestMessage },
+        claimed,
+    };
 }
 
 /**
@@ -694,6 +768,22 @@ function loopSleep(ms: number, signal?: AbortSignal): Promise<void> {
     });
 }
 
+/** Render a reconcile report as run-log lines (0834 R2): summary, then one line per held message. */
+function formatReconcileReport(report: {
+    unresolved: Array<{ messageId: string; reason: string; injectAttempts: number; runId?: string }>;
+    exhausted: string[];
+    scanned: number;
+}): string {
+    const lines = [
+        `reconcile: scanned=${report.scanned} unresolved=${report.unresolved.length} exhausted=${report.exhausted.length}`,
+    ];
+    for (const u of report.unresolved) {
+        const run = u.runId !== undefined ? ` run=${u.runId}` : '';
+        lines.push(`  ${u.messageId} ${u.reason} attempts=${u.injectAttempts}${run}`);
+    }
+    return lines.join('\n');
+}
+
 /**
  * `spur agent loop --spec <id> [--poll <ms>]` — the persistent self-draining wrapper
  * the supervisor spawns (0258 R6). Each iteration consumes the inbox via `drainPending`;
@@ -721,15 +811,46 @@ export async function runAgentLoop(
     }
     const pollMs = parseLoopPoll(flags.poll);
     const sleep = runtime.sleep ?? ((ms: number) => loopSleep(ms, runtime.signal));
-    const svc = context.agentService();
+    // 0831 R4: the loop shares runAgentRun's acceptance rule — a per-process bus so
+    // `agent.invoke.start` (via the agent runner) marks the invocation accepted.
+    const bus = new EventBus() as SystemEventBus;
+    const svc = context.agentService({ events: bus });
+
+    // 0834 R2: reconcile unfinished requests and runs BEFORE the first drain —
+    // ambiguous work is named (outcome-unknown, never requeued) and budget-
+    // exhausted rows are marked failed, so the loop never re-dispatches them.
+    // The report is operator information in the run log; a non-empty unresolved
+    // list does NOT gate the loop (blocking dispatch is G62's 0838 decision).
+    const report = await new DeliveryReconciler(context).reconcile(recipient);
+    context.output.write(formatReconcileReport(report));
+
+    let invocationStarted = false;
+    bus.on('agent.invoke.start', () => {
+        invocationStarted = true;
+    });
 
     let iteration = 0;
     while (!runtime.signal?.aborted && (runtime.maxIterations === undefined || iteration < runtime.maxIterations)) {
         // Consume this member's inbox (queued → injected). A non-empty drain yields a
         // prompt to run the agent on; an empty drain yields `undefined` → idle-sleep.
-        const { prompt, flags: rewritten } = await drainIntoPrompt(undefined, context, { ...flags, drain: true });
+        const {
+            prompt,
+            flags: rewritten,
+            claimed,
+        } = await drainIntoPrompt(undefined, context, {
+            ...flags,
+            drain: true,
+        });
         if (prompt !== undefined) {
-            await svc.run(prompt, rewritten, deps);
+            // Reset per iteration: each drain is an independent delivery attempt.
+            invocationStarted = false;
+            try {
+                await svc.run(prompt, rewritten, deps);
+            } finally {
+                // 0831 R4: settle even on abort; the loop keeps iterating either
+                // way — a released row redelivers on the next drain.
+                await settleClaimedMessages(context, claimed, invocationStarted ? 'accepted' : 'not-started');
+            }
         } else {
             await sleep(pollMs);
         }
