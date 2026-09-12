@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>G6 Projects prototype — simulation only</title>
 <style>
   /* DESIGN.md tokens; system font fallbacks only — the page must load standalone (no network fetches). */
@@ -50,7 +50,7 @@
   .g6-tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--primary);background:var(--surface-1)}
   .g6-tab .count{color:var(--ink-tertiary);font-size:12px;margin-left:4px}
 
-  main{max-width:1280px;margin:0 auto;width:100%;padding:var(--s-lg) var(--s-lg) 220px}
+  main{max-width:1280px;margin:0 auto;width:100%;padding:var(--s-lg)}
   .cols{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:var(--s-lg)}
   .card{background:var(--surface-1);border:1px solid var(--hairline);border-radius:var(--r-lg);padding:var(--s-lg)}
   .card + .card{margin-top:var(--s-lg)}
@@ -74,7 +74,7 @@
     background:var(--surface-3);font-size:13px;color:var(--ink-muted);margin-bottom:var(--s-sm)}
   .state-card strong{color:#f3e17a}
 
-  .composer{position:fixed;left:0;right:0;bottom:0;background:var(--surface-2);
+  .composer{position:static;background:var(--surface-2);
     border-top:1px solid var(--hairline-strong);padding:var(--s-sm) var(--s-lg);z-index:20}
   .composer-inner{max-width:1256px;margin:0 auto}
   .composer .hint{font-size:11.5px;color:var(--ink-tertiary);margin-top:4px}
@@ -85,7 +85,7 @@
     border:1px solid var(--hairline-strong);border-radius:var(--r-md);padding:10px 12px;font:inherit}
   .composer-row{display:flex;gap:var(--s-sm);align-items:center;margin-top:var(--s-xs)}
 
-  .fixture-bar{position:fixed;right:12px;bottom:160px;width:284px;max-height:calc(100vh - 170px);overflow:auto;
+  .fixture-bar{position:static;width:auto;max-height:none;margin-top:var(--s-lg);overflow:auto;
     background:var(--surface-2);border:1px solid var(--hairline-strong);border-radius:var(--r-lg);padding:var(--s-sm);
     z-index:15;font-size:12px}
   .fixture-bar .eyebrow{display:block;margin:8px 0 4px}
@@ -117,6 +117,8 @@
     border-bottom:1px solid var(--hairline);background:var(--surface-1)}
   #storage-notice{background:#2a2410;color:#f3e17a;border:1px solid #5c5322;border-radius:var(--r-md);
     padding:8px 12px;font-size:12.5px;margin:0 0 var(--s-md)}
+  .member,.task{flex-wrap:wrap}
+  .member > div,.appbar > div{min-width:0;overflow-wrap:anywhere}
   @media (max-width: 1020px){
     .appbar{grid-template-columns:1fr 1fr;gap:var(--s-xs)}
     main{padding-right:var(--s-lg)}
@@ -151,6 +153,18 @@
   <button class="g6-tab" id="tab-work" type="button" role="tab" aria-selected="false" aria-controls="view-work" data-g6-view="work" tabindex="-1">Work</button>
 </nav>
 
+<div class="composer">
+  <div class="composer-inner">
+    <div id="chips"></div>
+    <textarea id="composer" rows="2" data-g6="composer" aria-label="Message to this project’s agents (simulated dispatch)"
+      placeholder="Ask this project’s agents… (Enter submits · Shift+Enter newline · never during IME composition)"></textarea>
+    <div class="composer-row">
+      <button class="btn btn-primary" id="send-btn" type="button" disabled data-g6="send">Send</button>
+      <span class="hint">Enter submits · Shift+Enter newline · Esc closes detail and returns focus to the opener</span>
+    </div>
+  </div>
+</div>
+
 <main>
   <div id="storage-notice" hidden role="status"></div>
 
@@ -182,6 +196,8 @@
         <button class="btn" id="agent-detail-close" type="button">Close (Esc)</button>
       </div>
       <p class="subtle" id="agent-detail-sub" style="font-size:12.5px;margin:4px 0 8px"></p>
+      <button class="btn" id="agent-start" type="button">Start member (mock)</button>
+      <button class="btn" id="agent-stop" type="button">Stop member (mock)</button>
       <div class="detail-tabs" role="tablist" aria-label="Member inspection panels (mock)">
         <button class="btn" type="button" role="tab" aria-selected="true" data-detail-tab="process">Process</button>
         <button class="btn" type="button" role="tab" aria-selected="false" data-detail-tab="terminal" tabindex="-1">Terminal</button>
@@ -189,6 +205,11 @@
         <button class="btn" type="button" role="tab" aria-selected="false" data-detail-tab="activity" tabindex="-1">Activity</button>
       </div>
       <div class="panel" id="agent-detail-panel" data-g6="detail-panel"></div>
+      <form id="member-input-form" hidden>
+        <label for="member-input">Member input (mock; Terminal line or inbox message)</label>
+        <input id="member-input" autocomplete="off">
+        <button class="btn" type="submit">Send to member (mock)</button>
+      </form>
     </div>
   </section>
 
@@ -221,17 +242,6 @@
   </aside>
 </main>
 
-<div class="composer">
-  <div class="composer-inner">
-    <div id="chips"></div>
-    <textarea id="composer" rows="2" data-g6="composer" aria-label="Message to this project’s agents (simulated dispatch)"
-      placeholder="Ask this project’s agents… (Enter submits · Shift+Enter newline · never during IME composition)"></textarea>
-    <div class="composer-row">
-      <button class="btn btn-primary" id="send-btn" type="button" disabled data-g6="send">Send</button>
-      <span class="hint">Enter submits · Shift+Enter newline · Esc closes detail and returns focus to the opener</span>
-    </div>
-  </div>
-</div>
 
 <script>
 /* biome-ignore-all lint/correctness/noInnerDeclarations: self-contained ES5-style simulation prototype */
@@ -303,7 +313,7 @@
   function freshProject(fx) {
     var p = {
       path: fx.path, worktree: fx.worktree, strategy: fx.strategy, label: PROJECT_LABEL,
-      draft: "", seq: 0, entries: [], pendingTask: null,
+      draft: "", revision: 0, seq: 0, entries: [], pendingTask: null,
       orchestrator: "online", fleet: "ready", restHold: false,
       executorState: "ready", blocked: false, netfail: false, delayed: false
     };
@@ -322,7 +332,7 @@
       focused: state.focused,
       projects: PROJECTS.map((fx) => {
         var p = proj(fx.path);
-        return { path: p.path, draft: p.draft, seq: p.seq, entries: p.entries,
+        return { path: p.path, draft: p.draft, revision: p.revision, seq: p.seq, entries: p.entries,
                  pendingTask: p.pendingTask, orchestrator: p.orchestrator, fleet: p.fleet,
                  restHold: p.restHold, executorState: p.executorState, blocked: p.blocked,
                  lastFailedId: p.lastFailedId || null, lastFailedKey: p.lastFailedKey || null };
@@ -355,14 +365,23 @@
     }
   }
   function hydrate(data) {
+    if (!Array.isArray(data.projects)) throw new Error("projects must be an array");
     var byPath = {};
-    (data.projects || []).forEach((sp) => { byPath[sp.path] = sp; });
+    data.projects.forEach((sp) => {
+      if (!sp || typeof sp.path !== "string" || !Array.isArray(sp.entries) ||
+          sp.entries.some((e) => !e || typeof e.id !== "string" || typeof e.requestId !== "string" ||
+            typeof e.text !== "string" || !STATUS[e.status] || !["request", "result"].includes(e.kind) ||
+            e.projectPath !== sp.path)) throw new Error("invalid project or conversation entry");
+      byPath[sp.path] = sp;
+    });
     PROJECTS.forEach((fx) => {
       var sp = byPath[fx.path]; if (!sp) return;
       var p = proj(fx.path);
       if (typeof sp.draft === "string") p.draft = sp.draft;
-      if (typeof sp.seq === "number") p.seq = sp.seq;
+      if (Number.isSafeInteger(sp.revision) && sp.revision >= 0) p.revision = sp.revision;
+      if (Number.isSafeInteger(sp.seq) && sp.seq >= 0) p.seq = sp.seq;
       if (Array.isArray(sp.entries)) p.entries = sp.entries.filter((e) => e && typeof e.requestId === "string" && e.projectPath === p.path);
+      p.entries.forEach((e) => { e._pendingDelay = false; });
       p.pendingTask = sp.pendingTask || null;
       p.orchestrator = ["online", "missing", "offline"].indexOf(sp.orchestrator) >= 0 ? sp.orchestrator : "online";
       p.fleet = sp.fleet === "zero" ? "zero" : "ready";
@@ -418,7 +437,7 @@
       const x = document.createElement("button");
       x.className = "x"; x.type = "button"; x.textContent = "×";
       x.setAttribute("aria-label", `Remove work reference ${p.pendingTask.taskId} from the draft`);
-      x.addEventListener("click", () => { p.pendingTask = null; save(); renderChips(); });
+      x.addEventListener("click", () => { p.pendingTask = null; p.revision++; save(); renderChips(); });
       chip.appendChild(x);
       host.appendChild(chip);
     } else {
@@ -432,6 +451,7 @@
   composer.addEventListener("input", () => {
     var p = focused();
     p.draft = composer.value;
+    p.revision++;
     save();
     refreshSendState();
   });
@@ -487,11 +507,11 @@
     for (let di = 0; di < p.entries.length; di++) {
       const cand = p.entries[di];
       if (cand.kind !== "request") continue;
-      if (payloadKey(cand.text, cand.taskId) !== key) continue;
+      if (payloadKey(cand.text, refOf(cand)) !== key) continue;
       if (cand.status === "pending" || cand.status === "accepted-working" ||
           cand.status === "queued-awaiting-orchestrator" || cand.status === "rest-held" ||
           cand.status === "executor-unavailable" || cand.status === "blocked" ||
-          cand.status === "failed-delivery") {
+          cand.status === "failed-delivery" || cand.status === "outcome-unknown" || cand.status === "completed-exit-only") {
         covering = cand; break;
       }
     }
@@ -520,10 +540,10 @@
       requestId: `req-${p.seq}${suffix}`, text: text, attempts: 1,
       taskId: p.pendingTask ? p.pendingTask.taskId : null,
       featureId: p.pendingTask ? p.pendingTask.featureId : null,
-      status: "pending", submittedAt: `step ${p.seq}`, note: null
+      status: "pending", submittedRevision: p.revision, submittedAt: `step ${p.seq}`, note: null
     };
     p.entries = p.entries.concat([entry]);
-    p.pendingTask = null; p.lastFailedId = null; p.lastFailedKey = null;
+    p.lastFailedId = null; p.lastFailedKey = null;
     /* Composer value deliberately stays until durable acceptance clears the
      * submitted revision (and only if the user has not edited while waiting). */
     save(); renderAll(); composer.focus();
@@ -586,8 +606,8 @@
   /* Clear only the submitted revision: edits while waiting are retained, and the
    * clear applies to the ORIGINATING project's draft, never the focused one. */
   function clearSubmittedRevisionIfNeeded(p, e) {
-    if (p.draft === e.text) {
-      p.draft = "";
+    if (p.revision === e.submittedRevision && p.draft === e.text) {
+      p.draft = ""; p.pendingTask = null; p.revision++;
       if (e.projectPath === state.focused) { composer.value = ""; refreshSendState(); }
     }
   }
@@ -639,7 +659,7 @@
     var insertAt = -1;
     for (let i = 0; i < p.entries.length; i++) { if (p.entries[i].id === e.id) insertAt = i; }
     p.entries = p.entries.slice(0, insertAt + 1).concat([result]).concat(p.entries.slice(insertAt + 1));
-    e.status = status === "outcome-unknown" ? "outcome-unknown" : e.status;
+    e.status = status;
     var pathNote = e.projectPath === state.focused
       ? "focused: same project"
       : `focused: ${state.focused} (untouched — late arrival stays in its owning project)`;
@@ -752,6 +772,7 @@
             " — verified result (SIMULATED). Arrived while another project could be focused.",
       note: null, attempts: pick.attempts
     };
+    pick.status = "completed-verified";
     var insertAt = 0;
     for (let j = 0; j < pickP.entries.length; j++) { if (pickP.entries[j].id === pick.id) insertAt = j; }
     pickP.entries = pickP.entries.slice(0, insertAt + 1).concat([result]).concat(pickP.entries.slice(insertAt + 1));
@@ -786,7 +807,7 @@
     }
     sel.value = state.focused;
     document.getElementById("hdr-worktree").textContent = p.worktree;
-    document.getElementById("hdr-strategy").textContent = p.strategy;
+    document.getElementById("hdr-strategy").textContent = p.restHold ? "rest — drains running work (mock)" : p.strategy;
     var orch;
     if (p.fleet === "zero") orch = "missing — zero agent fleet (no planner to bind)";
     else if (p.orchestrator === "missing") orch = "missing — no orchestrator bound";
@@ -928,6 +949,12 @@
       return b;
     }
     if (isResult) {
+      const origin = proj(entry.projectPath).entries.find((e) => e.kind === "request" && e.requestId === entry.requestId);
+      if (origin?.taskId) act("Open linked work (mock)", () => {
+        state.focused = entry.projectPath;
+        selectView("work");
+        live(`Result ${entry.requestId} links to ${origin.taskId} / ${origin.featureId} in ${entry.projectPath} (mock).`);
+      });
       if (entry.status === "completed-exit-only") {
         act("Mark verified after reconcile (mock)", () => {
           var hit = getEntry(entry.id);
@@ -1050,6 +1077,7 @@
     detailOpenerMember = opener.getAttribute("data-g6-member");
     document.getElementById(`view-${currentView}`).hidden = false;
     renderAll();
+    document.getElementById("agent-detail-close").focus();
   }
   function closeDetail() {
     openMember = null;
@@ -1125,7 +1153,7 @@
       open.setAttribute("data-g6", "open-member");
       open.setAttribute("data-g6-member", m.local);
       open.textContent = "Open detail";
-      open.setAttribute("aria-expanded", "false");
+      open.setAttribute("aria-expanded", String(openMember?.projectPath === p.path && openMember?.local === m.local));
       open.addEventListener("click", () => { openDetail(p.path, m.local, open); });
       right.appendChild(open);
       el.appendChild(right);
@@ -1182,7 +1210,8 @@
     if (m.occupancy === "working" && detailTab === "messages" || detailTab === "process") {
       /* no-op: keep copy honest per panel */
     }
-    panel.textContent = body;
+    panel.textContent = body + (m.inputLog ? "\n" + m.inputLog : "");
+    document.getElementById("member-input-form").hidden = !["terminal", "messages"].includes(detailTab);
     var tabBtns = document.querySelectorAll("[data-detail-tab]");
     tabBtns.forEach((b) => {
       var sel = b.getAttribute("data-detail-tab") === detailTab;
@@ -1215,6 +1244,7 @@
       right.textContent = "Use in conversation";
       right.addEventListener("click", () => {
         p.pendingTask = { taskId: t.taskId, featureId: t.featureId, title: t.title };
+        p.revision++;
         save(); currentView = "conversation"; renderAll(); composer.focus();
         live("Task " + t.taskId + " (feature " + t.featureId + ") linked into the conversation of project " +
              p.path + ". The request submitted next captures taskId/featureId at submission.");
@@ -1259,6 +1289,7 @@
   document.getElementById("project-select").addEventListener("change", (ev) => {
     var prev = state.focused;
     state.focused = ev.target.value;
+    openMember = null; detailOpener = null; detailOpenerMember = null;
     save(); renderAll(); composer.focus();
     live("Focused project switched to " + PROJECT_LABEL + " — " + state.focused +
          ". Drafts, entries, holds, receipts and results remain bound per project path" +
@@ -1293,6 +1324,35 @@
     if (dt) { selectDetailTab(dt.getAttribute("data-detail-tab")); }
   });
   document.getElementById("agent-detail-close").addEventListener("click", closeDetail);
+  ["start", "stop"].forEach((action) => {
+    document.getElementById(`agent-${action}`).addEventListener("click", () => {
+      if (!openMember) return;
+      const member = memberOf(openMember.projectPath, openMember.local);
+      member.occupancy = action === "start" ? "working" : "idle";
+      renderAll();
+      live(`${action} ${member.specId} (SIMULATED) — no process was contacted.`);
+    });
+  });
+  document.getElementById("member-input-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const input = document.getElementById("member-input");
+    if (!openMember || !input.value.trim()) return;
+    const member = memberOf(openMember.projectPath, openMember.local);
+    member.inputLog = `${detailTab} input (SIMULATED): ${input.value}`;
+    input.value = "";
+    renderDetail();
+    live(`Mock ${detailTab} input accepted for ${member.specId}; no stdin or message API called.`);
+  });
+  document.querySelector(".detail-tabs").addEventListener("keydown", (ev) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(ev.key)) return;
+    ev.preventDefault();
+    const tabs = [...document.querySelectorAll("[data-detail-tab]")];
+    const index = tabs.indexOf(document.activeElement);
+    const next = ev.key === "Home" ? 0 : ev.key === "End" ? tabs.length - 1
+      : (index + (ev.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    selectDetailTab(tabs[next].getAttribute("data-detail-tab"));
+    tabs[next].focus();
+  });
 
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
@@ -1310,7 +1370,7 @@
       live(`Request ${e.requestId} captured; durable acceptance lands in ~4 s (fixture). Edits while waiting keep the newer draft text.`);
       window.setTimeout(() => {
         e._pendingDelay = false;
-        if (e.status === "pending") { ADVANCE_BASE(e); renderAll(); }
+        if (getEntry(e.id)?.e === e && e.status === "pending") { ADVANCE_BASE(e); renderAll(); }
       }, 4000);
       return;
     }

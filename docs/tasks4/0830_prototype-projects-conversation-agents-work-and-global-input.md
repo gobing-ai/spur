@@ -4,7 +4,7 @@ name: Prototype Projects conversation, agents, work, and global input interactio
 status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.271Z
-updated_at: "2026-09-12T00:27:21.274Z"
+updated_at: "2026-09-12T04:15:58.917Z"
 feature_id: G6
 priority: P2
 tags:
@@ -32,10 +32,10 @@ Out of scope: modifying live Board routes or components, production API calls, l
 
 ### Acceptance Criteria
 
-- [x] R1: Given the local prototype, when its three views and agent detail are opened, then all retained capabilities are discoverable under one project context and every mutation is visibly simulated.
-- [x] R2: Given two projects with colliding labels and delayed/failing responses, when the user submits, edits, retries, switches and refreshes, then requests/results remain bound to the captured project and no newer or other-project draft is cleared.
-- [x] R3: Given the fixture controls, when each required state is selected, then its honest status and recovery/next action are visible and no mock result is presented as a production receipt.
-- [x] R4: Given the review package, when checks are inspected, then automated interaction results, keyboard/IME/focus evidence, 390/1440 px views and complete legacy control/route mapping are recorded; unavailable browser evidence remains explicitly unverified.
+- [x] AC-1 (R1): Given the local prototype, when its three views and agent detail are opened, then all retained capabilities are discoverable under one project context and every mutation is visibly simulated.
+- [x] AC-2 (R2): Given two projects with colliding labels and delayed/failing responses, when the user submits, edits, retries, switches and refreshes, then requests/results remain bound to the captured project and no newer or other-project draft is cleared.
+- [x] AC-3 (R3): Given the fixture controls, when each required state is selected, then its honest status and recovery/next action are visible and no mock result is presented as a production receipt.
+- [x] AC-4 (R4): Given the review package, when checks are inspected, then automated interaction results, keyboard/IME/focus evidence, 390/1440 px views and complete legacy control/route mapping are recorded; unavailable browser evidence remains explicitly unverified.
 
 ### Q&A
 
@@ -93,62 +93,16 @@ Do not freeze new production DTOs or endpoint names from this private mock. Robi
 
 ### Solution
 
-Scope: `task 0830` is a **prototype-only** deliverable set (three artifacts). No production module,
-component, or CLI surface was opened.
+Self-contained G6 Projects simulation; no production routes, API calls, processes or dependencies changed.
 
-1. **`docs/prototypes/g6-projects/index.html`** — self-contained HTML/CSS/JS single page, zero
-   dependencies (no network/CDN), styled from `DESIGN.md` tokens.
+- `docs/prototypes/g6-projects/index.html:470` — captures immutable project/task/feature payloads; correct duplicate/retry comparison and unknown-outcome suppression.
+- `docs/prototypes/g6-projects/index.html:608` — clears only the accepted persisted draft revision; preserves task references on failure and newer edits.
+- `docs/prototypes/g6-projects/index.html:367` — rejects malformed conversation storage and detaches pre-reload timer captures.
+- `docs/prototypes/g6-projects/index.html:199` — labeled mock Start/Stop and member Terminal/Messages input; detail keyboard/focus and project-switch isolation. Result rows navigate to their captured work reference.
+- `apps/web/tests/prototypes/g6-projects.test.ts:458` — regression checks reproduced draft loss, duplicate reference requests and unknown replay; 19 interaction tests now pass.
+- `docs/reports/g6-projects-prototype.md:76` — Chrome screenshots at 390/1440 px, real browser keyboard/composition/focus and reload evidence, plus complete retained-control/route mapping. Composer and fixture controls use normal flow to prevent overlap.
 
-   - Three keyboard-tabbed views — **Conversation** (default: composer + thread + status cards), **Agents** (roster of
-   members with roles from the closed vocabulary; member detail with Process / Terminal / Messages /
-   Activity panels, all visibly "MOCK"), **Work** (task rows link a task into the *same*
-   conversation's next send) — `data-g6` hooks drive all interaction; `#send-btn` is the composer's
-   submission affordance
-   (`docs/prototypes/g6-projects/index.html:230`).
-   - Header shows worktree / strategy / orchestrator binding / capacity. The orchestrator is a
-   **planner-role member bound as** orchestrator — `orchestrator` is never a fifth role. `hdr-worktree`
-   renders the focused project path (`docs/prototypes/g6-projects/index.html:771`).
-   - Storage contract: `localStorage["spur:g6:projects-prototype:v1"]` versioned 1 with drafts +
-   conversations **per project path** (`docs/prototypes/g6-projects/index.html:251-252`); invalid /
-   unavailable storage → nonfatal notice, stored bytes untouched, the page keeps working
-   session-only (`apps/web/tests/prototypes/g6-projects.test.ts:336`).
-   - Frozen interaction contract implemented in `submit()` / `advance()`:
-   request captured at submission with projectPath, requestId, text, optional taskId/featureId —
-   navigation cannot retarget a captured payload (immutable at capture time); send → pending
-   receipt; the submitted draft revision clears **only** on simulated durable acceptance (delayed
-   ~4 s arc or "Durable accept now" fixture
-   (`docs/prototypes/g6-projects/index.html:1287`)); edits while waiting are retained; failure keeps
-   the draft with same-requestId retry for an identical payload (`changed payload → new
-   requestId`, covered by `apps/web/tests/prototypes/g6-projects.test.ts:225`); late receipts /
-   results land in the originating project (`docs/prototypes/g6-projects/index.html:735`); receipt
-   status resolution is the single transition engine (`docs/prototypes/g6-projects/index.html:521`).
-   - R3 honesty: `queued-awaiting-orchestrator` with zero-agent fleet **never** re-labels as
-   "working" (`apps/web/tests/prototypes/g6-projects.test.ts:263-271`); missing / offline
-   orchestrator, rest-held, executor-unavailable, blocked, failed-delivery, outcome-unknown each
-   carry an honest "Available action" explanation with no false receipt
-   (`apps/web/tests/prototypes/g6-projects.test.ts:277-294`); run exit ≠ verified result renders as
-   `completed-exit-only`, "unverified" (`apps/web/tests/prototypes/g6-projects.test.ts:307-322`).
-   - Element identity: both fixture projects display the **identical** label "Aurora"
-   (`docs/prototypes/g6-projects/index.html:253-257`) and selection / receipt identity keys on
-   project path (`apps/web/tests/prototypes/g6-projects.test.ts:397-402`), so name-based retargeting
-   is impossible. Keyboard contract behaviors covered in
-   `apps/web/tests/prototypes/g6-projects.test.ts:203-224` (Enter / Shift+Enter / IME guard), the
-   Escape-close / focus-restore of member detail in
-   `apps/web/tests/prototypes/g6-projects.test.ts:350` ↔ `docs/prototypes/g6-projects/index.html:1037`, and the live region mirrors all announcements
-   (`#g6-live`, `#g6-live-visual`); icons **plus** text labels — never color-alone.
-
-2. **`apps/web/tests/prototypes/g6-projects.test.ts`** — 11 happy-dom interaction tests (148
-   assertions) executed inside apps/web, following the setup pattern of
-   `tests/components/GlobalAgentBar.test.tsx` / `tests/happy-dom.ts`. Load-bearing test is the
-   cross-project corruption case at `apps/web/tests/prototypes/g6-projects.test.ts:128-201`.
-   Because happy-dom's inline-script VM sandbox has unreliable intrinsics under Bun, the test disables
-   script evaluation and executes the page script in the test realm against the happy-dom window
-   (`apps/web/tests/prototypes/g6-projects.test.ts:40-58`).
-
-3. **`docs/reports/g6-projects-prototype.md`** — viewing instructions, scenario-receipt matrix for
-   every R2/R3 case, keyboard/IME/focus checklists, 390px/1440px layout notes (explicitly marked
-   unverified-by-browser), retained-control / legacy-route mapping from the 0828 runtime inventory,
-   and explicit mock/runtime limitations.
+Chrome input-engine composition is verified; operating-system candidate windows, mobile keyboards and other browsers are not claimed. All lifecycle, receipt and result behavior remains visibly simulated.
 
 ### Testing
 
@@ -158,17 +112,17 @@ component, or CLI surface was opened.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | docs/prototypes/g6-projects/index.html (1317 lines): three keyboard-tabbed views (Conversation default, Agents with per-member Process/Terminal/Messages/Activity detail, Work linking selected task/feature to the same conversation), one project selector, header with worktree/strategy/orchestrator/capacity; every mutation visibly MOCK-labeled |
-| R2 | MET | project-bound capture at submission (projectPath/requestId/text/taskId/featureId immutable); receipt-before-clear of the submitted revision only; edits-while-waiting retained; failed-delivery retry re-uses same requestId including across refresh (serialized lastFailedId/lastFailedKey, covered-scan fix, regression test apps/web/tests/prototypes/g6-projects.test.ts:263); duplicate retry suppressed; result navigation lands in originating project — cross-project corruption test fails the suite; pending switch tested |
-| R3 | MET | all seven R3 states (zero-agent, orchestrator missing/offline, rest-held, executor-unavailable, blocked, failed-delivery, outcome-unknown) plus completed-exit-only selectable via labeled fixtures, each with honest status and Available-action explanation; unknown outcome offers inspect/reconcile guidance, not unconditional retry; tests :277-322 |
-| R4 | MET | review package docs/reports/g6-projects-prototype.md: viewing instructions, R2/R3 scenario receipts, keyboard/IME/focus steps (Enter/Shift+Enter/IME 229/Esc focus-restore), 390px+1440px layout notes, retained-control/legacy-route mapping from 0828; 12 automated happy-dom tests run inside apps/web (163 assertions); browser-only cases explicitly named unverified in the report HONESTY block — R4 PARTIAL elements are honestly reported limitations, not false claims |
+| R1 | MET | `apps/web/tests/prototypes/g6-projects.test.ts:497` and `apps/web/tests/prototypes/g6-projects.test.ts:545` — mock lifecycle/member input and project-bound result navigation; workspace `bun test tests/prototypes/g6-projects.test.ts` exit 0 (19 tests, 200 assertions). |
+| R2 | MET | `apps/web/tests/prototypes/g6-projects.test.ts:458` — revision-safe clear; task-reference retry and unknown-outcome regression cases at lines 468 and 486; same command exit 0. Chrome actual reload preserves project isolation. |
+| R3 | MET | `docs/prototypes/g6-projects/index.html:850` — selectable state cards; workspace suite exercises every required state and prevents unknown-outcome replay; same test command exit 0. |
+| R4 | MET | `docs/reports/g6-projects-prototype.md:76` — Chrome 153 at 390/1440 px: keyboard, browser input-engine composition, detail focus, reload isolation and zero overflow/page errors; browser-check.mjs exit 0. Tracked screenshots and complete legacy mapping; OS candidate UI untested. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1-AC | MET |  | three views + agent detail open in prototype; retained capabilities discoverable under one project context; simulated mutations labeled |
-| R2-AC | MET |  | colliding-label projects + delayed/failing responses exercised; requests/results stay bound to captured project; no draft cleared cross-project or cross-revision |
-| R3-AC | MET |  | fixture states show honest status + recovery action; no mock result presented as production receipt |
-| R4-AC | MET |  | automated results, keyboard/IME/focus steps, both viewports and full mapping recorded; browser-unavailable cases explicitly unverified |
+| AC-1 (R1) | MET | test | `apps/web/tests/prototypes/g6-projects.test.ts:497` and `apps/web/tests/prototypes/g6-projects.test.ts:545` — mock lifecycle/member input and project-bound result navigation; workspace `bun test tests/prototypes/g6-projects.test.ts` exit 0 (19 tests, 200 assertions). |
+| AC-2 (R2) | MET | test | `apps/web/tests/prototypes/g6-projects.test.ts:458` — revision-safe clear; task-reference retry and unknown-outcome regression cases at lines 468 and 486; same command exit 0. Chrome actual reload preserves project isolation. |
+| AC-3 (R3) | MET | test | `docs/prototypes/g6-projects/index.html:850` — selectable state cards; workspace suite exercises every required state and prevents unknown-outcome replay; same test command exit 0. |
+| AC-4 (R4) | MET | command | `docs/reports/g6-projects-prototype.md:76` — Chrome 153 at 390/1440 px: keyboard, browser input-engine composition, detail focus, reload isolation and zero overflow/page errors; browser-check.mjs exit 0. Tracked screenshots and complete legacy mapping; OS candidate UI untested. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -179,9 +133,12 @@ component, or CLI surface was opened.
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | secua-review | — | reviewer verdict PASS with one P2 (retry identity serialization) fixed before done; P3 x4 advisory documented; honesty claims cross-checked (identical-label fixtures keyed on path; no backend claims from 0829 simulator) |
-| P4 | quality-gate | — | bun run spur-check exit 0 post-fix; apps/web typecheck + biome clean; 12/12 prototype tests pass |
-| P4 | traceability-verify | — | per-requirement verdicts with file:line evidence; browser visual evidence honestly unverified (sandbox), matching task contract |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Self-contained prototype, retained controls, per-project immutable requests and revision-aware clearing; screenshots and real Chromium composition/focus evidence replace the old browser-unverified receipt. |
+| P4 | scope-creep | — | Prototype, task-owned tests/report/screenshots only; production Board and APIs untouched. |
+| P4 | browser | — | node .spur/run/g6-verifyall/browser-check.mjs exit 0; Chrome 153.0.8010.36 at 390x900 and 1440x900; OS candidate UI and mobile keyboards not exercised. |
+| P4 | fix-artifacts | — | Rewrote .spur/run/0830-verify-answer.txt lines 1-31; derived .spur/run/0830-verdict.json; .spur/run/g6-verifyall/0830-red.log, 0830-tests.log, browser-check.mjs and browser-results.json disclose checks. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 

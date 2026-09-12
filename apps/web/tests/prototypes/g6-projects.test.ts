@@ -455,4 +455,118 @@ describe('g6-projects prototype (task 0830)', () => {
         expect(row.textContent).toContain('Aurora');
         expect(row.textContent).toContain(PATH_A);
     });
+    test('a newer draft revision survives acceptance even when its text returns to the original', () => {
+        const rig = boot();
+        typeInto(rig, A_TEXT);
+        pressEnter(rig);
+        typeInto(rig, 'new revision');
+        typeInto(rig, A_TEXT);
+        acceptPending(rig);
+        expect(rig.composer.value).toBe(A_TEXT);
+    });
+
+    test('work reference survives failure and refresh; duplicate send retains the same request ID', () => {
+        const rig = boot();
+        (rig.doc.querySelector('#tab-work') as HTMLButtonElement).click();
+        (rig.doc.querySelector('[data-g6="use-task"]') as HTMLButtonElement).click();
+        typeInto(rig, A_TEXT);
+        pressEnter(rig);
+        pressEnter(rig);
+        expect(rig.entries()).toHaveLength(1);
+        rig.fixture('netfail').click();
+        acceptPending(rig);
+        rig.fixture('rehydrate').click();
+        pressEnter(rig);
+        const requests = projectOf(rig.storage(), PATH_A).entries.filter((e) => e.kind === 'request');
+        expect(requests).toHaveLength(1);
+        expect(requests[0]?.taskId).toBe('T-101');
+        expect(requests[0]?.status).toBe('pending');
+    });
+
+    test('outcome-unknown cannot be replayed through the composer', () => {
+        const rig = boot();
+        typeInto(rig, A_TEXT);
+        pressEnter(rig);
+        acceptPending(rig);
+        rig.fixture('outcome-unknown').click();
+        typeInto(rig, A_TEXT);
+        pressEnter(rig);
+        expect(projectOf(rig.storage(), PATH_A).entries.filter((e) => e.kind === 'request')).toHaveLength(1);
+        expect(rig.composer.value).toBe(A_TEXT);
+    });
+    test('member lifecycle is simulated, detail keyboard works, and project switch closes old detail', () => {
+        const rig = boot();
+        (rig.doc.querySelector('#tab-agents') as HTMLButtonElement).click();
+        (rig.doc.querySelector('[data-g6="open-member"]') as HTMLButtonElement).click();
+        expect(rig.doc.activeElement.id).toBe('agent-detail-close');
+        (rig.doc.querySelector('#agent-start') as HTMLButtonElement).click();
+        expect(rig.live()).toContain('SIMULATED');
+        (rig.doc.querySelector('#agent-stop') as HTMLButtonElement).click();
+        const processTab = rig.doc.querySelector('[data-detail-tab="process"]');
+        processTab.focus();
+        processTab.dispatchEvent(new rig.win.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+        expect(rig.doc.activeElement.getAttribute('data-detail-tab')).toBe('terminal');
+        selectProject(rig, PATH_B);
+        expect(rig.doc.querySelector('#agent-detail').hidden).toBe(true);
+    });
+
+    test('invalid structured storage is rejected before rendering conversation entries', () => {
+        const rig = boot();
+        const raw = JSON.stringify({ version: 1, projects: [{ path: PATH_A, entries: [{ id: 'bad' }] }] });
+        rig.win.localStorage.setItem(STORE_KEY, raw);
+        rig.fixture('rehydrate').click();
+        expect(rig.rawStorage()).toBe(raw);
+        expect(rig.doc.querySelector('#storage-notice').textContent).toContain('invalid project');
+        expect(rig.entries()).toHaveLength(0);
+    });
+
+    test('rehydration detaches old delayed acceptance and allows the pending request to rearm', () => {
+        const rig = boot();
+        const timers: Array<() => void> = [];
+        rig.win.setTimeout = (callback: () => void) => {
+            timers.push(callback);
+            return timers.length;
+        };
+        typeInto(rig, A_TEXT);
+        pressEnter(rig);
+        rig.fixture('delay').click();
+        acceptPending(rig);
+        expect(timers).toHaveLength(1);
+        rig.fixture('rehydrate').click();
+        timers[0]?.();
+        expect(rig.composer.value).toBe(A_TEXT);
+        expect(rig.entries()[0].getAttribute('data-g6-entry-status')).toBe('pending');
+        rig.fixture('delay').click();
+        acceptPending(rig);
+        expect(timers).toHaveLength(2);
+        timers[1]?.();
+        expect(rig.composer.value).toBe('');
+    });
+    test('mock member input and result navigation stay in the selected project', () => {
+        const rig = boot();
+        (rig.doc.querySelector('#tab-agents') as HTMLButtonElement).click();
+        (rig.doc.querySelector('[data-g6="open-member"]') as HTMLButtonElement).click();
+        (rig.doc.querySelector('[data-detail-tab="terminal"]') as HTMLButtonElement).click();
+        const input = rig.doc.querySelector('#member-input');
+        input.value = 'mock command';
+        rig.doc
+            .querySelector('#member-input-form')
+            .dispatchEvent(new rig.win.Event('submit', { bubbles: true, cancelable: true }));
+        expect(rig.doc.querySelector('#agent-detail-panel').textContent).toContain('SIMULATED): mock command');
+        expect(input.value).toBe('');
+        (rig.doc.querySelector('#tab-work') as HTMLButtonElement).click();
+        (rig.doc.querySelector('[data-g6="use-task"]') as HTMLButtonElement).click();
+        typeInto(rig, A_TEXT);
+        pressEnter(rig);
+        acceptPending(rig);
+        const verified = [...rig.doc.querySelectorAll('button')].find((b) =>
+            b.textContent.includes('Arrive verified result'),
+        );
+        verified.click();
+        const link = [...rig.doc.querySelectorAll('button')].find((b) => b.textContent.includes('Open linked work'));
+        link.click();
+        expect(rig.doc.querySelector('#tab-work').getAttribute('aria-selected')).toBe('true');
+        expect(rig.live()).toContain(PATH_A);
+        expect(rig.live()).toContain('T-101 / G6');
+    });
 });

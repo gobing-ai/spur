@@ -12,13 +12,13 @@ Open the file directly in a browser (double-click, or `open docs/prototypes/g6-p
 No build step, no server, no storage prerequisites. The page boots into the **Conversation** view of
 the first fixture project.
 
-- Fixture bar (bottom): **delay, netfail, dupretry, late-result, rehydrate, corrupt-storage** plus
+- Fixture controls (in the document flow): **delay, netfail, dupretry, late-result, rehydrate, corrupt-storage** plus
   the R3 state toggles **zero-agent / orch-missing / orch-offline / rest-held /
   executor-unavailable / blocked / failed-delivery / outcome-unknown** and **reset to nominal**.
   `aria-pressed` mirrors the toggled state; the fixture note names the focused project path.
 - Project selector (header): two projects **both labeled "Aurora"** (`/work/aurora-auth`,
   `/work/aurora-billing`). The shared label is deliberate — selection and identity key on the
-  project path, and `hdr-worktree` always shows the focused path so the two cannot be confused.
+  project path, and the conversation and live region always show the focused path; `hdr-worktree` shows the fixture branch/revision so the two cannot be confused.
 - Header: worktree, dispatch strategy, orchestrator binding, capacity — all update with the
   focused project. The orchestrator is a **planner-role member bound as orchestrator**; the role
   vocabulary stays the closed set `scribe/coder/reviewer/planner`.
@@ -31,7 +31,7 @@ Storage contract: `localStorage["spur:g6:projects-prototype:v1"]`, versioned (`v
 drafts + conversations **per project path**. Invalid/unavailable storage is a nonfatal notice; the
 stored bytes are left untouched and the page stays session-only.
 
-## Scenario receipts (static code + happy-dom automation; screenshots not taken)
+## Scenario receipts (happy-dom + Chrome browser checks)
 
 | # | Scenario | How to drive it | Expected outcome (observed) |
 | - | -------- | --------------- | --------------------------- |
@@ -57,8 +57,8 @@ stored bytes are left untouched and the page stays session-only.
 | ST-1 | Corrupt storage | "corrupt-storage" | page keeps working; notice names the key and says session-only; bytes untouched |
 | LB-1 | Identical labels | select either "Aurora" option | options carry the two paths as value; rows show both path and shared label; no name-based retargeting possible |
 
-Automation receipts for the same matrix: `bun test tests/prototypes/g6-projects.test.ts` (11 tests,
-148 assertions — including the load-bearing cross-project corruption case).
+Automation receipts for the same matrix: `bun test tests/prototypes/g6-projects.test.ts` (19 tests,
+200 assertions — including the load-bearing cross-project corruption case).
 
 ## Keyboard / IME / focus steps (manual check list)
 
@@ -73,28 +73,37 @@ Automation receipts for the same matrix: `bun test tests/prototypes/g6-projects.
 5. All receipt rows carry an icon **plus** a text label (`queued-awaiting-orchestrator`,
    `rest-held`, …) — nothing relies on color alone.
 
-## Layout notes (inspected statically; NOT verified in a real browser)
+## Browser evidence — 2026-09-12
 
-- **1440px** — two-column grid: conversation + state cards / insights gutter on the left, agents &
-  work on the right; the header fields sit on one line.
-- **390px** — the grid collapses to one column via the single breakpoint; the fixture bar scrolls
-  horizontally; the composer stays within the first viewport; states/cards stack but remain
-  typographically intact (tokens from `DESIGN.md`, no truncated labels).
-- HONESTY: **no real browser render, screenshot, or view-port measurement was taken for this
-  deliverable.** The 390px/1440px claims come from reading the CSS (flex? columns + 390px
-  breakpoint) and from DOM assertions in happy-dom; layout behavior in Chrome/Safari/Firefox is
-  **unverified**.
+Chrome **153.0.8010.36**, fresh headless contexts at **390×900** and **1440×900**, zero page errors and no horizontal overflow. The browser checks passed Enter, native Shift+Enter newline insertion, Chromium composition via CDP `Input.imeSetComposition` (Enter did not submit), tab arrow navigation, member-detail focus, Escape restoration, mock start/stop and actual page-reload isolation. Native operating-system candidate windows and mobile keyboards were not exercised; these remain compatibility checks, not claimed evidence.
+
+Initial browser inspection exposed the fixed composer obscuring content. The composer now sits before the active view in normal document flow, and fixture controls also occupy normal flow. At 390 px the view is one column and roster/task rows wrap; 1440 px retains the wider conversation grid. Scrolling keeps every control reachable without an overlay. No production design tokens or Board layout changed.
+
+| View | 390 px | 1440 px |
+| --- | --- | --- |
+| Conversation | [Screenshot](../prototypes/g6-projects/conversation-390.png) | [Screenshot](../prototypes/g6-projects/conversation-1440.png) |
+| Agents | [Screenshot](../prototypes/g6-projects/agents-390.png) | [Screenshot](../prototypes/g6-projects/agents-1440.png) |
+
+Reproduction: open the prototype at the indicated viewport widths and follow the keyboard checklist above. Browser automation receipt: `.spur/run/g6-verifyall/browser-results.json`; runner: `.spur/run/g6-verifyall/browser-check.mjs` (uses the already-installed local Playwright module and Chrome, no project dependency added). Happy-dom regression suite: `cd apps/web && bun test tests/prototypes/g6-projects.test.ts` → 19 pass, 0 fail, 200 assertions.
 
 ## Retained controls and legacy routes (from the 0828 runtime inventory)
 
 | Legacy control / route | Retained as | Note |
 | ---------------------- | ----------- | ---- |
 | `GlobalAgentBar` composer stub | prototype composer (textarea, `#composer`) | UI-only in production; the prototype stages the full capture contract |
-| Project switcher label-driven selection | `#project-select` keyed on `option.value` = project path | malicious/identical labels can never retarget; header repeats the path |
+| Project switcher project selection | `#project-select` keyed on `option.value` = project path | malicious/identical labels can never retarget; header repeats the path |
 | 0828 occupancy vocabulary (`working`/`idle`/`rest`) | state cards + member occupancy labels | `queued-awaiting-orchestrator` is never shown as "working" (R3-1) |
 | 0828 "no first-class blocked signal" | `blocked` card / `⛔ blocked` receipt | treated as occupancy ambiguity, honestly labeled |
 | Board / task URLs (`docs/tasks4`, feature ids) | Work view task rows → ref chips → `taskId`/`featureId` captured at submission | navigation cannot retarget a captured request (payload is immutable at submit time) |
 | Strategy names (rest / GTD dispatch) | `#hdr-strategy` + state cards | same vocabulary as 0829 traces |
+| Workspace team selection + Overview/Team/Inbox/Tasks | One project selector + Conversation/Agents/Work | `apps/web/src/modules/workspace/WorkspaceShell.tsx:15`; team-specific selection is consolidated only in the prototype. |
+| Inbox All/Supervisor/member tabs | Conversation + Agents → Messages/Activity | `apps/web/src/modules/inbox/InboxShell.tsx:14`; message history and occupancy remain distinct. |
+| Teams supervisor/terminal/process/activity controls | Agents roster, detail Process and mock Start/Stop | `apps/web/src/modules/teams/TeamsShell.tsx:10`; mutations visibly simulated; no process is launched. |
+| Member terminal stdout/stderr and stdin | Agents → Terminal inspection + labeled mock member input | `apps/web/src/modules/teams/MemberTerminal.tsx:47`; existing `POST /api/team/processes/:id/stdin` remains owned by the production terminal; mock input echoes locally without calling it. |
+| Message send/reply/inbox | Project composer and Agents → Messages inspection + labeled mock member input | `/api/messages` and `/api/messages/:id/reply` remain production-owned; prototype requests do not call them. |
+| Team process listing/start/stop/stream and team up/down | Agents Process/Terminal/Activity and mock lifecycle buttons | Existing `/api/team/*` transport stays intact; fleet-wide up/down is represented by fixtures, not performed. |
+| Registered project list/start | Single project selector | `apps/web/src/components/ProjectSwitcher.tsx:27` and `:73`; existing `/api/projects` and `/api/projects/start` are never called by this file. |
+| Board Workspace/Inbox/Teams navigation | Three Projects views in this standalone file | Existing Board routes remain usable; production route retirement and aliases await Robin's cutover decision. |
 
 ## Explicit mock / runtime limitations
 
@@ -114,3 +123,11 @@ Automation receipts for the same matrix: `bun test tests/prototypes/g6-projects.
 - The identical "Aurora" labels are intentional fixtures; the production design must key every
   interactive identity on the project path (this prototype demonstrates the failure mode with
   label-keyed addressing by keeping both).
+
+## Re-verification fixes
+
+The added regression checks initially failed on three defects: same-text newer drafts were cleared, task-referenced retries created duplicates, and outcome-unknown could be resent through the composer. Drafts now carry a persisted revision; references remain attached until their accepted revision clears; payload comparison includes both task and feature IDs; unresolved outcomes suppress duplicate dispatch. Reload invalidates old timer captures and resets pending delay state. Structured malformed storage is rejected before rendering. Project switches close the prior member detail; detail tabs support keyboard arrows; Start/Stop changes only labeled mock occupancy.
+
+Browser composition is now exercised through Chromium's input engine as well as the happy-dom `isComposing`/229 guards. OS IME candidate UI, other browsers and assistive-technology speech remain untested compatibility surfaces. The earlier all-browser-unverified receipt is superseded by the Chrome evidence above.
+
+Result rows with a captured task reference expose **Open linked work (mock)**, which navigates to Work in the result's original project and announces its task/feature identity. Member Terminal/Messages input is a local simulated echo; it never calls stdin or message routes.
