@@ -629,9 +629,11 @@ describe('G6 characterization (0828) — delivery faults', () => {
             const dao = new InboxMessageDao(db);
 
             let pendingAtInvocation = -1;
+            let calls = 0;
             const deps = {
                 runner: {
                     runPromptCommand: async () => {
+                        calls++;
                         // Observed state INSIDE the invocation: what status are the rows in?
                         pendingAtInvocation = await dao.countPending('planner');
                         return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
@@ -643,6 +645,7 @@ describe('G6 characterization (0828) — delivery faults', () => {
 
             const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
             expect(code).toBe(0);
+            expect(calls).toBe(1);
             expect(pendingAtInvocation).toBe(0); // queued rows already flipped to injected
 
             // Target invariant UNMET: delivery is finalized (queued→injected,
@@ -656,7 +659,10 @@ describe('G6 characterization (0828) — delivery faults', () => {
         }
     });
 
-    test('probe throwing invocation: the run is converted to exitCode 2 and the loop continues silently', async () => {
+    test.each([
+        'throw',
+        'nonzero',
+    ] as const)('probe %s invocation: the loop consumes the message and continues', async (failure) => {
         // Injected fault: the runner throws during invocation. Boundary:
         // AgentService.executeRun catch at agent-service.ts:1292 converts the throw
         // into { ok:false, exitCode:2 } WITHOUT a persisted message failure; svc.run
@@ -669,10 +675,13 @@ describe('G6 characterization (0828) — delivery faults', () => {
             const db = await ctx.getDb();
             const dao = new InboxMessageDao(db);
 
+            let calls = 0;
             const deps = {
                 runner: {
-                    runPromptCommand: async (): Promise<never> => {
-                        throw new Error('injected invocation failure');
+                    runPromptCommand: async () => {
+                        calls++;
+                        if (failure === 'throw') throw new Error('injected invocation failure');
+                        return { exitCode: 7, stdout: '', stderr: 'injected nonzero exit', durationMs: 1 };
                     },
                 } as G6MockRunner,
                 detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
@@ -688,7 +697,8 @@ describe('G6 characterization (0828) — delivery faults', () => {
                 deps,
             );
             expect(code).toBe(0);
-            expect(out.errors.join('\n')).toContain('injected invocation failure');
+            expect(calls).toBe(1);
+            if (failure === 'throw') expect(out.errors.join('\n')).toContain('injected invocation failure');
 
             const rows = await dao.inbox('planner', 10);
             expect(rows.length).toBe(1);
@@ -721,6 +731,9 @@ describe('G6 characterization (0828) — delivery faults', () => {
             expect(rows.length).toBe(2);
             // Observed: per-send UUIDs — same-body requests are NOT unified.
             expect(rows[0]?.id).not.toBe(rows[1]?.id);
+            const drained = await dao.drainPending('planner');
+            expect(drained).toHaveLength(2);
+            expect(await dao.countPending('planner')).toBe(0);
 
             // Target invariant UNMET: no idempotency/dedup key exists. A retried
             // send (client crash + resend, double-click, operator retry)
@@ -783,9 +796,13 @@ describe('G6 characterization (0828) — delivery faults', () => {
             const db = await ctx.getDb();
             const systemDao = new (await import('@gobing-ai/spur-domain')).SystemEventDao(db);
 
+            let calls = 0;
             const deps = {
                 runner: {
-                    runPromptCommand: async () => ({ exitCode: 0, stdout: 'done!', stderr: '', durationMs: 1 }),
+                    runPromptCommand: async () => {
+                        calls++;
+                        return { exitCode: 0, stdout: 'done!', stderr: '', durationMs: 1 };
+                    },
                 } as G6MockRunner,
                 detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
                 doctorRunner: g6Doctor() as G6MockDoctor,
@@ -794,8 +811,9 @@ describe('G6 characterization (0828) — delivery faults', () => {
             const code = await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
             expect(code).toBe(0);
 
+            expect(calls).toBe(1);
             // Observed: (a) the message row is stuck at 'injected' forever — markDelivered
-            // (ts-db) is never called on this path; (b) no message.* event family exists;
+            // (ts-db) is never called on this path; (b) no DAO delivery events reach this CLI ledger;
             // (c) nothing in the ledger associates the runId with a message id.
             const rows = await new InboxMessageDao(db).inbox('planner', 10);
             expect(rows[0]?.status).toBe('injected');

@@ -48,7 +48,7 @@ Evidence classification used below: **[S]** = source read; **[T]** = runnable te
 - CLI `spur team`: assign/status/up/down/start/stop — apps/cli/src/commands/team.ts:42–101 [S]; CLI `spur projects`: add/remove/list/start/stop — apps/cli/src/commands/projects.ts:13–188 [S]; CLI `spur serve` — apps/cli/src/commands/serve.ts [S].
 - HTTP server (`apps/server/src`): `/api/messages` GET/POST + `/api/messages/:id/reply` (apps/server/src/modules/messages/index.ts:26–71) and `/api/messages/inbox`; `/api/team/*` start/stop/stdin/stream/teams/up/down/health (apps/server/src/modules/team/index.ts:41–304); `/api/project`, `/api/projects`, `/api/projects/start` project-identity/start proxies (apps/server/src/modules/health/index.ts:45–100). Server context composes TeamService + SupervisorService over `cwd` + `dbUrl=join(cwd, DEFAULT_DATABASE_URL)` (apps/server/src/context.ts:326–334, 354–360) [S].
 - Board web: `GlobalAgentBar` (stub, no dispatch) — apps/web/src/components/GlobalAgentBar.tsx:36–39; `ProjectSwitcher` GET `/api/projects` + POST start — apps/web/src/components/ProjectSwitcher.tsx:24–80; Inbox/Teams shells — apps/web/src/modules/inbox/InboxShell.tsx, modules/teams/TeamsShell.tsx [S].
-- Plugins/agents/hooks: `plugins/sp/commands/*` drive dispatches through `spur agent --agent <inline|auto|name>` (e.g. plugins/sp/commands/dev-arch.md:4,18) — plugin dispatch routes through the SAME closed role vocabulary and `--agent` selector; subagent fan-outs inherit `SPUR_ROLE` (agent-service.ts:1721) [S].
+- Plugins/agents/hooks: `plugins/sp/commands/*` select inline execution or a subprocess executor through the skill-level `--agent <inline|auto|name>` contract (e.g. plugins/sp/commands/dev-arch.md:4,18) — plugin dispatch routes through the SAME closed role vocabulary and `--agent` selector; subagent fan-outs inherit `SPUR_ROLE` (agent-service.ts:1721) [S].
 
 ### 2.4 cwd / DB isolation
 
@@ -67,7 +67,7 @@ Evidence classification used below: **[S]** = source read; **[T]** = runnable te
 
 - Message rows: `inbox_messages(id uuid, from_id, to_id, body, status queued|injected|delivered, in_reply_to, inject_attempts, delivered_at)` — ts-db 0.4.62 `InboxMessageDao` (node_modules/@gobing-ai/ts-db/dist/inbox-message-dao.d.ts:59–75) [S].
 - Addressing is syntactic-only (`validateAgentId`); recipient existence NOT required; composition `teamId-memberId` (team-service.ts:316–345) [S].
-- Lifecycle events `message.enqueued/injected/delivered/failed` are DAO events; the `system_events` ledger tap records only `message.sent|replied` metadata (team-service.ts:316–345, 55–110) [S]. **No `message.*` family reaches the ledger from the enqueue path** (probe 6).
+- Lifecycle events `message.enqueued/injected/delivered/failed` are DAO events; the `system_events` ledger tap records only `message.sent|replied` metadata (team-service.ts:316–345, 55–110) [S]. **The CLI probe has no event bus, so it proves absence only on that path** (probe 6); server-wired `message.sent/replied` events remain observable (`packages/app/src/services/team-service.ts:915`).
 
 ### 2.7 Occupant replacement
 
@@ -83,11 +83,11 @@ apps/cli/tests/commands/agent-team.test.ts:611–819 (five probes) and packages/
 | # | Category | Setup / fault injected | Observed behavior | Target invariant |
 | --- | --- | --- | --- | --- |
 | 1 | Drain-before-spawn | Seed 1 queued msg; `runAgentRun --drain` with fake runner recording `countPending` at invocation entry | Invocation runs the drained body; pending = 0 already inside the invocation — rows flipped `queued→injected` BEFORE spawn (agent.ts:543–600 called ahead of `svc.run`, agent.ts:491–495) | UNMET: delivery finalized before invocation is verifiable; a spawn failure commits consumption first [T] |
-| 2 | Nonzero/throwing invocation | Fake runner throws (`agent-service.ts:1273–1297` catch) → `svc.run` returns exitCode 2 → `runAgentLoop` discards it (agent.ts:736); loop iterates on | Loop resolves 0, batched stderr only; row stays `injected`; re-drain empty. No requeue/failed-marking seam | UNMET: no durable recovery path; loss is silent to long-lived loops [T] |
+| 2 | Nonzero/throwing invocation | Fake runner throws or returns exit 7 (`agent-service.ts:1273–1297` catch) → `svc.run` returns exitCode 2 → `runAgentLoop` discards it (agent.ts:736); loop iterates on | Loop resolves 0, batched stderr only; row stays `injected`; re-drain empty. No requeue/failed-marking seam | UNMET: no durable recovery path; loss is silent to long-lived loops [T] |
 | 3 | Duplicate submission | Two identical bodies enqueued via `InboxMessageDao.enqueue` (ts-db 0.4.62, per-send `crypto.randomUUID`, inbox-message-dao.js:21–43) | 2 distinct msgIds, both queued, both deliver in one drain | UNMET: no idempotency/dedup key — a retried send duplicates the payload [T] |
 | 4 | Competing consumers | Two `TeamService` instances over one shared adapter; concurrent `drainPending` | At-most-once per row: disjoint claim sets, `injectAttempts==1` (conditional `UPDATE … WHERE status='queued' … RETURNING`, single statement) | MET on the SQLite seam; residual: statement-atomicity only, no cross-process lease/leader primitive [T] |
 | 5 | Stale-generation wait | Waiter pins run R gen 1; occupant replaced by run S gen 2 afterwards | Typed failure `run_replaced` (`generation 1 → 2`, occupant-wait.ts:247–261); successor observable via `getOccupant` | UNMET: failure carries no successor link or retarget primitive; caller must blind-re-snapshot [T] |
-| 6 | Completion-without-notification | Successful `--drain` run; notification sink suppressed by inspection (none exists) | Message stuck `injected` forever (`markDelivered` never called); zero `message.*` ledger rows; no completion message to sender; nothing in `system_events` connects the runId to any message id | ABSENT (seam named): `AgentService.executeRun` persists result + occupant exit pin (agent-service.ts:1434–1444) but has no completion-notification sink into `InboxMessageDao`; no durable run↔message association exists [T] |
+| 6 | Completion-without-notification | Successful `--drain` run; notification sink suppressed by inspection (none exists) | Message stuck `injected` forever (`markDelivered` never called); zero queried DAO delivery-event rows in this CLI probe; no completion message to sender; nothing in `system_events` connects the runId to any message id | ABSENT (seam named): `AgentService.executeRun` persists result + occupant exit pin (agent-service.ts:1434–1444) but has no completion-notification sink into `InboxMessageDao`; no durable run↔message association exists [T] |
 
 Duplicate submission (3) and duplicate consumption (4) are asserted separately, per the probe contract. No receipt table was manufactured.
 
@@ -152,6 +152,10 @@ Deferred decisions (owner: Robin / later production design): breaking cutover wi
 | `agent.invoke.start/exit` | occupancy projection: latest start = `working`; latest exit ⇒ `idle` iff `countPending==0`, else `unknown`; `blocked` has no first-class signal (occupant-wait.ts:18–79) |
 | `team.member.started/stopped` vs `process.*` | member events are the Board Activity filter surface; both are produced by SupervisorService and bridged from TeamOrchestrator (team-service.ts:980–1000); dedup only vs explicit stop() |
 | Projects registry `port` | 0 = stopped/unknown; >0 = last-known listener port (self-healing on staleness) |
-| GlobalAgentBar notice | honest stub; retained until 0830 wires dispatch (GlobalAgentBar.tsx:36–39) |
+| GlobalAgentBar notice | honest stub; 0830 models dispatch only in an isolated prototype (GlobalAgentBar.tsx:36–39) |
 | Retained controls mapping for 0830 | Board routes keep `/api/messages*`, `/api/team/*`, `/api/projects*` (server modules above); CLI verbs `agent run/loop/wait`, `message send/inbox/reply/watch`, `team up/down/start/stop/assign`, `projects add/list/start/stop` are the retained controls the prototypes must not silently rewire |
 
+
+## Verification corrections — 2026-09-12
+
+The invocation probes now assert exactly one fake runner call; the failure probe covers both a throw and a returned nonzero exit. Duplicate submission asserts both distinct IDs and consumption of both queued rows. Competing consumers remain a shared-adapter characterization, not a cross-process lease test. The notification probe has no sink to disable and no event bus; it does not disprove server message events. Plugin `--agent` is a skill execution selector, not a literal `spur agent --agent` command.

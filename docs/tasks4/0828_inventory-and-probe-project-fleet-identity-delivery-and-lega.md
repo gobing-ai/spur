@@ -4,7 +4,7 @@ name: Inventory and probe project fleet identity, delivery, and legacy migration
 status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.267Z
-updated_at: "2026-09-11T23:33:06.222Z"
+updated_at: "2026-09-12T01:04:28.925Z"
 feature_id: G6
 priority: P1
 tags:
@@ -106,17 +106,17 @@ Change map (no production code; deliverables = report + characterization probes 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | docs/reports/g6-runtime-inventory.md#runtime-path — registry→config/spec→supervisor→loop→inbox→run/result, all entry points, cwd/DB isolation, role propagation, mailbox identity, occupant replacement cited |
-| R2 | MET | apps/cli/tests/commands/agent-team.test.ts G6 probes + packages/app/tests/services/occupant-wait.test.ts stale-generation probe; six categories runnable, unmet invariants named |
-| R3 | MET | docs/reports/g6-runtime-inventory.md#migration-matrix — every R3 category with disposition, conflict, rollback note; no live data touched |
-| R4 | MET | docs/reports/g6-runtime-inventory.md#handoff — existing/absent/proposed split with 0829/0830 handoff inputs |
+| R1 | MET | `docs/reports/g6-runtime-inventory.md:18` — source inventory audited against TeamService, CLI loop and plugin callers; `spur task check 0828 --strict-core --json` exit 0. |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:616` and `packages/app/tests/services/occupant-wait.test.ts:299` — workspace `bun test` commands exit 0; 34 CLI tests and 16 app tests; throw/nonzero cases and exact invocation counts asserted. |
+| R3 | MET | `docs/reports/g6-runtime-inventory.md:94` — migration rows inspected with conflict/rollback notes; only task-owned report/tests changed (`git diff --name-only`). |
+| R4 | MET | `docs/reports/g6-runtime-inventory.md:112` — existing/absent/proposed handoff reviewed against 0829/0830; report correction preserves the prototype-only boundary. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1-AC | MET | report | every hop has owner, citation, identity/context carrier, evidence classification |
-| R2-AC | MET | test | six probe commands runnable; duplicate submission vs consumption separated; unmet invariants asserted in-test |
-| R3-AC | MET | report | matrix rows complete; G4/M3/M6/K1/K2/A7 resolved via spur; statuses untouched |
-| R4-AC | MET | report | capability limits + state/control mappings delivered; extensions name owning packages; cutover deferred to operator |
+| R1: Given the checked-out source and consuming-workspace dependencies, when the report is read, then every hop and caller category in R1 has an owner, source citation, identity/context carrier, and evidence classification. | MET | command | `docs/reports/g6-runtime-inventory.md:18` — source inventory audited against TeamService, CLI loop and plugin callers; `spur task check 0828 --strict-core --json` exit 0. |
+| R2: Given isolated fake-executor probes, when their documented commands run, then all six fault categories are reproducible with observed state and call counts; duplicate submission and duplicate consumption are distinguished, and unmet target invariants are explicitly named. | MET | test | `apps/cli/tests/commands/agent-team.test.ts:616` and `packages/app/tests/services/occupant-wait.test.ts:299` — workspace `bun test` commands exit 0; 34 CLI tests and 16 app tests; throw/nonzero cases and exact invocation counts asserted. |
+| R3: Given the legacy inventory, when migration coverage is reviewed, then every R3 category has a disposition, conflict/rollback note and source evidence, while live data and old task statuses remain unchanged. | MET | command | `docs/reports/g6-runtime-inventory.md:94` — migration rows inspected with conflict/rollback notes; only task-owned report/tests changed (`git diff --name-only`). |
+| R4: Given the completed report, when 0829 or 0830 starts, then Handoff provides capability limits and observable state/control mappings; each proposed extension names its owning package and deferred cutover decisions have an owner. | MET | command | `docs/reports/g6-runtime-inventory.md:112` — existing/absent/proposed handoff reviewed against 0829/0830; report correction preserves the prototype-only boundary. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -127,9 +127,11 @@ Change map (no production code; deliverables = report + characterization probes 
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | secua-review | — | 2xP3 fixed (call-count assertions, citation drift); 3xP4 advisory left (roster row fold, comment typo fixed, supervisor identity column) |
-| P4 | quality-gate | — | bun run spur-check exit 0 twice; post-check rules pass; apps/cli 33 pass / packages/app 16 pass |
-| P4 | traceability-verify | — | per-requirement MET with file:line evidence; verdict PASS |
+| P4 | spur task check | — | task check passed |
+| P4 | task-check | — | spur task check 0828 --strict-core --json exit 0 |
+| P4 | design-conformance | — | Report + isolated characterization only; no production or live-data changes. |
+| P4 | scope-creep | — | Changes limited to task 0828 report, characterization tests and task evidence. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
