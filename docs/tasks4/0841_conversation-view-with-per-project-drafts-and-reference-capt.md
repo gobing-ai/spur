@@ -4,7 +4,7 @@ name: Conversation view with per-project drafts and reference capture
 status: todo
 template: feature-impl
 created_at: 2026-09-12T04:54:51.543Z
-updated_at: "2026-09-12T04:56:45.621Z"
+updated_at: "2026-09-12T06:00:34.810Z"
 feature_id: G63
 priority: P2
 tags:
@@ -79,13 +79,233 @@ Feature: Conversation view with per-project drafts and reference capture
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-12T05:48:14.069Z
+
+- **How do references travel structurally? — CLOSED: a `SPUR-REQUEST/1` envelope line in the message
+  body.** `inbox_messages` is owned by `@gobing-ai/ts-db`, so a `refs` column would be an engine
+  release for a presentation concern; a sibling JSON body field on `POST /api/messages` would strand
+  the refs because only the body reaches the agent's prompt. The envelope is written structurally at
+  capture time and read by splitting on the first blank line, so R3's "not parsed out of prose" holds.
+- **Where do drafts leak across projects? — CLOSED: they cannot leak live; the hazard is port reuse.**
+  Browser storage is origin-scoped and each project's Board is its own origin (its own port), so a
+  live cross-project read is impossible. `ProjectRegistry` can reassign a freed port to a different
+  project, which is the one path by which a stale draft resurfaces. The stored `path` guard closes it.
+- **One draft record or a per-project map? — CLOSED: one record with a path guard.** An origin serves
+  exactly one project (task 0840), so a map would index a dimension that is always length one.
+- **Which read builds the thread? — CLOSED: `getInbox`, never `drainPending`.** `getInbox` is
+  documented and implemented as non-consuming (`packages/app/src/services/team-service.ts:333-349`);
+  `drainPending` transitions `queued → injected` and would consume the orchestrator's own queue from
+  the Board.
+- **What is the operator's mailbox identity? — CLOSED: `board-operator`.** `sendMessage` validates both
+  endpoints against `/^[a-z][a-z0-9_-]{1,63}$/`; `board-operator` satisfies it with no engine change.
+  It is an address, not a fleet member, and the Agents roster must not show it.
+- **Does this task surface `request_key`? — CLOSED: no, 0844 does.** `TeamService.getInbox` does not map
+  the column that task 0832 adds, and this task does not depend on 0832. `ConversationEntry.requestKey`
+  is frozen here as optional and populated by 0844, which does depend on 0832 — the seam is declared
+  rather than inverted.
+- **Hold reasons and result links in the thread — DEFERRED to 0844 by design, not left open.** This
+  task renders the inbox row's own `deliveryStatus` verbatim; the receipt-derived state vocabulary
+  (`queued-awaiting-orchestrator`, `rest-held`, `outcome-unknown`, …) is 0844's requirement R5 and
+  fills `ConversationEntry.receipt`.
+
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+**WHAT.** A `Conversation` tab component that renders one request/response thread for the served
+project, rehydrated from `/api/messages*`, plus a per-project draft record in client storage and an
+explicit reference-capture model. Submission itself is 0844's; this task owns the thread, its
+rehydration, the draft, and the payload encoding that carries references.
+
+**WHY the thread is two existing reads, not a new store.** A Board request is an `inbox_messages` row
+addressed to the orchestrator instance, and an orchestrator response is a row addressed back. Both are
+already readable, non-consumingly, through `GET /api/messages/inbox?agent=<id>`
+(`apps/server/src/modules/messages/index.ts:26-38` → `TeamService.getInbox`, which is explicitly a
+non-consuming read, `team-service.ts:333-349`). Two fetches — one for each direction — reconstruct the
+thread with no new endpoint, no new table, and no client-side message store (R6).
+
+**WHERE.**
+
+| Layer | Change |
+| --- | --- |
+| `apps/web/src/modules/projects/ConversationView.tsx` (new) | thread + composer host |
+| `apps/web/src/modules/projects/conversation.ts` (new) | entry model, envelope encoder, ordering |
+| `apps/web/src/modules/projects/drafts.ts` (new) | path-keyed draft load/save with a safe fallback |
+| `apps/web/src/modules/projects/tabs.ts` | register the `conversation` tab |
+| `docs/04_DESIGN.md` + owning satellite | record the request-envelope payload format (T3) |
+
+**Frozen names.**
+
+```ts
+// conversation.ts
+export type ConversationRef =
+    | { kind: 'task'; wbs: string }
+    | { kind: 'feature'; id: string };
+
+export type ConversationEntryKind = 'request' | 'response';
+
+export interface ConversationEntry {
+    id: string;                 // inbox message id
+    kind: ConversationEntryKind;
+    fromId: string | null;
+    toId: string;
+    text: string;               // human-readable body, envelope stripped
+    refs: readonly ConversationRef[];
+    createdAt: string;          // ISO-8601
+    inReplyTo: string | null;
+    deliveryStatus: string;     // the inbox row's own status, rendered verbatim
+    requestKey?: string;        // populated by 0844; absent here
+    receipt?: unknown;          // populated by 0844; opaque to this task
+}
+
+export const REQUEST_ENVELOPE_PREFIX = 'SPUR-REQUEST/1 ';
+export function encodeRequestEnvelope(text: string, refs: readonly ConversationRef[]): string;
+export function decodeRequestEnvelope(body: string): { text: string; refs: ConversationRef[] };
+export function buildThread(toOrchestrator: InboxMessage[], toOperator: InboxMessage[]): ConversationEntry[];
+
+// drafts.ts
+export const DRAFT_STORAGE_KEY = 'spur.board.projects.draft.v1';
+export interface DraftRecord { path: string; text: string; refs: ConversationRef[]; revision: number }
+export function loadDraft(servedPath: string): DraftRecord;   // never throws
+export function saveDraft(draft: DraftRecord): void;          // never throws
+
+// the shared composer draft, provided by BoardLayout so sibling tabs and GlobalAgentBar reach it
+export interface ConversationDraft {
+    draft: DraftRecord;
+    setText(text: string): void;
+    addRef(ref: ConversationRef): void;     // deduplicates by kind + id
+    removeRef(ref: ConversationRef): void;
+}
+export const ConversationDraftContext: React.Context<ConversationDraft>;
+export function useConversationDraft(): ConversationDraft;
+
+// the operator's own mailbox identity
+export const OPERATOR_AGENT_ID = 'board-operator';
+```
+
+**Operator identity.** `POST /api/messages` routes through `TeamService.sendMessage`, which calls
+`validateAgentId` on both endpoints; the engine's rule is `/^[a-z][a-z0-9_-]{1,63}$/`
+(`@gobing-ai/ts-ai-runner` `agent-spec.js:10-15`). `board-operator` satisfies it with no engine change
+and no spec file — it is a mailbox address, not a fleet member, and it must never appear in
+`ResolvedFleet` or in the Agents roster.
+
+**Reference capture (R3).** Refs are captured as structured values at the moment the operator picks
+them (a chip in the composer, or "use this task" from Work in task 0843) and travel in a deterministic
+envelope, never inferred from prose:
+
+```text
+SPUR-REQUEST/1 {"refs":[{"kind":"task","wbs":"0844"}]}
+<blank line>
+<the operator's text, verbatim>
+```
+
+`encodeRequestEnvelope` emits the prefix line only when `refs` is non-empty, so a plain request stays a
+plain message in `spur message` output and in the Inbox module. `decodeRequestEnvelope` splits on the
+first blank line, parses the JSON, and on any parse failure returns the whole body as `text` with
+`refs: []` — a malformed envelope degrades to prose rather than dropping the message.
+
+**WHY an envelope rather than a column or a new body field.** `inbox_messages` belongs to
+`@gobing-ai/ts-db`; a `refs` column would be an engine release for a presentation concern. A
+sibling JSON body field would strand the refs the moment a message is read by any other consumer
+(`spur message read`, the Inbox module, the orchestrator's own prompt), because only the body reaches
+the agent. The envelope travels wherever the body travels.
+
+**Thread assembly (`buildThread`).**
+
+1. Fetch `GET /api/messages/inbox?agent=<orchestratorInstanceId>` → candidate **requests**; keep rows
+   whose `fromId === OPERATOR_AGENT_ID`.
+2. Fetch `GET /api/messages/inbox?agent=OPERATOR_AGENT_ID` → candidate **responses**; keep all rows.
+3. Decode each body through `decodeRequestEnvelope`; map to `ConversationEntry`.
+4. Sort ascending by `createdAt`, tie-broken by message `id`, so refresh order is stable.
+5. `inReplyTo` links a response to its request; an unlinked response renders at its timestamp rather
+   than being hidden.
+
+When `orchestrator.instanceId` is absent (`OrchestratorState` is `missing` or `unresolvable`, task
+0836), step 1 is skipped, the thread renders whatever step 2 returns, and the composer shows the named
+`orchestrator-missing` state instead of a generic disabled control.
+
+**Draft model (R2, R5).** One record, not a map. The Board origin serves exactly one project (task
+0840 Background), so a per-project map would model a case that cannot occur on this origin. The stored
+`path` is a **guard**, not an index: `loadDraft(servedPath)` returns the stored record only when
+`record.path === servedPath`, and otherwise returns an empty draft and overwrites the stale record.
+That is the port-reuse guard task 0840 delegates here — `ProjectRegistry` can hand a previously used
+port to a different project, and browser storage is keyed by origin, so path equality is the only thing
+that distinguishes them.
+
+`loadDraft` and `saveDraft` wrap every storage access in `try/catch` and treat *any* failure — access
+denied, absent key, invalid JSON, a record missing `path` or with a non-string `text` — as "no draft"
+(R5). No error state, no toast, no notice; the view renders with an empty composer. Validation is
+shape-checked, not `JSON.parse`-only, because a well-formed JSON document of the wrong shape is the
+case the prototype's ST-1 scenario exercises.
+
+`revision` increments on every keystroke-batch save and is what lets 0844 clear only the submitted
+revision. This task stores and restores it; it does not interpret it.
+
+**Rehydration (R4).** On mount the view fetches both inboxes; the thread is derived from that response
+only. Client storage holds the **draft** and nothing else — no cached entries, no optimistic rows that
+survive a refresh. A request that was accepted but whose row is not yet visible therefore reappears
+from the server or not at all, which is what makes "the thread survives a refresh" a server-backed
+claim rather than a local-storage claim.
+
+**Anti-patterns — do not implement.**
+
+- Do not add a client-side message store, cache, or optimistic thread persisted across refreshes.
+- Do not use `drainPending` or any consuming read to build the thread; `getInbox` is the non-consuming
+  one (`team-service.ts:333`), and draining would steal the orchestrator's own queue.
+- Do not parse task or feature references out of the operator's prose with a regex, at submission or
+  at render.
+- Do not add a column to `inbox_messages` or a new endpoint for the thread.
+- Do not key the draft on project name, on the origin, or on a generated client id.
+- Do not provide `ConversationDraftContext` from `ConversationView` or from `ProjectsShell`; both are
+  below `GlobalAgentBar`.
+- Do not surface a storage error to the operator; a corrupt draft is an empty draft.
+- Do not register `board-operator` as a fleet member, a spec file, or a roster entry.
+- Do not implement submission, receipt rendering, or retry here — that is 0844, and duplicating it
+  would create two submit paths.
+
+**Draft provider placement — `BoardLayout`, beside `ProjectProvider`.** Two consumers sit outside
+`ConversationView`: the Work tab (task 0843) is a **sibling panel**, so a draft owned by the
+Conversation panel would be unmounted exactly when Work needs to add a reference to it; and
+`GlobalAgentBar` is mounted outside the module entirely (`apps/web/src/components/BoardLayout.tsx:161`)
+and must compose from every Board route (task 0844 R7). `ConversationDraftContext` is therefore
+provided in `BoardLayout` alongside `ProjectProvider`. The provider holds the record; the views render
+it.
+
+**Handoff.** 0843 calls `useConversationDraft().addRef(ref)` to push a `ConversationRef` into the
+composer.
+0844 owns `handleSubmit`, mints the idempotency key (task 0832), and fills `ConversationEntry.requestKey`
+and `receipt` by matching each entry against its `RequestReceipt` on `ConversationEntry.id ===
+RequestReceipt.messageId` — `TeamService.getInbox` is **not** widened — and renders the non-nominal
+state labels. 0844 also adds one additive optional field to `DraftRecord`, `pending?: { requestKey,
+revision }`, which this task's `loadDraft` / `saveDraft` carry through unchanged. 0845 asserts the composer's keyboard and IME contract against this view.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. **(R3)** Add `conversation.ts` with `ConversationRef`, `ConversationEntry`,
+   `REQUEST_ENVELOPE_PREFIX`, and `encodeRequestEnvelope` / `decodeRequestEnvelope`.
+   *Test:* round-trip with refs; no prefix emitted when `refs` is empty; a truncated or non-JSON
+   prefix line decodes to the full body as `text` with `refs: []`.
+2. **(R6, R1)** Add `buildThread`: two `getInbox` reads, operator filter, decode, ascending sort by
+   `createdAt` then `id`. *Test:* interleaved requests and responses order deterministically; a
+   response whose `inReplyTo` names a missing request still renders.
+3. **(R2, R5)** Add `drafts.ts` with `DRAFT_STORAGE_KEY`, `loadDraft`, `saveDraft`.
+   *Test:* a stored record whose `path` differs from the served path yields an empty draft and is
+   overwritten; a throwing storage accessor, absent key, invalid JSON, and a shape-valid-but-wrong
+   record each yield an empty draft with no thrown error and no notice.
+4. **(R1, R4)** Build `ConversationView.tsx`: fetch both inboxes through `resolveApiUrl` /
+   `fetchWithTimeout`, render entries with kind, timestamp, refs, and the row's `deliveryStatus`
+   verbatim; restore the draft on mount. *Test:* remount rebuilds the thread from the fetch response
+   alone, with nothing read from client storage but the draft.
+5. **(R1)** Render the `orchestrator-missing` / `unresolvable` case: skip the orchestrator-side fetch,
+   render the operator-side thread, and name the missing binding in the composer area.
+   *Test:* a `ProjectContext` with `orchestrator.state: 'missing'` issues exactly one inbox fetch and
+   renders the named state.
+6. **(R3)** Expose the ref-capture entry point the Work view calls in 0843, and render captured refs
+   as removable chips above the composer. *Test:* adding, deduplicating, and removing a ref updates
+   the draft record and its `revision`.
+7. **(R6)** Register the tab in `tabs.ts`. *Test:* `/board/projects` renders Conversation as the
+   default panel.
+8. **(T3)** Document the `SPUR-REQUEST/1` envelope format in `docs/04_DESIGN.md` and its owning
+   satellite in the same commit.
+9. Run `cd apps/web && bun test`, then `bun run spur-check`.
 
 ### Solution
 

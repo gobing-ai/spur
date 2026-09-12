@@ -95,6 +95,24 @@ Feature: Durable project command and result loop
     When reconciliation runs at restart
     Then the work is reported as outcome-unknown with its artifacts and run state
     And no automatic requeue occurs
+
+  Scenario: R7 — Attempts are bounded
+    Given a claimed message that is never accepted by its invocation
+    When the drain repeats across iterations
+    Then the claim exhausts its bounded attempt budget and becomes terminal failed
+    And the failure reason is queryable by the operator
+
+  Scenario: R8 — Long-lived loops observe the same contract
+    Given a long-lived agent loop draining the prompt inbox each iteration
+    When an invocation fails and its claim is released
+    Then the loop keeps iterating and the message is redelivered within budget
+    And no row is lost
+
+  Scenario: R9 — Competing consumers still claim at most once
+    Given two consumers racing on the same queued message
+    When both perform the claim
+    Then exactly one consumer owns the claim
+    And the other observes nothing to claim
 ```
 
 ## Tasks

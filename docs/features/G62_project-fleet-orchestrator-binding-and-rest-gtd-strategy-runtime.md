@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.011Z"
-updated_at: "2026-09-12T04:45:07.878Z"
+updated_at: "2026-09-12T05:24:28.550Z"
 ---
 
 # G62: Project fleet, orchestrator binding, and rest/GTD strategy runtime
@@ -137,13 +137,59 @@ Depends on G61: selective wakeups and result reconciliation are impossible witho
 receipt seam. Robin approved the rest/GTD semantics, the managed-loop v1 boundary, and one write
 slot per worktree on 2026-09-11.
 
-### Open decisions (Robin)
+### Storage added by this feature
 
-- Lease storage shape for `ownerEpoch`/`strategyVersion`: extend `coordination_runs` or add a fleet
-  table (additive-only either way).
-- Whether `orchestrator` becomes a persisted `purpose` column or stays a config-side annotation in v1.
-- Wake semantics: replace the 2000 ms drain poll with receipt-triggered wake, or keep the poll and
-  add dedup — cutover risk for already-promoted long-lived loops.
-- What receipt format counts as a "verified" outcome for a real coding agent.
+Three additive, droppable Spur-local pieces, all in `packages/domain`, none in `@gobing-ai/ts-db`:
+
+| Prefix | Owner | What |
+| --- | --- | --- |
+| `0044_spur_cli_project_claims` | 0836 | `project_claims` — one mutable holder per (project_path, slot), with `owner_epoch` and `strategy_version` declared up front so 0837 and 0838 need no `ALTER` |
+| (reuses 0044) | 0837 | the `'write'` slot value on the same table |
+| `0045_spur_cli_project_strategy` | 0838 | `project_strategy` — one row per project |
+
+Prefix `0043` belongs to G61 task 0833's `coordination_runs` receipt columns.
+
+### Decisions closed at implement-ready refinement (2026-09-11; Robin may override)
+
+- **Lease storage → a new Spur-local `project_claims` table, not `coordination_runs`.** A lease is
+  mutable singleton state keyed by (project, slot); `coordination_runs` is append-per-run history keyed
+  by `run_id` and would have to be scanned to answer "who holds the slot now". Exclusivity is the
+  composite primary key plus a single `ON CONFLICT … DO UPDATE … WHERE` statement — no read-then-write.
+  The token-plus-expiry shape copies the existing `queue_jobs.attempt_token` / `lease_expires_at`
+  pattern (`packages/domain/src/migrations.ts:1104-1105`), but not that ts-db-owned table. Detail:
+  tasks 0836 and 0837 Q&A.
+- **`orchestrator` binding → the existing `purpose` field; no persisted column, no role value.**
+  Premise-checked against the tree: `purpose: z.string().optional()` is already on the config member
+  schema (`packages/config/src/index.ts:386`), on `NormalizedTeamMember` (`:426`), and on
+  `AgentSpecInput` (`packages/app/src/services/team-service.ts:274`). So the prototype's
+  planner-role + `purpose: 'orchestrator'` convention needs no schema change and no widening of the
+  closed `AGENT_ROLE_NAMES` set. Detail: task 0836 Q&A.
+- **Wake semantics → replace the tick, keep the flag.** The fixed 2000 ms drain is removed and the drain
+  moves behind a ledger wake; `--poll` survives with its name, default (`DEFAULT_LOOP_POLL_MS = 2000`)
+  and parser as the backstop timeout, so an already-promoted `spur agent loop` keeps working with no
+  migration step. Detail: task 0839 Q&A.
+- **Capability evidence → reuse task 0706's attestation, do not invent a vocabulary.**
+  `EXECUTION_CAPABILITY_AXES` (including `fsWrite`), its states and provenance already ship at
+  `packages/config/src/index.ts:209-265`. Read-only concurrency requires `fsWrite: 'unavailable'`
+  (proven absent); `'unknown'` and an absent axis grant nothing, and a role name is never evidence.
+  Detail: tasks 0835 and 0837 Q&A.
+- **Instance identity → call `memberLocalId`, never re-derive.** `packages/config/src/index.ts:452` is
+  the frozen-index `<role>-<n>` allocator config-load already uses; calling it is what makes G64's
+  roster conversion produce byte-identical spec ids and keeps existing mailboxes addressable.
+
+### Premise correction (recorded during refinement)
+
+Task 0839's original framing — that `runAgentLoop` is "a hot loop for an orchestrator that holds a
+model" — is wrong about the current code. `apps/cli/src/commands/agent.ts:731-735` guards `svc.run`
+behind `prompt !== undefined`, so **no model call happens while idle today**. The three real defects are
+narrower: a single wake source (inbox only), a silent `else` branch with no durable hold reason, and an
+unconditional drain query every tick. 0839 was re-scoped to those and its tests assert the existing
+no-model-call property so a later refactor cannot lose it.
+
+### Still open (Robin)
+
+- What receipt format counts as a "verified" outcome for a real coding agent. G61 0833 deliberately
+  never writes `outcome: 'verified'` from the exit sink; only an existing workflow verification result
+  may. This feature does not need the answer to ship, and none of 0835–0839 assumes one.
 
 ## History
