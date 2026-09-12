@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-12T04:45:08.190Z"
+updated_at: "2026-09-12T16:45:48.722Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -124,6 +124,106 @@ approved in direction; no breaking cutover date has been selected. Migration evi
 choice — do not schedule this feature's destructive steps before that decision is recorded here.
 
 Do not re-status M3, M6, G1, or G4 as part of this feature's planning; reconcile their remaining work
-into concrete tasks here, or close them at their own owners with evidence.
+into concrete tasks here, or close them at their own owners with evidence. (Task 0851 executes that
+closure — the prohibition governs planning, not 0851's own deliverable.)
+
+### Implement-ready refinement (2026-09-12)
+
+All six tasks refined to `--depth ready`; every Design freezes its names, precedence, and
+anti-patterns, and every Plan step maps to an R-item with test intent. `spur task check` PASS on
+0846–0851; `spur feature check G64` PASS.
+
+### Premise corrections — the inventory's §4 line numbers have drifted
+
+Every claim below was checked against the current tree during refinement; the corrected fact is what
+the task Designs encode.
+
+1. **`spur self migrate` is SQL-schema-only.** `apps/cli/src/commands/migrate.ts` runs
+   `loadSqlMigrations(join(cwd, 'drizzle'))` + `applyCliMigrations`; it is not a config-migration
+   home. A top-level `spur migrate` noun would collide with the hidden legacy alias registered at
+   `apps/cli/src/index.ts:174-185`, and 0835 already rejected a `spur fleet` noun. The migration verb
+   is therefore **`spur projects migrate`** (`--dry-run` in 0846, `--apply` in 0847) — `projects`
+   already owns the registry the conversion targets. It needs its own consent row; 0846's Design
+   drafts it verbatim rather than riding an existing one (A3 no-further-promotion rule).
+2. **Conversion can be purely additive, so backup collapses to one file.** Because spec ids are
+   preserved verbatim, existing `.spur/agents/<id>.yaml` files are *already* correct — 0847 never
+   opens a spec for writing. That is what makes "no inbox or coordination row is orphaned" (R2)
+   provable rather than asserted, and it is why `agent.team.<id>` stays in place through 0847.
+3. **`FleetMember` cannot carry six of `TeamMemberConfigSchema`'s keys** (`workspace`, `model`,
+   `autonomy`, `systemPrompt`, `command`, `autostart` —
+   `packages/config/src/index.ts:366-392`). Mapping `autostart` onto `enabled` would conflate "spawn
+   at serve start" with "in the fleet". 0846 emits a non-blocking `unmapped-member-override` warning
+   instead, and **0848 halts on it** before any `agent.team.<id>` block is deleted.
+4. **`addressedSpecIds` makes retire-vs-relink deterministic.** `SELECT DISTINCT to_id FROM
+   inbox_messages` ∪ `SELECT DISTINCT spec_id FROM coordination_runs` decides an orphan spec's
+   disposition from data rather than judgment, and gives 0847 R2 a falsifiable assertion.
+5. **No alias table is needed.** R2 allows "preserved verbatim **or** mapped through a recorded
+   alias"; verbatim preservation is achievable in every case, and the one rename-forcing case
+   (`derived-id-collision`) halts instead of renaming. Nothing is registered under ADR-058 for the
+   roster.
+6. **The retired Board modules have no URL-addressable tab state.** `WorkspaceShell.tsx:19`,
+   `TeamsShell`, and `InboxShell` hold the active tab in `useState` — unlike 0840's `useProjectTab`,
+   which reads the path segment. R5's migration path is therefore **three** static redirects
+   (`workspace` → `/board/projects`, `inbox` → `/board/projects/conversation`, `teams` →
+   `/board/projects/agents`), not a per-tab mapping.
+7. **The default landing route is `observability`, not the first module alphabetically.** Every module
+   declares `order` (observability 10 … teams 70; projects 45 per 0840) and `compareModules`
+   (`discover.ts:66-72`) lifts declared-order modules first. Deleting 50/60/70 leaves the landing
+   route unchanged — **no renumbering**.
+8. **`apps/web/src/modules/teams/` cannot be deleted wholesale.** 0842 mounts `MemberTerminal`
+   (`teams/MemberTerminal.tsx:66`) in the Projects Agents tab. 0849 **moves** the file into
+   `modules/projects/`; deleting it would break G63.
+9. **The `agent-flag-spec-id` shim's marker and manifest entry disagree** — the source comment
+   (`apps/cli/src/commands/agent.ts:690-692`) says `.spur/workflows/`, the manifest says
+   `config/workflows/`. 0849's scan covers both. A repo-wide grep at refine time found **no** spec-id
+   `--agent` usage, only role and executor values.
+10. **No ADR is allocated for the G6 program, and `docs/00_ADR.md` ends at ADR-115.** 0850 allocates
+    **ADR-116** (project-scoped fleet composition) as ADR-052's replacement, flips ADR-052's status
+    line at `:500`, and retains ADR-037 / ADR-057 / ADR-022 by naming them in ADR-116 rather than
+    editing three correct ADRs.
+11. **`config/config.example.yaml` is the portable init template.** `init.ts:170` seeds it as
+    `~/.config/spur/config.yaml` on first run, so its `agent.team` block (`:183-184`) is what every
+    new project inherits — the one artifact R4 of 0850 is actually about.
+12. **0851's scope is a disposition record, not a pile of tickets.** M6 is `backlog` with **zero**
+    linked tasks; M3, G1, and G4 are `verifying` with **every** linked task `done`, so their status is
+    a verify/wrap gap at their own owners, not remaining implementation.
+
+### Decisions closed at refinement (Robin may override)
+
+- **Migration verb → `spur projects migrate`,** consent-gated, with the rejected shapes recorded
+  (top-level `spur migrate` collides with the hidden `self migrate` alias; `spur fleet` rejected by
+  0835). Plan steps that do not register CLI surface proceed without the grant.
+- **`spur team` verb coverage (0848).** `assign` → `spur task update <wbs> --assignee <spec-id>`;
+  `status` → `spur agent list --specs` gaining the live run-status merge (`team.ts:147-159`);
+  `--by-team` **dropped**, because one project has one fleet and the group key ceases to exist;
+  `up` → **no CLI verb** (config-only per the brief; `up --check`'s diff is `spur projects list
+  --fleet`); `down` → `spur agent stop` plus the already-existing `spur agent delete`
+  (`agent.ts:215`); `start`/`stop` → `spur agent start|stop <spec-id>`. Net consent ask: **2 new
+  verbs + 1 new flag + 1 observable-output change**, drafted as one row in 0848's Design.
+- **Board redirects are permanent routes, not a transition shim.** ADR-058 requires an objectively
+  checkable removal condition; "no bookmark points here any more" is not checkable, so a shim entry
+  could never retire. Three `Navigate` elements in `router.tsx` instead.
+- **`spur team`'s docs are deprecated, not deleted, by 0850.** 0848 ships a warning and keeps all six
+  verbs working until the cutover window, so deleting `team.md` or `docs/help2/team.md` in 0850 would
+  make the references contradict the shipped CLI.
+- **M6 closes `cancelled`, evidence first.** Its Overview deletion is subsumed by 0849, its label
+  split is made moot by the same deletion, its "keep Workspace as a lens" decision is reversed by
+  ADR-116, and its no-`role`-noun recommendation is already honored. `done` would claim its design
+  shipped.
+- **M3 resolves by merge order:** verified before 0849 merges → `done` on `0269`'s receipt; 0849
+  merges first → `cancelled` citing the retirement commit. Its backend half (`/api/team/teams`
+  `model`, `/api/messages` identity enrichment, `process.*` in Activity) survives and is reused by
+  0842.
+- **One residual, evidence-gated:** M6's "`workDir` + `model` in the member row". 0842's
+  `MemberDetail.tsx` does not name either field. After 0842 ships, create **one** task only if both
+  are absent — filing it now would be the duplicate R4 forbids.
+
+### Still Robin's, unchanged
+
+- **The cutover window.** 0848's shim removal condition, 0849's merge gate, and 0850's deletion of
+  the superseded reference files all name this record as their trigger. Nothing destructive proceeds
+  until a date appears here.
+- **Public-surface consent** for `spur projects migrate` (0846/0847) and for 0848's two verbs, one
+  flag, and output change. Both rows are drafted in their task Designs, granted by nobody yet.
 
 ## History
