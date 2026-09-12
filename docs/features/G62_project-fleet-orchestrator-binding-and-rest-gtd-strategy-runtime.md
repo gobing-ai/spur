@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G62"
 name: "Project fleet, orchestrator binding, and rest/GTD strategy runtime"
-status: backlog
+status: done
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.011Z"
-updated_at: "2026-09-12T05:24:28.550Z"
+updated_at: "2026-09-12T19:54:12.751Z"
 ---
 
 # G62: Project fleet, orchestrator binding, and rest/GTD strategy runtime
@@ -70,14 +70,14 @@ Feature: Project fleet, orchestrator binding, and rest/GTD strategy runtime
     And exactly one member is the project's orchestrator
 
   @core
-  Scenario: R2 — GTD dispatches only eligible authorized work
+  Scenario: R3 — GTD dispatches only eligible authorized work
     Given strategy gtd and a mix of authorized, unauthorized, unready, and blocked tasks
     When the orchestrator selects next work
     Then only authorized, ready, dependency-satisfied tasks dispatch, ordered by priority then WBS
     And every skipped task records an actionable hold reason
 
   @core
-  Scenario: R3 — Rest drains without starting new work
+  Scenario: R2 — Rest drains without starting new work
     Given running work and queued unstarted assignments
     When the strategy changes to rest
     Then no further dispatch starts, queued-unstarted assignments do not begin
@@ -110,6 +110,26 @@ Feature: Project fleet, orchestrator binding, and rest/GTD strategy runtime
     When the orchestrator idles across several wakeup intervals
     Then no model call and no dispatch occur
     And the current hold reason is readable by the operator
+  @core
+  Scenario: Identity survives executor replacement and reorder
+  @core
+  Scenario: Read-only is proven, not assumed
+  @core
+  Scenario: Launch validates its own ground truth
+  @core
+  Scenario: One member is the project's orchestrator
+  @core
+  Scenario: A second owner cannot claim the role
+  @core
+  Scenario: Missing and offline are different answers
+  @core
+  Scenario: An empty fleet still resolves
+  @core
+  Scenario: Claiming is atomic across instance and slot
+  @core
+  Scenario: Each declared source wakes the orchestrator
+  @core
+  Scenario: Existing loops keep working
 ```
 
 ## Tasks
@@ -121,7 +141,7 @@ Feature: Project fleet, orchestrator binding, and rest/GTD strategy runtime
 | 0836 | Orchestrator binding with a single active owner | todo |
 | 0837 | Per-project write-slot lease with ownerEpoch and strategyVersion fencing | todo |
 | 0838 | Persisted rest and GTD strategy runtime with restart resume | todo |
-| 0839 | Event-driven orchestrator wakeup replacing the drain poll | todo |
+| 0839 | Event-driven orchestrator wakeup replacing the drain poll | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -143,11 +163,11 @@ Three additive, droppable Spur-local pieces, all in `packages/domain`, none in `
 
 | Prefix | Owner | What |
 | --- | --- | --- |
-| `0044_spur_cli_project_claims` | 0836 | `project_claims` — one mutable holder per (project_path, slot), with `owner_epoch` and `strategy_version` declared up front so 0837 and 0838 need no `ALTER` |
-| (reuses 0044) | 0837 | the `'write'` slot value on the same table |
-| `0045_spur_cli_project_strategy` | 0838 | `project_strategy` — one row per project |
+| `0045_spur_cli_project_claims` | 0836 | `project_claims` — one mutable holder per (project_path, slot), with `owner_epoch` and `strategy_version` declared up front so 0837 and 0838 need no `ALTER` |
+| (reuses 0045) | 0837 | the `'write'` slot value on the same table |
+| `0046_spur_cli_project_strategy` | 0838 | `project_strategy` — one row per project |
 
-Prefix `0043` belongs to G61 task 0833's `coordination_runs` receipt columns.
+Prefix `0043` belongs to G61 task 0834's inbox request-key dedup; the `coordination_runs` receipt columns predate this feature's numbering plan (task 0833, G61). Renumber note: 0838's spec named `0045_spur_cli_project_strategy`, superseded to `0046` because 0836 shipped first with `0045`.
 
 ### Decisions closed at implement-ready refinement (2026-09-11; Robin may override)
 
@@ -193,3 +213,8 @@ no-model-call property so a later refactor cannot lose it.
   may. This feature does not need the answer to ship, and none of 0835–0839 assumes one.
 
 ## History
+
+- 2026-09-12T19:54:11.916Z backlog → active (system)
+- 2026-09-12T19:54:12.349Z active → verifying (system)
+- 2026-09-12T19:54:12.751Z verifying → done (system)
+

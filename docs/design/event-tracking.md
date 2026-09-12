@@ -291,6 +291,8 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `agent.started` | `agentId`, `agentType`, `pid` | `[agent] {agentId} started` | — |
 | `agent.stopped` | `agentId`, `exitCode` | `[agent] {agentId} stopped` | `exitCode` |
 | `agent.message.sent` | `agentId`, `ok` | `[agent] message -> {agentId}` | `ok` |
+| `strategy.changed` | `projectPath`, `strategy`, `version` | `[strategy] {strategy} (v{version})` | — |
+| `fleet.capacity.changed` | `projectPath`, `change`, `holderId` | `[fleet] write slot {change} — {holderId}` | — |
 | `team.up` | `teamId`, `memberCount`, `outcome` | `[team] {teamId} up` | `outcome` |
 | `team.down` | `teamId`, `memberCount`, `outcome` | `[team] {teamId} down` | `outcome` |
 | `team.member.assigned` | team/member/type/task, `outcome` | `[team] {teamId} · {memberId} assigned` | `outcome` |

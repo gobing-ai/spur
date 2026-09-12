@@ -209,11 +209,11 @@ spur agent loop [options]
 |---|---|
 | `--spec <id>` | Team agent spec id / message recipient (canonical occupant addressing) |
 | `--agent <id>` | Agent spec id / message recipient (legacy alias — prefer `--spec`) |
-| `--poll <ms>` | Idle poll interval in milliseconds (default `2000`) |
+| `--poll <ms>` | Wakeup backstop timeout in milliseconds (default `2000`) |
 
 Persistent self-draining inbox loop used by the team supervisor (`spur team up` / `start`).
 Each iteration: check the agent inbox → drain pending messages into a prompt → run the agent
-→ idle-poll until the next message. Runs until `SIGINT` / `SIGTERM`.
+→ wakes on ledger events (message sent, strategy/capacity change, completion receipt); `--poll` is the no-event backstop. Runs until `SIGINT` / `SIGTERM`.
 
 ```bash
 spur agent loop --agent worker-1

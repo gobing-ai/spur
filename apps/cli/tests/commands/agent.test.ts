@@ -812,19 +812,11 @@ describe('runAgentLoop', () => {
             agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
         };
 
-        let sleepCallCount = 0;
-        const mockSleep = async () => {
-            sleepCallCount++;
-        };
-
-        const code = await runAgentLoop(
-            customCtx,
-            { agent: 'loop-worker', poll: '100' },
-            { maxIterations: 1, sleep: mockSleep },
-        );
+        // 0839: no sleep seam — the pre-queued message is drained on the `--poll`
+        // backstop wake (no ledger event precedes it; R5 keeps the drain bounded).
+        const code = await runAgentLoop(customCtx, { agent: 'loop-worker', poll: '100' }, { maxIterations: 1 });
         expect(code).toBe(0);
         expect(run).toHaveBeenCalledTimes(1);
-        expect(sleepCallCount).toBe(0);
     });
 
     // 0834 R2/R7: restart with in-flight work through the real call path — the
@@ -850,11 +842,7 @@ describe('runAgentLoop', () => {
             agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
         };
 
-        const code = await runAgentLoop(
-            customCtx,
-            { spec: 'reconcile-worker', poll: '100' },
-            { maxIterations: 1, sleep: async () => {} },
-        );
+        const code = await runAgentLoop(customCtx, { spec: 'reconcile-worker', poll: '100' }, { maxIterations: 1 });
         expect(code).toBe(0);
         const stdout = output.stdout.join('\n');
         expect(stdout).toContain('reconcile: scanned=2 unresolved=2 exhausted=1');
@@ -868,7 +856,7 @@ describe('runAgentLoop', () => {
         expect(run).not.toHaveBeenCalled();
     });
 
-    test('runAgentLoop sleeps using default sleep helper when idle', async () => {
+    test('0839: idle backstop wake drains nothing and never runs the agent', async () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const team = new TeamService(ctx);
@@ -901,6 +889,7 @@ describe('runAgentLoop', () => {
             agentService: () => ({ run }) as unknown as ReturnType<CliContext['agentService']>,
         };
 
+        // 0839: the abort cuts the wake wait (no 5s backstop) — the loop exits 0.
         const controller = new AbortController();
         const loopPromise = runAgentLoop(
             customCtx,

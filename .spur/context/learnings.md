@@ -810,3 +810,10 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - (G61 batch, 2026-09-12) task-pipeline spec drift: migration prefixes are consumed by earlier tasks in the same batch — 0833's frozen "next free 0043" collided with 0832's mirror; renumber at dispatch time.
 - (G61 batch, 2026-09-12) premise checks catch owner errors: coordination_runs is Spur-owned not ts-db (0833 correction); inbox legacy DDL mirror required for enqueueIdempotent on existing DBs (0832).
 - (G61 batch, 2026-09-12) host bridge quirk: single-arg fingerprint prints only, two-arg persists — always bracket-check before gates.
+
+## G62 batch (2026-09-12, run 20260912T151809Z-A00E198C)
+- Fleet/team prune collision root cause: shared `team:<slug>` spec tag → fixed by tag-disjoint namespaces by construction (fleet specs carry `fleet:<slug>`+`spur:generated`+`fleet:generated`; prune matches only the latter two).
+- One-statement guarded upsert with RETURNING is the dao concurrency precedent (ProjectClaimDao.claim, ProjectStrategyDao.set) — replaces read-then-write probe sequences.
+- DD-09 insertion must land AFTER a complete scenario; a bare title dropped mid-scenario orphans its Given/When/Then body (repaired via python once in 0837/0838 window).
+- Migration renumber when plan races: log in Solution, never edit frozen spec (0045→0046 precedent).
+- Event-driven loop: forward-only in-memory cursor + `--poll` backstop; lost wake events degrade to latency, never lost work.

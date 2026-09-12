@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Command } from '@commander-js/extra-typings';
 import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
@@ -5,9 +6,14 @@ import {
     AgentService,
     type AgentSpecInput,
     DeliveryReconciler,
+    FleetService,
+    FOLLOW_POLL_INTERVAL_MS,
     followSystemEventsAfter,
     MAX_INJECT_ATTEMPTS,
+    normalizeProjectPath,
     resolveAgentSelector,
+    resolvePlanningFolders,
+    StrategyRuntime,
     type SystemEventBus,
     TeamService,
     WaitError,
@@ -24,6 +30,7 @@ import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
+import { makeCheckService, makeService } from './task';
 
 export type { AgentRunDeps };
 
@@ -708,20 +715,18 @@ export function _resetAgentFlagShimsForTest(): void {
     warnedAgentSpecId.clear();
 }
 
-/** Default idle poll interval for `spur agent loop` (ms). */
+/** Default wakeup-backstop timeout for `spur agent loop` (ms) — `--poll` (0839 R5). */
 const DEFAULT_LOOP_POLL_MS = 2000;
 
-/** Injectable knobs for {@link runAgentLoop} — tests pass maxIterations/sleep to avoid real waits. */
+/** Injectable knobs for {@link runAgentLoop} — tests pass maxIterations/signal to bound runs. */
 export interface AgentLoopRuntime {
     /** Aborting ends the loop cleanly (SIGINT/SIGTERM in the CLI action). */
     signal?: AbortSignal;
     /** Hard cap on iterations (tests only); undefined = run until aborted. */
     maxIterations?: number;
-    /** Sleep override; defaults to a cancellable setTimeout. */
-    sleep?: (ms: number) => Promise<void>;
 }
 
-/** Parse the `--poll` flag; falls back to the default for non-positive/non-numeric input. */
+/** Parse the `--poll` backstop timeout; falls back to the default for non-positive/non-numeric input. */
 function parseLoopPoll(raw: string | boolean | undefined): number {
     if (typeof raw !== 'string') return DEFAULT_LOOP_POLL_MS;
     const n = Number.parseInt(raw, 10);
@@ -785,13 +790,149 @@ function formatReconcileReport(report: {
 }
 
 /**
+ * The four wake sources (0839 R1): a human request (a ledgered `message.sent`
+ * — Board/server senders persist it), a strategy change (`strategy.changed`,
+ * emitted by StrategyRuntime.setStrategy), a task or capacity change
+ * (`fleet.capacity.changed`, emitted by WriteSlotService claim/release), and a
+ * completion receipt (`agent.invoke.exit`, persisted by every ledger-attached
+ * run — 0833 writes the receipt in the same exit sink). Nothing else wakes the
+ * loop; an unfiltered follow would re-create the hot loop with extra steps.
+ */
+const WAKE_EVENT_NAMES = [
+    'message.sent', // human request / orchestrator order   (existing)
+    'strategy.changed', // strategy change                      (new)
+    'fleet.capacity.changed', // task or capacity change        (new)
+    'agent.invoke.exit', // completion receipt (0833 writes it in the same sink)
+] as const;
+type WakeSource = (typeof WAKE_EVENT_NAMES)[number] | 'backstop-timeout';
+
+/** What ended one wait: the wake event consumed, or the `--poll` backstop timeout. */
+interface WakeResult {
+    source: WakeSource;
+    /** The ledger cursor the loop resumes from — never replays a seen row. */
+    sequence: number;
+}
+
+/** Batch size for the wake poll — mirrors the shared follower's query batch. */
+const WAKE_FOLLOW_BATCH = 512;
+
+/**
+ * Wait for the next wake event on the `system_events` ledger (0839 R4/R5):
+ * keyset-follows `sequence > afterSequence` at the shared follower cadence
+ * ({@link FOLLOW_POLL_INTERVAL_MS}), returning on the first wake event, or
+ * `{ source: 'backstop-timeout' }` after `timeoutMs` (R5's `--poll`), or on
+ * abort. The cursor only ever moves forward: non-matching rows are consumed,
+ * and the timeout/abort snapshot is `latestSequence()` — a wake never replays
+ * an event the loop has already seen. Built on `dao.follow` (the same query
+ * `followSystemEventsAfter` tails) because the frozen signature passes a dao,
+ * not a getDb factory; the ledger — not a second transport — stays the source.
+ */
+async function waitForWake(
+    dao: SystemEventDao,
+    afterSequence: number,
+    timeoutMs: number,
+    signal?: AbortSignal,
+): Promise<WakeResult> {
+    const deadline = Date.now() + timeoutMs;
+    let cursor = afterSequence;
+    for (;;) {
+        if (signal?.aborted === true) {
+            return { source: 'backstop-timeout', sequence: Math.max(cursor, await dao.latestSequence()) };
+        }
+        const rows = await dao.follow(cursor, WAKE_FOLLOW_BATCH);
+        for (const row of rows) {
+            const sequence = row.sequence;
+            if (sequence === null || sequence <= cursor) continue;
+            cursor = sequence;
+            if ((WAKE_EVENT_NAMES as readonly string[]).includes(row.event_name)) {
+                return { source: row.event_name as WakeSource, sequence };
+            }
+        }
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+            return { source: 'backstop-timeout', sequence: Math.max(cursor, await dao.latestSequence()) };
+        }
+        await loopSleep(Math.min(FOLLOW_POLL_INTERVAL_MS, remaining), signal);
+    }
+}
+
+/** Ledger event name for the recorded idle hold (0839 R3; rendered by G63 0844). */
+const IDLE_HOLD_EVENT = 'fleet.idle-hold';
+
+/**
+ * Record the operator-readable hold reason when nothing is runnable (0839 R3),
+ * sourced from 0838's StrategyRuntime.selectNext — one `system_events` row
+ * ONLY when the hold key changes (a steadily idle orchestrator writes one row,
+ * not one per wake; a run that did work resets the caller's key via the loop
+ * body). The loop's cwd is the project: strategy/claims/corpus/fleet resolve
+ * against it, and the hold lands in the same ledger the loop follows. A
+ * selectNext failure (no corpus, unmigrated db) is logged, never fatal — the
+ * hold row is advisory, and silence must not wedge a consuming loop.
+ */
+async function recordIdleHold(
+    context: CliContext,
+    recipient: string,
+    source: WakeSource,
+    lastHoldKey: string,
+): Promise<string> {
+    const projectPath = normalizeProjectPath(context.cwd);
+    let holds: Array<{ wbs: string; reason: string }>;
+    try {
+        // Construction is inside the try on purpose: a bare project (no corpus,
+        // no agent config) must degrade to "no hold row", never wedge the loop.
+        const runtime = new StrategyRuntime({
+            openDb: () => context.getDb(),
+            tasks: await makeService(context, undefined, true),
+            fleet: new FleetService({
+                spurConfig: await context.loadAgentConfig(context.cwd),
+                roles: context.agentRoles,
+                fs: context.fs,
+                openDb: () => context.getDb(),
+            }),
+            dependencyBlocked: async (_projectPath, wbs) => {
+                const { foldersConfig } = await resolvePlanningFolders(context.fs);
+                const check = await makeCheckService(context);
+                return await check.firstBlockingPrerequisite(context.fs.resolve(foldersConfig.active_folder), wbs);
+            },
+        });
+        holds = (await runtime.selectNext(projectPath)).holds;
+    } catch (error) {
+        context.output.error(
+            `idle-hold: strategy selectNext failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return lastHoldKey;
+    }
+    const holdKey =
+        holds.length === 0
+            ? 'idle'
+            : holds
+                  .map((h) => `${h.wbs}:${h.reason}`)
+                  .sort()
+                  .join(',');
+    if (holdKey === lastHoldKey) return lastHoldKey;
+    await new SystemEventDao(await context.getDb()).insert({
+        id: randomUUID(),
+        event_name: IDLE_HOLD_EVENT,
+        occurred_at: new Date().toISOString(),
+        actor: recipient,
+        payload_json: JSON.stringify({ projectPath, source, holdKey, holds }),
+    });
+    return holdKey;
+}
+
+/**
  * `spur agent loop --spec <id> [--poll <ms>]` — the persistent self-draining wrapper
- * the supervisor spawns (0258 R6). Each iteration consumes the inbox via `drainPending`;
- * if messages were drained it runs the agent with them prepended, otherwise it
- * idle-sleeps `--poll` ms. This is the long-lived, attachable process — the member no
- * longer dies after one successful drain. Exits cleanly on abort (SIGINT/SIGTERM);
- * crash-restart is the supervisor's job. Legacy `--agent <id>` still works for the
- * transition, warned once (agent-flag-spec-id).
+ * the supervisor spawns (0258 R6). Each iteration WAITS for a wake on the
+ * `system_events` ledger (0839: a human request, a strategy change, a capacity
+ * change, or a completion receipt) and only then drains the inbox via
+ * `drainPending`; an empty drain records the idle hold reason instead of a
+ * silent sleep (R3). `--poll` is the backstop timeout — with no wake event the
+ * loop still drains every `--poll` ms (R5, no migration for promoted loops).
+ * Idle wakes cost no model call and no dispatch (R2). This is the long-lived,
+ * attachable process — the member no longer dies after one successful drain.
+ * Exits cleanly on abort (SIGINT/SIGTERM); crash-restart is the supervisor's
+ * job. Legacy `--agent <id>` still works for the transition, warned once
+ * (agent-flag-spec-id).
  */
 export async function runAgentLoop(
     context: CliContext,
@@ -810,7 +951,6 @@ export async function runAgentLoop(
         return 2;
     }
     const pollMs = parseLoopPoll(flags.poll);
-    const sleep = runtime.sleep ?? ((ms: number) => loopSleep(ms, runtime.signal));
     // 0831 R4: the loop shares runAgentRun's acceptance rule — a per-process bus so
     // `agent.invoke.start` (via the agent runner) marks the invocation accepted.
     const bus = new EventBus() as SystemEventBus;
@@ -829,10 +969,22 @@ export async function runAgentLoop(
         invocationStarted = true;
     });
 
+    // 0839 R4 wake-then-drain: the drain runs only AFTER a wake (a wake event on
+    // the ledger, or the `--poll` backstop timeout — R5 keeps `--poll` as the
+    // backstop so a promoted loop keeps consuming at the same worst-case latency
+    // with no migration). The cursor starts at the current ledger tail so a
+    // long-idle ledger fires no spurious immediate wake, and never replays a
+    // seen row (waitForWake owns the forward-only guarantee).
+    const wakeDao = new SystemEventDao(await context.getDb());
+    let cursor = await wakeDao.latestSequence();
+    let lastHoldKey = '';
+
     let iteration = 0;
     while (!runtime.signal?.aborted && (runtime.maxIterations === undefined || iteration < runtime.maxIterations)) {
+        const wake = await waitForWake(wakeDao, cursor, pollMs, runtime.signal);
+        cursor = wake.sequence;
         // Consume this member's inbox (queued → injected). A non-empty drain yields a
-        // prompt to run the agent on; an empty drain yields `undefined` → idle-sleep.
+        // prompt to run the agent on; an empty drain records the idle hold (R3).
         const {
             prompt,
             flags: rewritten,
@@ -851,8 +1003,11 @@ export async function runAgentLoop(
                 // way — a released row redelivers on the next drain.
                 await settleClaimedMessages(context, claimed, invocationStarted ? 'accepted' : 'not-started');
             }
+            // The hold that described the previous idle stretch is stale: work
+            // ran, so the next idle wake records a fresh hold row.
+            lastHoldKey = '';
         } else {
-            await sleep(pollMs);
+            lastHoldKey = await recordIdleHold(context, recipient, wake.source, lastHoldKey);
         }
         iteration++;
     }

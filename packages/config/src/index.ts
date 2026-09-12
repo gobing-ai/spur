@@ -494,6 +494,73 @@ export function memberLocalId(
     return '';
 }
 
+// ---- Project fleet declaration (0835) ----
+
+/**
+ * Schema for one member of a project-local fleet declaration
+ * (`<projectPath>/.spur/fleet.json`, 0835 R1). Same member fields the team
+ * roster carries that identity needs — `id`/`role`/`executor` feed the frozen
+ * {@link memberLocalId} allocator unchanged — plus `enabled`: a member set to
+ * `false` keeps its derived `<role>-<n>` index (deleting would free the index
+ * and silently reallocate later members' ids) but is not materialized.
+ * Deliberately minimal: no process/liveness fields ever (0835 R5 — desired
+ * state only; liveness is read from occupant/supervisor surfaces).
+ */
+export const FleetMemberSchema = z.object({
+    /** Explicit stable id — wins outright in {@link memberLocalId} (0835 R3). */
+    id: z.string().min(1).optional(),
+    /** Layer-1 role id; the closed vocabulary is shared with team members. */
+    role: z
+        .enum(AGENT_ROLE_NAMES, {
+            error: (issue) =>
+                new Error(`Unknown role "${issue.input}" — expected one of: ${AGENT_ROLE_NAMES.join(', ')}`),
+        })
+        .optional(),
+    executor: z.string().min(1).optional(),
+    purpose: z.string().optional(),
+    /** Default true. `false` preserves the member's derived id index. */
+    enabled: z.boolean().optional(),
+});
+
+/** Inferred type for {@link FleetMemberSchema}. */
+export type FleetMember = z.infer<typeof FleetMemberSchema>;
+
+/**
+ * Schema for a project fleet declaration at `<projectPath>/.spur/fleet.json`
+ * (0835 R1). `version` is pinned to 1. `members` may be empty — a project with
+ * no enabled members resolves to a fleet whose `missing` names the fix (R7),
+ * it is not a schema error. Each member must declare a role or an executor —
+ * the same "at least one" rule the team member contract enforces (0543 R4).
+ */
+export const FleetDeclarationSchema = z
+    .object({
+        version: z.literal(1),
+        members: z.array(FleetMemberSchema),
+        /**
+         * 0836 R1/R2: the orchestrator pointer — the `memberLocalId` of the one
+         * planner-role member carrying `purpose: 'orchestrator'` that may act as
+         * the project's orchestrator. Absent = no orchestrator declared (resolves
+         * `missing`, never inferred — Q&A: error, never search). The role
+         * vocabulary is closed; the binding carrier is this pointer plus the
+         * member's existing `purpose` field.
+         */
+        orchestrator: z.string().min(1).optional(),
+    })
+    .superRefine((decl, ctx) => {
+        for (const [index, member] of decl.members.entries()) {
+            if (member.role === undefined && member.executor === undefined) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    path: ['members', index],
+                    message: `members[${index}] must declare a role or an executor — at least one is required`,
+                });
+            }
+        }
+    });
+
+/** Inferred type for {@link FleetDeclarationSchema}. */
+export type FleetDeclaration = z.infer<typeof FleetDeclarationSchema>;
+
 /** A resolved executor: a canonical agent plus an optional model override. */
 export interface ResolvedExecutor {
     agent: string;

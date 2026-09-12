@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Event-driven orchestrator wakeup replacing the drain poll
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.725Z
-updated_at: "2026-09-12T05:24:00.274Z"
+updated_at: "2026-09-12T19:51:06.660Z"
 feature_id: G62
 priority: P2
 tags:
@@ -245,15 +245,60 @@ these events.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Wake-then-drain loop on the existing `system_events` ledger — no new transport, no daemon, **no new migration/drizzle file** (wake facts ride the cataloged ledger; `--poll` keeps promoted 0835 loops draining with no re-provisioning).
+
+**Catalog + producers (R1).**
+- `packages/app/src/services/event-names.ts:306-314` — `strategy.changed` + `fleet.capacity.changed` cataloged (agent family, metadata-only, producer override `fleet-strategy` / `write-slot`); presenters at `:809` / `:825` (doc-sync gate rows added to `docs/design/event-tracking.md` §11).
+- `packages/app/src/services/strategy-runtime.ts:243-255` — `setStrategy` emits `strategy.changed` (actor `strategy-runtime`, payload `projectPath`/`strategy`/`version`) into the same db as the persisted row; read paths emit nothing.
+- `packages/app/src/services/write-slot-service.ts:138-160` / `:203-218` — `claim` emits `fleet.capacity.changed` ONLY when the slot lease is taken (proven read-only claims emit nothing); `release` emits ONLY on an actual release.
+
+**Consumer loop (R4, R5, R2).**
+- `apps/cli/src/commands/agent.ts:793-801` — frozen `WAKE_EVENT_NAMES` + `WakeSource`/`WakeResult`; `waitForWake` at `:830-856` keyset-follows `sequence > cursor` at the shared follower cadence (`FOLLOW_POLL_INTERVAL_MS`), returns the first wake event or the `--poll` backstop snapshot (`latestSequence()`; abort returns promptly) — the cursor never replays a seen row. Built on `dao.follow` (the same query `followSystemEventsAfter` tails) because the frozen signature passes a dao, not a getDb factory; the ledger stays the only transport.
+- `apps/cli/src/commands/agent.ts:979-1010` — `runAgentLoop` body: cursor starts at `latestSequence()` (no replay on start), wake → `cursor = wake.sequence` → drain; a prompt runs the agent and resets the hold key; an empty drain records the hold. `AgentLoopRuntime.sleep` seam removed (dead after the rewrite); `DEFAULT_LOOP_POLL_MS` (`:719`) repurposed as the backstop; `--poll` help text updated (`apps/cli/src/commands/shared-options.ts:61`).
+
+**Idle holds (R3).**
+- `apps/cli/src/commands/agent.ts:872-912` — `recordIdleHold` sources holds from 0838's `StrategyRuntime.selectNext` (runtime constructed over the loop's cwd db; `makeService`/`makeCheckService` exported from `apps/cli/src/commands/task.ts:1624`/`:1699` — precedent: `workflow.ts` imports `makeTaskLocator` from `./task`), writes one `fleet.idle-hold` `system_events` row on hold-key change ONLY (steady idle = one row, not one per wake; any construction/select failure is logged, never fatal). The event is deliberately uncataloged (0837 precedent `fleet.write-slot.stale-owner-rejected`); G63 0844 renders it.
+
+**Dispositions (required).**
+- (a) unchecked `row.strategy as StrategyName` casts (0838 read path): NOT changed — outside 0839's diff scope; the values are schema-constrained by the same single writer (`setStrategy`).
+- (b) O(candidates×deps) dep-gate amplification: RESOLVED BY DESIGN — idle `selectNext` is now event-bounded (only on a wake), not every 2 s; per-wake runtime construction accepted (section matrix is cached); no snapshot cache added.
+- (c) capacity-vs-priority iteration order: UNCHANGED — 0838's `selectNext` ordering is authoritative and untouched by this diff; the wake rewrite does not alter selection order.
+- `message.sent` durability gap: DOCUMENTED, no code change — bare-CLI `TeamService` senders attach no ledger bus, so a CLI-side send writes no wake fact; Board/server senders persist it and the R5 backstop still drains every `--poll` ms.
+- Heartbeat: no `ProjectClaimDao` heartbeat added — the loop holds no live write claim (`WriteSlotService.claim` has no CLI caller on this path).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Catalog `packages/app/src/services/event-names.ts:306,310` (strategy.changed, fleet.capacity.changed); producers `packages/app/src/services/strategy-runtime.ts:248` (setStrategy) + `packages/app/src/services/write-slot-service.ts:144,209` (claim/release); consumer `apps/cli/src/commands/agent.ts:793-801` WAKE_EVENT_NAMES = [message.sent, strategy.changed, fleet.capacity.changed, agent.invoke.exit]; §11 rows `docs/design/event-tracking.md:294-295`; fresh emit tests pass (strategy-runtime 2 wake-emit, write-slot 2 wake-emit) |
+| R2 | MET | `apps/cli/src/commands/agent.ts:979-1010` — svc.run only behind `prompt !== undefined` after a wake; fresh test `apps/cli/tests/commands/agent-loop-wake.test.ts:231` — `rig.run` called 0 times across 3 idle wakes ("idle wakes dispatch nothing (R2)"); non-message wake tests each assert run count 0 |
+| R3 | MET | `apps/cli/src/commands/agent.ts:872-912` recordIdleHold — writes one `fleet.idle-hold` row ONLY on hold-key change (holds from 0838 StrategyRuntime.selectNext); fresh tests "steady idle writes exactly ONE hold row across three wakes (on-change-only, R3)" + "a run resets the hold" pass |
+| R4 | MET | `apps/cli/src/commands/agent.ts:979-1010` — cursor starts at `latestSequence()`, loop is wake-then-drain (waitForWake at :830-856, forward-only keyset follow, no fixed-tick drain; sleep seam removed); fresh test "the cursor never replays: an idle iteration after a run does not re-run (R4)" pass |
+| R5 | MET | `DEFAULT_LOOP_POLL_MS = 2000` kept verbatim (`apps/cli/src/commands/agent.ts:719`) + parseLoopPoll kept; `--poll` re-documented as backstop (`apps/cli/src/commands/shared-options.ts:61` "Wakeup backstop timeout"); fresh test "backstop still drains a pre-queued message when no wake event arrives (R5)" pass (poll:100, queued message drained, run once) |
+| R6 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts` fresh run 8 pass / 0 fail — zero model calls on repeated idle wakes (run count 0) + wake asserted per each declared source (elapsed <2500ms vs 5000ms backstop); corroborated by full gate rc0: `.spur/run/0839-test-gate.status` "PASS rc=0", 8156 pass / 0 fail / 453 files |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R7 — Idle costs nothing | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:229-240` fresh pass — 3 idle wakes → `rig.run` called 0 times (no model call, no dispatch) and exactly ONE `fleet.idle-hold` row (operator-readable hold reason, holds payload wbs:reason) |
+| Each declared source wakes the orchestrator | MET | test | Fresh passes: message.sent organic via ledger-attached TeamService sendMessage (drains + runs once); strategy.changed / fleet.capacity.changed / agent.invoke.exit via direct ledger rows — each wakes <2500ms ≪ 5000ms backstop, 4/4 pass |
+| Existing loops keep working | MET | test | Fresh pass `agent-loop-wake.test.ts` "backstop still drains a pre-queued message… (R5)" — inbox-only row with no ledger event, poll:100 → drained and run once, no migration; `--poll` name/default/parser unchanged (`agent.ts:719,725-730`) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:02938c69a096992d867ae9cf7e87b843445d520b2721f3ca5d248a7468d39cb1 |
 
 ### References
 
@@ -264,3 +309,8 @@ these events.
 - Producer dependency: task 0833 completion receipt supplies the result-arrived event
 
 ### History
+
+- 2026-09-12T18:58:37.446Z todo → wip (system)
+- 2026-09-12T19:51:06.014Z wip → testing (system)
+- 2026-09-12T19:51:06.660Z testing → done (system)
+

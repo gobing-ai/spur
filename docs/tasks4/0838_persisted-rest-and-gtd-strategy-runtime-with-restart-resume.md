@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Persisted rest and GTD strategy runtime with restart resume
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.725Z
-updated_at: "2026-09-12T05:22:25.591Z"
+updated_at: "2026-09-12T18:58:37.247Z"
 feature_id: G62
 priority: P1
 tags:
@@ -74,14 +74,14 @@ than assumed.
 Feature: Persisted rest and GTD strategy runtime with restart resume
 
   @core
-  Scenario: R2 — GTD dispatches only eligible authorized work
+  Scenario: R3 — GTD dispatches only eligible authorized work
     Given strategy gtd and a mix of authorized, unauthorized, unready, and blocked tasks
     When the orchestrator selects next work
     Then only authorized, ready, dependency-satisfied tasks dispatch, ordered by priority then WBS
     And every skipped task records an actionable hold reason
 
   @core
-  Scenario: R3 — Rest drains without starting new work
+  Scenario: R2 — Rest drains without starting new work
     Given running work and queued unstarted assignments
     When the strategy changes to rest
     Then no further dispatch starts, queued-unstarted assignments do not begin
@@ -283,15 +283,94 @@ renders `rest-after-drain` as `rest-held`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**SPEC DRIFT CORRECTION (mandatory note):** the frozen spec's migration id `0045_spur_cli_project_strategy` is STALE — 0045 is taken by 0836 (`0045_spur_cli_project_claims`). Shipped as **`0046_spur_cli_project_strategy`** + `drizzle/0046_spur_cli_project_strategy.sql` everywhere; frozen spec text untouched (0833/0836 renumber precedent).
+
+**Change map (all files; line refs at implementation time):**
+
+| File | Change |
+| --- | --- |
+| `packages/domain/src/migrations.ts:328` | `PROJECT_STRATEGY_SCHEMA_SQL` (one row per project; `strategy_version` bumps on every set); wired into `CLI_SCHEMA_SQL` (:347); step `0046_spur_cli_project_strategy` registered (:1443) |
+| `drizzle/0046_spur_cli_project_strategy.sql` (new) | byte-compatible regenerate-on-release mirror (0045 precedent) |
+| `packages/domain/src/dao/project-strategy-dao.ts` (new) | `ProjectStrategyDao.get` (:46) / `set` (:62) — `set` is ONE guarded upsert with `RETURNING` (the `ProjectClaimDao.claim` one-statement precedent; no post-write re-read), version increments on EVERY set incl. same-name re-sets; exported from `packages/domain/src/dao/index.ts:183` |
+| `packages/app/src/services/strategy-runtime.ts` (new) | frozen vocabulary (`StrategyName`, `DEFAULT_STRATEGY`, `FLEET_AUTO_TAG`, `DispatchHoldReason`, `DispatchHold`, `StrategyContext`, `StrategyResult`, `Strategy`, `STRATEGIES` :179); `restStrategy` :84 (zero decisions, one `rest-after-drain` hold per candidate); `gtdStrategy` :104 (five-step precedence, priority-then-WBS sort, decisions carry `strategyVersion`+`ownerEpoch`, `requiresWrite` = member `writeCapable`); `StrategyRuntime` :218 — `getStrategy` :225 (pure read; absent → rest v1), `setStrategy` :238, `resume` :252 (strict R6 order: persist default when absent → `resolveOrchestrator`, non-`bound-online` returns `reconciled: false` with no dispatch → `DeliveryReconciler.reconcile()` → ready), `selectNext` :278 (assembles ctx: candidates from `TaskService.list({status:'todo'})`, idle = enabled minus the LIVE write-slot holder (self-heals at TTL — no sticky liveness), `ownerEpoch` from the live orchestrator claim else 0 (fences every live claim), injected dep gate resolved per candidate up front); `DispatchDecision` reused from 0837's write-slot-service (never redefined) |
+| `packages/app/src/services/task-check.ts:1385` | `firstBlockingPrerequisite(tasksDir, wbs)` — the L4 prerequisite rule as a value: reuses the SAME `checkDependencyReadiness` walk (:1306, now additively returns the first blocking wbs; finding pushes unchanged, sole existing caller unaffected). Declared `dependencies[]` edges only — the set `dev-runall`/`dev-verifyall` topo-sort on. This IS the production source of the injected `dependencyBlocked` (Q&A: injected, sourced from the corpus checker, never a second parse) |
+| `packages/app/src/index.ts:221` | exports: `StrategyRuntime`, `STRATEGIES`, strategies, frozen types |
+| `apps/cli/src/commands/projects.ts:170` | `list --fleet` reads `ProjectStrategyDao` per project (read-only); text line `strategy: <name> (v<n>)` / `rest (default)` / `unavailable (…)` (:262); `--json` gains `strategy` + `strategyError` (:175) |
+| `docs/help/cmd_projects.md:55`, `plugins/sp/skills/spur-cli/references/projects.md:48` | `--fleet` docs gain the strategy surface |
+
+**Design notes.** Idle-instance derivation: "enabled, not currently holding a run" reads the live `write` claim (`ProjectClaimDao.get` + expiry) — the only TTL'd, self-healing run-holder signal; `coordination_runs.status='running'` rows are sticky after a crash and would wedge a member forever, so they are deliberately not consulted (disclosed). Instance assignment happens in candidate-iteration order inside the frozen five-step, THEN survivors sort — instances are fungible in v1; no role matching exists to assign by.
+
+**Heartbeat wiring:** 0838 ships no run loop (Q&A defers scheduling/wakeup to 0839), so no `ProjectClaimDao.heartbeat` call site exists yet — `selectNext`/`resume` are the dispatch/interval seams 0839's loop will heartbeat from. The orchestrator claim written at `claim()` time carries `heartbeat_at = claimed_at`; nothing in this task churns claim rows.
+
+**Advisory dispositions (carried from 0837's review):**
+- **(a) WriteSlotService.claim fence-read/claim TOCTOU + holder-identity belt-and-braces — DISPOSITIONED, not churned.** The holder-identity check after the atomic claim is already present (0837 `claim()` post-claim guard). The residual read-then-claim window (orchestrator epoch advancing between fence check and write claim) is inherent to non-transactional fencing; closing it would rewrite 0836's frozen single-statement dao contract. The window is bounded by the 30s TTL and fenced at the consuming ends: `validateResult` rejects stale-owner results and 0839's dispatch loop can re-fence immediately before launch, which is where a re-check actually shrinks the window for the launch decision. No change made.
+- **(b) 0834 P3 multi-receipt `listByMessageId` tie-break test — ADDRESSED.** Two tests added in `packages/app/tests/services/delivery-reconciler.test.ts` ("0838 advisory" describe): older `errored` superseded by newer `verified` → omitted as finished; older `verified` superseded by newer `errored` → `delivery-failed` naming the newest run. Pins newest-evidence-wins determinism from the reconcile caller side; no production change (behavior was already deterministic and sensible).
+- **(c) `changes()` probes in `heartbeat`/`release` — DISPOSITIONED: retained.** Wrap-residual fail-safe per the advisory; churned for nothing.
+
+**Not done (frozen anti-patterns honored):** no plugin loader (STRATEGIES is a two-entry record literal), no second backlog (candidates are `TaskSummary`), no dependency re-parse (injected from task-check), no task advancement, `rest` never cancels running work or releases a held slot, no Board write on open, `HoldReason` (0834) vs `DispatchHoldReason` (0838) kept distinct.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/migrations.ts:328,1443-1446` PROJECT_STRATEGY_SCHEMA_SQL + step `0046_spur_cli_project_strategy` (0045 taken by 0836; drift logged in task ## Solution), byte-compatible mirror `drizzle/0046_spur_cli_project_strategy.sql`; `ProjectStrategyDao.get/set` (`packages/domain/src/dao/project-strategy-dao.ts:46,62`, exported `dao/index.ts:34`); `getStrategy` is a pure read defaulting to rest (`strategy-runtime.ts:225-243`), `resume` restores without reset (`:252-275`); CLI reads only (`apps/cli/src/commands/projects.ts:162-176,262-270`). Tests fresh: strategy-runtime.test.ts:297 "no persisted row → rest default; getStrategy never writes", :307 "version increments even when name unchanged", :393 "resume restores persisted strategy without resetting it" — 14 pass / 0 fail; project-strategy-dao.test.ts 4 pass / 0 fail |
+| R2 | MET | `restStrategy.select` returns zero decisions + one `rest-after-drain` hold PER candidate (`strategy-runtime.ts:84-90`); running work untouched, held write slot not released (drain, not cancel). Tests fresh: strategy-runtime.test.ts:157 "zero decisions, one rest-after-drain hold PER candidate", :376 "rest leaves a held write slot and its holder untouched" — pass; selectNext under rest starts nothing (:319) |
+| R3 | MET | `gtdStrategy.select` five-step precedence in frozen order, first failure wins (`strategy-runtime.ts:104-165`); survivors sort priority-ascending (missing → 'P9' sentinel) then wbs (`:167-175`); decisions carry `strategyVersion`+`ownerEpoch`, `requiresWrite = member.writeCapable` (`:144-156`); dep gate injected from `TaskCheckService.firstBlockingPrerequisite` (`task-check.ts:1385`) reusing the SAME checkDependencyReadiness L4 walk (`:1314`, additive return, sole caller unaffected). Tests fresh: strategy-runtime.test.ts:170 five-step precedence, :220 priority-then-WBS + P9 sentinel, :333 selectNext dispatches only authorized/ready/satisfied subset — pass |
+| R4 | MET | Closed `DispatchHoldReason` union of exactly six (`strategy-runtime.ts:32-39`); no silent-skip path — every branch records a hold; all six reasons exercised incl. `unmet-dependency` detail wbs and `executor-unavailable` member consumption. Test fresh: strategy-runtime.test.ts:170-218 "every skip gets exactly one hold reason, first failure wins" — pass |
+| R5 | MET | `STRATEGIES` is a two-entry `Readonly<Record<StrategyName, Strategy>>` literal (`strategy-runtime.ts:179`); full-file read confirms no plugin loader, no registry file, no dynamic import — adding a strategy is a typed code change, per spec |
+| R6 | MET | `resume` strict order (`strategy-runtime.ts:252-275`): (1) read persisted row, persist rest v1 when absent; (2) `resolveOrchestrator` — non-`bound-online` returns `reconciled: false` with NO dispatch; (3) `DeliveryReconciler.reconcile()` only when bound-online; (4) then selectNext. Tests fresh: strategy-runtime.test.ts:393 strict order + persisted row never rewritten, :416 bound-offline → reconciled:false, :429 missing declaration → reconciled:false never throws, :445 bound-online reconciles before ready — pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R2 — GTD dispatches only eligible authorized work | MET | test | strategy-runtime.test.ts:170 "five-step precedence: every skip gets exactly one hold reason, first failure wins" + :220 "survivors order by priority ascending then wbs; missing priority sorts last (P9 sentinel)" + :333 "selectNext dispatches only the authorized/ready/satisfied subset, carrying the live claim epoch + strategy version" + :364 write-holder exclusion — fresh run 14 pass / 0 fail (45 expects), full gate rc0 8144 pass / 0 fail (.spur/run/0838-test-gate.status) |
+| R3 — Rest drains without starting new work | MET | test | strategy-runtime.test.ts:157 "zero decisions, one rest-after-drain hold PER candidate" + :376 "rest leaves a held write slot and its holder untouched (drain, not cancel)" + :319 "selectNext under an unpersisted strategy applies the rest default (starts nothing)" — fresh run pass; running work finishes and reconciles with slot held until reconciliation, no cancel path exists in restStrategy (`strategy-runtime.ts:84-90`) |
+| R6 — Restart resumes persisted state before dispatching | MET | test | strategy-runtime.test.ts:392-462 "StrategyRuntime.resume (0838 R6)": :393 strict order persists rest default when absent + restores persisted strategy without resetting, :416/:429 non-bound-online → reconciled:false and no dispatch input produced, :445 bound-online reconciles deliveries BEFORE reporting ready — fresh run pass; Board-open is a read-only getStrategy path (R1), never a reset |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0838
+
+**Scope:** 0838 surface only — migration `0046_spur_cli_project_strategy` + `drizzle/0046_spur_cli_project_strategy.sql` (renumber 0045→0046 logged in `## Solution`), NEW `packages/domain/src/dao/project-strategy-dao.ts`, NEW `packages/app/src/services/strategy-runtime.ts`, `task-check.ts` `firstBlockingPrerequisite` addition, `apps/cli/src/commands/projects.ts` `--fleet` strategy surface, docs rows + NEW tests (`strategy-runtime.test.ts` 14, `project-strategy-dao.test.ts` 4, `task-check.test.ts` +5, `delivery-reconciler.test.ts` +2, `projects.test.ts` extended). Settled 0835–0837 surfaces excluded from judgment.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | usability | `--fleet` text/JSON parity gap: the `strategy:` line renders only after the fleet-resolution `continue`s, so a project with a persisted strategy but a missing/unresolvable `fleet.json` shows `strategy` in `--json` yet no strategy line in text output (R1's display intent holds for resolvable fleets; JSON always carries it). One-line hoist of the strategy block above the `continue`s restores parity — wrap residual, non-blocking | `apps/cli/src/commands/projects.ts:218-225,263-270` |
+| 2 | P4 (advisory) | correctness | Feature doc storage table stale on BOTH renumbers: names `0044_spur_cli_project_claims` (shipped `0045`; 0044 is coordination_runs receipt columns) and `0045_spur_cli_project_strategy` (shipped `0046`), and attributes 0043 to 0833's receipts (0043 is the inbox request-key; receipts are 0044). The task doc `## Solution` logs the renumber but this table was never regenerated — doc-only drift, could mislead a future task targeting ids by the feature doc | `docs/features/G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md:159-166` |
+| 3 | P4 (advisory) | correctness | Frozen AC scenario titles swap R2/R3 ("R2 — GTD dispatches…", "R3 — Rest drains…") against the Requirements numbering (R2=rest, R3=gtd); scenario bodies and every test label use the correct mapping. Doc-only | `docs/tasks4/0838_persisted-rest-and-gtd-strategy-runtime-with-restart-resume.md` (Acceptance Criteria block) |
+| 4 | P4 (advisory) | architecture | `row.strategy as StrategyName` is an unchecked cast on read: a hand-edited/foreign-vocabulary row would surface in `getStrategy`/`ResumeReport` unvalidated. `selectNext` already falls back (`?? STRATEGIES[DEFAULT_STRATEGY]`); the trust boundary is the typed `setStrategy`. Validate at 0839's consumption seam if belt-and-braces is ever wanted | `packages/app/src/services/strategy-runtime.ts:231,262,292` |
+| 5 | P4 (advisory) | architecture | Capacity-vs-priority interaction frozen into the five-step: idle instances are consumed in candidate-iteration order (`idle.shift()`) BEFORE the priority sort, so with scarce instances the `no-idle-instance` holds land by `TaskService.list` order (readDir order), not lowest priority — decisions themselves ARE priority-ordered; disclosed in `## Solution` design notes and pinned by test comment. Revisit if 0839 wants priority-ordered capacity assignment | `packages/app/src/services/strategy-runtime.ts:126-131,167-175` |
+| 6 | P4 (advisory) | efficiency | `selectNext` resolves the injected dep gate sequentially per candidate with no snapshot cache (O(candidates × deps) markdown parses per pass). Fine at corpus scale and current call frequency; note for 0839's event-loop cadence | `packages/app/src/services/strategy-runtime.ts:297-301`; `packages/app/src/services/task-check.ts:1429` |
+
+No P1–P2 findings. Scrutiny checklist: (1) R6 strict order verified — persist-when-absent → `resolveOrchestrator`, non-`bound-online` returns `reconciled: false` with `unresolved: []` and NO dispatch, `DeliveryReconciler.reconcile()` runs only on bound-online, restart-idempotent (persisted row/version never rewritten, tested). (2) GTD five-step precedence exact (first-failure-wins, each skip one hold); P9-sentinel priority-then-WBS sort pinned; dep gate is `firstBlockingPrerequisite` reusing the SAME `checkDependencyReadiness` walk with an additive return — finding pushes unchanged, sole caller unaffected, declared `dependencies[]` edges only (`proseSeeded: false`). (3) `selectNext` excludes the live write-slot holder with an explicit expiry check and pins `ownerEpoch` from the live orchestrator claim, else 0 (fenced fail-safe — every live claim out-ranks). (4) dao `set` is ONE guarded upsert with RETURNING and `strategy_version = project_strategy.strategy_version + 1` on every set incl. same-name — the `ProjectClaimDao.claim` precedent, monotonic-fence tests pass. (5) rest drains: zero decisions, per-candidate `rest-after-drain`, held slot untouched (drain, not cancel). (6) flag-not-verb under existing `--fleet`; `strategyError` isolated per project; docs rows present in both doc files. (7) Heartbeat correctly NOT wired: zero production callers of `.heartbeat(`, `WriteSlotService`, or `StrategyRuntime` — `selectNext`/`resume` are the 0839 seams. (8) Carried advisory dispositions legitimate: (a) TOCTOU accept is sound — window bounded by the 30s TTL and fenced at the consuming ends (`validateResult` epoch; 0839 pre-launch re-fence), no dao rewrite warranted; (b) tie-break tests genuinely pin newest-evidence-wins in BOTH directions; (c) `changes()` probes retained as wrap-residual fail-safe — no churn for nothing.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `0046_spur_cli_project_strategy` registered + wired into `CLI_SCHEMA_SQL` (`packages/domain/src/migrations.ts:328-337,362,1443-1446`), byte-compatible drizzle mirror (`drizzle/0046_spur_cli_project_strategy.sql`); default `rest`, absent-row default and read-only `getStrategy` tested (`strategy-runtime.test.ts:297-317`); same-name version bumps monotonic (`:307-317`, `project-strategy-dao.test.ts:26-34`); CLI reads only, never writes (`projects.ts:162-170`) |
+| R2 | MET | `restStrategy` zero decisions + one `rest-after-drain` hold PER candidate (`strategy-runtime.ts:84-90`, test `:157-167`); held write slot untouched (drain, not cancel) (`strategy-runtime.test.ts:376-390`) |
+| R3 | MET | five-step precedence in frozen order, first failure wins (`strategy-runtime.ts:104-165`, exact-sequence test `:170-218`); P9-sentinel priority-then-WBS sort (`:167-175`, test `:220-271`); decisions carry `strategyVersion`+`ownerEpoch` and `requiresWrite = member.writeCapable` (`:144-156`, tests `:273-294,333-362`); dep gate injected from `TaskCheckService.firstBlockingPrerequisite` (`task-check.ts:1385-1400`) — same walk as the L4 rule, additive return only (`task-check.ts:1318-1374`), sole caller `:1247` unaffected |
+| R4 | MET | closed `DispatchHoldReason` union (`strategy-runtime.ts:32-39`); no silent-skip path — every branch falls to a hold; all six reasons exercised incl. `unmet-dependency` detail and `executor-unavailable` member consumption (`strategy-runtime.test.ts:170-218,333-362`) |
+| R5 | MET | `STRATEGIES` is a two-entry `Record<StrategyName, Strategy>` literal (`strategy-runtime.ts:179`); no loader, registry file, or dynamic `import()` anywhere in the diff |
+| R6 | MET | `resume` strict order — persist default when absent → `resolveOrchestrator` → non-`bound-online` returns `reconciled: false`, no dispatch → reconcile only when bound-online (`strategy-runtime.ts:252-275`); bound-offline/missing/bound-online tests (`strategy-runtime.test.ts:392-462`); Board-open never writes (tested); restart-idempotent (persisted gtd row NOT rewritten) |
+
+##### Verification Evidence (fresh, this review)
+
+- Gate artifact `.spur/run/0838-test-gate.status` = `rc=0`; log tail: **8144 pass / 0 fail**, 33,035 expects, 452 files, 159.82s; post-check rules all passed.
+- Migration identity cross-checked: `drizzle/` folder ships `0045_spur_cli_project_claims` + `0046_spur_cli_project_strategy`; `CLI_MIGRATIONS[46].id` pinned in `migrations.test.ts`; fresh/upgrade convergence (25 steps) asserted.
+- Feature-doc drift (finding 2) confirmed against the shipped `drizzle/` filenames, not the doc table.
+- Heartbeat/WriteSlot/StrategyRuntime production-caller sweep: zero matches in `packages/*/src`, `apps/cli/src` (exports and tests only).
+
+**Next:** PASS clears the Phase 7 gate. Disposition — finding 1 is a wrap residual (text-parity hoist, one line); finding 2 is a doc-table regeneration at wrap; finding 3 wraps with the doc; findings 4–5 hand to 0839's dispatch-loop work; finding 6 notes 0839 cadence. No repair required in this task.
 
 ### References
 
@@ -302,3 +381,8 @@ renders `rest-after-drain` as `rest-held`.
 - Preserved gates: `config/workflows/task-pipeline.yaml` readiness/verification remain authoritative
 
 ### History
+
+- 2026-09-12T18:14:24.341Z todo → wip (system)
+- 2026-09-12T18:58:36.656Z wip → testing (system)
+- 2026-09-12T18:58:37.247Z testing → done (system)
+

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Orchestrator binding with a single active owner
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.723Z
-updated_at: "2026-09-12T05:21:13.816Z"
+updated_at: "2026-09-12T17:29:52.193Z"
 feature_id: G62
 priority: P1
 tags:
@@ -259,15 +259,122 @@ fencing on top of the same rows. 0838 writes `strategy_version` when it claims. 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**SPEC DRIFT CORRECTION (mandatory, G61 0833 precedent).** The spec's frozen migration id
+`0044_spur_cli_project_claims` was stale — 0043 (0832 inbox mirror) and 0044 (0833 coordination_runs
+receipt columns) are both registered. Implemented as **`0045_spur_cli_project_claims`** everywhere
+(`CLI_MIGRATIONS` step, drizzle mirror, tests); the frozen spec text was not edited. Frozen names
+(table `project_claims`, columns, DAO method set, `CLAIM_TTL_MS = 30_000`) are unchanged.
+
+Change map (all additions are 0836's own surface; 0835's uncommitted tree untouched):
+
+- `packages/config/src/index.ts:547` — `orchestrator: z.string().min(1).optional()` on
+  `FleetDeclarationSchema` (R1): the pointer names a member by its declaration-level `memberLocalId`;
+  absent = `missing`, never inferred.
+- `packages/domain/src/migrations.ts:297` — `PROJECT_CLAIMS_SCHEMA_SQL` (composite PK
+  `(project_path, slot)` IS the exclusivity mechanism; `owner_epoch`/`strategy_version` declared for
+  0837/0838 with no second migration); `:334` joined into `CLI_SCHEMA_SQL` (fresh-db path, 0040
+  precedent); `:1402-1408` — step `0045_spur_cli_project_claims` (standalone CREATE TABLE IF NOT
+  EXISTS). Inline SQL comment reworded `; NULL here` → `(NULL until then)`:
+  `splitSqlStatements` splits naively on `;` and a semicolon inside an inline comment truncates the
+  statement (found by the dao test's first run).
+- `drizzle/0045_spur_cli_project_claims.sql` — regenerate-on-release mirror, byte-compatible at
+  statement level (folder-load path).
+- `packages/domain/src/dao/project-claim-dao.ts:67` (new) — `ProjectClaimDao`: `claim` (:77) is the
+  frozen single-statement `INSERT … ON CONFLICT(project_path, slot) DO UPDATE … WHERE expires_at <=
+  excluded.claimed_at OR holder_id = excluded.holder_id`; zero changed rows ⇒ refused (`null`, R3);
+  takeover bumps `owner_epoch` (0837's fencing token). `heartbeat` (:107) by a displaced holder
+  returns false; `get` (:123); `release` (:135) holder-scoped. `CLAIM_TTL_MS = 30_000` (:16, module
+  constant per Q&A). Changed-row detection reuses the `SELECT changes()` probe
+  (`packages/domain/src/dao/agent-executor-update-dao.ts:160` precedent) — no read-then-write.
+- `packages/domain/src/dao/index.ts:26-32` — dao barrel export (re-exported by the domain index).
+- `packages/app/src/services/fleet-service.ts:249` — `FleetService.resolveOrchestrator`, four-step
+  precedence first-match-wins: `missing` (`no-orchestrator-declared`) → `unresolvable`
+  (`unknown-member:` / `member-disabled:` / `wrong-role:` / `missing-purpose:`, each naming the
+  pointer — error, never inference) → `bound-offline` (`no-live-claim`, expired row included) →
+  `bound-online` (claim attached). R2 asserted here: `role === 'planner'` AND
+  `purpose === 'orchestrator'`. `:84-100` — `OrchestratorState`/`OrchestratorBinding` (missing and
+  bound-offline are distinct states, R4); `:53` — `FleetServiceContext.openDb` factory (caller-owned
+  adapter; claim reads are the only db touch).
+- `packages/app/src/index.ts:196-201` — export the 0836 binding types.
+- `apps/cli/src/commands/projects.ts:131` — `openProjectDb` (lazy per-project `.spur/spur.db`; only
+  pointer-resolving projects touch SQLite); `:152-160` per-project orchestrator resolution with
+  isolated `orchestratorError` (one project's db failure never fails the listing); `:181-183` `--json`
+  gains `orchestrator` + `orchestratorError`; `:226-245` text lines for all four states + unavailable.
+  Flag surface only — no new verb (public-surface rule).
+- Docs: `docs/help/cmd_projects.md:55`, `plugins/sp/skills/spur-cli/references/projects.md:47-56`.
+
+Tests (`<pkg>/tests/**/*.test.ts` per sp:code-testing):
+- `packages/domain/tests/dao/project-claim-dao.test.ts` (new, 6 tests): second live claimant refused;
+  takeover after expiry bumps `ownerEpoch` to 2; re-entrant same-holder claim succeeds with one row;
+  displaced-holder heartbeat false / holder heartbeat extends; release holder-scoped; slots
+  independent (`orchestrator` vs `write`).
+- `packages/app/tests/services/fleet-service.test.ts` (+9 tests): missing (no declaration; empty
+  roster — R5); unresolvable unknown/disabled/wrong-role/missing-purpose pointers; bound-offline
+  (no claim; EXPIRED claim still offline — R4); bound-online with live claim (`ownerEpoch` 1).
+- `packages/domain/tests/dao/migrations.test.ts` — 0045 registered at index 45 (46 steps),
+  applied-count shifts (+1 unconditional step), folder-load byte-compat for 0045 (0833 precedent).
+- `packages/domain/tests/retention.test.ts:166-173` — aligned the fresh-db compaction assertion with
+  its own documented contract ("compaction may run or skip"): 0836's `project_claims` table pushed a
+  fresh DB's page-slack over `COMPACTION_MIN_RECLAIM_RATIO` (0.03), so VACUUM now legitimately runs
+  on a fresh db (663552 → 659456 bytes). The guarantee that matters — never crashes, never GROWS the
+  file — is what the test now asserts (`bytesAfter <= bytesBefore`).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/fleet-service.ts:249-299` — resolveOrchestrator 4-step precedence; live claim → bound-online with exactly one holder (test `fleet-service.test.ts:702` "a live claim reads bound-online…R1", fresh 27 pass/0 fail); exclusivity enforced by composite PK `(project_path, slot)` in `drizzle/0045_spur_cli_project_claims.sql` + `packages/domain/src/migrations.ts:297` |
+| R2 | MET | Carrier = existing `purpose` + `role==='planner'`, both asserted at resolve (`fleet-service.ts:276-291`); tests `fleet-service.test.ts:635` (non-planner → unresolvable, R2) and `:654` (planner without purpose → unresolvable, R2); config adds only the pointer `orchestrator: z.string().min(1).optional()` (`packages/config/src/index.ts:547`); AGENT_ROLE_NAMES unchanged |
+| R3 | MET | `packages/domain/src/dao/project-claim-dao.ts:77-101` — single-statement `INSERT … ON CONFLICT(project_path, slot) DO UPDATE … WHERE expires_at <= excluded.claimed_at OR holder_id = excluded.holder_id`, `SELECT changes()` probe, zero changed rows ⇒ null (refused, never queued); test `project-claim-dao.test.ts:14` "refuses a second live claimant" and `:30` "claim after expiry … increments ownerEpoch" (fresh 6 pass/0 fail) |
+| R4 | MET | `missing` and `bound-offline` are distinct OrchestratorState values with distinct reasons (`fleet-service.ts:84-100`, `:259` no-orchestrator-declared vs `:297` no-live-claim); tests `fleet-service.test.ts:669` "bound-offline — distinct from missing (R4)" and `:685` "an EXPIRED claim still reads bound-offline, not online (R4)"; distinct CLI lines `apps/cli/src/commands/projects.ts:228-243` |
+| R5 | MET | Value-never-throw resolution; empty fleet / no pointer → `missing` resolves cleanly (test `fleet-service.test.ts:589` "an empty fleet resolves cleanly (R5)"); unresolvable names the pointer, never infers (`:604,620,635,654`); CLI per-project `orchestratorError` isolation renders `unavailable (<error>)` (`projects.ts:243-245`) without failing the listing |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| One member is the project's orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:702` "a live claim reads bound-online with the claim (R1: exactly one orchestrator)" — fresh run 27 pass/0 fail; claim returned with holderId, ownerEpoch 1 |
+| A second owner cannot claim the role | MET | test | `packages/domain/tests/dao/project-claim-dao.test.ts:14` "claims, then refuses a second live claimant — refused, not queued" returns null — fresh run 6 pass/0 fail, 21 expect |
+| Missing and offline are different answers | MET | test | `packages/app/tests/services/fleet-service.test.ts:669` "bound-offline — distinct from missing (R4)" + `:685` "EXPIRED claim still reads bound-offline, not online (R4)" — fresh run 27 pass/0 fail |
+| An empty fleet still resolves | MET | test | `packages/app/tests/services/fleet-service.test.ts:589` "a declaration without a pointer is missing — an empty fleet resolves cleanly (R5)" — fresh run 27 pass/0 fail; also empty-roster case in same suite |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0836 (pipeline Phase 7, observe-only)
+
+**Scope:** 0836's surface over base ca2a760c — `0045_spur_cli_project_claims` migration + drizzle mirror, `packages/domain/src/dao/project-claim-dao.ts` (new), `FleetService.resolveOrchestrator` + binding types + `openDb` seam, config `orchestrator` pointer, `spur projects list --fleet` orchestrator state, docs rows. 0835's materialize/roster surface excluded per review scope.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | correctness | The CLI orchestrator surface has no test: the four-state text switch, `orchestratorError` isolation, and the `--json` `orchestrator`/`orchestratorError` projection are unrendered by any test (the two new `projects.test.ts` cases cover only 0835's fleet lines; zero `orchestrator` assertions there). The service layer beneath is fully covered (9 resolution tests), so the logic is verified — but a swapped label or a dropped json field would fail nothing. Add one CLI render test in a bounded follow-up. | `apps/cli/src/commands/projects.ts:152-186,228-245` |
+| 2 | P4 (advisory) | correctness | A re-entrant same-holder claim also bumps `owner_epoch` (+1), so a restart invalidates previously observed epochs without any displacement. This is the frozen spec SQL verbatim, and epoch semantics are explicitly 0837-owned (Q&A deferred) — not a defect here; 0837 must treat the epoch as claim-generation, not displacement counter. | `packages/domain/src/dao/project-claim-dao.ts:82-91` |
+| 3 | P4 (advisory) | correctness | `claim` returns its value via a post-write `get()` read; under a concurrent takeover the returned row can describe the other claimant. The refuse/accept decision itself is atomic (single statement + `SELECT changes()` probe); only the advisory return value can race. No caller exists yet (0837 is the first); if a caller needs a guaranteed-self row, echo the input instead. | `packages/domain/src/dao/project-claim-dao.ts:97-101` |
+| 4 | P4 (advisory) | functional | Out-of-scope observation (0835's docs row, shared uncommitted tree): three `@core` scenario headers were inserted between `Scenario: R7 — Idle costs nothing` and its Given/When/Then, orphaning those steps onto `Scenario: Launch validates its own ground truth`. Not 0836 surface; the placement fix belongs to 0835's record. | `docs/features/G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md:106-113` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | pointer → enabled planner member with live claim; one holder enforced by composite PK (`fleet-service.ts:249-299`; bound-online test, `ownerEpoch` 1) |
+| R2 | MET | carrier = existing `purpose` + `role === 'planner'`, both asserted (`fleet-service.ts:276-291`); `AGENT_ROLE_NAMES` unchanged (`config/src/index.ts:153`); config adds only the pointer (`config/src/index.ts:547`) |
+| R3 | MET | single-statement refusal, zero changed rows ⇒ `null` (`project-claim-dao.ts:77-101`); tests: second live claimant refused; takeover on expiry bumps epoch 1→2 |
+| R4 | MET | `missing` and `bound-offline` distinct states with distinct reasons (`fleet-service.ts:259,297`); expired-claim-still-offline test; distinct CLI lines (`projects.ts:228-240`) |
+| R5 | MET | value-never-throw resolution; empty fleet → `missing` test; per-project `orchestrator: unavailable (<error>)` isolation (`projects.ts:243-245`) |
+
+Spec-drift correction verified: Solution carries the 0044→0045 note (G61 0833 precedent); mirrored in code comments (`migrations.ts:291-294`, drizzle header) and asserted by test (`migrations.test.ts` — 46 steps, index 45 id+sql, folder-load byte-compat via stripComments).
+
+Scrutiny checklist: single-statement atomicity ✓ (frozen SQL verbatim; `SELECT changes()` probe = `agent-executor-update-dao.ts:160` precedent — probe reads the result, no read-then-write decision); displaced-holder heartbeat=false ✓ (dao test, post-takeover displacement); holder-scoped release ✓ (`:135-143`); epoch bump on takeover ✓; 4-step precedence exact ✓ (missing → unresolvable ×4 each naming the pointer → bound-offline → bound-online); TTL boundary consistent (`expires_at <= excluded.claimed_at` in claim, `expiresAt <= now` in resolve); R6 enforcement present at the claim-registration statement (exclusivity decided by the atomic write, not reads/config) with 0835's `assertLaunchGroundTruth` intact (`fleet-service.ts:437`); flag-not-verb ✓ (`--fleet` on the existing `list` verb; help rows updated in both docs); 0045 registration + byte-compat mirror ✓.
+
+**Fresh evidence (re-run by this review):** domain 69 pass / 0 fail (project-claim-dao + migrations + retention); app fleet-service 27 pass / 0 fail (77 expect); cli projects 13 pass / 0 fail. Prior full gate: rc=0, 8107 pass / 0 fail (`.spur/run/0836-test-gate.status`).
+
+**Next:** disposition finding 1 (bounded CLI render test or explicit accept); carry findings 2–3 into 0837's handoff reading.
 
 ### References
 
@@ -278,3 +385,8 @@ fencing on top of the same rows. 0838 writes `strategy_version` when it claims. 
 - Governance: public-surface consent for any role-vocabulary change — `docs/design/harness-surface-governance.md`
 
 ### History
+
+- 2026-09-12T16:42:51.509Z todo → wip (system)
+- 2026-09-12T17:29:51.577Z wip → testing (system)
+- 2026-09-12T17:29:52.193Z testing → done (system)
+

@@ -1306,6 +1306,15 @@ export class TaskCheckService extends PlanningCheckService {
         return refs;
     }
 
+    /**
+     * Walk the prerequisite rule for `depWbs`, pushing the same L4 findings as
+     * always, and ADDITIONALLY return the first blocking prerequisite wbs in
+     * walk order (null = satisfied). The return value is additive — the sole
+     * existing caller (`runL4Readiness`) ignores it — so finding behavior is
+     * unchanged. 0838's {@link firstBlockingPrerequisite} reuses this same walk
+     * (never a second implementation) to source the strategy's injected
+     * `dependencyBlocked` gate.
+     */
     private async checkDependencyReadiness(
         depWbs: string,
         rootWbs: string,
@@ -1314,7 +1323,7 @@ export class TaskCheckService extends PlanningCheckService {
         seen: Set<string>,
         transitive: boolean,
         proseSeeded = false,
-    ): Promise<void> {
+    ): Promise<string | null> {
         if (seen.has(depWbs)) {
             // R3: report a cycle only when it rests on at least one frontmatter
             // dependencies[] edge. A loop reached solely through a prose-inferred seed
@@ -1328,12 +1337,13 @@ export class TaskCheckService extends PlanningCheckService {
                     message: `Prerequisite cycle detected while checking ${rootWbs}: ${[...seen, depWbs].join(' -> ')}`,
                 });
             }
-            return;
+            return null;
         }
 
         const dep = await this.readTaskSnapshot(tasksDir, depWbs);
-        if (dep === null) return;
+        if (dep === null) return null;
 
+        let firstBlocked: string | null = null;
         if (dep.status !== 'done') {
             findings.push({
                 layer: 'L4',
@@ -1342,13 +1352,53 @@ export class TaskCheckService extends PlanningCheckService {
                 section: '',
                 message: `${transitive ? 'Transitive prerequisite' : 'Prerequisite'} ${depWbs} is ${dep.status}; task ${rootWbs} is not ready until it is done`,
             });
+            firstBlocked = depWbs;
         }
 
         const nextSeen = new Set(seen);
         nextSeen.add(depWbs);
         for (const childDep of dep.dependencies) {
-            await this.checkDependencyReadiness(childDep, rootWbs, findings, tasksDir, nextSeen, true, proseSeeded);
+            firstBlocked ??= await this.checkDependencyReadiness(
+                childDep,
+                rootWbs,
+                findings,
+                tasksDir,
+                nextSeen,
+                true,
+                proseSeeded,
+            );
         }
+        return firstBlocked;
+    }
+
+    /**
+     * 0838 R3: dispatch readiness as a value — the first blocking prerequisite
+     * for `wbs` under the L4 readiness rule (the same
+     * {@link checkDependencyReadiness} walk, transitive form and cycle guard
+     * included), or null when satisfied. Declared frontmatter `dependencies[]`
+     * edges only (no prose seeding): batch ordering (`dev-runall`/`dev-verifyall`)
+     * topo-sorts `dependencies[]`, so that is the edge set dispatch must honor.
+     * The strategy runtime never parses `dependencies[]` itself — this method IS
+     * the injected `dependencyBlocked` source (Q&A: injected, sourced from the
+     * checker that gates the corpus, never a second parse).
+     */
+    async firstBlockingPrerequisite(tasksDir: string, wbs: string): Promise<string | null> {
+        const root = await this.readTaskSnapshot(tasksDir, wbs);
+        if (root === null) return null;
+        const findings: CheckFindings[] = [];
+        for (const dep of root.dependencies) {
+            const blocked = await this.checkDependencyReadiness(
+                dep,
+                wbs,
+                findings,
+                tasksDir,
+                new Set([wbs]),
+                false,
+                false,
+            );
+            if (blocked !== null) return blocked;
+        }
+        return null;
     }
 
     private checkGateLanguage(doc: MarkdownDocument, findings: CheckFindings[]): void {

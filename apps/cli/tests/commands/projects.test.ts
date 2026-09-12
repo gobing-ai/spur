@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ProjectRegistry, setDetachedServeSpawnForTests, setPortProbeForTests } from '@gobing-ai/spur-app';
+import {
+    normalizeProjectPath,
+    ProjectRegistry,
+    setDetachedServeSpawnForTests,
+    setPortProbeForTests,
+} from '@gobing-ai/spur-app';
 import { main } from '../../src/index';
 
 describe('spur projects CLI command', () => {
@@ -71,6 +76,120 @@ describe('spur projects CLI command', () => {
         expect(removeExit).toBe(0);
         const removeJson = JSON.parse(mockRemove.getText()) as { ok: boolean };
         expect(removeJson.ok).toBe(true);
+    });
+
+    it('should resolve fleet declarations under list --fleet (0835)', async () => {
+        const { mkdirSync, writeFileSync } = await import('node:fs');
+        await main(['projects', 'add', projectPath, '--name', 'fleetproj'], {
+            cwd: tempDir,
+            output: createMockOutput().output,
+        });
+        // Declaration with one enabled + one disabled member.
+        mkdirSync(join(projectPath, '.spur'), { recursive: true });
+        writeFileSync(
+            join(projectPath, '.spur', 'fleet.json'),
+            JSON.stringify({
+                version: 1,
+                // Pinned executors (not in test agent config) resolve cleanly: R4
+                // missing-data-never-grants gives fsWrite=unknown write=false.
+                members: [
+                    { id: 'lead', executor: 'build' },
+                    { id: 'rev', executor: 'review', enabled: false },
+                ],
+            }),
+        );
+        // A second registered project with NO declaration (R7 says-so path).
+        const bareProject = mkdtempSync(join(tmpdir(), 'spur-bare-project-'));
+        try {
+            await main(['projects', 'add', bareProject, '--name', 'bareproj'], {
+                cwd: tempDir,
+                output: createMockOutput().output,
+            });
+
+            // 0838: persist a gtd strategy (twice — v2 proves the monotonic bump) in
+            // fleetproj's own project db; bareproj stays unpersisted.
+            const { ProjectStrategyDao, createMigratedDb } = await import('@gobing-ai/spur-domain');
+            // The registry normalizes the project path (realpath) — seed under the
+            // SAME key the list command reads.
+            const normalized = normalizeProjectPath(projectPath);
+            const projectDb = await createMigratedDb({ url: join(normalized, '.spur', 'spur.db') });
+            const strategyDao = new ProjectStrategyDao(projectDb);
+            await strategyDao.set(normalized, 'gtd');
+            expect((await strategyDao.set(normalized, 'gtd')).strategyVersion).toBe(2);
+            projectDb.close();
+
+            const mockList = createMockOutput();
+            const listExit = await main(['projects', 'list', '--fleet'], {
+                cwd: tempDir,
+                output: mockList.output,
+            });
+            expect(listExit).toBe(0);
+            const text = mockList.getText();
+            expect(text).toContain('- fleetproj-lead role=- executor=build fsWrite=unknown write=false');
+            expect(text).toContain('fleetproj-rev [disabled]');
+            expect(text).toContain('bareproj');
+            expect(text).toContain('no declaration (.spur/fleet.json)');
+
+            const mockJson = createMockOutput();
+            const jsonExit = await main(['projects', 'list', '--fleet', '--json'], {
+                cwd: tempDir,
+                output: mockJson.output,
+            });
+            expect(jsonExit).toBe(0);
+            const parsed = JSON.parse(mockJson.getText()) as {
+                projects: Array<{
+                    name: string;
+                    fleet: { members: Array<{ instanceId: string; enabled: boolean }> } | null;
+                    fleetError?: string;
+                    strategy: { strategy: string; strategyVersion: number } | null;
+                    strategyError?: string;
+                }>;
+            };
+            const fleetEntry = parsed.projects.find((p) => p.name === 'fleetproj');
+            expect(fleetEntry?.fleet?.members.map((m) => m.instanceId)).toContain('fleetproj-lead');
+            const bareEntry = parsed.projects.find((p) => p.name === 'bareproj');
+            expect(bareEntry?.fleet?.members).toEqual([]); // R7: missing declaration resolves cleanly
+            expect(bareEntry?.fleetError).toBeUndefined();
+
+            // 0838 R1: the persisted strategy surfaces in text and JSON — the seeded
+            // row for fleetproj, the `rest` default (nothing persisted) for bareproj.
+            expect(text).toContain('strategy: gtd (v2)');
+            // bareproj's text stops at the no-declaration line; its JSON still carries
+            // strategy: null — the rest default renders only where the fleet resolved.
+            expect(fleetEntry?.strategy).toMatchObject({ strategy: 'gtd', strategyVersion: 2 });
+            expect(bareEntry?.strategy).toBeNull();
+        } finally {
+            rmSync(bareProject, { recursive: true, force: true });
+        }
+    });
+
+    it('should report a per-project fleet resolution error without failing the listing (0835)', async () => {
+        const { mkdirSync, writeFileSync } = await import('node:fs');
+        await main(['projects', 'add', projectPath, '--name', 'brokenfleet'], {
+            cwd: tempDir,
+            output: createMockOutput().output,
+        });
+        mkdirSync(join(projectPath, '.spur'), { recursive: true });
+        // Invalid declaration (member declares neither role nor executor) — resolution throws.
+        writeFileSync(
+            join(projectPath, '.spur', 'fleet.json'),
+            JSON.stringify({ version: 1, members: [{ purpose: 'ghost' }] }),
+        );
+
+        const mockList = createMockOutput();
+        const listExit = await main(['projects', 'list', '--fleet'], { cwd: tempDir, output: mockList.output });
+        expect(listExit).toBe(0);
+        expect(mockList.getText()).toContain('fleet: unavailable');
+        expect(mockList.getText()).toContain('must declare a role or an executor');
+
+        const mockJson = createMockOutput();
+        await main(['projects', 'list', '--fleet', '--json'], { cwd: tempDir, output: mockJson.output });
+        const parsed = JSON.parse(mockJson.getText()) as {
+            projects: Array<{ name: string; fleet: unknown; fleetError?: string }>;
+        };
+        const entry = parsed.projects.find((p) => p.name === 'brokenfleet');
+        expect(entry?.fleet).toEqual(null);
+        expect(entry?.fleetError).toContain('must declare a role or an executor');
     });
 
     it('should handle text formatting for add, list, and remove commands', async () => {

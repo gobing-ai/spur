@@ -1617,7 +1617,15 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         });
 }
 
-async function makeService(context: CliContext, folderOverride?: string, noLifecycle = false): Promise<TaskService> {
+/**
+ * Build the TaskService over the active planning folder (0839: exported for the
+ * agent loop's idle-hold strategy reads — `list` only; no lifecycle writes).
+ */
+export async function makeService(
+    context: CliContext,
+    folderOverride?: string,
+    noLifecycle = false,
+): Promise<TaskService> {
     const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
     // Normalize the override: relative and absolute spellings are the same folder (0522 R2).
     const tasksDir = context.fs.resolve(folderOverride ?? foldersConfig.active_folder);
@@ -1687,7 +1695,8 @@ export async function makeTaskLocator(context: CliContext): Promise<TaskLocator>
     });
 }
 
-async function makeCheckService(context: CliContext): Promise<TaskCheckService> {
+/** 0839: exported for the agent loop's injected dependency gate (`firstBlockingPrerequisite`). */
+export async function makeCheckService(context: CliContext): Promise<TaskCheckService> {
     return new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
 }
 
