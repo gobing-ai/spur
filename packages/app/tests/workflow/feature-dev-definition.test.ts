@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -12,6 +12,9 @@ import { parse as parseYaml } from 'yaml';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import { registerSpurBuiltins } from '../../src/workflow/builtins';
+
+/** Repo checkout's plugins/ — symlinked into each exec workdir for the precheck wrapper. */
+const REPO_PLUGINS_DIR = join(import.meta.dir, '..', '..', '..', '..', 'plugins');
 
 /**
  * R5 (0604 / feature D5 R11): PR review spends quota once per stable integration
@@ -174,18 +177,16 @@ describe('feature-dev definition — existing-feature reuse contract (0782)', ()
         }
         const precheckShell = (precheck?.onEnter ?? []).find((a) => a.kind === 'shell');
         const command = String(precheckShell?.options?.command ?? '');
-        // CLI reads are captured once under run-scoped artifacts (frozen artifact names).
-        expect(command).toContain('feature-dev-feature.json');
-        expect(command).toContain('feature-dev-roster.json');
-        expect(command).toContain('feature-dev-tasks.txt');
-        // JSON field validation, not content grepping: identity match, nonempty array,
-        // unique non-empty WBS identities, known statuses, refinement-blocking statuses.
-        expect(command).toContain('.id == $id');
-        expect(command).toContain('type == "array" and length > 0');
-        expect(command).toContain('unique | length');
-        expect(command).toContain(
-            'select(.status == "backlog" or .status == "wip" or .status == "testing" or .status == "blocked")',
-        );
+        // 0825 (d): the precheck is a plugin-script wrapper — repo source first, then the
+        // installed node twin, then a named fail-closed status; always exit 0 so the graph
+        // routes on the recorded status. The jq/roster contract itself is pinned by
+        // plugins/sp/tests/feature-dev-precheck.test.ts against the real script.
+        expect(command).toContain('feature-dev-precheck.ts');
+        expect(command).toContain('feature-dev-precheck.mjs');
+        expect(command).toContain('superskill script path sp feature-dev-precheck.mjs');
+        expect(command).toContain('superskill install sp');
+        expect(command).toContain('feature-dev-precheck.status');
+        expect(command.trim().endsWith('exit 0')).toBe(true);
     });
 
     test('execution hops read the frozen todo list and dispatch it as a pure slash command (R2)', () => {
@@ -319,6 +320,9 @@ async function makeHarness(): Promise<ExecHarness> {
     writeFileSync(join(bin, 'spur'), SPUR_STUB, { mode: 0o755 });
     writeFileSync(join(bin, 'superskill'), SUPER_SKILL_STUB, { mode: 0o755 });
     writeFileSync(join(workdir, 'reviewer.ts'), REVIEWER_TS);
+    // 0825 (d): the precheck wrapper resolves the repo script relative to the workdir —
+    // expose the plugin tree via a symlink so the source branch of the wrapper fires.
+    symlinkSync(REPO_PLUGINS_DIR, join(workdir, 'plugins'), 'dir');
 
     const dispatches: string[] = [];
     const host: WorkflowEngineHost = createDefaultWorkflowEngineHost();
@@ -403,8 +407,10 @@ describe('feature-dev execution — existing-feature reuse (0782 scenarios)', ()
             seedCheck(h, PASS_CHECK);
             const result = await h.run();
             expect(result.status).toBe('done');
-            // The frozen, sorted todo list — done/cancelled members are ignored.
-            expect(h.dispatches).toEqual(['/sp:dev-runall --tasks 0781,0782 --auto']);
+            // The frozen, sorted todo list — done/cancelled members are ignored. The
+            // answerFile directive is appended by the engine below the first line.
+            expect(h.dispatches.map((d) => d.split('\n')[0])).toEqual(['/sp:dev-runall --tasks 0781,0782 --auto']);
+            expect(h.dispatches.join('\n')).toContain('feature-dev-runall-answer.txt');
             // CLI reads captured once under the run-scoped artifacts.
             expect(readFileSync(join(h.workdir, '.spur/run/exec-run-feature-dev-tasks.txt'), 'utf8')).toBe('0781,0782');
             // Exactly one completion-check invocation was recorded and it passed.
@@ -447,7 +453,9 @@ describe('feature-dev execution — existing-feature reuse (0782 scenarios)', ()
             seedCheck(h, PASS_CHECK);
             const result = await h.run({ profile: 'standard' });
             expect(result.status).toBe('done');
-            expect(h.dispatches).toEqual(['/sp:dev-runall --tasks 0781,0782']);
+            // Interactive dispatches the frozen list without --auto (answerFile appends below).
+            expect(h.dispatches.map((d) => d.split('\n')[0])).toEqual(['/sp:dev-runall --tasks 0781,0782']);
+            expect(h.dispatches.join('\n')).toContain('feature-dev-runall-answer.txt');
         } finally {
             h.cleanup();
         }

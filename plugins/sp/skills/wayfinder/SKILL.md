@@ -128,7 +128,7 @@ Invoked when the operator has a loose idea and the destination itself is foggy. 
 
 ### Work Through the Map
 
-Invoked when a map already exists (operator provides the feature ID). A ticket is **optional** — without one, pick the next frontier ticket, not the operator's preference.
+Invoked when a map already exists (operator provides the feature ID). A ticket is **optional** — without one, pick the next frontier ticket, not the operator's preference. Pipeline runs: `references/pipeline-resolution.md`.
 
 0. **Branch first.** `git checkout -b wayfind/<wbs>-<slug>`, for the same reason as charting: steps 6 and 7 below remove fog from the map, and the gate that checks the removal was paid for measures the branch, not the commit. On the default branch the check silently passes no matter what you delete.
 1. **Load the map** — the feature description (the low-res view), not every task body. Read the destination and Decisions-so-far to orient.
@@ -266,7 +266,7 @@ The operator invokes this skill directly: `Skill(skill="sp:wayfinder", args="<lo
 
 ## Reference Files
 
-- **`../spur-dev/references/decision-brief.md`** — Decision-brief format for HITL choices during charting
+- **`../spur-dev/references/decision-brief.md`** — Decision-brief format for HITL choices during charting.
 - **`../spur-dev/references/cross-cutting.md`** — Verification-before-completion rule (one-ticket-per-session discipline)
 - **`../spur-dev/references/execution-batch.md`** — Batch execution model (pairs with one-ticket-per-session loop)
 

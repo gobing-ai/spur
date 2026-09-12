@@ -91,35 +91,11 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (d) 0825: the 12-command identity/roster program moved into
+          # plugins/sp/scripts/feature-dev-precheck.ts (§1.1 owner); same messages,
+          # artifacts and soft-fail exit-0 contract, wrapper fails closed.
           command: >-
-            mkdir -p .spur/run;
-            FEATURE_JSON=".spur/run/$__runId-feature-dev-feature.json";
-            ROSTER_JSON=".spur/run/$__runId-feature-dev-roster.json";
-            TASKS_TXT=".spur/run/$__runId-feature-dev-tasks.txt";
-            PRECHECK_STATUS=".spur/run/$__runId-feature-dev-precheck.status";
-            rm -f "$PRECHECK_STATUS";
-            set +e;
-            test -n "$featureId" && test -n "$__runId";
-            id_rc=$?;
-            if [ "$id_rc" -eq 0 ]; then $spurBin feature show "$featureId" --json > "$FEATURE_JSON" 2>&1; show_rc=$?; else show_rc=1; fi;
-            if [ "$id_rc" -eq 0 ] && [ "$show_rc" -eq 0 ] && jq -e --arg id "$featureId" 'type == "object" and .id == $id' "$FEATURE_JSON" > /dev/null 2>&1; then $spurBin task list --feature "$featureId" --json > "$ROSTER_JSON" 2>&1; list_rc=$?; else list_rc=1; fi;
-            if [ "$id_rc" -ne 0 ] || [ "$show_rc" -ne 0 ] || [ "$list_rc" -ne 0 ]; then
-              echo "feature-dev precheck: missing featureId/runId, unknown feature '$featureId', or unreadable roster (rc $id_rc/$show_rc/$list_rc) — supply an existing planned feature via /sp:dev-plan or /sp:dev-idea; nothing was auto-created or re-planned" >&2;
-              printf 'FAIL\n' > "$PRECHECK_STATUS";
-            elif ! jq -e 'type == "array" and length > 0' "$ROSTER_JSON" > /dev/null 2>&1; then
-              echo "feature-dev precheck: roster at $ROSTER_JSON is malformed, not an array, or empty — plan the feature first via /sp:dev-plan; refusing to replan or run an empty batch" >&2;
-              printf 'FAIL\n' > "$PRECHECK_STATUS";
-            elif ! jq -e 'all(.[]; (.wbs | type == "string" and length > 0)) and ([.[].wbs] | length == (unique | length)) and all(.[]; .status == "todo" or .status == "done" or .status == "cancelled" or .status == "backlog" or .status == "wip" or .status == "testing" or .status == "blocked")' "$ROSTER_JSON" > /dev/null 2>&1; then
-              echo "feature-dev precheck: roster has empty/duplicate/mismatched WBS identities or unknown statuses at $ROSTER_JSON — repair the task corpus; refusing to batch a broken roster" >&2;
-              printf 'FAIL\n' > "$PRECHECK_STATUS";
-            elif [ "$(jq '[.[] | select(.status == "backlog" or .status == "wip" or .status == "testing" or .status == "blocked")] | length' "$ROSTER_JSON")" -gt 0 ]; then
-              echo "feature-dev precheck: linked task(s) are backlog/wip/testing/blocked — refine or resume them through their own task pipelines before batching; refusing to launch overlapping work" >&2;
-              printf 'FAIL\n' > "$PRECHECK_STATUS";
-            else
-              printf '%s' "$(jq -r '[.[] | select(.status == "todo") | .wbs] | sort | join(",")' "$ROSTER_JSON")" > "$TASKS_TXT";
-              printf 'PASS\n' > "$PRECHECK_STATUS";
-            fi;
-            exit 0
+            mkdir -p .spur/run; if [ -f plugins/sp/scripts/feature-dev-precheck.ts ]; then bun plugins/sp/scripts/feature-dev-precheck.ts; elif W="$(superskill script path sp feature-dev-precheck.mjs 2>/dev/null)" && [ -f "$W" ]; then node "$W"; else echo "feature-dev precheck failed closed — feature-dev-precheck script not found — run 'superskill install sp'" >&2; printf 'FAIL\n' > ".spur/run/$__runId-feature-dev-precheck.status"; fi; exit 0
       - kind: note
         options:
           message: "Feature-dev start for existing feature ${vars.featureId} (0782 reuse path): roster resolved under .spur/run/${vars.__runId}-feature-dev-roster.json; frozen todo list at .spur/run/${vars.__runId}-feature-dev-tasks.txt."
@@ -143,6 +119,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-runall --tasks ${vars.featureTaskIds} --auto
+          answerFile: .spur/run/${vars.__runId}-feature-dev-runall-answer.txt
+          expectFile: .spur/run/${vars.__runId}-feature-dev-runall-answer.txt
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           timeoutMs: ${vars.stepTimeoutMs}
@@ -162,6 +140,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-runall --tasks ${vars.featureTaskIds}
+          answerFile: .spur/run/${vars.__runId}-feature-dev-runall-answer.txt
+          expectFile: .spur/run/${vars.__runId}-feature-dev-runall-answer.txt
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           timeoutMs: ${vars.stepTimeoutMs}
@@ -177,17 +157,10 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 9 lines — `feature check --as done` runs EXACTLY ONCE per run (0782 R3)
+          # and owns the status write the guards read; split would re-run the check.
           command: >-
-            mkdir -p .spur/run;
-            VERIFY_JSON=".spur/run/$__runId-feature-dev-verify.json";
-            VERIFY_STATUS=".spur/run/$__runId-feature-dev-verify.status";
-            VERIFY_TMP=".spur/run/$__runId-feature-dev-verify.status.tmp";
-            rm -f "$VERIFY_STATUS";
-            set +e;
-            $spurBin feature check "$featureId" --as done --json > "$VERIFY_JSON" 2>&1;
-            check_rc=$?;
-            set -e;
-            if [ "$check_rc" -eq 0 ] && jq -e 'type == "array" and length > 0 and all(.[]; .pass == true)' "$VERIFY_JSON" > /dev/null 2>&1; then printf 'PASS\n' > "$VERIFY_TMP" && mv -f "$VERIFY_TMP" "$VERIFY_STATUS"; else printf 'FAIL\n' > "$VERIFY_TMP" && mv -f "$VERIFY_TMP" "$VERIFY_STATUS"; fi
+            mkdir -p .spur/run; rm -f ".spur/run/$__runId-feature-dev-verify.status"; $spurBin feature check "$featureId" --as done --json > ".spur/run/$__runId-feature-dev-verify.json" 2>&1 && jq -e 'type == "array" and length > 0 and all(.[]; .pass == true)' ".spur/run/$__runId-feature-dev-verify.json" > /dev/null 2>&1 && R=PASS || R=FAIL; printf '%s\n' "$R" > ".spur/run/$__runId-feature-dev-verify.status.tmp" && mv -f ".spur/run/$__runId-feature-dev-verify.status.tmp" ".spur/run/$__runId-feature-dev-verify.status"
       - kind: note
         options:
           message: "Feature verification for ${vars.featureId}: decision at .spur/run/${vars.__runId}-feature-dev-verify.status (evidence at .spur/run/${vars.__runId}-feature-dev-verify.json) — exactly one `feature check --as done --json` invocation per run (0782 R3)."
@@ -211,36 +184,18 @@ states:
       `requireCleanReview=true` turns a non-clean COLLECTED verdict (including
       collect FAIL) into the blocking edge declared first below.
     onEnter:
+      # (e) 0825: one request action + one collect action (same verdicts, same files,
+      # collect gated on the captured head SHA as before) to hold the §1.2 budgets.
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/$__runId-integration-review.status" &&
-            REQUEST_JSON=".spur/run/$__runId-integration-review.json" &&
-            COLLECT_JSON=".spur/run/$__runId-integration-review-collect.json" &&
-            COLLECT_STATUS=".spur/run/$__runId-integration-review-collect.status" &&
-            PR_REQUEST_STATUS=".spur/run/$__runId-integration-review-pr-request.status" &&
-            set +e &&
-            bun "$(superskill script path sp pr-reviewing.ts)" request --base "$baseBranch" --json
-            --status-file "$PR_REQUEST_STATUS" > "$REQUEST_JSON" 2>&1;
-            request_rc=$?; set -e &&
-            if [ "$request_rc" -eq 0 ]; then
-              printf 'PASS\n' > "$STATUS_FILE";
-            else
-              printf 'FAIL\n' > "$STATUS_FILE";
-            fi &&
-            HEAD_SHA=$(jq -r '.head // empty' "$REQUEST_JSON" 2>/dev/null || true) &&
-            if [ -z "$HEAD_SHA" ]; then
-              echo "integration-review: request result carried no head SHA — collect not run, recorded FAIL" >&2;
-              printf 'FAIL\n' > "$COLLECT_STATUS";
-            else
-              set +e &&
-              bun "$(superskill script path sp pr-reviewing.ts)" collect --head "$HEAD_SHA" --json
-              --status-file "$COLLECT_STATUS" > "$COLLECT_JSON" 2>&1;
-              collect_rc=$?; set -e &&
-              echo "integration-review: collect rc=$collect_rc status=$(cat "$COLLECT_STATUS" 2>/dev/null || echo missing) — verdict captured to $COLLECT_JSON" >&2;
-            fi;
-            exit 0
+            mkdir -p .spur/run; bun "$(superskill script path sp pr-reviewing.ts)" request --base "$baseBranch" --json --status-file ".spur/run/$__runId-integration-review-pr-request.status" > ".spur/run/$__runId-integration-review.json" 2>&1 && printf 'PASS\n' > ".spur/run/$__runId-integration-review.status" || printf 'FAIL\n' > ".spur/run/$__runId-integration-review.status"; exit 0
+      - kind: shell
+        options:
+          # (e) 0825: 8 lines — collect stays head-locked to the request record and records
+          # its verdict status file; the rc/status echo is the audible soft-fail contract.
+          command: >-
+            if H=$(jq -er '.head // empty | select(. != "")' ".spur/run/$__runId-integration-review.json" 2>/dev/null); then bun "$(superskill script path sp pr-reviewing.ts)" collect --head "$H" --json --status-file ".spur/run/$__runId-integration-review-collect.status" > ".spur/run/$__runId-integration-review-collect.json" 2>&1; rc=$?; echo "integration-review: collect rc=$rc status=$(cat ".spur/run/$__runId-integration-review-collect.status" 2>/dev/null || echo missing) — verdict captured to .spur/run/$__runId-integration-review-collect.json" >&2; else echo "integration-review: request result carried no head SHA — collect not run, recorded FAIL" >&2; printf 'FAIL\n' > ".spur/run/$__runId-integration-review-collect.status"; fi; exit 0
       - kind: note
         options:
           message: "Integration review for feature ${vars.featureId}: request verdict at .spur/run/${vars.__runId}-integration-review.status (request state only — REQUESTED/ALREADY_* are NEVER clean evidence); collected verdict at .spur/run/${vars.__runId}-integration-review-collect.status (CLEAN/FINDINGS/PENDING — the only clean evidence). Advisory unless requireCleanReview=true."

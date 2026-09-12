@@ -41,6 +41,14 @@ Reproducible via any YAML parser over the same files.
 `feature-transition:onEnter:0` now sequences its existing feature-sync extension with the trusted
 project command `featureGateCmd`. Its row below is reclassified `EXT + POLICY`.
 
+**2026-09-12 delta (0823–0825):** the classification heading is re-counted at **67** rows after
+the 0823/0824 budget rebuilds (task-pipeline, idea-pipeline tables), 0825's feature-dev rewrite
+(2 → 4 compound), and 0825's table audit: the docs-pipeline verify table gained the feature-spec
+lookup row (+1) and a stale wrap-up `done:onEnter:1` row was dropped (5 compound — `done` holds
+only a note), netting zero; four rows are `command.gate` / `doctor.probe` built-in slots that
+left shell. `history-anatomy.yaml` (17 shell programs) shipped after the inventory
+date and stays outside this classification.
+
 ## Bulk exceptions
 
 1. **92 transition guards** — single boolean predicates (`test … && $spurBin …`) that decide graph
@@ -90,7 +98,7 @@ task Design; the alternatives considered are recorded above. The sole future con
 `qualityGateCmd` external-extension home (option d), which is deferred until a real extension
 mechanism is proposed.
 
-## Individual classification (58 programs)
+## Individual classification (67 programs)
 
 Dispositions: **BUILTIN** = landed built-in this task; **EXT** = already a portable external
 extension under `plugins/sp/scripts/` (shell is wrapper glue); **POLICY** = deliberate shell
@@ -108,9 +116,9 @@ program deliberately sequences two independently-owned capabilities.
 | `precheck:onEnter:0` | POLICY | executes per-project `preReviewCmd` via `sh -c`; project-only policy, override is the point |
 | `push:onEnter:0` | EXT | `pr-reviewing.ts push` |
 | `ensure-pr:onEnter:0` | EXT | `pr-reviewing.ts ensure-pr` |
-| `request:onEnter:0` | EXT | `pr-reviewing.ts request` + conditional `--force` flag; 0771 adds one extraction of the request record's requestedAt/head into run-scoped `.txt` files |
-| `wait:onEnter:0` | EXT | `pr-reviewing.ts wait`; since 0771 the record is read via `file.read.into-var` vars (`prSince`/`prHead`) exported as shell env — no repeated JSON parsing in shell |
-| `collect:onEnter:0` | EXT | same pattern, `pr-reviewing.ts collect` + `status`; 0771 pins the same vars and makes a non-empty `--head` mandatory in the script (moved HEAD fails loud) |
+| `request:onEnter:0` | EXT | `pr-reviewing.ts request` + conditional `--force` flag; 0771 adds one extraction of the request record's requestedAt/head into run-scoped `.txt` files; 0825 condenses request, status fallback and that extraction into one action so the file-var transport feeding wait/collect cannot half-land |
+| `wait:onEnter:2` | EXT | `pr-reviewing.ts wait`; since 0771 the record is read via `file.read.into-var` vars (`prSince`/`prHead`) exported as shell env — no repeated JSON parsing in shell |
+| `collect:onEnter:2` | EXT | same pattern, `pr-reviewing.ts collect` + `status`; 0771 pins the same vars and makes a non-empty `--head` mandatory in the script (moved HEAD fails loud); 0825 condenses the pair so collect and status decide against the same since/head pair |
 
 ### wayfinder-resolution.yaml
 
@@ -137,6 +145,7 @@ consumes the recorded run-scoped PASS/FAIL instead of re-running `spur feature c
 | Program | Disposition | Reason |
 | --- | --- | --- |
 | `start:onEnter:1` | **BUILTIN** | `doctor.probe` resolves reserved selectors through `planner`, records the elected executor, and reuses it for dispatch (0718) |
+| `start:onEnter:2` | GLUE | empty-idea FAIL-writer over the doctor status file (`test -n "$idea"`; routes to `failed` via transitions) |
 | `feature-create:onEnter:2` | GLUE | `test -s` guard + `feature update --section Goal` |
 | `feature-create:onEnter:3` | GLUE | same for Scope |
 | `ac-generate:onEnter:0` | GLUE | retry counter + scratch cleanup |
@@ -149,7 +158,6 @@ consumes the recorded run-scoped PASS/FAIL instead of re-running `spur feature c
 | `batch-create-run:onEnter:0` | GLUE | idempotent `task batch-create --skip-ready` + jq verify + done/failed markers |
 | `ready-prepare:onEnter:1` | GLUE | normalize absent ready-evidence sidecar to empty + jq fail-closed shape validation (0788) |
 | `handoff-finalize:onEnter:0` | EXT | bundled plugin script over the shared `finalizeIdeaHandoff` (0824): the monorepo runs the TS writer directly; seeded projects run the registered `idea-handoff.mjs` twin over the generated `plugins/sp/lib/idea-handoff.generated.mjs`, and a missing script fails closed |
-| `handoff:onEnter:2` | GLUE | checkpoint write |
 
 ### docs-pipeline.yaml
 
@@ -164,7 +172,10 @@ verdict/digest, and `record → failed` always — a denied record is never conv
 an exit 0. The former synthetic PASS writer in `done` is gone — no state manufactures a verdict,
 and non-PASS/malformed/mismatched evidence routes to `failed`. Temporary captures are
 run-scoped (`.spur/run/<runId>-docs-*`); the verdict artifact keeps its wbs-named compatibility
-path with `runId` stamped inside.
+path with `runId` stamped inside. 0825 condenses the `verify → record` guard to four shell
+predicates — the digest-locked measured-PASS comparison keeps its fail-closed semantics
+(empty/malformed evidence still routes to `failed`) — and the verifier `agent.run`
+(`verify:onEnter:6`) now declares `expectFile` equal to its `answerFile`.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
@@ -173,8 +184,9 @@ path with `runId` stamped inside.
 | `record:onEnter:0` | GLUE | captured `task record --solution-from-diff --transition testing` → status file; `record → failed` consumes the capture (0769) |
 | `verify:onEnter:0` | GLUE | `rm -f` stale answer before the fresh-session verifier (0769) |
 | `verify:onEnter:1` | GLUE | task path extraction (feeds the proof capture; `docs/tasks*` excluded from the digest's git-tree half) |
-| `verify:onEnter:5` | SIMPLE | single `task verdict --from-answer` |
-| `verify:onEnter:6` | GLUE | proof-digest + runId injection into verdict json (jq mutation; workflow-local proof wiring) |
+| `verify:onEnter:3` | GLUE | feature-spec path extraction (feeds the proof capture; a broken linked feature fails closed — 0825) |
+| `verify:onEnter:7` | SIMPLE | single `task verdict --from-answer` |
+| `verify:onEnter:8` | GLUE | proof-digest + runId injection into verdict json (jq mutation; workflow-local proof wiring) |
 | `done:onEnter:0` | SIMPLE | single `task update done --no-lifecycle` |
 
 ### task-pipeline.yaml
@@ -215,7 +227,7 @@ collapsed to the single `jq -e` verdict predicate.
 | `check:onEnter:0` | POLICY | `qualityGateCmd` soft probe (same exception as task-pipeline `test`) |
 | `fix:onEnter:0` | GLUE | fix-attempt counter increment |
 
-### wrapup-pipeline.yaml (6 compound)
+### wrapup-pipeline.yaml (5 compound)
 
 0824 moved the run-local JSON handling, the status probes and the bounded feature sync out of the
 workflow: the `wrapup-steps.ts resolve|metrics|feature-transition` extension (option d) owns them,
@@ -230,14 +242,21 @@ YAML-comment reason directly above the action.
 | `doc-sync:onEnter:1` | GLUE | append learnings if present (7 lines; re-keyed from `learning-capture:onEnter:1` after task 0607 renamed the state) |
 | `metrics-record:onEnter:0` | EXT | wrapper for `wrapup-steps.ts metrics` (option d): per-task metrics loop (`task show` + verdict) → wrapup-metrics.jsonl |
 | `feature-transition:onEnter:0` | EXT + POLICY | wrapper for `wrapup-steps.ts feature-transition`: bounded sync (`feature-sync-bounded.ts` → `feature sync` fallback); after an applied sync, trusted `featureGateCmd` runs through `sh -c` (option e) and reports PASS/FAIL softly |
-| `done:onEnter:1` | GLUE | checkpoint write |
 
-### feature-dev.yaml (2 compound)
+### feature-dev.yaml (4 compound)
+
+0825 moved the 12-command identity/roster precheck into the `feature-dev-precheck.ts` extension
+(option d) behind a fail-closed shell wrapper, condensed the one-shot `feature check` verifier in
+place (option e), and split the combined integration-review program into a request step and a
+collect step (both EXT wrappers over `pr-reviewing.ts`, advisory under D5-P). The two
+`execute-tasks` dispatcher hops declare `expectFile` equal to their `answerFile`.
 
 | Program | Disposition | Reason |
 | --- | --- | --- |
-| `precheck:onEnter:0` | GLUE | `test -n "$featureId"` + `agent doctor` exit-code soft probe; simpler than `doctor.probe`; consolidation candidate |
-| `done:onEnter:0` | GLUE | checkpoint write |
+| `precheck:onEnter:0` | EXT | wrapper for `feature-dev-precheck.ts` (option d); identity/roster contract, soft FAIL + exit 0 (routing stays in transitions); a missing script and a failing `superskill` lookup fail closed writing FAIL |
+| `feature-verify:onEnter:0` | GLUE | one-shot `feature check --as done --json` (0782 R3) + the PASS/FAIL status write the guards read; condensed in place (option e) |
+| `integration-review:onEnter:0` | EXT | `pr-reviewing.ts request` wrapper (advisory, D5-P); records request state only — never clean evidence |
+| `integration-review:onEnter:1` | EXT | `pr-reviewing.ts collect` wrapper with `--status-file`, head-locked to the captured request HEAD (advisory, D5-P; only `requireCleanReview=true` blocks) |
 
 ## Portability rule (feature R5, task 0608 R5)
 

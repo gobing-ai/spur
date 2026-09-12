@@ -130,8 +130,19 @@ describe('wayfinder-resolution measured resolution (task 0769)', () => {
         expect(investigateInput).not.toContain('at least 5 lines');
         expect(investigateInput).not.toContain('60 words');
         expect(investigateInput).not.toContain('at least');
-        expect(investigateInput).toContain('grep -n');
-        expect(investigateInput).toContain('re-read each cited line');
+        // 0825: the authoring contract moved into the sp:wayfinder skill reference; the
+        // input is a bounded pointer naming the reference and the prepared input bundle.
+        expect(investigateInput).toContain('references/pipeline-resolution.md');
+        expect(investigateInput).toContain('-wayfinder-input.json');
+        // The evidence-anchor pins hold against the reference that now owns the contract.
+        // Whitespace is collapsed so markdown line-wrapping cannot split a pinned literal.
+        const reference = readFileSync(
+            join(import.meta.dir, '../../../../plugins/sp/skills/wayfinder/references/pipeline-resolution.md'),
+            'utf8',
+        ).replace(/\s+/g, ' ');
+        expect(reference).toContain('grep -n');
+        expect(reference).toContain('re-read each cited line');
+        expect(reference).not.toContain('at least');
         // 0769: no standalone PASS-word file in any action option or guard command
         // (header/state prose may document the retirement).
         const flat =

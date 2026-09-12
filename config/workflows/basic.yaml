@@ -56,6 +56,8 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 10 lines — soft probe must run the trusted compound gate via `sh -c`
+          # and write the status file the guards read, always exit 0 (0771 R1 contract).
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-basic-gate.status" &&
@@ -83,6 +85,8 @@ states:
         options:
           agent: ${vars.agent}
           input: /sp:dev-fixall "${vars.qualityGateCmd}"
+          answerFile: .spur/run/${vars.__runId}-basic-fix-answer.txt
+          expectFile: .spur/run/${vars.__runId}-basic-fix-answer.txt
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: coder
           timeoutMs: ${vars.stepTimeoutMs}

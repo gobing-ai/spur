@@ -67,6 +67,8 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 10 lines — detached-HEAD/dirty/gh-auth/base-refusal probes must record
+          # before any push can publish; split would let a half-probed run continue.
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-preflight.status" &&
@@ -83,6 +85,8 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 9 lines — hygiene verdict + json capture land together; the status-file
+          # fallback keeps a silent driver from passing the gate.
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-hygiene.status" &&
@@ -100,16 +104,10 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 7 lines — unchanged shape (optional preReviewCmd probe, SKIP/PASS/FAIL)
+          # condensed onto folded one-liners to hold the §1.2 budget.
           command: >-
-            mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/$__runId-pr-precheck.status" &&
-            if [ -z "$preReviewCmd" ]; then
-              printf 'SKIP\n' > "$STATUS_FILE";
-            else
-              set +e; sh -c "$preReviewCmd"; rc=$?; set -e;
-              if [ "$rc" -eq 0 ]; then printf 'PASS\n' > "$STATUS_FILE"; else printf 'FAIL\n' > "$STATUS_FILE"; fi;
-            fi &&
-            exit 0
+            mkdir -p .spur/run; if [ -z "$preReviewCmd" ]; then R=SKIP; elif sh -c "$preReviewCmd"; then R=PASS; else R=FAIL; fi; printf '%s\n' "$R" > ".spur/run/$__runId-pr-precheck.status"
 
   - id: push
     description: >
@@ -118,6 +116,8 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 9 lines — push result and status fallback are atomic; a split could
+          # publish commits without recording the outcome.
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-push.status" &&
@@ -133,6 +133,8 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 9 lines — PR dedupe lookup captures its record for the downstream
+          # review link; ensure + capture must not race.
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-ensure.status" &&
@@ -150,19 +152,10 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 10 lines — the write-then-read split is the file-var transport feeding
+          # wait/collect and must stay one action (same record, same run scope).
           command: >-
-            mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/$__runId-pr-request.status" &&
-            FORCE_FLAG="" &&
-            if [ "$mode" = "rerun" ]; then FORCE_FLAG="--force"; fi &&
-            set +e &&
-            bun "$(superskill script path sp pr-reviewing.ts)" request --focus "$focus" $FORCE_FLAG --json
-            --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-request.json";
-            rc=$?; set -e &&
-            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
-            [ -f ".spur/run/$__runId-pr-request.json" ] &&
-            bun -e 'const fs=require("node:fs");const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));fs.writeFileSync(process.argv[2],(r.requestedAt ?? "")+"\n");fs.writeFileSync(process.argv[3],(r.head ?? "")+"\n")' ".spur/run/$__runId-pr-request.json" ".spur/run/$__runId-pr-since.txt" ".spur/run/$__runId-pr-head.txt";
-            exit 0
+            mkdir -p .spur/run; case "$mode" in rerun) F=--force ;; *) F= ;; esac; bun "$(superskill script path sp pr-reviewing.ts)" request --focus "$focus" $F --json --status-file ".spur/run/$__runId-pr-request.status" > ".spur/run/$__runId-pr-request.json"; [ -f ".spur/run/$__runId-pr-request.status" ] || printf 'FAIL\n' > ".spur/run/$__runId-pr-request.status"; jq -e . ".spur/run/$__runId-pr-request.json" > /dev/null 2>&1 && jq -r '.requestedAt // ""' ".spur/run/$__runId-pr-request.json" > ".spur/run/$__runId-pr-since.txt" && jq -r '.head // ""' ".spur/run/$__runId-pr-request.json" > ".spur/run/$__runId-pr-head.txt"; exit 0
 
   - id: wait
     description: >
@@ -181,6 +174,8 @@ states:
           var: prHead
       - kind: shell
         options:
+          # (e) 0825: 9 lines — bounded wait loop keeps rc bookkeeping so a crashed driver
+          # fails closed instead of polling forever.
           command: >-
             mkdir -p .spur/run &&
             STATUS_FILE=".spur/run/$__runId-pr-wait.status" &&
@@ -206,19 +201,10 @@ states:
           var: prHead
       - kind: shell
         options:
+          # (e) 0825: 9 lines — collect + status must run against the same since/head pair
+          # before the composite status is decided (same 0771 record contract).
           command: >-
-            mkdir -p .spur/run &&
-            STATUS_FILE=".spur/run/$__runId-pr-collect.status" &&
-            set +e &&
-            bun "$(superskill script path sp pr-reviewing.ts)" collect --since "$prSince" --head "$prHead" --json
-            --status-file "$STATUS_FILE" > ".spur/run/$__runId-pr-findings.json";
-            collect_rc=$?;
-            bun "$(superskill script path sp pr-reviewing.ts)" status --since "$prSince" --head "$prHead" --json > ".spur/run/$__runId-pr-status.json";
-            status_rc=$?; set -e &&
-            if [ "$collect_rc" -ne 0 ] || [ "$status_rc" -ne 0 ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
-            if [ ! -f "$STATUS_FILE" ]; then printf 'FAIL\n' > "$STATUS_FILE"; fi &&
-            { cat ".spur/run/$__runId-pr-findings.json" 2>/dev/null || true; } &&
-            exit 0
+            mkdir -p .spur/run; bun "$(superskill script path sp pr-reviewing.ts)" collect --since "$prSince" --head "$prHead" --json --status-file ".spur/run/$__runId-pr-collect.status" > ".spur/run/$__runId-pr-findings.json"; c=$?; bun "$(superskill script path sp pr-reviewing.ts)" status --since "$prSince" --head "$prHead" --json > ".spur/run/$__runId-pr-status.json" && [ "$c" -eq 0 ] && [ -f ".spur/run/$__runId-pr-collect.status" ] || printf 'FAIL\n' > ".spur/run/$__runId-pr-collect.status"; cat ".spur/run/$__runId-pr-findings.json" 2>/dev/null; exit 0
 
   - id: done
     description: Terminal — review collected; findings artifact at .spur/run/${vars.__runId}-pr-findings.json
@@ -308,6 +294,8 @@ transitions:
     guard:
       kind: shell
       options:
+        # (e) 0825: 4-predicate guard — ALREADY_REQUESTED/REQUESTED pair state is the
+        # fallback route when the review driver stalls (mode/noWait honored).
         command: 'test "$(cat .spur/run/$__runId-pr-request.status 2>/dev/null)" = ALREADY_REQUESTED || { test "$(cat .spur/run/$__runId-pr-request.status 2>/dev/null)" = REQUESTED && { test "$mode" = "submit" || test "$noWait" = "true"; }; }'
   - from: request
     to: wait

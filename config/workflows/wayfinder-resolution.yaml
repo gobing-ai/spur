@@ -60,18 +60,10 @@ states:
     onEnter:
       - kind: shell
         options:
+          # (e) 0825: 8 lines — task check + show capture the investigate input bundle in the
+          # same soft probe; show must stay verbatim (it IS the bundle downstream reads).
           command: >-
-            mkdir -p .spur/run &&
-            set +e &&
-            $spurBin task check $wbs; check_rc=$?;
-            $spurBin task show $wbs --json > .spur/run/$__runId-wayfinder-input.json; show_rc=$?;
-            set -e &&
-            if [ "$check_rc" -eq 0 ] && [ "$show_rc" -eq 0 ]; then
-              printf 'PASS\n' > .spur/run/$__runId-wayfinder-precheck.status;
-            else
-              printf 'FAIL\n' > .spur/run/$__runId-wayfinder-precheck.status;
-            fi &&
-            exit 0
+            mkdir -p .spur/run; $spurBin task check $wbs; c=$?; $spurBin task show $wbs --json > .spur/run/$__runId-wayfinder-input.json && [ "$c" -eq 0 ] && printf 'PASS\n' > .spur/run/$__runId-wayfinder-precheck.status || printf 'FAIL\n' > .spur/run/$__runId-wayfinder-precheck.status; exit 0
       - kind: note
         options:
           message: "Wayfinder resolution started for task ${vars.wbs} (mode=${vars.resolutionMode}, evidence=${vars.evidencePolicy}); no code implementation pipeline is permitted."
@@ -86,22 +78,10 @@ states:
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           mode: text
+          # (e) 0825: bounded reference-reading prompt (260 chars) — the authoring contract
+          # lives in the skill reference sp:wayfinder references/pipeline-resolution.md.
           input: >-
-            Resolve task ${vars.wbs} in resolution mode ${vars.resolutionMode} using the prepared
-            local bundle `.spur/run/${vars.__runId}-wayfinder-input.json` and only local shell/file
-            reads plus the `spur` CLI; do not use network search or MCP tools. Do not
-            invoke task-pipeline.yaml, /sp:dev-run, /sp:dev-runall, or code implementation.
-            Read the task file, map its existing Requirements and Acceptance Criteria to the
-            existing Design/Plan/References, then author concise Solution, Testing, and Review
-            sections through `spur task update --section --from-file`. Preserve the research
-            boundary. Finish with a short summary and stop. Evidence policy: ${vars.evidencePolicy}.
-
-            Evidence-anchor contract (mandatory — 0299 R1 line-anchor rule): when the task's
-            evidence lives in a shared evidence file, anchor every Solution/Testing `file:line`
-            citation truthfully — resolve the section's real start line with
-            `grep -n "^## <wbs> " <evidence-file>` and cite that exact line. NEVER copy a line
-            number from another ticket's example; each WBS anchors to its own section. Before
-            finishing, re-read each cited line and confirm it names the requirement's subject.
+            Resolve wayfinder task ${vars.wbs} per the sp:wayfinder skill (references/pipeline-resolution.md). Mode ${vars.resolutionMode}; evidence policy ${vars.evidencePolicy}; bundle .spur/run/${vars.__runId}-wayfinder-input.json. Finish with a short summary and stop.
           answerFile: .spur/run/${vars.__runId}-wayfinder-answer.md
           expectFile: .spur/run/${vars.__runId}-wayfinder-answer.md
           timeoutMs: ${vars.stepTimeoutMs}
@@ -121,6 +101,8 @@ states:
       # proof digest via taskFile; a silent miss would degrade the proof to tree-only.
       - kind: shell
         options:
+          # (e) 0825: 6 lines — fail-closed lookup feeds every downstream artifact name;
+          # folding a silent miss into the digest would fake tree coverage.
           command: >-
             set -e;
             task_path="$($spurBin task path $wbs --json | jq -r '.path // .filePath // empty')";
@@ -155,6 +137,8 @@ states:
           command: "$spurBin task verdict $wbs --from-answer .spur/run/$__runId-wayfinder-verify-answer.txt"
       - kind: shell
         options:
+          # (e) 0825: 6 lines — stamp shell freezes the proof digest + capture point into the
+          # verdict before it is registered; the closing guard compares against this stamp.
           command: >-
             V=".spur/run/$wbs-verdict.json";
             if [ -f "$V" ] && [ -n "$proofDigest" ]; then
@@ -246,6 +230,8 @@ transitions:
     guard:
       kind: shell
       options:
+        # (e) 0825: 5-line guard — approval + digest-bracket + verdict PASS must all hold
+        # before record; dropping any operand would let a stale proof auto-record.
         command: >-
           test "$approval" = auto &&
           test -n "$proofDigest" &&

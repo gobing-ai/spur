@@ -138,12 +138,8 @@ states:
       # excluded from the digest's git-tree half, so the spec is folded in via `taskFile`.
       - kind: shell
         options:
-          # 0760 R1 (sibling of 0751 R2): task-path lookup fails closed. Drop
-          # `2>/dev/null`, `|| true`, and the forced `exit 0` so an unresolved
-          # wbs exits non-zero with a named message. The resolved path folds
-          # into the proof digest via `taskFile:` below; a silent miss would
-          # degrade the docs-pipeline proof to tree-only (same hazard 0751 R2
-          # removed from task-pipeline). (0769: run-scoped capture path.)
+          # (e) 0825: 6 lines — fail-closed lookup feeds the verdict/digest file names
+          # (0760 R1); a silent miss would degrade the proof to tree-only.
           command: >-
             set -e;
             task_path="$($spurBin task path $wbs --json | jq -r '.path // .filePath // empty')";
@@ -159,6 +155,8 @@ states:
       # folding a stale spec into the proof.
       - kind: shell
         options:
+          # (e) 0825: 9 lines — per-check rc capture (task show/feature show/jq) keeps an
+          # orphan task and a broken linked feature distinguishable (0785 R2 contract).
           command: >-
             set -e;
             FID="$($spurBin task show $wbs --json 2>/dev/null | jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null)";
@@ -191,6 +189,7 @@ states:
           role: reviewer
           timeoutMs: ${vars.stepTimeoutMs}
           answerFile: .spur/run/${vars.__runId}-docs-verify-answer.txt
+          expectFile: .spur/run/${vars.__runId}-docs-verify-answer.txt
       - kind: shell
         options:
           command: "$spurBin task verdict $wbs --from-answer .spur/run/$__runId-docs-verify-answer.txt"
@@ -199,6 +198,8 @@ states:
       # guard below, not this step.
       - kind: shell
         options:
+          # (e) 0825: 6 lines — stamp shell freezes the docs proof digest for the closing
+          # guard; the record→done guard compares against this stamp.
           command: >-
             V=".spur/run/$wbs-verdict.json";
             if [ -f "$V" ] && [ -n "$proofDigest" ]; then
@@ -313,17 +314,13 @@ transitions:
     guard:
       kind: shell
       options:
-        # Hardened (0703 P2 carry): every operand is required non-empty (`test -n`) so a
-        # missing file or empty var fails closed instead of empty-equals-empty passing.
+        # (e) 0825: 8-line operand ladder condensed to one jq select — same file, same
+        # digest-locked PASS semantics (0769 R4/R5); empty/malformed still fail closed.
         command: >-
           test -n "$proofDigest" &&
           test -n "$proofDigestNow" &&
           test "$proofDigestNow" = "$proofDigest" &&
-          test -f ".spur/run/$wbs-verdict.json" &&
-          test -n "$(jq -r '.verdict // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" &&
-          test "$(jq -r '.verdict // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS &&
-          test -n "$(jq -r '.proof.digest // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" &&
-          test "$(jq -r '.proof.digest // empty' .spur/run/$wbs-verdict.json 2>/dev/null)" = "$proofDigest"
+          test "$(jq -r --arg d "$proofDigest" 'select(.proof.digest == $d) | .verdict // empty' ".spur/run/$wbs-verdict.json" 2>/dev/null)" = PASS
   - from: verify
     to: failed
     description: Non-PASS verdict, missing/malformed answer, or digest mismatch (R5) — the run
@@ -338,6 +335,8 @@ transitions:
     guard:
       kind: shell
       options:
+        # (e) 0825: 5-line guard — captured record PASS + digest-locked persisted verdict
+        # must both hold before done; a failed `task record` never converts to success.
         command: >-
           test "$(cat .spur/run/$__runId-docs-record.status 2>/dev/null)" = PASS &&
           test -f ".spur/run/$wbs-verdict.json" &&
