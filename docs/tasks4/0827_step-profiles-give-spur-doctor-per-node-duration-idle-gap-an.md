@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Step profiles give spur-doctor per-node duration, idle-gap and cache evidence
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.075Z
-updated_at: "2026-09-11T15:56:10.898Z"
+updated_at: "2026-09-12T04:57:09.672Z"
 feature_id: I21
 priority: P2
 tags:
@@ -44,7 +44,7 @@ Ordering: after 0820 (spur-doctor exists) and 0822 (findings carry `level`).
 
 ### Requirements
 
-- [ ] R1. The plugin script `plugins/sp/scripts/workflow-step-profile.ts` ships with its `.mjs` twin and a `config/plugin-scripts.json` entry (ADR-065). It reads `spur workflow trace --json` for a workflow's last N completed, non-dry runs. Per node and action kind it reports:
+- [x] R1. The plugin script `plugins/sp/scripts/workflow-step-profile.ts` ships with its `.mjs` twin and a `config/plugin-scripts.json` entry (ADR-065). It reads `spur workflow trace --json` for a workflow's last N completed, non-dry runs. Per node and action kind it reports:
   - the number of runs and executions;
   - the p50 and max `durationMs`;
   - the p50 idle gap before the step;
@@ -190,18 +190,41 @@ p50 is the nearest-rank median, `sorted[Math.ceil(n / 2) - 1]`, so every reporte
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/tests/skill-structure.test.ts:2165` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | R1.1 script + `.mjs` twin + manifest entry + `build:scripts` (ADR-065) `plugins/sp/scripts/workflow-step-profile.ts:1-27` (node:-only imports, `import.meta.main` block at `:453-455`); twin `plugins/sp/scripts/workflow-step-profile.mjs:1-9` (`#!/usr/bin/env node` + `// @bun`, bare `child_process`/`fs`/`url`, unconditional `{ process.exit(main(...)) }` at `:358-360` — same generated shape as `quality-gate.mjs:126-129`, `wrapup-steps.mjs:335-338`); `config/plugin-scripts.json:108-112` `{ rel: workflow-step-profile.ts, contract: standard, twin: workflow-step-profile.mjs }`; `package.json:61` `build:scripts` ends `… && superskill script convert sp workflow-step-profile.ts`; registry is two-sided (`plugins/sp/scripts/script-contract-check.ts:198-247`) and PASSed in the gate log ; R1.2 trace consumption: `--workflow --status done --last --json`, dry runs dropped, per-run timeline, `kind==='action'` sorted by `startedAt` `workflow-step-profile.ts:400-411` builds exactly `workflow trace --workflow <w> --status done --last <N> --json`; `:270-272` `nonDryRuns` drops `isDryRun === true` (and entries without a runId); `:427-436` per-run `workflow trace <runId> --json`; `:160-166` filters `kind === 'action'` and sorts by `startKey` (`:149-153`, unparseable → `+Infinity` last). Live shapes match: `packages/app/src/services/workflow-service.ts:446-449` (`{entries,total}`), `:451-477` (`{run,events}`, action fields `node/actionKind/durationMs/startedAt/completedAt/invocation/cost`); `invocation.continue` survives trace projection (`workflow-service.ts:1536`, allow-list `:2373-2385` including `'continue'` at `:2381`); `apps/cli/src/commands/workflow.ts:1293-1389` owns the flags/`--status` set and defaults `--last 20`; unknown-workflow/empty list is handled by `nonDryRuns`+`buildStepProfile` ; R1.3 per-execution `durationMs` and `idleGapMs` (previous action's `completedAt`; first action none) `workflow-step-profile.ts:124-126` (`numeric`, number-only), `:128-134` (`msBetween(previous.completedAt, startedAt)` → null on missing/unparseable), `:167-175` (`durationMs: numeric(...)`, `idleGapMs: msBetween(previous?.completedAt, …)`), `:170` `index === 0 ? undefined : actions[index-1]`; tests `plugins/sp/tests/workflow-step-profile.test.ts:166-171` (gap from previous completedAt), `:172-183` (first action → p50 `null`, never 0), `:184-215` (order by startedAt), `:216-233` (per run) ; R1.4 per-execution session from `invocation.continue` (true resumed / false fresh / missing unknown) `workflow-step-profile.ts:136-141` (`=== true` resumed, `=== false` fresh, otherwise `null` — never coerced to fresh); `:174` writes it per execution; tests `:235-261` (fresh/resumed/mixed folds), `:262-275` (unknown invocation is neither), `:276-280` (null for non-agent.run) ; R1.5 per-execution `cacheHit` from `cost.exact` only, numeric only `workflow-step-profile.ts:143-146` `numeric(event.cost?.exact?.cacheHit)` with the explicit `cost.estimated` unread comment; writer shape `packages/domain/src/analytics/run-cost.ts:19-38` (`cacheHit: number |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-12T04:38:31.459Z todo → wip (system)
+- 2026-09-12T04:57:08.878Z wip → testing (system)
+- 2026-09-12T04:57:09.672Z testing → done (system)
+

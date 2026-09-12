@@ -52,15 +52,42 @@ record saves the returned table under `docs/reports/`; the doctor creates no art
 | task | `spur task check <wbs> --json` |
 | feature | `spur feature check <id> --json` |
 | rule | `spur rule trace --json`, `spur rule validate` |
-| workflow | `spur workflow list --json`, `spur workflow validate --json`, `spur workflow trace --json` |
+| workflow | `spur workflow validate --json` (findings by `level`), `node "$(superskill script path sp workflow-step-profile.mjs)" <workflow> --json` |
 | agent spec | `spur agent list --specs --json`, read and written through `spur agent` with `--specs`, never `spur team` |
 | history | A `sp:history-anatomy` report ([../history-anatomy/SKILL.md](../history-anatomy/SKILL.md)), never raw history records |
 
-Step-profile evidence for workflows (per-step durations, idle gaps, cache hits — satellite §10)
-lands with the step-profile task that adds its plugin script; until then workflow evidence is the
-three read-only verbs above.
-
 Every row of a proposal cites the evidence it rests on. No anchor, no proposal.
+
+## Workflow step profile and cache-window flags
+
+The step profile (`plugins/sp/scripts/workflow-step-profile`, ADR-065 plugin entrypoint) reads
+`spur workflow trace` for a workflow's last N completed, non-dry runs. Per node and action kind it
+reports run count, executions, p50 and max `durationMs`, p50 idle gap before the step, session mode
+(`fresh`, `resumed` or `mixed`) and `cacheHit` p50 with its coverage — satellite §10 step evidence.
+
+```bash
+node "$(superskill script path sp workflow-step-profile.mjs)" <workflow> --json
+```
+
+`W` is the cache window, **300** seconds by default (satellite §10). The script computes every flag
+arithmetically; doctor maps the flag ids to proposals and never re-derives numbers from prose. Each
+flag and each composition finding becomes one proposal row with action class **workflow
+optimization**, and the change comes from the §10 table:
+
+| Evidence | Flag | Proposed change |
+| --- | --- | --- |
+| Validate finding, `level: error` | always | Extract to an owner from the closed fix vocabulary |
+| Validate finding, `level: warn` | always | Extract, or record a stays-shell reason inside the warn band |
+| Deterministic step | `step-over-window` — p50 > W | Split it, or move the slow work out of the step |
+| Resumed `agent.run` | `resume-after-idle` — p50 idle gap before it > W | `freshSession: true` with the prior artifact as handoff |
+| Resumed `agent.run` | `resume-cold-cache` — `cacheHit` p50 < 0.5, with evidence | The same, or move a long in-step tool call to a deterministic step |
+| `agent.run` | `agent-run-over-2w` — p50 > 2W | Split at an artifact seam, or no-op when none exists |
+
+- The two validate finding rows classify by `level` alone and carry no flag id.
+- A row with `cacheHit.known: 0` raises no cache flag. Its cache evidence is **unknown, never a zero
+  hit rate**, and doctor reports it as unknown rather than as a 0% hit.
+- A proposal that changes a shared workflow goes through §7 of the composition ladder
+  ([spur-composer](../spur-composer/SKILL.md)), including its recorded operator consent.
 
 ## Reflection map over history findings
 

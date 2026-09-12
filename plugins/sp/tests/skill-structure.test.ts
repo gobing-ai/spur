@@ -2162,3 +2162,47 @@ describe('task 0820 — spur-composer and spur-doctor skills compose, evaluate a
         expect(composer).toContain('Composition budgets (ADR-115)');
     });
 });
+
+// ─── (task 0827 / feature I21 / ADR-115) doctor reads the step profile ────────
+
+describe('task 0827 — spur-doctor judges workflows by composition findings and step profiles', () => {
+    const doctor = readFileSync(join(SKILLS_DIR, 'spur-doctor', 'SKILL.md'), 'utf8');
+
+    test('R1 — the workflow evidence row names the profile script and `workflow validate --json`', () => {
+        expect(doctor).toContain('workflow-step-profile.mjs');
+        expect(doctor).toContain('superskill script path sp workflow-step-profile.mjs');
+        expect(doctor).toContain('spur workflow validate --json');
+        expect(doctor).toContain('findings by `level`');
+    });
+
+    test('R1 — every §10 flag id appears with its proposed change and the 300 s window', () => {
+        for (const flag of ['step-over-window', 'resume-after-idle', 'resume-cold-cache', 'agent-run-over-2w']) {
+            expect(doctor, `doctor must name the step-profile flag ${flag}`).toContain(flag);
+        }
+        // W defaults to the satellite's 300 s cache window.
+        expect(doctor).toContain('300');
+        expect(doctor).toContain('step-over-window` — p50 > W');
+        expect(doctor).toContain('resume-after-idle` — p50 idle gap before it > W');
+        expect(doctor).toContain('resume-cold-cache` — `cacheHit` p50 < 0.5');
+        expect(doctor).toContain('agent-run-over-2w` — p50 > 2W');
+    });
+
+    test('R1 — findings and flags both land as workflow-optimization proposals', () => {
+        expect(doctor).toContain('workflow optimization');
+        expect(doctor).toContain('| Validate finding, `level: error` |');
+        expect(doctor).toContain('| Validate finding, `level: warn` |');
+        // A shared workflow change routes through the ladder's shared step and its consent.
+        expect(doctor).toContain('§7');
+        expect(doctor).toContain('recorded operator consent');
+    });
+
+    test('R1 — unknown cache evidence is reported as unknown, and raises no cache flag', () => {
+        expect(doctor).toContain('cacheHit.known: 0');
+        expect(doctor).toContain('never a zero');
+        // Session modes and both evidence commands are named, not paraphrased.
+        for (const mode of ['`fresh`', '`resumed`', '`mixed`']) {
+            expect(doctor, `doctor must name the session mode ${mode}`).toContain(mode);
+        }
+        expect(doctor).toContain('spur workflow trace');
+    });
+});

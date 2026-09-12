@@ -104,6 +104,11 @@
         {
             "rel": "validate-flag-contracts.ts",
             "contract": "repo-only"
+        },
+        {
+            "rel": "workflow-step-profile.ts",
+            "contract": "standard",
+            "twin": "workflow-step-profile.mjs"
         }
     ]
 }

@@ -155,9 +155,9 @@ optimization* (§4 row 4). W is the cache window, 300 s by default.
 | --- | --- | --- |
 | Validate finding, `level: error` | always | Extract to an owner from the closed fix vocabulary |
 | Validate finding, `level: warn` | always | Extract, or record a stays-shell reason inside the warn band |
-| Deterministic step | p50 > W | Split it, or move the slow work out of the step |
-| Resumed `agent.run` | p50 idle gap before it > W | `freshSession: true` with the prior artifact as handoff |
-| Resumed `agent.run` | `cacheHit` p50 < 0.5, with evidence | The same, or move a long in-step tool call to a deterministic step |
-| `agent.run` | p50 > 2W | Split at an artifact seam, or no-op when none exists |
+| Deterministic step | `step-over-window` — p50 > W | Split it, or move the slow work out of the step |
+| Resumed `agent.run` | `resume-after-idle` — p50 idle gap before it > W | `freshSession: true` with the prior artifact as handoff |
+| Resumed `agent.run` | `resume-cold-cache` — `cacheHit` p50 < 0.5, with evidence | The same, or move a long in-step tool call to a deterministic step |
+| `agent.run` | `agent-run-over-2w` — p50 > 2W | Split at an artifact seam, or no-op when none exists |
 
 A proposal that changes a shared workflow goes through the §7 shared step and its recorded consent.
