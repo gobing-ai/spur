@@ -4,7 +4,7 @@ name: Prototype rest and GTD dispatch traces with capacity and restart failures
 status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.271Z
-updated_at: "2026-09-11T23:53:02.176Z"
+updated_at: "2026-09-12T01:08:42.982Z"
 feature_id: G6
 priority: P1
 tags:
@@ -90,11 +90,14 @@ Execution budget: implement the bounded event cases, avoiding new architecture; 
 
 ### Solution
 
-- apps/cli/tests/fixtures/g6/strategy-prototype.ts — test-only deterministic event-driven fake controller implementing the frozen behavioral contract (strategy-prototype.ts:215 `G6StrategyPrototypeController.process` event switch; :325 `wakeAndSelect`; :366 `selectGtdAssignment` GTD priority→WBS gates; :403 `pickInstance` role/enable/capability filters with stable instanceId tie-break; :422-441 `claimAndAssign` atomic instance+write-slot claim against ownerEpoch/strategyVersion with duplicate-assignment (:429-433), single-writer write-slot guard (:425-426, slot release :534) and no-dispatch-after-rest (:424) guards; :473 `handleResult` — attemptId dedup (:478-482), cross-project orphan rejection, stale-owner downgrade, durable persist-before-notification (mirrors 0828 probe 6), exit-only vs task-completed split with taskOutcome derivation at :526; :273-281 rest drain dropping queued future starts; :302-311 tick = zero model calls/dispatches; :317 `record`/(:188 `getProject`) slot-claim bookkeeping; :601-615 `unsafeForceAssignment` guard tripwires; :575 `snapshot`/(:618 `restoreController`) for restart).
-- apps/cli/tests/commands/g6-strategy-prototype.test.ts — 17 table-driven cases covering every R2 case (duplicate input, duplicate results, rest-vs-dispatch race via select/claim intercept, restart from snapshot into a fresh controller, stale-owner rejection after replacement, disabled/unavailable executors, exhausted capacity, unmet dependencies, missing/failed completion receipts, cross-project delivery) plus guard tripwires proving the "must FAIL on" guarantees.
-- docs/reports/g6-strategy-prototype.md — run commands, one-shot readable trace command + captured output, per-case trace table, reused-vs-simulated strategy contract (provenance to 0828 §3 probes / §5 Handoff), and the 8 missing production seams with remaining decisions for production planning.
+Test-local simulation only. Re-verification corrected unsafe behavior; no production API or schema changes.
 
-Rationale: 0828 is the dependency authority; every primitive it shows as absent (idempotent request dedup, completion-receipt linking, per-project write-slot lease/ownerEpoch, rest semantics, verified-completion distinct from exit, capability evidence, selective wakeup) is simulated explicitly and named as a seam — none of its findings were contradicted or its report edited. The orchestrator is an explicit planner-role instance with `purpose: "orchestrator"`; the closed role vocabulary (scribe/coder/reviewer/planner) is untouched. No production API, dependency, or pipeline file changed; no production test altered.
+- `apps/cli/tests/fixtures/g6/strategy-prototype.ts:257` — explicit question answer/hold, independent from task dispatch; request IDs remain opaque.
+- `apps/cli/tests/fixtures/g6/strategy-prototype.ts:324` — replacement retains ambiguous writers and slots; exit-only results also hold rather than replay.
+- `apps/cli/tests/fixtures/g6/strategy-prototype.ts:511` — result identity includes task and owner epoch; persisted counters prevent restart ID/generation collisions.
+- `apps/cli/tests/fixtures/g6/strategy-prototype.ts:351` — per-event before/after snapshots and fake-call deltas, optional supplied clock; capability and numeric WBS gates.
+- `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — regression cases reproduced the defects before the fix; 23 tests now pass.
+- `docs/reports/g6-strategy-prototype.md:124` — re-audit corrections, traces and remaining simulated-only recovery boundary.
 
 ### Testing
 
@@ -104,17 +107,17 @@ Rationale: 0828 is the dependency authority; every primitive it shows as absent 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/cli/tests/fixtures/g6/strategy-prototype.ts:215 event-driven controller; dispatch correlation attemptId/runId/generation/ownerEpoch/strategyVersion at :441-444; answers/holds/assignments distinguished; trace command + captured output in docs/reports/g6-strategy-prototype.md §1 |
-| R2 | MET | 17 table-driven tests in apps/cli/tests/commands/g6-strategy-prototype.test.ts: duplicate input/dedup by projectPath+requestId; attemptId dedup (:478-482); rest-vs-dispatch race intercept (:341-362); restart via snapshot :575 / restoreController :618; stale ownerEpoch rejection :503-511; disabled/unavailable + exhausted capacity; unmet dependencies; notification-failure reconciliation :560 |
-| R3 | MET | single write slot per project in claimAndAssign :422-441 with single-writer guard; exact-instance via pickInstance :403-417 stable instanceId tie-break; authorization/readiness gates :395-401 (whyNotEligible); idle tick zero model calls/dispatches :302-311; verified-outcome-only completion vs exit :516-526; must-FAIL guards via unsafeForceAssignment tripwires :601-615 |
-| R4 | MET | docs/reports/g6-strategy-prototype.md §2 reused-vs-simulated contract with 0828 provenance; §4 8 missing production seams; §5 remaining decisions; no contradiction with 0828 report (reviewer cross-checked); simulation boundary explicitly disclaims SQLite/crash/real-agent claims |
+| R1 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — question answer vs assignment/hold and event snapshots; workspace `bun test tests/commands/g6-strategy-prototype.test.ts` exit 0. |
+| R2 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — replacement holds reservation; forged task/epoch results rejected; restart counters persist. All 23 tests / 109 assertions pass. |
+| R3 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — numeric WBS, capability gates; existing tests cover authorization, rest races, single writer, idle and verified completion. Same test command exit 0. |
+| R4 | MET | `docs/reports/g6-strategy-prototype.md:124` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1-AC | MET |  | documented run command + trace carry project/request/instance/run correlation |
-| R2-AC | MET |  | each fault case asserts final state and dispatch counts; snapshots restore strategy; ambiguous work held not replayed |
-| R3-AC | MET |  | all named invariants enforced by failing assertions incl. tripwires |
-| R4-AC | MET |  | owners/simulated guarantees/seams/scope explicit and consistent with 0828 |
+| R1: Given fake tasks, instances and input events, when the documented workspace test command runs, then request-to-result traces carry project/request/instance/run correlation and distinguish answers, holds and assignments. | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — question answer vs assignment/hold and event snapshots; workspace `bun test tests/commands/g6-strategy-prototype.test.ts` exit 0. |
+| R2: Given each listed fault/race case, when its event sequence runs, then expected final state and dispatch counts are asserted, snapshots restore strategy, and ambiguous work is held rather than blindly replayed. | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — replacement holds reservation; forged task/epoch results rejected; restart counters persist. All 23 tests / 109 assertions pass. |
+| R3: Given competing writers, repeated roles, unauthorized/unready work, idle ticks and a zero exit without verification, when selection/completion is evaluated, then all named invariants are enforced by failing assertions. | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — numeric WBS, capability gates; existing tests cover authorization, rest races, single writer, idle and verified completion. Same test command exit 0. |
+| R4: Given the report and executable traces, when downstream planning consumes them, then the reused owners, simulated guarantees, missing production seams, and scope boundaries are explicit and consistent with 0828. | MET | test | `docs/reports/g6-strategy-prototype.md:124` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -125,9 +128,12 @@ Rationale: 0828 is the dependency authority; every primitive it shows as absent 
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | secua-review | — | reviewer verdict PASS; P3 stale Solution refs fixed; P4 ×3 advisory (dead record no-op, queued-state vacuous, trace-table abridgment) |
-| P4 | quality-gate | — | bun run spur-check exit 0 (twice); apps/cli typecheck + biome clean; 17/17 tests pass; full apps/cli suite 1033 pass |
-| P4 | traceability-verify | — | per-requirement MET with file:line evidence |
+| P4 | spur task check | — | task check passed |
+| P4 | task-check | — | spur task check 0829 --strict-core --json exit 0 before record; repeated after record. |
+| P4 | design-conformance | — | Frozen safe-hold, request correlation, restored state, explicit fake answer and event snapshot contract exercised; synchronous selection models queued-unstarted at the existing intercept. |
+| P4 | fix-artifacts | — | Rewrote .spur/run/0829-verify-answer.txt lines 1-30; derived .spur/run/0829-verdict.json; red log .spur/run/g6-verifyall/0829-red.log and green log 0829-tests.log. |
+| P4 | typecheck | — | bun run --filter @gobing-ai/spur typecheck exit 0. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 

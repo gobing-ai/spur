@@ -290,7 +290,7 @@ describe('G6 strategy prototype — frozen contract traces (0829)', () => {
                 generation: a.generation,
                 ownerEpoch: a.ownerEpoch,
                 instanceId: a.instanceId,
-                taskId: 't2',
+                taskId: a.taskId,
                 verified: true,
             }),
         ]);
@@ -337,13 +337,13 @@ describe('G6 strategy prototype — frozen contract traces (0829)', () => {
                 generation: a.generation,
                 ownerEpoch: a.ownerEpoch,
                 instanceId: a.instanceId,
-                taskId: 't2',
+                taskId: a.taskId,
                 verified: true,
             }),
         ]);
         expect(c2.assignments(P1).filter((x) => x.state === 'running')).toHaveLength(0);
         expect(c2.holds(P1).some((h) => h.reason === 'rest-after-drain')).toBe(true);
-        expect(c2.tasks(P1).get('t2')?.completed).toBe(true);
+        expect(c2.tasks(P1).get(a.taskId ?? '')?.completed).toBe(true);
     });
 
     test('R2/R3: stale-owner rejection — replacement bumps epoch, old result downgraded to diagnostic', () => {
@@ -366,20 +366,9 @@ describe('G6 strategy prototype — frozen contract traces (0829)', () => {
         expect(c.diagnostics(P1).some((d) => d.kind === 'stale-owner-rejected')).toBe(true);
         expect(c.tasks(P1).get('t1')?.completed).toBe(false); // NOT advanced by stale owner
         expect(c.unsafeForceAssignment.bind(c, P1, 'scribe-1', 't1')).toThrow(/single-writer/);
-        const a2 = c.assignments(P1).find((x) => x.ownerEpoch === 2);
-        if (!a2) throw new Error('no ownerEpoch=2 assignment');
-        c.process(
-            res({
-                attemptId: a2.attemptId,
-                runId: a2.runId,
-                generation: a2.generation,
-                ownerEpoch: 2,
-                instanceId: a2.instanceId,
-                taskId: 't1',
-                verified: true,
-            }),
-        );
-        expect(c.tasks(P1).get('t1')?.completed).toBe(true);
+        expect(c.assignments(P1).some((x) => x.ownerEpoch === 2)).toBe(false);
+        expect(c.dispatchCount).toBe(1);
+        expect(c.getProject(P1).writeSlot?.heldBy).toBe(a.attemptId);
     });
 
     test('R2/R3: duplicate results dedupe by attemptId', () => {
@@ -420,7 +409,9 @@ describe('G6 strategy prototype — frozen contract traces (0829)', () => {
         ]);
         expect(c.getProject(P1).finishedResults.get(a.attemptId)?.taskOutcome).toBe('exit-only');
         expect(c.tasks(P1).get('t1')?.completed).toBe(false);
-        expect(c.assignments(P1).some((x) => x.taskId === 't1' && x.attemptId !== a.attemptId)).toBe(true);
+        expect(c.dispatchCount).toBe(1);
+        expect(firstAssignment(c).state).toBe('outcome-unknown');
+        expect(c.getProject(P1).writeSlot?.heldBy).toBe(a.attemptId);
     });
 
     test('R2: notification failure leaves the result discoverable in durable model state', () => {
@@ -490,5 +481,73 @@ describe('G6 strategy prototype — frozen contract traces (0829)', () => {
             }),
         ]);
         expect(c2.getProject(P1).writeSlot).toBeNull(); // after reconciliation no ghost slot
+    });
+    test('R2/R3: replacement retains ambiguous writer reservation instead of replaying it', () => {
+        const c = boot();
+        runSequence(c, [T('t1'), req('r1')]);
+        const a = firstAssignment(c);
+        const slot = c.getProject(P1).writeSlot;
+        c.process(replace());
+        expect(c.dispatchCount).toBe(1);
+        expect(c.getProject(P1).writeSlot).toEqual(slot);
+        expect(firstAssignment(c).attemptId).toBe(a.attemptId);
+        expect(c.holds(P1).some((h) => h.reason === 'outcome-unknown')).toBe(true);
+    });
+
+    test.each(['task', 'epoch'] as const)('R3: rejects a result with forged %s correlation', (field) => {
+        const c = boot();
+        runSequence(c, [T('t1', { priority: 1 }), T('t2'), req('r1')]);
+        const a = firstAssignment(c);
+        c.process(
+            res({
+                ...a,
+                taskId: field === 'task' ? 't2' : a.taskId,
+                ownerEpoch: field === 'epoch' ? a.ownerEpoch + 1 : a.ownerEpoch,
+                verified: true,
+            }),
+        );
+        expect(c.getProject(P1).finishedResults.size).toBe(0);
+        expect(c.tasks(P1).get('t1')?.completed).toBe(false);
+        expect(c.tasks(P1).get('t2')?.completed).toBe(false);
+        expect(c.dispatchCount).toBe(1);
+    });
+
+    test('R2: restart preserves ID and generation counters across later dispatches', () => {
+        const c = boot();
+        runSequence(c, [T('t1', { priority: 1 }), T('t2'), req('r1')]);
+        const first = firstAssignment(c);
+        c.process(res({ ...first, verified: true }));
+        const second = firstAssignment(c);
+        const restored = restoreController(c.snapshot());
+        runSequence(restored, [T('t3'), res({ ...second, verified: true })]);
+        const third = firstAssignment(restored);
+        expect(third.attemptId).not.toBe(first.attemptId);
+        expect(third.attemptId).not.toBe(second.attemptId);
+        expect(third.runId).not.toBe(second.runId);
+        expect(third.generation).toBeGreaterThan(second.generation);
+        expect(restored.dispatchCount).toBe(3);
+    });
+
+    test('R1/R4: questions answer without dispatch; trace retains event state and counters', () => {
+        const c = boot();
+        runSequence(c, [T('t1'), { ...req('question'), intent: 'question' }]);
+        expect(c.dispatchCount).toBe(0);
+        const question = [...c.getProject(P1).requests.values()][0];
+        expect(question?.answer).toContain('SIMULATED answer from planner-1');
+        expect(JSON.parse(c.trace.at(-1) ?? '').event.requestId).toBe('question');
+        const trace = JSON.parse(c.trace.at(-1) ?? '');
+        expect(JSON.parse(trace.before.state).projects[0].requests).toHaveLength(0);
+        expect(JSON.parse(trace.after).projects[0].requests).toHaveLength(1);
+        runSequence(c, [req('request::with::separators')]);
+        expect(firstAssignment(c).requestId).toBe('request::with::separators');
+    });
+
+    test('R3: write tasks require write capability and WBS ordering is numeric', () => {
+        const c = new G6StrategyPrototypeController();
+        c.addInstance(P1, I('coder-0', { capabilities: ['read-only'] }));
+        c.addInstance(P1, I('coder-1'));
+        runSequence(c, [T('late', { wbs: '1.10' }), T('early', { wbs: '1.2' }), req('r1')]);
+        expect(firstAssignment(c).instanceId).toBe('coder-1');
+        expect(firstAssignment(c).taskId).toBe('early');
     });
 });

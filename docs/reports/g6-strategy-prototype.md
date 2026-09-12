@@ -14,7 +14,7 @@ cd apps/cli && bun test tests/commands/g6-strategy-prototype.test.ts
 cd apps/cli && bun test tests/commands/agent-team.test.ts
 ```
 
-Latest run: **17 pass, 0 fail, 80 assertions** (`bun test apps/cli/tests/commands/g6-strategy-prototype.test.ts`).
+Latest run: **23 pass, 0 fail, 109 assertions** (`cd apps/cli && bun test tests/commands/g6-strategy-prototype.test.ts`, 2026-09-12).
 
 Readable one-shot trace (event → controller trace + counters), run from `apps/cli/`:
 
@@ -29,7 +29,7 @@ const a=c.assignments(P)[0];
 c.process({kind:"strategy",projectPath:P,action:"rest"});
 c.process({kind:"tick",projectPath:P});
 c.process({kind:"result",projectPath:P,attemptId:a.attemptId,runId:a.runId,generation:a.generation,ownerEpoch:a.ownerEpoch,instanceId:a.instanceId,taskId:"t1",exitCode:0,verified:true,notification:"failed"});
-console.log(c.trace.map(l=>"- "+l).join("\n")); console.log("modelCalls:",c.modelCalls,"dispatches:",c.dispatchCount)'
+console.log(c.trace.filter(l=>!l.startsWith("{")).map(l=>"- "+l).join("\n")); console.log("modelCalls:",c.modelCalls,"dispatches:",c.dispatchCount)'
 ```
 
 Output of that trace command (run for this report):
@@ -86,9 +86,9 @@ Boundary statement: the suite's passing state demonstrates the **simulated polic
 | Rest drain | request+tasks, rest, extra task+request during rest, result | strategyVersion 2, 0 future starts, running kept and reconciled, then `rest-after-drain` hold, slot freed only via reconciliation | 1 |
 | Rest-vs-dispatch race | intercept between select and claim: rest fires | decision declared stale (v1→v2), re-evaluate → no dispatch, slot free | 0 |
 | Restart w/ persisted strategy | snapshot after rest → fresh controller | compactState identical; running assignment + slot owner restored; result reconciled in fresh controller; durable dispatch count 1 | 1 |
-| Stale-owner rejection | replace (ownerEpoch 1→2), then old-epoch result | `stale-owner-rejected` diagnostic, task NOT advanced; current-epoch result completes the task normally | 2 |
+| Stale-owner rejection | replace (ownerEpoch 1→2), then old-epoch result | `stale-owner-rejected` diagnostic, task NOT advanced; original writer reservation retained; no new assignment until explicit reconciliation | 1 |
 | Duplicate results | same attemptId twice | `finishedResults` size 1, 1 dispatch | 1 |
-| Exit-as-task-success | result exit 0, verified false | `finishedResults` returns `exit-only`: run finishes, slot free, but task NOT completed; re-wake re-dispatches with a fresh attempt | 2 |
+| Exit-as-task-success | result exit 0, verified false | `finishedResults` returns `exit-only`: run exit is recorded, task NOT completed; outcome-unknown keeps its slot and prevents blind replay | 1 |
 | Notification failure | result reconciled with notification failed | result discoverable in `finishedResults` AND after a snapshot reload; `reconcileNotifications()` delivers it later | 1 |
 | Cross-project delivery | P1-owned attempt delivered at P2 | `orphan-result` diagnostic in P2; P1 work intact; no advance | 1 |
 | Idle tick | 5 ticks | modelCalls delta 0, dispatch delta 0, `holds: idle` | 0 |
@@ -121,3 +121,13 @@ Each violation is asserted in the positive policy (nothing wrong happens while t
 - Wake semantics: replace the 2000 ms drain poll with receipt-triggered wake, or keep the poll and only add dedup? (Cutover risk for loops promoted by long-lived processes.)
 - Cutover window and spec-id migration constraints remain with Robin (0828 §4 unchanged: preserve current spec IDs through V1).
 - Verified-workflow-outcome definition for a real coding agent (what receipt format counts as "verified" is a later product contract; this prototype only asserts the distinct-from-exit gate).
+
+## 6. Re-verification corrections — 2026-09-12
+
+The re-audit reproduced four failures: replacing an owner started a second writer, a result could name the wrong task or owner epoch, and snapshot restore reused attempt/run IDs. The controller now retains ambiguous assignments and their write reservation, checks task and epoch alongside instance/run/generation, and persists ID/generation/dispatch/model counters. Exit-only outcomes likewise hold for reconciliation rather than automatically replaying a possibly completed write.
+
+Question requests use an explicit test-local `intent: "question"`: the bound planner produces a labeled fake answer with no task/assignment; unavailable planners hold. Question input cannot authorize pending tasks. Work requests preserve opaque IDs including `::`. Writer selection checks write capability and sorts WBS numerically.
+
+Every processed event appends a JSON trace with project/request identity, supplied-clock time (default logical zero), before/after snapshots and fake-call deltas. The readable command above filters these JSON lines; inspect `c.trace` directly for complete traces. Tests retain initial/event/final state in memory; no production persistence or real process recovery is claimed.
+
+The model selects and starts synchronously; the select/claim intercept is the queued-unstarted boundary used to test rest races. Reconciliation of outcome-unknown assignments is deliberately not automated: the reservation remains held until downstream design supplies authoritative evidence. This is the task's safe-hold invariant, not a claim that production recovery already exists.

@@ -55,13 +55,15 @@ export interface Assignment {
     taskId?: string;
     ownerEpoch: number;
     strategyVersion: number;
-    state: 'queued' | 'running' | 'finished';
+    state: 'queued' | 'running' | 'outcome-unknown' | 'finished';
 }
 
 export interface RequestRecord {
     requestId: string;
     messageId: string;
     content: string;
+    intent?: 'question';
+    answer?: string;
 }
 
 export interface OutcomeRecord {
@@ -98,7 +100,14 @@ export interface ProjectState {
 }
 
 export type SimEvent =
-    | { kind: 'request'; projectPath: string; requestId: string; messageId: string; content: string }
+    | {
+          kind: 'request';
+          projectPath: string;
+          requestId: string;
+          messageId: string;
+          content: string;
+          intent?: 'question';
+      }
     | {
           kind: 'task';
           projectPath: string;
@@ -128,6 +137,8 @@ export interface ControllerOptions {
     /** Monotonic id minters, overridden per-test for readability. */
     nextAttemptId?: () => string;
     nextRunId?: () => string;
+    counters?: { attempt: number; run: number; generation: number; dispatch: number; model: number };
+    now?: () => number;
 }
 
 /** The wakeup triggers of the frozen contract; anything else must not wake. */
@@ -138,6 +149,7 @@ export class G6StrategyPrototypeController {
     private readonly opts: Required<Pick<ControllerOptions, 'nextAttemptId' | 'nextRunId'>> & ControllerOptions;
     private attemptCounter = 0;
     private runCounter = 0;
+    private generationCounter = 0;
     /** Fake "model/LLM" call counter — idle ticks must leave it at zero delta. */
     modelCalls = 0;
     /** Total assigned dispatches (guards assert against this). */
@@ -146,6 +158,11 @@ export class G6StrategyPrototypeController {
     trace: string[] = [];
 
     constructor(opts: ControllerOptions = {}) {
+        this.attemptCounter = opts.counters?.attempt ?? 0;
+        this.runCounter = opts.counters?.run ?? 0;
+        this.generationCounter = opts.counters?.generation ?? 0;
+        this.dispatchCount = opts.counters?.dispatch ?? 0;
+        this.modelCalls = opts.counters?.model ?? 0;
         this.opts = {
             nextAttemptId: opts.nextAttemptId ?? (() => `attempt-${++this.attemptCounter}`),
             nextRunId: opts.nextRunId ?? (() => `run-${++this.runCounter}`),
@@ -214,13 +231,13 @@ export class G6StrategyPrototypeController {
     /** Process one event. Deterministic, synchronous. */
     process(event: SimEvent): void {
         const p = this.project(event.projectPath);
-        const before = { dispatch: this.dispatchCount, model: this.modelCalls };
+        const before = { dispatch: this.dispatchCount, model: this.modelCalls, state: this.snapshot() };
         switch (event.kind) {
             case 'request': {
                 const key = `${p.projectPath}::${event.requestId}`;
                 const existing = p.requests.get(key);
                 if (existing) {
-                    if (existing.content !== event.content) {
+                    if (existing.content !== event.content || existing.intent !== event.intent) {
                         // Immutable request content: reuse of a requestId with
                         // different content is an error, not a silent amend.
                         throw new Error(`request ${event.requestId} reused with different content`);
@@ -230,7 +247,26 @@ export class G6StrategyPrototypeController {
                     this.record(event, before, p);
                     return;
                 }
-                p.requests.set(key, { requestId: event.requestId, messageId: event.messageId, content: event.content });
+                const request: RequestRecord = {
+                    requestId: event.requestId,
+                    messageId: event.messageId,
+                    content: event.content,
+                    intent: event.intent,
+                };
+                p.requests.set(key, request);
+                if (event.intent === 'question') {
+                    const orchestrator = [...p.instances.values()].find(
+                        (i) => i.purpose === 'orchestrator' && i.enabled,
+                    );
+                    if (orchestrator) {
+                        this.modelCalls++;
+                        request.answer = `SIMULATED answer from ${orchestrator.instanceId}: ${event.content}`;
+                    } else {
+                        p.holds.push({ reason: 'orchestrator-unavailable', detail: event.requestId });
+                    }
+                    this.record(event, before, p);
+                    return;
+                }
                 this.trace.push(`request ${event.requestId} accepted`);
                 this.wakeAndSelect(p);
                 this.record(event, before, p);
@@ -283,14 +319,12 @@ export class G6StrategyPrototypeController {
                     this.trace.push(`resume`);
                     this.wakeAndSelect(p);
                 } else {
-                    // Replacement of the orchestrator: bump the lease epoch and
-                    // release the slot held under the outdated epoch. Old
-                    // assignments stay registered so their late results can be
-                    // rejected as stale-owner diagnostics (never advanced).
+                    // A new owner cannot prove that the old writer stopped.
                     p.ownerEpoch += 1;
-                    p.resting = false;
-                    p.writeSlot = null;
-                    this.trace.push(`replace-orchestrator → ownerEpoch=${p.ownerEpoch}; slot released for re-claim`);
+                    for (const a of p.assignments) a.state = 'outcome-unknown';
+                    if (p.assignments.length)
+                        p.holds.push({ reason: 'outcome-unknown', detail: 'replacement requires reconciliation' });
+                    this.trace.push(`replace-orchestrator → ownerEpoch=${p.ownerEpoch}; reservation retained`);
                     this.wakeAndSelect(p);
                 }
                 this.record(event, before, p);
@@ -314,10 +348,18 @@ export class G6StrategyPrototypeController {
         }
     }
 
-    private record(_e: SimEvent, before: { dispatch: number; model: number }, p: ProjectState): void {
+    private record(e: SimEvent, before: { dispatch: number; model: number; state: string }, p: ProjectState): void {
         p.holds = p.holds.slice(-8);
-        void before;
-        void p;
+        this.trace.push(
+            JSON.stringify({
+                event: e,
+                at: this.opts.now?.() ?? 0,
+                before,
+                after: this.snapshot(),
+                dispatchDelta: this.dispatchCount - before.dispatch,
+                modelDelta: this.modelCalls - before.model,
+            }),
+        );
     }
 
     /* --------------------------- wake + GTD select ----------------------- */
@@ -325,7 +367,7 @@ export class G6StrategyPrototypeController {
     private wakeAndSelect(p: ProjectState): void {
         this.modelCalls += 1; // evaluating eligible state is the model call;
         // idle ticks never reach here (guarded above).
-        if (p.requests.size === 0) {
+        if (![...p.requests.values()].some((r) => r.intent !== 'question')) {
             // No accepted human request in scope yet: nothing may dispatch.
             p.holds.push({ reason: 'no-driving-request', detail: 'task/capacity change with no accepted request' });
             return;
@@ -370,7 +412,7 @@ export class G6StrategyPrototypeController {
         }
         const cand = [...p.tasks.values()]
             .filter((t) => !t.completed)
-            .sort((a, b) => a.priority - b.priority || a.wbs.localeCompare(b.wbs)); // priority then WBS
+            .sort((a, b) => a.priority - b.priority || a.wbs.localeCompare(b.wbs, undefined, { numeric: true })); // priority then WBS
         for (const t of cand) {
             const fail = this.whyNotEligible(p, t);
             if (fail) {
@@ -406,7 +448,7 @@ export class G6StrategyPrototypeController {
             .filter((i) => i.role === t.role) // role-compatible
             .filter((i) => !i.purpose)
             .filter((i) => this.isGhost(p, i.instanceId))
-            .filter((i) => (t.readOnly ? i.capabilities.includes('read-only') : true))
+            .filter((i) => i.capabilities.includes(t.readOnly ? 'read-only' : 'write'))
             .sort((a, b) => a.instanceId.localeCompare(b.instanceId)); // stable tie-break
         return eligible[0] ?? null;
     }
@@ -436,11 +478,10 @@ export class G6StrategyPrototypeController {
         const task = c.task;
         const attemptId = this.opts.nextAttemptId();
         const runId = this.opts.nextRunId();
-        const genBase = Math.max(0, ...p.assignments.map((a) => a.generation));
         const a: Assignment = {
             attemptId,
             runId,
-            generation: genBase + 1,
+            generation: ++this.generationCounter,
             instanceId: c.instance.instanceId,
             executor: c.instance.executor,
             role: c.instance.role,
@@ -460,19 +501,16 @@ export class G6StrategyPrototypeController {
     }
 
     private lastRequestId(p: ProjectState): string {
-        const keys = [...p.requests.keys()];
-        const last = keys.at(-1);
-        if (!last) throw new Error('no request accepted for this dispatch');
-        const requestId = last.split('::')[1];
-        if (!requestId) throw new Error('malformed request key');
-        return requestId;
+        const request = [...p.requests.values()].findLast((r) => r.intent !== 'question');
+        if (!request) throw new Error('no driving request accepted for this dispatch');
+        return request.requestId;
     }
 
     /* ------------------------------ results ------------------------------ */
 
     private handleResult(
         e: Extract<SimEvent, { kind: 'result' }>,
-        before: { dispatch: number; model: number },
+        before: { dispatch: number; model: number; state: string },
         p: ProjectState,
     ): void {
         // Deduplicate outcomes by attemptId.
@@ -495,7 +533,12 @@ export class G6StrategyPrototypeController {
         }
         // Ownership check: late/stale results must match instance/run/generation
         // AND the ownerEpoch under which the work was claimed.
-        if (a.instanceId !== e.instanceId || a.generation !== e.generation) {
+        if (
+            a.instanceId !== e.instanceId ||
+            a.generation !== e.generation ||
+            a.ownerEpoch !== e.ownerEpoch ||
+            a.taskId !== e.taskId
+        ) {
             p.diagnostics.push({
                 kind: 'stale-owner-rejected',
                 detail: `${e.attemptId} instance/run/generation mismatch`,
@@ -529,9 +572,14 @@ export class G6StrategyPrototypeController {
         p.finishedResults.set(outcome.attemptId, outcome);
         // Process exit can FINISH a RUN; only an explicit verified workflow
         // outcome can COMPLETE a task.
-        a.state = 'finished';
-        p.assignments = p.assignments.filter((x) => x !== a);
-        if (p.writeSlot?.heldBy === e.attemptId) p.writeSlot = null;
+        if (outcome.taskOutcome === 'task-completed') {
+            a.state = 'finished';
+            p.assignments = p.assignments.filter((x) => x !== a);
+            if (p.writeSlot?.heldBy === e.attemptId) p.writeSlot = null;
+        } else {
+            a.state = 'outcome-unknown';
+            p.holds.push({ reason: 'outcome-unknown', detail: `${a.attemptId}: exit alone does not authorize replay` });
+        }
         if (outcome.taskOutcome === 'task-completed') {
             const t = p.tasks.get(e.taskId as string);
             if (t) {
@@ -576,6 +624,13 @@ export class G6StrategyPrototypeController {
         return JSON.stringify(
             {
                 version: 1,
+                counters: {
+                    attempt: this.attemptCounter,
+                    run: this.runCounter,
+                    generation: this.generationCounter,
+                    dispatch: this.dispatchCount,
+                    model: this.modelCalls,
+                },
                 projects: [...this.projects.values()].map((p) => ({
                     projectPath: p.projectPath,
                     strategyVersion: p.strategyVersion,
@@ -617,6 +672,7 @@ export class G6StrategyPrototypeController {
 
 export function restoreController(json: string, opts: ControllerOptions = {}): G6StrategyPrototypeController {
     const data = JSON.parse(json) as {
+        counters: NonNullable<ControllerOptions['counters']>;
         projects: Array<
             Omit<ProjectState, 'requests' | 'tasks' | 'instances' | 'finishedResults'> & {
                 requests: Array<[string, RequestRecord]>;
@@ -626,7 +682,7 @@ export function restoreController(json: string, opts: ControllerOptions = {}): G
             }
         >;
     };
-    const c = new G6StrategyPrototypeController(opts);
+    const c = new G6StrategyPrototypeController({ ...opts, counters: data.counters });
     for (const raw of data.projects) {
         const p = c.restoreProjectState(raw.projectPath);
         p.strategyVersion = raw.strategyVersion;
