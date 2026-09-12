@@ -31,6 +31,11 @@ rules:
             # `vendors/*/scripts/**`), so it must stay excluded.
             - "/.spur/"
             - "vendors/"
+            # `apps/cli/config/` is the gitignored bundle-config output (.gitignore
+            # `bundle-config`); it duplicates config/workflows YAML, which is outside
+            # this rule's include scope — scanning generated copies only adds noise
+            # (e.g. `id: task-implement-transition` trips the sk- token shape).
+            - "apps/cli/config/"
 
   - id: no-unsafe-git-commands
     description: "Unsafe git commands (force-push, hard reset) can overwrite history or cause data loss (AGENTS.md CRITICAL safety)."

@@ -41,6 +41,34 @@
             "tokenCostUsd": null,
             "source": "Zero-query pipeline (the live definition declares no model queries); query budget trivially 0 — the gate handles an empty list (0607 R3). No real full run recorded; wall-clock unenforced.",
             "decision": null
+        },
+        "history-anatomy": {
+            "modelQueries": 4,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
+            "decision": null
+        },
+        "feature-dev": {
+            "modelQueries": 2,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
+            "decision": null
+        },
+        "wayfinder-resolution": {
+            "modelQueries": 2,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
+            "decision": null
+        },
+        "basic": {
+            "modelQueries": 1,
+            "wallClockMs": null,
+            "tokenCostUsd": null,
+            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
+            "decision": null
         }
     }
 }

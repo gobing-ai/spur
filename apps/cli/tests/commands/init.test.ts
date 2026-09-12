@@ -83,11 +83,7 @@ describe('init command', () => {
         });
         const parsed = JSON.parse(messages.at(-1) ?? '{}');
         expect(parsed.valid).toBe(true);
-        // I21: exit 0 is restored by 0826 once 0823–0825 land. Until then a shared
-        // definition may carry error-level composition findings, and validate
-        // legitimately exits 1 while the definition itself stays valid.
-        const findings: Array<{ level?: string }> = parsed.composition?.findings ?? [];
-        expect(exitCode).toBe(findings.some((f) => f.level === 'error') ? 1 : 0);
+        expect(exitCode).toBe(0);
     });
 
     test('init no longer seeds assets with no .spur/ reader (0646)', async () => {

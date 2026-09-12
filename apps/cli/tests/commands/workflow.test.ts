@@ -3,6 +3,7 @@
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { readdirSync } from 'node:fs';
 import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -72,6 +73,43 @@ function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
 }
 
+/** The `workflow validate --json` envelope subset the bundled gate reads. */
+interface ValidateJson {
+    valid?: boolean;
+    composition?: {
+        findings?: Array<{
+            level?: string;
+            workflow?: string;
+            state?: string;
+            actionKey?: string;
+            measure: { kind: string; measured: number };
+        }>;
+    };
+}
+
+/**
+ * Validate one workflow file exactly as the bundled-definition loop does: an isolated
+ * no-config cwd, `:memory:` DB, and FULL JSON-Schema resolution. `errorFindings` flattens
+ * the error-level composition findings to `workflow state actionKey kind=measured` lines,
+ * so a gate failure names its finding (0826 R1; ADR-115).
+ */
+async function validateWorkflowFile(
+    file: string,
+): Promise<{ exitCode: number; parsed: ValidateJson; errorFindings: string[] }> {
+    // Isolate cwd to a temp dir with no .spur/config.yaml so main() takes the
+    // lightweight no-config branch. Without this, cwd falls back to process.cwd()
+    // (the repo root, which HAS a config), triggering full app bootstrap on every
+    // validate call — environment-fragile on CI.
+    const cwd = await createTempProject();
+    const output = createCapturedOutput();
+    const exitCode = await main(['workflow', 'validate', file, '--json'], { output, cwd, dbUrl: ':memory:' });
+    const parsed = JSON.parse(output.messages.at(-1) ?? '{}') as ValidateJson;
+    const errorFindings = (parsed.composition?.findings ?? [])
+        .filter((f) => f.level === 'error')
+        .map((f) => `${f.workflow} ${f.state} ${f.actionKey} ${f.measure.kind}=${f.measure.measured}`);
+    return { exitCode, parsed, errorFindings };
+}
+
 /**
  * Create an in-memory DB pre-seeded with a `runs` row so an `--async` launcher's
  * registration confirmation (`waitForRunRegistration`) resolves. The detached worker
@@ -97,44 +135,21 @@ describe('workflow command (main)', () => {
         expect(exitCode).toBe(1);
     });
 
-    // Bundled workflow YAMLs must validate with FULL JSON-Schema resolution (no
-    // --no-schema). This catches a dead `$schema` ref (e.g. pointing at a package
-    // that ships no schemas dir) — the 0062 task-pipeline regression.
+    // Bundled definitions validate with full schema resolution and carry no error-level
+    // composition finding (ADR-115 gate over the bundled shared-workflow layer, 0826).
     const REPO_ROOT = join(import.meta.dir, '..', '..', '..', '..');
-    for (const wf of [
-        'task-pipeline.yaml',
-        'task-lifecycle.yaml',
-        'feature-lifecycle.yaml',
-        'feature-dev.yaml',
-        'basic.yaml',
-        'idea-pipeline.yaml',
-        'docs-pipeline.yaml',
-        'wrapup-pipeline.yaml',
-        'wayfinder-resolution.yaml',
-    ]) {
+    const bundledWorkflows = readdirSync(join(REPO_ROOT, 'config', 'workflows'))
+        .filter((f) => /\.ya?ml$/.test(f))
+        .sort();
+    for (const wf of bundledWorkflows) {
         test(`bundled workflows/${wf} validates (schema resolves)`, async () => {
-            // Isolate cwd to a temp dir with no .spur/config.yaml so main() takes
-            // the lightweight no-config branch. Without this, cwd falls back to
-            // process.cwd() (the repo root, which HAS a config), triggering full
-            // app bootstrap on every validate call — environment-fragile on CI.
-            const cwd = await createTempProject();
-            const output = createCapturedOutput();
-            const exitCode = await main(
-                ['workflow', 'validate', join(REPO_ROOT, 'config', 'workflows', wf), '--json'],
-                {
-                    output,
-                    cwd,
-                    dbUrl: ':memory:',
-                },
+            const { exitCode, parsed, errorFindings } = await validateWorkflowFile(
+                join(REPO_ROOT, 'config', 'workflows', wf),
             );
-            expect(exitCode === 0 || exitCode === 1).toBe(true);
-            const parsed = JSON.parse(output.messages.at(-1) ?? '{}');
+            // Findings before the exit code, so a failure names the workflow, state and action.
             expect(parsed.valid).toBe(true);
-            // I21: exit 0 is restored by 0826 once 0823–0825 land. Until then a
-            // shared definition may carry error-level composition findings, and
-            // validate legitimately exits 1 while the definition itself stays valid.
-            const findings: Array<{ level?: string }> = parsed.composition?.findings ?? [];
-            expect(exitCode).toBe(findings.some((f) => f.level === 'error') ? 1 : 0);
+            expect(errorFindings).toEqual([]);
+            expect(exitCode).toBe(0);
         });
     }
 
@@ -353,6 +368,23 @@ terminalStates: [done]
             measured: 11,
             threshold: 10,
         });
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('the bundled composition gate fails on error-level findings and ignores warn-level ones (0826 R1)', async () => {
+        const dir = await createTempProject();
+        const errorFile = join(dir, 'error.yaml');
+        await writeFile(errorFile, compositionFixture(11));
+        const errorRun = await validateWorkflowFile(errorFile);
+        // `workflow` is the fixture file's basename without extension (collectCompositionAdvisory).
+        expect(errorRun.errorFindings).toEqual(['error start start:onEnter:0 shell-lines=11']);
+        expect(errorRun.exitCode).toBe(1);
+
+        const warnFile = join(dir, 'warn.yaml');
+        await writeFile(warnFile, compositionFixture(6));
+        const warnRun = await validateWorkflowFile(warnFile);
+        expect(warnRun.errorFindings).toEqual([]);
+        expect(warnRun.exitCode).toBe(0);
         await rm(dir, { recursive: true, force: true });
     });
 

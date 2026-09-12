@@ -1,5 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { checkBudgets, detectSilentRaises, formatViolation, type PipelineBudget } from './pipeline-budgets';
+import { readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import {
+    checkBudgetCoverage,
+    checkBudgets,
+    detectSilentRaises,
+    formatViolation,
+    loadPipelineBudgets,
+    loadQueryCounts,
+    type PipelineBudget,
+} from './pipeline-budgets';
 
 const budget = (over: Partial<PipelineBudget> = {}): PipelineBudget => ({
     modelQueries: 4,
@@ -148,5 +158,34 @@ describe('detectSilentRaises (0607 R3 — no silent budget bump)', () => {
             }),
         };
         expect(detectSilentRaises(before, after)).toEqual([]);
+    });
+});
+
+describe('checkBudgetCoverage (0826 R2)', () => {
+    const REPO_ROOT = join(import.meta.dir, '..', '..');
+
+    test('a model-query workflow without an entry is returned by name', () => {
+        expect(checkBudgetCoverage({ 'new-pipeline': 2 }, {})).toEqual(['new-pipeline']);
+    });
+
+    test('a zero-query workflow without an entry passes', () => {
+        expect(checkBudgetCoverage({ 'task-lifecycle': 0 }, {})).toEqual([]);
+    });
+
+    test('an entry for a zero-query workflow is allowed', () => {
+        expect(checkBudgetCoverage({ 'pr-review': 0 }, { 'pr-review': budget({ modelQueries: 0 }) })).toEqual([]);
+    });
+
+    test('every live config/workflows definition with a query count has an entry (anti-vacuous)', async () => {
+        const counts = await loadQueryCounts();
+        // loadQueryCounts returns {} on any read or parse error — pin the key set to the
+        // directory so a swallowed error cannot make this test pass vacuously.
+        const files = (await readdir(join(REPO_ROOT, 'config', 'workflows')))
+            .filter((f) => /\.ya?ml$/.test(f))
+            .map((f) => f.replace(/\.ya?ml$/, ''))
+            .sort();
+        expect(Object.keys(counts).sort()).toEqual(files);
+        const { budgets } = await loadPipelineBudgets();
+        expect(checkBudgetCoverage(counts, budgets)).toEqual([]);
     });
 });

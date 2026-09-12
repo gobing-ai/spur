@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: spur-check enforces shared-workflow composition caps and pipeline-budget coverage
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.074Z
-updated_at: "2026-09-11T15:51:57.450Z"
+updated_at: "2026-09-12T05:14:07.154Z"
 feature_id: I21
 priority: P2
 tags:
@@ -32,8 +32,8 @@ Ordering: last. It needs 0822 (finding `level`, exit 1) and the three extraction
 
 ### Requirements
 
-- [ ] R1. `bun run spur-check` validates every `config/workflows/*.yaml` definition with full schema resolution and fails on any error-level composition finding, naming the workflow, state and action key. The definitions are enumerated from the directory, not from a hard-coded list. Warn-level findings never fail it, and it passes on the shipped catalog.
-- [ ] R2. `bun run spur-check` and `check-pipeline-budgets` both fail when a `config/workflows` definition with at least one model query has no entry in `config/pipeline-budgets.json`, and name it. A new entry records the live query count, with null wall-clock and cost budgets. A later count above an entry still needs a `decision` record.
+- [x] R1. `bun run spur-check` validates every `config/workflows/*.yaml` definition with full schema resolution and fails on any error-level composition finding, naming the workflow, state and action key. The definitions are enumerated from the directory, not from a hard-coded list. Warn-level findings never fail it, and it passes on the shipped catalog.
+- [x] R2. `bun run spur-check` and `check-pipeline-budgets` both fail when a `config/workflows` definition with at least one model query has no entry in `config/pipeline-budgets.json`, and name it. A new entry records the live query count, with null wall-clock and cost budgets. A later count above an entry still needs a `decision` record.
 
 Non-goals:
 - Budget values. The gate checks that an entry exists, not that it covers the live count; `idea-pipeline` (budget 5, live 6) is unchanged.
@@ -166,18 +166,56 @@ Refined at depth=ready (refineall I21, 2026-09-11). Closed decisions:
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/tests/commands/init.test.ts:86` |
+| `apps/cli/tests/commands/workflow.test.ts:138` |
+| `apps/cli/tests/commands/workflow.test.ts:141` |
+| `apps/cli/tests/commands/workflow.test.ts:146` |
+| `apps/cli/tests/commands/workflow.test.ts:149` |
+| `apps/cli/tests/commands/workflow.test.ts:151` |
+| `apps/cli/tests/commands/workflow.test.ts:374` |
+| `apps/cli/tests/commands/workflow.test.ts:6` |
+| `apps/cli/tests/commands/workflow.test.ts:76` |
+| `scripts/commands/pipeline-budgets.test.ts:163` |
+| `scripts/commands/pipeline-budgets.test.ts:2` |
+| `scripts/commands/pipeline-budgets.ts:198` |
+| `scripts/commands/pipeline-budgets.ts:21` |
+| `scripts/commands/pipeline-budgets.ts:256` |
+| `scripts/commands/pipeline-budgets.ts:259` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Directory-enumerated loop (workflow.test.ts:141-152, 11 `config/workflows/*.yaml` per ls), helper `validateWorkflowFile` full schema resolution via `--json` (workflow.test.ts:96-111), three ordered AC assertions valid→errorFindings→exit 0 (:150-152), error findings name workflow/state/actionKey (:105-107), warn-only never asserted (:374-389 negative test asserts error `error start start:onEnter:0 shell-lines=11`, warn → `[]` exit 0); init relax branch gone (init.test.ts:80-86, `expect(exitCode).toBe(0)`), `rg "restored by 0826" apps/cli/tests` empty, gate inside `test` within spur-check (package.json:77,81). |
+| R2 | MET | `checkBudgetCoverage` names count>0 definitions lacking an entry (pipeline-budgets.ts:202-213), wired into `checkPipelineBudgets` with `MISSING BUDGET: pipeline=… modelQueries=…` to stderr + `failures++` → exit 1 (:256-262); live anti-vacuous test pins count keys to directory and asserts coverage `[]` (pipeline-budgets.test.ts:179-190), zero-query exemption covered (:171-177); four new entries with `modelQueries` history-anatomy 4 / feature-dev 2 / wayfinder-resolution 2 / basic 1, `wallClockMs`+`tokenCostUsd`+`decision` null (pipeline-budgets.json) — counts independently match `kind: agent.run` occurrences in those four definitions; `./scripts` in root `test` (package.json:77). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-12T05:00:19.233Z todo → wip (system)
+- 2026-09-12T05:14:06.824Z wip → testing (system)
+- 2026-09-12T05:14:07.154Z testing → done (system)
+

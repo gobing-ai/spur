@@ -18,6 +18,9 @@
  * `extractResolvedWorkflowFacts` (`packages/app/src/workflow/composition-baseline.ts`, 0775)
  * and guarded by `composition-baseline.test.ts` in `bun run test` inside spur-check.
  *
+ * Coverage (0826 R2) is static, so its live test runs in `spur-check`; the wall-clock half stays
+ * outside it.
+ *
  * Repo-internal dev-script, NOT a new public `spur` noun/verb (ADR-051; surface questions
  * route to task 0608).
  */
@@ -192,6 +195,20 @@ export async function loadQueryCounts(workflowsDir: string = WORKFLOWS_DIR): Pro
     }
 }
 
+/**
+ * Names with at least one model query and no budget entry (0826 R2). Sorted, so the gate and
+ * its test report a stable order. Zero-query definitions need no entry.
+ */
+export function checkBudgetCoverage(
+    queryCounts: Record<string, number>,
+    budgets: Record<string, PipelineBudget>,
+): string[] {
+    return Object.entries(queryCounts)
+        .filter(([name, count]) => count > 0 && budgets[name] === undefined)
+        .map(([name]) => name)
+        .sort();
+}
+
 /** CLI entry — the R3 gate. Exit 1 when any budget is exceeded or any raise is silent. */
 export async function checkPipelineBudgets(argv: string[]): Promise<number> {
     const filters: string[] = [];
@@ -236,8 +253,15 @@ export async function checkPipelineBudgets(argv: string[]): Promise<number> {
     }
 
     const violations = checkBudgets(measured, config.budgets);
+    const missingBudgets = checkBudgetCoverage(queryCounts, config.budgets);
 
     let failures = 0;
+    for (const name of missingBudgets) {
+        console.error(
+            `MISSING BUDGET: pipeline=${name} modelQueries=${queryCounts[name]} has no entry in config/pipeline-budgets.json`,
+        );
+        failures++;
+    }
     for (const v of violations) {
         console.error(`BUDGET EXCEEDED: ${formatViolation(v)}`);
         failures++;
