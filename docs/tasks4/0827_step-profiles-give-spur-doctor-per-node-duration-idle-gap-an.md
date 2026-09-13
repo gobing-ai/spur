@@ -4,7 +4,7 @@ name: Step profiles give spur-doctor per-node duration, idle-gap and cache evide
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.075Z
-updated_at: "2026-09-12T04:57:09.672Z"
+updated_at: "2026-09-13T05:57:17.906Z"
 feature_id: I21
 priority: P2
 tags:
@@ -205,7 +205,11 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | R1.1 script + `.mjs` twin + manifest entry + `build:scripts` (ADR-065) `plugins/sp/scripts/workflow-step-profile.ts:1-27` (node:-only imports, `import.meta.main` block at `:453-455`); twin `plugins/sp/scripts/workflow-step-profile.mjs:1-9` (`#!/usr/bin/env node` + `// @bun`, bare `child_process`/`fs`/`url`, unconditional `{ process.exit(main(...)) }` at `:358-360` — same generated shape as `quality-gate.mjs:126-129`, `wrapup-steps.mjs:335-338`); `config/plugin-scripts.json:108-112` `{ rel: workflow-step-profile.ts, contract: standard, twin: workflow-step-profile.mjs }`; `package.json:61` `build:scripts` ends `… && superskill script convert sp workflow-step-profile.ts`; registry is two-sided (`plugins/sp/scripts/script-contract-check.ts:198-247`) and PASSed in the gate log ; R1.2 trace consumption: `--workflow --status done --last --json`, dry runs dropped, per-run timeline, `kind==='action'` sorted by `startedAt` `workflow-step-profile.ts:400-411` builds exactly `workflow trace --workflow <w> --status done --last <N> --json`; `:270-272` `nonDryRuns` drops `isDryRun === true` (and entries without a runId); `:427-436` per-run `workflow trace <runId> --json`; `:160-166` filters `kind === 'action'` and sorts by `startKey` (`:149-153`, unparseable → `+Infinity` last). Live shapes match: `packages/app/src/services/workflow-service.ts:446-449` (`{entries,total}`), `:451-477` (`{run,events}`, action fields `node/actionKind/durationMs/startedAt/completedAt/invocation/cost`); `invocation.continue` survives trace projection (`workflow-service.ts:1536`, allow-list `:2373-2385` including `'continue'` at `:2381`); `apps/cli/src/commands/workflow.ts:1293-1389` owns the flags/`--status` set and defaults `--last 20`; unknown-workflow/empty list is handled by `nonDryRuns`+`buildStepProfile` ; R1.3 per-execution `durationMs` and `idleGapMs` (previous action's `completedAt`; first action none) `workflow-step-profile.ts:124-126` (`numeric`, number-only), `:128-134` (`msBetween(previous.completedAt, startedAt)` → null on missing/unparseable), `:167-175` (`durationMs: numeric(...)`, `idleGapMs: msBetween(previous?.completedAt, …)`), `:170` `index === 0 ? undefined : actions[index-1]`; tests `plugins/sp/tests/workflow-step-profile.test.ts:166-171` (gap from previous completedAt), `:172-183` (first action → p50 `null`, never 0), `:184-215` (order by startedAt), `:216-233` (per run) ; R1.4 per-execution session from `invocation.continue` (true resumed / false fresh / missing unknown) `workflow-step-profile.ts:136-141` (`=== true` resumed, `=== false` fresh, otherwise `null` — never coerced to fresh); `:174` writes it per execution; tests `:235-261` (fresh/resumed/mixed folds), `:262-275` (unknown invocation is neither), `:276-280` (null for non-agent.run) ; R1.5 per-execution `cacheHit` from `cost.exact` only, numeric only `workflow-step-profile.ts:143-146` `numeric(event.cost?.exact?.cacheHit)` with the explicit `cost.estimated` unread comment; writer shape `packages/domain/src/analytics/run-cost.ts:19-38` (`cacheHit: number |
+| R1 | MET | Per-node/action profiles preserve unknown durations/cache values, calculate nearest-rank medians and window flags, and feed doctor proposals; live Node smoke sampled 13 completed runs and 21 rows with unknown cache evidence. `plugins/sp/scripts/workflow-step-profile.ts:211`; `plugins/sp/tests/workflow-step-profile.test.ts:130`; `plugins/sp/tests/skill-structure.test.ts:2168`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — spur-doctor judges workflows by composition findings and step profiles | MET | test | Per-node/action profiles preserve unknown durations/cache values, calculate nearest-rank medians and window flags, and feed doctor proposals; live Node smoke sampled 13 completed runs and 21 rows with unknown cache evidence. `plugins/sp/scripts/workflow-step-profile.ts:211`; `plugins/sp/tests/workflow-step-profile.test.ts:130`; `plugins/sp/tests/skill-structure.test.ts:2168`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -217,6 +221,13 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0827-verify-answer.txt:1-33` and `.spur/run/0827-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | live-profile | — | `node plugins/sp/scripts/workflow-step-profile.mjs idea-pipeline --json` exit 0; 13 runs, 21 rows; cache evidence unknown for all rows. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
