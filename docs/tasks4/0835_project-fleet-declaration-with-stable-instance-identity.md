@@ -4,7 +4,7 @@ name: Project fleet declaration with stable instance identity
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.720Z
-updated_at: "2026-09-12T16:42:40.866Z"
+updated_at: "2026-09-13T07:27:52.897Z"
 feature_id: G62
 priority: P1
 tags:
@@ -250,24 +250,24 @@ to decide who may take the write slot; 0838 selects among enabled members; 0847 
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | FleetMemberSchema/FleetDeclarationSchema (packages/config/src/index.ts:509,535); FleetService.load/resolve (packages/app/src/services/fleet-service.ts:101,134); authoring file .spur/fleet.json; CLI `projects list --fleet` (apps/cli/src/commands/projects.ts:100); test fleet-service.test.ts:147 (18 pass) |
-| R2 | MET | Specs are a projection: prune only `spur:generated`+`fleet:generated` (fleet-service.ts:253-267); hand-authored skip in shared loop (team-service.ts:436-437); tests fleet-service.test.ts:352 (hand-authored untouched) and :420 (prune never takes a hand-authored spec) |
-| R3 | MET | id = `<slug>-<memberLocalId(member, members, index)>` delegated, never re-derived (fleet-service.ts:148-149; team-service.ts:418); tests fleet-service.test.ts:183 (explicit id survives executor replacement + reorder) and :213 (byte-identical with team derivation) |
-| R4 | MET | writeCapable from resolved executor fsWrite axis only; unavailable/unknown/absent never grant; role never consulted (fleet-service.ts:170-184); test fleet-service.test.ts:234 (reviewer+available writes, coder+absent axis does not) |
-| R5 | MET | ResolvedFleetMember/ResolvedFleet carry desired state only, no process/liveness fields (fleet-service.ts:75-83); schema forbids liveness fields (packages/config/src/index.ts:501-504); resolve() reads no supervisor/occupant state |
-| R6 | MET | assertLaunchGroundTruth compares process.cwd() and storage root against normalizeProjectPath, loud error names both paths, SPUR_* env never consulted (fleet-service.ts:316-366); test fleet-service.test.ts:337 rejects mismatch naming both paths |
-| R7 | MET | no declaration → missing:['no-declaration'] (fleet-service.ts:136-140), all-disabled → ['no-enabled-members'] (:186), ENOENT-only resolves null, EACCES rethrown (:105-114); tests fleet-service.test.ts:106,262,274; CLI bare-project resolves empty fleet (projects.test.ts:76) |
+| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves stable member identity and capability state; `bun run spur-check` (exit 0). |
+| R2 | MET | `packages/app/tests/services/fleet-service.test.ts:352` — hand-authored specs survive projection; generated specs are pruned separately; `bun run spur-check` (exit 0). |
+| R3 | MET | `packages/app/tests/services/fleet-service.test.ts:183` — explicit member identity survives executor replacement and reorder through the shared allocator; `bun run spur-check` (exit 0). |
+| R4 | MET | `packages/app/tests/services/fleet-service.test.ts:234` — capability comes from executor attestation, never role; `bun run spur-check` (exit 0). |
+| R5 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — resolved fleet contains desired member state; liveness is a separate claim projection; `bun run spur-check` (exit 0). |
+| R6 | PARTIAL | `packages/app/tests/services/fleet-service.test.ts:337` — materialization rejects cwd/storage mismatches; `bun run spur-check` (exit 0). Actual managed registration/launch does not route through this materialization guard; `packages/app/src/services/fleet-service.ts:440` and `apps/cli/src/commands/agent.ts:1006`. |
+| R7 | MET | `packages/app/tests/services/fleet-service.test.ts:262` — absent declaration resolves an empty fleet with a named missing condition; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — A project declares its fleet and one orchestrator | MET | test | fleet-service.test.ts:147: members resolve stable instanceId/role/executor/capabilityState, missing=[]; orchestrator binding field itself deferred to 0836 by closed Q&A decision (task doc), orchestrator member present as id 'lead' |
-| Identity survives executor replacement and reorder | MET | test | fleet-service.test.ts:183: id 'lead' unchanged when executor replaced and roster reordered; :213 coder-1/coder-2/reviewer-1 from shared memberLocalId; inbox/coordination ids are the instanceId, unorphaned |
-| Read-only is proven, not assumed | MET | test | fleet-service.test.ts:234: reviewer role with fsWrite available is writeCapable=true; coder with absent axis is unknown/false — role name grants nothing |
-| Launch validates its own ground truth | MET | test | fleet-service.test.ts:337: materialize outside project cwd rejects /Ground-truth mismatch/ naming both paths (fleet-service.ts:352-364); SPUR_* env read as context only, never proof |
+| R1 — A project declares its fleet and one orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves stable member identity and capability state; `bun run spur-check` (exit 0). `packages/app/tests/services/fleet-service.test.ts:702` — declared orchestrator resolves through the binding service; `bun run spur-check` (exit 0). |
+| Identity survives executor replacement and reorder | MET | test | `packages/app/tests/services/fleet-service.test.ts:183` — explicit member identity survives executor replacement and reorder through the shared allocator; `bun run spur-check` (exit 0). |
+| Read-only is proven, not assumed | MET | test | `packages/app/tests/services/fleet-service.test.ts:234` — capability comes from executor attestation, never role; `bun run spur-check` (exit 0). |
+| Launch validates its own ground truth | PARTIAL | test | `packages/app/tests/services/fleet-service.test.ts:337` — materialization rejects cwd/storage mismatches; `bun run spur-check` (exit 0). Actual managed registration/launch does not route through this materialization guard; `packages/app/src/services/fleet-service.ts:440` and `apps/cli/src/commands/agent.ts:1006`. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
