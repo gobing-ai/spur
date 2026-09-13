@@ -4,7 +4,7 @@ name: Workflow list and name resolution share the project, registered and shared
 status: done
 template: feature-impl
 created_at: 2026-09-10T22:18:37.281Z
-updated_at: "2026-09-13T05:48:00.986Z"
+updated_at: "2026-09-13T05:57:03.369Z"
 feature_id: I21
 priority: P2
 tags:
@@ -248,11 +248,19 @@ Re-audit fix (R4, 2026-09-12): `packages/app/src/workflow/workflow-resolver.ts:2
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | shared layer = bundledConfigRoot()/workflows, ordered last (workflow-resolver.ts:85,104); project always resolve(cwd,'.spur/workflows') (:90); test asserts shared=package folder ordered last (workflow-resolver.test.ts:406-413) |
-| R2 | MET | project layer added unconditionally when folder missing (workflow-resolver.ts:90); list keeps layer on scan throw (workflow-service.ts:1399-1405); human header prints every layer with "(no workflows)" (workflow.ts:1413-1439); tests resolver:400-404, service:805-813 |
-| R3 | MET | registeredWorkflowPaths expands bundled: and returns extras only (workflow-resolver.ts:39-56); layers carry registered ids in config order, deduped, legacy collapse (:92-99, tests :416-437); entry source=layer id (workflow-service.ts:376,2139); config.global.yaml:140 paths:[] drops bundled:workflows; e2e config-layering.test.ts:170-186 |
-| R4 | MET | one workflowLayers() backs list (workflow-service.ts:1396) and bare-name scan (workflow-resolver.ts:199-227); union project-registered-shared (:23); show --json source:{layer,path} (workflow.ts:1252,1276; workflow.test.ts:2494,2550); legacy bundled→shared via normalizePersistedWorkflowLayer (run-dao.ts:22) wired in resume (workflow-service.ts:1102) and attach (inline-run-setup.ts:221); project shadows shared (resolver tests :471-482) |
-| R5 | MET | WorkflowListEntry.description string-or-null (workflow-service.ts:382-383) filled from definition (:1558), null on all failure paths (:1567,2159-2186); parity test fails on any shared-corpus workflow lacking non-empty description (workflow-catalog-parity.test.ts:13-27) |
+| R1 | MET | Shared layer is last and points to the package folder. `packages/app/src/workflow/workflow-resolver.ts:85`; `packages/app/tests/workflow/workflow-resolver.test.ts:406`. Executed: `bun run spur-check` (exit 0). |
+| R2 | MET | Missing project directories retain their layer and human header. `packages/app/src/services/workflow-service.ts:1414`; `packages/app/tests/services/workflow-service.test.ts:805`. Executed: `bun run spur-check` (exit 0). |
+| R3 | MET | Registered paths retain config order and deduplicate normalized project/shared paths. `packages/app/src/workflow/workflow-resolver.ts:97`; `packages/app/tests/workflow/workflow-resolver.test.ts:416`. Executed: `bun run spur-check` (exit 0). |
+| R4 | MET | Name resolution now honors project/registered/shared precedence; show accepts registered-only names; explicit paths remain pinned. `packages/app/src/workflow/workflow-resolver.ts:283`; `packages/app/tests/workflow/workflow-resolver.test.ts:487`; `apps/cli/tests/commands/workflow.test.ts:2591`. Executed: `bun run spur-check` (exit 0). |
+| R5 | MET | Descriptions are exposed and shared catalog intents are checked. `packages/app/tests/services/workflow-service.test.ts:843`; `packages/app/tests/workflow/workflow-catalog-parity.test.ts:13`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — workflow list labels the installed package folder as the shared layer | MET | test | Shared layer is last and points to the package folder. `packages/app/src/workflow/workflow-resolver.ts:85`; `packages/app/tests/workflow/workflow-resolver.test.ts:406`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R2 — workflow list always includes the project layer | MET | test | Missing project directories retain their layer and human header. `packages/app/src/services/workflow-service.ts:1414`; `packages/app/tests/services/workflow-service.test.ts:805`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R3 — registered extra workflow folders are listed as their own layer | MET | test | Registered paths retain config order and deduplicate normalized project/shared paths. `packages/app/src/workflow/workflow-resolver.ts:97`; `packages/app/tests/workflow/workflow-resolver.test.ts:416`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R4 — list and resolution share one layer vocabulary | MET | test | Name resolution now honors project/registered/shared precedence; show accepts registered-only names; explicit paths remain pinned. `packages/app/src/workflow/workflow-resolver.ts:283`; `packages/app/tests/workflow/workflow-resolver.test.ts:487`; `apps/cli/tests/commands/workflow.test.ts:2591`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R5 — every shared workflow has a catalog intent | MET | test | Descriptions are exposed and shared catalog intents are checked. `packages/app/tests/services/workflow-service.test.ts:843`; `packages/app/tests/workflow/workflow-catalog-parity.test.ts:13`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -264,6 +272,13 @@ Re-audit fix (R4, 2026-09-12): `packages/app/src/workflow/workflow-resolver.ts:2
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0819-verify-answer.txt:1-41` and `.spur/run/0819-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | cli-golden-path-present | — | Source-local workflow show/validate --json invocations and CLI subprocess regression passed. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
