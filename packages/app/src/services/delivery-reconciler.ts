@@ -86,6 +86,57 @@ export class DeliveryReconciler {
      *    marks the row `failed` — the only write.
      * 5. `queued` under budget → not unresolved; omitted.
      */
+    /**
+     * The PURE pass over steps 1, 2, 3 and 5 (0844 R5): every ambiguous case is
+     * classified, nothing is written — a read-only caller (the Board's
+     * `GET /api/project/requests`) must never trigger the terminal
+     * `attempts-exhausted` marking. Queued rows are entirely steps 4/5's
+     * business, so they are omitted here even at/over budget; {@link reconcile}
+     * is {@link classify}'s output plus that marking, with its report unchanged.
+     */
+    async classify(agentId?: string): Promise<UnresolvedDelivery[]> {
+        const db = await this.ctx.getDb();
+        const rows: InboxUnfinishedRow[] = await new InboxUnfinishedDao(db).listUnfinished(agentId);
+        const runs = new CoordinationRunDao(db);
+        const unresolved: UnresolvedDelivery[] = [];
+        for (const row of rows) {
+            const base = {
+                messageId: row.id,
+                toId: row.to_id,
+                injectAttempts: row.inject_attempts,
+                ...(row.inject_error !== null && row.inject_error !== '' ? { injectError: row.inject_error } : {}),
+            };
+
+            // 1. Terminal delivery failure — queryable hold, never repaired.
+            if (row.status === 'failed') {
+                unresolved.push({ ...base, reason: 'delivery-failed', artifacts: [] });
+                continue;
+            }
+
+            // 2/3. Consumed by a drain: the receipt decides.
+            if (row.status === 'injected') {
+                const runRow = (await runs.listByMessageId(row.id))[0];
+                if (runRow === undefined) {
+                    unresolved.push({ ...base, reason: 'outcome-unknown', artifacts: [] });
+                    continue;
+                }
+                if (runRow.outcome === 'run-exit-only' || runRow.outcome === 'errored') {
+                    unresolved.push({
+                        ...base,
+                        reason: runRow.outcome === 'errored' ? 'delivery-failed' : 'run-exit-only',
+                        runId: runRow.run_id,
+                        ...(runRow.task_id !== null ? { taskId: runRow.task_id } : {}),
+                        artifacts: parseArtifactRefs(runRow.artifact_refs_json),
+                    });
+                }
+            }
+
+            // 4/5. Still queued: step 4 (the budget marking) is reconcile()'s
+            // only write; a pure classification omits every queued row.
+        }
+        return unresolved;
+    }
+
     async reconcile(agentId?: string): Promise<ReconcileReport> {
         const db = await this.ctx.getDb();
         const rows: InboxUnfinishedRow[] = await new InboxUnfinishedDao(db).listUnfinished(agentId);

@@ -86,6 +86,43 @@ Initial browser inspection exposed the fixed composer obscuring content. The com
 
 Reproduction: open the prototype at the indicated viewport widths and follow the keyboard checklist above. Browser automation receipt: `.spur/run/g6-verifyall/browser-results.json`; runner: `.spur/run/g6-verifyall/browser-check.mjs` (uses the already-installed local Playwright module and Chrome, no project dependency added). Happy-dom regression suite: `cd apps/web && bun test tests/prototypes/g6-projects.test.ts` → 19 pass, 0 fail, 200 assertions.
 
+## Production browser verification — 2026-09-13 (0845, G63 Projects module)
+
+Chrome **140.0.7339.16**, fresh headless contexts at **390×900** and **1440×900** against the
+production module (`apps/web`, dev server, every `/api/**` request intercepted client-side so the
+repo database is untouched). Result: **18 / 18 scenarios pass, `ok: true`, zero page errors** —
+KB-2 (Shift+Enter newline, no post), KB-3 (composition-Enter submits nothing), KB-1/P4 (plain Enter
+after the composition submits exactly once, payload carries the composed text), ST-1 (receipt
+icon+text announced in the live region, pending → `queued-awaiting-orchestrator`), R2 (arrow-key tab
+navigation with `aria-selected`), KB-4 (Escape closes member detail, focus restored to opener), and
+LB-1 geometric (`scrollWidth ≤ innerWidth` on every view at both widths, screenshots below).
+
+**Degradation (recorded in the results):** Chrome 140.0.7339.16 rejects `Input.imeSetComposition`
+with "Invalid parameters" for every parameter shape (verified empirically: negative and absolute
+selections, with and without `compositionLength`/`compositionStart`), so the composition step
+degraded to the documented fallback — composed text placed with CDP `Input.insertText` and the
+composition-Enter replayed as contract-shaped `KeyboardEvent`s (`isComposing: true`, then legacy
+`keyCode 229`), the same shape the happy-dom suite dispatches. The real-composition guard itself is
+production code (`GlobalAgentBar` checks both signals); what the browser run proves is that a
+composition-shaped Enter reaches the guard and submits nothing in real Chrome. Native OS candidate
+windows and mobile keyboards remain untested compatibility surfaces, as do other browsers and
+assistive-technology speech.
+
+**P3 (structural regex blind spots) resolved by this geometric run:** `responsive.test.tsx` cannot
+see fixed-width `w-[Npx]` elements, intrinsic-width images, or unbreakable strings; the geometric
+half asserts actual layout and confirms `scrollWidth == innerWidth` on conversation/agents/work at
+both 390 px and 1440 px, closing that gap.
+
+Reproduction: `bun .spur/run/g63-projects/browser-check.mjs` (untracked runner, operator-local
+Playwright, no project dependency). Results: `.spur/run/g63-projects/browser-results.json`
+(`ok: true`, Chrome version, per-scenario details, degradation record).
+
+| View | 390 px | 1440 px |
+| --- | --- | --- |
+| Conversation | [Screenshot](../../.spur/run/g63-projects/conversation-390.png) | [Screenshot](../../.spur/run/g63-projects/conversation-1440.png) |
+| Agents | [Screenshot](../../.spur/run/g63-projects/agents-390.png) | [Screenshot](../../.spur/run/g63-projects/agents-1440.png) |
+| Work | [Screenshot](../../.spur/run/g63-projects/work-390.png) | [Screenshot](../../.spur/run/g63-projects/work-1440.png) |
+
 ## Retained controls and legacy routes (from the 0828 runtime inventory)
 
 | Legacy control / route | Retained as | Note |

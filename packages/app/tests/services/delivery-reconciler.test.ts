@@ -236,3 +236,50 @@ describe('0838 advisory: multi-receipt tie-break (newest receipt decides)', () =
         expect(report.unresolved[0]?.runId).toBe('run-new');
     });
 });
+
+// ── 0844: classify() — the pure pass ──
+
+describe('0844 classify(): steps 1/2/3/5 without the step-4 write', () => {
+    test('every terminal/injected case classifies identically to reconcile()', async () => {
+        const failed = await seedQueued();
+        await inbox.markFailed(failed, 'inject error');
+        const exitOnly = await seedQueued();
+        await writeReceipt('r-exit', [exitOnly], 'run-exit-only', [], 'T-1');
+        const errored = await seedQueued();
+        await writeReceipt('r-err', [errored], 'errored');
+        const unknown = await seedQueued();
+        await claim(); // consumed, no receipt
+        const verified = await seedQueued();
+        await writeReceipt('r-ver', [verified], 'verified');
+
+        const classified = await reconciler.classify();
+        const byId = new Map(classified.map((u) => [u.messageId, u.reason]));
+
+        expect(byId.get(failed)).toBe('delivery-failed');
+        expect(byId.get(exitOnly)).toBe('run-exit-only');
+        expect(byId.get(errored)).toBe('delivery-failed');
+        expect(byId.get(unknown)).toBe('outcome-unknown');
+        expect(byId.has(verified)).toBe(false); // finished request — not held
+    });
+
+    test('queued rows are omitted entirely — even at/over budget — and nothing is written', async () => {
+        await seedQueued(); // under budget — steps 4/5's business either way
+        const overBudget = await seedQueued();
+        // Push one row to the budget boundary without the DAO's own drain:
+        // reconcile() would mark it failed; classify() must not.
+        await db.run(`UPDATE inbox_messages SET inject_attempts = ? WHERE id = ?`, [MAX_INJECT_ATTEMPTS, overBudget]);
+
+        const classified = await reconciler.classify();
+        expect(classified).toEqual([]);
+
+        // The pure pass never wrote the step-4 marking.
+        const row = (
+            await db.queryAll<{ status: string }>(`SELECT status FROM inbox_messages WHERE id = ?`, [overBudget])
+        )[0];
+        expect(row?.status).toBe('queued');
+
+        // The report path, by contrast, marks it.
+        const report = await reconciler.reconcile();
+        expect(report.exhausted).toContain(overBudget);
+    });
+});

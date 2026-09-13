@@ -824,3 +824,13 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - Record writes Testing/Review sections BEFORE the guard runs — a guard denial leaves a stub "Verdict: UNKNOWN" Testing section that must be hand-replaced before re-record.
 - Worktree contract: if base branch advanced after allocation, FF is impossible; cherry-pick (verified with `git cherry -`) then branch -D is the equivalent clean landing. Zero-overlap check first (`comm -12` of changed-file sets).
 - Temp git-index tree-hash needs `read-tree HEAD` init; bare mktemp index fails rc=128.
+- G64 0849/0850 unblocked: dep 0845 (G63) landed via merge 51d093718.
+
+## G63 batch (2026-09-13, RUN_ID 20260912T205800Z-G63BATCH)
+- Provider-tree lesson: BoardLayout mounts ProjectProvider+ConversationDraftProvider+GlobalAgentBar; bare-`{}` API stubs in BoardLayout-mounting fixtures parse as truthy fleet w/o orchestrator → render crash poisons the reconciler process-wide (172-fail cascade). Fixture: full ProjectFleetSnapshot w/ `orchestrator:{state:'bound-online',instanceId:'orch'}`.
+- Gate flake class: spawnSync-heavy CLI tests (plugins/sp inline-run-setup) return proc.status=null under full-gate parallel load; pass isolated. One full re-run before diagnosing.
+- Verify answer AC Evidence Type vocabulary: test|command|doc(s)|static(-ref), compounds of those only — `browser` drops the row (ac-row-dropped fail → guard recompute FAIL overrides PASS header).
+- `task record --transition testing` rewrites Testing stub rows: run AFTER the verdict artifact exists, else done-guard FAILs on UNKNOWN stub.
+- record's done-walk auto-creates the pipeline run-link (ensurePipelineRunLink); workflow dry-run rc=1 on capability-preflight warnings is harmless — link is written at run start regardless.
+- Chrome 140 rejects every Input.imeSetComposition shape (5 variants probed); degrade to Input.insertText + contract-shaped KeyboardEvents (isComposing:true / keyCode 229) — same shape happy-dom dispatches.
+- DD-09: bare scenario titles (no R-prefix) are the batch's feature-doc insertions, `@core`, after the last complete scenario block.

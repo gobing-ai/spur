@@ -6,6 +6,8 @@ import { MemoryRouter } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
 import GlobalAgentBar from '../../src/components/GlobalAgentBar';
 import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
+import { ConversationDraftProvider, saveDraft } from '../../src/modules/projects/drafts';
+import { ProjectContext, type ProjectFleetSnapshot } from '../../src/modules/projects/useProjectContext';
 import type { WebModule } from '../../src/modules/types';
 import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
@@ -17,6 +19,7 @@ afterAll(async () => {
 afterEach(() => {
     cleanup();
     resetFetchForTesting();
+    localStorage.clear();
 });
 
 function setPromptValue(textarea: Element, value: string): void {
@@ -26,6 +29,59 @@ function setPromptValue(textarea: Element, value: string): void {
     const onChange = props?.onChange as ((e: { target: { value: string } }) => void) | undefined;
     if (!onChange) throw new Error('onChange not found on agent-bar-input');
     act(() => onChange({ target: { value } }));
+}
+
+// ── 0844 harness: the bar consumes ProjectContext + ConversationDraftContext ──
+
+function fleet(overrides: { orchestrator?: Partial<ProjectFleetSnapshot['orchestrator']> } = {}): ProjectFleetSnapshot {
+    return {
+        path: '/repo/wt',
+        strategy: { name: 'gtd', version: 1 },
+        orchestrator: { state: 'bound-online', instanceId: 'lead', ...overrides.orchestrator },
+        members: [],
+        capacity: { total: 1, enabled: 1, writeCapable: 1, missing: [] },
+    };
+}
+
+function projectCtx(overrides: Record<string, unknown> = {}) {
+    return { path: '/repo/wt', name: 'spur', fleet: fleet(), state: 'ready' as const, ...overrides };
+}
+
+function harness(projectValue: Record<string, unknown> = projectCtx(), activeModule?: WebModule) {
+    return render(
+        <ProjectContext.Provider value={projectValue as never}>
+            <ConversationDraftProvider>
+                <GlobalAgentBar activeModule={activeModule} />
+            </ConversationDraftProvider>
+        </ProjectContext.Provider>,
+    );
+}
+
+interface PostRecord {
+    to: string;
+    from: string;
+    body: string;
+    requestKey: string;
+    projectPath: string;
+}
+
+/** Canned fetch: records POST /api/messages bodies, serves the results feed. */
+function fetchRouter(state: { posts: PostRecord[]; requestsPayload?: unknown; postStatus?: number }): typeof fetch {
+    return (async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        const u = new URL(url);
+        if (u.pathname === '/api/messages') {
+            state.posts.push((await (input as Request).json()) as PostRecord);
+            return new Response(
+                JSON.stringify({ msgId: `m${state.posts.length}`, toId: 'lead', status: 'queued', injected: false }),
+                { status: state.postStatus ?? 201 },
+            );
+        }
+        if (u.pathname === '/api/project/requests') {
+            return new Response(JSON.stringify(state.requestsPayload ?? { requests: [] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ messages: [], count: 0 }), { status: 200 });
+    }) as typeof fetch;
 }
 
 describe('GlobalAgentBar', () => {
@@ -56,22 +112,12 @@ describe('GlobalAgentBar', () => {
     });
 
     test('Send is disabled while the prompt is empty, enabled once text is entered', () => {
-        const { getByTestId, getByText } = render(<GlobalAgentBar />);
+        const { getByTestId, getByText } = harness();
         fireEvent.click(getByTestId('agent-bar-dock'));
         const send = getByText('Send') as HTMLButtonElement;
         expect(send.disabled).toBe(true);
         setPromptValue(getByTestId('agent-bar-input'), 'refine this feature');
         expect((send as HTMLButtonElement).disabled).toBe(false);
-    });
-
-    test('submitting clears the field and surfaces the stub notice', () => {
-        const { getByTestId, getByText, getByRole } = render(<GlobalAgentBar />);
-        fireEvent.click(getByTestId('agent-bar-dock'));
-        const input = getByTestId('agent-bar-input') as HTMLTextAreaElement;
-        setPromptValue(input, 'implement F84');
-        fireEvent.click(getByText('Send'));
-        expect(input.value).toBe('');
-        expect(getByRole('status').textContent).toContain('Agent dispatch is not wired yet');
     });
 
     test('BoardLayout renders the global agent bar dock', () => {
@@ -82,6 +128,98 @@ describe('GlobalAgentBar', () => {
             </MemoryRouter>,
         );
         expect(getByTestId('agent-bar-dock')).toBeDefined();
+    });
+});
+
+describe('GlobalAgentBar submission, durability, and receipts (0844)', () => {
+    test('R1+R2: submit persists the request before the ack and clears the submitted revision', async () => {
+        const state: { posts: PostRecord[] } = { posts: [] };
+        setFetchForTesting(fetchRouter(state));
+        // Seed the shared draft with text + a task ref (the envelope path).
+        saveDraft({ path: '/repo/wt', text: 'implement F84', refs: [{ kind: 'task', wbs: '0844' }], revision: 1 });
+        const view = harness();
+        fireEvent.click(view.getByTestId('agent-bar-dock'));
+        fireEvent.click(view.getByText('Send'));
+
+        // In flight: the strip names the pending state before any ack.
+        expect(view.container.querySelector('[data-receipt-state="pending"]')).not.toBeNull();
+
+        await act(async () => {});
+
+        // R1: the POST carried the durable identity + project scope + envelope.
+        expect(state.posts).toHaveLength(1);
+        expect(state.posts[0]?.to).toBe('lead');
+        expect(state.posts[0]?.from).toBe('board-operator');
+        expect(state.posts[0]?.body).toContain('SPUR-REQUEST/1 {"refs":[{"kind":"task","wbs":"0844"}]}');
+        expect(state.posts[0]?.body).toContain('implement F84');
+        expect(state.posts[0]?.requestKey).toMatch(/[0-9a-f-]{36}/);
+        expect(state.posts[0]?.projectPath).toBe('/repo/wt');
+
+        // R2: the submitted revision cleared.
+        const input = view.getByTestId('agent-bar-input') as HTMLTextAreaElement;
+        expect(input.value).toBe('');
+
+        // The strip classified the durable receipt joined by messageId m1.
+        const strip = view.container.querySelector('[data-receipt-state]');
+        expect(strip).not.toBeNull();
+        expect(strip?.getAttribute('data-receipt-state')).toBe('queued-awaiting-orchestrator');
+        expect(strip?.textContent).toContain('queued-awaiting-orchestrator');
+        view.unmount();
+    });
+
+    test('R3: a failed ack keeps the draft and the retry reuses the SAME requestKey', async () => {
+        const state: { posts: PostRecord[] } = { posts: [] };
+        setFetchForTesting(fetchRouter({ ...state, postStatus: 500 }));
+        const view = harness();
+        fireEvent.click(view.getByTestId('agent-bar-dock'));
+        setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84');
+        fireEvent.click(view.getByText('Send'));
+        await act(async () => {});
+        expect(state.posts).toHaveLength(1);
+        // Draft untouched by the failed ack.
+        expect((view.getByTestId('agent-bar-input') as HTMLTextAreaElement).value).toBe('implement F84');
+
+        fireEvent.click(view.getByText('Send'));
+        await act(async () => {});
+        expect(state.posts).toHaveLength(2);
+        expect(state.posts[1]?.requestKey).toBe(state.posts[0]?.requestKey);
+        view.unmount();
+    });
+
+    test('R2: an edit typed during flight survives the clear and mints a NEW key on resubmit', async () => {
+        const state: { posts: PostRecord[] } = { posts: [] };
+        setFetchForTesting(fetchRouter(state));
+        const view = harness();
+        fireEvent.click(view.getByTestId('agent-bar-dock'));
+        setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84');
+        fireEvent.click(view.getByText('Send'));
+        // The edit lands while the POST is still in flight.
+        setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84 — with the new constraint');
+        await act(async () => {});
+
+        const input = view.getByTestId('agent-bar-input') as HTMLTextAreaElement;
+        expect(input.value).toBe('implement F84 — with the new constraint');
+
+        // The edited payload is a different revision → a new key, not the old one.
+        fireEvent.click(view.getByText('Send'));
+        await act(async () => {});
+        expect(state.posts).toHaveLength(2);
+        expect(state.posts[1]?.requestKey).not.toBe(state.posts[0]?.requestKey);
+        view.unmount();
+    });
+
+    test('unbound orchestrator: Send is disabled and the state is named, never a bare disabled control', () => {
+        setFetchForTesting(fetchRouter({ posts: [] }));
+        const view = harness(
+            projectCtx({ fleet: fleet({ orchestrator: { state: 'missing', instanceId: undefined } }) }),
+        );
+        fireEvent.click(view.getByTestId('agent-bar-dock'));
+        expect(view.getByTestId('agent-bar-orchestrator-missing').textContent).toContain(
+            'no orchestrator instance is bound',
+        );
+        setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84');
+        expect((view.getByText('Send') as HTMLButtonElement).disabled).toBe(true);
+        view.unmount();
     });
 });
 
@@ -115,7 +253,7 @@ describe('GlobalAgentBar context, chips, and execution drawer', () => {
             component: () => null,
         };
 
-        const { getByTestId, getByText } = render(<GlobalAgentBar activeModule={tasksModule} />);
+        const { getByTestId, getByText } = harness(projectCtx(), tasksModule);
         fireEvent.click(getByTestId('agent-bar-dock'));
 
         const chips = getByTestId('agent-bar-chips');

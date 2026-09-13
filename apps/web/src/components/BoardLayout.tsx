@@ -2,6 +2,8 @@ import { createContext, useCallback, useLayoutEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router';
 import { Button } from '@/ui';
 import { loadLayoutState, saveLayoutState } from '../lib/layout-state';
+import { ConversationDraftProvider } from '../modules/projects/drafts';
+import { ProjectProvider } from '../modules/projects/useProjectContext';
 import { getModule } from '../modules/registry';
 import type { WebModule } from '../modules/types';
 import ApiErrorToast from './ApiErrorToast';
@@ -122,44 +124,46 @@ export default function BoardLayout() {
     const showBackdrop = mobileSidebarOpen || mobilePanelOpen;
 
     return (
-        <>
-            {showBackdrop && (
-                <div
-                    className="fixed inset-0 z-40 bg-black/50 md:hidden"
-                    onClick={closeMobile}
-                    onKeyDown={onBackdropKeyDown}
-                    aria-hidden="true"
-                />
-            )}
-            <div
-                className="board-layout"
-                data-sidebar-collapsed={String(state.sidebarCollapsed)}
-                data-rightpanel-collapsed={String(state.rightPanelCollapsed)}
-                data-mobile-sidebar-open={String(mobileSidebarOpen)}
-                data-mobile-panel-open={String(mobilePanelOpen)}
-            >
-                <ActiveModuleContext.Provider value={activeModule}>
-                    <LeftSidebar
-                        collapsed={state.sidebarCollapsed && !mobileSidebarOpen}
-                        onToggle={toggleSidebar}
-                        onMobileClose={closeMobile}
+        <ProjectProvider>
+            <ConversationDraftProvider>
+                {showBackdrop && (
+                    <div
+                        className="fixed inset-0 z-40 bg-black/50 md:hidden"
+                        onClick={closeMobile}
+                        onKeyDown={onBackdropKeyDown}
+                        aria-hidden="true"
                     />
-                    <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
-                    <MainWorkspace mobileHeader={mobileHeader}>
-                        <Outlet />
-                    </MainWorkspace>
-                    <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
-                    <RightPanel
-                        collapsed={state.rightPanelCollapsed}
-                        onToggle={toggleRightPanel}
-                        onMobileClose={closeMobile}
-                    >
-                        {RightPanelContent ? <RightPanelContent /> : null}
-                    </RightPanel>
-                </ActiveModuleContext.Provider>
-            </div>
-            <GlobalAgentBar activeModule={activeModule} />
-            <ApiErrorToast />
-        </>
+                )}
+                <div
+                    className="board-layout"
+                    data-sidebar-collapsed={String(state.sidebarCollapsed)}
+                    data-rightpanel-collapsed={String(state.rightPanelCollapsed)}
+                    data-mobile-sidebar-open={String(mobileSidebarOpen)}
+                    data-mobile-panel-open={String(mobilePanelOpen)}
+                >
+                    <ActiveModuleContext.Provider value={activeModule}>
+                        <LeftSidebar
+                            collapsed={state.sidebarCollapsed && !mobileSidebarOpen}
+                            onToggle={toggleSidebar}
+                            onMobileClose={closeMobile}
+                        />
+                        <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
+                        <MainWorkspace mobileHeader={mobileHeader}>
+                            <Outlet />
+                        </MainWorkspace>
+                        <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
+                        <RightPanel
+                            collapsed={state.rightPanelCollapsed}
+                            onToggle={toggleRightPanel}
+                            onMobileClose={closeMobile}
+                        >
+                            {RightPanelContent ? <RightPanelContent /> : null}
+                        </RightPanel>
+                    </ActiveModuleContext.Provider>
+                </div>
+                <GlobalAgentBar activeModule={activeModule} />
+                <ApiErrorToast />
+            </ConversationDraftProvider>
+        </ProjectProvider>
     );
 }

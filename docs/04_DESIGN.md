@@ -379,3 +379,30 @@ See [contract detail](design/observability-contracts.md#team-routes-appsserversr
 ### Message routes (`apps/server/src/modules/messages/index.ts`)
 
 See [contract detail](design/observability-contracts.md#message-routes-appsserversrcmodulesmessagesindexts).
+
+## Project identity + fleet HTTP routes (0840)
+
+See [contract detail](design/project-switcher.md#7-http-api).
+
+## Agents roster two-fact card (0842)
+
+Declared fleet member and observed process are rendered as two labeled facts,
+joined by `instanceId` — never one status; issue labels are frozen and shared
+with 0844's receipt states. Roster + member detail read and control only the
+existing `/api/project/fleet` + `/api/team/*` transports.
+
+See [contract detail](design/project-switcher.md#agents-roster-two-fact-card-0842).
+
+## Work view embed and reference capture (0843)
+
+The Projects Work tab embeds the existing `KanbanBoard` / `FeaturesShell`
+unchanged — no third task-rendering path and no project filter (one server
+instance serves one project). Card selection captures a structured task
+reference into the shared draft and switches to Conversation; it never
+navigates out of the module.
+
+See [contract detail](design/project-switcher.md#work-view-embed-and-reference-capture-0843).
+
+## Board request envelope `SPUR-REQUEST/1` (0841)
+
+See [contract detail](design/project-switcher.md#request-envelope-0841).
