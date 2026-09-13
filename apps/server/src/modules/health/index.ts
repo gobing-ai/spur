@@ -212,7 +212,7 @@ export const healthModule: ServerModule = {
             // on the wire, never a 500.
             const holdByTask = new Map<string, string>();
             try {
-                for (const h of (await runtime.selectNext(path)).holds) {
+                for (const h of (await runtime.selectNext(path, { readOnly: true })).holds) {
                     holdByTask.set(h.wbs, h.reason);
                 }
             } catch {

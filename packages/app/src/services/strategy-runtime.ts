@@ -71,6 +71,12 @@ export interface StrategyResult {
     holds: DispatchHold[];
 }
 
+/** Options for selecting work without changing persisted runtime state. */
+export interface SelectNextOptions {
+    /** Read-only callers must not persist defaults or reconcile delivery rows. */
+    readOnly?: boolean;
+}
+
 /**
  * R5's declared extension point: a frozen `Record<StrategyName, Strategy>`
  * literal. No loader, no discovery, no dynamic `import()` — a third strategy
@@ -266,20 +272,20 @@ export class StrategyRuntime {
      * deliveries (0834) against completion receipts (0833); (4) only then may
      * {@link selectNext} be called.
      */
-    async resume(projectPath: string): Promise<ResumeReport> {
+    async resume(projectPath: string, options: { readOnly?: boolean } = {}): Promise<ResumeReport> {
         const normalized = normalizeProjectPath(projectPath);
         const dao = new ProjectStrategyDao(await this.ctx.openDb(normalized));
-        const row = await dao.set(normalized, DEFAULT_STRATEGY, true);
-        const strategy: StrategyName = row.strategy === 'gtd' ? 'gtd' : DEFAULT_STRATEGY;
-        const version = row.strategyVersion;
+        const row = options.readOnly ? await dao.get(normalized) : await dao.set(normalized, DEFAULT_STRATEGY, true);
+        const strategy: StrategyName = row?.strategy === 'gtd' ? 'gtd' : DEFAULT_STRATEGY;
+        const version = row?.strategyVersion ?? 1;
 
         const orchestrator = await this.ctx.fleet.resolveOrchestrator(normalized);
         if (orchestrator.state !== 'bound-online') {
             return { strategy, version, orchestrator, unresolved: [], reconciled: false };
         }
         const reconciler = new DeliveryReconciler({ getDb: async () => this.ctx.openDb(normalized) });
-        const report = await reconciler.reconcile();
-        return { strategy, version, orchestrator, unresolved: report.unresolved, reconciled: true };
+        const unresolved = options.readOnly ? await reconciler.classify() : (await reconciler.reconcile()).unresolved;
+        return { strategy, version, orchestrator, unresolved, reconciled: true };
     }
 
     /** A managed wake dispatches through the existing agent runner, never transitions tasks. */
@@ -375,9 +381,9 @@ export class StrategyRuntime {
      * deliveries hold GTD selection), and the injected
      * dependency gate resolved per candidate up front.
      */
-    async selectNext(projectPath: string): Promise<StrategyResult> {
+    async selectNext(projectPath: string, options: SelectNextOptions = {}): Promise<StrategyResult> {
         const normalized = normalizeProjectPath(projectPath);
-        const resumed = await this.resume(normalized);
+        const resumed = await this.resume(normalized, options);
         const { strategy: name, version } = resumed;
         const db = await this.ctx.openDb(normalized);
         const claims = new ProjectClaimDao(db);

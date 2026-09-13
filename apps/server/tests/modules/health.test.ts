@@ -504,6 +504,10 @@ describe('healthModule', () => {
             expect(queuedRow?.runId).toBeNull();
             expect(queuedRow?.outcome).toBeNull();
 
+            // The receipt projection is a GET: it must not persist the default
+            // strategy merely to compute named hold states.
+            expect(await new ProjectStrategyDao(db).get(normalizeProjectPath(tempDir))).toBeNull();
+
             // limit caps the feed.
             const limited = await app.request('/api/project/requests?limit=1');
             const limitedBody = (await limited.json()) as { requests: unknown[] };
