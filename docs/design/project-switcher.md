@@ -156,27 +156,35 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
 
 ### Fleet ownership and dispatch boundaries (G62)
 
-- `bound-online` requires an unexpired claim whose holder matches the declared orchestrator
-  instance. A different holder produces `bound-offline` with `claim-holder-mismatch:<holder>`.
-- Write acquisition uses the persisted `project_strategy` version and repeats the observed owner
-  and strategy fences inside the claim statement. A live write lease cannot be acquired twice,
-  even by the same member. Release retains its generation with zero expiry; reads treat that
-  marker as absent and later acquisition increments the generation. Heartbeats cannot revive it.
-- Result validation requires the exact current write holder and generation, before release.
-  This write-generation check does not yet preserve the originating orchestrator generation;
-  replacing the orchestrator remains a separate unresolved fence.
-- GTD allocates instances in priority/WBS order. Selection reconciles first and returns holds
-  when ownership is offline or prior deliveries are unresolved. Managed fleet loops leave input
-  queued in `rest` (also the absent-strategy default); loops without a declaration retain their
-  existing drain behavior.
-- Wake consumers include messages/replies, task creation/update, strategy/capacity changes, and
-  invocation exits. CLI senders persist metadata-only wake events without an injected bus;
-  managed loop invocations attach and flush the existing ledger. `--poll` remains the backstop.
-
-These service contracts do not establish end-to-end GTD dispatch. The managed GTD loop still
-drains input without selection/claim/heartbeat/fenced-completion integration, and orchestrator
-claims still permit the same spec identity to reclaim a live owner. The current verification
-evidence and recovery scope live in [the G62 re-audit](../reports/g62-verifyall-2026-09-13.md).
+- `bound-online` requires an unexpired claim matching the declared orchestrator instance.
+  A second process is refused even when it uses the same spec ID. Acquisition increments the
+  generation; heartbeat and release require that exact generation. Released rows retain it.
+- The managed orchestrator loop restores persisted strategy and reconciles prior deliveries
+  before selection. Unconfigured projects default to `rest`; Board reads never reset strategy.
+  `rest` leaves queued input unstarted and permits running work to finish and reconcile.
+- GTD selects `fleet:auto` tasks through the existing task checker and dependency gate, in
+  priority/WBS order. Existing assignees constrain member selection; otherwise coder or
+  role-unspecified members are eligible. Running instance generations consume capacity.
+  Prior run receipts hold a still-todo task for explicit reconciliation rather than repeat it.
+- Selected tasks execute through `AgentService.runTraced` and `/sp:dev-run`, preserving the task
+  pipeline's verification and advancement gates. Spec-addressed fleet runs require the managed
+  dispatch guard. Arbitrary queued messages cannot bypass task authorization.
+- Write acquisition atomically checks the live owner and persisted GTD strategy version.
+  The loop renews ownership and the running write lease every ten seconds against a thirty-second
+  TTL. The slot is released after completion reconciliation. Proven read-only assignments take
+  no write slot; unknown capability never grants read-only concurrency.
+- The capacity receipt records both the write-lease generation and originating orchestrator
+  generation. Result validation requires both to match their live owners. Missing receipt
+  evidence fails closed; replaced owners produce a diagnostic without a task transition.
+  Executor resolution is followed by another owner/strategy/lease check before each launch.
+- Registration, materialization, supervision, and spec-addressed execution validate real process
+  cwd, spec workspace, filesystem storage root, and (when opened) SQLite's backing file.
+  Project path aliases are accepted; foreign storage roots and storage symlinks are rejected.
+  Environment identity hints are not proof of project ownership.
+- Wake sources are messages/replies, task creation/update, strategy/capacity changes, and invocation
+  exits. CLI senders persist metadata-only events; managed invocations flush the existing ledger.
+  `--poll` remains the backstop, idle holds are recorded on change, and undeclared projects retain
+  legacy queue consumption. Idle wakes make no model call.
 
 ### Request envelope (0841)
 

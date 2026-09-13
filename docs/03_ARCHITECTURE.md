@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.45.0
+version: 1.45.1
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-09
+updated_at: 2026-09-13
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -510,9 +510,18 @@ _for display_ by the Inbox module; they are never merged in storage and delivery
 | --- | --- | --- |
 | Write path | `TeamService.sendMessage` → DAO `enqueue` | `POST /api/team/processes/:id/stdin` |
 | Read path | `TeamService.getInbox` / `listRecent` / `drainPending` | `GET /api/team/processes/:id/stream` (SSE) |
-| Delivery to agent | `spur agent loop` calls `drainPending`, prepends to prompt | written straight to `PipeProcess` stdin |
+| Delivery to agent | Undeclared projects use `agent loop` → `drainPending`; fleets use the dispatch gate below | written straight to `PipeProcess` stdin |
 | Storage | SQLite (`inbox_messages`), durable, `queued → injected` lifecycle | in-memory ring buffer, bounded (default 500), lost on restart |
 | Ordering cursor | `createdAt` | `seq` (monotonic) + `ts` |
+
+Declared fleets use one generation-fenced orchestrator loop. On a ledger wake, `StrategyRuntime`
+restores strategy, reconciles deliveries, and selects authorized tasks through the existing task
+checker and dependency gate. `WriteSlotService` atomically reserves the project writer; the loop
+renews ownership and that lease while `AgentService.runTraced` executes the existing task pipeline.
+A final launch guard checks owner/strategy after executor resolution. Capacity receipts correlate
+the originating owner and write generation; reconciliation precedes slot release. Rest starts no
+queued assignments. This adds no message transport or workflow engine. Boundary details:
+[project fleet dispatch](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
 
 The merge is a **pure function** in `apps/web/src/modules/inbox/timeline.ts`:
 `mergeTimeline(messages, frames, agentId) → TimelineEntry[]` — a discriminated union
@@ -636,7 +645,7 @@ identity is omitted. Actor data is not persisted as envelope context. Data contr
 ## 17. Inter-Agent Control Plane (ADR-057 — waves 1–2 landed; wave 3 follow helper landed)
 
 Current shipped coordination is two independent channels (`03` §14.1): durable `inbox_messages`
-drained by `spur agent loop`, and a supervised process pipe (stdin POST + bounded SSE ring).
+consumed through the loop/dispatch policy in §14.1, and a supervised process pipe (stdin POST + bounded SSE ring).
 Wave 1 (task 0529) persists an `OccupantRef` + `coordination_runs` row when a run is addressed by
 spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the spec's **executor
 name** when the spec records one — falling back to the coding-agent type only via the

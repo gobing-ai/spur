@@ -4,7 +4,7 @@ name: Event-driven orchestrator wakeup replacing the drain poll
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.725Z
-updated_at: "2026-09-13T07:31:50.250Z"
+updated_at: "2026-09-13T08:04:45.511Z"
 feature_id: G62
 priority: P2
 tags:
@@ -272,6 +272,12 @@ Re-audit repair: task.created, task.updated, and message.replied now wake the co
 
 Current per-requirement evidence and residuals are in Testing and `docs/reports/g62-verifyall-2026-09-13.md`. Earlier implementation-time anchors and completion statements above are historical; this re-audit supersedes them.
 
+#### G62 closure — 2026-09-13
+
+This implementation supersedes the unresolved gaps recorded in the preceding re-audit. Fleet wakes now drive managed selection and fenced dispatch while undeclared projects retain their legacy drain behavior. Arbitrary queued input cannot bypass fleet authorization. Owner and write-lease renewal are integrated; the ledger remains the wake transport and unchanged idle holds remain deduplicated.
+
+Regression evidence is recorded in the refreshed Testing section. New changes are intentionally uncommitted for the operator's next step.
+
 ### Testing
 
 **Pipeline verify results**
@@ -280,18 +286,18 @@ Current per-requirement evidence and residuals are in Testing and `docs/reports/
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:198` — plain send persists a wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:188` — task creation/update and replies wake the consumer; `bun run spur-check` (exit 0). Strategy/capacity producers and invocation ledger are covered by the same suite. Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0839-verify-answer.txt` line 1–36; Evidence: G62 re-audit `.spur/run/0839-verdict.json` line 1–94. Measured repository coverage: 98.99% lines, 99.21% functions. |
-| R2 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — repeated idle wakes make zero model calls and no dispatch; `bun run spur-check` (exit 0). |
-| R3 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — operator-readable hold is recorded once per unchanged idle state; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:302` — new idle stretch records a fresh hold; `bun run spur-check` (exit 0). |
-| R4 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:329` — wake precedes draining and consumed events do not replay; `bun run spur-check` (exit 0). |
-| R5 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:264` — legacy queues drain on the unchanged poll backstop without migration; `bun run spur-check` (exit 0). |
-| R6 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — idle model-call assertion; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:230` — completion wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:175` — strategy wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:213` — capacity wake; `bun run spur-check` (exit 0). |
+| R1 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:202` — plain sends persist wake events; `apps/cli/tests/commands/agent-loop-wake.test.ts:192` — creation, updates, and replies each wake the loop; `apps/cli/tests/commands/agent-loop-wake.test.ts:179` — strategy wake; `apps/cli/tests/commands/agent-loop-wake.test.ts:217` — capacity wake; `apps/cli/tests/commands/agent-loop-wake.test.ts:234` — completion wake; `bun run spur-check` (exit 0). Measured repository coverage: 98.99% lines, 99.21% functions. Evidence: G62 closure `.spur/run/g62-verifyall-20260913/spur-check-shippable.log` line 1 through EOF. Replaces Evidence: G62 re-audit `.spur/run/0839-verify-answer.txt` line 1 through EOF and `.spur/run/0839-verdict.json` line 1 through EOF; prior artifacts are preserved under the closure run directory. |
+| R2 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:282` — repeated idle wakes make zero model calls and no dispatch; `bun run spur-check` (exit 0). |
+| R3 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:282` — the hold is persisted once for an unchanged idle state; `apps/cli/tests/commands/agent-loop-wake.test.ts:306` — work starts a fresh idle stretch; `bun run spur-check` (exit 0). |
+| R4 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:333` — the consumer waits for a wake before draining and never replays consumed events; `bun run spur-check` (exit 0). |
+| R5 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:268` — legacy queued work continues on the unchanged poll backstop; `bun run spur-check` (exit 0). |
+| R6 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:282` — idle model-call count is asserted; `apps/cli/tests/commands/agent-loop-wake.test.ts:234` — named sources each have a consumer wake test; `apps/cli/tests/commands/agent-loop-wake.test.ts:202` — plain sends persist wake events; `apps/cli/tests/commands/agent-loop-wake.test.ts:192` — creation, updates, and replies each wake the loop; `apps/cli/tests/commands/agent-loop-wake.test.ts:179` — strategy wake; `apps/cli/tests/commands/agent-loop-wake.test.ts:217` — capacity wake; `apps/cli/tests/commands/agent-loop-wake.test.ts:234` — completion wake; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R7 — Idle costs nothing | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — repeated idle wakes make zero model calls and no dispatch; `bun run spur-check` (exit 0). |
-| Each declared source wakes the orchestrator | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:198` — plain send persists a wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:188` — task creation/update and replies wake the consumer; `bun run spur-check` (exit 0). Strategy/capacity producers and invocation ledger are covered by the same suite. |
-| Existing loops keep working | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:264` — legacy queues drain on the unchanged poll backstop without migration; `bun run spur-check` (exit 0). |
+| R7 — Idle costs nothing | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:282` — repeated idle wakes make zero model calls and no dispatch; `bun run spur-check` (exit 0). |
+| Each declared source wakes the orchestrator | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:202` — plain sends persist wake events; `apps/cli/tests/commands/agent-loop-wake.test.ts:192` — creation, updates, and replies each wake the loop; `apps/cli/tests/commands/agent-loop-wake.test.ts:179` — strategy wake; `apps/cli/tests/commands/agent-loop-wake.test.ts:217` — capacity wake; `apps/cli/tests/commands/agent-loop-wake.test.ts:234` — completion wake; `bun run spur-check` (exit 0). |
+| Existing loops keep working | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:268` — legacy queued work continues on the unchanged poll backstop; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -303,11 +309,12 @@ Current per-requirement evidence and residuals are in Testing and `docs/reports/
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | repository-gate | — | `bun run spur-check` (exit 0): 8511 tests, 0 failures; lint/typecheck; 45 pre-rules and 2 post-rules pass. |
+| P4 | repository-gate | — | `bun run spur-check` (exit 0): 8526 tests, 0 failures, 478 files; lint/typecheck and all 45 pre-rules plus 2 post-rules pass. |
 | P4 | coverage | — | Coverage: 98.99% lines, 99.21% functions, measured by the repository gate. |
 | P4 | cloudflare | — | `bun run test-cf` (exit 0): 1 test passed. |
-| P4 | design-conformance | — | Wake transport remains the existing ledger; extra task/reply events and CLI persistence close the producer/consumer gaps. Poll backstop is retained. |
-| P4 | artifact-provenance | — | Evidence: G62 re-audit `.spur/run/0839-verify-answer.txt` line 1 through EOF and `.spur/run/0839-verdict.json` line 1 through EOF replace prior verification artifacts. |
+| P4 | build | — | `bun run build` (exit 0); CLI linked and bundle regenerated. |
+| P4 | design-conformance | — | Existing corpus, task checker, dependency gate, agent runner, reconciliation and event ledger remain the owners. No new public noun/verb, table, migration, dependency or workflow engine. |
+| P4 | artifact-provenance | — | Canonical task answer/verdict replace the earlier failed audit; earlier artifacts are preserved in the closure run directory. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References

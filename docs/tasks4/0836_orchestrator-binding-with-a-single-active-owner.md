@@ -4,7 +4,7 @@ name: Orchestrator binding with a single active owner
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.723Z
-updated_at: "2026-09-13T07:31:48.584Z"
+updated_at: "2026-09-13T08:04:44.205Z"
 feature_id: G62
 priority: P1
 tags:
@@ -325,26 +325,32 @@ Re-audit repair: online binding now requires the live holder to match the declar
 
 Current per-requirement evidence and residuals are in Testing and `docs/reports/g62-verifyall-2026-09-13.md`. Earlier implementation-time anchors and completion statements above are historical; this re-audit supersedes them.
 
+#### G62 closure — 2026-09-13
+
+This implementation supersedes the unresolved gaps recorded in the preceding re-audit. Live ownership is exclusive across processes, including processes using the same stable spec ID. Renewal and release require the acquired generation. The production orchestrator loop acquires, renews and releases that generation and refuses another owner.
+
+Regression evidence is recorded in the refreshed Testing section. New changes are intentionally uncommitted for the operator's next step.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:723` — online requires the claim holder to match the declared binding; `bun run spur-check` (exit 0). Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0836-verify-answer.txt` line 1–37; Evidence: G62 re-audit `.spur/run/0836-verdict.json` line 1–100. Measured repository coverage: 98.99% lines, 99.21% functions. |
-| R2 | MET | `packages/app/tests/services/fleet-service.test.ts:654` — planner role and existing purpose carrier are required; no new role; `bun run spur-check` (exit 0). |
-| R3 | UNMET | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 6; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): a second claimant with the same spec receives a live claim. `packages/domain/src/dao/project-claim-dao.ts:115`. |
-| R4 | MET | `packages/app/tests/services/fleet-service.test.ts:669` — missing and offline remain distinct; mismatched holder now stays offline; `bun run spur-check` (exit 0). |
-| R5 | MET | `packages/app/tests/services/fleet-service.test.ts:589` — empty fleet resolves cleanly and names missing binding; `bun run spur-check` (exit 0). |
+| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:723` — binding is online only when the live holder matches the declared instance; `bun run spur-check` (exit 0). Measured repository coverage: 98.99% lines, 99.21% functions. Evidence: G62 closure `.spur/run/g62-verifyall-20260913/spur-check-shippable.log` line 1 through EOF. Replaces Evidence: G62 re-audit `.spur/run/0836-verify-answer.txt` line 1 through EOF and `.spur/run/0836-verdict.json` line 1 through EOF; prior artifacts are preserved under the closure run directory. |
+| R2 | MET | `packages/app/tests/services/fleet-service.test.ts:654` — the existing planner role requires orchestrator purpose; `bun run spur-check` (exit 0). |
+| R3 | MET | `packages/domain/tests/dao/project-claim-dao.test.ts:68` — live same-spec reacquisition is refused and displaced epochs cannot heartbeat or release; `apps/cli/tests/commands/agent-loop-wake.test.ts:363` — production loop acquires the declared owner, selects a ready authorized task through the real checker, refuses a second owner, reconciles and prevents duplicate dispatch after restart; `bun run spur-check` (exit 0). |
+| R4 | MET | `packages/app/tests/services/fleet-service.test.ts:669` — missing and offline are distinct with actionable reasons; `bun run spur-check` (exit 0). |
+| R5 | MET | `packages/app/tests/services/fleet-service.test.ts:589` — an empty/unbound fleet resolves cleanly; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| One member is the project's orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:723` — online requires the claim holder to match the declared binding; `bun run spur-check` (exit 0). |
-| A second owner cannot claim the role | UNMET | command | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 6; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): a second claimant with the same spec receives a live claim. `packages/domain/src/dao/project-claim-dao.ts:115`. |
-| Missing and offline are different answers | MET | test | `packages/app/tests/services/fleet-service.test.ts:669` — missing and offline remain distinct; mismatched holder now stays offline; `bun run spur-check` (exit 0). |
-| An empty fleet still resolves | MET | test | `packages/app/tests/services/fleet-service.test.ts:589` — empty fleet resolves cleanly and names missing binding; `bun run spur-check` (exit 0). |
+| One member is the project's orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:723` — binding is online only when the live holder matches the declared instance; `bun run spur-check` (exit 0). |
+| A second owner cannot claim the role | MET | test | `packages/domain/tests/dao/project-claim-dao.test.ts:68` — live same-spec reacquisition is refused and displaced epochs cannot heartbeat or release; `apps/cli/tests/commands/agent-loop-wake.test.ts:363` — production loop acquires the declared owner, selects a ready authorized task through the real checker, refuses a second owner, reconciles and prevents duplicate dispatch after restart; `bun run spur-check` (exit 0). |
+| Missing and offline are different answers | MET | test | `packages/app/tests/services/fleet-service.test.ts:669` — missing and offline are distinct with actionable reasons; `bun run spur-check` (exit 0). |
+| An empty fleet still resolves | MET | test | `packages/app/tests/services/fleet-service.test.ts:589` — an empty/unbound fleet resolves cleanly; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

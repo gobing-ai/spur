@@ -4,7 +4,7 @@ name: Per-project write-slot lease with ownerEpoch and strategyVersion fencing
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.724Z
-updated_at: "2026-09-13T07:31:49.130Z"
+updated_at: "2026-09-13T08:04:44.635Z"
 feature_id: G62
 priority: P2
 tags:
@@ -297,26 +297,32 @@ Re-audit repair: persisted strategy and owner snapshots are rechecked inside wri
 
 Current per-requirement evidence and residuals are in Testing and `docs/reports/g62-verifyall-2026-09-13.md`. Earlier implementation-time anchors and completion statements above are historical; this re-audit supersedes them.
 
+#### G62 closure — 2026-09-13
+
+This implementation supersedes the unresolved gaps recorded in the preceding re-audit. Managed GTD now consumes write-slot claims and renews them throughout a running invocation. The durable capacity receipt records the originating orchestrator epoch plus write-lease epoch; replacement of either rejects results. Reconciliation precedes release. Existing tables and migrations are reused.
+
+Regression evidence is recorded in the refreshed Testing section. New changes are intentionally uncommitted for the operator's next step.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | PARTIAL | `packages/app/tests/services/write-slot-service.test.ts:146` — durable singleton slot refuses a second writer; `bun run spur-check` (exit 0). No production dispatch/heartbeat path holds the lease through a running assignment and reconciliation. |
-| R2 | MET | `packages/domain/tests/dao/project-claim-dao.test.ts:14` — atomic statement gates acquisition on owner and strategy; `bun run spur-check` (exit 0). `packages/app/tests/services/write-slot-service.test.ts:134` — one member cannot acquire two simultaneous live write leases; `bun run spur-check` (exit 0). |
-| R3 | UNMET | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 15; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): replacing the orchestrator still accepts the old writer result. `packages/app/src/services/write-slot-service.ts:186` compares write generation without the originating orchestrator generation. |
-| R4 | PARTIAL | `packages/app/tests/services/write-slot-service.test.ts:117` — persisted strategy changes fence writers, repeated atomically at acquisition; `bun run spur-check` (exit 0). Production dispatch does not consume the refusal or reselect work; read-only admission also has no atomic launch boundary. |
-| R5 | MET | `packages/app/tests/services/write-slot-service.test.ts:203` — slot-free admission requires unavailable fsWrite; unknown never grants read-only concurrency; `bun run spur-check` (exit 0). |
-| R6 | MET | `packages/domain/tests/dao/project-claim-dao.test.ts:31` — release retains generation in the existing table; no new migration or table was added; `bun run spur-check` (exit 0). |
+| R1 | MET | `packages/app/tests/services/write-slot-service.test.ts:148` — one durable project slot refuses competing writers; `packages/app/tests/services/strategy-runtime.test.ts:598` — the running lease survives its original TTL through heartbeat; `packages/app/tests/services/strategy-runtime.test.ts:527` — rest preserves the slot until completion reconciliation; `bun run spur-check` (exit 0). Measured repository coverage: 98.99% lines, 99.21% functions. Evidence: G62 closure `.spur/run/g62-verifyall-20260913/spur-check-shippable.log` line 1 through EOF. Replaces Evidence: G62 re-audit `.spur/run/0837-verify-answer.txt` line 1 through EOF and `.spur/run/0837-verdict.json` line 1 through EOF; prior artifacts are preserved under the closure run directory. |
+| R2 | MET | `packages/domain/tests/dao/project-claim-dao.test.ts:14` — owner and strategy fences execute inside the atomic claim statement; `packages/app/tests/services/write-slot-service.test.ts:136` — the same instance cannot acquire two live write leases; `bun run spur-check` (exit 0). |
+| R3 | MET | `packages/app/tests/services/write-slot-service.test.ts:396` — a capacity receipt pins the originating owner; replacement rejects an unchanged writer lease result; `packages/app/tests/services/write-slot-service.test.ts:272` — old write generations remain stale after release and reacquisition; `bun run spur-check` (exit 0). |
+| R4 | MET | `packages/app/tests/services/write-slot-service.test.ts:119` — claim checks persisted strategy version; `packages/app/tests/services/strategy-runtime.test.ts:549` — final launch rejects a rest switch after claim; `packages/app/tests/services/agent-service.test.ts:4354` — the actual runner calls the guard after resolution and before spawn; `bun run spur-check` (exit 0). |
+| R5 | MET | `packages/app/tests/services/write-slot-service.test.ts:206` — only attested read-only assignments run alongside a held write slot; unknown capability is refused; `bun run spur-check` (exit 0). |
+| R6 | MET | `packages/domain/tests/dao/project-claim-dao.test.ts:32` — existing claim storage retains monotonically increasing generations; no table or migration added; `packages/app/src/services/write-slot-service.ts:186` records origin using the existing system-event ledger; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R4 — One writer per worktree | PARTIAL | test | `packages/app/tests/services/write-slot-service.test.ts:146` — durable singleton slot refuses a second writer; `bun run spur-check` (exit 0). No production dispatch/heartbeat path holds the lease through a running assignment and reconciliation. |
-| R5 — Stale decisions and replaced owners cannot act | UNMET | command | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 15; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): replacing the orchestrator still accepts the old writer result. `packages/app/src/services/write-slot-service.ts:186` compares write generation without the originating orchestrator generation. |
-| Claiming is atomic across instance and slot | MET | test | `packages/domain/tests/dao/project-claim-dao.test.ts:14` — atomic statement gates acquisition on owner and strategy; `bun run spur-check` (exit 0). `packages/app/tests/services/write-slot-service.test.ts:134` — one member cannot acquire two simultaneous live write leases; `bun run spur-check` (exit 0). |
+| R4 — One writer per worktree | MET | test | `packages/app/tests/services/write-slot-service.test.ts:148` — one durable project slot refuses competing writers; `packages/app/tests/services/strategy-runtime.test.ts:598` — the running lease survives its original TTL through heartbeat; `packages/app/tests/services/strategy-runtime.test.ts:527` — rest preserves the slot until completion reconciliation; `packages/app/tests/services/write-slot-service.test.ts:206` — only attested read-only assignments run alongside a held write slot; unknown capability is refused; `bun run spur-check` (exit 0). |
+| R5 — Stale decisions and replaced owners cannot act | MET | test | `packages/app/tests/services/write-slot-service.test.ts:396` — a capacity receipt pins the originating owner; replacement rejects an unchanged writer lease result; `packages/app/tests/services/write-slot-service.test.ts:272` — old write generations remain stale after release and reacquisition; `packages/app/tests/services/write-slot-service.test.ts:119` — claim checks persisted strategy version; `packages/app/tests/services/strategy-runtime.test.ts:549` — final launch rejects a rest switch after claim; `packages/app/tests/services/agent-service.test.ts:4354` — the actual runner calls the guard after resolution and before spawn; `bun run spur-check` (exit 0). |
+| Claiming is atomic across instance and slot | MET | test | `packages/domain/tests/dao/project-claim-dao.test.ts:14` — owner and strategy fences execute inside the atomic claim statement; `packages/app/tests/services/write-slot-service.test.ts:136` — the same instance cannot acquire two live write leases; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

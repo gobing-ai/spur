@@ -4,7 +4,7 @@ name: Persisted rest and GTD strategy runtime with restart resume
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.725Z
-updated_at: "2026-09-13T07:31:49.681Z"
+updated_at: "2026-09-13T08:04:45.062Z"
 feature_id: G62
 priority: P1
 tags:
@@ -315,26 +315,32 @@ Re-audit repair: sort candidates before allocating scarce instances. GTD selecti
 
 Current per-requirement evidence and residuals are in Testing and `docs/reports/g62-verifyall-2026-09-13.md`. Earlier implementation-time anchors and completion statements above are historical; this re-audit supersedes them.
 
+#### G62 closure — 2026-09-13
+
+This implementation supersedes the unresolved gaps recorded in the preceding re-audit. The production loop dispatches selected tasks through the existing AgentService and dev-run pipeline. Authorization, strict task readiness, dependencies, priority/WBS, assignee/role compatibility and live instance capacity gate selection. Strategy and ownership are checked again after executor resolution. Rest accepts queued input without starting it; running work reconciles before releasing its slot. Prior task receipts prevent duplicate dispatch after restart. Absent strategy insertion cannot overwrite a concurrent strategy change.
+
+Regression evidence is recorded in the refreshed Testing section. New changes are intentionally uncommitted for the operator's next step.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/strategy-runtime.test.ts:318` — default rest and read-only Board access preserve persisted strategy; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:328` — version increases on every set; `bun run spur-check` (exit 0). Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0838-verify-answer.txt` line 1–40; Evidence: G62 re-audit `.spur/run/0838-verdict.json` line 1–99. Measured repository coverage: 98.99% lines, 99.21% functions. |
-| R2 | PARTIAL | `apps/cli/tests/commands/agent-loop-wake.test.ts:250` — queued fleet input stays unstarted in rest; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:395` — rest selection preserves an existing slot; `bun run spur-check` (exit 0). Running-loop lease heartbeat/reconciliation integration is still absent. |
-| R3 | UNMET | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/runtime-gap.test.ts` line 318; `cd apps/cli && bun test ../../.spur/run/g62-verifyall-20260913/runtime-gap.test.ts --test-name-pattern G62` (exit 1): GTD invokes queued input with no live owner or dispatch claim. `packages/app/tests/services/strategy-runtime.test.ts:170` — priority-before-capacity selection is repaired, but not used by dispatch; `bun run spur-check` (exit 0). |
-| R4 | PARTIAL | `packages/app/tests/services/strategy-runtime.test.ts:191` — selection emits a hold for each skipped candidate; `bun run spur-check` (exit 0). Managed GTD draining bypasses those readiness/capacity holds. |
-| R5 | MET | `packages/app/tests/services/strategy-runtime.test.ts:157` — rest is a declared strategy; `bun run spur-check` (exit 0). `packages/app/src/services/strategy-runtime.ts:171` contains only rest/gtd; no dynamic loader or extra backlog. |
-| R6 | PARTIAL | `packages/app/tests/services/strategy-runtime.test.ts:383` — selection refuses offline ownership; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:464` — selection refuses unresolved deliveries; `bun run spur-check` (exit 0). Managed GTD draining still bypasses resume/selection, as the runtime audit demonstrates. |
+| R1 | MET | `packages/app/tests/services/strategy-runtime.test.ts:325` — rest is the default and Board reads do not write; `packages/app/tests/services/strategy-runtime.test.ts:419` — restart restores persisted strategy without resetting its version; `bun run spur-check` (exit 0). Measured repository coverage: 98.99% lines, 99.21% functions. Evidence: G62 closure `.spur/run/g62-verifyall-20260913/spur-check-shippable.log` line 1 through EOF. Replaces Evidence: G62 re-audit `.spur/run/0838-verify-answer.txt` line 1 through EOF and `.spur/run/0838-verdict.json` line 1 through EOF; prior artifacts are preserved under the closure run directory. |
+| R2 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:254` — queued assignments remain unstarted; `packages/app/tests/services/strategy-runtime.test.ts:527` — a rest switch holds subsequent tasks while running work retains its slot through reconciliation; `packages/app/tests/services/strategy-runtime.test.ts:598` — heartbeat prevents the running slot from expiring; `bun run spur-check` (exit 0). |
+| R3 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:363` — production loop acquires the declared owner, selects a ready authorized task through the real checker, refuses a second owner, reconciles and prevents duplicate dispatch after restart; `packages/app/tests/services/strategy-runtime.test.ts:177` — priority/WBS sorting happens before capacity allocation; `packages/app/tests/services/strategy-runtime.test.ts:568` — running readers consume capacity and prior task receipts cannot be redispatched; `bun run spur-check` (exit 0). |
+| R4 | MET | `packages/app/tests/services/strategy-runtime.test.ts:198` — every skipped candidate gets one actionable hold from the closed vocabulary; `apps/cli/tests/commands/agent-loop-wake.test.ts:363` — production loop acquires the declared owner, selects a ready authorized task through the real checker, refuses a second owner, reconciles and prevents duplicate dispatch after restart; `bun run spur-check` (exit 0). |
+| R5 | MET | `packages/app/src/services/strategy-runtime.ts:184` declares only rest and gtd; task enumeration/checking and the existing agent runner are reused without another workflow engine or backlog; `bun run spur-check` (exit 0). |
+| R6 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:363` — production loop acquires the declared owner, selects a ready authorized task through the real checker, refuses a second owner, reconciles and prevents duplicate dispatch after restart; `packages/app/tests/services/strategy-runtime.test.ts:471` — unresolved deliveries gate dispatch; `packages/app/tests/services/strategy-runtime.test.ts:568` — unfinished task/run receipts survive restart and prevent repeat dispatch; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R3 — GTD dispatches only eligible authorized work | UNMET | command | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/runtime-gap.test.ts` line 318; `cd apps/cli && bun test ../../.spur/run/g62-verifyall-20260913/runtime-gap.test.ts --test-name-pattern G62` (exit 1): GTD invokes queued input with no live owner or dispatch claim. `packages/app/tests/services/strategy-runtime.test.ts:170` — priority-before-capacity selection is repaired, but not used by dispatch; `bun run spur-check` (exit 0). |
-| R2 — Rest drains without starting new work | PARTIAL | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:250` — queued fleet input stays unstarted in rest; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:395` — rest selection preserves an existing slot; `bun run spur-check` (exit 0). Running-loop lease heartbeat/reconciliation integration is still absent. |
-| R6 — Restart resumes persisted state before dispatching | PARTIAL | test | `packages/app/tests/services/strategy-runtime.test.ts:383` — selection refuses offline ownership; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:464` — selection refuses unresolved deliveries; `bun run spur-check` (exit 0). Managed GTD draining still bypasses resume/selection, as the runtime audit demonstrates. |
+| R3 — GTD dispatches only eligible authorized work | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:363` — production loop acquires the declared owner, selects a ready authorized task through the real checker, refuses a second owner, reconciles and prevents duplicate dispatch after restart; `packages/app/tests/services/strategy-runtime.test.ts:177` — priority/WBS sorting happens before capacity allocation; `packages/app/tests/services/strategy-runtime.test.ts:568` — running readers consume capacity and prior task receipts cannot be redispatched; `bun run spur-check` (exit 0). |
+| R2 — Rest drains without starting new work | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:254` — queued assignments remain unstarted; `packages/app/tests/services/strategy-runtime.test.ts:527` — a rest switch holds subsequent tasks while running work retains its slot through reconciliation; `packages/app/tests/services/strategy-runtime.test.ts:598` — heartbeat prevents the running slot from expiring; `bun run spur-check` (exit 0). |
+| R6 — Restart resumes persisted state before dispatching | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:363` — production loop acquires the declared owner, selects a ready authorized task through the real checker, refuses a second owner, reconciles and prevents duplicate dispatch after restart; `packages/app/tests/services/strategy-runtime.test.ts:471` — unresolved deliveries gate dispatch; `packages/app/tests/services/strategy-runtime.test.ts:568` — unfinished task/run receipts survive restart and prevent repeat dispatch; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

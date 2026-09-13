@@ -4,7 +4,7 @@ name: Project fleet declaration with stable instance identity
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.720Z
-updated_at: "2026-09-13T07:31:48.025Z"
+updated_at: "2026-09-13T08:04:43.756Z"
 feature_id: G62
 priority: P1
 tags:
@@ -246,28 +246,34 @@ to decide who may take the write slot; 0838 selects among enabled members; 0847 
 - `FleetServiceContext` takes an injected `fs: FileSystem` port (no-direct-fs-io boundary rule) and optional `registry` so tests avoid touching the machine registry.
 - Missing declaration / all-disabled resolve cleanly (`missing: ['no-declaration']` / `['no-enabled-members']`) rather than erroring — R7.
 
+#### G62 closure — 2026-09-13
+
+This implementation supersedes the unresolved gaps recorded in the preceding re-audit. Registration, materialization, managed supervision and spec-addressed execution now call the shared ground-truth validator. It compares process cwd, spec workspace, filesystem root and SQLite backing file; project aliases pass while foreign storage roots fail. The supervisor always uses the managed loop for fleet specs.
+
+Regression evidence is recorded in the refreshed Testing section. New changes are intentionally uncommitted for the operator's next step.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves stable member identity and capability state; `bun run spur-check` (exit 0). Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0835-verify-answer.txt` line 1–39; Evidence: G62 re-audit `.spur/run/0835-verdict.json` line 1–110. Measured repository coverage: 98.99% lines, 99.21% functions. |
-| R2 | MET | `packages/app/tests/services/fleet-service.test.ts:352` — hand-authored specs survive projection; generated specs are pruned separately; `bun run spur-check` (exit 0). |
-| R3 | MET | `packages/app/tests/services/fleet-service.test.ts:183` — explicit member identity survives executor replacement and reorder through the shared allocator; `bun run spur-check` (exit 0). |
-| R4 | MET | `packages/app/tests/services/fleet-service.test.ts:234` — capability comes from executor attestation, never role; `bun run spur-check` (exit 0). |
-| R5 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — resolved fleet contains desired member state; liveness is a separate claim projection; `bun run spur-check` (exit 0). |
-| R6 | PARTIAL | `packages/app/tests/services/fleet-service.test.ts:337` — materialization rejects cwd/storage mismatches; `bun run spur-check` (exit 0). Actual managed registration/launch does not route through this materialization guard; `packages/app/src/services/fleet-service.ts:440` and `apps/cli/src/commands/agent.ts:1006`. |
-| R7 | MET | `packages/app/tests/services/fleet-service.test.ts:262` — absent declaration resolves an empty fleet with a named missing condition; `bun run spur-check` (exit 0). |
+| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves member identity and executor capability; `bun run spur-check` (exit 0). Measured repository coverage: 98.99% lines, 99.21% functions. Evidence: G62 closure `.spur/run/g62-verifyall-20260913/spur-check-shippable.log` line 1 through EOF. Replaces Evidence: G62 re-audit `.spur/run/0835-verify-answer.txt` line 1 through EOF and `.spur/run/0835-verdict.json` line 1 through EOF; prior artifacts are preserved under the closure run directory. |
+| R2 | MET | `packages/app/tests/services/fleet-service.test.ts:352` — projection preserves hand-authored specs and prunes generated specs separately; `bun run spur-check` (exit 0). |
+| R3 | MET | `packages/app/tests/services/fleet-service.test.ts:183` — identity survives executor replacement and reorder; `bun run spur-check` (exit 0). |
+| R4 | MET | `packages/app/tests/services/fleet-service.test.ts:234` — capability derives from executor attestation, never role; `bun run spur-check` (exit 0). |
+| R5 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — declaration remains desired state; ownership is resolved separately; `bun run spur-check` (exit 0). |
+| R6 | MET | `packages/app/tests/services/fleet-service.test.ts:741` — registration validates the actual filesystem root; `packages/app/tests/services/fleet-service.test.ts:765` — SQLite backing storage is checked; `packages/app/tests/services/fleet-service.test.ts:782` — canonical project aliases are accepted and foreign storage aliases refused; `packages/app/tests/services/agent-service.test.ts:4368` — real AgentService validates cwd/workspace and managed launch authority; `packages/app/tests/services/supervisor-service.test.ts:812` — supervision rejects foreign storage before spawn; `bun run spur-check` (exit 0). |
+| R7 | MET | `packages/app/tests/services/fleet-service.test.ts:262` — missing declaration produces an empty fleet with a named missing condition; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — A project declares its fleet and one orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves stable member identity and capability state; `bun run spur-check` (exit 0). `packages/app/tests/services/fleet-service.test.ts:702` — declared orchestrator resolves through the binding service; `bun run spur-check` (exit 0). |
-| Identity survives executor replacement and reorder | MET | test | `packages/app/tests/services/fleet-service.test.ts:183` — explicit member identity survives executor replacement and reorder through the shared allocator; `bun run spur-check` (exit 0). |
-| Read-only is proven, not assumed | MET | test | `packages/app/tests/services/fleet-service.test.ts:234` — capability comes from executor attestation, never role; `bun run spur-check` (exit 0). |
-| Launch validates its own ground truth | PARTIAL | test | `packages/app/tests/services/fleet-service.test.ts:337` — materialization rejects cwd/storage mismatches; `bun run spur-check` (exit 0). Actual managed registration/launch does not route through this materialization guard; `packages/app/src/services/fleet-service.ts:440` and `apps/cli/src/commands/agent.ts:1006`. |
+| R1 — A project declares its fleet and one orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves member identity and executor capability; `packages/app/tests/services/fleet-service.test.ts:702` — declared orchestrator binding resolves online; `bun run spur-check` (exit 0). |
+| Identity survives executor replacement and reorder | MET | test | `packages/app/tests/services/fleet-service.test.ts:183` — identity survives executor replacement and reorder; `bun run spur-check` (exit 0). |
+| Read-only is proven, not assumed | MET | test | `packages/app/tests/services/fleet-service.test.ts:234` — capability derives from executor attestation, never role; `bun run spur-check` (exit 0). |
+| Launch validates its own ground truth | MET | test | `packages/app/tests/services/fleet-service.test.ts:741` — registration validates the actual filesystem root; `packages/app/tests/services/fleet-service.test.ts:765` — SQLite backing storage is checked; `packages/app/tests/services/fleet-service.test.ts:782` — canonical project aliases are accepted and foreign storage aliases refused; `packages/app/tests/services/agent-service.test.ts:4368` — real AgentService validates cwd/workspace and managed launch authority; `packages/app/tests/services/supervisor-service.test.ts:812` — supervision rejects foreign storage before spawn; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
