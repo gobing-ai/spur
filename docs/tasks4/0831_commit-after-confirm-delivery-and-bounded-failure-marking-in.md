@@ -4,7 +4,7 @@ name: Commit-after-confirm delivery and bounded failure marking in the agent dra
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:29.914Z
-updated_at: "2026-09-12T05:54:03.798Z"
+updated_at: "2026-09-13T06:49:49.274Z"
 feature_id: G61
 
 ---
@@ -210,103 +210,66 @@ Neither may re-own the settle decision.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
-- `~/xprojects/ts-libs/packages/db/src/inbox-message-dao.ts`: additive `release(msgIds)` —
-  `UPDATE ... SET status='queued' WHERE id IN (...) AND status='injected'`; `injectAttempts`/
-  `injectError` untouched (the claim counter IS the budget), `message.requeued` event emitted.
-  Published as `@gobing-ai/ts-db@0.4.64` (GHA Trusted Publishing via aggregate tag, run
-  34675557095); spur catalog bumped to `^0.4.64` (+ ts-* family aligned at `^0.4.63` to keep
-  one EventBus copy), `bun install` regenerates bun.lock. All part of this task's diff.
-- `packages/app/src/services/team-service.ts`: `releasePending(msgIds)`, `settleDelivered(msgIds)`
-  (per-id `markDelivered`), `settleFailed(msgIds, error)` (per-id `markFailed`); empty lists no-op.
-- `apps/cli/src/commands/agent.ts`: `drainIntoPrompt` returns `claimed: string[]`
-  (~:560–640); `MAX_INJECT_ATTEMPTS = 3`; exported `settleClaimedMessages(context, claimed,
-  outcome)` — outcome `'accepted'` → settleDelivered; `'not-started'` → rows still `injected`:
-  `injectAttempts >= 3` → settleFailed("... never started ..."), else releasePending (already-
-  settled rows skipped). Acceptance detected via `bus.on('agent.invoke.start')` on the run bus —
-  never from exit code (exit 2 is both validation failure and legitimate agent exit).
-  `runAgentRun` (~:545–625) creates the bus, flips `invocationStarted`, tracks `claimed`
-  immediately after the drain, settles in `finally` before `ledger.flush()`. `runAgentLoop`
-  (~:730–780) same bus + per-iteration try/finally so released rows redeliver next iteration.
+Re-audit fixes and current change map:
 
-**Change map (authoritative)**: apps/cli/src/commands/agent.ts:460 (MAX_INJECT_ATTEMPTS), apps/cli/src/commands/agent.ts:471 (settleClaimedMessages), apps/cli/src/commands/agent.ts:584/820 (settles in finally), packages/app/src/services/team-service.ts:379/390/401 (releasePending/settleDelivered/settleFailed), ~/xprojects/ts-libs/packages/db/src/inbox-message-dao.ts:213-235 (release verb), apps/cli/tests/commands/agent-team.test.ts:690-886 (regressions).
-- Acceptance semantics (Design Q&A): started-but-nonzero → delivered (state transition IS the
-  confirmation); started+unresponsive → delivered (progress-gate separate); settled-only-rows
-  that no longer exist or aren't `injected` are skipped without error.
+- `apps/cli/src/commands/agent.ts:541` — shared settle releases never-started claims within budget; delivered is separate from process exit
+- `apps/cli/src/commands/agent.ts:599` — listener relies on runner acceptance; installed 0.4.63 emits before spawn, as g61-installed-runner-probe.log shows
+- `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case
+- `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior
+
+Upstream fix committed in ts-libs as f967214: `packages/ai-runner/src/ai-runner.ts` line 243 emits invoke.start from ProcessOptions.onSpawn. This matches R5 while fixing its false pre-spawn signal. The source passes its full gate (2250 tests) and build. Spur still resolves published 0.4.63; release/install is pending operator approval. The installed probe is `.spur/run/g61-installed-runner-probe.mjs` lines 1-15; its log proves the residual failure.
 
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: FAIL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | delivery finalized only after invocation accepted; never-started claim released to queued, redeliverable: apps/cli/src/commands/agent.ts:471-503 (settleClaimedMessages: not-started → releasePending; guarded `status='injected'`), ~/xprojects/ts-libs/packages/db/src/inbox-message-dao.ts:213-235 (release: UPDATE ... SET status='queued' WHERE id IN (...) AND status='injected', injectAttempts untouched), packages/app/src/services/team-service.ts:379-382; test apps/cli/tests/commands/agent-team.test.ts:690-729 (released back to queued, redeliverable, attempts preserved) |
-| R2 | MET | delivery state separate from run outcome: started invocation settles delivered regardless of exit; markFailed reserved for never-started: apps/cli/src/commands/agent.ts:477-479 (accepted → settleDelivered only), packages/app/src/services/team-service.ts:390-406; test apps/cli/tests/commands/agent-team.test.ts:781-821 (start-then-nonzero-exit → status delivered, exit code irrelevant) |
-| R3 | MET | bounded by injectAttempts; exhausted budget → failed with queryable reason, MAX_INJECT_ATTEMPTS=3: apps/cli/src/commands/agent.ts:460 (MAX_INJECT_ATTEMPTS=3), :486-502 (injectAttempts >= 3 → settleFailed with reason "delivery not accepted: invocation never started after 3 inject attempts"); test apps/cli/tests/commands/agent-team.test.ts:731-779 (loop burns 3 attempts → status failed, injectAttempts=3, reason asserted) |
-| R4 | MET | long-lived loop observes same contract; keeps iterating after failure without losing row: apps/cli/src/commands/agent.ts:790-825 (loop: same bus, per-iteration try/finally settle, released rows redeliver next drain); test apps/cli/tests/commands/agent-team.test.ts:731-779 (loop keeps iterating; redelivery within budget then terminal failed) |
-| R5 | MET | acceptance from `agent.invoke.start` lifecycle event, never exit code: apps/cli/src/commands/agent.ts:525-533 (runAgentRun bus.on('agent.invoke.start')) and :791-798 (runAgentLoop same); exit-code-independent settle at :583-585 and :818-821; exit-2 pre-spawn validation path returns before svc.run yet still settles in finally (:566-574, :581-585) |
-| R6 | MET | default-on, no compatibility flag: git diff HEAD shows no flag/config addition in apps/cli/src/commands/agent.ts or team-service.ts; settle is unconditional in both runAgentRun (:584) and runAgentLoop (:820) |
-| R7 | MET | 0828 probes rewritten as regressions; probe 4 keeps at-most-once: apps/cli/tests/commands/agent-team.test.ts:619-654 (header: flipped by 0831), :655-688 (was probe 1 → delivered), :690-729 (release regression), :853-886 (probe 4 competing consumers at-most-once retained); fresh run: bun test tests/commands/agent-team.test.ts → 35 pass / 0 fail |
+| R1 | UNMET | `apps/cli/tests/commands/agent-team.test.ts:673` — fresh CLI test passes for validation-before-spawn failure; real executor failure still fails installed-runner probe |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:753` — fresh regression checks started/nonzero invocation remains delivered |
+| R3 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
+| R4 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
+| R5 | UNMET | `apps/cli/src/commands/agent.ts:599` — listener relies on runner acceptance; installed 0.4.63 emits before spawn, as g61-installed-runner-probe.log shows |
+| R6 | MET | `apps/cli/src/commands/agent.ts:654` — unconditional settle in finally; one-shot and loop use the same helper |
+| R7 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Delivery is finalized after the invocation is accepted | MET | test | apps/cli/tests/commands/agent-team.test.ts:690-729 (pre-spawn validation-failure run releases row to queued, injectAttempts preserved, redelivered next drain); code apps/cli/src/commands/agent.ts:471-503 |
-| A failing invocation is durably recorded | MET | test | apps/cli/tests/commands/agent-team.test.ts:731-779 (status failed, injectAttempts=3, queryable reason via injectError/settle reason); code packages/app/src/services/team-service.ts:401-406 |
-| Attempts are bounded | MET | test | apps/cli/tests/commands/agent-team.test.ts:729-779 (no further redelivery after budget exhausted); code apps/cli/src/commands/agent.ts:460,491 |
-| Long-lived loops observe the same contract | MET | test | apps/cli/tests/commands/agent-team.test.ts:731-779; code apps/cli/src/commands/agent.ts:790-825 |
-| Competing consumers still claim at most once | MET | test | apps/cli/tests/commands/agent-team.test.ts:853-886; SQL guard ~/xprojects/ts-libs/packages/db/src/inbox-message-dao.ts:130-150 (conditional UPDATE ... AND status='queued') |
+| Scenario: Delivery is finalized after the invocation is accepted | UNMET | test | `apps/cli/tests/commands/agent-team.test.ts:673` — fresh CLI test passes for validation-before-spawn failure; real executor failure still fails installed-runner probe; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
+| Scenario: A failing invocation is durably recorded | PARTIAL | test | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
+| Scenario: Attempts are bounded | PARTIAL | test | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
+| Scenario: Long-lived loops observe the same contract | PARTIAL | test | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
+| Scenario: Competing consumers still claim at most once | MET | test | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### G61 forced re-audit — 0831
 
-**Verdict: PASS** (reviewer sp-super-reviewer, 2026-09-12, @ HEAD 3761051f9 + uncommitted diff;
-profile=auto, mode=safety).
+Verdict: FAIL
 
-##### Findings (ranked)
+Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source and the fixes in this run.
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P4 (advisory) | — | No P1–P3 findings: all 7 requirements verified against 6 changed code/test files; R1–R7 traced to fresh passing tests (see below). Findings below are advisory-only. | `apps/cli/src/commands/agent.ts:459-495` |
-| 2 | P4 (advisory) | housekeeping | Zero-byte untracked scratch files `probe.disc`, `probe-equals-if-any` sit in the working tree; do not include them in the task commit (`.spur/host/` is pipeline staging, also untracked). | `probe.disc`, `probe-equals-if-any` |
-| 3 | P4 (advisory) | architecture | `settleClaimedMessages` reaches `InboxMessageDao.getById` directly while settle/release go through `TeamService` — two inbox access paths in one helper. Pragmatic (no TeamService.getById); fine to leave. | `apps/cli/src/commands/agent.ts:478-479` |
-| 4 | P4 (advisory) | efficiency | Exhausted-budget settle calls `settleFailed` per id (N sequential `markFailed` calls + N `message.failed` events). Bounded by drain limit 100; batch only if exhaustion becomes common. | `apps/cli/src/commands/agent.ts:487-490` |
-| 5 | P4 (advisory) | correctness | If `settleClaimedMessages` itself throws inside either `finally`, it would shadow the original run result/exception. Low likelihood (plain DAO updates); acceptable for now. | `apps/cli/src/commands/agent.ts:581-583`, `:822-824` |
-| 6 | P4 (advisory) | usability (tests) | `captureInvokeStart` monkey-patches `EventBus.prototype.on` globally; contained by per-test `restore()` in `finally` and bun's sequential in-file execution, but it is a global seam — keep one instance at a time. | `apps/cli/tests/commands/agent-team.test.ts:637-658` |
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P1 | Correctness | `apps/cli/src/commands/agent.ts:599` | Installed ts-ai-runner 0.4.63 emits acceptance before process creation. A spawn failure can consume the message. Upstream fix f967214 passes its full gate and build, but remains unpublished. Installed probe still exits 1; this task is not certified. |
 
-Residual risk (recorded, not blocking): the attempt budget is enforced at settle time, not in the
-claim SQL, so a released row is claimed up to exactly `MAX_INJECT_ATTEMPTS` times before resting
-`failed` — that matches R3 and the frozen design (claim must stay unconditional for probe 4).
-`history_etl_deepseek` expectation updates in the two domain tests are ripple from the approved
-ts-libs family bump (importer registry grew to 16 tables), not 0831 logic.
-
-##### Functional Traceability
-
+#### Functional traceability
 | Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | claim-then-release: `settleClaimedMessages` `not-started` path → `releasePending` (guard `status='injected'`) — `apps/cli/src/commands/agent.ts:478-486`, `~/xprojects/ts-libs/packages/db/src/inbox-message-dao.ts:213-231`; test asserts release + redelivery with attempts preserved (`apps/cli/tests/commands/agent-team.test.ts:690-712`) |
-| R2 | MET | started invocation settles `delivered` regardless of exit; `settleFailed` reserved for never-started — `agent.ts:472-475`, `packages/app/src/services/team-service.ts:384-396`; test `start-then-exit-7 → delivered` (`agent-team.test.ts:781-812`) |
-| R3 | MET | `MAX_INJECT_ATTEMPTS = 3` (`agent.ts:459`); exhaustion → `settleFailed` with queryable reason; test: loop burns 3 attempts → `failed`, `injectAttempts=3`, reason contains "never started" (`agent-team.test.ts:729-753`) |
-| R4 | MET | loop shares the acceptance rule (same bus) and settles per-iteration in `finally`; released row redelivers next iteration; loop-keeps-iterating asserted (`agent.ts:789-824`, `agent-team.test.ts:729-753`) |
-| R5 | MET | acceptance = `bus.on('agent.invoke.start')` in both call sites; exit code never consulted for delivery (`agent.ts:525-533`, `:796-799`); real emitter confirmed at `~/xprojects/ts-libs/packages/ai-runner/src/ai-runner.ts:232` (sync handlers run inside `emit` before first await — flag flips before `svc.run` resolves) |
-| R6 | MET | no compatibility flag anywhere in the diff; default-on in both `runAgentRun` and `runAgentLoop` |
-| R7 | MET | 0828 probes 1/2 flipped to regressions; probe 4 retained asserting at-most-once claim (`agent-team.test.ts:853-886`); all frozen names present: `release`, `releasePending`, `settleDelivered`, `settleFailed`, `claimed: string[]`, `settleClaimedMessages(context, claimed, outcome)` |
+| --- | --- | --- |
+| R1 | UNMET | `apps/cli/tests/commands/agent-team.test.ts:673` — fresh CLI test passes for validation-before-spawn failure; real executor failure still fails installed-runner probe |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:753` — fresh regression checks started/nonzero invocation remains delivered |
+| R3 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
+| R4 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
+| R5 | UNMET | `apps/cli/src/commands/agent.ts:599` — listener relies on runner acceptance; installed 0.4.63 emits before spawn, as g61-installed-runner-probe.log shows |
+| R6 | MET | `apps/cli/src/commands/agent.ts:654` — unconditional settle in finally; one-shot and loop use the same helper |
+| R7 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior |
 
-Anti-pattern checks (Design): no peek-then-claim (claim SQL untouched, probe 4 green); nonzero run
-never marks `failed` (R2 test proves the opposite); `injectAttempts` not reset on release
-(`ts-libs .../inbox-message-dao.ts:213-231` sets only `status`/`updated_at`); no in-iteration retry
-(release, redeliver next iteration); no Spur-local inbox migration (engine-only change, published
-`@gobing-ai/ts-db@0.4.64`).
+Verification: fresh bun run spur-check exit 0 (8496 tests, 99.21% functions / 98.99% lines), bun run test-cf exit 0, bun run build exit 0. Focused evidence and corrected Design deviations are recorded in Testing and Solution. No new public verb or dependency-local workaround.
 
-Fresh verification evidence (run during this review): `bun test tests/commands/agent-team.test.ts`
-→ 35 pass / 0 fail; full `apps/cli` `bun test` → 1041 pass / 0 fail; `packages/domain` dao+analytics
-tests (incl. both bumped expectations) → 229 pass / 0 fail; `tsc --noEmit` → exit 0.
-
-**Next:** dispose advisories at commit time (exclude `probe.disc`/`probe-equals-if-any`); proceed
-to 0833 (receipt) — it consumes the settled `delivered` ids and must not re-own the settle decision.
+--next: no-op - task already terminal (done). Existing done status is historical; the current verdict above is the re-audit result.
 
 ### References
 
