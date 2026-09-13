@@ -62,7 +62,7 @@ around them.
 | Enforce project constraints (imports, secrets, structure) | `spur rule run`                                                  |
 | Run a multi-step agent workflow / dev loop                | `spur workflow run <file>.yaml`                                  |
 | Import and analyze agent conversation history & cost      | `spur history import` / `spur history analyze`                   |
-| Coordinate team agents and durable messages               | `spur message ...` / `spur team ...`                             |
+| Coordinate team agents and durable messages               | `spur message ...` / `spur agent ...` / `spur task update --assignee` |
 | Inspect rule/workflow run history                         | `spur rule trace` / `spur workflow trace`                        |
 | Scaffold a Spur project                                   | `spur init`                                                      |
 | Manage markdown task files (WBS, sections, status)        | `spur task ...` _(ADR-020)_                                      |
@@ -93,7 +93,7 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | Executor availability and quota-driven project updates      | Existing executor config, routing, and `spur agent doctor` | B5 (recovery detection and account-wide fan-out deferred) |
 | Agent spec management                                      | `spur agent create\|edit\|delete`, `list --specs`  | `ts-ai-runner` spec helpers                |
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `MessageService` + ts-db                   |
-| Team coordination                                          | `spur team assign\|status\|up\|down\|start\|stop` | `TeamService` + `SupervisorService` (`spur serve`) |
+| Team coordination                                          | `spur task update --assignee`, `spur agent list --specs\|start\|stop` | `TeamService` + `SupervisorService` (`spur serve`) |
 | Inter-agent control plane (occupant identity, coordination artifacts, pinned wait) | existing `spur agent` / `spur message` (no new noun) | ADR-057; feature G4 |
 | Team-scoped Board composition                              | Spur Board Teams / Inbox / Workspace                | existing team, message, and task surfaces  |
 | Constraint rule evaluation / discovery / validation        | `spur rule run\|list\|validate`                    | `ts-rule-engine`                           |

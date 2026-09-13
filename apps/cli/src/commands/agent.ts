@@ -1,11 +1,19 @@
+import { randomUUID } from 'node:crypto';
 import type { Command } from '@commander-js/extra-typings';
 import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
     type AgentRunDeps,
     AgentService,
     type AgentSpecInput,
+    DeliveryReconciler,
+    FleetService,
+    FOLLOW_POLL_INTERVAL_MS,
     followSystemEventsAfter,
+    MAX_INJECT_ATTEMPTS,
+    normalizeProjectPath,
     resolveAgentSelector,
+    resolvePlanningFolders,
+    StrategyRuntime,
     type SystemEventBus,
     TeamService,
     WaitError,
@@ -13,7 +21,7 @@ import {
     waitForOccupant,
 } from '@gobing-ai/spur-app';
 import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
-import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
+import { InboxMessageDao, SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -22,6 +30,8 @@ import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
+import { makeCheckService, makeService } from './task';
+import { DEFAULT_TEAM_SERVER, fetchServerProcesses, runTeamStart, runTeamStop } from './team';
 
 export type { AgentRunDeps };
 
@@ -35,12 +45,14 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--specs', 'List team specs instead of detected agents')
+        .option('--server <url>', 'Server API URL for live run status (with --specs)', DEFAULT_TEAM_SERVER)
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
             const code = await runAgentList(svc, context, {
                 json: options.json,
                 jsonEnvelope: options.jsonEnvelope,
                 specs: options.specs,
+                server: options.server,
             });
             context.setExitCode(code);
         });
@@ -219,6 +231,45 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             const code = await runAgentDelete(id, context, flags);
             context.setExitCode(code);
         });
+
+    // 0848: per-spec process lifecycle moved here from `spur team start|stop` (R1).
+    // Both delegate to the team.ts runners — same POST /api/team/agents/:id/{start,stop}
+    // endpoints, same response translation, same unreachable-server error text.
+    agent
+        .command('start')
+        .description('Start a supervised agent process (requires spur serve).')
+        .argument('<spec-id>', 'Agent spec id')
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (specId, options) => {
+            // 0697 AC4: the advertised flag's decision rides visibly on the delegated
+            // options — the implementation envelopes when `json` is set and `jsonEnvelope`
+            // picks the envelope form (runTeamStart, the moved team.ts implementation).
+            const code = await runTeamStart(
+                specId,
+                { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
+                context,
+            );
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('stop')
+        .description('Stop a supervised agent process (requires spur serve).')
+        .argument('<spec-id>', 'Agent spec id')
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (specId, options) => {
+            // Same threading contract as `agent start` (0697 AC4).
+            const code = await runTeamStop(
+                specId,
+                { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
+                context,
+            );
+            context.setExitCode(code);
+        });
 }
 
 /** Map commander-style camelCase option keys to kebab-case flags internal handlers expect. */
@@ -260,12 +311,29 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
 async function runAgentList(
     svc: AgentService,
     context: CliContext,
-    opts: { json?: boolean; jsonEnvelope?: boolean; specs?: boolean },
+    opts: { json?: boolean; jsonEnvelope?: boolean; specs?: boolean; server?: string },
 ): Promise<number> {
     if (!opts.specs) {
         return svc.list({ json: opts.json ?? false, enveloped: opts.jsonEnvelope });
     }
     const specs = await new TeamService(context).listAgentSpecs();
+    // 0848: `agent list --specs` inherited `team status`'s live-run merge. The CLI
+    // process never owns the supervisor — specs are spawned by `spur serve` — so the
+    // local listing is only the desired state until the server's process table
+    // overrides it. Unreachable server ⇒ same fallback (all `stopped`) and same
+    // stderr warning as `team status`, so offline listing still works.
+    const server = opts.server ?? DEFAULT_TEAM_SERVER;
+    const live = await fetchServerProcesses(server);
+    if (live === null) {
+        context.output.error(
+            `Cannot reach server at ${server} — showing local specs as stopped. Is spur serve running?`,
+        );
+    }
+    const statusOf = (id: string): { status: string; pid?: number } => {
+        const proc = live?.get(id);
+        if (proc === undefined) return { status: 'stopped' };
+        return proc.pid !== null ? { status: proc.status, pid: proc.pid } : { status: proc.status };
+    };
     if (opts.json) {
         context.output.write(
             toEnvelopeJson(
@@ -279,6 +347,7 @@ async function runAgentList(
                             ? { role: spec.config.role }
                             : {}),
                         ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
+                        ...statusOf(spec.id),
                         path: `.spur/agents/${spec.id}.yaml`,
                     })),
                 },
@@ -292,13 +361,17 @@ async function runAgentList(
         return 0;
     }
     // 0544 R2/R4: role and executor are distinct columns; undeclared renders `unset`.
+    // 0848: live run status is the trailing column (`stopped` + pid suffix), mirroring
+    // `team status`'s `pid=<n>` rendering.
     context.output.write(
         specs
             .map((spec) => {
                 const role =
                     typeof spec.config?.role === 'string' && spec.config.role.length > 0 ? spec.config.role : 'unset';
                 const executor = spec.executor ?? 'unset';
-                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}`;
+                const { status, pid } = statusOf(spec.id);
+                const pidSuffix = pid === undefined ? '' : ` pid=${pid}`;
+                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}\t${status}${pidSuffix}`;
             })
             .join('\n'),
     );
@@ -456,6 +529,47 @@ function jsonFlags(flags: Record<string, string | boolean>): { json?: boolean; j
     };
 }
 
+/**
+ * Settle messages claimed by a drain (0831): a claimed row ends in exactly one of
+ * `delivered` (invocation accepted — seen `agent.invoke.start` on the run bus),
+ * `queued` (released for redelivery — the invocation never started and the row
+ * still has attempt budget), or `failed` (never started AND the budget is
+ * exhausted). The exit code is irrelevant to delivery: a run that started is
+ * delivered (0831 R2), and delivery failure is never inferred from the exit
+ * code (0831 R5). Called from a `finally` so an abort still settles.
+ */
+export async function settleClaimedMessages(
+    context: CliContext,
+    claimed: string[],
+    outcome: 'accepted' | 'not-started',
+): Promise<void> {
+    if (claimed.length === 0) return;
+    const team = new TeamService(context);
+    if (outcome === 'accepted') {
+        await team.settleDelivered(claimed);
+        return;
+    }
+    // Not started: release within the claim budget, else a queryable terminal failure.
+    const dao = new InboxMessageDao(await context.getDb());
+    const releasable: string[] = [];
+    const exhausted: string[] = [];
+    for (const id of claimed) {
+        const row = await dao.getById(id);
+        // Already settled on another path (e.g. the live stdin-injection delivery)
+        // or gone — never re-settle someone else's row.
+        if (row?.status !== 'injected') continue;
+        if (row.injectAttempts >= MAX_INJECT_ATTEMPTS) exhausted.push(id);
+        else releasable.push(id);
+    }
+    if (releasable.length > 0) await team.releasePending(releasable);
+    for (const id of exhausted) {
+        await team.settleFailed(
+            [id],
+            `delivery not accepted: invocation never started after ${MAX_INJECT_ATTEMPTS} inject attempts`,
+        );
+    }
+}
+
 /** Execute `spur agent run <prompt> [flags]`. */
 export async function runAgentRun(
     prompt: string | undefined,
@@ -478,6 +592,14 @@ export async function runAgentRun(
     // bridge, same crossing the ledger attach performs above).
     const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
     const svc = context.agentService({ events: bus });
+    // 0831: acceptance is detected from the `agent.invoke.start` lifecycle event —
+    // never from an exit code (exit 2 is both a pre-spawn validation failure and a
+    // legitimate agent exit). The sync listener flips before `svc.run` resolves.
+    let invocationStarted = false;
+    bus.on('agent.invoke.start', () => {
+        invocationStarted = true;
+    });
+    let claimed: string[] = [];
     try {
         // `--spec <id>` (canonical, 0542 R1) or the legacy `--agent <spec-id>`
         // names the occupant address; `--drain` is DB-backed, so it is resolved in
@@ -488,7 +610,14 @@ export async function runAgentRun(
         // executor/type so resolution still works; in Phase 1-3 there is no live
         // stdin, so prepending is how deferred messages reach the agent.
         if (flags.drain === true || typeof flags.spec === 'string') {
-            const { prompt: drained, flags: rewritten } = await drainIntoPrompt(prompt, context, flags);
+            const {
+                prompt: drained,
+                flags: rewritten,
+                claimed: drainedIds,
+            } = await drainIntoPrompt(prompt, context, flags);
+            // Track the claim immediately: a validation failure BEFORE the run
+            // must still settle (release) the rows, not strand them at injected.
+            claimed = drainedIds;
             // R1 (0542): an explicit --spec must resolve to a real team spec — a
             // typo'd id must not silently fall through to auto resolution.
             if (typeof flags.spec === 'string' && flags.spec !== '' && rewritten['spec-id'] !== flags.spec) {
@@ -518,6 +647,11 @@ export async function runAgentRun(
         }
         return await svc.run(prompt, flags, deps);
     } finally {
+        // Settle AFTER the run attempt (0831 R1/R3): in a finally so an abort or
+        // early validation failure still settles the claim. Only the drained path
+        // (drainIntoPrompt above) claims messages — the released ids go back to
+        // `queued` for redelivery; rows whose invocation started settle `delivered`.
+        await settleClaimedMessages(context, claimed, invocationStarted ? 'accepted' : 'not-started');
         await ledger.flush();
         ledger.unsubscribe();
         // 0799 R1: flush recorded quota observations before process exit.
@@ -544,13 +678,13 @@ async function drainIntoPrompt(
     prompt: string | undefined,
     context: CliContext,
     flags: Record<string, string | boolean>,
-): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean> }> {
+): Promise<{ prompt: string | undefined; flags: Record<string, string | boolean>; claimed: string[] }> {
     const specFlag = typeof flags.spec === 'string' ? flags.spec : '';
     const agentFlag = typeof flags.agent === 'string' ? flags.agent : '';
     const recipient = specFlag !== '' ? specFlag : agentFlag;
     if (recipient === '' || recipient === 'auto') {
         context.output.error('--drain requires an explicit --spec <id> matching a message recipient');
-        return { prompt, flags };
+        return { prompt, flags, claimed: [] };
     }
 
     const team = new TeamService(context);
@@ -563,15 +697,26 @@ async function drainIntoPrompt(
         spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: drainAgentSelector(spec, context) };
 
     // `--spec` without `--drain`: address the occupant, leave the inbox alone.
-    if (flags.drain !== true) return { prompt, flags: flagsOut };
+    if (flags.drain !== true) return { prompt, flags: flagsOut, claimed: [] };
 
     const inbox = await team.drainPending(recipient);
-    if (inbox.count === 0) return { prompt, flags: flagsOut };
+    if (inbox.count === 0) return { prompt, flags: flagsOut, claimed: [] };
 
     const header = inbox.messages.map((m) => `- ${m.fromId ?? 'operator'}: ${m.body}`).join('\n');
     const block = `Pending messages:\n${header}`;
     const merged = prompt === undefined ? block : `${block}\n\n${prompt}`;
-    return { prompt: merged, flags: flagsOut };
+    const claimed = inbox.messages.map((m) => m.id);
+    // Claimed ids (0831): the caller must settle these rows once it knows whether
+    // the invocation started — spawned-but-settled-later is the whole 0831 contract.
+    // 0833: the same ids ride into executeRun as the requestMessage flag (comma-
+    // joined, dual spelling per the sessionDir convention) so the exit sink can
+    // persist the run↔message receipt.
+    const requestMessage = claimed.join(',');
+    return {
+        prompt: merged,
+        flags: { ...flagsOut, requestMessage, 'request-message': requestMessage },
+        claimed,
+    };
 }
 
 /**
@@ -634,20 +779,18 @@ export function _resetAgentFlagShimsForTest(): void {
     warnedAgentSpecId.clear();
 }
 
-/** Default idle poll interval for `spur agent loop` (ms). */
+/** Default wakeup-backstop timeout for `spur agent loop` (ms) — `--poll` (0839 R5). */
 const DEFAULT_LOOP_POLL_MS = 2000;
 
-/** Injectable knobs for {@link runAgentLoop} — tests pass maxIterations/sleep to avoid real waits. */
+/** Injectable knobs for {@link runAgentLoop} — tests pass maxIterations/signal to bound runs. */
 export interface AgentLoopRuntime {
     /** Aborting ends the loop cleanly (SIGINT/SIGTERM in the CLI action). */
     signal?: AbortSignal;
     /** Hard cap on iterations (tests only); undefined = run until aborted. */
     maxIterations?: number;
-    /** Sleep override; defaults to a cancellable setTimeout. */
-    sleep?: (ms: number) => Promise<void>;
 }
 
-/** Parse the `--poll` flag; falls back to the default for non-positive/non-numeric input. */
+/** Parse the `--poll` backstop timeout; falls back to the default for non-positive/non-numeric input. */
 function parseLoopPoll(raw: string | boolean | undefined): number {
     if (typeof raw !== 'string') return DEFAULT_LOOP_POLL_MS;
     const n = Number.parseInt(raw, 10);
@@ -694,14 +837,166 @@ function loopSleep(ms: number, signal?: AbortSignal): Promise<void> {
     });
 }
 
+/** Render a reconcile report as run-log lines (0834 R2): summary, then one line per held message. */
+function formatReconcileReport(report: {
+    unresolved: Array<{ messageId: string; reason: string; injectAttempts: number; runId?: string }>;
+    exhausted: string[];
+    scanned: number;
+}): string {
+    const lines = [
+        `reconcile: scanned=${report.scanned} unresolved=${report.unresolved.length} exhausted=${report.exhausted.length}`,
+    ];
+    for (const u of report.unresolved) {
+        const run = u.runId !== undefined ? ` run=${u.runId}` : '';
+        lines.push(`  ${u.messageId} ${u.reason} attempts=${u.injectAttempts}${run}`);
+    }
+    return lines.join('\n');
+}
+
+/**
+ * The four wake sources (0839 R1): a human request (a ledgered `message.sent`
+ * — Board/server senders persist it), a strategy change (`strategy.changed`,
+ * emitted by StrategyRuntime.setStrategy), a task or capacity change
+ * (`fleet.capacity.changed`, emitted by WriteSlotService claim/release), and a
+ * completion receipt (`agent.invoke.exit`, persisted by every ledger-attached
+ * run — 0833 writes the receipt in the same exit sink). Nothing else wakes the
+ * loop; an unfiltered follow would re-create the hot loop with extra steps.
+ */
+const WAKE_EVENT_NAMES = [
+    'message.sent', // human request / orchestrator order   (existing)
+    'strategy.changed', // strategy change                      (new)
+    'fleet.capacity.changed', // task or capacity change        (new)
+    'agent.invoke.exit', // completion receipt (0833 writes it in the same sink)
+] as const;
+type WakeSource = (typeof WAKE_EVENT_NAMES)[number] | 'backstop-timeout';
+
+/** What ended one wait: the wake event consumed, or the `--poll` backstop timeout. */
+interface WakeResult {
+    source: WakeSource;
+    /** The ledger cursor the loop resumes from — never replays a seen row. */
+    sequence: number;
+}
+
+/** Batch size for the wake poll — mirrors the shared follower's query batch. */
+const WAKE_FOLLOW_BATCH = 512;
+
+/**
+ * Wait for the next wake event on the `system_events` ledger (0839 R4/R5):
+ * keyset-follows `sequence > afterSequence` at the shared follower cadence
+ * ({@link FOLLOW_POLL_INTERVAL_MS}), returning on the first wake event, or
+ * `{ source: 'backstop-timeout' }` after `timeoutMs` (R5's `--poll`), or on
+ * abort. The cursor only ever moves forward: non-matching rows are consumed,
+ * and the timeout/abort snapshot is `latestSequence()` — a wake never replays
+ * an event the loop has already seen. Built on `dao.follow` (the same query
+ * `followSystemEventsAfter` tails) because the frozen signature passes a dao,
+ * not a getDb factory; the ledger — not a second transport — stays the source.
+ */
+async function waitForWake(
+    dao: SystemEventDao,
+    afterSequence: number,
+    timeoutMs: number,
+    signal?: AbortSignal,
+): Promise<WakeResult> {
+    const deadline = Date.now() + timeoutMs;
+    let cursor = afterSequence;
+    for (;;) {
+        if (signal?.aborted === true) {
+            return { source: 'backstop-timeout', sequence: Math.max(cursor, await dao.latestSequence()) };
+        }
+        const rows = await dao.follow(cursor, WAKE_FOLLOW_BATCH);
+        for (const row of rows) {
+            const sequence = row.sequence;
+            if (sequence === null || sequence <= cursor) continue;
+            cursor = sequence;
+            if ((WAKE_EVENT_NAMES as readonly string[]).includes(row.event_name)) {
+                return { source: row.event_name as WakeSource, sequence };
+            }
+        }
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
+            return { source: 'backstop-timeout', sequence: Math.max(cursor, await dao.latestSequence()) };
+        }
+        await loopSleep(Math.min(FOLLOW_POLL_INTERVAL_MS, remaining), signal);
+    }
+}
+
+/** Ledger event name for the recorded idle hold (0839 R3; rendered by G63 0844). */
+const IDLE_HOLD_EVENT = 'fleet.idle-hold';
+
+/**
+ * Record the operator-readable hold reason when nothing is runnable (0839 R3),
+ * sourced from 0838's StrategyRuntime.selectNext — one `system_events` row
+ * ONLY when the hold key changes (a steadily idle orchestrator writes one row,
+ * not one per wake; a run that did work resets the caller's key via the loop
+ * body). The loop's cwd is the project: strategy/claims/corpus/fleet resolve
+ * against it, and the hold lands in the same ledger the loop follows. A
+ * selectNext failure (no corpus, unmigrated db) is logged, never fatal — the
+ * hold row is advisory, and silence must not wedge a consuming loop.
+ */
+async function recordIdleHold(
+    context: CliContext,
+    recipient: string,
+    source: WakeSource,
+    lastHoldKey: string,
+): Promise<string> {
+    const projectPath = normalizeProjectPath(context.cwd);
+    let holds: Array<{ wbs: string; reason: string }>;
+    try {
+        // Construction is inside the try on purpose: a bare project (no corpus,
+        // no agent config) must degrade to "no hold row", never wedge the loop.
+        const runtime = new StrategyRuntime({
+            openDb: () => context.getDb(),
+            tasks: await makeService(context, undefined, true),
+            fleet: new FleetService({
+                spurConfig: await context.loadAgentConfig(context.cwd),
+                roles: context.agentRoles,
+                fs: context.fs,
+                openDb: () => context.getDb(),
+            }),
+            dependencyBlocked: async (_projectPath, wbs) => {
+                const { foldersConfig } = await resolvePlanningFolders(context.fs);
+                const check = await makeCheckService(context);
+                return await check.firstBlockingPrerequisite(context.fs.resolve(foldersConfig.active_folder), wbs);
+            },
+        });
+        holds = (await runtime.selectNext(projectPath)).holds;
+    } catch (error) {
+        context.output.error(
+            `idle-hold: strategy selectNext failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return lastHoldKey;
+    }
+    const holdKey =
+        holds.length === 0
+            ? 'idle'
+            : holds
+                  .map((h) => `${h.wbs}:${h.reason}`)
+                  .sort()
+                  .join(',');
+    if (holdKey === lastHoldKey) return lastHoldKey;
+    await new SystemEventDao(await context.getDb()).insert({
+        id: randomUUID(),
+        event_name: IDLE_HOLD_EVENT,
+        occurred_at: new Date().toISOString(),
+        actor: recipient,
+        payload_json: JSON.stringify({ projectPath, source, holdKey, holds }),
+    });
+    return holdKey;
+}
+
 /**
  * `spur agent loop --spec <id> [--poll <ms>]` — the persistent self-draining wrapper
- * the supervisor spawns (0258 R6). Each iteration consumes the inbox via `drainPending`;
- * if messages were drained it runs the agent with them prepended, otherwise it
- * idle-sleeps `--poll` ms. This is the long-lived, attachable process — the member no
- * longer dies after one successful drain. Exits cleanly on abort (SIGINT/SIGTERM);
- * crash-restart is the supervisor's job. Legacy `--agent <id>` still works for the
- * transition, warned once (agent-flag-spec-id).
+ * the supervisor spawns (0258 R6). Each iteration WAITS for a wake on the
+ * `system_events` ledger (0839: a human request, a strategy change, a capacity
+ * change, or a completion receipt) and only then drains the inbox via
+ * `drainPending`; an empty drain records the idle hold reason instead of a
+ * silent sleep (R3). `--poll` is the backstop timeout — with no wake event the
+ * loop still drains every `--poll` ms (R5, no migration for promoted loops).
+ * Idle wakes cost no model call and no dispatch (R2). This is the long-lived,
+ * attachable process — the member no longer dies after one successful drain.
+ * Exits cleanly on abort (SIGINT/SIGTERM); crash-restart is the supervisor's
+ * job. Legacy `--agent <id>` still works for the transition, warned once
+ * (agent-flag-spec-id).
  */
 export async function runAgentLoop(
     context: CliContext,
@@ -720,18 +1015,63 @@ export async function runAgentLoop(
         return 2;
     }
     const pollMs = parseLoopPoll(flags.poll);
-    const sleep = runtime.sleep ?? ((ms: number) => loopSleep(ms, runtime.signal));
-    const svc = context.agentService();
+    // 0831 R4: the loop shares runAgentRun's acceptance rule — a per-process bus so
+    // `agent.invoke.start` (via the agent runner) marks the invocation accepted.
+    const bus = new EventBus() as SystemEventBus;
+    const svc = context.agentService({ events: bus });
+
+    // 0834 R2: reconcile unfinished requests and runs BEFORE the first drain —
+    // ambiguous work is named (outcome-unknown, never requeued) and budget-
+    // exhausted rows are marked failed, so the loop never re-dispatches them.
+    // The report is operator information in the run log; a non-empty unresolved
+    // list does NOT gate the loop (blocking dispatch is G62's 0838 decision).
+    const report = await new DeliveryReconciler(context).reconcile(recipient);
+    context.output.write(formatReconcileReport(report));
+
+    let invocationStarted = false;
+    bus.on('agent.invoke.start', () => {
+        invocationStarted = true;
+    });
+
+    // 0839 R4 wake-then-drain: the drain runs only AFTER a wake (a wake event on
+    // the ledger, or the `--poll` backstop timeout — R5 keeps `--poll` as the
+    // backstop so a promoted loop keeps consuming at the same worst-case latency
+    // with no migration). The cursor starts at the current ledger tail so a
+    // long-idle ledger fires no spurious immediate wake, and never replays a
+    // seen row (waitForWake owns the forward-only guarantee).
+    const wakeDao = new SystemEventDao(await context.getDb());
+    let cursor = await wakeDao.latestSequence();
+    let lastHoldKey = '';
 
     let iteration = 0;
     while (!runtime.signal?.aborted && (runtime.maxIterations === undefined || iteration < runtime.maxIterations)) {
+        const wake = await waitForWake(wakeDao, cursor, pollMs, runtime.signal);
+        cursor = wake.sequence;
         // Consume this member's inbox (queued → injected). A non-empty drain yields a
-        // prompt to run the agent on; an empty drain yields `undefined` → idle-sleep.
-        const { prompt, flags: rewritten } = await drainIntoPrompt(undefined, context, { ...flags, drain: true });
+        // prompt to run the agent on; an empty drain records the idle hold (R3).
+        const {
+            prompt,
+            flags: rewritten,
+            claimed,
+        } = await drainIntoPrompt(undefined, context, {
+            ...flags,
+            drain: true,
+        });
         if (prompt !== undefined) {
-            await svc.run(prompt, rewritten, deps);
+            // Reset per iteration: each drain is an independent delivery attempt.
+            invocationStarted = false;
+            try {
+                await svc.run(prompt, rewritten, deps);
+            } finally {
+                // 0831 R4: settle even on abort; the loop keeps iterating either
+                // way — a released row redelivers on the next drain.
+                await settleClaimedMessages(context, claimed, invocationStarted ? 'accepted' : 'not-started');
+            }
+            // The hold that described the previous idle stretch is stale: work
+            // ran, so the next idle wake records a fresh hold row.
+            lastHoldKey = '';
         } else {
-            await sleep(pollMs);
+            lastHoldKey = await recordIdleHold(context, recipient, wake.source, lastHoldKey);
         }
         iteration++;
     }

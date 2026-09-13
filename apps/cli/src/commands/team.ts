@@ -35,7 +35,45 @@ function teamFetch(url: string, init: RequestInit): Promise<Response> {
 }
 
 /** Default server API URL for team start/stop (requires spur serve). */
-const DEFAULT_SERVER = 'http://localhost:3000/api';
+export const DEFAULT_TEAM_SERVER = 'http://localhost:3000/api';
+
+// ── team-noun-retired transition shim (0848 R5) ─────────────────────
+// @transition-shim(team-noun-retired) — the `spur team` noun keeps working after its
+// six verbs moved to owning nouns (0848); a one-time stderr warning names the replacement.
+// Every `spur team` capability moved to its owning noun (task update --assignee,
+// agent list --specs, agent start/stop/delete, fleet materialization at serve
+// start). The noun itself stays functional until Robin records the G64 cutover
+// window; removal of this shim and the noun is gated by the manifest entry
+// `team-noun-retired` in config/transition-shims.json.
+
+/** Replacement command shown in the one-time deprecation warning, per verb. */
+const TEAM_NOUN_REPLACEMENTS: Record<string, string> = {
+    assign: '`spur task update <wbs> --assignee <spec-id>`',
+    status: '`spur agent list --specs`',
+    up: 'fleet materialization at `spur serve` start (`--check` diff: `spur projects list --fleet`)',
+    down: '`spur agent stop <spec-id>` per member (`--purge`: `spur agent delete <id>`)',
+    start: '`spur agent start <spec-id>`',
+    stop: '`spur agent stop <spec-id>`',
+};
+
+let warnedTeamNounRetired = false;
+
+/** Reset the one-time team-noun retirement warning (test seam). */
+export function resetTeamNounRetiredWarningForTesting(): void {
+    warnedTeamNounRetired = false;
+}
+
+/** Emit the noun-level retirement warning once per process, naming the verb's replacement. */
+function warnTeamNounRetiredOnce(verb: string, output: CliContext['output']): void {
+    if (warnedTeamNounRetired) return;
+    warnedTeamNounRetired = true;
+    const replacement = TEAM_NOUN_REPLACEMENTS[verb] ?? '`spur agent` / `spur task` / `spur projects`';
+    output.error(
+        `warning: \`spur team ${verb}\` is deprecated — use ${replacement}. ` +
+            'The noun keeps working until the G64 cutover window is recorded ' +
+            '(docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md).',
+    );
+}
 
 /** Register `spur team` commands. */
 export function registerTeamCommand(program: Command, context: CliContext): void {
@@ -46,6 +84,7 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .argument('<task-id>', 'Task file id')
         .argument('<agent-id>', 'Agent spec id')
         .action(async (taskId, agentId) => {
+            warnTeamNounRetiredOnce('assign', context.output);
             const code = await runTeamAssign(taskId, agentId, context);
             context.setExitCode(code);
         });
@@ -55,8 +94,9 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--by-team', 'Group specs by their agent.team.<id> membership')
-        .option('--server <url>', 'Server API URL for live run status', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL for live run status', DEFAULT_TEAM_SERVER)
         .action(async (options) => {
+            warnTeamNounRetiredOnce('status', context.output);
             const code = options.byTeam
                 ? await runTeamStatusGrouped(options, context)
                 : await runTeamStatus(options, context);
@@ -67,10 +107,11 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .description('Materialize a team roster into agent specs; best-effort start when spur serve is reachable.')
         .argument('<team>', 'Team id (agent.team.<team>)')
         .option('--check', 'Dry-run: show the add/prune diff without writing')
-        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (team, options) => {
+            warnTeamNounRetiredOnce('up', context.output);
             const code = await runTeamUp(team, options, context);
             context.setExitCode(code);
         });
@@ -79,10 +120,11 @@ export function registerTeamCommand(program: Command, context: CliContext): void
         .description('Tear down a team: stop members; --purge also removes generated specs.')
         .argument('<team>', 'Team id')
         .option('--purge', 'Also delete spur:generated specs (never manual / ref:)')
-        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (team, options) => {
+            warnTeamNounRetiredOnce('down', context.output);
             const code = await runTeamDown(team, options, context);
             context.setExitCode(code);
         });
@@ -90,10 +132,11 @@ export function registerTeamCommand(program: Command, context: CliContext): void
     noun.command('start')
         .description('Start a supervised agent process (requires spur serve).')
         .argument('<agent-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (agentId, options) => {
+            warnTeamNounRetiredOnce('start', context.output);
             const code = await runTeamStart(agentId, options, context);
             context.setExitCode(code);
         });
@@ -101,17 +144,22 @@ export function registerTeamCommand(program: Command, context: CliContext): void
     noun.command('stop')
         .description('Stop a supervised agent process (requires spur serve).')
         .argument('<agent-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (agentId, options) => {
+            warnTeamNounRetiredOnce('stop', context.output);
             const code = await runTeamStop(agentId, options, context);
             context.setExitCode(code);
         });
 }
 
-/** `spur team assign <task-id> <agent-id>` */
-async function runTeamAssign(taskId: string, agentId: string, context: CliContext): Promise<number> {
+/**
+ * `spur team assign <task-id> <agent-id>` — moved home of the assignment capability
+ * (0848): `spur task update <wbs> --assignee <spec-id>` delegates here so the ledger
+ * attach and `team.member.assigned` emission stay in one place (R2: moved, not copied).
+ */
+export async function runTeamAssign(taskId: string, agentId: string, context: CliContext): Promise<number> {
     // CLI ledger so team.member.assigned reaches system_events without serve (0371 R6).
     const { svc, ledger, quotaPersistence } = await makeTeamServiceWithLedger(context);
     try {
@@ -212,8 +260,11 @@ function mapServerStatus(status: string): TeamStatusEntry['status'] {
  * Fetch live run status from the server supervisor (`GET /api/team/processes`).
  * Returns a `Map<agentId, { status, pid }>`, or `null` when the server is
  * unreachable / returns a non-OK response — callers fall back to local specs.
+ *
+ * 0848: shared with `spur agent list --specs`, which inherited `team status`'s
+ * live-run merge (same fallback, same stderr warning).
  */
-async function fetchServerProcesses(
+export async function fetchServerProcesses(
     server: string,
 ): Promise<Map<string, { status: TeamStatusEntry['status']; pid: number | null }> | null> {
     try {
@@ -256,8 +307,12 @@ async function performTeamStart(
     }
 }
 
-/** `spur team start <agent-id> [--server <url>] [--json]` — spawn via server API. */
-async function runTeamStart(
+/**
+ * `spur team start <agent-id> [--server <url>] [--json]` — spawn via server API.
+ * 0848: shared with `spur agent start <spec-id>` (same endpoint, same error text) —
+ * the capability moved nouns, not implementation (R2).
+ */
+export async function runTeamStart(
     agentId: string,
     options: { server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,
@@ -323,8 +378,12 @@ async function performTeamStop(
     }
 }
 
-/** `spur team stop <agent-id> [--server <url>] [--json]` — stop via server API. */
-async function runTeamStop(
+/**
+ * `spur team stop <agent-id> [--server <url>] [--json]` — stop via server API.
+ * 0848: shared with `spur agent stop <spec-id>` (same endpoint, same error text) —
+ * the capability moved nouns, not implementation (R2).
+ */
+export async function runTeamStop(
     agentId: string,
     options: { server: string; json?: boolean; jsonEnvelope?: boolean },
     context: CliContext,

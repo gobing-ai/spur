@@ -807,3 +807,30 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - (E9, 2026-08-22) Verdict answer files: AC rows keyed to scenario titles need *executable* evidence (test/command) — static-ref triggers evidence-rule-failed. Status enums MET/PARTIAL/UNMET/N/A; severity P1–P4.
 - (E9, 2026-08-22) Line-number anchors in recorded tasks rot when later tasks edit the same files: corpus-check `--corpus` NEW anchor-subject-mismatch is the detector; fix anchors in the old task files, don't baseline them. "STALE" baseline entries can mean metadata drift with the finding still live — never bulk-remove by (kind,id,code) key; removal must follow the finding actually disappearing.
 - (E9, 2026-08-22) Production-scale latency evidence: copy .spur/spur.db to /tmp, run source-local bun script; cold-copy first-touch medians can transiently exceed steady-state (53.8 vs 42ms) — record all runs, gate on warm.
+- (G61 batch, 2026-09-12) task-pipeline spec drift: migration prefixes are consumed by earlier tasks in the same batch — 0833's frozen "next free 0043" collided with 0832's mirror; renumber at dispatch time.
+- (G61 batch, 2026-09-12) premise checks catch owner errors: coordination_runs is Spur-owned not ts-db (0833 correction); inbox legacy DDL mirror required for enqueueIdempotent on existing DBs (0832).
+- (G61 batch, 2026-09-12) host bridge quirk: single-arg fingerprint prints only, two-arg persists — always bracket-check before gates.
+
+## G62 batch (2026-09-12, run 20260912T151809Z-A00E198C)
+- Fleet/team prune collision root cause: shared `team:<slug>` spec tag → fixed by tag-disjoint namespaces by construction (fleet specs carry `fleet:<slug>`+`spur:generated`+`fleet:generated`; prune matches only the latter two).
+- One-statement guarded upsert with RETURNING is the dao concurrency precedent (ProjectClaimDao.claim, ProjectStrategyDao.set) — replaces read-then-write probe sequences.
+- DD-09 insertion must land AFTER a complete scenario; a bare title dropped mid-scenario orphans its Given/When/Then body (repaired via python once in 0837/0838 window).
+- Migration renumber when plan races: log in Solution, never edit frozen spec (0045→0046 precedent).
+- Event-driven loop: forward-only in-memory cursor + `--poll` backstop; lost wake events degrade to latency, never lost work.
+
+## G64 runall batch (2026-09-12, commit bb4b459c4)
+- Batch 0846/0847/0848/0851 done via inline task-pipeline (host driver, worker subagents). 0849/0850 remain todo: dep 0845 (G63) unstarted.
+- Verdict-artifact schema gotchas: requirements/acceptanceCriteria must be ARRAYS of rows; checks must be array of OBJECTS (strings fail L4.malformed-verdict-artifact at record).
+- Record writes Testing/Review sections BEFORE the guard runs — a guard denial leaves a stub "Verdict: UNKNOWN" Testing section that must be hand-replaced before re-record.
+- Worktree contract: if base branch advanced after allocation, FF is impossible; cherry-pick (verified with `git cherry -`) then branch -D is the equivalent clean landing. Zero-overlap check first (`comm -12` of changed-file sets).
+- Temp git-index tree-hash needs `read-tree HEAD` init; bare mktemp index fails rc=128.
+- G64 0849/0850 unblocked: dep 0845 (G63) landed via merge 51d093718.
+
+## G63 batch (2026-09-13, RUN_ID 20260912T205800Z-G63BATCH)
+- Provider-tree lesson: BoardLayout mounts ProjectProvider+ConversationDraftProvider+GlobalAgentBar; bare-`{}` API stubs in BoardLayout-mounting fixtures parse as truthy fleet w/o orchestrator → render crash poisons the reconciler process-wide (172-fail cascade). Fixture: full ProjectFleetSnapshot w/ `orchestrator:{state:'bound-online',instanceId:'orch'}`.
+- Gate flake class: spawnSync-heavy CLI tests (plugins/sp inline-run-setup) return proc.status=null under full-gate parallel load; pass isolated. One full re-run before diagnosing.
+- Verify answer AC Evidence Type vocabulary: test|command|doc(s)|static(-ref), compounds of those only — `browser` drops the row (ac-row-dropped fail → guard recompute FAIL overrides PASS header).
+- `task record --transition testing` rewrites Testing stub rows: run AFTER the verdict artifact exists, else done-guard FAILs on UNKNOWN stub.
+- record's done-walk auto-creates the pipeline run-link (ensurePipelineRunLink); workflow dry-run rc=1 on capability-preflight warnings is harmless — link is written at run start regardless.
+- Chrome 140 rejects every Input.imeSetComposition shape (5 variants probed); degrade to Input.insertText + contract-shaped KeyboardEvents (isComposing:true / keyCode 229) — same shape happy-dom dispatches.
+- DD-09: bare scenario titles (no R-prefix) are the batch's feature-doc insertions, `@core`, after the last complete scenario block.

@@ -13,7 +13,7 @@ export interface ProcessStatus {
 }
 
 /** Status poll interval (ms). */
-const STATUS_POLL_MS = 3000;
+export const STATUS_POLL_MS = 3000;
 
 /**
  * Runtime-narrow the `/api/team/processes` response into a status map.
@@ -249,7 +249,7 @@ export default function MemberTerminal({ agentId }: { agentId: string }) {
 
             <pre
                 ref={preRef}
-                className="flex-1 overflow-y-auto p-2 text-xs font-mono leading-snug bg-base-100"
+                className="flex-1 overflow-x-auto overflow-y-auto p-2 text-xs font-mono leading-snug bg-base-100"
                 data-terminal-output
             >
                 {frames.length === 0 ? (

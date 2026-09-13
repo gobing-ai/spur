@@ -141,6 +141,13 @@ export interface ServerContext {
     /** Lazy, cached TaskService (planning layer). */
     taskService(): TaskService;
 
+    /**
+     * Reload the merged Spur config for this project (0840). Composition-root
+     * owned — module code must not import the config loader. Load failure
+     * degrades to null so callers treat config as unavailable, not fatal.
+     */
+    reloadAgentConfig(): Promise<SpurConfig | null>;
+
     /** Lazy, cached FeatureService (planning layer). */
     featureService(): FeatureService;
 
@@ -483,6 +490,14 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return teamSvc;
+        },
+
+        reloadAgentConfig: async () => {
+            try {
+                return await loadSpurConfig(cwd);
+            } catch {
+                return null;
+            }
         },
 
         processRegistry(): ProcessRegistry {

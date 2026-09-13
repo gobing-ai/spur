@@ -46,13 +46,14 @@ the team supervisor API become available at `http://<host>:<port>`.
 
 ## What this skill is NOT
 
-- **Not the team supervisor.** `spur serve` hosts the supervisor API; `spur team start` / `stop` /
-  `status` are the verbs that drive it. See **[team.md](team.md)**.
+- **Not the team supervisor.** `spur serve` hosts the supervisor API; `spur agent start` / `stop` /
+  `agent list --specs` are the verbs that drive and inspect it (0848). See
+  **[agent.md](agent.md)**.
 - **Not a production server.** This is the local fallback. Production deployment uses the Cloudflare
   Worker build (`apps/server/`), not `spur serve`.
 
 ## See also
 
-- **`spur team` (see [team.md](team.md))** - `start`/`stop`/`status` require `spur serve` for the
-  supervisor API.
+- **`spur agent` (see [agent.md](agent.md))** - `start`/`stop`/`list --specs` require `spur serve`
+  for the supervisor API.
 - **`sp:spur-cli`** SKILL.md - the facade that routes to this reference.

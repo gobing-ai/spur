@@ -1,11 +1,26 @@
 import { basename } from 'node:path';
-import { isPortLive, normalizeProjectPath, ProjectRegistry, startRegisteredProject } from '@gobing-ai/spur-app';
+import {
+    DeliveryReconciler,
+    FleetService,
+    isPortLive,
+    normalizeProjectPath,
+    type OrchestratorBinding,
+    ProjectRegistry,
+    type ResolvedFleetMember,
+    type StrategyName,
+    StrategyRuntime,
+    startRegisteredProject,
+} from '@gobing-ai/spur-app';
+import { CoordinationRunDao, InboxMessageDao } from '@gobing-ai/spur-domain';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
 
 /** Server start timestamp for uptime calculation. */
 const startedAt = Date.now();
+
+/** The operator mailbox the Board submits from (0841) — twin of the web constant. */
+const OPERATOR_AGENT_ID = 'board-operator';
 
 /**
  * Health module — the reference ServerModule implementation.
@@ -47,8 +62,190 @@ export const healthModule: ServerModule = {
         // The board sidebar labels itself with the served project (basename of
         // the cwd `spur serve` runs in). `null` when there is no ServerContext
         // (e.g. the Cloudflare Worker, which has no meaningful cwd).
+        //
+        // `path` (0840 R4): the canonical worktree through the SAME
+        // `normalizeProjectPath` call `/api/projects` uses for its `current`
+        // marker, so the module's identity key and the switcher can never
+        // disagree. `name` stays byte-identical (LeftSidebar title reads it).
         app.get('/api/project', (c) => {
-            return c.json({ name: ctx ? basename(ctx.cwd) : null });
+            return c.json({ name: ctx ? basename(ctx.cwd) : null, path: ctx ? normalizeProjectPath(ctx.cwd) : null });
+        });
+
+        // ── Project fleet snapshot (0840 R2/R5) ──
+        // One server serves one project, so the runtime facts are read from
+        // THIS project: fleet declaration + orchestrator binding through
+        // FleetService (0835/0836) and the persisted strategy through
+        // StrategyRuntime (0838, read-only). The endpoint is a value, not an
+        // exception surface: every degraded fact resolves to a NAMED state
+        // (`strategy: null`, `orchestrator: { state: 'unresolvable' }`) and
+        // the route returns 200, never a 500.
+        app.get('/api/project/fleet', async (c) => {
+            if (!ctx) {
+                return c.json({
+                    path: null,
+                    strategy: null,
+                    orchestrator: { state: 'unresolvable', reason: 'no-project-context' },
+                    members: [],
+                    capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
+                });
+            }
+            const path = normalizeProjectPath(ctx.cwd);
+            // The server's own migrated db IS the served project's db (one
+            // instance serves one project) — the same adapter
+            // project_claims/project_strategy read through.
+            const openDb = () => ctx.getDb();
+            const fleet = new FleetService({
+                fs: ctx.fs,
+                // 0799 R3 parity with the CLI's --fleet: resolve against a fresh
+                // merged config of THIS project; a load failure degrades to null.
+                // Loader lives at the composition root (ServerContext) by gate rule.
+                reloadAgentConfig: () => ctx.reloadAgentConfig(),
+                openDb,
+            });
+            // Read-only runtime: only getStrategy is consumed here.
+            // dependencyBlocked is a selectNext seam with no server owner yet.
+            const runtime = new StrategyRuntime({
+                openDb,
+                tasks: ctx.taskService(),
+                fleet,
+                dependencyBlocked: async () => null,
+            });
+
+            let members: ResolvedFleetMember[] = [];
+            let missing: string[] = [];
+            let orchestrator: OrchestratorBinding = { state: 'unresolvable', reason: 'unavailable' };
+            let strategy: { name: StrategyName; version: number } | null = null;
+            try {
+                const resolved = await fleet.resolve(path);
+                members = resolved.members;
+                missing = resolved.missing;
+            } catch (err) {
+                // Unreadable/invalid declaration is an environment fact, not a
+                // 500 — keep FleetService's purpose-built detail (its load()
+                // throw names the declaration file and every schema issue)
+                // instead of flattening it to a placeholder.
+                missing = [err instanceof Error ? err.message : 'unresolved'];
+            }
+            try {
+                // Wire contract (0840 review F1): project the claim to its
+                // binding fields. holderId is intentionally INCLUDED; the raw
+                // ProjectClaim row is never echoed. 0841-0843 freeze on this
+                // shape.
+                const { state, instanceId, holderId, reason } = await fleet.resolveOrchestrator(path);
+                orchestrator = { state, instanceId, holderId, reason };
+            } catch {
+                orchestrator = { state: 'unresolvable', reason: 'unavailable' };
+            }
+            try {
+                strategy = await runtime.getStrategy(path);
+            } catch {
+                strategy = null;
+            }
+
+            return c.json({
+                path,
+                strategy,
+                orchestrator,
+                members,
+                capacity: {
+                    total: members.length,
+                    enabled: members.filter((m) => m.enabled).length,
+                    writeCapable: members.filter((m) => m.writeCapable).length,
+                    missing,
+                },
+            });
+        });
+
+        // ── Project request receipts (0844 R1/R5) ──
+        // Durable results feed for the global input: the operator's
+        // `inbox_messages` rows addressed to the orchestrator, joined with the
+        // delivery classification (DeliveryReconciler.classify — the PURE pass,
+        // it never writes the attempts-exhausted marking) and the coordination
+        // run receipt. Same mailbox selection as 0841's buildThread: rows to
+        // the orchestrator instance from `board-operator`. Degraded facts are
+        // named states, never a 500 — no project context or no bound
+        // orchestrator returns `{ requests: [] }`.
+        app.get('/api/project/requests', async (c) => {
+            if (!ctx) {
+                return c.json({ requests: [] });
+            }
+            const limitRaw = c.req.query('limit');
+            const parsedLimit = limitRaw === undefined ? NaN : Number.parseInt(limitRaw, 10);
+            const limit = Number.isNaN(parsedLimit) || parsedLimit < 0 ? 50 : Math.min(parsedLimit, 200);
+            const path = normalizeProjectPath(ctx.cwd);
+            const openDb = () => ctx.getDb();
+            const fleet = new FleetService({
+                fs: ctx.fs,
+                // Same loader seam the /api/project/fleet route uses (0799 R3).
+                reloadAgentConfig: () => ctx.reloadAgentConfig(),
+                openDb,
+            });
+            const runtime = new StrategyRuntime({
+                openDb,
+                tasks: ctx.taskService(),
+                fleet,
+                dependencyBlocked: async () => null,
+            });
+            // Wire contract (0840 review F1): project the claim to its binding
+            // fields; the raw project_claims row is never echoed.
+            let orchestrator: OrchestratorBinding = { state: 'unresolvable', reason: 'unavailable' };
+            try {
+                const { state, instanceId, holderId, reason } = await fleet.resolveOrchestrator(path);
+                orchestrator = { state, instanceId, holderId, reason };
+            } catch {
+                orchestrator = { state: 'unresolvable', reason: 'unavailable' };
+            }
+            const instanceId =
+                orchestrator.state === 'missing' || orchestrator.state === 'unresolvable'
+                    ? undefined
+                    : orchestrator.instanceId;
+            if (instanceId === undefined) {
+                return c.json({ requests: [] });
+            }
+
+            const db = await openDb();
+            const unresolved = await new DeliveryReconciler({ getDb: openDb }).classify(instanceId);
+            const reasonByMessage = new Map(unresolved.map((u) => [u.messageId, u.reason]));
+            const runs = new CoordinationRunDao(db);
+            // Strategy holds, keyed by wbs, joined onto the request's task id
+            // (0838). A selectNext failure leaves holds empty — named as null
+            // on the wire, never a 500.
+            const holdByTask = new Map<string, string>();
+            try {
+                for (const h of (await runtime.selectNext(path)).holds) {
+                    holdByTask.set(h.wbs, h.reason);
+                }
+            } catch {
+                // holds stay empty
+            }
+
+            const REQUESTED_RUN_OUTCOMES = ['run-exit-only', 'errored', 'verified'] as const;
+            const requests = [];
+            // Read the max page once; filter to the operator mailbox, then cap.
+            for (const row of await new InboxMessageDao(db).inbox(instanceId, 200)) {
+                if (row.fromId !== OPERATOR_AGENT_ID) continue;
+                if (requests.length >= limit) break;
+                const runRow = (await runs.listByMessageId(row.id))[0];
+                requests.push({
+                    messageId: row.id,
+                    requestKey: row.requestKey,
+                    deliveryStatus: row.status,
+                    injectAttempts: row.injectAttempts,
+                    injectError: row.injectError,
+                    runId: runRow?.run_id ?? null,
+                    taskId: runRow?.task_id ?? null,
+                    outcome:
+                        runRow !== undefined && REQUESTED_RUN_OUTCOMES.includes(runRow.outcome as never)
+                            ? (runRow.outcome as (typeof REQUESTED_RUN_OUTCOMES)[number])
+                            : null,
+                    reason: reasonByMessage.get(row.id) ?? null,
+                    hold:
+                        runRow?.task_id !== null && runRow?.task_id !== undefined
+                            ? (holdByTask.get(runRow.task_id) ?? null)
+                            : null,
+                });
+            }
+            return c.json({ requests });
         });
 
         // ── Multi-project list ──

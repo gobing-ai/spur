@@ -108,6 +108,14 @@ export type {
 } from './services/corpus-migrator';
 // R3 (0452): CorpusMigrator is @internal — no public CLI surface.
 export { CorpusMigrator } from './services/corpus-migrator';
+export {
+    DeliveryReconciler,
+    type DeliveryReconcilerContext,
+    type HoldReason,
+    MAX_INJECT_ATTEMPTS,
+    type ReconcileReport,
+    type UnresolvedDelivery,
+} from './services/delivery-reconciler';
 export type {
     GuardInput,
     GuardOutcome,
@@ -192,6 +200,15 @@ export {
     type FindingCode,
     isFindingCode,
 } from './services/finding-codes';
+export type {
+    FleetServiceContext,
+    OrchestratorBinding,
+    OrchestratorState,
+    ResolvedFleet,
+    ResolvedFleetMember,
+} from './services/fleet-service';
+// Project fleet declaration (0835) + orchestrator binding (0836)
+export { FleetService } from './services/fleet-service';
 export {
     type HistoryRollupRefreshResult,
     refreshHistoryRollups,
@@ -267,6 +284,28 @@ export {
 } from './services/job-exclusion-guard';
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
+export type {
+    ConversionResult,
+    LegacyArtifact,
+    LegacyArtifactKind,
+    LegacyConflict,
+    LegacyConflictKind,
+    LegacyDisposition,
+    LegacyMigrationServiceContext,
+    LegacyWarning,
+    LegacyWarningKind,
+    MigrationInventory,
+    MigrationPlan,
+    MigrationPlanStep,
+    RollbackResult,
+} from './services/legacy-migration';
+// Legacy team→fleet migration: inventory + dry-run preview (0846); apply/rollback (0847);
+// config-block removal halt guard (0848)
+export {
+    assertConfigBlockRemovalSafe,
+    ConfigBlockRemovalBlockedError,
+    LegacyMigrationService,
+} from './services/legacy-migration';
 export type {
     InvokeEventSnapshot,
     OccupantLifecycle,
@@ -414,6 +453,23 @@ export {
     schedulerJobTimeoutEnvName,
     validateSchedulerCustomJobPayload,
 } from './services/scheduler-custom-job-service';
+// Persisted rest/GTD strategy runtime (0838)
+export {
+    DEFAULT_STRATEGY,
+    type DispatchHold,
+    type DispatchHoldReason,
+    FLEET_AUTO_TAG,
+    gtdStrategy,
+    type ResumeReport,
+    restStrategy,
+    STRATEGIES,
+    type Strategy,
+    type StrategyContext,
+    type StrategyName,
+    type StrategyResult,
+    StrategyRuntime,
+    type StrategyRuntimeContext,
+} from './services/strategy-runtime';
 export type {
     ProcessEntry,
     ProcessEventBus,
@@ -553,6 +609,7 @@ export type {
     MessageEventPayload,
     RecentMessageRow,
     RecentMessagesResult,
+    RosterProjection,
     SendResult,
     TeamLifecycleEventPayload,
     TeamListing,
@@ -615,6 +672,15 @@ export {
     type WorkflowLayerId,
     workflowLayers,
 } from './services/workflow-service';
+// Write-slot lease (0837) over the 0836 claim table
+export {
+    type ClaimOutcome,
+    type ClaimRefusal,
+    type DispatchDecision,
+    type ResultRef,
+    WRITE_SLOT_TTL_MS,
+    WriteSlotService,
+} from './services/write-slot-service';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';

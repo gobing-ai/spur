@@ -162,10 +162,12 @@ describe('data retention (0622 R8)', () => {
         expect(result.queueJobs).toBe(0);
         expect(result.ledgerRows).toBe(0);
         expect(result.backupFiles).toBe(0);
-        // Compaction may run or skip depending on dbstat availability; it must never crash the
-        // pass (best-effort) and must report a consistent before/after size.
+        // Compaction may run or skip — dbstat availability AND the fresh-db reclaim
+        // ratio decide (0836's project_claims table pushed a fresh DB over the
+        // COMPACTION_MIN_RECLAIM_RATIO VACUUM threshold, so the skip is no longer
+        // guaranteed). The contract: it never crashes the pass and never GROWS the file.
         expect(typeof result.compaction.ran).toBe('boolean');
-        expect(result.compaction.bytesBefore).toBe(result.compaction.bytesAfter);
+        expect(result.compaction.bytesAfter).toBeLessThanOrEqual(result.compaction.bytesBefore);
     });
 });
 

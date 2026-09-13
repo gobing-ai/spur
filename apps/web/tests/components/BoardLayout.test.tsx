@@ -30,6 +30,34 @@ const platformFetch = fetch.bind(globalThis);
 function installSilentApiFetch(): void {
     setFetchForTesting((async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        // 0844: BoardLayout now mounts ProjectProvider + ConversationDraftProvider +
+        // GlobalAgentBar, so these routes must serve well-formed fixtures. The old
+        // `[]` catch-all parsed as a truthy fleet snapshot with no `orchestrator`
+        // and crashed GlobalAgentBar mid-render. Shapes mirror AgentsView.test.tsx.
+        if (url.includes('/api/project/fleet')) {
+            return new Response(
+                JSON.stringify({
+                    path: '/repo/wt',
+                    strategy: { name: 'gtd', version: 1 },
+                    orchestrator: { state: 'bound-online', instanceId: 'orch' },
+                    members: [],
+                    capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
+                }),
+                { status: 200, headers: { 'content-type': 'application/json' } },
+            );
+        }
+        if (url.includes('/api/project/requests')) {
+            return new Response(JSON.stringify({ requests: [] }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+            });
+        }
+        if (url.includes('/api/project')) {
+            return new Response(JSON.stringify({ name: 'spur', path: '/repo/wt' }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+            });
+        }
         if (url.includes('/api/features/F/status')) {
             return new Response(JSON.stringify({ ok: true, data: { status: 'done' } }), {
                 status: 200,

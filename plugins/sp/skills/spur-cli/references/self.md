@@ -95,8 +95,9 @@ directory. Only flag is `--json`.
 
 ## What this skill is NOT
 
-- **Not the team supervisor.** `self serve` hosts the supervisor API; `spur team start` / `stop` /
-  `status` are the verbs that drive it. See **[team.md](team.md)**.
+- **Not the team supervisor.** `self serve` hosts the supervisor API; `spur agent start` / `stop` /
+  `agent list --specs` are the verbs that drive and inspect it (0848). See
+  **[agent.md](agent.md)**.
 - **Not a production server.** This is the local fallback. Production deployment uses the Cloudflare
   Worker build (`apps/server/`), not `self serve`.
 
@@ -105,8 +106,8 @@ directory. Only flag is `--json`.
 - **[init.md](init.md)** - `init` / `status` verbs: scaffold semantics and the Phase 1.5 / 1.6
   post-scaffold validation probes.
 - **[serve.md](serve.md)** - `serve` verb: server flags and the `--json` dry-probe contract.
-- **`spur team` (see [team.md](team.md))** - `start`/`stop`/`status` require `self serve` for the
-  supervisor API.
+- **`spur agent` (see [agent.md](agent.md))** - `start`/`stop`/`list --specs` require `self serve`
+  for the supervisor API.
 - **`sp:spur-cli`** SKILL.md - the facade that routes to this reference.
 
 > **Shared option declarations (0618):** options shared across command modules resolve from

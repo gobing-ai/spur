@@ -280,7 +280,8 @@ describe('teams module components', () => {
 
         await waitFor(() => expect(getByText(/No processes/)).toBeDefined());
         // 0263 R3: empty copy includes actionable guidance (no stale Roster refs).
-        expect(getByText(/spur team start/)).toBeDefined();
+        // 0848: noun migration — guidance now points at `spur agent start` (team noun retired).
+        expect(getByText(/spur agent start/)).toBeDefined();
         expect(container.querySelector('[data-processes-tab-empty]')).not.toBeNull();
         expect(container.querySelector('[data-processes-tab-loading]')).toBeNull();
     });

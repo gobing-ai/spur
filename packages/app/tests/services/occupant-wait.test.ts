@@ -289,3 +289,44 @@ describe('snapshotOccupant', () => {
 // Ensure WaitErrorCode exhausts the wave-2 surface (compile-time guard).
 const _: WaitErrorCode[] = ['occupant_gone', 'run_replaced', 'wait_stalled', 'timeout'];
 void _;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// G6 characterization block (task 0828) — stale-generation wait evidence for
+// `docs/reports/g6-runtime-inventory.md`. Characterization ONLY: observes
+// current behavior and names the unmet target invariant; no production change.
+// ═══════════════════════════════════════════════════════════════════════════════
+describe('G6 characterization (0828) — stale-generation wait', () => {
+    test('probe: a waiter pinned to a replaced run fails run_replaced and observes the successor with no retarget/link', async () => {
+        // Setup: waiter pins run R (generation 1); after the snapshot the occupant
+        // is replaced by run S (generation 2 + new runId). Injected fault: the
+        // replacement happens behind the waiter's identity re-probe.
+        const clock = { ms: 0 };
+        const startOccupant = occupant();
+        const successor = occupant({ runId: 'S', generation: 2 });
+        // tick 0: original occupant (snapshot); tick 1+: successor.
+        const occupantOverrides = [startOccupant, successor, successor];
+        const deps = buildFakeDeps({
+            startOccupant,
+            startLatest: { eventName: 'agent.invoke.start', sequence: 1 },
+            pending: { n: 1 },
+            clock,
+            events: [{ eventName: 'agent.invoke.start', sequence: 1 }],
+            occupantOverrides,
+        });
+
+        // Observed: the wait fails typed — run_replaced, generation 1 → 2.
+        await expect(waitForOccupant(deps, { pin: pin(), until: 'idle', timeoutMs: 10_000 })).rejects.toMatchObject({
+            code: 'run_replaced',
+        });
+
+        // Observable successor state after the failed wait (post-tick probe):
+        const finalOccupant = deps.getOccupant('reviewer'); // tick advanced past replacement
+        expect(await finalOccupant).toMatchObject({ runId: 'S', generation: 2 });
+
+        // Target invariant UNMET: the stale waiter's failure carries NO linkage to
+        // the successor — no retarget/resubscribe primitive exists (occupant-wait.ts
+        // throws at the identity re-probe; the caller must re-snapshot from scratch),
+        // and nothing in the ledger associates run S with the superseded run R.
+        // 0829 handoff: wakeup/reconnect capability must name this seam.
+    });
+});

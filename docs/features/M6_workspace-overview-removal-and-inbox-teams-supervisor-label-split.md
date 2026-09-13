@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M6"
 name: "Workspace Overview removal and Inbox/Teams supervisor-label split"
-status: backlog
+status: cancelled
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:33.143Z"
-updated_at: "2026-08-19T05:37:08.767Z"
+updated_at: "2026-09-13T02:54:19.895Z"
 ---
 
 # M6: Workspace Overview removal and Inbox/Teams supervisor-label split
@@ -76,9 +76,32 @@ _No linked tasks._
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 Graduated from wayfinder map **I6** / task **0599**. Approach is decided in
 `docs/design/board-module-boundaries.md` §5–§6. Teams-absorbs-both is
 rejected on M4 D1 evidence; do not re-open that hypothesis. Map open
 question 4 is recommended as "no `role` noun"; the operator ratifies at
 kickoff (ADR-051 if anyone later wants `spur agent roles`).
+
+### Reconciliation with G64 (2026-09-13, task 0851)
+
+G64 (retire Workspace, Inbox, Teams, and `spur team`) reconciled this feature item by item before
+closing it. Dispositions at reconciliation time:
+
+| M6 scope item | Disposition |
+| --- | --- |
+| Delete `apps/web/src/modules/workspace/OverviewTab.tsx` and its `WORKSPACE_TABS` entry | **Subsumed by 0849** — it deletes the whole `workspace/` directory, a superset of this item |
+| Rename the Inbox `Supervisor` tab to stop colliding with the Teams Supervisor tab | **Moot after 0849** — both modules are deleted, so the collision cannot occur (`FIXED_INBOX_TABS` in `inbox/tabs.ts` and `TEAMS_TABS` in `teams/tabs.ts` both disappear) |
+| Keep Workspace as a lens over scoped Team / Inbox / Tasks | **Rejected by G6** — the Projects module replaces the lens; ADR-116 (0850) records the supersession |
+| Fold `workDir` and `model` into the Teams Supervisor team header / member row | **Single evidence-gated residual** — after 0842 ships, inspect `apps/web/src/modules/projects/MemberDetail.tsx`: if neither field is present, create exactly one task against the Agents view; if present, this item closes with that as evidence |
+| Record the no-`role`-noun recommendation as the approach | **Honored** — G6 keeps role as a value on the agent spec against the closed set `['scribe','coder','reviewer','planner']`; no G6 task adds a `role` noun |
+
+Closure rationale: nothing in this feature was implemented as specified. Its Overview deletion
+happens as a side effect of 0849 deleting the entire module, its label split becomes impossible
+rather than satisfied, and its "keep Workspace as a lens" decision is explicitly reversed by
+ADR-116. `cancelled` records what actually happened; `done` would claim this design shipped.
+
 ## History
+
+- 2026-09-13T02:54:19.895Z backlog → cancelled (system)
+

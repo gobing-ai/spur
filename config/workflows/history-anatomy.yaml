@@ -72,7 +72,10 @@ vars:
   agent: "claude"
   spurBin: "spur"
   __runId: ""
-  stepTimeoutMs: "1800000"
+  # 2026-09-12: raised 30m -> 60m. Observed runs on zai/glm-5.3-flash butt against the
+  # 30m ceiling (correct exited at exactly 30m00s; a prior run passed at 29m52s) — the
+  # enrich/validate/correct stages legitimately need >30m for the 60KB candidate report.
+  stepTimeoutMs: "3600000"
   workflowFile: "config/workflows/history-anatomy.yaml"
   contractVersion: "1"
   reportDir: "docs/report"
@@ -225,6 +228,24 @@ states:
           role: reviewer
           expectFile: .spur/run/${vars.__runId}-validation.txt
           timeoutMs: ${vars.stepTimeoutMs}
+      - kind: shell
+        options:
+          # 2026-09-13 verdict-placement normalization: the 0771 guard reads ONLY the
+          # final line, but models sometimes lead with `Verdict: PASS` and close with
+          # prose — a substantive PASS must not die as a format phantom (observed
+          # 2026-09-13 run 94c4d6dc). Moves the verdict line to the end ONLY when
+          # exactly one exact-line verdict exists and it is PASS. Any `Verdict: FAIL`
+          # line anywhere (or multiple/ambiguous verdict lines) suppresses
+          # normalization, so the guard still fails and a real FAIL can never be
+          # laundered into a PASS.
+          command: >-
+            f=.spur/run/$__runId-validation.txt;
+            if [ -f "$f" ] && ! tail -n 1 "$f" | grep -qx 'Verdict: PASS'; then
+              p=$(grep -cx 'Verdict: PASS' "$f"); q=$(grep -cx 'Verdict: FAIL' "$f");
+              if [ "$p" = 1 ] && [ "$q" = 0 ]; then
+                grep -vx 'Verdict: PASS' "$f" > "$f.tmp" && printf 'Verdict: PASS\n' >> "$f.tmp" && mv "$f.tmp" "$f";
+              fi;
+            fi
       - kind: shell
         options:
           command: >-

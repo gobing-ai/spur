@@ -1,0 +1,1394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>G6 Projects prototype — simulation only</title>
+<style>
+  /* DESIGN.md tokens; system font fallbacks only — the page must load standalone (no network fetches). */
+  :root{
+    --primary:#5e6ad2; --on-primary:#ffffff; --primary-hover:#828fff; --primary-focus:#5e69d1;
+    --ink:#f7f8f8; --ink-muted:#d0d6e0; --ink-subtle:#8a8f98; --ink-tertiary:#62666d;
+    --canvas:#010102; --surface-1:#0f1011; --surface-2:#141516; --surface-3:#18191a; --surface-4:#191a1b;
+    --hairline:#23252a; --hairline-strong:#34343a; --hairline-tertiary:#3e3e44;
+    --semantic-success:#27a644;
+    --r-xs:4px; --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:16px; --r-pill:9999px;
+    --s-xxs:4px; --s-xs:8px; --s-sm:12px; --s-md:16px; --s-lg:24px; --s-xl:32px;
+    font-family:"Linear Text", SF Pro Text, -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--canvas);color:var(--ink);font-size:15px;line-height:1.5}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:12.5px}
+  h1,h2,h3{font-weight:600;letter-spacing:-.3px;margin:0}
+  button{font:inherit;color:inherit;cursor:pointer}
+  .btn{background:var(--surface-1);border:1px solid var(--hairline);border-radius:var(--r-md);
+       padding:6px 12px;font-size:13.5px;font-weight:500}
+  .btn:hover{background:var(--surface-2);border-color:var(--hairline-strong)}
+  .btn-primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+  .btn-primary:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+  .btn:disabled{color:var(--ink-tertiary);cursor:not-allowed;background:var(--surface-1)}
+  .btn:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{
+    outline:2px solid var(--primary-focus);outline-offset:1px}
+
+  .proto-banner{background:repeating-linear-gradient(-45deg,#2a2a10,#2a2a10 12px,#232212 12px,#232212 24px);
+    border-bottom:1px solid var(--hairline-strong);color:#f3e17a;padding:8px var(--s-lg);
+    font-size:12.5px;font-weight:600;letter-spacing:.4px}
+  .proto-banner .sub{display:block;color:var(--ink-subtle);font-weight:400;letter-spacing:0}
+
+  .appbar{display:grid;grid-template-columns:240px auto auto auto auto;gap:var(--s-xs) var(--s-md);
+    align-items:start;padding:var(--s-sm) var(--s-lg);border-bottom:1px solid var(--hairline);
+    background:var(--surface-1);position:relative;z-index:2}
+  .appbar .eyebrow{display:block;font-size:11px;letter-spacing:.4px;color:var(--ink-subtle);text-transform:uppercase}
+  .appbar .field{font-size:13.5px;color:var(--ink-muted)}
+  select#project-select{background:var(--surface-2);color:var(--ink);border:1px solid var(--hairline-strong);
+    border-radius:var(--r-md);padding:8px 10px;font-size:14px;font-weight:600;width:100%}
+  .appbar-note{grid-column:1 / -1;font-size:12px;color:var(--ink-subtle);border-top:1px solid var(--hairline);padding-top:6px}
+
+  .tabs{display:flex;gap:var(--s-xxs);padding:0 var(--s-lg);border-bottom:1px solid var(--hairline);background:var(--canvas)}
+  .g6-tab{background:none;border:none;border-radius:var(--r-md) var(--r-md) 0 0;padding:10px 16px;
+    font-size:14px;font-weight:500;color:var(--ink-subtle);border-bottom:2px solid transparent}
+  .g6-tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--primary);background:var(--surface-1)}
+  .g6-tab .count{color:var(--ink-tertiary);font-size:12px;margin-left:4px}
+
+  main{max-width:1280px;margin:0 auto;width:100%;padding:var(--s-lg)}
+  .cols{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:var(--s-lg)}
+  .card{background:var(--surface-1);border:1px solid var(--hairline);border-radius:var(--r-lg);padding:var(--s-lg)}
+  .card + .card{margin-top:var(--s-lg)}
+  /* biome-ignore lint/style/noDescendingSpecificity: class ordering is cosmetic here */
+  .eyebrow{font-size:12px;letter-spacing:.4px;font-weight:500;color:var(--ink-subtle);text-transform:uppercase}
+  .muted{color:var(--ink-muted)} .subtle{color:var(--ink-subtle)} .tertiary{color:var(--ink-tertiary)}
+
+  #conversation{display:flex;flex-direction:column;gap:var(--s-sm);min-height:140px}
+  .entry{border:1px solid var(--hairline);border-radius:var(--r-md);padding:10px 12px;background:var(--surface-2)}
+  .entry.kind-result{background:var(--surface-1)}
+  .entry .meta{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;font-size:12px;color:var(--ink-subtle)}
+  .entry .text{white-space:pre-wrap;color:var(--ink-muted);margin-top:2px}
+  .status-badge{border:1px solid var(--hairline-strong);border-radius:var(--r-pill);padding:1px 9px;
+    background:var(--surface-3);color:var(--ink-muted);font-size:12px;font-weight:600;white-space:nowrap}
+  .status-badge.ok{background:#122418;color:#9fe0af;border-color:#3d6b48}
+  .status-badge.warn{background:#2a2410;color:#f3e17a;border-color:#5c5322}
+  .status-badge.err{background:#2a1518;color:#f0a0aa;border-color:#5c2b32}
+  .entry .actions{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+  .entry .actions .btn{padding:3px 10px;font-size:12px}
+  .state-card{border:1px dashed var(--hairline-strong);border-radius:var(--r-md);padding:10px 12px;
+    background:var(--surface-3);font-size:13px;color:var(--ink-muted);margin-bottom:var(--s-sm)}
+  .state-card strong{color:#f3e17a}
+
+  .composer{position:static;background:var(--surface-2);
+    border-top:1px solid var(--hairline-strong);padding:var(--s-sm) var(--s-lg);z-index:20}
+  .composer-inner{max-width:1256px;margin:0 auto}
+  .composer .hint{font-size:11.5px;color:var(--ink-tertiary);margin-top:4px}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-3);border:1px solid var(--hairline-strong);
+    border-radius:var(--r-pill);padding:2px 4px 2px 10px;font-size:12px;color:var(--ink-muted);margin:0 6px 4px 0}
+  .chip .x{border:none;background:none;color:var(--ink-subtle);padding:0 4px;font-size:14px}
+  textarea#composer{width:100%;min-height:64px;resize:vertical;background:var(--surface-1);color:var(--ink);
+    border:1px solid var(--hairline-strong);border-radius:var(--r-md);padding:10px 12px;font:inherit}
+  .composer-row{display:flex;gap:var(--s-sm);align-items:center;margin-top:var(--s-xs)}
+
+  .fixture-bar{position:static;width:auto;max-height:none;margin-top:var(--s-lg);overflow:auto;
+    background:var(--surface-2);border:1px solid var(--hairline-strong);border-radius:var(--r-lg);padding:var(--s-sm);
+    z-index:15;font-size:12px}
+  .fixture-bar .eyebrow{display:block;margin:8px 0 4px}
+  .fixture-bar > .eyebrow:first-child{margin-top:0}
+  .fixture-bar .btn{display:block;width:100%;text-align:left;margin-bottom:4px;padding:4px 8px;font-size:12px}
+  .fixture-bar .btn[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+  .fixture-note{color:var(--ink-tertiary);font-size:10.5px;margin:6px 0 0}
+
+  .roster{display:flex;flex-direction:column;gap:var(--s-sm)}
+  .member{display:flex;justify-content:space-between;align-items:center;gap:var(--s-sm);
+    border:1px solid var(--hairline);border-radius:var(--r-md);padding:10px 12px;background:var(--surface-2)}
+  .member .id{font-size:14px;font-weight:600}
+  .member .sub{font-size:12px;color:var(--ink-subtle)}
+  .role-badge{border:1px solid var(--hairline-strong);border-radius:var(--r-xs);padding:1px 7px;font-size:11px;
+    letter-spacing:.4px;text-transform:uppercase;color:var(--ink-muted);background:var(--surface-3)}
+  #agent-detail{margin-top:var(--s-lg);border-top:1px solid var(--hairline-strong);padding-top:var(--s-md)}
+  #agent-detail[hidden]{display:none}
+  .detail-tabs{display:flex;gap:var(--s-xxs);margin:var(--s-sm) 0;flex-wrap:wrap}
+  .detail-tabs .btn[aria-selected="true"]{background:var(--surface-3);border-color:var(--hairline-tertiary)}
+  .panel{background:var(--canvas);border:1px solid var(--hairline);border-radius:var(--r-md);padding:var(--s-md);
+    color:var(--ink-muted);white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;max-height:240px;overflow:auto}
+
+  .task{display:flex;justify-content:space-between;align-items:center;gap:var(--s-md);
+    border:1px solid var(--hairline);border-radius:var(--r-md);background:var(--surface-2);padding:10px 12px;margin-bottom:8px}
+  .task .sub{font-size:12px;color:var(--ink-subtle)}
+
+  #g6-live{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+  #g6-live-visual{min-height:18px;font-size:12.5px;color:var(--ink-muted);padding:4px var(--s-lg) 6px;
+    border-bottom:1px solid var(--hairline);background:var(--surface-1)}
+  #storage-notice{background:#2a2410;color:#f3e17a;border:1px solid #5c5322;border-radius:var(--r-md);
+    padding:8px 12px;font-size:12.5px;margin:0 0 var(--s-md)}
+  .member,.task{flex-wrap:wrap}
+  .member > div,.appbar > div{min-width:0;overflow-wrap:anywhere}
+  @media (max-width: 1020px){
+    .appbar{grid-template-columns:1fr 1fr;gap:var(--s-xs)}
+    main{padding-right:var(--s-lg)}
+    .fixture-bar{position:static;width:auto;max-height:none;margin-top:var(--s-md)}
+    .cols{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="proto-banner">⚠ G6 PROJECTS PROTOTYPE — SIMULATION ONLY
+  <span class="sub">Every control, receipt, process line and result here is mock data. Nothing contacts a backend, agent process or project server. Production Board routes, components and storage are untouched; prototype state lives only in the versioned key <code class="mono">spur:g6:projects-prototype:v1</code> above its own version field.</span>
+</div>
+
+<div id="g6-live" role="status" aria-live="polite"></div>
+<div id="g6-live-visual"></div>
+
+<header class="appbar">
+  <div>
+    <span class="eyebrow"><label for="project-select">Project selector — two fixtures share the display label “Aurora”</label></span>
+    <select id="project-select" aria-label="Switch project (two fixtures share the display label Aurora)"></select>
+  </div>
+  <div><span class="eyebrow">Worktree</span><div class="field mono" id="hdr-worktree"></div></div>
+  <div><span class="eyebrow">Strategy</span><div class="field" id="hdr-strategy"></div></div>
+  <div><span class="eyebrow">Orchestrator</span><div class="field" id="hdr-orch"></div></div>
+  <div><span class="eyebrow">Capacity</span><div class="field" id="hdr-capacity"></div></div>
+  <div class="appbar-note subtle" id="hdr-storage-note"></div>
+</header>
+
+<nav class="tabs" id="g6-tabs" role="tablist" aria-label="Projects views">
+  <button class="g6-tab" id="tab-conversation" type="button" role="tab" aria-selected="true" aria-controls="view-conversation" data-g6-view="conversation">Conversation</button>
+  <button class="g6-tab" id="tab-agents" type="button" role="tab" aria-selected="false" aria-controls="view-agents" data-g6-view="agents" tabindex="-1">Agents<span id="agents-count" class="count"></span></button>
+  <button class="g6-tab" id="tab-work" type="button" role="tab" aria-selected="false" aria-controls="view-work" data-g6-view="work" tabindex="-1">Work</button>
+</nav>
+
+<div class="composer">
+  <div class="composer-inner">
+    <div id="chips"></div>
+    <textarea id="composer" rows="2" data-g6="composer" aria-label="Message to this project’s agents (simulated dispatch)"
+      placeholder="Ask this project’s agents… (Enter submits · Shift+Enter newline · never during IME composition)"></textarea>
+    <div class="composer-row">
+      <button class="btn btn-primary" id="send-btn" type="button" disabled data-g6="send">Send</button>
+      <span class="hint">Enter submits · Shift+Enter newline · Esc closes detail and returns focus to the opener</span>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div id="storage-notice" hidden role="status"></div>
+
+  <section id="view-conversation" role="tabpanel" aria-labelledby="tab-conversation">
+    <div class="cols">
+      <div>
+        <h2 style="margin-bottom:6px">Conversation</h2>
+        <p class="subtle" id="convo-sub" style="font-size:13px;margin:0 0 var(--s-sm)"></p>
+        <div id="state-cards"></div>
+        <div id="conversation" aria-label="Conversation history (mock) — one conversation per project"></div>
+      </div>
+      <div>
+        <div class="card">
+          <h3>Selected work reference</h3>
+          <p class="subtle" id="ref-state" style="font-size:13px;margin-bottom:8px"></p>
+          <p class="subtle" style="font-size:12.5px;margin:0">Requests capture <code class="mono">projectPath</code>, <code class="mono">requestId</code>, <code class="mono">text</code> and optional <code class="mono">taskId</code>/<code class="mono">featureId</code> at submission. Navigation (project switching, agents, incoming receipts) cannot retarget them; receipts and results always land in their captured project.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-agents" role="tabpanel" aria-labelledby="tab-agents" hidden>
+    <h2 style="margin-bottom:6px">Agents</h2>
+    <p class="subtle" id="agents-sub" style="font-size:13px;margin:0 0 var(--s-sm)"></p>
+    <div class="roster" id="agent-roster"></div>
+    <div id="agent-detail" hidden>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h3 id="agent-detail-title"></h3>
+        <button class="btn" id="agent-detail-close" type="button">Close (Esc)</button>
+      </div>
+      <p class="subtle" id="agent-detail-sub" style="font-size:12.5px;margin:4px 0 8px"></p>
+      <button class="btn" id="agent-start" type="button">Start member (mock)</button>
+      <button class="btn" id="agent-stop" type="button">Stop member (mock)</button>
+      <div class="detail-tabs" role="tablist" aria-label="Member inspection panels (mock)">
+        <button class="btn" type="button" role="tab" aria-selected="true" data-detail-tab="process">Process</button>
+        <button class="btn" type="button" role="tab" aria-selected="false" data-detail-tab="terminal" tabindex="-1">Terminal</button>
+        <button class="btn" type="button" role="tab" aria-selected="false" data-detail-tab="messages" tabindex="-1">Messages</button>
+        <button class="btn" type="button" role="tab" aria-selected="false" data-detail-tab="activity" tabindex="-1">Activity</button>
+      </div>
+      <div class="panel" id="agent-detail-panel" data-g6="detail-panel"></div>
+      <form id="member-input-form" hidden>
+        <label for="member-input">Member input (mock; Terminal line or inbox message)</label>
+        <input id="member-input" autocomplete="off">
+        <button class="btn" type="submit">Send to member (mock)</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="view-work" role="tabpanel" aria-labelledby="tab-work" hidden>
+    <h2 style="margin-bottom:6px">Work</h2>
+    <p class="subtle" style="font-size:13px;margin:0 0 var(--s-sm)">This project’s task/feature fixtures. “Use in conversation” links a task into this project’s <strong>same</strong> conversation — Work never keeps a second backlog, a second conversation, or duplicate status state.</p>
+    <div id="work-list"></div>
+    <p class="subtle" id="work-context" style="font-size:12.5px"></p>
+  </section>
+
+  <aside class="fixture-bar" aria-label="Simulation fixture controls">
+    <span class="eyebrow">Fixture controls — simulation</span>
+    <button class="btn" type="button" data-g6-fixture="delay" aria-pressed="false">Toggle delayed acceptance (~4 s)</button>
+    <button class="btn" type="button" data-g6-fixture="netfail" aria-pressed="false">Toggle network failure at acceptance</button>
+    <button class="btn" type="button" data-g6-fixture="dupretry">Duplicate retry (same immutable payload)</button>
+    <button class="btn" type="button" data-g6-fixture="late-result">Deliver latest result (into its owning project)</button>
+    <button class="btn" type="button" data-g6-fixture="rehydrate">Rehydrate from storage (simulated refresh)</button>
+    <button class="btn" type="button" data-g6-fixture="corrupt-storage">Corrupt storage payload, then reload</button>
+    <span class="eyebrow">R3 runtime states (mock — applied to the focused project)</span>
+    <button class="btn" type="button" data-g6-fixture="zero-agent">Zero agent fleet</button>
+    <button class="btn" type="button" data-g6-fixture="orch-missing">Orchestrator: missing</button>
+    <button class="btn" type="button" data-g6-fixture="orch-offline">Orchestrator: offline</button>
+    <button class="btn" type="button" data-g6-fixture="rest-held">Rest-held dispatch</button>
+    <button class="btn" type="button" data-g6-fixture="executor-unavailable">Executor unavailable</button>
+    <button class="btn" type="button" data-g6-fixture="blocked">Blocked on external signal</button>
+    <button class="btn" type="button" data-g6-fixture="failed-delivery">Failed delivery</button>
+    <button class="btn" type="button" data-g6-fixture="outcome-unknown">Outcome unknown (last running request)</button>
+    <button class="btn" type="button" data-g6-fixture="reset">Reset to nominal</button>
+    <p class="fixture-note" id="fixture-note" aria-live="off">Fixture buttons mutate only this page’s own mock state.</p>
+  </aside>
+</main>
+
+
+<script>
+/* biome-ignore-all lint/correctness/noInnerDeclarations: self-contained ES5-style simulation prototype */
+/* biome-ignore-all lint/suspicious/noFunctionAssign: monkey-patched advance() is part of the simulated arc */
+/* biome-ignore-all lint/style/useTemplate: string concatenation matches the ES5 prototype style */
+"use strict";
+(() => {
+  /* ===============================================================  fixtures
+   * Two distinct project paths share one display label ("Aurora") and identical
+   * member labels; receiver resolution must key on projectPath / requestId /
+   * spec id — never a name — otherwise this page's own receipts visibly land in
+   * the wrong project. Roles use the closed 0828 vocabulary
+   * scribe | coder | reviewer | planner; "orchestrator" is NOT a role value —
+   * the planner-role member Scout is explicitly BOUND as the project's
+   * orchestrator (mock per 0828 §5.3 explicit-orchestrator-binding proposal).
+   * 0829 is not a dependency: no simulator here claims to be a backend.        */
+  var STORE_KEY = "spur:g6:projects-prototype:v1";
+  var STORE_VERSION = 1;
+  var PROJECT_LABEL = "Aurora";
+  var PROJECTS = [
+    { path: "/work/aurora-auth",
+      worktree: "main @ 4c7f21a (aurora-auth)",
+      strategy: "managed-loop v1 — rest/GTD defaults (simulation)" },
+    { path: "/work/aurora-billing",
+      worktree: "billing @ 9d1e0b2 (aurora-billing)",
+      strategy: "managed-loop v1 — rest/GTD defaults (simulation)" }
+  ];
+  var ROLE_MEMBERS = [
+    { local: "planner-1",  role: "planner",  name: "Scout", executor: "mock-exec-a" },
+    { local: "coder-1",    role: "coder",    name: "Forge", executor: "mock-exec-a" },
+    { local: "coder-2",    role: "coder",    name: "Forge", executor: "mock-exec-b" },
+    { local: "reviewer-1", role: "reviewer", name: "Sable", executor: "mock-exec-b" },
+    { local: "scribe-1",   role: "scribe",   name: "Quill", executor: "mock-exec-c" }
+  ];
+  var TASKS = [
+    { taskId: "T-101", featureId: "G6",  title: "Fleet spec identity preservation", status: "todo" },
+    { taskId: "T-102", featureId: "G6",  title: "Orchestrator binding note",        status: "todo" },
+    { taskId: "T-103", featureId: "G6",  title: "Receipt-before-clear spike",       status: "doing" },
+    { taskId: "T-104", featureId: "G14", title: "Storage key rotation audit",       status: "todo" }
+  ];
+
+  /* Honest status vocabulary: each badge shows an icon + word (never color alone),
+   * an "observed meaning" line and the action actually available in that state. */
+  var STATUS = {
+    "pending": { icon: "◐", label: "pending", klass: "", obs:
+      "Receipt captured; waiting for simulated durable acceptance. The submitted draft revision clears only on durable acceptance." },
+    "accepted-working": { icon: "▶", label: "accepted · executor working", klass: "ok", obs:
+      "Simulated durable acceptance; an executor is working. This is occupancy, NOT a verified result." },
+    "queued-awaiting-orchestrator": { icon: "⏸", label: "queued-awaiting-orchestrator", klass: "warn", obs:
+      "Durable receipt exists but no active orchestrator can consume it. NOT “working”. Available action: bind/restore an orchestrator (Agents → Planner · Scout, mock)." },
+    "rest-held": { icon: "⏳", label: "rest-held", klass: "warn", obs:
+      "Rest accepted the request into a visible hold. Available action: release from rest (mock) or let rest wake it; results from already-running work keep arriving." },
+    "failed-delivery": { icon: "✕", label: "failed-delivery", klass: "err", obs:
+      "The run could not accept this payload; the draft is preserved. Available action: Retry keeps the SAME requestId for this immutable payload; editing text first creates a NEW requestId." },
+    "executor-unavailable": { icon: "⊘", label: "executor-unavailable", klass: "err", obs:
+      "No executor tier can serve the addressed member, so the request was not accepted; the draft is preserved. Available action: fix the member's executor binding (mock), then retry — same payload, same requestId." },
+    "blocked": { icon: "⛔", label: "blocked", klass: "warn", obs:
+      "Waiting on an external signal. Today's runtime has no first-class blocked signal (0828) — treat as occupancy ambiguity. Available action: inspect Activity for the pending signal, then unblock (mock)." },
+    "outcome-unknown": { icon: "?", label: "outcome-unknown", klass: "err", obs:
+      "The run exited without a verifiable receipt. Available action: inspect Messages/Activity and reconcile before any resend — an unconditional retry would duplicate the payload or abandon in-flight work." },
+    "completed-exit-only": { icon: "✓", label: "run exit 0 recorded (unverified)", klass: "warn", obs:
+      "A process exit code is not proof of success (run exit ≠ verified result). Available action: reconcile in Messages/Activity; only then mark the result verified (mock)." },
+    "completed-verified": { icon: "✓", label: "completed · verified result", klass: "ok", obs:
+      "Result received and reconciled against the original request. Mock receipt only — never a production receipt." }
+  };
+
+  var state = { focused: PROJECTS[0].path, projects: {}, detail: null, storageBroken: false };
+
+  function freshProject(fx) {
+    var p = {
+      path: fx.path, worktree: fx.worktree, strategy: fx.strategy, label: PROJECT_LABEL,
+      draft: "", revision: 0, seq: 0, entries: [], pendingTask: null,
+      orchestrator: "online", fleet: "ready", restHold: false,
+      executorState: "ready", blocked: false, netfail: false, delayed: false
+    };
+    p.members = ROLE_MEMBERS.map((m) => ({ local: m.local, role: m.role, name: m.name, executor: m.executor,
+               specId: `${fx.path.replace(/^\//, "").replace(/\//g, "-")}/${m.local}`,
+               occupancy: "idle", pending: 0 }));
+    return p;
+  }
+  function proj(path) { return state.projects[path]; }
+  function focused() { return proj(state.focused); }
+
+  /* ================================================ persistence (prototype-only) */
+  function serialize() {
+    return JSON.stringify({
+      version: STORE_VERSION,
+      focused: state.focused,
+      projects: PROJECTS.map((fx) => {
+        var p = proj(fx.path);
+        return { path: p.path, draft: p.draft, revision: p.revision, seq: p.seq, entries: p.entries,
+                 pendingTask: p.pendingTask, orchestrator: p.orchestrator, fleet: p.fleet,
+                 restHold: p.restHold, executorState: p.executorState, blocked: p.blocked,
+                 lastFailedId: p.lastFailedId || null, lastFailedKey: p.lastFailedKey || null };
+      })
+    });
+  }
+  function save() {
+    if (state.storageBroken) return;
+    try { window.localStorage.setItem(STORE_KEY, serialize()); }
+    catch (err) { notice(`storage write rejected (${err?.name}) — continuing session-only`); }
+  }
+  function load() {
+    PROJECTS.forEach((fx) => { state.projects[fx.path] = freshProject(fx); });
+    state.detail = null; state.focused = PROJECTS[0].path;
+    var raw = null;
+    try { raw = window.localStorage.getItem(STORE_KEY); }
+    catch (err) { notice(`storage unavailable (${err?.name}) — continuing session-only`); return; }
+    if (raw === null) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed.version !== STORE_VERSION) {
+        throw new Error(`unsupported version ${JSON.stringify(parsed.version)}`);
+      }
+      hydrate(parsed);
+    } catch (err) {
+      /* Nonfatal: start from clean in-memory state; leave the bad payload untouched. */
+      notice("invalid storage payload (" + (err?.message) +
+             ") — treated as empty storage; starting fresh session-only without touching the stored bytes");
+      state.storageBroken = true;
+    }
+  }
+  function hydrate(data) {
+    if (!Array.isArray(data.projects)) throw new Error("projects must be an array");
+    var byPath = {};
+    data.projects.forEach((sp) => {
+      if (!sp || typeof sp.path !== "string" || !Array.isArray(sp.entries) ||
+          sp.entries.some((e) => !e || typeof e.id !== "string" || typeof e.requestId !== "string" ||
+            typeof e.text !== "string" || !STATUS[e.status] || !["request", "result"].includes(e.kind) ||
+            e.projectPath !== sp.path)) throw new Error("invalid project or conversation entry");
+      byPath[sp.path] = sp;
+    });
+    PROJECTS.forEach((fx) => {
+      var sp = byPath[fx.path]; if (!sp) return;
+      var p = proj(fx.path);
+      if (typeof sp.draft === "string") p.draft = sp.draft;
+      if (Number.isSafeInteger(sp.revision) && sp.revision >= 0) p.revision = sp.revision;
+      if (Number.isSafeInteger(sp.seq) && sp.seq >= 0) p.seq = sp.seq;
+      if (Array.isArray(sp.entries)) p.entries = sp.entries.filter((e) => e && typeof e.requestId === "string" && e.projectPath === p.path);
+      p.entries.forEach((e) => { e._pendingDelay = false; });
+      p.pendingTask = sp.pendingTask || null;
+      p.orchestrator = ["online", "missing", "offline"].indexOf(sp.orchestrator) >= 0 ? sp.orchestrator : "online";
+      p.fleet = sp.fleet === "zero" ? "zero" : "ready";
+      p.restHold = !!sp.restHold;
+      p.executorState = sp.executorState === "unavailable" ? "unavailable" : "ready";
+      p.blocked = !!sp.blocked;
+      /* Retry identity survives refresh too: a failed-delivery row keeps its
+       * draft and its requestId across rehydration. */
+      p.lastFailedId = typeof sp.lastFailedId === "string" ? sp.lastFailedId : null;
+      p.lastFailedKey = typeof sp.lastFailedKey === "string" ? sp.lastFailedKey : null;
+    });
+    if (data.focused && proj(data.focused)) state.focused = data.focused;
+  }
+  function notice(msg) {
+    var el = document.getElementById("storage-notice");
+    el.hidden = false;
+    el.textContent = `Prototype notice (nonfatal): ${msg}`;
+    live(`Persistence notice: ${msg}`);
+  }
+  function clearNotice() {
+    var el = document.getElementById("storage-notice");
+    el.hidden = true; el.textContent = "";
+  }
+
+  function live(msg) {
+    var al = document.getElementById("g6-live");
+    var vl = document.getElementById("g6-live-visual");
+    al.textContent = "";
+    vl.textContent = `status: ${msg}`;
+    al.textContent = msg;
+  }
+
+  /* =================================================================  composer */
+  var composer = document.getElementById("composer");
+  var sendBtn = document.getElementById("send-btn");
+  sendBtn.addEventListener("click", submit);
+
+  function refreshSendState() { sendBtn.disabled = composer.value.trim().length === 0; }
+  function payloadKey(text, ref) {
+    return JSON.stringify({ text: text, taskId: ref ? ref.taskId : null, featureId: ref ? ref.featureId : null });
+  }
+  function refOf(e) { return e.taskId ? { taskId: e.taskId, featureId: e.featureId } : null; }
+
+  function renderChips() {
+    var p = focused(), host = document.getElementById("chips");
+    host.textContent = "";
+    if (p.pendingTask) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.setAttribute("data-g6", "task-chip");
+      chip.appendChild(document.createTextNode("Ref " + p.pendingTask.taskId +
+        " · feature " + p.pendingTask.featureId + " — " + p.pendingTask.title));
+      const x = document.createElement("button");
+      x.className = "x"; x.type = "button"; x.textContent = "×";
+      x.setAttribute("aria-label", `Remove work reference ${p.pendingTask.taskId} from the draft`);
+      x.addEventListener("click", () => { p.pendingTask = null; p.revision++; save(); renderChips(); });
+      chip.appendChild(x);
+      host.appendChild(chip);
+    } else {
+      const none = document.createElement("span");
+      none.className = "tertiary"; none.style.fontSize = "11.5px";
+      none.textContent = "No work reference attached — the request is project-scoped text. Attach one from the Work tab.";
+      host.appendChild(none);
+    }
+  }
+
+  composer.addEventListener("input", () => {
+    var p = focused();
+    p.draft = composer.value;
+    p.revision++;
+    save();
+    refreshSendState();
+  });
+
+  composer.addEventListener("keydown", (e) => {
+    /* IME safety first: Enter during composition never submits. */
+    if (e.isComposing || e.keyCode === 229) { return; }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    }
+    /* Shift+Enter falls through — textarea inserts the newline natively. */
+  });
+
+  /* ==================================================================  submit */
+  function submit() {
+    var p = focused();
+    var text = composer.value;
+    if (!text.trim()) return;
+    var key = payloadKey(text, p.pendingTask);
+
+    /* Idempotent retry: same immutable payload after a retryable failure keeps the
+     * same requestId; any payload change mints a new requestId. */
+    if (p.lastFailedId && p.lastFailedKey === key) {
+      const target = p.lastFailedId;
+      let prior = null;
+      for (let i = 0; i < p.entries.length; i++) {
+        if (p.entries[i].requestId === target) { prior = p.entries[i]; }
+      }
+      if (prior) {
+        if (prior.status === "pending" || prior.status === "accepted-working") {
+          prior.attempts += 1;
+          save(); renderAll(); composer.focus();
+          live("Duplicate suppressed — " + prior.requestId + " already covers this immutable payload in project " +
+               p.path + "; no second request was created (attempts=" + prior.attempts + ").");
+          return;
+        }
+        prior.status = "pending"; prior.attempts += 1;
+        prior.note = "retry — same requestId, same immutable payload";
+        p.lastFailedId = null; p.lastFailedKey = null;
+        save(); renderAll(); composer.focus();
+        live("Retry of " + prior.requestId + " submitted into project " + p.path +
+             "; receipt is pending again for the same immutable payload.");
+        return;
+      }
+    }
+
+    /* Duplicate suppression by immutable payload: a request already pending,
+     * accepted, or failed-delivery for this payload covers the new send — no
+     * second request exists. A failed-delivery cover is a retry: the SAME
+     * requestId is re-armed, so refresh/rehydrate cannot mint a duplicate. */
+    var covering = null;
+    for (let di = 0; di < p.entries.length; di++) {
+      const cand = p.entries[di];
+      if (cand.kind !== "request") continue;
+      if (payloadKey(cand.text, refOf(cand)) !== key) continue;
+      if (cand.status === "pending" || cand.status === "accepted-working" ||
+          cand.status === "queued-awaiting-orchestrator" || cand.status === "rest-held" ||
+          cand.status === "executor-unavailable" || cand.status === "blocked" ||
+          cand.status === "failed-delivery" || cand.status === "outcome-unknown" || cand.status === "completed-exit-only") {
+        covering = cand; break;
+      }
+    }
+    if (covering) {
+      if (covering.status === "failed-delivery") {
+        covering.status = "pending"; covering.attempts += 1;
+        covering.note = "retry — same requestId, same immutable payload";
+        p.lastFailedId = null; p.lastFailedKey = null;
+        save(); renderAll(); composer.focus();
+        live("Retry of " + covering.requestId + " submitted into project " + p.path +
+             "; receipt is pending again for the same immutable payload.");
+        return;
+      }
+      covering.attempts += 1;
+      save(); renderAll(); composer.focus();
+      live("Duplicate suppressed — " + covering.requestId + " already covers this immutable payload in project " +
+           p.path + "; no second request was created (attempts=" + covering.attempts + ").");
+      return;
+    }
+
+    p.seq += 1;
+    var suffix = p.path === PROJECTS[0].path ? "a" : "b";
+    var entry = {
+      id: `e${p.seq}${suffix}`,
+      kind: "request", projectPath: p.path, projectLabel: p.label,
+      requestId: `req-${p.seq}${suffix}`, text: text, attempts: 1,
+      taskId: p.pendingTask ? p.pendingTask.taskId : null,
+      featureId: p.pendingTask ? p.pendingTask.featureId : null,
+      status: "pending", submittedRevision: p.revision, submittedAt: `step ${p.seq}`, note: null
+    };
+    p.entries = p.entries.concat([entry]);
+    p.lastFailedId = null; p.lastFailedKey = null;
+    /* Composer value deliberately stays until durable acceptance clears the
+     * submitted revision (and only if the user has not edited while waiting). */
+    save(); renderAll(); composer.focus();
+    live("Request " + entry.requestId + " captured in project " + p.path +
+         " (projectPath, requestId, text" + (entry.taskId ? ", taskId, featureId" : "") +
+         "). Receipt pending; the submitted draft revision clears only on durable acceptance.");
+  }
+
+  /* ============================== single transition engine for a captured request */
+  function advance(e) {
+    var p = proj(e.projectPath);
+    var resolveStatus = () => {
+      if (p.netfail) return "failed-delivery";
+      if (p.fleet === "zero" || p.orchestrator === "missing" || p.orchestrator === "offline")
+        return "queued-awaiting-orchestrator";
+      if (p.restHold) return "rest-held";
+      if (p.executorState === "unavailable") return "executor-unavailable";
+      if (p.blocked) return "blocked";
+      return "accepted-working";
+    };
+    if (e.status !== "pending") return;
+    var targetStatus = resolveStatus();
+    e.status = targetStatus;
+    if (targetStatus === "failed-delivery") {
+      p.lastFailedKey = payloadKey(e.text, refOf(e));
+      p.lastFailedId = e.requestId;
+      e.note = `network failure at acceptance — draft untouched; retry reuses ${e.requestId}`;
+      live("Request " + e.requestId + " FAILED to accept in project " + p.path +
+           ". Draft preserved. Retry (same payload) reuses " + e.requestId + "; a changed payload gets a new id.");
+    } else if (targetStatus === "queued-awaiting-orchestrator") {
+      e.note = p.fleet === "zero" ? "zero-agent fleet: only a durable queue exists"
+             : p.orchestrator === "offline" ? "orchestrator reachable check failed; queue is durable"
+             : "no orchestrator bound for this project";
+      clearSubmittedRevisionIfNeeded(p, e);
+      live("Request " + e.requestId + " is queued-awaiting-orchestrator in project " + p.path +
+           " — a durable receipt, not “working”. Available action: bind an orchestrator (Agents, mock).");
+    } else if (targetStatus === "rest-held") {
+      e.note = "rest accepted this request into its visible hold";
+      clearSubmittedRevisionIfNeeded(p, e);
+      live("Request " + e.requestId + " is rest-held in project " + p.path +
+           ". Available action: release from rest (mock); running results still arrive.");
+    } else if (targetStatus === "executor-unavailable") {
+      e.note = "no executor tier can serve the addressed member";
+      live("Request " + e.requestId + " is executor-unavailable in project " + p.path +
+           ". Draft preserved. Fix the binding, then retry — same payload, same requestId.");
+    } else if (targetStatus === "blocked") {
+      e.note = "waiting on an external signal (occupancy ambiguous per 0828)";
+      clearSubmittedRevisionIfNeeded(p, e);
+      live("Request " + e.requestId + " is blocked in project " + p.path +
+           " — inspect Activity for the external signal, then unblock (mock).");
+    } else {
+      e.note = "durable accept: executor working (simulated)";
+      clearSubmittedRevisionIfNeeded(p, e);
+      p.members.forEach((m) => { if (m.local === "coder-1") m.occupancy = "working"; });
+      live("Request " + e.requestId + " accepted into project " + p.path +
+           " — executor working (simulated). An eventual exit code is NOT a verified result.");
+    }
+    save();
+  }
+  /* Clear only the submitted revision: edits while waiting are retained, and the
+   * clear applies to the ORIGINATING project's draft, never the focused one. */
+  function clearSubmittedRevisionIfNeeded(p, e) {
+    if (p.revision === e.submittedRevision && p.draft === e.text) {
+      p.draft = ""; p.pendingTask = null; p.revision++;
+      if (e.projectPath === state.focused) { composer.value = ""; refreshSendState(); }
+    }
+  }
+
+  /* ======================================================= per-row fixture actions */
+  function getEntry(id) {
+    for (let i = 0; i < PROJECTS.length; i++) {
+      var ps = proj(PROJECTS[i].path).entries;
+      for (let j = 0; j < ps.length; j++) {
+        if (ps[j].id === id) return { e: ps[j], project: proj(PROJECTS[i].path) };
+      }
+    }
+    return null;
+  }
+  function forceStatus(id, mode) {
+    var hit = getEntry(id);
+    if (!hit) return;
+    var p = hit.project, e = hit.e;
+    if (e.status !== "pending") return;
+    if (mode === "fail") {
+      e.status = "failed-delivery";
+      p.lastFailedKey = payloadKey(e.text, refOf(e));
+      p.lastFailedId = e.requestId;
+      e.note = "delivery failed by fixture — draft untouched; retry reuses " + e.requestId +
+               " for the same immutable payload; a changed payload gets a new id";
+      save();
+      live("Request " + e.requestId + " FAILED delivery in project " + p.path +
+           ". Draft preserved. Retry reuses the same requestId for the same immutable payload.");
+    }
+  }
+  function arriveResult(id, kind) {
+    var hit = getEntry(id);
+    if (!hit) return;
+    var e = hit.e, p = hit.project;
+    var status = kind === "verified" ? "completed-verified"
+               : kind === "unknown" ? "outcome-unknown"
+               : "completed-exit-only";
+    var result = {
+      id: `${e.id}-r${kind === "verified" ? "v" : kind === "unknown" ? "u" : "x"}`,
+      kind: "result", projectPath: e.projectPath, projectLabel: e.projectLabel,
+      requestId: e.requestId, status: status,
+      text: kind === "verified"
+        ? `Result reconciled by Reviewer · Sable against request ${e.requestId} — verified result (SIMULATED).`
+        : kind === "unknown"
+        ? `Run exited during reconciliation; no verifiable receipt for ${e.requestId}. Do NOT retry blindly — inspect and reconcile instead (guidance, not a production path).`
+        : `Run exit code 0 recorded for ${e.requestId} — exit only; this is NOT a verified result.`,
+      note: null, attempts: e.attempts
+    };
+    var insertAt = -1;
+    for (let i = 0; i < p.entries.length; i++) { if (p.entries[i].id === e.id) insertAt = i; }
+    p.entries = p.entries.slice(0, insertAt + 1).concat([result]).concat(p.entries.slice(insertAt + 1));
+    e.status = status;
+    var pathNote = e.projectPath === state.focused
+      ? "focused: same project"
+      : `focused: ${state.focused} (untouched — late arrival stays in its owning project)`;
+    save(); renderAll();
+    live("Result for request " + e.requestId + " (" + STATUS[status].label + ") arrived into project " +
+         e.projectPath + "; " + pathNote + ".");
+  }
+  function releaseOrUnblock(id, how) {
+    var hit = getEntry(id);
+    if (!hit) return;
+    if (how === "release") {
+      hit.e.note = "released from rest hold (mock) — executor working (simulated)";
+      hit.e.status = "accepted-working";
+      clearSubmittedRevisionIfNeeded(hit.project, hit.e);
+      live(`Request ${hit.e.requestId} released from rest in project ${hit.project.path} (mock wake).`);
+    } else {
+      hit.e.note = "unblocked (mock) — executor working (simulated)";
+      hit.e.status = "accepted-working";
+      live(`Request ${hit.e.requestId} unblocked in project ${hit.project.path} (mock external signal delivered).`);
+    }
+    save(); renderAll();
+  }
+
+  /* ====================================================== fixes (R3 fixtures) */
+  function applyFixture(name) {
+    var p = focused();
+    if (name === "reset") {
+      PROJECTS.forEach((fx) => {
+        var q = proj(fx.path);
+        q.orchestrator = "online"; q.fleet = "ready"; q.restHold = false;
+        q.executorState = "ready"; q.blocked = false; q.netfail = false; q.delayed = false;
+      });
+      state.storageBroken = false;
+      try { window.localStorage.removeItem(STORE_KEY); } catch (err) { /* session-only anyway */ }
+      save();
+      clearNotice();
+      live("Fixtures reset to nominal; prototype storage key cleared (prototype-only).");
+      return;
+    }
+       if (name === "delay") { p.delayed = !p.delayed; }
+    if (name === "netfail") { p.netfail = !p.netfail; }
+    if (name === "zero-agent") { p.fleet = "zero"; }
+    if (name === "orch-missing") { p.orchestrator = "missing"; }
+    if (name === "orch-offline") { p.orchestrator = "offline"; }
+    if (name === "rest-held") { p.restHold = true; }
+    if (name === "executor-unavailable") { p.executorState = "unavailable"; }
+    if (name === "blocked") { p.blocked = true; }
+    if (name === "failed-delivery") { p.netfail = true; }
+    if (name === "outcome-unknown") {
+      var found = null;
+      for (var i = p.entries.length - 1; i >= 0; i--) {
+        if (p.entries[i].kind === "request" && p.entries[i].status === "accepted-working") { found = p.entries[i]; break; }
+      }
+      if (found) { found.status = "outcome-unknown"; found.note = "run exited without a verifiable receipt"; }
+      else { notice(`no running request in ${p.path} to mark outcome-unknown — submit or accept one first`); }
+    }
+    if (name === "dupretry") { duplicateRetry(); return; }
+    if (name === "late-result") { lateResult(); return; }
+    if (name === "rehydrate") {
+      load(); renderAll();
+      live(`Rehydrated from ${STORE_KEY} (simulated refresh). Cross-check: each conversation still contains only its own project's entries.`);
+      return;
+    }
+    if (name === "corrupt-storage") {
+      try { window.localStorage.setItem(STORE_KEY, '{"version":1,"projects":[broken'); }
+      catch (err) { notice(`could not even write the corrupt fixture payload (${err?.name})`); return; }
+      load(); renderAll();
+      return;
+    }
+    save(); renderAll();
+    live("Fixture applied to project " + p.path + ": " + name +
+         ". Next captured request resolves through the state machine with an honest label.");
+  }
+
+  function duplicateRetry() {
+    var p = focused();
+    var id = p.lastFailedId;
+    if (!id) { notice(`no retryable failed request in ${p.path} — toggle network failure, submit, then retry`); return; }
+    var prior = null;
+    for (let i = 0; i < p.entries.length; i++) { if (p.entries[i].requestId === id) prior = p.entries[i]; }
+    if (!prior) { notice(`failed request row vanished under ${p.path}`); return; }
+    if (prior.status === "pending" || prior.status === "accepted-working") {
+      prior.attempts += 1;
+      save(); renderAll();
+      live(`Duplicate suppressed — ${id} already covers this immutable payload (attempts=${prior.attempts}). Same requestId, same payload, no new row.`);
+      return;
+    }
+    prior.status = "pending"; prior.attempts += 1;
+    prior.note = "retry — same requestId, same immutable payload";
+    p.lastFailedId = null; p.lastFailedKey = null;
+    save(); renderAll();
+    live(`Duplicate retry of ${id} submitted with the same immutable payload in project ${p.path}`);
+    advance(prior); renderAll();
+  }
+
+  function lateResult() {
+    var pick = null, pickP = null;
+    PROJECTS.forEach((fx) => {
+      var q = proj(fx.path), entries = q.entries;
+      for (var i = entries.length - 1; i >= 0; i--) {
+        if (entries[i].kind === "request" && entries[i].status === "accepted-working") { pick = entries[i]; pickP = q; break; }
+      }
+    });
+    if (!pick) { notice("no accepted-working request anywhere — accept one first, then deliver its result"); return; }
+    var _verified = true; /* mock verified receipt */
+    var result = {
+      id: `${pick.id}-late`, kind: "result", projectPath: pick.projectPath,
+      projectLabel: pick.projectLabel, requestId: pick.requestId, status: "completed-verified",
+      text: "LATE result for " + pick.requestId + ", reconciled in project " + pick.projectPath +
+            " — verified result (SIMULATED). Arrived while another project could be focused.",
+      note: null, attempts: pick.attempts
+    };
+    pick.status = "completed-verified";
+    var insertAt = 0;
+    for (let j = 0; j < pickP.entries.length; j++) { if (pickP.entries[j].id === pick.id) insertAt = j; }
+    pickP.entries = pickP.entries.slice(0, insertAt + 1).concat([result]).concat(pickP.entries.slice(insertAt + 1));
+    var crossNote = pick.projectPath === state.focused
+      ? "the focused project is this one"
+      : `the focused project was ${state.focused} — its draft and log were NOT touched (identity is projectPath-keyed, not name-keyed)`;
+    save(); renderAll();
+    live("Late result for request " + pick.requestId + " arrived in project " + pick.projectPath +
+         " (display label “" + pick.projectLabel + "”); " + crossNote + ".");
+  }
+
+  /* =================================================================  render */
+  var VIEWS = ["conversation", "agents", "work"];
+  var currentView = "conversation";
+  var openMember = null;   /* {projectPath, local} */
+  var detailTab = "process";
+  var detailOpener = null; /* element to restore focus to on Esc */
+  var detailOpenerMember = null; /* member local name of the opener, for re-rendered roster matching */
+
+  function renderHeader() {
+    var p = focused();
+    var sel = document.getElementById("project-select");
+    if (!sel.options.length) {
+      PROJECTS.forEach((fx) => {
+        var opt = document.createElement("option");
+        opt.value = fx.path;
+        /* Display label deliberately identical for both fixtures; the
+         * header shows the path. Selection must key on value (path), not label. */
+        opt.textContent = PROJECT_LABEL;
+        sel.appendChild(opt);
+      });
+    }
+    sel.value = state.focused;
+    document.getElementById("hdr-worktree").textContent = p.worktree;
+    document.getElementById("hdr-strategy").textContent = p.restHold ? "rest — drains running work (mock)" : p.strategy;
+    var orch;
+    if (p.fleet === "zero") orch = "missing — zero agent fleet (no planner to bind)";
+    else if (p.orchestrator === "missing") orch = "missing — no orchestrator bound";
+    else if (p.orchestrator === "offline") orch = "offline — bound but unreachable";
+    else orch = "online — Planner · Scout bound as orchestrator (mock)";
+    document.getElementById("hdr-orch").textContent = orch;
+    var cap = p.fleet === "zero" ? "0/5 instances (empty fleet)" :
+              `${p.members.length}/5 instances${p.executorState === "unavailable" ? " — executor tiers unavailable" : ""}`;
+    document.getElementById("hdr-capacity").textContent = cap;
+    document.getElementById("hdr-storage-note").textContent = "";
+    var note = document.createDocumentFragment();
+    var t1 = document.createTextNode("Storage: drafts + conversations saved per project path under ");
+    var code = document.createElement("code"); code.className = "mono"; code.textContent = STORE_KEY;
+    var t2 = document.createTextNode(". Invalid/unavailable storage is a nonfatal notice (session-only). No production Board storage is read or written, and receipts/results stay bound to their captured projectPath — the identical “Aurora” labels can never retarget a request.");
+    note.appendChild(t1); note.appendChild(code); note.appendChild(t2);
+    document.getElementById("hdr-storage-note").appendChild(note);
+  }
+
+  function selectView(view) {
+    currentView = view;
+    renderAll();
+    var tab = document.getElementById(`tab-${view}`);
+    if (tab) tab.focus();
+    live(`View selected: ${view} for project ${state.focused}. Selection announced as pressed below.`);
+  }
+
+  function renderTabs() {
+    VIEWS.forEach((v) => {
+      var tab = document.getElementById(`tab-${v}`);
+      var selected = currentView === v;
+      tab.setAttribute("aria-selected", selected ? "true" : "false");
+      tab.tabIndex = selected ? 0 : -1;
+      document.getElementById(`view-${v}`).hidden = !selected;
+    });
+    var p = focused();
+    var membersEl = document.getElementById("agents-count");
+    membersEl.textContent = `(${p.fleet === "zero" ? "0" : p.members.length})`;
+  }
+
+  function renderStateCards() {
+    var p = focused(), host = document.getElementById("state-cards");
+    host.textContent = "";
+    var cards = [];
+    if (p.fleet === "zero") cards.push(["zero-agent fleet",
+      "No agent instances exist for this project. A capture still holds a durable receipt, labeled queued-awaiting-orchestrator. Available action: materialize the fleet from project config (mock) before any execution can start."]);
+    if (p.orchestrator === "missing") cards.push(["orchestrator missing",
+      "No orchestrator is bound, so nothing consumes the queue. Available action: bind the planner-role member as orchestrator (Agents, mock). Requests stay queued-awaiting-orchestrator, not failed and not working."]);
+    if (p.orchestrator === "offline") cards.push(["orchestrator offline",
+      "The bound orchestrator is unreachable. Queued receipts remain durable. Available action: restore the orchestrator process (mock), then it drains on its own schedule."]);
+    if (p.restHold && p.netfail && p.executorState === "unavailable" && p.blocked) { /* unheap impossible */ }
+    if (p.restHold) cards.push(["rest-active",
+      "Rest holds newly captured requests in a visible hold instead of dispatching. Available action: release individual holds (row button) or switch rest off (fixtures). Results from already-running work still arrive."]);
+    if (p.executorState === "unavailable") cards.push(["executor unavailable",
+      "Executor tiers cannot serve members, so requests stay unaccepted and drafts stay intact. Available action: restore an executor (mock), then retry — same payload, same requestId."]);
+    if (p.blocked) cards.push(["blocked",
+      "A run is waiting on an external signal (no first-class signal exists in the runtime today). Available action: inspect the Activity panel for what it waits on, then unblock (mock)."]);
+    if (p.netfail) cards.push(["network failure armed",
+      "The next acceptance attempt FAILS from the moment it reaches dispatch, and the draft is preserved. Available action: retry (same immutable payload, same requestId) after failure."]);
+    if (p.delayed) cards.push(["delayed acceptance armed",
+      "Acceptance completes ~4 s after capture. Use this to edit while waiting: the submitted revision clears, but newer typed text is retained."]);
+    cards.forEach((c) => {
+      var el = document.createElement("div");
+      el.className = "state-card";
+      el.setAttribute("data-g6", "state-card");
+      var s = document.createElement("strong");
+      s.textContent = `STATE (simulation): ${c[0]}. `;
+      el.appendChild(s);
+      el.appendChild(document.createTextNode(c[1]));
+      host.appendChild(el);
+    });
+  }
+
+  function entryEl(entry) {
+    var isResult = entry.kind === "result";
+    var st = STATUS[entry.status] || { icon: "•", label: entry.status, klass: "", obs: "" };
+    var el = document.createElement("div");
+    el.className = `entry${isResult ? " kind-result" : ""}`;
+    el.setAttribute("data-g6", isResult ? "result-row" : "request-row");
+    el.setAttribute("data-g6-entry-id", entry.id);
+    el.setAttribute("data-g6-entry-request-id", entry.requestId);
+    el.setAttribute("data-g6-entry-status", entry.status);
+    el.setAttribute("data-g6-entry-project", entry.projectPath);
+
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    var badge = document.createElement("span");
+    badge.className = `status-badge ${st.klass}`;
+    badge.setAttribute("data-g6-field", "status");
+    badge.textContent = `${st.icon} ${st.label}`;
+    meta.appendChild(badge);
+    var idSpan = document.createElement("span");
+    idSpan.className = "mono"; idSpan.setAttribute("data-g6-field", "request-id");
+    idSpan.textContent = entry.requestId;
+    meta.appendChild(idSpan);
+    var projSpan = document.createElement("span");
+    projSpan.setAttribute("data-g6-field", "project");
+    projSpan.textContent = `project ${entry.projectPath} (“${entry.projectLabel}”)`;
+    meta.appendChild(projSpan);
+    if (entry.taskId) {
+      var taskSpan = document.createElement("span");
+      taskSpan.setAttribute("data-g6-field", "task-ref");
+      taskSpan.className = "mono";
+      taskSpan.textContent = `taskId ${entry.taskId} · feature ${entry.featureId}`;
+      meta.appendChild(taskSpan);
+    }
+    if (entry.attempts > 1) {
+      var attSpan = document.createElement("span");
+      attSpan.textContent = `attempts ${entry.attempts}`;
+      attSpan.setAttribute("data-g6-field", "attempts");
+      meta.appendChild(attSpan);
+    }
+    el.appendChild(meta);
+
+    var text = document.createElement("div");
+    text.className = "text";
+    text.setAttribute("data-g6-field", "payload");
+    text.textContent = entry.text;
+    el.appendChild(text);
+
+    if (entry.note) {
+      var noteEl = document.createElement("div");
+      noteEl.className = "subtle"; noteEl.style.fontSize = "12px";
+      noteEl.textContent = `》“${entry.note}”`;
+      el.appendChild(noteEl);
+    }
+
+    var obs = document.createElement("div");
+    obs.className = "subtle"; obs.style.fontSize = "12px";
+    obs.textContent = `Observation + available action: ${st.obs}`;
+    el.appendChild(obs);
+
+    var acts = document.createElement("div");
+    acts.className = "actions";
+    function act(label, fn) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "btn"; b.textContent = label;
+      b.addEventListener("click", fn);
+      acts.appendChild(b);
+      return b;
+    }
+    if (isResult) {
+      const origin = proj(entry.projectPath).entries.find((e) => e.kind === "request" && e.requestId === entry.requestId);
+      if (origin?.taskId) act("Open linked work (mock)", () => {
+        state.focused = entry.projectPath;
+        selectView("work");
+        live(`Result ${entry.requestId} links to ${origin.taskId} / ${origin.featureId} in ${entry.projectPath} (mock).`);
+      });
+      if (entry.status === "completed-exit-only") {
+        act("Mark verified after reconcile (mock)", () => {
+          var hit = getEntry(entry.id);
+          var r = hit.e;
+          r.status = "completed-verified";
+          r.text = `Reconciled in-project: verified result for ${r.requestId} (SIMULATED).`;
+          save(); renderAll();
+          live(`Result ${r.requestId} marked verified after in-project reconciliation (mock); run exit alone was never treated as verified.`);
+        });
+      }
+      if (entry.status === "outcome-unknown") {
+        var inspect = document.createElement("span");
+        inspect.className = "subtle"; inspect.style.fontSize = "12px";
+        inspect.textContent = "Guidance: open the Agents member detail (Messages/Activity) and reconcile this request against its run before deciding anything. Retry is deliberately NOT offered here.";
+        acts.appendChild(inspect);
+      }
+      el.appendChild(acts);
+      return el;
+    }
+    if (entry.status === "pending") {
+      act("Durable accept now (fixture)", () => { advance(entry); renderAll(); });
+      act("Fail delivery now (fixture)", () => { forceStatus(entry.id, "fail"); renderAll(); });
+    } else if (entry.status === "accepted-working") {
+      act("Arrive run-exit-only result (fixture)", () => { arriveResult(entry.id, "exit"); renderAll(); });
+      act("Arrive verified result (fixture)", () => { arriveResult(entry.id, "verified"); renderAll(); });
+      act("Outcome unknown (fixture)", () => { arriveResult(entry.id, "unknown"); renderAll(); });
+    } else if (entry.status === "rest-held") {
+      act("Release from rest (mock)", () => { releaseOrUnblock(entry.id, "release"); renderAll(); });
+    } else if (entry.status === "blocked") {
+      act("Deliver external signal → unblock (mock)", () => { releaseOrUnblock(entry.id, "unblock"); renderAll(); });
+    } else if (entry.status === "failed-delivery") {
+      act("Retry — same payload, same requestId", () => {
+        entry.status = "pending"; entry.attempts += 1;
+        entry.note = "retry — same requestId, same immutable payload";
+        var p = proj(entry.projectPath);
+        p.lastFailedId = null; p.lastFailedKey = null;
+        save(); renderAll();
+        advance(entry); renderAll();
+      });
+      act("Edit → new payload gets a NEW requestId", () => {
+        /* honest helper, not a silent mutation: focuses the composer with the retained draft */
+        composer.focus();
+        live("Draft retained in the composer. Edit it, then send — the changed payload mints a new requestId per the retry identity rule.");
+      });
+    } else if (entry.status === "executor-unavailable") {
+      var fix = document.createElement("button");
+      fix.type = "button"; fix.className = "btn";
+      fix.textContent = "Retry — same payload, same requestId (after fixing executor, mock)";
+      fix.addEventListener("click", () => {
+        entry.status = "pending"; entry.attempts += 1;
+        entry.note = "retry — same requestId, same immutable payload";
+        var pp = proj(entry.projectPath);
+        pp.lastFailedId = null; pp.lastFailedKey = null;
+        save(); advance(entry); renderAll();
+      });
+      acts.appendChild(fix);
+      var same = document.createElement("button");
+      same.type = "button"; same.className = "btn";
+      same.textContent = "Simulate retry WITHOUT fixing executor";
+      same.addEventListener("click", () => {
+        entry.attempts += 1;
+        entry.note = `retry attempt failed again — executor still unavailable (same requestId ${entry.requestId})`;
+        save(); renderAll();
+        live(`Retry refused again for ${entry.requestId} — executor still unavailable; the requestId was reused for the same immutable payload.`);
+      });
+      acts.appendChild(same);
+    } else if (entry.status === "queued-awaiting-orchestrator") {
+      var bind = document.createElement("button");
+      bind.type = "button"; bind.className = "btn";
+      bind.textContent = "Bind orchestrator (mock) → starts working";
+      bind.addEventListener("click", () => {
+        var pp = proj(entry.projectPath);
+        pp.orchestrator = "online"; pp.fleet = "ready";
+        entry.status = "accepted-working";
+        entry.note = "orchestrator bound (mock) — drained and accepted";
+        save(); renderAll();
+        live(`Orchestrator bound for project ${pp.path}: request ${entry.requestId} drained and accepted into working.`);
+      });
+      acts.appendChild(bind);
+      var keep = document.createElement("span");
+      keep.className = "subtle"; keep.style.fontSize = "12px";
+      keep.textContent = "Resending is explicitly discouraged: the queue is durable.";
+      acts.appendChild(keep);
+    }
+    if (entry.status === "outcome-unknown") {
+      var guidance = document.createElement("span");
+      guidance.className = "subtle"; guidance.style.fontSize = "12px";
+      guidance.textContent = "Guidance: reconcile before any resend (row-level guidance is the only action here).";
+      acts.appendChild(guidance);
+    }
+    el.appendChild(acts);
+    return el;
+  }
+  function renderConversation() {
+    var p = focused(), host = document.getElementById("conversation");
+    host.textContent = "";
+    document.getElementById("convo-sub").textContent =
+      "One conversation for project " + p.path + " (display label “" + p.label + "”). " +
+      (p.fleet === "zero"
+        ? "Zero agent fleet: captures still hold durable receipts."
+        : "Dispatch, holds and receipts below are simulated.");
+    if (!p.entries.length) {
+      var empty = document.createElement("div");
+      empty.className = "tertiary"; empty.style.fontSize = "13px";
+      empty.textContent = "No entries yet for this project. Type a draft and send — the receipt appears here immediately while the draft clears only on durable acceptance.";
+      host.appendChild(empty);
+      return;
+    }
+    p.entries.forEach((e) => { host.appendChild(entryEl(e)); });
+  }
+
+  var _DETAIL_TABS = ["process", "terminal", "messages", "activity"];
+  function selectDetailTab(tab) {
+    detailTab = tab;
+    renderDetail();
+  }
+  function openDetail(projectPath, local, opener) {
+    openMember = { projectPath: projectPath, local: local };
+    detailOpener = opener;
+    detailOpenerMember = opener.getAttribute("data-g6-member");
+    document.getElementById(`view-${currentView}`).hidden = false;
+    renderAll();
+    document.getElementById("agent-detail-close").focus();
+  }
+  function closeDetail() {
+    openMember = null;
+    renderAll();
+    /* Focus goes back to the opener (or its re-rendered equivalent) — never the body. */
+    var restore = null;
+    if (detailOpener && document.contains(detailOpener)) { restore = detailOpener; }
+    else if (detailOpenerMember) {
+      restore = document.querySelector(`[data-g6="open-member"][data-g6-member="${detailOpenerMember}"]`);
+    }
+    if (restore) { restore.focus(); }
+    detailOpener = null; detailOpenerMember = null;
+    live("Member detail closed; focus returned to the opener.");
+  }
+  function memberOf(projectPath, local) {
+    var ms = proj(projectPath).members;
+    for (let i = 0; i < ms.length; i++) { if (ms[i].local === local) return ms[i]; }
+    return null;
+  }
+  function renderAgents() {
+    var p = focused(), roster = document.getElementById("agent-roster");
+    roster.textContent = "";
+    document.getElementById("agents-sub").textContent = p.fleet === "zero"
+      ? `Zero agent fleet for ${p.path} — nothing to inspect. Restore instances from project config (mock) to populate this roster.`
+      : `Member roster for project ${p.path}. Every process/terminal/message/activity panel below is simulated.`;
+    if (p.fleet === "zero") {
+      var card = document.createElement("div");
+      card.className = "state-card";
+      card.textContent = "STATE (simulation): zero agent fleet. " +
+        "Available action: materialize instances from project config (Agents “bind fleet”), then members become inspectable.";
+      roster.appendChild(card);
+      var bindBtn = document.createElement("button");
+      bindBtn.type = "button"; bindBtn.className = "btn";
+      bindBtn.textContent = "Materialize fleet from project config (mock)";
+      bindBtn.addEventListener("click", () => {
+        p.fleet = "ready"; p.orchestrator = "online";
+        save(); renderAll();
+        live(`Fleet materialized for project ${p.path} (mock): Scout/Forge/Forge/Sable/Quill restored with executor bindings.`);
+      });
+      var wrap = document.createElement("div");
+      wrap.appendChild(bindBtn);
+      roster.appendChild(wrap);
+      renderDetail();
+      return;
+    }
+    p.members.forEach((m) => {
+      /* 0828 occupancy meanings: latest start ⇒ working; exit ⇒ idle ONLY if nothing pending. */
+      var working = m.occupancy === "working";
+      var label = working ? "working" : m.pending > 0 ? "idle with pending work (ambiguity per 0828)" : "idle";
+      var el = document.createElement("div");
+      el.className = "member";
+      el.setAttribute("data-g6", "member-row");
+      el.setAttribute("data-g6-member", m.local);
+      var left = document.createElement("div");
+      var role = document.createElement("span");
+      role.className = "role-badge"; role.textContent = m.role;
+      left.appendChild(role);
+      var nm = document.createElement("span"); nm.className = "id";
+      nm.textContent = ` ${m.name}`;
+      nm.id = `member-name-${m.local}`;
+      left.appendChild(nm);
+      var sub = document.createElement("div"); sub.className = "sub mono";
+      sub.textContent = `spec ${m.specId} · executor ${m.executor} · pending ${m.pending}`;
+      left.appendChild(sub);
+      el.appendChild(left);
+      var right = document.createElement("div");
+      var occ = document.createElement("span");
+      occ.className = `status-badge ${working ? "ok" : ""}`;
+      occ.textContent = (working ? "▶ " : "○ ") + label;
+      right.appendChild(occ);
+      var open = document.createElement("button");
+      open.type = "button"; open.className = "btn";
+      open.setAttribute("data-g6", "open-member");
+      open.setAttribute("data-g6-member", m.local);
+      open.textContent = "Open detail";
+      open.setAttribute("aria-expanded", String(openMember?.projectPath === p.path && openMember?.local === m.local));
+      open.addEventListener("click", () => { openDetail(p.path, m.local, open); });
+      right.appendChild(open);
+      el.appendChild(right);
+      roster.appendChild(el);
+    });
+    renderDetail();
+  }
+
+  function renderDetail() {
+    var host = document.getElementById("agent-detail");
+    var panel, title, sub;
+    panel = document.getElementById("agent-detail-panel");
+    title = document.getElementById("agent-detail-title");
+    sub = document.getElementById("agent-detail-sub");
+    if (!openMember) { host.hidden = true; panel.textContent = ""; return; }
+    host.hidden = false;
+    var m = memberOf(openMember.projectPath, openMember.local);
+    var p = proj(openMember.projectPath);
+    if (!m) { openMember = null; host.hidden = true; return; }
+    title.textContent = `${m.role} · ${m.name}`;
+    sub.textContent = "spec " + m.specId + " · executor " + m.executor +
+      " · occupancy " + m.occupancy + " · pending " + m.pending +
+      (p.fleet === "zero" ? " (fleet currently zero)" : "");
+    var body = "";
+    if (detailTab === "process") {
+      body =
+"MOCK process listing (simulation — never a live ps)\n" +
+"pid      " + (m.occupancy === "working" ? "4137" : "—") + "  spec=" + m.specId + "\n" +
+"cmd      process.execPath apps/cli/src/index.ts agent loop --spec " + m.specId + "\n" +
+"env      SPUR_SPEC_ID=" + m.specId + " SPUR_TEAM_ID=(fixture) SPUR_RUN_ID=(mock uuid)\n" +
+"restarts " + (m.occupancy === "working" ? "0 (backoff ladder idle)" : "0") + " · heartbeat " + (m.occupancy === "working" ? "2s" : "2000ms idle poll");
+    } else if (detailTab === "terminal") {
+      body =
+"MOCK terminal frames (simulated stdout/stderr)\n" +
+"07:20:01 [agent] loop start — drainPending\n" +
+(m.occupancy === "working"
+  ? "07:20:02 [run   ] svc.run: executing assigned work (fixture text)\n07:20:04 [run   ] tool call: read docs/tasks4/…\n07:20:09 [run   ] streaming tokens…"
+  : "07:20:02 [agent ] drainPending empty → idle sleep (--poll 2000ms, simulated)");
+    } else if (detailTab === "messages") {
+      body =
+"MOCK durable message rows (simulated inbox)\n" +
+"queued→injected rows whose delivery status stays honest:\n" +
+"· " + (m.role === "planner" ? "injected rows: injected ≠ delivered (0828); nothing marks markDelivered today" : "no rows pending; drain-at-inject happened under the fixture") + "\n" +
+"· reply threading via in_reply_to: none (fixture)";
+    } else {
+      body =
+"MOCK lifecycle activity (simulated system_events tail)\n" +
+"team.member.started  " + m.specId + " (fixture)\n" +
+"process.spawned      runId=(mock uuid) workspace=" + proj(openMember.projectPath).worktree + "\n" +
+(m.occupancy === "working"
+  ? "agent.invoke.start   occupancy ⇒ working"
+  : `agent.invoke.exit    occupancy ⇒ idle iff nothing pending (0828); current pending=${m.pending}\nNOTE: blocked has no first-class signal in today's runtime — this panel shows occupancy ONLY.`);
+    }
+    if (m.occupancy === "working" && detailTab === "messages" || detailTab === "process") {
+      /* no-op: keep copy honest per panel */
+    }
+    panel.textContent = body + (m.inputLog ? "\n" + m.inputLog : "");
+    document.getElementById("member-input-form").hidden = !["terminal", "messages"].includes(detailTab);
+    var tabBtns = document.querySelectorAll("[data-detail-tab]");
+    tabBtns.forEach((b) => {
+      var sel = b.getAttribute("data-detail-tab") === detailTab;
+      b.setAttribute("aria-selected", sel ? "true" : "false");
+      b.tabIndex = sel ? 0 : -1;
+    });
+  }
+
+  function renderWork() {
+    var p = focused(), host = document.getElementById("work-list");
+    host.textContent = "";
+    TASKS.forEach((t) => {
+      var el = document.createElement("div");
+      el.className = "task";
+      el.setAttribute("data-g6", "task-row");
+      el.setAttribute("data-g6-task", t.taskId);
+      var left = document.createElement("div");
+      var t1 = document.createElement("div");
+      t1.className = "mono";
+      t1.textContent = `${t.taskId} (${t.status})`;
+      left.appendChild(t1);
+      var t2 = document.createElement("div");
+      t2.textContent = `${t.title} — feature ${t.featureId}`;
+      left.appendChild(t2);
+      el.appendChild(left);
+      var right = document.createElement("button");
+      right.type = "button"; right.className = "btn";
+      right.setAttribute("data-g6", "use-task");
+      right.setAttribute("data-g6-task", t.taskId);
+      right.textContent = "Use in conversation";
+      right.addEventListener("click", () => {
+        p.pendingTask = { taskId: t.taskId, featureId: t.featureId, title: t.title };
+        p.revision++;
+        save(); currentView = "conversation"; renderAll(); composer.focus();
+        live("Task " + t.taskId + " (feature " + t.featureId + ") linked into the conversation of project " +
+             p.path + ". The request submitted next captures taskId/featureId at submission.");
+      });
+      el.appendChild(right);
+      host.appendChild(el);
+    });
+    var cnt = 0;
+    p.entries.forEach((e) => { if (e.kind === "request" && e.taskId) cnt++; });
+    document.getElementById("work-context").textContent =
+      "Linked work this session (project " + p.path + "): " + cnt +
+      " request(s) carried a taskId/featureId into this SAME project's conversation. No second backlog exists.";
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderTabs();
+    renderStateCards();
+    renderWork();
+    renderConversation();
+    renderAgents();
+    renderOverview();
+    renderChips();
+    composer.value = focused().draft;
+    refreshSendState();
+    /* fixture pressed-state mirror */
+    var p = focused();
+    document.querySelector('[data-g6-fixture="delay"]').setAttribute("aria-pressed", p.delayed ? "true" : "false");
+    document.querySelector('[data-g6-fixture="netfail"]').setAttribute("aria-pressed", p.netfail ? "true" : "false");
+    document.getElementById("fixture-note").textContent =
+      "Fixture buttons mutate only this page's mock state. Focused project: " + p.label + " — " + p.path +
+      " (identical labels “Aurora”; identity is the path).";
+  }
+  function renderOverview() {
+    var p = focused();
+    document.getElementById("ref-state").textContent = p.pendingTask
+      ? `Ref ${p.pendingTask.taskId} · feature ${p.pendingTask.featureId} will be captured with the next send.`
+      : "Nothing attached; the next send is a plain project-scoped request.";
+  }
+
+  /* ================================================================  wiring */
+  document.getElementById("project-select").addEventListener("change", (ev) => {
+    var prev = state.focused;
+    state.focused = ev.target.value;
+    openMember = null; detailOpener = null; detailOpenerMember = null;
+    save(); renderAll(); composer.focus();
+    live("Focused project switched to " + PROJECT_LABEL + " — " + state.focused +
+         ". Drafts, entries, holds, receipts and results remain bound per project path" +
+         (prev !== state.focused ? "; the previous project keeps its pending states untouched." : "."));
+  });
+
+  document.getElementById("g6-tabs").addEventListener("keydown", (ev) => {
+    var tabs = VIEWS.map((v) => document.getElementById(`tab-${v}`));
+    var idx = tabs.indexOf(document.activeElement);
+    if (idx < 0) return;
+    if (ev.key === "ArrowRight" || ev.key === "ArrowLeft" || ev.key === "Home" || ev.key === "End") {
+      ev.preventDefault();
+      var next = ev.key === "ArrowRight" ? Math.min(tabs.length - 1, idx + 1)
+               : ev.key === "ArrowLeft" ? Math.max(0, idx - 1)
+               : ev.key === "Home" ? 0 : tabs.length - 1;
+      selectView(VIEWS[next]);
+    }
+  });
+
+  /* Delegate fixture buttons and tab clicks */
+  document.querySelector(".fixture-bar").addEventListener("click", (ev) => {
+    var b = ev.target.closest("[data-g6-fixture]");
+    if (!b) return;
+    applyFixture(b.getAttribute("data-g6-fixture"));
+  });
+  document.getElementById("g6-tabs").addEventListener("click", (ev) => {
+    var b = ev.target.closest("[data-g6-view]");
+    if (b) selectView(b.getAttribute("data-g6-view"));
+  });
+  document.getElementById("view-agents").addEventListener("click", (ev) => {
+    var dt = ev.target.closest("[data-detail-tab]");
+    if (dt) { selectDetailTab(dt.getAttribute("data-detail-tab")); }
+  });
+  document.getElementById("agent-detail-close").addEventListener("click", closeDetail);
+  ["start", "stop"].forEach((action) => {
+    document.getElementById(`agent-${action}`).addEventListener("click", () => {
+      if (!openMember) return;
+      const member = memberOf(openMember.projectPath, openMember.local);
+      member.occupancy = action === "start" ? "working" : "idle";
+      renderAll();
+      live(`${action} ${member.specId} (SIMULATED) — no process was contacted.`);
+    });
+  });
+  document.getElementById("member-input-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const input = document.getElementById("member-input");
+    if (!openMember || !input.value.trim()) return;
+    const member = memberOf(openMember.projectPath, openMember.local);
+    member.inputLog = `${detailTab} input (SIMULATED): ${input.value}`;
+    input.value = "";
+    renderDetail();
+    live(`Mock ${detailTab} input accepted for ${member.specId}; no stdin or message API called.`);
+  });
+  document.querySelector(".detail-tabs").addEventListener("keydown", (ev) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(ev.key)) return;
+    ev.preventDefault();
+    const tabs = [...document.querySelectorAll("[data-detail-tab]")];
+    const index = tabs.indexOf(document.activeElement);
+    const next = ev.key === "Home" ? 0 : ev.key === "End" ? tabs.length - 1
+      : (index + (ev.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    selectDetailTab(tabs[next].getAttribute("data-detail-tab"));
+    tabs[next].focus();
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    if (openMember) { closeDetail(); return; }
+    if (ev.target === composer) { live("The composer stays open — Escape only closes floating/inspection surfaces."); }
+  });
+
+  /* ================================== simulated delay: delayed acceptance arc */
+  var ADVANCE_BASE = advance;
+  advance = (e) => {
+    var p = proj(e.projectPath);
+    if (p.delayed && e.status === "pending" && !e._pendingDelay) {
+      e._pendingDelay = true;
+      e.note = "delayed acceptance armed — acceptance lands ~4 s after capture; edits while waiting are retained";
+      live(`Request ${e.requestId} captured; durable acceptance lands in ~4 s (fixture). Edits while waiting keep the newer draft text.`);
+      window.setTimeout(() => {
+        e._pendingDelay = false;
+        if (getEntry(e.id)?.e === e && e.status === "pending") { ADVANCE_BASE(e); renderAll(); }
+      }, 4000);
+      return;
+    }
+    ADVANCE_BASE(e);
+  };
+
+  /* ===================================================================  boot */
+  load();
+  renderAll();
+  live("G6 Projects prototype ready (full simulation). Focused project: Aurora — " + state.focused +
+       ". Conversation is the default view; drafts and receipts are saved per project path under " + STORE_KEY + ".");
+
+  /* Test/inspection hook: read-only exposure of live state for automated checks. */
+  window.__g6 = {
+    state: () => state,
+    focused: () => focused()
+  };
+})();
+</script>
+</body>
+</html>

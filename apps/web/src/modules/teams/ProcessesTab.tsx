@@ -299,7 +299,7 @@ export default function ProcessesTab({ teamId }: { teamId?: string }) {
         return (
             <div className="p-4 text-sm text-spur-text-muted" data-processes-tab-empty>
                 No processes. Start a team agent from the Terminal tab or via{' '}
-                <code className="font-mono">spur team start</code>.
+                <code className="font-mono">spur agent start</code>.
             </div>
         );
     }

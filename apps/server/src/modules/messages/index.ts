@@ -1,3 +1,4 @@
+import { normalizeProjectPath } from '@gobing-ai/spur-app';
 import type { Context, Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -8,7 +9,8 @@ import type { ServerModule } from '../types';
  * Endpoints:
  *   - GET  /api/messages/inbox?agent=<id>&limit=<n>  — one agent's inbox (newest-first)
  *   - GET  /api/messages?limit=<n>                    — global recent-message feed (newest-first)
- *   - POST /api/messages                              — send a message (body, to, optional from)
+ *   - POST /api/messages                              — send a message (body, to, optional from,
+ *     optional projectPath — 0844 R4 project-scoped requests)
  *   - POST /api/messages/:id/reply                    — reply to a message (body)
  *
  * Gated by ServerContext: on Bun the routes are active; on Cloudflare Workers
@@ -50,16 +52,37 @@ export const messagesModule: ServerModule = {
         app.post('/api/messages', async (c) => {
             const parsed = await parseJsonBody(c);
             if ('error' in parsed) return c.json({ error: parsed.error }, 400);
-            const { to, body, from } = parsed;
+            const { to, body, from, requestKey, projectPath } = parsed;
             if (typeof to !== 'string' || to.length === 0) return c.json({ error: 'field "to" is required' }, 400);
             if (typeof body !== 'string' || body.length === 0)
                 return c.json({ error: 'field "body" is required' }, 400);
             if (from !== undefined && (typeof from !== 'string' || from.length === 0)) {
                 return c.json({ error: 'field "from" must be a non-empty string when present' }, 400);
             }
+            if (requestKey !== undefined && (typeof requestKey !== 'string' || requestKey.length === 0)) {
+                return c.json({ error: 'field "requestKey" must be a non-empty string when present' }, 400);
+            }
+            // 0844 R4: requests are project-scoped. A client that recovered a
+            // stale port (project switched, server reused) must not inject its
+            // request into a different project's orchestrator — reject with 409
+            // BEFORE the row is written, so no cross-project inbox traffic
+            // happens and the retry targets the right project instead.
+            if (projectPath !== undefined && (typeof projectPath !== 'string' || projectPath.length === 0)) {
+                return c.json({ error: 'field "projectPath" must be a non-empty string when present' }, 400);
+            }
+            if (typeof projectPath === 'string' && projectPath.length > 0) {
+                const served = normalizeProjectPath(ctx.cwd);
+                const claimed = normalizeProjectPath(projectPath);
+                if (claimed !== served) {
+                    return c.json(
+                        { error: `project mismatch: request targets ${claimed}, server serves ${served}` },
+                        409,
+                    );
+                }
+            }
             const svc = ctx.teamService();
             try {
-                const result = await svc.sendMessage(from ?? null, to, body);
+                const result = await svc.sendMessage(from ?? null, to, body, undefined, requestKey);
                 return c.json(result, 201);
             } catch (err) {
                 return c.json({ error: errMsg(err) }, 400);
@@ -89,7 +112,9 @@ export const messagesModule: ServerModule = {
 /** Read and validate a JSON object body; returns `{ error }` on malformed input. */
 async function parseJsonBody(
     c: Context,
-): Promise<{ to?: unknown; body?: unknown; from?: unknown } | { error: string }> {
+): Promise<
+    { to?: unknown; body?: unknown; from?: unknown; requestKey?: unknown; projectPath?: unknown } | { error: string }
+> {
     let json: unknown;
     try {
         json = await c.req.json();
@@ -99,7 +124,7 @@ async function parseJsonBody(
     if (typeof json !== 'object' || json === null || Array.isArray(json)) {
         return { error: 'request body must be a JSON object' };
     }
-    return json as { to?: unknown; body?: unknown; from?: unknown };
+    return json as { to?: unknown; body?: unknown; from?: unknown; projectPath?: unknown };
 }
 
 /** Extract a useful message from a thrown error (validation, missing row, etc.). */

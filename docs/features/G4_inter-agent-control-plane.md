@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-08-13T04:47:58.316Z"
-updated_at: "2026-08-24T17:41:02.584Z"
+updated_at: "2026-09-13T02:54:42.462Z"
 ---
 
 # G4: Inter-agent control plane
@@ -109,12 +109,15 @@ Feature: Inter-agent control plane
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 Authority: ADR-057 (complements ADR-052; does not change Board composition).
 Mechanism: `docs/03_ARCHITECTURE.md` §17.
 Shapes: `docs/design/inter-agent-control-plane.md`. Implementation: tasks 0529–0531.
 Waves 1–2 (0529/0530) landed 2026-08-13. Wave 3 follow helper (`followSystemEventsAfter`, 0531) landed 2026-08-13. First-class `blocked` / optional `agent report-state` remain accepted design.
 Wave 2 verbs landed under ADR-051 consent granted by ADR-057 / G4 (0529-0530).
 G3 (Board un-merge) is a sibling feature, not this one.
+Authority retained, not forked: G61–G64 (project agent fleet program) consume occupant identity, identity-pinned wait, and coordination run records — G61 extended `coordination_runs` rather than forking a receipt table, and spec ids stayed the mailbox identity across 0847's roster conversion (G64 reconciliation, task 0851, 2026-09-13).
+
 ## History
 
 - 2026-08-13T06:51:42.173Z backlog → active (system)

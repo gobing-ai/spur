@@ -19,9 +19,10 @@ shapes live in `apps/cli/src/commands/projects.ts`.
 | ---- | ------- | --------- |
 | `add <path>` | Upsert an existing path in the registry | `--name <name>` `--json` |
 | `remove <target>` | Remove an entry by display name or path | `--json` |
-| `list` | List entries with live running status | `--json` |
+| `list` | List entries with live running status | `--json` `--fleet` |
 | `start <target>` | Start or reuse a detached project server | `--port <n>` `--json` |
 | `stop <target>` | Best-effort stop the listener and clear its recorded port | `--json` |
+| `migrate [path]` | Preview (default) or apply the legacy `agent.team` → `fleet.json` conversion (0847) | `--dry-run` `--apply` `--json` |
 
 Every verb also advertises `--json-envelope`; use the facade's machine-output contract. Success is
 exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
@@ -36,6 +37,45 @@ exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
   defaults the display name to its basename. It upserts; it does not start a server. The current
   source does not enforce a `.spur/` marker or directory type.
 - `list` probes recorded ports and heals stale entries to `port: 0` before reporting `running`.
+- `list --fleet` (0835) additionally resolves each project's fleet declaration at
+  `<project>/.spur/fleet.json` under the existing verb (no new noun). Per project it prints one line
+  per member: instance id (the spec id / mailbox identity), `role`, resolved `executor`,
+  `fsWrite` capability state, and derived `write` flag. A project with no declaration reports
+  `no declaration (.spur/fleet.json)`; an all-disabled roster reports `no enabled members`; a project
+  whose executors fail resolution reports the error without failing the listing. Under `--json` each
+  project gains `fleet` (the resolved fleet, `null` on resolution failure) and, on failure,
+  `fleetError`.
+- `list --fleet` (0836) also reports the project's orchestrator binding: one
+  `orchestrator:` line per project with state `bound-online <id> (holder <spec-id>)`,
+  `bound-offline <id> (no live claim)`, `missing (no-orchestrator-declared)`, or
+  `unresolvable (<reason>)` — missing (nothing bound) and bound-offline (bound, no live
+  claim) are distinct states with distinct next actions, and an unresolvable pointer is an
+  error, never inferred. Reading the live claim touches the project's own `.spur/spur.db`
+  (lazily; only when the pointer resolves). Under `--json` each project gains
+  `orchestrator` (the binding, `null` on resolution failure) and, on failure,
+  `orchestratorError`.
+- `list --fleet` (0838) also reports the project's persisted strategy (0838): one
+  `strategy:` line — `rest (default)` when nothing is persisted (the read never
+  writes; only the runtime's `setStrategy`/`resume` persist), `<name> (v<n>)` for a
+  persisted row, or `unavailable (<error>)` on a db failure. Under `--json` each
+  project gains `strategy` (`{ strategy, strategyVersion }`, `null` when
+  unpersisted) and, on failure, `strategyError`.
+- `migrate [path]` (0847) converts the single legacy `agent.team.<id>` roster whose
+  `work_dir` resolves to the project into `<project>/.spur/fleet.json`, preserving
+  every spec id verbatim (explicit member ids freeze the `<role>-<n>` derivation).
+  Dry-run is the default: it emits the 0846 plan (steps + conflicts + warnings) and
+  writes nothing — not even the project db, which is opened in-memory when absent.
+  `--apply` validates first, deep-equals an existing declaration (`unchanged`, no
+  rewrite), backs up a differing prior file to `.bak`, then atomically writes the
+  declaration (`converted`). It is purely additive — specs, `config.yaml`, and the
+  database are never touched — and it refuses to write while any conflict exists
+  (`addressed-id-without-spec`, `two-teams-one-project`, …). Exit codes: `0` for a
+  clean preview or `converted`/`unchanged`/`nothing-to-convert`; `2` when blocked
+  (the JSON payload still carries the full plan/result); `1` on error. Under
+  `--json` the payload is the raw `MigrationPlan` (preview) or `ConversionResult`
+  (apply). `rollback` is a service-level API (no CLI verb): restore the `.bak` a
+  previous apply created, remove a file that apply created when no `.bak` exists,
+  or report `nothing-to-roll-back`.
 
 ## Server lifecycle
 

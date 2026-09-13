@@ -24,11 +24,13 @@ that before using `run` for fan-out dispatch.
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
 | `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) | `--spec <id>` `--agent <id>` `--poll <ms>` |
 | `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
-| `list` | List detected coding agents, or team agent specs with `--specs` | `--specs` `--json` |
+| `list` | List detected coding agents, or team agent specs with `--specs` (live run status merged from `spur serve`) | `--specs` `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` | `--type` `--tags` `--model` `--autonomy` `--system-prompt` `--name` `--workspace` `--purpose` `--auto-start` `--no-identity-preamble` `--json` |
 | `edit <id>` | Open an agent spec in `$EDITOR`, or print its path | - |
 | `delete <id>` | Remove an agent spec | `--force` |
+| `start <spec-id>` | Start a supervised agent process (requires `spur serve`; 0848 moved home of `spur team start`) | `--server <url>` `--json` |
+| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`; 0848 moved home of `spur team stop`) | `--server <url>` `--json` |
 
 `list`, `doctor`, `run`, `wait`, and `create` accept `--json` plus `--json-envelope`. `loop`, `edit`,
 and `delete` are human/process-control surfaces. **Exit codes:** `0` success, `1` failure, and `2`
@@ -89,9 +91,13 @@ justify it - but ensure the run executes in a context that can write the target 
 spur agent loop --agent worker-1 --poll 2000
 ```
 
-`loop` is the **persistent self-draining wrapper** used by the team supervisor. It polls the
-addressed agent's inbox, drains each pending message into an `agent run` invocation, and idles
-between drains. It is not typically invoked directly by the operator - `spur team start` launches it
+`loop` is the **persistent self-draining wrapper** used by the team supervisor. It waits for a
+wake on the `system_events` ledger — a human request (`message.sent`), a strategy change
+(`strategy.changed`), a capacity change (`fleet.capacity.changed`), or a completion receipt
+(`agent.invoke.exit`) — then drains the inbox into an `agent run` invocation. An idle wake
+records the hold reason instead of dispatching; with no wake event at all it still drains every
+`--poll` ms (backstop). It
+between drains. It is not typically invoked directly by the operator - `spur agent start` launches it
 under supervision.
 
 ### Flags
@@ -99,10 +105,10 @@ under supervision.
 | Flag | Purpose |
 |------|---------|
 | `--spec <id>` | **Required.** Team agent spec id / message recipient (0542 R1; legacy `--agent <spec-id>` still read with a one-time warning). |
-| `--poll <ms>` | Idle poll interval in milliseconds (default: `2000`). |
+| `--poll <ms>` | Wakeup backstop timeout in milliseconds — drains at least this often (default: `2000`). |
 
 The loop runs until `SIGINT` / `SIGTERM`. Each iteration: check inbox -> if messages, drain each
-into `run` with `--drain` -> else sleep for `--poll` ms.
+into `run` with `--drain` -> else record the idle hold (an empty drain dispatches nothing).
 
 ## `wait` - identity-pinned occupant wait (G4 wave 2)
 
@@ -152,7 +158,17 @@ spur agent list --json       # machine-readable
 ```
 
 Without `--specs`, lists coding agents detected on the host (by binary on `PATH`). With `--specs`,
-lists team agent specs (`.spur/agents/*.yaml`).
+lists team agent specs (`.spur/agents/*.yaml`) **with live run status merged from the server's
+supervisor** (0848, the moved home of `spur team status`): each row carries a trailing status column
+(`running` / `stopped` / `errored` / `unknown`) and `pid=<n>` where a process exists. When `spur serve`
+is unreachable, the listing falls back to all `stopped` with a stderr warning. `--server <url>`
+(default `http://localhost:3000/api`) targets the supervisor API.
+
+```bash
+spur agent list --specs
+# planner	claude	reviewer	claude	plans the work	running pid=4132
+# worker-1	pi	worker	pi	implements	stopped
+```
 
 ## `doctor` - readiness check
 
@@ -176,7 +192,8 @@ spur agent create reviewer --type codex --autonomy review --auto-start
 ```
 
 Writes a team agent spec to `.spur/agents/<id>.yaml`. The spec captures the agent's identity
-(type, model, autonomy, system prompt, tags) so `spur team up` can materialize a roster and `spur
+(type, model, autonomy, system prompt, tags) so the fleet declaration (`.spur/fleet.json`, converted
+by `spur projects migrate`) can materialize a roster and `spur
 agent loop` can self-drain its inbox.
 
 ### Flags
@@ -191,7 +208,7 @@ agent loop` can self-drain its inbox.
 | `--name <name>` | Agent display name. |
 | `--workspace <path>` | Workspace path for this agent. |
 | `--purpose <text>` | Team identity purpose. |
-| `--auto-start` | Auto-start flag (start on `team up` without manual `team start`). |
+| `--auto-start` | Auto-start flag (started by the supervisor when serve materializes the fleet; without it, start manually with `spur agent start`). |
 | `--no-identity-preamble` | Disable the identity preamble prepended to prompts. |
 | `--json` | Output machine-readable JSON. |
 
@@ -211,20 +228,45 @@ spur agent delete worker-1 --force
 
 `--force` is required (guards against accidental deletion). Removes `.spur/agents/<id>.yaml`.
 
+## `start` - start a supervised process (0848)
+
+```bash
+spur agent start worker-1
+spur agent start worker-1 --json
+```
+
+The moved home of `spur team start`. Posts to the `spur serve` supervisor API
+(`POST /api/team/agents/:id/start`) and prints `started <id> (pid=<n>, status=<s>)`. Requires a
+reachable `spur serve`; `--server <url>` (default `http://localhost:3000/api`) targets it. Exit `1`
+when the server is unreachable or the start fails.
+
+## `stop` - stop a supervised process (0848)
+
+```bash
+spur agent stop worker-1
+spur agent stop worker-1 --json
+```
+
+The moved home of `spur team stop`. Posts to the supervisor API
+(`POST /api/team/agents/:id/stop`) and prints `stopped <id>`. Same server requirement and flags as
+`start`. `spur agent delete` (with `--force`) remains the spec-removal counterpart of the old
+`team down --purge`.
+
 ## What this skill is NOT
 
 - **Not the dispatch decision.** *When* to use `spur agent run` vs a native subagent is the
   **[dispatch-surface rule](../../parallel-execution/references/dispatch-surface.md)**, not this
   reference. This reference documents the verbs; that rule decides which surface carries a dispatch.
-- **Not the team orchestrator.** `spur team up` / `spur team start` drive the supervisor lifecycle;
-  `spur agent` provides the execution primitives they compose.
+- **Not the team orchestrator.** The `spur serve` supervisor drives the lifecycle: `spur agent
+  start` / `stop` manage supervised processes and `agent list --specs` reports live state (0848
+  moved these homes off the deprecated `spur team` noun).
 
 ## See also
 
 - **[dispatch-surface.md](../../parallel-execution/references/dispatch-surface.md)** - native
   subagent vs `spur agent run` decision rule. `--model` and `--agent` are its escalation levers.
-- **`spur team` (see [team.md](team.md))** - team lifecycle that launches `agent loop` under
-  supervision.
+- **`spur team` (see [team.md](team.md))** - deprecated team noun (0848); its verbs moved to this
+  noun (`start`/`stop`/`list --specs`) and to `spur task update --assignee`.
 - **`spur message` (see [message.md](message.md))** - the inbox `--drain` reads from.
 - **`sp:spur-cli`** SKILL.md - the facade that routes to this reference.
 

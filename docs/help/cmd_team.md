@@ -1,5 +1,13 @@
 # spur team
 
+> **Deprecated (0848):** every capability below has moved to its owning noun. This noun keeps
+> working until the G64 cutover window is recorded and emits a one-time stderr warning naming the
+> replacement. Migrate: `assign` → `spur task update <wbs> --assignee <spec-id>`; `status` →
+> `spur agent list --specs`; `up` → fleet materialization at `spur serve` start (`--check` diff →
+> `spur projects list --fleet`); `down` → `spur agent stop <spec-id>` per member (`spur agent
+> delete <id>` replaces `--purge`); `start` → `spur agent start <spec-id>`; `stop` → `spur agent
+> stop <spec-id>`.
+
 > Coordinate team-agent assignments and supervision. Sits above `spur agent` specs:
 > `up` / `down` materialize and tear down rosters, `start` / `stop` manage supervised
 > processes (require `spur serve`), `assign` wires tasks to agents, and `status` reports
