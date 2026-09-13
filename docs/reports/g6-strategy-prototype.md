@@ -1,7 +1,7 @@
 # G6 strategy prototype — rest and GTD dispatch traces with capacity and restart failures
 
 Task 0829 · prototype/test only · **no production API, dependency, or report-of-record change; mutationPolicy: none**.
-Consumed authority: [0828 runtime inventory](g6-runtime-inventory.md) (§3 probes, §5 Handoff), closed 2026-09-11. Nothing in 0828's report was edited; every place 0828 reports an absent primitive is handled here as an explicitly **simulated** proposal with the production seam named.
+Consumed investigation baseline: [0828 runtime inventory](g6-runtime-inventory.md) (§3 probes, §5 Handoff), closed 2026-09-11. The reusable/missing classifications below describe that baseline; consult its current-tree re-audit before production planning. This test-local controller still **simulates** the proposals even where successor features now implement them.
 
 Frozen sections: **Commands · Strategy contract (reused vs simulated) · Per-case traces · Missing production seams · Remaining decisions for production planning**.
 
@@ -131,3 +131,7 @@ Question requests use an explicit test-local `intent: "question"`: the bound pla
 Every processed event appends a JSON trace with project/request identity, supplied-clock time (default logical zero), before/after snapshots and fake-call deltas. The readable command above filters these JSON lines; inspect `c.trace` directly for complete traces. Tests retain initial/event/final state in memory; no production persistence or real process recovery is claimed.
 
 The model selects and starts synchronously; the select/claim intercept is the queued-unstarted boundary used to test rest races. Reconciliation of outcome-unknown assignments is deliberately not automated: the reservation remains held until downstream design supplies authoritative evidence. This is the task's safe-hold invariant, not a claim that production recovery already exists.
+
+## Forced re-audit — 2026-09-12
+
+Fresh `bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts` inside apps/cli passed all 60 tests, including the 23 strategy cases. The documented one-shot trace also ran successfully with `modelCalls: 3 dispatches: 1`. Request correlation, rest races, ownership rejection, capability gates, snapshot counters and safe holding after exit-only outcomes remain simulated and independently exercised. No controller change was needed. The historical list of missing production seams is not a current implementation backlog; G61 successor evidence is linked in the 0828 re-audit.

@@ -4,7 +4,7 @@ name: Prototype rest and GTD dispatch traces with capacity and restart failures
 status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.271Z
-updated_at: "2026-09-12T04:16:35.850Z"
+updated_at: "2026-09-13T06:26:05.490Z"
 feature_id: G6
 priority: P1
 tags:
@@ -107,17 +107,17 @@ Test-local simulation only. Re-verification corrected unsafe behavior; no produc
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — question answer vs assignment/hold and event snapshots; workspace `bun test tests/commands/g6-strategy-prototype.test.ts` exit 0. |
-| R2 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — replacement holds reservation; forged task/epoch results rejected; restart counters persist. All 23 tests / 109 assertions pass. |
-| R3 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — numeric WBS, capability gates; existing tests cover authorization, rest races, single writer, idle and verified completion. Same test command exit 0. |
-| R4 | MET | `docs/reports/g6-strategy-prototype.md:127` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
+| R1 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:122` and `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass, including all 23 strategy cases); dispatch identity and question answer/hold snapshots asserted. |
+| R2 | MET | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:303` and `apps/cli/tests/commands/g6-strategy-prototype.test.ts:321` — apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass, including all 23 strategy cases); duplicate input/results, rest race, restart, stale-owner, capacity/dependency and failed-notification cases asserted. |
+| R3 | MET | `apps/cli/tests/fixtures/g6/strategy-prototype.ts:396` and `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass, including all 23 strategy cases); single writer, capabilities, authorization/readiness, numeric WBS order, zero-call idle ticks and exit-only safe holds inspected and exercised. |
+| R4 | MET | `docs/reports/g6-strategy-prototype.md:135` — documented one-shot bun -e trace exits 0: modelCalls 3, dispatches 1; trace output .spur/run/g6-verifyall-recheck/0829-trace.txt lines 1-7. Historical reused/missing labels clarified against 0828 successors. Artifacts rewritten: .spur/run/0829-verify-answer.txt lines 1-34 and derived .spur/run/0829-verdict.json. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 (R1) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — question answer vs assignment/hold and event snapshots; workspace `bun test tests/commands/g6-strategy-prototype.test.ts` exit 0. |
-| AC-2 (R2) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:485` — replacement holds reservation; forged task/epoch results rejected; restart counters persist. All 23 tests / 109 assertions pass. |
-| AC-3 (R3) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — numeric WBS, capability gates; existing tests cover authorization, rest races, single writer, idle and verified completion. Same test command exit 0. |
-| AC-4 (R4) | MET | test | `docs/reports/g6-strategy-prototype.md:127` — corrected traces, missing production seams and explicit safe-hold limit reviewed; trace snapshot assertions at `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` pass. |
+| AC-1 (R1) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:122` and `apps/cli/tests/commands/g6-strategy-prototype.test.ts:531` — apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass, including all 23 strategy cases); dispatch identity and question answer/hold snapshots asserted. |
+| AC-2 (R2) | MET | test | `apps/cli/tests/commands/g6-strategy-prototype.test.ts:303` and `apps/cli/tests/commands/g6-strategy-prototype.test.ts:321` — apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass, including all 23 strategy cases); duplicate input/results, rest race, restart, stale-owner, capacity/dependency and failed-notification cases asserted. |
+| AC-3 (R3) | MET | test | `apps/cli/tests/fixtures/g6/strategy-prototype.ts:396` and `apps/cli/tests/commands/g6-strategy-prototype.test.ts:545` — apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass, including all 23 strategy cases); single writer, capabilities, authorization/readiness, numeric WBS order, zero-call idle ticks and exit-only safe holds inspected and exercised. |
+| AC-4 (R4) | MET | command | `docs/reports/g6-strategy-prototype.md:135` — documented one-shot bun -e trace exits 0: modelCalls 3, dispatches 1; trace output .spur/run/g6-verifyall-recheck/0829-trace.txt lines 1-7. Historical reused/missing labels clarified against 0828 successors. Artifacts rewritten: .spur/run/0829-verify-answer.txt lines 1-34 and derived .spur/run/0829-verdict.json. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -129,10 +129,9 @@ Test-local simulation only. Re-verification corrected unsafe behavior; no produc
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | task-check | — | spur task check 0829 --strict-core --json exit 0 before record; repeated after record. |
-| P4 | design-conformance | — | Frozen safe-hold, request correlation, restored state, explicit fake answer and event snapshot contract exercised; synchronous selection models queued-unstarted at the existing intercept. |
-| P4 | fix-artifacts | — | Rewrote .spur/run/0829-verify-answer.txt lines 1-30; derived .spur/run/0829-verdict.json; red log .spur/run/g6-verifyall/0829-red.log and green log 0829-tests.log. |
-| P4 | typecheck | — | bun run --filter @gobing-ai/spur typecheck exit 0. |
+| P4 | design-conformance | — | Deterministic policy model preserves ownership, identity, safe holds and snapshot recovery; no production guarantee inferred from simulation. |
+| P4 | scope-creep | — | Only historical-scope clarification and task evidence changed. |
+| P4 | repository-gates | — | bun run spur-check exits 0 (8490 pass, zero fail; lint/typecheck and rules pass); bun run test-cf and bun run build exit 0. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
