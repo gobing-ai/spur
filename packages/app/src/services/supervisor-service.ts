@@ -1,6 +1,13 @@
+import { dirname } from 'node:path';
 import type { AgentSpec } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
-import type { PipeProcess, PipeProcessOptions, ProcessExecutor } from '@gobing-ai/ts-runtime';
+import {
+    createNodeFileSystem,
+    type PipeProcess,
+    type PipeProcessOptions,
+    type ProcessExecutor,
+} from '@gobing-ai/ts-runtime';
+import { FleetService } from './fleet-service';
 
 // ── Types ──
 
@@ -187,6 +194,11 @@ export class SupervisorService {
             throw new Error(`No agent spec found for "${agentId}"`);
         }
 
+        if (spec.tags.some((tag) => tag.startsWith('fleet:'))) {
+            await new FleetService({
+                fs: createNodeFileSystem(dirname(dirname(this.configDir))),
+            }).assertLaunchGroundTruth(spec.workspace);
+        }
         const { command, args } = this.resolveCommand(spec);
         // Resolve teamId from spec.tags (`team:<id>`) for registry grouping (spur#0267 R1).
         // If the agent belongs to multiple teams, the first `team:` tag wins.
@@ -198,6 +210,7 @@ export class SupervisorService {
         const pipeOpts: PipeProcessOptions = {
             command,
             args,
+            cwd: spec.workspace,
             label: `agent:${agentId}`,
             // Tag for ProcessRegistry watch list (ts-runtime 0.4.10 / spur#0264).
             source: 'supervisor',
@@ -407,6 +420,7 @@ export class SupervisorService {
     }
 
     private resolveCommand(spec: AgentSpec): { command: string; args: string[] } {
+        if (spec.tags.some((tag) => tag.startsWith('fleet:'))) return defaultWrapperArgv(spec.id);
         // Prefer `config.command` — the field materializeTeam writes and that
         // saveAgentSpec/loadAgentSpecs round-trip (0258 R9). Fall back to a top-level
         // `command` for in-memory / legacy specs (serializeAgentSpec drops top-level).

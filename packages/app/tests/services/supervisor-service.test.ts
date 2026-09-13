@@ -808,3 +808,33 @@ describe('SupervisorService', () => {
         });
     });
 });
+
+test('managed fleet launch validates the spec workspace and config storage before spawning', async () => {
+    const { executor, calls } = createMockExecutor();
+    const { bus } = createMockBus();
+    const service = new SupervisorService({
+        processExecutor: executor,
+        eventBus: bus,
+        configDir: '/tmp/foreign-project/.spur/agents',
+        agentSpecs: [makeSpec({ workspace: process.cwd(), tags: ['fleet:generated'] })],
+    });
+    await expect(service.start('test-agent')).rejects.toThrow('Ground-truth mismatch');
+    expect(calls).toHaveLength(0);
+});
+
+test('a valid managed fleet spec always starts the fenced loop wrapper', async () => {
+    const { executor, calls } = createMockExecutor();
+    const { bus } = createMockBus();
+    const service = new SupervisorService({
+        processExecutor: executor,
+        eventBus: bus,
+        configDir: `${process.cwd()}/.spur/agents`,
+        agentSpecs: [
+            makeSpec({ workspace: process.cwd(), tags: ['fleet:generated'], config: { command: ['pi', 'unfenced'] } }),
+        ],
+    });
+    await service.start('test-agent');
+    expect(calls[0]?.args).toContain('loop');
+    expect(calls[0]?.args).not.toContain('unfenced');
+    await service.stopAll();
+});

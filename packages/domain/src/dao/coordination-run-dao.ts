@@ -180,6 +180,16 @@ export class CoordinationRunDao {
         }
     }
 
+    /** Any unresolved running generation consumes this instance's capacity. */
+    async hasRunning(specId: string): Promise<boolean> {
+        return (
+            (await this.db.queryFirst<{ run_id: string }>(
+                "SELECT run_id FROM coordination_runs WHERE spec_id = ? AND status = 'running' LIMIT 1",
+                specId,
+            )) !== undefined
+        );
+    }
+
     /** Latest occupant row for a specId (highest generation, then newest started), or null. */
     async getLatestBySpecId(specId: string): Promise<CoordinationRunRow | null> {
         try {
