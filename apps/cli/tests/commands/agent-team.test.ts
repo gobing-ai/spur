@@ -875,6 +875,48 @@ describe('G61 delivery settle regressions (0831)', () => {
 });
 
 describe('G61 completion receipt regressions (0833)', () => {
+    test('origin is persisted before dispatch and unaddressed receipts survive reopening the database', async () => {
+        const { cwd, out, cleanup } = await makeCtx();
+        const dbUrl = join(cwd, 'receipts.db');
+        const ctx = createCliContext({ cwd, output: out, env: {}, dbUrl });
+        try {
+            const db = await ctx.getDb();
+            const dao = new CoordinationRunDao(db);
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => {
+                        const rows = await dao.listByTaskId('receipt-restart');
+                        expect(rows).toHaveLength(1);
+                        expect(rows[0]).toMatchObject({
+                            status: 'running',
+                            completed_at: null,
+                            message_ids_json: '[]',
+                        });
+                        return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
+                    },
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+            expect(await runAgentRun('work', ctx, { agent: 'claude', task: 'receipt-restart', json: true }, deps)).toBe(
+                0,
+            );
+            await db.close();
+            const reopened = await createMigratedDb({ url: dbUrl });
+            const rows = await new CoordinationRunDao(reopened).listByTaskId('receipt-restart');
+            expect(rows).toHaveLength(1);
+            expect(rows[0]).toMatchObject({
+                status: 'exited',
+                outcome: 'run-exit-only',
+                message_ids_json: '[]',
+                spec_id: '',
+            });
+            await reopened.close();
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('probe 6, flipped by 0833: a finished run is correlated to its message and task at exit (R1, R4, R8)', async () => {
         // The exit sink in AgentService.executeRun writes the receipt into the
         // coordination_runs row it already finalizes — runId, originating message
@@ -891,6 +933,8 @@ describe('G61 completion receipt regressions (0833)', () => {
             const deps = {
                 runner: {
                     runPromptCommand: async () => {
+                        const inFlight = await dao.listByMessageId(sent.msgId);
+                        expect(inFlight[0]).toMatchObject({ status: 'running', task_id: '0833', completed_at: null });
                         accepted.fire();
                         return { exitCode: 0, stdout: 'done!', stderr: '', durationMs: 1 };
                     },

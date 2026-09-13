@@ -1090,22 +1090,20 @@ export class AgentService {
         // supervisor-process-shared-generation refinement is handoff 0530; Wave 1
         // only needs an addressable, monotonic pin (ponytail: one source of truth).
         const specId = stringFlag(flags, 'spec-id', '');
-        const coordinationRunId =
-            specId !== '' && options.execution?.correlation !== undefined
-                ? options.execution.correlation.runId
-                : undefined;
+        const coordinationRunId = options.execution?.correlation?.runId ?? lifecycle.identity.runId;
         let occupantRef: OccupantRef | undefined;
-        if (specId !== '' && coordinationRunId !== undefined && this.ctx.getDb !== undefined) {
+        if (this.ctx.getDb !== undefined) {
             try {
                 const dao = new CoordinationRunDao(await this.ctx.getDb());
                 const generation = ((await dao.maxGeneration(specId)) ?? 0) + 1;
-                occupantRef = {
-                    specId,
-                    agentKind: currentAgent,
-                    processId: null,
-                    runId: coordinationRunId,
-                    generation,
-                };
+                if (specId !== '')
+                    occupantRef = {
+                        specId,
+                        agentKind: currentAgent,
+                        processId: null,
+                        runId: coordinationRunId,
+                        generation,
+                    };
                 await dao.insertStart({
                     specId,
                     agentKind: currentAgent,
@@ -1113,6 +1111,8 @@ export class AgentService {
                     runId: coordinationRunId,
                     generation,
                     startedAt: new Date().toISOString(),
+                    messageIds: requestMessageIds,
+                    ...(taskId !== undefined ? { taskId } : {}),
                 });
             } catch (error) {
                 // Non-fatal: the agent run is primary; coordination persistence is secondary.
@@ -1440,7 +1440,7 @@ export class AgentService {
             options.execution?.signal?.removeEventListener('abort', onExternalAbort);
 
             // Finalize the coordination run row (terminal status + artifact paths).
-            if (occupantRef !== undefined && coordinationRunId !== undefined && this.ctx.getDb !== undefined) {
+            if (this.ctx.getDb !== undefined) {
                 try {
                     const dao = new CoordinationRunDao(await this.ctx.getDb());
                     const status: 'exited' | 'errored' = result?.exitCode === 0 ? 'exited' : 'errored';

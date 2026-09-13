@@ -219,3 +219,14 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 - `packages/domain/src/migrations.ts` — coordination-run table
 - `packages/contracts/src/` — oRPC DTOs only when Board/server expose the record
 - `plugins/sp/skills/spur-cli/references/agent.md` + `message.md` — Wave 2, same commit as verbs
+
+## 11. Durable request correlation (G61)
+
+The coordination run stores originating message IDs and the optional task ID before dispatch,
+so interrupted work remains attributable. The exit sink adds completion time, outcome, and
+artifact references before notifying consumers. `run-exit-only` records a zero process exit;
+it never advances the task or asserts workflow verification.
+
+Unaddressed invocations also persist receipts, using an empty `spec_id` and no occupant pin.
+An absent originating request is represented by an empty message list, never an inferred
+mailbox association. Receipt reads support run, message, and task IDs.

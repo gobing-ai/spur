@@ -74,6 +74,9 @@ export interface StartCoordinationRunInput {
     runId: string;
     generation: number;
     startedAt: string;
+    /** Persist origin before dispatch so an interrupted run remains attributable. */
+    messageIds?: string[];
+    taskId?: string;
 }
 
 // ── DAO ──
@@ -90,14 +93,16 @@ export class CoordinationRunDao {
     async insertStart(input: StartCoordinationRunInput): Promise<void> {
         await this.db.run(
             `INSERT INTO coordination_runs
-                (spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json)
-             VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, '[]')`,
+                (spec_id, agent_kind, process_id, run_id, generation, status, started_at, completed_at, artifact_refs_json, message_ids_json, task_id)
+             VALUES (?, ?, ?, ?, ?, 'running', ?, NULL, '[]', ?, ?)`,
             input.specId,
             input.agentKind,
             input.processId,
             input.runId,
             input.generation,
             input.startedAt,
+            JSON.stringify(input.messageIds ?? []),
+            input.taskId ?? null,
         );
     }
 
