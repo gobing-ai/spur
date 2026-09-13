@@ -11,13 +11,26 @@ import type { DbAdapter } from '@gobing-ai/ts-db';
  * a table that does not exist cannot hold rows, so "unaddressed" is the true answer,
  * not a swallowed error.
  */
-export async function listAddressedSpecIds(db: DbAdapter): Promise<string[]> {
+export async function listAddressedSpecIds(db: Pick<DbAdapter, 'queryAll'>): Promise<string[]> {
     const inboxIds = await distinctOrEmpty(db, 'SELECT DISTINCT to_id AS id FROM inbox_messages');
     const runIds = await distinctOrEmpty(db, 'SELECT DISTINCT spec_id AS id FROM coordination_runs');
     return Array.from(new Set([...inboxIds, ...runIds])).sort();
 }
 
-async function distinctOrEmpty(db: DbAdapter, sql: string): Promise<string[]> {
+/** Inspect legacy schemas without opening a writer or applying migrations. */
+export async function readAddressedSpecIds(databasePath: string): Promise<string[]> {
+    const { Database } = await import('@gobing-ai/ts-runtime/bun-sqlite');
+    const db = new Database(databasePath, { readonly: true });
+    try {
+        return await listAddressedSpecIds({
+            queryAll: async <T>(sql: string): Promise<T[]> => db.query<T, []>(sql).all(),
+        });
+    } finally {
+        db.close();
+    }
+}
+
+async function distinctOrEmpty(db: Pick<DbAdapter, 'queryAll'>, sql: string): Promise<string[]> {
     try {
         return (await db.queryAll<{ id: string }>(sql)).map((row) => row.id);
     } catch (error) {

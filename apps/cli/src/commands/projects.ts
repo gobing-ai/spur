@@ -12,8 +12,13 @@ import {
     ProjectRegistry,
     startRegisteredProject,
 } from '@gobing-ai/spur-app';
-import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
-import { createMigratedDb, type DbAdapter, type ProjectStrategy, ProjectStrategyDao } from '@gobing-ai/spur-domain';
+import {
+    createMigratedDb,
+    type DbAdapter,
+    type ProjectStrategy,
+    ProjectStrategyDao,
+    readAddressedSpecIds,
+} from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
@@ -435,17 +440,14 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 // over --apply so an option-concatenating wrapper can never imply a write.
                 const applyMode = options.apply === true && options.dryRun !== true;
 
-                // The inventory reads the TARGET project's own db (inbox/coordination
-                // rows are project-scoped). A missing db means no addressed rows: open
-                // in-memory instead of creating one — the preview must not write (0846 R3).
+                // Inspect the target's legacy schema as-is; opening a migrated adapter
+                // here would make even --dry-run write to the database (0846 R3).
                 const dbUrl = join(projectPath, '.spur', 'spur.db');
-                const db = (await context.fs.exists(dbUrl))
-                    ? await createMigratedDb({ url: dbUrl })
-                    : await createMigratedDb({ url: IN_MEMORY_DATABASE_URL });
                 const service = new LegacyMigrationService({
                     spurConfig: await context.loadAgentConfig(projectPath),
                     fs: context.fs,
-                    getDb: async () => db,
+                    listAddressedSpecIds: async () =>
+                        (await context.fs.exists(dbUrl)) ? readAddressedSpecIds(dbUrl) : [],
                 });
 
                 if (!applyMode) {

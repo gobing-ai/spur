@@ -9,7 +9,7 @@ import {
     type SpurConfig,
     type TeamConfig,
 } from '@gobing-ai/spur-config';
-import { atomicWriteAsync, type DbAdapter, listAddressedSpecIds } from '@gobing-ai/spur-domain';
+import { atomicWriteAsync } from '@gobing-ai/spur-domain';
 import { type AgentSpec, loadAgentSpecs } from '@gobing-ai/ts-ai-runner';
 import { type FileSystem, walkDir } from '@gobing-ai/ts-runtime';
 import { normalizeProjectPath, ProjectRegistry } from './project-registry';
@@ -35,6 +35,7 @@ export type LegacyConflictKind =
     | 'derived-id-collision'
     | 'orphan-spec-no-config'
     | 'spec-workspace-disagreement'
+    | 'project-name-mismatch'
     // 0847 R2: a preserved roster id that inbox/coordination rows address but that has
     // no spec file on disk — the preview cannot see it (it classifies on-disk specs only),
     // so the conversion itself must look before writing.
@@ -139,8 +140,8 @@ export interface LegacyMigrationServiceContext {
     spurConfig?: SpurConfig | null;
     /** Filesystem port. The service reads through it only — the zero-write guard (R3). */
     fs: FileSystem;
-    /** Migrated SQLite adapter factory. Read-only use: the addressed-spec-id SELECTs. */
-    getDb(): Promise<DbAdapter>;
+    /** Read-only union of inbox and coordination addresses; never migrates the database. */
+    listAddressedSpecIds(): Promise<string[]>;
     /**
      * Project registry for the work_dir registration check (R4). Optional so tests
      * can point one at a temp file; defaults to the machine registry.
@@ -379,9 +380,10 @@ export class LegacyMigrationService {
         const configDir = join(base, '.spur', 'agents');
         const specs = await loadAgentSpecs(configDir, this.ctx.fs);
         const specPaths = await this.specFilePaths(configDir, specs);
-        const addressed = new Set(await listAddressedSpecIds(await this.ctx.getDb()));
+        const addressed = new Set(await this.ctx.listAddressedSpecIds());
         // readRaw, never list(): list() heals tilde paths and stale ports — both WRITE.
-        const registeredPaths = new Set(this.registry.readRaw().projects.map((p) => normalizeProjectPath(p.path)));
+        const registeredProjects = this.registry.readRaw().projects;
+        const registeredPaths = new Set(registeredProjects.map((p) => normalizeProjectPath(p.path)));
 
         const teams = new Map<string, TeamSnapshot>();
         for (const [teamId, teamConfig] of Object.entries(config?.agent?.team ?? {})) {
@@ -431,7 +433,26 @@ export class LegacyMigrationService {
             for (const team of group) attachTeamConflict(team.teamId, conflict);
         }
         for (const team of teams.values()) {
-            if (registeredPaths.has(team.normalizedWorkDir)) continue;
+            if (registeredPaths.has(team.normalizedWorkDir)) {
+                const project = registeredProjects.find((p) => normalizeProjectPath(p.path) === team.normalizedWorkDir);
+                if (
+                    team.normalizedWorkDir === normalizeProjectPath(base) &&
+                    byPath.get(team.normalizedWorkDir)?.length === 1 &&
+                    project !== undefined &&
+                    project.name !== team.teamId
+                ) {
+                    attachTeamConflict(
+                        team.teamId,
+                        addConflict(
+                            'project-name-mismatch',
+                            `project name "${project.name}" differs from legacy team "${team.teamId}" — ` +
+                                `fleet resolution would change mailbox ids; align the registry name with "${team.teamId}" before converting`,
+                            [`agent.team.${team.teamId}`, project.path],
+                        ),
+                    );
+                }
+                continue;
+            }
             attachTeamConflict(
                 team.teamId,
                 addConflict(

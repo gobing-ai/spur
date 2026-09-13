@@ -426,7 +426,7 @@ describe('spur projects CLI command', () => {
     /** Legacy G64 fixture: registered project with a team block, its generated spec, and a project db. */
     async function seedLegacyProject(members: string[], specIds: string[]): Promise<void> {
         const { mkdirSync, writeFileSync } = await import('node:fs');
-        await main(['projects', 'add', projectPath, '--name', 'legacyproj'], {
+        await main(['projects', 'add', projectPath, '--name', 'web'], {
             cwd: tempDir,
             output: createMockOutput().output,
         });
@@ -473,6 +473,29 @@ describe('spur projects CLI command', () => {
         // Zero-write (0846 R3): even the project db is not touched by the preview.
         const dbAfter = await import('node:fs').then((m) => m.statSync(join(projectPath, '.spur', 'spur.db')).mtimeMs);
         expect(dbAfter).toBe(dbBefore);
+    });
+
+    it('should preview an unmigrated database without changing its schema or bytes (0847)', async () => {
+        const { Database } = await import('bun:sqlite');
+        const { mkdirSync, readFileSync, readdirSync } = await import('node:fs');
+        const dir = join(projectPath, '.spur');
+        mkdirSync(dir, { recursive: true });
+        const dbPath = join(dir, 'spur.db');
+        const db = new Database(dbPath);
+        db.run('CREATE TABLE inbox_messages (to_id TEXT)');
+        db.run("INSERT INTO inbox_messages VALUES ('legacy-coder')");
+        db.close();
+        const before = readFileSync(dbPath);
+        const filesBefore = readdirSync(dir).sort();
+        const mock = createMockOutput();
+        const code = await main(['projects', 'migrate', projectPath, '--dry-run', '--json'], {
+            cwd: tempDir,
+            output: mock.output,
+        });
+        expect(code).toBe(0);
+        expect(JSON.parse(mock.getText()).inventory.addressedSpecIds).toEqual(['legacy-coder']);
+        expect(readFileSync(dbPath)).toEqual(before);
+        expect(readdirSync(dir).sort()).toEqual(filesBefore);
     });
 
     it('should --apply write the declaration with explicit ids and report unchanged on re-run (0847)', async () => {
@@ -607,7 +630,7 @@ describe('spur projects CLI command', () => {
 
     it('should render non-blocking member warnings in the preview (0847)', async () => {
         const { mkdirSync, writeFileSync } = await import('node:fs');
-        await main(['projects', 'add', projectPath, '--name', 'warnproj'], {
+        await main(['projects', 'add', projectPath, '--name', 'web'], {
             cwd: tempDir,
             output: createMockOutput().output,
         });

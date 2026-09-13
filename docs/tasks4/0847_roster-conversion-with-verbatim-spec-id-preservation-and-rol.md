@@ -4,7 +4,7 @@ name: Roster conversion with verbatim spec-ID preservation and rollback
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.301Z
-updated_at: "2026-09-13T01:40:01.222Z"
+updated_at: "2026-09-13T15:37:33.067Z"
 feature_id: G64
 priority: P2
 tags:
@@ -269,20 +269,27 @@ task writes — the shapes must match `FleetDeclarationSchema` exactly, or `load
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+Migration conversion writes explicit local member IDs while preserving the legacy spec files and
+database rows. Differing fleet declarations are backed up before atomic replacement; rollback restores
+the backup or removes a declaration created by the current service instance.
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/commands/projects.ts:15` |
-| `apps/cli/src/commands/projects.ts:4` |
-| `apps/cli/src/commands/projects.ts:416` |
-| `apps/cli/src/commands/projects.ts:8` |
-| `apps/cli/src/commands/shared-options.ts:105` |
-| `apps/cli/tests/commands/projects.test.ts:423` |
-| `apps/cli/tests/json-envelope-inventory.test.ts:259` |
-| `packages/app/src/index.ts:287` |
-| `packages/domain/src/dao/index.ts:3` |
+Verification fixes (2026-09-13):
+
+- `packages/app/src/services/legacy-migration.ts:383` obtains addresses through a read-only callback.
+  The registry/team prefix check at `packages/app/src/services/legacy-migration.ts:447` refuses
+  conversion with `project-name-mismatch` instead of silently changing fleet mailbox identities.
+- `packages/domain/src/dao/addressed-spec-ids.ts:21` opens existing SQLite databases read-only and
+  closes them after querying the existing tables. No migrations run during inspection.
+- `apps/cli/src/commands/projects.ts:443` wires that reader for both preview and apply; absent databases
+  contribute no addresses. This fixes dry-run writes through the previous migrated adapter.
+- `packages/app/tests/services/legacy-migration.test.ts:169` checks prefix-conflict refusal and zero
+  writes; `apps/cli/tests/commands/projects.test.ts:478` proves an old database's bytes and directory
+  contents survive preview unchanged. Both tests failed before the fix and pass afterward.
+- `docs/design/project-switcher.md:122` documents migration's read-only and prefix-conflict contract;
+  the owning CLI reference is synchronized. The normal build regenerates the plugin handoff bundle.
+
+Design refinement: mismatched registry names halt for explicit operator correction; no registry rename,
+alias table, or roster merge is introduced. The conversion remains additive and rollback-capable.
 
 ### Testing
 

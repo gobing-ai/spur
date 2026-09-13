@@ -64,12 +64,16 @@ exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
   `work_dir` resolves to the project into `<project>/.spur/fleet.json`, preserving
   every spec id verbatim (explicit member ids freeze the `<role>-<n>` derivation).
   Dry-run is the default: it emits the 0846 plan (steps + conflicts + warnings) and
-  writes nothing — not even the project db, which is opened in-memory when absent.
+  writes nothing — an existing project db is opened read-only without migrations;
+  an absent db or table contributes no addressed identities.
   `--apply` validates first, deep-equals an existing declaration (`unchanged`, no
   rewrite), backs up a differing prior file to `.bak`, then atomically writes the
   declaration (`converted`). It is purely additive — specs, `config.yaml`, and the
   database are never touched — and it refuses to write while any conflict exists
-  (`addressed-id-without-spec`, `two-teams-one-project`, …). Exit codes: `0` for a
+  (`addressed-id-without-spec`, `two-teams-one-project`, …). A registry name that
+  differs from the legacy team ID is `project-name-mismatch`: align that name
+  explicitly before conversion so fleet resolution preserves the spec-id prefix.
+  Exit codes: `0` for a
   clean preview or `converted`/`unchanged`/`nothing-to-convert`; `2` when blocked
   (the JSON payload still carries the full plan/result); `1` on error. Under
   `--json` the payload is the raw `MigrationPlan` (preview) or `ConversionResult`

@@ -111,9 +111,16 @@ Extend `startServer` / `registerServeCommand` (no new server process type):
 | `list [--json]` | Table / JSON of name, path, port, running |
 | `start <name\|path> [--port]` | Spawn `spur serve` in project path (detached child); wait until health OK; update registry |
 | `stop <name\|path>` | SIGTERM process listening on registered port (or recorded pid if we add it later); set port 0 |
+| `migrate [path] [--dry-run\|--apply] [--json]` | Preview legacy team conversion by default; explicit `--apply` backs up a differing fleet declaration and writes the conversion. Conflicts exit 2. |
 
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
 resource; keep `spur serve` as the low-level launcher.
+
+Migration reads existing inbox and coordination addresses through a read-only SQLite connection,
+without schema migrations; a missing database or table contributes no addresses. It refuses conversion
+when the target registry name differs from the legacy team ID (`project-name-mismatch`): fleet spec
+IDs use the registry name as their prefix, so the names must agree to preserve mailbox identity.
+The operator resolves that conflict explicitly; migration never renames the project or merges teams.
 
 **Future launchd:** `start`/`stop` become thin clients of a daemon; `ProjectRegistry` file contract
 unchanged.

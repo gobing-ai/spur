@@ -4,7 +4,13 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join, relative } from 'node:path';
 import { FleetDeclarationSchema, type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
-import { CoordinationRunDao, createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
+import {
+    CoordinationRunDao,
+    createMigratedDb,
+    type DbAdapter,
+    InboxMessageDao,
+    listAddressedSpecIds,
+} from '@gobing-ai/spur-domain';
 import { type AgentSpec, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { createNodeFileSystem, type FileSystem, walkDir } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
@@ -45,7 +51,7 @@ async function seedSpec(project: string, id: string, tags: string[], workspace?:
 
 async function registeredRegistry(project: string, extraPaths: string[] = []): Promise<ProjectRegistry> {
     const registry = new ProjectRegistry(join(project, '.spur', 'registry.json'));
-    await registry.upsert({ name: 'proj', path: project });
+    await registry.upsert({ name: 'web', path: project });
     for (const [index, path] of extraPaths.entries()) {
         await registry.upsert({ name: `extra-${index}`, path });
     }
@@ -62,7 +68,7 @@ function makeService(input: {
     return new LegacyMigrationService({
         spurConfig: input.config,
         fs: input.fs ?? createNodeFileSystem(input.project),
-        getDb: async () => input.db,
+        listAddressedSpecIds: () => listAddressedSpecIds(input.db),
         ...(input.registry !== undefined ? { registry: input.registry } : {}),
     });
 }
@@ -160,6 +166,22 @@ async function makeConvertedFixture(): Promise<{
 }
 
 describe('LegacyMigrationService.apply + rollback (0847)', () => {
+    test('registry name mismatch blocks conversion before fleet resolution can change mailbox ids', async () => {
+        const { project, svc, cleanup } = await makeConvertedFixture();
+        try {
+            const registry = await registeredRegistry(project);
+            await registry.upsert({ name: 'different-project', path: project });
+            const before = await snapshotTree(project);
+            const plan = await svc.preview(project);
+            expect(plan.blocked).toBe(true);
+            expect(plan.inventory.conflicts).toContainEqual(expect.objectContaining({ kind: 'project-name-mismatch' }));
+            expect((await svc.apply(project)).outcome).toBe('blocked');
+            expect(await snapshotTree(project)).toEqual(before);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('converted declaration carries explicit ids; preservedIds match the on-disk specs verbatim (R1/R3)', async () => {
         const { project, svc, cleanup } = await makeConvertedFixture();
         try {
