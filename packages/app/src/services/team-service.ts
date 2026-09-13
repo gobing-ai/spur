@@ -32,6 +32,7 @@ import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
 import { type AgentRoleDefinition, cheapestEligibleExecutors, getExecutorTier } from './agent-service';
+import { FleetService } from './fleet-service';
 import { TaskLocator } from './task-locator';
 
 // ---------------------------------------------------------------------------
@@ -793,6 +794,10 @@ export class TeamService {
      */
     async createAgentSpec(input: AgentSpecInput): Promise<AgentSpec> {
         validateAgentId(input.id);
+        const fleet = new FleetService({ fs: this.ctx.fs, openDb: this.ctx.getDb });
+        if ((await fleet.load(this.ctx.cwd)) !== null || input.tags?.some((tag) => tag.startsWith('fleet:'))) {
+            await fleet.assertLaunchGroundTruth(input.workspace ?? this.ctx.cwd);
+        }
         const existing = (await loadAgentSpecs(this.configDir)).find((spec) => spec.id === input.id);
         if (existing !== undefined) {
             throw new Error(`Agent spec already exists: ${input.id}`);

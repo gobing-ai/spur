@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentExecutorConfig } from '@gobing-ai/spur-config';
 import { applyCliMigrations, CoordinationRunDao, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
-import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
+import { saveAgentSpec, TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
@@ -4349,4 +4349,54 @@ describe('in-run quota exclusion (0799 R3)', () => {
         expect(runPromptCommand).toHaveBeenCalledTimes(1);
         expect(errors.some((line) => line.includes('Escalating:'))).toBe(false);
     });
+});
+
+test('the final dispatch guard runs after resolution and prevents a revoked launch', async () => {
+    const { deps, runner, doctor } = mockDeps();
+    const service = new AgentService({ cwd: '/tmp', env: {}, output: nullOutput() });
+    const result = await service.runTraced('work', { agent: 'pi' }, deps, {
+        beforeDispatch: async () => {
+            expect(doctor.runOne).toHaveBeenCalled();
+            throw new Error('stale-strategy');
+        },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toBe('stale-strategy');
+    expect(runner.runPromptCommand).not.toHaveBeenCalled();
+});
+
+test('fleet spec execution validates actual launch context and requires the managed dispatch guard', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'spur-fleet-launch-'));
+    const previous = process.cwd();
+    const { deps, runner } = mockDeps();
+    const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+    await applyCliMigrations(db);
+    try {
+        mkdirSync(join(project, '.spur/agents'), { recursive: true });
+        writeFileSync(join(project, '.spur/fleet.json'), JSON.stringify({ version: 1, members: [] }));
+        await saveAgentSpec(
+            {
+                id: 'fleet-worker',
+                name: 'Worker',
+                type: 'pi',
+                workspace: project,
+                purpose: 'fixture',
+                tags: ['fleet:generated'],
+                config: {},
+            },
+            join(project, '.spur/agents'),
+        );
+        const service = new AgentService({ cwd: project, env: {}, output: nullOutput(), getDb: async () => db });
+        const flags = { agent: 'pi', 'spec-id': 'fleet-worker' };
+        await expect(service.runTraced('work', flags, deps)).rejects.toThrow('Ground-truth mismatch');
+        process.chdir(project);
+        expect((await service.runTraced('work', flags, deps)).message).toContain('owning orchestrator');
+        expect(runner.runPromptCommand).not.toHaveBeenCalled();
+        expect((await service.runTraced('work', flags, deps, { beforeDispatch: async () => {} })).exitCode).toBe(0);
+        expect(runner.runPromptCommand).toHaveBeenCalledTimes(1);
+    } finally {
+        process.chdir(previous);
+        await db.close();
+        rmSync(project, { recursive: true, force: true });
+    }
 });

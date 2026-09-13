@@ -13,15 +13,19 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _resetAgentServiceShimsForTest, type SystemEventBus, TeamService } from '@gobing-ai/spur-app';
+import { spurConfigSchema } from '@gobing-ai/spur-config';
 import {
+    CoordinationRunDao,
     createMigratedDb,
     type DbAdapter,
     InboxMessageDao,
+    ProjectClaimDao,
     ProjectStrategyDao,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { runAgentLoop } from '../../src/commands/agent';
+import { makeCheckService } from '../../src/commands/task';
 import { type CliContext, createCliContext } from '../../src/context';
 import type { CommandOutput } from '../../src/output';
 import { attachSystemEventLedger } from '../../src/system-event-ledger';
@@ -340,4 +344,137 @@ describe('agent loop backstop and idle holds (0839 R3/R5)', () => {
             rig.cleanup();
         }
     });
+});
+
+test('G62 GTD without an orchestrator never drains arbitrary queued work', async () => {
+    const rig = await makeRig({ corpus: true });
+    try {
+        writeFileSync(join(rig.tempDir, '.spur', 'fleet.json'), JSON.stringify({ version: 1, members: [] }));
+        await new ProjectStrategyDao(rig.db).set(realpathSync(rig.tempDir), 'gtd');
+        await rig.inbox.enqueue('operator', 'wake-worker', 'unapproved queued work');
+        await runAgentLoop(rig.customCtx, { spec: 'wake-worker', poll: '1' }, { maxIterations: 1 });
+        expect(rig.run).not.toHaveBeenCalled();
+        expect((await rig.inbox.inbox('wake-worker'))[0]?.status).toBe('queued');
+    } finally {
+        rig.cleanup();
+    }
+});
+
+test('G62 production loop claims ownership, dispatches gated tasks, reconciles and does not redispatch on restart', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'spur-gtd-'));
+    const project = join(base, 'proj');
+    mkdirSync(join(project, '.spur'), { recursive: true });
+    mkdirSync(join(project, 'docs', 'tasks'), { recursive: true });
+    mkdirSync(join(project, 'docs', 'features'), { recursive: true });
+    writeFileSync(join(project, 'docs/features/G62_fixture.md'), '# G62 Fixture\n');
+    const db = await createMigratedDb({ url: ':memory:' });
+    const previous = process.cwd();
+    const output = captureOutput();
+    const config = spurConfigSchema.parse({
+        agent: {
+            executors: [
+                {
+                    name: 'writer',
+                    agent: 'pi',
+                    executionCapabilities: {
+                        version: 1,
+                        axes: { fsWrite: { state: 'available', provenance: 'native-known' } },
+                    },
+                },
+            ],
+        },
+    });
+    const ctx = createCliContext({ cwd: project, output, db, spurConfig: config });
+    const started: string[] = [];
+    const claims = new ProjectClaimDao(db);
+    const runs = new CoordinationRunDao(db);
+    try {
+        process.chdir(project);
+        const path = realpathSync(project);
+        const team = new TeamService(ctx);
+        await team.createAgentSpec({ id: 'proj-lead', type: 'pi' });
+        await team.createAgentSpec({ id: 'proj-coder', type: 'pi' });
+        writeFileSync(
+            join(project, '.spur', 'fleet.json'),
+            JSON.stringify({
+                version: 1,
+                orchestrator: 'lead',
+                members: [
+                    { id: 'lead', role: 'planner', purpose: 'orchestrator', executor: 'writer' },
+                    { id: 'coder', role: 'coder', executor: 'writer' },
+                ],
+            }),
+        );
+        for (const [wbs, tags, body, dependencies] of [
+            ['0841', '[fleet:auto]', '### Plan\n\n- [ ] Inspect the supplied fixture and record its result.', '[]'],
+            ['0842', '[]', '### Plan\n\n- [ ] Inspect the supplied fixture and record its result.', '[]'],
+            ['0843', '[fleet:auto]', '', '[]'],
+            [
+                '0844',
+                '[fleet:auto]',
+                '### Plan\n\n- [ ] Inspect the supplied fixture and record its result.',
+                '["0842"]',
+            ],
+        ]) {
+            writeFileSync(
+                join(project, 'docs', 'tasks', `${wbs}_fixture.md`),
+                `---\nschema_version: 1\nname: Fixture ${wbs}\nstatus: todo\ntemplate: meta\nfeature_id: G62\nupdated_at: 2026-09-12T00:00:00.000Z\ncreated_at: 2026-09-12T00:00:00.000Z\ntags: ${tags}\ndependencies: ${dependencies}\n---\n\n## ${wbs}. Fixture ${wbs}\n\n### Background\n\nInspect this local fixture to exercise managed dispatch through the real task readiness checker.\n\n${body}\n`,
+            );
+        }
+        const readiness = await (await makeCheckService(ctx)).check(
+            join(project, 'docs/tasks/0841_fixture.md'),
+            '0841',
+            { asStatus: 'wip', strict: true },
+        );
+        expect(readiness.findings).toEqual([]);
+        await new ProjectStrategyDao(db).set(path, 'gtd');
+        const managed: CliContext = {
+            ...ctx,
+            agentService: () =>
+                ({
+                    runTraced: async (
+                        _prompt: string,
+                        flags: Record<string, string | boolean>,
+                        _deps: unknown,
+                        execution: { beforeDispatch: () => Promise<void> },
+                    ) => {
+                        await execution.beforeDispatch();
+                        expect((await claims.get(path, 'orchestrator'))?.holderId).toBe('proj-lead');
+                        expect((await claims.get(path, 'write'))?.holderId).toBe('proj-coder');
+                        expect(await runAgentLoop(ctx, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 })).toBe(2);
+                        const task = String(flags.task);
+                        started.push(task);
+                        await runs.insertStart({
+                            specId: 'proj-coder',
+                            agentKind: 'pi',
+                            processId: null,
+                            runId: 'gtd-run',
+                            generation: 1,
+                            startedAt: new Date().toISOString(),
+                            taskId: task,
+                        });
+                        await runs.updateExit('gtd-run', 'exited', new Date().toISOString(), '[]', {
+                            messageIds: [],
+                            taskId: task,
+                            outcome: 'run-exit-only',
+                        });
+                        return { exitCode: 0, stdout: '' };
+                    },
+                }) as unknown as ReturnType<CliContext['agentService']>,
+        };
+        expect(await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 2 })).toBe(0);
+        expect(started).toEqual(['0841']);
+        expect(await claims.get(path, 'orchestrator')).toBeNull();
+        expect(await claims.get(path, 'write')).toBeNull();
+        expect(await runAgentLoop(managed, { spec: 'proj-lead', poll: '1' }, { maxIterations: 1 })).toBe(0);
+        expect(started).toEqual(['0841']);
+        const holds = await new SystemEventDao(db).query({ names: ['fleet.idle-hold'], limit: 1 });
+        expect(holds[0]?.payload_json).toContain('unauthorized');
+        expect(holds[0]?.payload_json).toContain('not-ready');
+        expect(holds[0]?.payload_json).toContain('unmet-dependency');
+    } finally {
+        process.chdir(previous);
+        await db.close();
+        rmSync(base, { recursive: true, force: true });
+    }
 });

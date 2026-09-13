@@ -26,6 +26,7 @@ import {
     DoctorRunner,
     getAgentShim,
     isClaudeStyleSlashCommand,
+    loadAgentSpecs,
     type ModelHealthResult,
     type PromptOptions,
     resolveAgentName,
@@ -61,6 +62,7 @@ import {
 } from './capability-attestation';
 import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
+import { FleetService } from './fleet-service';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
 
 // ---------------------------------------------------------------------------
@@ -299,6 +301,7 @@ export interface AgentRoleDefinition {
 /** Context injected into AgentService. */
 export interface AgentServiceContext {
     cwd: string;
+    fs?: FileSystem;
     env: Record<string, string | undefined>;
     output: AgentServiceOutput;
     /**
@@ -886,6 +889,23 @@ export class AgentService {
         const silent = options.silent;
         const nonInteractive = options.nonInteractive === true;
 
+        const launchSpecId = stringFlag(flags, 'spec-id', '');
+        if (launchSpecId !== '') {
+            const fs = this.ctx.fs ?? createNodeFileSystem(this.ctx.cwd);
+            const fleet = new FleetService({ fs, openDb: this.ctx.getDb });
+            if ((await fleet.load(this.ctx.cwd)) !== null) {
+                await fleet.assertLaunchGroundTruth(this.ctx.cwd);
+                const spec = (await loadAgentSpecs(fs.resolve('.spur/agents'))).find((s) => s.id === launchSpecId);
+                if (spec === undefined)
+                    return { ok: false, exitCode: 2, message: `Missing fleet spec: ${launchSpecId}` };
+                await fleet.assertLaunchGroundTruth(spec.workspace);
+                await fleet.assertLaunchGroundTruth(stringFlag(flags, 'cwd', this.ctx.cwd));
+                if (options.execution?.beforeDispatch === undefined) {
+                    return { ok: false, exitCode: 2, message: 'Fleet dispatch requires the owning orchestrator loop' };
+                }
+            }
+        }
+
         // validate --mode
         const mode = stringFlag(flags, 'mode', 'text');
         if (mode !== 'text' && mode !== 'json') {
@@ -1298,6 +1318,7 @@ export class AgentService {
 
                 // Dispatch
                 try {
+                    await options.execution?.beforeDispatch?.();
                     result = await runner.runPromptCommand(agent, promptOptions, {
                         cwd: cwd || undefined,
                         ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),

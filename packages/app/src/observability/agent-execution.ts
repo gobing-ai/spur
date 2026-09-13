@@ -130,6 +130,8 @@ export type AgentExecutionObserver = (event: AgentExecutionEvent) => void;
 
 /** Optional correlation, cancellation, observation, and heartbeat controls for one dispatch. */
 export interface AgentExecutionOptions {
+    /** Recheck dispatch authority after resolution/probes and before each subprocess starts. */
+    beforeDispatch?: () => Promise<void>;
     readonly correlation?: AgentRunCorrelation;
     readonly signal?: AbortSignal;
     readonly observer?: AgentExecutionObserver;

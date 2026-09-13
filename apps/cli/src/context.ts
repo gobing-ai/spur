@@ -216,6 +216,7 @@ export function createCliContext(options: {
             new AgentService({
                 cwd,
                 env,
+                fs,
                 output: options.output,
                 agentConfig: agentConfig,
                 roles: agentRoles,
