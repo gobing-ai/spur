@@ -4,7 +4,7 @@ name: Projects module shell with header and project-path identity
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.540Z
-updated_at: "2026-09-12T21:28:40.432Z"
+updated_at: "2026-09-13T15:07:39.629Z"
 feature_id: G63
 priority: P2
 tags:
@@ -400,19 +400,19 @@ Change map (file:line):
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/web/src/modules/projects/index.tsx:14-24 module export (id/route 'projects', order 45) auto-discovered by discover.ts glob; registration test ProjectsShell.test.tsx:51-62 proves unique id/route among 8 modules; shell renders only the served project via useProjectContext (ProjectsShell.tsx:67) with no client-side selector |
-| R2 | MET | ProjectsShell.tsx:88-92 name+canonical worktree path, :96 orchestrator by its own state name (missing='no orchestrator bound', bound-offline='bound but not responding', :38-49), :98-113 capacity (total/enabled/write-capable/unresolved), :115-124 strategy name+version; server snapshot composed at health/index.ts:77-145 |
-| R3 | MET | ProjectsShell.tsx:129-159 role=tablist/tab/tabpanel with aria-selected and frozen projects-tab-*/panel ids (native buttons = keyboard reachable); useProjectTab.ts:14-29 URL segment after 'projects', unknown/missing→'conversation', query-preserving replace nav; deep link resolves via wildcard router.tsx:22-25; tests useProjectTab.test.ts:24-41, ProjectsShell.test.tsx:134+ |
-| R4 | MET | health/index.ts:66 path=normalizeProjectPath(ctx.cwd) — same normalizer as /api/projects current marker (:161-172, equality test health.test.ts:247-281); useProjectContext.tsx:62-84 exposes path as identity key, name display-only; F2 functional update preserves first-landed fleet (:96-100, test :87); provider above Outlet+GlobalAgentBar (BoardLayout.tsx:5,126,164; board-wide test useProjectContext.test.tsx:44) |
-| R5 | MET | ProjectsShell.tsx:19-33 seven-state headerState precedence with data-projects-state (:70-71), tabs mounted in every state (ProjectsShell.test.tsx:64-131); zero-member → 'no fleet declared — expected <path>/.spur/fleet.json' (:102-103; health.test.ts:354-377 missing=['no-declaration']); invalid fleet.json keeps FleetService detail in capacity.missing (health/index.ts:113-122; health.test.ts:328); degraded services → 200 named states never 500 (health/index.ts:77-145; health.test.ts:378) |
-| R6 | MET | Only order:45 added; workspace/inbox/teams orders unchanged at 50/60/70 (verified in tree); registry.ts, router.tsx, modules/config.ts untouched in diff over bb6313459; eight-module registration + sidebar ordering asserted (ProjectsShell.test.tsx:50-62, LeftSidebar.test.tsx) |
-| R7 | MET | Only DESIGN.md live tokens spur-bg/surface/surface-3/border/text/text-muted/accent (ProjectsShell.tsx:66-147); text-white on accent matches sibling precedent WorkspaceShell.tsx:86; no package.json/dependency change in diff; @/ui primitives only |
+| R1 | MET | `apps/web/src/modules/projects/index.tsx:14` auto-discovered Projects module; `apps/web/tests/modules/projects/ProjectsShell.test.tsx` PASS; Fix-pass artifact: .spur/run/0840-verdict.json. |
+| R2 | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:103-139` renders project, strategy, orchestrator, and capacity facts; ProjectsShell tests PASS |
+| R3 | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:146-183` tablist/aria-selected/deep-link contract; `apps/web/tests/modules/projects/useProjectTab.test.ts` PASS |
+| R4 | MET | `apps/server/src/modules/health/index.ts:65` normalized path and `apps/web/src/modules/projects/useProjectContext.tsx:80` board-wide identity; `apps/server/tests/modules/health.test.ts` PASS |
+| R5 | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:98-139` names degraded states while tabs remain mounted; ProjectsShell tests PASS |
+| R6 | MET | `apps/web/src/modules/projects/index.tsx:14` order 45; registry ordering test PASS |
+| R7 | MET | Projects shell uses existing spur token classes; `bun run spur-check` PASS |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Projects opens the selected project with Conversation, Agents, and Work | MET | test | Header shows worktree/strategy/orchestrator/capacity (ProjectsShell.tsx:88-124); Conversation/Agents/Work as three aria-selected native buttons (tabs.tsx:46-51, ProjectsShell.tsx:134-147); fresh run: web targeted 32 pass/0 fail rc0, server health 17 pass/0 fail rc0 |
-| An empty project still opens | MET | test | health.test.ts:354-377 — zero-member/no-declaration fixture returns 200 with capacity {0,0,0,['no-declaration']} and orchestrator 'missing'; shell names the absence + expected fleet.json path (ProjectsShell.tsx:102-103) with tabs still mounted (ProjectsShell.test.tsx:64-131) |
-| Identical labels stay distinct | MET | test | Identity key is canonical path via the same normalizeProjectPath as the switcher's current marker (health/index.ts:66,161-172); equality test health.test.ts:247-281; name is documented display-only and never a key (useProjectContext.tsx:70-71) |
+| Scenario: R1 — Projects opens the selected project with Conversation, Agents, and Work | MET | test | `apps/web/tests/modules/projects/ProjectsShell.test.tsx` — Projects module registration and three-tab contract PASS |
+| Scenario: An empty project still opens | MET | test | `apps/web/tests/modules/projects/ProjectsShell.test.tsx` — no-fleet state names fleet.json and keeps tabs mounted PASS |
+| Scenario: Identical labels stay distinct | MET | test | `apps/server/tests/modules/health.test.ts` — normalized project path identity PASS |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

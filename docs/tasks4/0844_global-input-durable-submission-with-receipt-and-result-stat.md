@@ -4,7 +4,7 @@ name: Global input durable submission with receipt and result states
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.545Z
-updated_at: "2026-09-13T02:17:06.397Z"
+updated_at: "2026-09-13T15:07:40.344Z"
 feature_id: G63
 priority: P1
 tags:
@@ -431,21 +431,21 @@ advance while the bar stays mounted.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/components/GlobalAgentBar.tsx:80-83` — requestKey minted/reused and `persistPending()` writes `draft.pending` BEFORE the POST; server persists the row and returns the receipt (`POST /api/messages` → TeamService.sendMessage). Tests: "R1+R2: submit persists the request before the ack and clears the submitted revision" (`GlobalAgentBar.test.tsx:135`). Fresh run: apps/web `bun test` 896 pass / 0 fail. |
-| R2 | MET | `apps/web/src/modules/projects/drafts.tsx:189-196` — `clearSubmitted(submitted.revision)` is revision-gated (no-op if a newer edit bumped revision); called at `GlobalAgentBar.tsx:106` only after a durable ok. Test: "R2: an edit typed during flight survives the clear and mints a NEW key on resubmit" (`GlobalAgentBar.test.tsx:189`). |
-| R3 | MET | `GlobalAgentBar.tsx:77-80` — key reuse gated on `pending.revision === draft.revision`; `:100` `!res.ok` returns leaving draft+pending intact (network-error catch too). Test: "R3: a failed ack keeps the draft and the retry reuses the SAME requestKey" (`GlobalAgentBar.test.tsx:170`). |
-| R4 | MET | `apps/server/src/modules/messages/index.ts:73-81` — present-and-mismatched `projectPath` → 409 BEFORE any row write. Tests: "mismatched projectPath → 409 and NO row written" (`messages/index.test.ts:327`); "…scoped to the mailbox" (`health.test.ts:417`, feed reads only the orchestrator's operator rows, `health/index.ts:226`); CLI/Inbox parity without the field (`:347`). |
-| R5 | MET | `apps/web/src/modules/projects/receipt.ts:51-61` — closed 12-state vocabulary; `RECEIPT_LABELS` icon+label+meaning+action+tone per state; `classifyReceipt` 16-row precedence (`receipt.ts:185-219`) pinned by 21 `receipt.test.ts` tests; feed advances on the 15s `STATUS_POLL_MS` poll (`useProjectRequests.ts:22-27,71-76`; F1 test `useProjectRequests.test.ts:107`); per-entry states: "request entries join the durable results feed: receipt state rendered per entry (0844 R5)" (`ConversationView.test.tsx:177`). |
-| R6 | MET | `receipt.ts:142-147` — `outcome-unknown` action is inspect/reconcile, never a retry button; `:149-155` `completed-exit-only` = "run exit 0 recorded (unverified)", tone warn, reconcile-then-mark action; outcome precedence `receipt.ts:188-191`. Test: "completed-exit-only is labelled unverified (R6)" (`receipt.test.ts:211`). |
-| R7 | MET | `apps/web/src/components/BoardLayout.tsx:127-167` — GlobalAgentBar mounted at `:164` inside ProjectProvider+ConversationDraftProvider, outside `<Outlet/>` (`:152`); works from any Board route. Tests: "BoardLayout renders the global agent bar dock" (`GlobalAgentBar.test.tsx:123`); "unbound orchestrator: Send is disabled and the state is named, never a bare disabled control" (`:211`). |
+| R1 | MET | `apps/web/src/components/GlobalAgentBar.tsx:89-128` persists request identity before POST and accepts durable receipt; GlobalAgentBar tests PASS; Fix-pass artifact: .spur/run/0844-verdict.json. |
+| R2 | MET | `apps/web/src/modules/projects/drafts.tsx:189-198` clears only submitted revision; edit-during-flight test PASS |
+| R3 | MET | `apps/web/src/components/GlobalAgentBar.tsx:96-110` reuses pending key by revision; failed-ack/retry tests PASS |
+| R4 | MET | `apps/web/src/components/GlobalAgentBar.tsx:112-124` sends projectPath and receipt feed is project-scoped; health tests PASS |
+| R5 | MET | `apps/web/src/modules/projects/receipt.ts:76-204` closed named state vocabulary; receipt tests PASS |
+| R6 | MET | `apps/web/src/modules/projects/receipt.ts:184-198` maps run-exit-only to unverified guidance; GlobalAgentBar tests PASS |
+| R7 | MET | `apps/web/src/components/BoardLayout.tsx:127-167` mounts providers/bar board-wide; BoardLayout test PASS |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| A submission becomes a durable request before acknowledgement | MET | test | `GlobalAgentBar.test.tsx:135` "R1+R2: submit persists the request before the ack and clears the submitted revision" — pending persisted before fetch, clear only after ok; fresh run apps/web bun test 896 pass / 0 fail (2026-09-13). |
-| A failed submission never loses the draft | MET | test | `GlobalAgentBar.test.tsx:170` "R3: a failed ack keeps the draft and the retry reuses the SAME requestKey" + `:189` "R2: an edit typed during flight survives the clear and mints a NEW key on resubmit". |
-| Project identity survives navigation | MET | test | `messages/index.test.ts:327` "mismatched projectPath → 409 and NO row written"; `health.test.ts:417` mailbox-scoped feed (foreign-orchestrator rows dropped); drafts stored-path guard. |
-| Every non-nominal state is named and actionable | MET | test | `receipt.test.ts` — 21 tests pin all 12 states × icon+label+meaning+action+tone incl. capabilityState 'unknown' → queued-awaiting-orchestrator (never executor-unavailable); `ConversationView.test.tsx:177` per-entry receipt states; `GlobalAgentBar.test.tsx:211` unbound orchestrator named state. |
-| A run exit is never shown as a verified result | MET | test | `receipt.test.ts:80` "outcome run-exit-only → completed-exit-only (a run exit is NEVER shown as verified)" + `:211` "completed-exit-only is labelled unverified (R6)"; precedence `receipt.ts:190-191`. |
+| Scenario: A submission becomes a durable request before acknowledgement | MET | test | `apps/web/tests/components/GlobalAgentBar.test.tsx` — durable identity/project scope and revision clear PASS |
+| Scenario: A failed submission never loses the draft | MET | test | `apps/web/tests/components/GlobalAgentBar.test.tsx` — failed ack preserves draft and retry key PASS |
+| Scenario: Project identity survives navigation | MET | test | `apps/server/tests/modules/health.test.ts` — project request projection scoped to served project PASS |
+| Scenario: Every non-nominal state is named and actionable | MET | test | `apps/web/tests/modules/projects/receipt.test.ts` — closed vocabulary/action labels PASS |
+| Scenario: A run exit is never shown as a verified result | MET | test | `apps/web/tests/modules/projects/receipt.test.ts` — run-exit-only is unverified PASS |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -456,8 +456,10 @@ advance while the bar stays mounted.
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | tests-pass | — | `cd apps/web && bun test tests/components/GlobalAgentBar.test.tsx tests/modules/projects`, health tests, runtime tests, typechecks, and `bun run spur-check` passed this run. Fix-pass artifact: .spur/run/0844-verdict.json. |
+| P4 | design-conformance | — | Implementation matches the task Design change map and approved seams. |
+| P4 | evidence-rule-pass | — | All behavior AC rows have executable test evidence. |
+| P4 | read-only-receipt-projection | — | `apps/server/src/modules/health/index.ts:215` uses `selectNext(..., { readOnly: true })`; health test proves no strategy row is persisted. |
 
 ### References
 

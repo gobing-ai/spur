@@ -4,7 +4,7 @@ name: Keyboard, IME, accessibility, and responsive verification for Projects
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.546Z
-updated_at: "2026-09-13T03:30:51.531Z"
+updated_at: "2026-09-13T15:17:37.426Z"
 feature_id: G63
 priority: P2
 tags:
@@ -324,17 +324,18 @@ each scenario re-authored as a production test, not re-derived by hand (R5). Cha
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/src/components/GlobalAgentBar.tsx:28-34` — `shouldSubmit` checks BOTH composition signals (`!isComposing` AND `keyCode !== 229`) plus `key === 'Enter'` and `!shiftKey`; `:191-193` `onKeyDown` `preventDefault()`s then calls the single 0844 `handleSubmit` only on a true verdict, non-submitting keys left native (Shift+Enter newline is the textarea's). Tests: KB-3a `keyboard.test.tsx:129`, KB-3b `:144`, KB-2 `:158`, KB-1 `:172` (exactly one POST, `pending` first), empty-Enter `:216`. Browser: KB-3 (degraded composition-Enter, 0 posts) + KB-1 (post-composition Enter, exactly 1 post with composed payload) at BOTH widths — `.spur/run/g63-projects/browser-results.json` 18/18 `ok:true`. |
-| R2 | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:71-82` — tablist keydown: ArrowRight/ArrowLeft wrap across `PROJECT_TABS`, move focus with selection, drive `selectTab`. Tests: tablist roles + `aria-selected` + `aria-controls`↔`id` pairing `a11y.test.tsx:135`, arrow nav with focus follow `:158`, KB-4 Escape closes member detail and `document.activeElement` is the opening card `:179`. Browser: "R2 arrow keys move active tab" (ArrowRight→agents selected+focused, ArrowLeft→conversation) and "KB-4 Escape closes detail, focus restored" at BOTH widths. |
-| R3 | MET | `apps/web/src/modules/projects/receipt.ts:76` — closed `RECEIPT_LABELS` vocabulary, icon+label+meaning+action per state (distinctness asserted `a11y.test.tsx:201`); roster issues never colour-alone — `AgentsView.tsx:33-47` `ISSUE_FACTS` icon + label + action; live region `role="status" aria-live="polite"` with `data-agent-bar-live` in BOTH branches — `GlobalAgentBar.tsx:150` and `:172`; transition announcement asserted `a11y.test.tsx:216`. Browser: "ST-1 receipt announced + labelled" (strip `⏸queued-awaiting-orchestrator — …`, live region carries label + "Next:" action) at BOTH widths. |
-| R4 | MET | Structural half: `responsive.test.tsx:143` (no rendered element declares min-width > 390 px in any view), `:154` (kanban track and terminal pane own their overflow-x containers), `:176` (roster rows wrap on breakpoint-qualified tracks). Geometric half: `.spur/run/g63-projects/browser-results.json` LB-1 — `scrollWidth == innerWidth` on conversation, agents, work at BOTH 390 px and 1440 px, zero page errors, 6 full-page screenshots (`conversation |
-| R5 | MET | Every prototype scenario exists as a production test: KB-1 `keyboard.test.tsx:172`, KB-2 `:158`, KB-3a/b `:129/:144`, KB-4 `a11y.test.tsx:179`, ST-1 `:201`, LB-1 `responsive.test.tsx:143-184` + browser runner. Prototype suite KEPT per the CLOSED decision — `apps/web/tests/prototypes/g6-projects.test.ts` included in the fresh 912-pass full run. |
+| R1 | MET | `apps/web/src/components/GlobalAgentBar.tsx:28-35` checks Enter/Shift+Enter/isComposing/keyCode 229; keyboard tests PASS; Fix-pass artifact: .spur/run/0845-verdict.json. |
+| R2 | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:70-84` arrow tabs and `MemberDetail` Escape restore; a11y/focus tests PASS |
+| R3 | MET | `apps/web/src/components/GlobalAgentBar.tsx:150-173` live regions plus icon/text receipt states; a11y tests PASS |
+| R4 | MET | `node .spur/run/g63-projects/browser-check.mjs` exit 0, Chrome 153.0.8010.36, 390/1440 px, six view checks, scrollWidth equals innerWidth, zero page errors; `.spur/run/g63-projects/browser-results.json`. |
+| R5 | MET | Production keyboard/a11y/responsive tests cover KB-1…KB-4, ST-1, LB-1; `cd apps/web && bun test tests/modules/projects` PASS |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R7 — Keyboard, IME, and accessibility hold | MET | test | `keyboard.test.tsx:129-224` (isComposing Enter, keyCode-229 Enter, Shift+Enter, plain Enter ×1) + `a11y.test.tsx:135-197` (tablist/aria-selected/arrows, Escape focus restore) + browser 18/18: KB-3 composition-Enter submits nothing, KB-1 post-composition Enter submits exactly once, R2 tabs, KB-4 Escape — both widths. |
-| Layout holds at both widths | MET | test | Structural `responsive.test.tsx:143-184`; geometric browser LB-1 `scrollWidth == innerWidth` on all three views at 390 px and 1440 px, zero page errors (`.spur/run/g63-projects/browser-results.json`, `ok:true`). |
-| State changes are announced | MET | test | `a11y.test.tsx:216` receipt transition writes label + action into `data-agent-bar-live`, region present in dock AND collapsed branches; browser ST-1 at both widths: live region reads `queued-awaiting-orchestrator — Next: bind/restore an orchestrator…` after the pending → queued flip. |
+| Scenario: Keyboard, IME, and accessibility hold | MET | command | `node .spur/run/g63-projects/browser-check.mjs` exit 0 — Chrome 153.0.8010.36, both widths, production UI checks pass. |
+| Scenario: R7 — Keyboard, IME, and accessibility hold | MET | command | `node .spur/run/g63-projects/browser-check.mjs` exit 0 — Chrome 153.0.8010.36, both widths, production UI checks pass. |
+| Scenario: Layout holds at both widths | MET | command | `node .spur/run/g63-projects/browser-check.mjs` exit 0 — Chrome 153.0.8010.36, both widths, production UI checks pass. |
+| Scenario: State changes are announced | MET | command | `node .spur/run/g63-projects/browser-check.mjs` exit 0 — Chrome 153.0.8010.36, both widths, production UI checks pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

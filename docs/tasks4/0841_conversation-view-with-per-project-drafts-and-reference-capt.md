@@ -4,7 +4,7 @@ name: Conversation view with per-project drafts and reference capture
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.543Z
-updated_at: "2026-09-12T22:29:57.672Z"
+updated_at: "2026-09-13T15:07:39.796Z"
 feature_id: G63
 priority: P2
 tags:
@@ -371,23 +371,20 @@ the two fetch stubs `as typeof fetch` per sibling convention
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/web/src/modules/projects/conversation.ts:144 buildThread (operator-sent requests fromId==='board-operator' conversation.ts:18 + all operator-inbox responses, ascending createdAt tie-broken by id) fed by ConversationView.tsx:48-59 two non-consuming GET /api/messages/inbox reads; entry rows rendered ConversationView.tsx:128-146 with verbatim deliveryStatus :142-144; hold reasons/result links ride reserved requestKey/receipt (conversation.ts:37-38) per task-doc Q&A closed deferral to 0844. Fresh tests: conversation.test.ts:113 'keeps only operator-sent rows as requests…', :134 'sorts ascending by createdAt with id tie-break…', :144 'decodes envelopes and renders deliveryStatus verbatim; unlinked response is kept', ConversationView.test.tsx:75 'remount rebuilds the thread from the fetch response alone'. |
-| R2 | MET | apps/web/src/modules/projects/drafts.tsx:59-73 loadDraft path guard (:64 rec.path!==servedPath → empty draft + overwrite, closes port-reuse leak), provider reloads per served path :115-119; addRef dedupe :135. Fresh tests: drafts.test.ts:36 'stored record with matching path is returned as-is', :42 'stored record whose path differs yields an empty draft and is OVERWRITTEN (port reuse)', ConversationView.test.tsx:204 'a project switch restores the stored draft; the draft never leaks across projects (R2)'. |
-| R3 | MET | apps/web/src/modules/projects/conversation.ts:56-58 encodeRequestEnvelope (SPUR-REQUEST/1 prefix line + blank line + verbatim text, emitted only when refs non-empty), :81-96 decodeRequestEnvelope total on every parse failure → whole body as prose with refs:[]; refs captured structurally via addRef/removeRef chips (drafts.tsx:132-139, ConversationView.tsx:106,178), never regexed from prose. Fresh tests: conversation.test.ts:28,32,42,49,53,60,67,72 (no-refs plain text, deterministic prefix round-trip, truncated/non-JSON/wrong-shape degradation, junk-item drop), :79 sameRef, ConversationView.test.tsx:237 'addRef dedupes, chips render removable, removeRef updates draft + revision (R3)'. |
-| R4 | MET | apps/web/src/modules/projects/ConversationView.tsx:21-22 inboxUrl (GET /api/messages/inbox) + :44-59 thread rebuilt from the two fetch responses on every mount; nothing thread-shaped is ever written to client storage (drafts.tsx persists only the DraftRecord). Fresh test: ConversationView.test.tsx:75 'remount rebuilds the thread from the fetch response alone; storage keeps only the draft' (different server response followed on remount, DRAFT_STORAGE_KEY stays null). |
-| R5 | MET | apps/web/src/modules/projects/drafts.tsx:43-49 parseDraftRecord shape gate, :59-73 loadDraft and :75-79 saveDraft wrapped in try/catch — absent key, invalid JSON, throwing accessor, no localStorage, 9 wrong-shape records all yield an empty draft with no throw and no notice. Fresh tests: drafts.test.ts:31,55,73,85,104; ConversationView.test.tsx:180 'corrupt storage degrades to an empty draft — view renders, no error state (ST-1)'. |
-| R6 | MET | Sole transport is the existing GET /api/messages/inbox (ConversationView.tsx:21-22 resolveApiUrl+inboxUrl); grep of apps/web/src/modules/projects shows no drainPending, no POST, no new endpoint, no client-side message store — entries are per-fetch state; tab registered existing tabs.tsx:38 (default :13) with BoardLayout.tsx:128 draft provider only. apps/server working tree: 3 unrelated dirty files (context.ts, health), server suite fresh 406 pass / 0 fail. |
+| R1 | MET | `apps/web/src/modules/projects/ConversationView.tsx:38-68` rehydrates two inbox reads and renders thread entries; ConversationView tests PASS; Fix-pass artifact: .spur/run/0841-verdict.json. |
+| R2 | MET | `apps/web/src/modules/projects/drafts.tsx:73-96` path guards and persists drafts; `apps/web/tests/modules/projects/drafts.test.ts` PASS |
+| R3 | MET | `apps/web/src/modules/projects/conversation.ts:56-64` structured SPUR-REQUEST/1 envelope; `conversation.test.ts` PASS |
+| R4 | MET | `apps/web/src/modules/projects/ConversationView.tsx:38-68` rebuilds from fetch responses; remount rehydration test PASS |
+| R5 | MET | `apps/web/src/modules/projects/drafts.tsx:73-96` catches storage/JSON/shape failures; corrupt storage test PASS |
+| R6 | MET | `apps/web/src/modules/projects/ConversationView.tsx:39-68` uses existing `/api/messages/inbox`; no new message store; tests PASS |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Drafts stay with their project | MET | test | ConversationView.test.tsx:204 'a project switch restores the stored draft; the draft never leaks across projects (R2)' — saveDraft under path A restored on arrival, B renders empty, storage residue serves only B; backed by drafts.test.ts:42 path-guard overwrite. |
-| The thread survives a refresh | MET | test | ConversationView.test.tsx:75 'remount rebuilds the thread from the fetch response alone; storage keeps only the draft' — remount with a different server response renders only fresh rows, no client-storage thread. |
-| References are explicit | MET | test | conversation.test.ts:32,42 'refs travel as a deterministic prefix line + blank line + verbatim text' + round-trip; degradation paths :49,53,60,67; structured capture ConversationView.test.tsx:237 chips/dedupe/revision. |
-| Corrupt storage degrades safely | MET | test | drafts.test.ts:55 'shape-valid-but-wrong records each yield an empty draft', :73 'invalid JSON and a throwing accessor each yield an empty draft, never a throw', :85 'no localStorage at all'; ConversationView.test.tsx:180 ST-1 renders empty draft, no error state. |
+| Scenario: Drafts stay with their project | MET | test | `apps/web/tests/modules/projects/ConversationView.test.tsx` — project switch restore/no-leak PASS |
+| Scenario: The thread survives a refresh | MET | test | `apps/web/tests/modules/projects/ConversationView.test.tsx` — remount rehydrates from fetch alone PASS |
+| Scenario: References are explicit | MET | test | `apps/web/tests/modules/projects/conversation.test.ts` and `ConversationView.test.tsx` — envelope/ref chips PASS |
+| Scenario: Corrupt storage degrades safely | MET | test | `apps/web/tests/modules/projects/drafts.test.ts` — invalid/throwing storage yields empty draft PASS |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-Fresh verification (2026-09-12): verdict PASS (6 R, 4 AC) — `.spur/run/0841-verify-answer.txt`; review PASS (0 blocker / 1 minor P3 carried to 0844 / 2 advisory). Gate rc=0 (8211 pass / 0 fail, `.spur/run/0841-test-gate.status`); projects module 50/0; web tsc clean. Proof digest at bind: `sha256:608713f31df8345922399995b31218f8e3c782390ea52448729e7ecfb7453f8c`.
-
 
 ### Review
 

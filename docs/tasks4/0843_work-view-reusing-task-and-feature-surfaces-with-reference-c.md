@@ -4,7 +4,7 @@ name: Work view reusing task and feature surfaces with reference chips
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.545Z
-updated_at: "2026-09-13T00:18:20.570Z"
+updated_at: "2026-09-13T15:07:40.145Z"
 feature_id: G63
 priority: P3
 tags:
@@ -277,27 +277,22 @@ Fix disposition (host, 2026-09-12): Finding 1 (P2) resolved by requirements amen
 
 ### Testing
 
-`cd apps/web && bunx tsc --noEmit` rc 0.
+**Pipeline verify results**
 
-- New `apps/web/tests/modules/projects/WorkView.test.tsx` — 6 tests over the real
-  `ProjectsShell` (tab bar + panel contract) with the process-global `buildFullRpcMock` /
-  `mockDndKit` helpers: default section (R1, `data-work-section` pressed states),
-  Features-switch renders unmodified `FeaturesShell` inside `#projects-tab-panel-work`,
-  card click captures `{kind:'task',wbs:'0001'}` + switches to Conversation + never
-  `/board/tasks` + `data-g6="task-chip"` + draft text stays empty (R2), re-visit dedupe
-  yields exactly one chip (R2), the embedded board's task-list request sequence is
-  `deepEqual` to the bare embed's and every call's only key is `folder` (R3 — byte-for-byte
-  at the api seam, which the oRPC link serializes to identical wire bytes), and
-  `discoverModules` still routes `tasks`/`features` to their own modules (R4).
-- `tabs.test.ts` extended (+1 test): the `work` tab component identity is `WorkView` with the
-  frozen id/label/order asserted.
-- Full suite: `cd apps/web && bun test` — 866 pass / 0 fail across 63 files (was 859 before
-  0843's 7).
-- R4 no-touch: no edit issued to `apps/web/src/modules/task-kanban/` or
-  `apps/web/src/modules/features/`; the modules register unchanged and are imported as-is.
+- Verdict: PASS (from verdict artifact)
 
-Fresh verification (2026-09-12): verdict PASS (4 R, 2 AC, as amended) — `.spur/run/0843-verify-answer.txt`; review PARTIAL → host requirements amendment (R2 task-capture-only + CLOSED Q&A deviation entry) → re-review PASS (addendum at Review). Gate rc=0 (866 web pass / 0 fail, `.spur/run/0843-test-gate.status`); projects suite 87/0; web tsc clean. Proof digest at bind: `sha256:3af72b7be0bbfa250cc22b91c5a2b10ae36efdeb03bbefbe3f1d7175bb69f915`.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/projects/WorkView.tsx:68-74` embeds existing KanbanBoard/FeaturesShell; WorkView tests PASS; Fix-pass artifact: .spur/run/0843-verdict.json. |
+| R2 | MET | `apps/web/src/modules/projects/WorkView.tsx:40-47` captures structured task refs and returns to Conversation; reference tests PASS |
+| R3 | MET | `apps/web/src/modules/projects/WorkView.tsx:25-30` uses served-project corpus without a project filter; scoping test PASS |
+| R4 | MET | `apps/web/src/modules/projects/WorkView.tsx:68-74` leaves existing modules/routes unchanged; route preservation test PASS |
 
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Work reuses the existing views | MET | test | `apps/web/tests/modules/projects/WorkView.test.tsx` — KanbanBoard and FeaturesShell embedding PASS |
+| Scenario: A task can be referenced into a request | MET | test | `apps/web/tests/modules/projects/WorkView.test.tsx` — structured chip and Conversation navigation PASS |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

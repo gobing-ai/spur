@@ -4,7 +4,7 @@ name: "Agents view: fleet roster and member detail"
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.544Z
-updated_at: "2026-09-12T23:36:20.269Z"
+updated_at: "2026-09-13T15:07:39.963Z"
 feature_id: G63
 priority: P2
 tags:
@@ -326,12 +326,25 @@ fleet-wide control; 0844's submission plumbing untouched.
 
 ### Testing
 
-- `cd apps/web && bunx tsc --noEmit` — rc 0, no type errors.
-- `cd apps/web && bun test tests/modules/projects` — 80 pass / 0 fail (222 expect() calls, 10 files): roster join (15), AgentsView (11 — route render + non-orchestrator marker negative assertion, two-facts-not-one, issue states, bound-offline offline-vs-start-it branches, malformed-tick skip + fleet member shape-rejection gate, empty-fleet path, pane open, Escape focus restore), MemberDetail (5 — existing surfaces transport inventory, disabled controls name reason and issue no request, stop POST, Escape + close focus restore), plus conversation/drafts/tabs/shell/useProjectContext suites.
-- Fix-hop review gate: `bun run spur-check` rc 0 (full log `.spur/run/0842-test-gate.log`, status `.spur/run/0842-test-gate.status` = 0).
+**Pipeline verify results**
 
-Fresh verification (2026-09-12): verdict PASS (6 R, 3 AC) — `.spur/run/0842-verify-answer.txt`; review PARTIAL → fix hop (2 P2 blockers resolved: unconditional orchestrator badge deleted + isOrchestrator conjunct/per-tick fact source) → re-review PASS (addendum at Review). Gate rc=0 (8241 pass / 0 fail, `.spur/run/0842-test-gate.status`); projects suite 80/0; web tsc clean. Proof digest at bind: `sha256:535b4df21b08ed14e0f6dfeffdb8a570e5799674452d346203f4b2fd1fc24ddc`.
+- Verdict: PASS (from verdict artifact)
 
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/modules/projects/roster.ts:63-101` declared/observed fleet join; roster and AgentsView tests PASS; Fix-pass artifact: .spur/run/0842-verdict.json. |
+| R2 | MET | `apps/web/src/modules/projects/AgentsView.tsx:219-244` renders separate declared and observed facts; tests PASS |
+| R3 | MET | `apps/web/src/modules/projects/MemberDetail.tsx:38-72` mounts existing terminal/messages/activity transports; MemberDetail test PASS |
+| R4 | MET | `apps/web/src/modules/projects/AgentsView.tsx:130-141` restores opener focus on close; focus test PASS |
+| R5 | MET | `apps/web/src/modules/projects/AgentsView.tsx:31-61` named issue/action vocabulary; issue tests PASS |
+| R6 | MET | `apps/web/src/modules/projects/MemberDetail.tsx:78-116` only start/stop/stdin existing controls; lifecycle tests PASS |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: The roster shows the project fleet | MET | test | `apps/web/tests/modules/projects/AgentsView.test.tsx` — role/executor/orchestrator roster PASS |
+| Scenario: Declared and observed are separate | MET | test | `apps/web/tests/modules/projects/AgentsView.test.tsx` — two labeled facts PASS |
+| Scenario: Detail opens and returns focus | MET | test | `apps/web/tests/modules/projects/AgentsView.test.tsx` — Escape restores card focus PASS |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
