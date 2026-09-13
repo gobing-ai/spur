@@ -96,9 +96,10 @@ export const restStrategy: Strategy = {
  * hold and the candidate skipped: (1) no `fleet:auto` tag → `unauthorized`;
  * (2) status ≠ todo → `not-ready`; (3) injected dependency gate →
  * `unmet-dependency`; (4) no idle instance → `no-idle-instance`; (5) the chosen
- * instance's executor unresolved → `executor-unavailable`. Survivors sort by
+ * instance's executor unresolved → `executor-unavailable`. Candidates sort by
  * `priority` ascending as a string (the existing P0<P1<… vocabulary; a missing
- * priority sorts last under the sentinel `'P9'`) then by wbs ascending, and
+ * priority sorts last under the sentinel `'P9'`) then by wbs ascending before
+ * allocating capacity, and
  * carry `strategyVersion` + `ownerEpoch` for 0837's fences. Never advances,
  * transitions, or verifies a task — `task-pipeline.yaml` owns advancement.
  */
@@ -276,8 +277,8 @@ export class StrategyRuntime {
      * from `TaskService.list({ status: 'todo' })`, idle instances from the
      * resolved fleet minus the live write-slot holder (an instance holding the
      * run is holding the slot; a crashed holder self-heals at TTL, 0837), the
-     * orchestrator claim's epoch for fencing (no live claim reads 0, which
-     * every live claim out-ranks — fail-safe, 0837 refuses), and the injected
+     * orchestrator claim's epoch for fencing (offline ownership and unresolved
+     * deliveries hold GTD selection), and the injected
      * dependency gate resolved per candidate up front.
      */
     async selectNext(projectPath: string): Promise<StrategyResult> {
