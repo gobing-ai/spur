@@ -4,7 +4,7 @@ name: Workflow validate reports composition findings by level and fails on the c
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.069Z
-updated_at: "2026-09-11T21:09:17.979Z"
+updated_at: "2026-09-13T05:57:08.848Z"
 feature_id: I21
 priority: P2
 tags:
@@ -278,8 +278,13 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | workflow-service.ts:1942-1952 countLogicalCommands splits on newline semicolon and-or-or (single pipe never splits), skips blank/hash/structure tokens; :1960-2113 walks shell onEnter/onExit and flow nodes, state-machine transitions[].guard and flow edges[].condition, and agent.run; one size finding per element via precedence :1966-1994, separate agent-run-output :2049-2057; level and five measure kinds at :241-254; caps :262-266; guard state=from and actionKey from→to :2000-2008; exit rule workflow.ts:453-458 (invalid or any error level exits 1 in both modes), stderr per-finding print :436-447; parity test composition-advisory.test.ts:416-458 ties COMPOSITION_CAPS to governance §1.2, fit-and-tuning §3 and cli-contracts.md:558-575; AC evidence: 11-command/6-command-guard/1001-char error fixtures + warn-only exit 0 in both modes (composition-advisory.test.ts:210-319, workflow.test.ts:293-356) |
-| R2 | MET | Sole call site of collectCompositionAdvisory is validate (workflow-service.ts:637); run() :667 and continuePaused() :1067 resolve and schema-check only; dry-run is run(file,{dryRun}) (workflow.ts:630,:922); CLI composition handling only in the validate action (workflow.ts:437-456); error-level fixture through run/dry-run/continue shows no composition output and identical behavior (workflow.test.ts:373-446); cli-contracts.md:573-574 states the invariant |
+| R1 | MET | Logical command counts, tier boundaries, guards, output checks, findings and exit semantics match ADR-115. `packages/app/src/services/workflow-service.ts:1942`; `packages/app/tests/workflow/composition-advisory.test.ts:176`. Executed: `bun run spur-check` (exit 0). |
+| R2 | MET | Run, dry-run and continue do not evaluate or act on composition findings. `apps/cli/tests/commands/workflow.test.ts:405`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — composition caps are error-level validate findings | MET | test | Logical command counts, tier boundaries, guards, output checks, findings and exit semantics match ADR-115. `packages/app/src/services/workflow-service.ts:1942`; `packages/app/tests/workflow/composition-advisory.test.ts:176`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R2 — composition findings never block a run | MET | test | Run, dry-run and continue do not evaluate or act on composition findings. `apps/cli/tests/commands/workflow.test.ts:405`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -291,6 +296,13 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0822-verify-answer.txt:1-35` and `.spur/run/0822-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | cli-golden-path-present | — | Source-local workflow show/validate --json invocations and CLI subprocess regression passed. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
