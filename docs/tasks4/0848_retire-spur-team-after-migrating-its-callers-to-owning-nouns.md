@@ -4,7 +4,7 @@ name: Retire spur team after migrating its callers to owning nouns
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
-updated_at: "2026-09-13T20:08:02.382Z"
+updated_at: "2026-09-13T20:15:13.687Z"
 feature_id: G64
 priority: P2
 tags:
@@ -284,17 +284,17 @@ schema, or transition shim is removed by this repair.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/cli/tests/commands/team-retirement.test.ts:109 pins all owning-noun registrations (team keeps six verbs; agent start/stop; agent list --server; task update --assignee); impl apps/cli/src/commands/task.ts:455, apps/cli/src/commands/agent.ts:239,258,48, apps/cli/src/commands/projects.ts:108 (--fleet, up --check home), apps/cli/src/commands/agent.ts:225 (delete, down --purge home) |
-| R2 | MET | git diff HEAD on packages/app/src/services/team-service.ts and apps/server/src/modules/team/index.ts is empty (service untouched); delegation parity asserted at apps/cli/tests/commands/team-retirement.test.ts:192,217,245 (same endpoint + error text) and :356 (assignTask frontmatter write + team.member.assigned persisted) |
-| R3 | MET | docs/design/harness-surface-governance.md:117 — 0848 consent row names the granted scope (agent start/stop verbs, task update --assignee flag, agent list --specs output change + --server flag), reason, rejected shapes, and provenance (G64 runall session, 2026-09-13); consent treated as granted per standing operator decision |
-| R4 | MET | rg 'spur team' config/workflows scripts → zero hits (run this turn); plugins migrated (plugins/sp/skills/spur-cli/references/team.md:9-22 migration table; agent.md; message.md; dispatch-surface.md:131; serve/projects/self/tasks refs); Board caller apps/web/src/modules/teams/ProcessesTab.tsx:302 with test apps/web/tests/modules/teams/components.test.tsx:284; residual P3 noted: docs/help/cmd_agent.md:221 |
-| R5 | MET | apps/cli/src/commands/team.ts:41 marker, :67 one-time per-verb warning wired at :87-151; config/transition-shims.json:31-37 entry team-noun-retired (wbs 0848) with removal condition naming the G64 window; two-sided gate bun run transition-shim-check PASS; tests apps/cli/tests/commands/team-retirement.test.ts:128,160,432 |
-| R6 | MET | Coverage table in task Design + plugins/sp/skills/spur-cli/references/team.md:14-22 + manifest keepsWorking (config/transition-shims.json:35), verified true against the tree (--by-team dropped with recorded rationale: group key removed, not capability); executable coverage assertion apps/cli/tests/commands/team-retirement.test.ts:109 |
+| R1 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/serve.test.ts — exit 0, 51 pass; refreshed local verification scratch `.spur/run/0848-verify-answer.txt` lines 1-39 and derived `.spur/run/0848-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R2 | MET | `apps/cli/tests/commands/team-retirement.test.ts:192`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/cli/tests/commands/team-retirement.test.ts:356`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
+| R3 | MET | `docs/design/harness-surface-governance.md:117`; consent row read this run; `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
+| R4 | MET | rg scan of plugins/sp/scripts, config/workflows and scripts found no executable spur team callers; compatibility examples remain in the deprecated noun reference |
+| R5 | MET | `apps/cli/tests/commands/team-retirement.test.ts:128`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/cli/tests/commands/team-retirement.test.ts:432`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
+| R6 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/serve.test.ts — exit 0, 51 pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: spur team is retired only after its callers move | MET | test | apps/cli/tests/commands/team-retirement.test.ts:109 (every replacement registered while the noun still stands) + :432 (two-sided shim gate: noun cannot be deleted without the manifest pair, forcing the removal commit to carry the completed caller migration) + parity :192,217,245,356; removal act deferred to the recorded window per R5 (closed Q&A decision) |
-| Scenario: Removal waits for the recorded window | MET | test | Given holds: no cutover window recorded (docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:123); Then holds: apps/cli/tests/commands/team-retirement.test.ts:128 (warns once naming replacement, verb still works exit 0) and :160 (stderr-only, prior exit codes/output unchanged) |
+| Scenario: spur team is retired only after its callers move | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/serve.test.ts — exit 0, 51 pass |
+| Scenario: Removal waits for the recorded window | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:128`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -305,8 +305,13 @@ schema, or transition shim is removed by this repair.
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | design-conformance | — | WHERE table honored: agent.ts start/stop thin delegation; task.ts --assignee; team.ts warn-only; manifest entry; team-service.ts and server team module untouched |
-| P3 | residual-doc-residue-cmd_agent-221 | — | docs/help/cmd_agent.md:221 still names spur team up/start (P3 doc residue; superseded-authority slices are 0850) |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | DONE: owning noun wrappers, consent, warning and shim; CHANGED: the missing fleet startup caller is now wired, and role resolution is shared with the CLI. Command removal stays gated. |
+| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
+| P4 | task-check | — | spur task check 0848 --strict-core --json — exit 0 |
+| P4 | cli-golden-path-present | — | Focused projects/team-retirement command tests invoke the real main() registration with --json; successful and refusal paths asserted |
+| P4 | secua-review | — | Fixed the missing production materialization caller and registry-prefix overwrite at startup; no team noun removal was authorized by this batch. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
