@@ -3505,7 +3505,8 @@ describe('AgentService routing decision attribution (0545)', () => {
         // resource-exhaustion ladder), the escalated dispatch succeeds.
         const originalRun = RolePropagatingProcessExecutor.prototype.run;
         let processCall = 0;
-        RolePropagatingProcessExecutor.prototype.run = mock(async () => {
+        RolePropagatingProcessExecutor.prototype.run = mock(async (options) => {
+            options.onSpawn?.(12345);
             if (processCall++ === 0) {
                 return {
                     command: 'pi',

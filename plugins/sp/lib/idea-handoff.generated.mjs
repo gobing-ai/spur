@@ -322,7 +322,7 @@ END`;var Tn="messages, tool_calls, skill_calls, fresh_input_tokens, cache_read_t
         ''
     )
     ELSE ''
-END`;var u9$=[...W7,...z7,"history_daily_stats","history_board_source_daily"];var Wz="0.4.63",zz=`
+END`;var u9$=[...W7,...z7,"history_daily_stats","history_board_source_daily"];var Wz="0.4.66",zz=`
 CREATE TABLE IF NOT EXISTS history_import_checkpoint (
     source TEXT NOT NULL,
     source_file TEXT NOT NULL,
