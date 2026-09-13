@@ -4,7 +4,7 @@ name: task-pipeline stays within the composition budgets
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.072Z
-updated_at: "2026-09-13T05:49:14.105Z"
+updated_at: "2026-09-13T05:57:10.645Z"
 feature_id: I21
 priority: P2
 tags:
@@ -343,7 +343,7 @@ Each entry cites the first changed line per file (`file:line`).
 | `plugins/sp/tests/task-pipeline-resilience.test.ts:262` |
 | `plugins/sp/tests/task-pipeline-resilience.test.ts:287` |
 
-Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/quality-gate.ts:115` captures both streams through one file descriptor to preserve ordering and avoid the subprocess pipe-buffer cap; the Superskill-generated twin is `plugins/sp/scripts/quality-gate.mjs:61`. `plugins/sp/tests/quality-gate.test.ts:224` checks interleaved output and a 2 MiB capture. `docs/design/workflow-shell-ownership.md:200` owns the capture contract. The regression failed before the fix; all 12 quality-gate tests pass afterward.
+Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/quality-gate.ts:115` captures both streams through one file descriptor to preserve ordering and avoid the subprocess pipe-buffer cap; the Superskill-generated twin is `plugins/sp/scripts/quality-gate.mjs:57`. `plugins/sp/tests/quality-gate.test.ts:224` checks interleaved output and a 2 MiB capture. `docs/design/workflow-shell-ownership.md:200` owns the capture contract. The regression failed before the fix; all 13 quality-gate tests pass afterward.
 
 ### Testing
 
@@ -353,7 +353,11 @@ Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/quality-gate.ts:115` captures
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | All 4 agent.run actions declare output checks (task-pipeline.yaml:213,226 requireDiff; :353,365-366; :403,416-417; :470,484 expectFile), so the sole agent-run-output trigger (workflow-service.ts:2055-2060: fires only when expectFile undefined AND requireDiff !== true) cannot fire; over-cap programs moved to owners: command.gate at task-pipeline.yaml:236-250, :545-558, :572-585 with classified retry on: sqlite-busy,ENOENT,EBUSY,ENOTEMPTY and resultFiles under .spur/run; command-gate.ts:52-68 extends the sqlite-busy class with sqlite database .*is busy plus test command-gate.test.ts:272-297; quality-gate.ts plugin script (contract per quality-gate.ts:1-198: run resets attempt counter :127, recheck probe-first :135-142, 5-attempt lock-only retry :145-158, findings capped 20 code-unit sorted :57-64, soft exit 0 with usage exit 2 :178-192, proof-digest trailer :172) with registered .mjs twin (config/plugin-scripts.json entries quality-gate.ts standard twin quality-gate.mjs; twin mirrors caps/messages quality-gate.mjs:9,97-112) and build:scripts convert appended (package.json:61); condensed warn-band programs each carry a one-line YAML comment directly above the action or guard (task-pipeline.yaml:166,177,182,187,192,283,306,322,341,393,489,506,557,587 and guard :759), clean test-fix:0 has no reason per design; verify→record guard is the single jq -e predicate (task-pipeline.yaml:751) asserting verdict PASS plus digest/runId/definitionDigest/review-completed; 23 transitions identical to baseline (baseline .spur/run/0823-baseline-graph.json lists 23 transitions; current task-pipeline.yaml:603-793 has exactly 23 with matching from,to,guard.kind; pre-change error findings documented in .spur/run/0823-baseline-validate.json); model queries pinned implement,test-fix,review,verify (composition-baseline.test.ts:43, matches baseline-graph modelQueries); proof-chain suite 22 tests with the jq-guard pin (task-pipeline-proof-chain.test.ts:346-354) and command.gate assertions (:382); proportional-routing 11 tests with jq-guard literal pins (:55-60) and REASON_FILE/run-id fallback behavior (:179-220); command-gate 14 tests; inline-pipeline-driver 4 tests; lifecycle-drift excludes quality-gate.ts from spur-shell filter (lifecycle-drift.test.ts:260-266) and asserts delegation plus -test-gate.log/findings and the 20-anchor cap (:285-295); driver observed validate exit 0 with 15 warn-band findings and zero error-level and zero agent-run-output on this exact tree, full spur-check PASS — reviewer runtime has no shell tool so the command was verified statically plus by the driver observation. |
+| R1 | MET | Task graph and four model queries preserved; caps/output checks pass. Quality-gate capture now preserves stream order beyond 1 MiB; retries, proof chain and wrapper failures remain checked. `plugins/sp/scripts/quality-gate.ts:115`; `plugins/sp/tests/quality-gate.test.ts:223`; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:40`; `plugins/sp/tests/task-pipeline-resilience.test.ts:245`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — task-pipeline stays within the composition budgets | MET | test | Task graph and four model queries preserved; caps/output checks pass. Quality-gate capture now preserves stream order beyond 1 MiB; retries, proof chain and wrapper failures remain checked. `plugins/sp/scripts/quality-gate.ts:115`; `plugins/sp/tests/quality-gate.test.ts:223`; `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:40`; `plugins/sp/tests/task-pipeline-resilience.test.ts:245`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -365,6 +369,13 @@ Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/quality-gate.ts:115` captures
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0823-verify-answer.txt:1-33` and `.spur/run/0823-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | workflow-audit | — | `bun .spur/run/I21-verifyall-20260912/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
