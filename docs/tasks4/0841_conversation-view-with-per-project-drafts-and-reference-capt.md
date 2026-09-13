@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Conversation view with per-project drafts and reference capture
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.543Z
-updated_at: "2026-09-12T06:00:34.810Z"
+updated_at: "2026-09-12T22:29:57.672Z"
 feature_id: G63
 priority: P2
 tags:
@@ -309,15 +309,119 @@ revision }`, which this task's `loadDraft` / `saveDraft` carry through unchanged
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented the Conversation tab (thread + per-project composer draft + explicit
+reference capture) over the existing inbox transports — no new endpoint, no
+client-side message store (R6); submission itself is task 0844's.
+
+Change map (file:line):
+
+- `apps/web/src/modules/projects/conversation.ts` (new) — the conversation model:
+  `OPERATOR_AGENT_ID` operator mailbox (`board-operator`, an address never in a
+  fleet roster), `ConversationRef`/`ConversationEntry`, `encodeRequestEnvelope`/
+  `decodeRequestEnvelope` (SPUR-REQUEST/1 prefix line + blank line + verbatim
+  text; any parse failure degrades to prose, R3), `parseInboxMessages`
+  (runtime-narrow, malformed rows skipped), `buildThread` (operator-sent requests
+  + operator-inbox responses, ascending `createdAt` tie-broken by id).
+- `apps/web/src/modules/projects/drafts.tsx` (new) — single-slot draft record
+  `spur.board.projects.draft.v1` with `loadDraft` path guard (matching path
+  returned; garbage overwritten; shape-valid foreign record yields empty —
+  spec §Draft model, closes the port-reuse leak), `saveDraft` (storage failures
+  swallowed, R5), `ConversationDraftContext` + `ConversationDraftProvider`
+  (functional updates, reload per served path, `setText`/`addRef` (dedupe by
+  `sameRef`)/`removeRef` each bumping `revision`).
+- `apps/web/src/modules/projects/ConversationView.tsx` (new) — rehydrates the
+  thread from two non-consuming `GET /api/messages/inbox` reads
+  (`:16` inboxUrl; `:40-58` parallel fetch → `buildThread`, AbortController,
+  orchestrator side skipped when unbound), envelope-decoded entries with verbatim
+  `deliveryStatus` (`data-conversation-delivery`), named fetch-failed and
+  orchestrator-missing states, composer bound to `useConversationDraft` with
+  removable ref chips (`data-draft-ref`).
+- `apps/web/src/modules/projects/tabs.tsx:38` — `conversation` tab registered
+  (frozen order, default tab `:13`).
+- `apps/web/src/components/BoardLayout.tsx:5,128` — `ConversationDraftProvider`
+  mounted beside `ProjectProvider` (only permitted edit there) so Work (0843)
+  and GlobalAgentBar (0844) can consume the draft.
+- Tests — `apps/web/tests/modules/projects/conversation.test.ts` (13: envelope
+  encode/decode incl. degradation paths, `sameRef`, `parseInboxMessages`),
+  `drafts.test.ts` (8: path guard, overwrite, garbage/throwing/absent storage),
+  `ConversationView.test.tsx` (7: remount rehydration from fetch alone,
+  envelope rendering, one-fetch unbound state, corrupt storage ST-1, typed-draft
+  persistence, project-switch restore/no-leak, ref chips dedupe/revision).
+- `docs/design/project-switcher.md` §7 "Request envelope (0841)" +
+  `docs/04_DESIGN.md` index entry — SPUR-REQUEST/1 payload format recorded (T3).
+
+Resume pass (0841 continuation): attempt 1 act-wrapped the project-switch
+rerenders in ConversationView.test.tsx — still red, and by trace necessarily so:
+the spec-mandated overwrite in `loadDraft` replaces A's stored record during the
+B phase, so a typed "switch back restores the same text" assertion cannot pass
+under the recorded design (drafts.test.ts explicitly pins the overwrite).
+Attempt 2 restructured that single test to the hook contract per the authorized
+fallback: seed via `saveDraft` under path A → arrive at A (restore asserted) →
+switch to B (empty input, no leak) → storage now serves B with no cross-project
+residue. Housekeeping: removed unused `beforeEach`/`fireEvent` imports, typed
+the two fetch stubs `as typeof fetch` per sibling convention
+(ProjectSwitcher.test.tsx), adopted GlobalAgentBar's react-props accessor
+(fixes `noUncheckedIndexedAccess` TS2532); `bunx tsc --noEmit` now clean.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | apps/web/src/modules/projects/conversation.ts:144 buildThread (operator-sent requests fromId==='board-operator' conversation.ts:18 + all operator-inbox responses, ascending createdAt tie-broken by id) fed by ConversationView.tsx:48-59 two non-consuming GET /api/messages/inbox reads; entry rows rendered ConversationView.tsx:128-146 with verbatim deliveryStatus :142-144; hold reasons/result links ride reserved requestKey/receipt (conversation.ts:37-38) per task-doc Q&A closed deferral to 0844. Fresh tests: conversation.test.ts:113 'keeps only operator-sent rows as requests…', :134 'sorts ascending by createdAt with id tie-break…', :144 'decodes envelopes and renders deliveryStatus verbatim; unlinked response is kept', ConversationView.test.tsx:75 'remount rebuilds the thread from the fetch response alone'. |
+| R2 | MET | apps/web/src/modules/projects/drafts.tsx:59-73 loadDraft path guard (:64 rec.path!==servedPath → empty draft + overwrite, closes port-reuse leak), provider reloads per served path :115-119; addRef dedupe :135. Fresh tests: drafts.test.ts:36 'stored record with matching path is returned as-is', :42 'stored record whose path differs yields an empty draft and is OVERWRITTEN (port reuse)', ConversationView.test.tsx:204 'a project switch restores the stored draft; the draft never leaks across projects (R2)'. |
+| R3 | MET | apps/web/src/modules/projects/conversation.ts:56-58 encodeRequestEnvelope (SPUR-REQUEST/1 prefix line + blank line + verbatim text, emitted only when refs non-empty), :81-96 decodeRequestEnvelope total on every parse failure → whole body as prose with refs:[]; refs captured structurally via addRef/removeRef chips (drafts.tsx:132-139, ConversationView.tsx:106,178), never regexed from prose. Fresh tests: conversation.test.ts:28,32,42,49,53,60,67,72 (no-refs plain text, deterministic prefix round-trip, truncated/non-JSON/wrong-shape degradation, junk-item drop), :79 sameRef, ConversationView.test.tsx:237 'addRef dedupes, chips render removable, removeRef updates draft + revision (R3)'. |
+| R4 | MET | apps/web/src/modules/projects/ConversationView.tsx:21-22 inboxUrl (GET /api/messages/inbox) + :44-59 thread rebuilt from the two fetch responses on every mount; nothing thread-shaped is ever written to client storage (drafts.tsx persists only the DraftRecord). Fresh test: ConversationView.test.tsx:75 'remount rebuilds the thread from the fetch response alone; storage keeps only the draft' (different server response followed on remount, DRAFT_STORAGE_KEY stays null). |
+| R5 | MET | apps/web/src/modules/projects/drafts.tsx:43-49 parseDraftRecord shape gate, :59-73 loadDraft and :75-79 saveDraft wrapped in try/catch — absent key, invalid JSON, throwing accessor, no localStorage, 9 wrong-shape records all yield an empty draft with no throw and no notice. Fresh tests: drafts.test.ts:31,55,73,85,104; ConversationView.test.tsx:180 'corrupt storage degrades to an empty draft — view renders, no error state (ST-1)'. |
+| R6 | MET | Sole transport is the existing GET /api/messages/inbox (ConversationView.tsx:21-22 resolveApiUrl+inboxUrl); grep of apps/web/src/modules/projects shows no drainPending, no POST, no new endpoint, no client-side message store — entries are per-fetch state; tab registered existing tabs.tsx:38 (default :13) with BoardLayout.tsx:128 draft provider only. apps/server working tree: 3 unrelated dirty files (context.ts, health), server suite fresh 406 pass / 0 fail. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Drafts stay with their project | MET | test | ConversationView.test.tsx:204 'a project switch restores the stored draft; the draft never leaks across projects (R2)' — saveDraft under path A restored on arrival, B renders empty, storage residue serves only B; backed by drafts.test.ts:42 path-guard overwrite. |
+| The thread survives a refresh | MET | test | ConversationView.test.tsx:75 'remount rebuilds the thread from the fetch response alone; storage keeps only the draft' — remount with a different server response renders only fresh rows, no client-storage thread. |
+| References are explicit | MET | test | conversation.test.ts:32,42 'refs travel as a deterministic prefix line + blank line + verbatim text' + round-trip; degradation paths :49,53,60,67; structured capture ConversationView.test.tsx:237 chips/dedupe/revision. |
+| Corrupt storage degrades safely | MET | test | drafts.test.ts:55 'shape-valid-but-wrong records each yield an empty draft', :73 'invalid JSON and a throwing accessor each yield an empty draft, never a throw', :85 'no localStorage at all'; ConversationView.test.tsx:180 ST-1 renders empty draft, no error state. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+Fresh verification (2026-09-12): verdict PASS (6 R, 4 AC) — `.spur/run/0841-verify-answer.txt`; review PASS (0 blocker / 1 minor P3 carried to 0844 / 2 advisory). Gate rc=0 (8211 pass / 0 fail, `.spur/run/0841-test-gate.status`); projects module 50/0; web tsc clean. Proof digest at bind: `sha256:608713f31df8345922399995b31218f8e3c782390ea52448729e7ecfb7453f8c`.
+
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Phase 7 multi-dimensional review (batch 20260912T205800Z-G63BATCH, fresh-context, observe-only).
+Scope: working-tree diff — apps/web/src/modules/projects/{conversation.ts,drafts.tsx,ConversationView.tsx,tabs.tsx}, BoardLayout wiring, projects tests, docs satellites. Dimensions: functional, security, efficiency, correctness, usability, architecture.
+
+**Verdict: PASS** (0 blocker, 0 major, 1 minor dispositioned below, 2 advisory)
+
+Fresh gate evidence (re-run this review, not inherited): decisive suites `bun test` conversation/drafts/ConversationView/tabs → 31 pass / 0 fail (84 expects); projects module subset → 50 pass / 0 fail (7 files); full apps/web suite → 829 pass / 0 fail (59 files, matches 0841-test-gate rc=0); `bunx tsc --noEmit` rc=0.
+
+Findings:
+
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|---------|-------------|
+| P3 (minor) | architecture | apps/web/src/modules/projects/drafts.tsx:49 | `parseDraftRecord` whitelists exactly `{path,text,refs,revision}`, so a stored record carrying 0844's declared additive `pending?` field is silently stripped on load — the next `saveDraft` persists it without `pending`. Contradicts the frozen handoff "which this task's loadDraft / saveDraft carry through unchanged" (0841 spec §Handoff). No current R breaks; cost lands on 0844's refresh-time idempotency recovery. One-line fix when 0844 lands: spread unknown fields through (`{...r, path: r.path, ...}`) while keeping the shape gate. | Accept now, fix in 0844 (owner of the seam); recorded so 0844 refinement cannot assume carry-through works |
+| P4 (advisory) | correctness | apps/web/tests/modules/projects/ConversationView.test.tsx | R2 restructured hook-contract test assessed and accepted: in production each project's Board is its own origin (own port), so A's draft physically cannot be touched by B's session; the literal A→B→A typed-text round trip is unsatisfiable only in the single-origin harness under the recorded overwrite-on-mismatch design (pinned by drafts.test.ts). The restructured test asserts the exact mechanism production relies on — path-match restore at A (ConversationView.test.tsx 'restores the stored draft', phase 1), zero leak at B (empty input; residue is B's own record). Operator-visible intent "draft follows project, never leaks across" is covered; restructure sound. | Accepted — no action |
+| P4 (advisory) | usability | apps/web/tests/modules/projects/ConversationView.test.tsx | React `act(...)` console warnings from `ConversationDraftProvider` updates resolving alongside async fetches in the draft tests; suites pass, output noise only. Wrap the settle points when the file is next touched. | Accepted — cosmetic |
+
+Functional traceability (all evidence file:line verified fresh):
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | conversation.ts:144 `buildThread` (operator-sent requests + all operator-inbox responses, ascending createdAt tie-broken by id); ConversationView.tsx:48-59 two non-consuming inbox reads → :134 `[data-conversation-entry]` rows with verbatim `deliveryStatus` (:142). Hold reasons/result links ride reserved `requestKey`/`receipt` (conversation.ts:33-35) per the spec's recorded 0844 deferral (Q&A: "Hold reasons … DEFERRED to 0844 by design"). |
+| R2 | MET | drafts.tsx:59-73 `loadDraft` path guard (`:64 rec.path !== servedPath` → empty + overwrite — port-reuse closure); provider reload per served path; drafts.test.ts 8-test guard suite; ConversationView.test.tsx switch test (restore at A, empty at B, residue is B's). |
+| R3 | MET | conversation.ts:56 encodeRequestEnvelope (prefix line + blank line + verbatim text only when refs exist), :81 decode total on every failure → whole body as prose; refs captured structurally via addRef/removeRef chips (ConversationView.tsx:106,178), never parsed from prose; conversation.test.ts envelope suite incl. degradation paths. |
+| R4 | MET | ConversationView.tsx:48-59 thread rebuilt per mount from `GET /api/messages/inbox` only; nothing thread-shaped written to storage — remount test asserts a changed server response is followed and `DRAFT_STORAGE_KEY` stays null. |
+| R5 | MET | drafts.tsx shape gate (parseDraftRecord) + try/catch on load (:59) and save (:75); drafts.test.ts invalid-JSON / throwing accessor / absent key / 9 wrong-shape records each → empty draft, no throw; ConversationView ST-1 test renders empty draft, no `[data-conversation-fetch-failed]`. |
+| R6 | MET | Sole transport `GET /api/messages/inbox` (ConversationView.tsx:21); grep confirms no `drainPending`, no POST, no client-side message store in the module; entries are per-fetch state. |
+
+AC scenarios: drafts stay with their project → switch test (MET, hook-contract form); thread survives refresh → remount test (MET); references are explicit → envelope suite + chip test (MET); corrupt storage degrades safely → ST-1 test + drafts.test.ts (MET).
+
+0840 frozen contracts verified: tab ids `conversation|agents|work` (tabs.tsx:5, frozen order :36-40); canonical path as identity key (draft guard on `project.path`); ProjectProvider functional updates (useProjectContext.tsx:99,109); orchestrator wire projection consumed as `{state,instanceId}` only, never echoed; FleetService untouched. 0844 boundary respected: encodeRequestEnvelope is the spec-assigned payload encoding; no submission, no retry, no receipt rendering, `board-operator` appears only as the mailbox constant, never in any roster.
+
+T3 docs: docs/design/project-switcher.md §7 "Request envelope (0841)" (:160-176) + docs/04_DESIGN.md:387 index entry — format matches implementation.
 
 ### References
 
@@ -327,3 +431,8 @@ revision }`, which this task's `loadDraft` / `saveDraft` carry through unchanged
 - Code: `apps/web/src/modules/inbox/AllTab.tsx`, `AgentTab.tsx`, `SupervisorTab.tsx`
 
 ### History
+
+- 2026-09-12T22:28:49.951Z todo → wip (system)
+- 2026-09-12T22:28:50.453Z wip → testing (system)
+- 2026-09-12T22:29:57.672Z testing → done (system)
+

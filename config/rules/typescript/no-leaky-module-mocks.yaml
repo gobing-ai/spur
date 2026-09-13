@@ -40,6 +40,7 @@ exclude:
   - "apps/web/tests/modules/task-kanban/board.test.tsx"
   - "apps/web/tests/modules/task-kanban/new-task-panel.test.tsx"
   - "apps/web/tests/modules/task-kanban/task-detail.test.tsx"
+  - "apps/web/tests/modules/projects/WorkView.test.tsx"
 rules:
   - id: no-leaky-mock-module
     description: >

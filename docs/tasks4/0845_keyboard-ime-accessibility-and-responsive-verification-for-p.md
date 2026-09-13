@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Keyboard, IME, accessibility, and responsive verification for Projects
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:54:51.546Z
-updated_at: "2026-09-12T06:03:02.328Z"
+updated_at: "2026-09-13T03:30:51.531Z"
 feature_id: G63
 priority: P2
 tags:
@@ -286,15 +286,109 @@ reference those routes, so they survive that removal unchanged.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Solution: the prototype's interaction contract (KB-1…KB-4, ST-1, LB-1) is carried to the production
+module as one submit decision for the composer keyboard plus structural a11y/responsive invariants —
+each scenario re-authored as a production test, not re-derived by hand (R5). Change map:
+
+- `apps/web/src/components/GlobalAgentBar.tsx:22-36` — `onComposerKeyDown` is the single submit
+  decision: plain Enter submits once; an Enter with `isComposing` OR legacy `keyCode === 229`
+  submits nothing (R1, KB-3a/KB-3b); Shift+Enter is not prevented so the textarea inserts the
+  newline natively (KB-2). Empty body submits nothing.
+- `apps/web/src/components/GlobalAgentBar.tsx:149-172` — the `data-agent-bar-live` status region
+  exists in BOTH dock and collapsed branches, so a receipt transition is announced even while the
+  bar is folded (R3).
+- `apps/web/src/modules/projects/ProjectsShell.tsx:69-77` — tablist keydown: ArrowLeft/ArrowRight
+  wrap across `PROJECT_TABS`, move focus with the selected tab, and drive `selectTab` (R2); Tab and
+  Enter keep working through the native tab buttons.
+- `apps/web/src/modules/projects/AgentsView.tsx:33` — roster issue rows render icon + text, never
+  colour-alone (R3); the receipt vocabulary is frozen to the prototype STATUS table in
+  `apps/web/src/modules/projects/receipt.ts`.
+- Task chip (0841 P3 carried): `data-g6="task-chip"` is a native labeled button removable by
+  activation; the 0844 bar controls (dock, drawer toggle, collapse, composer, Send) are labeled
+  native controls with the unbound-orchestrator state named in a status region (`a11y.test.tsx:285-323`).
+- Production tests: `apps/web/tests/modules/projects/keyboard.test.tsx` (5 tests: KB-1…KB-3b),
+  `a11y.test.tsx` (8 tests: tablist roles/aria-selected + arrow navigation, KB-4 Escape/focus
+  restore, ST-1 receipt icon+label, live region, task chip, bar parity), `responsive.test.tsx`
+  (3 tests: LB-1 min-width ≤ 390 px, overflow-x owners, breakpoint-qualified wrapping rows).
+- `bunx tsc --noEmit -p apps/web` rc 0 — 5 pre-existing errors fixed without `as any`:
+  `ProjectsShell.tsx` tab-cycle narrowed with an `if (!next) return` guard; `keyboard.test.tsx`
+  `releasePost` declared without an initializer so the fetch-callback assignment is not flow-narrowed
+  to `null`; `responsive.test.tsx` regex capture groups read with `?? ''` (NaN then fails the
+  assertion loudly).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/web/src/components/GlobalAgentBar.tsx:28-34` — `shouldSubmit` checks BOTH composition signals (`!isComposing` AND `keyCode !== 229`) plus `key === 'Enter'` and `!shiftKey`; `:191-193` `onKeyDown` `preventDefault()`s then calls the single 0844 `handleSubmit` only on a true verdict, non-submitting keys left native (Shift+Enter newline is the textarea's). Tests: KB-3a `keyboard.test.tsx:129`, KB-3b `:144`, KB-2 `:158`, KB-1 `:172` (exactly one POST, `pending` first), empty-Enter `:216`. Browser: KB-3 (degraded composition-Enter, 0 posts) + KB-1 (post-composition Enter, exactly 1 post with composed payload) at BOTH widths — `.spur/run/g63-projects/browser-results.json` 18/18 `ok:true`. |
+| R2 | MET | `apps/web/src/modules/projects/ProjectsShell.tsx:71-82` — tablist keydown: ArrowRight/ArrowLeft wrap across `PROJECT_TABS`, move focus with selection, drive `selectTab`. Tests: tablist roles + `aria-selected` + `aria-controls`↔`id` pairing `a11y.test.tsx:135`, arrow nav with focus follow `:158`, KB-4 Escape closes member detail and `document.activeElement` is the opening card `:179`. Browser: "R2 arrow keys move active tab" (ArrowRight→agents selected+focused, ArrowLeft→conversation) and "KB-4 Escape closes detail, focus restored" at BOTH widths. |
+| R3 | MET | `apps/web/src/modules/projects/receipt.ts:76` — closed `RECEIPT_LABELS` vocabulary, icon+label+meaning+action per state (distinctness asserted `a11y.test.tsx:201`); roster issues never colour-alone — `AgentsView.tsx:33-47` `ISSUE_FACTS` icon + label + action; live region `role="status" aria-live="polite"` with `data-agent-bar-live` in BOTH branches — `GlobalAgentBar.tsx:150` and `:172`; transition announcement asserted `a11y.test.tsx:216`. Browser: "ST-1 receipt announced + labelled" (strip `⏸queued-awaiting-orchestrator — …`, live region carries label + "Next:" action) at BOTH widths. |
+| R4 | MET | Structural half: `responsive.test.tsx:143` (no rendered element declares min-width > 390 px in any view), `:154` (kanban track and terminal pane own their overflow-x containers), `:176` (roster rows wrap on breakpoint-qualified tracks). Geometric half: `.spur/run/g63-projects/browser-results.json` LB-1 — `scrollWidth == innerWidth` on conversation, agents, work at BOTH 390 px and 1440 px, zero page errors, 6 full-page screenshots (`conversation |
+| R5 | MET | Every prototype scenario exists as a production test: KB-1 `keyboard.test.tsx:172`, KB-2 `:158`, KB-3a/b `:129/:144`, KB-4 `a11y.test.tsx:179`, ST-1 `:201`, LB-1 `responsive.test.tsx:143-184` + browser runner. Prototype suite KEPT per the CLOSED decision — `apps/web/tests/prototypes/g6-projects.test.ts` included in the fresh 912-pass full run. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R7 — Keyboard, IME, and accessibility hold | MET | test | `keyboard.test.tsx:129-224` (isComposing Enter, keyCode-229 Enter, Shift+Enter, plain Enter ×1) + `a11y.test.tsx:135-197` (tablist/aria-selected/arrows, Escape focus restore) + browser 18/18: KB-3 composition-Enter submits nothing, KB-1 post-composition Enter submits exactly once, R2 tabs, KB-4 Escape — both widths. |
+| Layout holds at both widths | MET | test | Structural `responsive.test.tsx:143-184`; geometric browser LB-1 `scrollWidth == innerWidth` on all three views at 390 px and 1440 px, zero page errors (`.spur/run/g63-projects/browser-results.json`, `ok:true`). |
+| State changes are announced | MET | test | `a11y.test.tsx:216` receipt transition writes label + action into `data-agent-bar-live`, region present in dock AND collapsed branches; browser ST-1 at both widths: live region reads `queued-awaiting-orchestrator — Next: bind/restore an orchestrator…` after the pending → queued flip. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0845
+
+**Scope:** task diff — `apps/web/src/components/GlobalAgentBar.tsx` (composer key guard + live region), `apps/web/tests/modules/projects/{keyboard,a11y,responsive}.test.tsx` (new), untracked `.spur/run/g63-projects/{browser-check.mjs,browser-results.json}`, planned report satellite `docs/reports/g6-projects-prototype.md`
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PARTIAL
+
+Fresh evidence this review (re-run, not inherited): `cd apps/web && bun test` (full) → **912 pass / 0 fail**, 3993 expect() calls, 68 files; `bunx tsc --noEmit -p apps/web` → rc 0; `.spur/run/0845-test-gate.status` = 0, bind digest `sha256:ff965746073084d3f9e2b9a8b83b962f8d82ae28e5851838577199875a8746fd` matches `.spur/run/proofDigest`. Frozen contracts intact: tab ids `conversation|agents|work` frozen order (`apps/web/src/modules/projects/tabs.tsx:15-20`), the 0845 diff touches only the composer/bar + tests (wire projection, addRef path `ConversationView.tsx:198-212`, and the receipt vocabulary `receipt.ts:96-166` are untouched), and the only added test attribute is the frozen `data-agent-bar-live`. (The bare pipeline-verify placeholder — SECU verdict UNKNOWN — that previously opened this section is superseded by this authored review; its verify-step UNKNOWN verdict is recorded here.)
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P2 (major) | correctness | R4's geometric half is UNVERIFIED: the saved browser run is a failure — `.spur/run/g63-projects/browser-results.json` (startedAt 2026-09-13T02:46:30Z, chrome 140.0.7339.16) records `ok:false`, the runner aborted on `Input.imeSetComposition` "Invalid parameters" mid-KB-3 at 390 px, only KB-2@390 passed, ZERO scenarios ran at 1440 px, `screenshots:[]`, and plan step 7's production receipt was never appended to `docs/reports/g6-projects-prototype.md` (no 0845/Chrome-140 content in the file; its only browser evidence is the prototype's). R4 as written ("verified at 390 px and 1440 px") therefore holds only its structural half. | `.spur/run/g63-projects/browser-check.mjs:141-148` | fix hop before approve: repair the CDP composition call (match the prototype runner's parameter shape, `docs/reports/g6-projects-prototype.md:87`) or degrade to `insertText` + contract-shaped composition events; re-run BOTH widths to `ok:true`, then append the receipt to the report |
+| 2 | P3 (minor) | correctness | The structural half has known blind spots the crashed geometric half was meant to cover: `assertNoWideMinWidth` matches only `min-w-[Npx|Nrem]` arbitrary values and inline `min-width:Npx` — a fixed `w-[420px]`, an intrinsic-width image, or an unbreakable string without an overflow owner passes the structural test yet overflows 390 px. Not a defect of the Q&A-closed split (geometry belongs to the browser half), but until finding 1 resolves, R4 rests on this narrower invariant. | `apps/web/tests/modules/projects/responsive.test.tsx:105-113` | resolves with finding 1's re-run |
+| 3 | P4 (advisory) | correctness | No explicit happy-dom assertion of the over-swallow direction — a plain Enter AFTER a composition commits must still submit. Static reading is sound: post-`compositionend` Enter carries `isComposing:false` and `keyCode ≠ 229` → submits, while WebKit's post-compositionend replay Enter (`keyCode 229`, `isComposing false`) is correctly swallowed as the composition Enter. The crashed runner's commit-then-Enter sequence was designed to prove this end to end; it arrives with finding 1's re-run. | `apps/web/src/components/GlobalAgentBar.tsx:28-35` | accept static analysis now; add browser assertion in finding 1's re-run |
+| 4 | P4 (advisory) | architecture | Tablist satisfies the stated bar (aria-selected parity with frozen ids + arrow-cycle focus-follow) but not strict APG roving tabindex: all three tabs remain in the Tab order and Home/End are unhandled. Acceptable at three tabs; revisit if the count grows. | `apps/web/src/modules/projects/ProjectsShell.tsx:69-84,130-147` | accept; note for any future tab addition |
+| 5 | P4 (advisory) | functional | Solution section labels the task chip "0841 P3 carried", but 0841's P3-on-record was `parseDraftRecord` stripping the additive `pending` field (dispositioned to 0844 and fixed there — `drafts.tsx:61-64` now spreads `{...r}` through). The chip keyboard parity here is the carried usability intent, not that P3; relabel at wrap so the audit trail stays accurate. | `docs/tasks4/0845…md` § Solution | relabel in-task at wrap |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Guard checks BOTH composition signals — `GlobalAgentBar.tsx:28-35` (`isComposing` + `keyCode !== 229`); `onKeyDown` `preventDefault()`s before the single `handleSubmit` and leaves non-submitting keys native (`:186-194`); tests: KB-3a `keyboard.test.tsx:129-142` (no POST, event not prevented), KB-3b `:144-155`, KB-2 `:157-167` (no POST, newline native), KB-1 `:169-210` (exactly one POST, `preventDefault` true, `pending` persisted before ack, same receipt as Send), empty-Enter `:212-224`. Real-key IME dispatch is the browser runner's job — see finding 1 |
+| R2 | MET | Tablist roles + `aria-selected` + `aria-controls`↔`id` pairing with only the active panel mounted (`a11y.test.tsx:135-156`); ArrowRight/ArrowLeft wrap across the frozen three tabs with focus following (`:158-176` ↔ `ProjectsShell.tsx:69-84`); KB-4 Escape closes member detail and `document.activeElement` is the opening card (`a11y.test.tsx:179-197`, 0842 contract) |
+| R3 | MET | Closed 12-state receipt vocabulary, each state non-empty distinct icon AND label AND meaning AND action + tone (`receipt.ts:96-166`, asserted `a11y.test.tsx:201-214`); polite `role="status"` region with `data-agent-bar-live` in BOTH dock and open branches (`GlobalAgentBar.tsx:150-151,172-173`); a pending→queued-awaiting-orchestrator transition is announced and survives folding the bar (`a11y.test.tsx:216-262`); roster issue rows render icon + text + action, never colour-alone (`AgentsView.tsx:238-244`) |
+| R4 | PARTIAL | Structural half MET: no rendered element in any view declares min-width > 390 px (`responsive.test.tsx:143-152`), kanban track and terminal pane own their overflow-x containers (`:154-174`), roster rows wrap on breakpoint-qualified tracks with no fixed track count (`:176-184`). Geometric half UNVERIFIED — finding 1 (`ok:false` run, no 1440 evidence, no report receipt) |
+| R5 | MET | KB-1…KB-4, ST-1, LB-1 all exist as production tests (`keyboard.test.tsx`, `a11y.test.tsx`, `responsive.test.tsx`); the prototype suite is kept intact per the CLOSED decision (`apps/web/tests/prototypes/g6-projects.test.ts`, included in the fresh 912-pass full run) |
+
+**Next:** one fix hop before the approve gate — finding 1 only: repair/re-degrade the browser runner's IME composition step, re-run both viewports to `ok:true` with screenshots, append the production receipt to `docs/reports/g6-projects-prototype.md` (plan step 7), then relabel finding 5 at wrap. No production-code change required.
+
+#### Review Addendum — re-review after browser fix hop (run c6cc48b0)
+
+**Scope:** fix-hop delta only — untracked runner `.spur/run/g63-projects/browser-check.mjs`, results `.spur/run/g63-projects/browser-results.json`, 6 screenshots, receipt appended at `docs/reports/g6-projects-prototype.md:89-110`. No code delta: newest mtime under `apps/web/src` and `apps/web/tests` is 2026-09-13T02:53Z — before the report below was authored (03:06Z) and before the browser re-run (03:14Z); all code anchors cited below re-verified unchanged.
+**Dimensions:** correctness (runner/results consistency), functional (receipt completeness), honesty (degradation note)
+**Verdict:** PASS
+
+Evidence re-checked fresh this hop, not inherited: `browser-results.json` (startedAt 2026-09-13T03:14:44Z, chrome 140.0.7339.16) records **18/18 scenarios `ok:true` at both 390 px and 1440 px**, `pageErrors: []`, 6 screenshots on disk, `ok: true`; `.spur/run/0845-test-gate.status` = 0 with rebound digest `sha256:da3b0e6f786732e762d510db5890ff60f3dd9285d6b7bbef4310f5683c1b8a14` matching `.spur/run/proofDigest` (prior `ff965746…` superseded — report + browser artifacts are in-fingerprint). Runner-internal consistency: per-width post deltas are correct (`postsBefore` captured per viewport — 390: 0→0→1, 1440: 1→1→2, `postCount: 2`); the KB-3 detail records the two dispatched composition-Enters (`isComposing:true`, `keyCode:229`) the guard must swallow, and KB-1 proves the post-composition plain Enter still submits exactly once with the composed payload. The receipt at `docs/reports/g6-projects-prototype.md:89-110` is complete (Chrome version, both widths, pass count, reproduction command, screenshot table) and its degradation note (`:100-103`) is honest: every `Input.imeSetComposition` shape rejected on Chrome 140, fallback named (`Input.insertText` + contract-shaped KeyboardEvents, the same shape the happy-dom suite dispatches), real-composition guard located in production code, and the untested surfaces (OS candidate windows, mobile keyboards, other browsers, AT speech) restated rather than claimed.
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | correctness | Receipt prose enumerates the rejected `imeSetComposition` shapes as "negative and absolute selections, with and without `compositionLength`/`compositionStart`" (four described combos) while the fix-hop note says "5 variants probed"; both agree on the substance ("every parameter shape" → "Invalid parameters") and the `degraded` field in `browser-results.json` records it. Enumeration count only; nothing verdict-relevant. | `docs/reports/g6-projects-prototype.md:100-103` |
+
+**Prior-finding dispositions (report below):**
+- Finding 1 (P2, R4 geometric half UNVERIFIED) — **RESOLVED**: both widths re-run `ok:true`, `scrollWidth == innerWidth` on all three views at 390 and 1440, zero page errors, screenshots captured, production receipt appended (plan step 7 complete).
+- Finding 2 (P3, structural blind spots) — **RESOLVED**: receipt explicitly closes the gap (`docs/reports/g6-projects-prototype.md:105-107`) — the geometric run sees what the min-width regex cannot.
+- Finding 3 (P4, post-composition plain Enter) — **RESOLVED**: KB-1 "Enter after composition submits exactly once" now asserted end to end in real Chrome at both widths, payload carries the composed text.
+- Finding 4 (P4, tablist not strict APG roving tabindex) — unchanged, disposition stands (accept at three tabs).
+- Finding 5 (P4, Solution labels the task chip "0841 P3 carried") — **still open**, advisory only: relabel at wrap so the audit trail stays accurate.
+
+**Next:** proceed to the approve gate; finding 5 relabel at wrap.
 
 ### References
 
@@ -304,3 +398,8 @@ reference those routes, so they survive that removal unchanged.
 - Design system: root `DESIGN.md`
 
 ### History
+
+- 2026-09-13T02:56:59.662Z todo → wip (system)
+- 2026-09-13T02:57:00.146Z wip → testing (system)
+- 2026-09-13T03:30:51.531Z testing → done (system)
+

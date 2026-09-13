@@ -817,3 +817,11 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - DD-09 insertion must land AFTER a complete scenario; a bare title dropped mid-scenario orphans its Given/When/Then body (repaired via python once in 0837/0838 window).
 - Migration renumber when plan races: log in Solution, never edit frozen spec (0045→0046 precedent).
 - Event-driven loop: forward-only in-memory cursor + `--poll` backstop; lost wake events degrade to latency, never lost work.
+## G63 batch (2026-09-13, RUN_ID 20260912T205800Z-G63BATCH)
+- Provider-tree lesson: BoardLayout mounts ProjectProvider+ConversationDraftProvider+GlobalAgentBar; bare-`{}` API stubs in BoardLayout-mounting fixtures parse as truthy fleet w/o orchestrator → render crash poisons the reconciler process-wide (172-fail cascade). Fixture: full ProjectFleetSnapshot w/ `orchestrator:{state:'bound-online',instanceId:'orch'}`.
+- Gate flake class: spawnSync-heavy CLI tests (plugins/sp inline-run-setup) return proc.status=null under full-gate parallel load; pass isolated. One full re-run before diagnosing.
+- Verify answer AC Evidence Type vocabulary: test|command|doc(s)|static(-ref), compounds of those only — `browser` drops the row (ac-row-dropped fail → guard recompute FAIL overrides PASS header).
+- `task record --transition testing` rewrites Testing stub rows: run AFTER the verdict artifact exists, else done-guard FAILs on UNKNOWN stub.
+- record's done-walk auto-creates the pipeline run-link (ensurePipelineRunLink); workflow dry-run rc=1 on capability-preflight warnings is harmless — link is written at run start regardless.
+- Chrome 140 rejects every Input.imeSetComposition shape (5 variants probed); degrade to Input.insertText + contract-shaped KeyboardEvents (isComposing:true / keyCode 229) — same shape happy-dom dispatches.
+- DD-09: bare scenario titles (no R-prefix) are the batch's feature-doc insertions, `@core`, after the last complete scenario block.

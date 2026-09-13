@@ -13,16 +13,42 @@ afterAll(async () => {
     await teardownHappyDom();
 });
 
-// BoardLayout mounts LeftSidebar, which fetches /api/project on mount. Intercept with a
-// silent `{}` response (same seam as BoardLayout.test.tsx) so happy-dom never logs a real
-// cross-origin fetch attempt to localhost:3000.
-setFetchForTesting(
-    (async (_input: RequestInfo | URL, _init?: RequestInit) =>
-        new Response('{}', {
+// BoardLayout mounts ProjectProvider + ConversationDraftProvider + GlobalAgentBar (0844).
+// Intercept api traffic (same seam as BoardLayout.test.tsx): the project routes must serve
+// well-formed fixtures — a bare `{}` parses as a truthy fleet snapshot with no `orchestrator`
+// and crashes GlobalAgentBar mid-render. Everything else gets a silent `{}` so happy-dom
+// never logs a real cross-origin fetch attempt to localhost:3000.
+setFetchForTesting((async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url.includes('/api/project/fleet')) {
+        return new Response(
+            JSON.stringify({
+                path: '/repo/wt',
+                strategy: { name: 'gtd', version: 1 },
+                orchestrator: { state: 'bound-online', instanceId: 'orch' },
+                members: [],
+                capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+    }
+    if (url.includes('/api/project/requests')) {
+        return new Response(JSON.stringify({ requests: [] }), {
             status: 200,
             headers: { 'content-type': 'application/json' },
-        })) as typeof fetch,
-);
+        });
+    }
+    if (url.includes('/api/project')) {
+        return new Response(JSON.stringify({ name: 'spur', path: '/repo/wt' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+        });
+    }
+    return new Response('{}', {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+    });
+}) as typeof fetch);
 
 function renderBoard(route = '/board/tasks') {
     return render(

@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G63"
 name: "Projects board module and global input wiring"
-status: backlog
+status: done
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.189Z"
-updated_at: "2026-09-12T15:12:40.165Z"
+updated_at: "2026-09-13T03:31:00.930Z"
 ---
 
 # G63: Projects board module and global input wiring
@@ -67,11 +67,125 @@ Feature: Projects board module and global input wiring
     And Conversation, Agents, and Work are reachable by keyboard
 
   @core
+  Scenario: An empty project still opens
+    Given a registered project has no fleet declaration
+    When the operator opens Projects
+    Then the shell names the absence and the expected fleet.json path with tabs still mounted
+
+  @core
+  Scenario: Identical labels stay distinct
+    Given two registered projects share a display name
+    When both are opened
+    Then each is identified by its canonical worktree path, never by name
+
+  @core
   Scenario: R2 — A submission becomes a durable request before acknowledgement
     Given the operator types into the global input on any Board route
     When the request is submitted
     Then the server persists it against the submitting project and returns a receipt
     And the composer clears only the submitted revision, preserving any newer edit
+
+  @core
+  Scenario: Drafts stay with their project
+    Given a typed draft exists for one project
+    When the operator switches to another project and back
+    Then each project's composer shows only its own draft, never the other's
+
+  @core
+  Scenario: The thread survives a refresh
+    Given a request and a response exist in the project inbox
+    When the operator reloads the page
+    Then the thread is rebuilt from the server inbox reads, not client state
+
+  @core
+  Scenario: References are explicit
+    Given the operator captures a task or feature reference onto a draft
+    When the draft renders
+    Then each reference shows as a removable chip and is never parsed from prose
+
+  @core
+  Scenario: Corrupt storage degrades safely
+    Given the stored draft record is corrupt or shape-mismatched
+    When the composer loads
+    Then it starts from an empty draft and overwrites the stale record without throwing
+
+  @core
+  Scenario: The roster shows the project fleet
+    Given the project has declared members and live orchestrator claims
+    When the Agents tab opens
+    Then every member renders exactly once as the join of declared roster and claimed instance
+
+  @core
+  Scenario: Declared and observed are separate
+    Given a member's claim state disagrees with its declared role
+    When the roster renders
+    Then declared and observed facts render as separate labeled elements with no combined status
+
+  @core
+  Scenario: Detail opens and returns focus
+    Given the operator opens a member's detail terminal
+    When the operator presses Escape
+    Then the detail closes and focus returns to the opener
+
+  @core
+  Scenario: Work reuses the existing views
+    Given a project with tasks and features
+    When the Work view opens
+    Then it renders the existing task and feature surfaces scoped to that project
+
+  @core
+  Scenario: A task can be referenced into a request
+    Given a task shown in Work
+    When the operator references it into the conversation
+    Then the composer carries it as a structured reference
+
+  @core
+  Scenario: A submission becomes a durable request before acknowledgement
+    Given the operator submits the global input
+    When the acknowledgement is in flight
+    Then the request identity is already durable
+
+  @core
+  Scenario: A failed submission never loses the draft
+    Given acknowledgement fails
+    When the operator resubmits the same payload
+    Then the same request identity is reused with no duplicate request
+
+  @core
+  Scenario: Project identity survives navigation
+    Given a submission from one project
+    When the operator navigates away and back
+    Then the receipt feed still shows that project's requests only
+
+  @core
+  Scenario: Every non-nominal state is named and actionable
+    Given a request in any non-nominal receipt state
+    When the results feed renders it
+    Then the state is named with its one available action
+
+  @core
+  Scenario: A run exit is never shown as a verified result
+    Given a request whose run exited 0 without verification
+    When the results feed renders its outcome
+    Then the exit is shown as unverified, never as a verified result
+
+  @core
+  Scenario: Keyboard, IME, and accessibility hold
+    Given the global input, tabs, and receipt feed
+    When the operator drives them with keyboard and IME composition only
+    Then every control is reachable, named, and announced
+
+  @core
+  Scenario: Layout holds at both widths
+    Given the board rendered at 390px and 1440px
+    When every view is measured
+    Then no view scrolls horizontally and content stays reachable
+
+  @core
+  Scenario: State changes are announced
+    Given a receipt transition in the global bar
+    When the state changes
+    Then the live region announces the new state's label and next action
 
   @core
   Scenario: R3 — A failed submission never loses the draft
@@ -183,3 +297,8 @@ against the current tree; all are corrected in the tasks, not deferred.
   untouched.
 
 ## History
+
+- 2026-09-13T03:30:59.981Z backlog → active (system)
+- 2026-09-13T03:31:00.466Z active → verifying (system)
+- 2026-09-13T03:31:00.930Z verifying → done (system)
+

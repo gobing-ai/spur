@@ -18,20 +18,22 @@ function ctxWithStubs(
         sendThrows?: Error;
         /** When set, replyToMessage throws this Error (simulates missing original). */
         replyThrows?: Error;
+        /** Served project cwd (0844 projectPath guard). */
+        cwd?: string;
     } = {},
 ): {
     ctx: ServerContext;
     calls: {
         inbox: Array<{ agent?: string; limit?: number; offset?: number }>;
         recent: Array<{ limit?: number }>;
-        send: Array<{ from: string | null; to: string; body: string }>;
+        send: Array<{ from: string | null; to: string; body: string; requestKey?: string }>;
         reply: Array<{ id: string; body: string }>;
     };
 } {
     const calls = {
         inbox: [] as Array<{ agent?: string; limit?: number; offset?: number }>,
         recent: [] as Array<{ limit?: number }>,
-        send: [] as Array<{ from: string | null; to: string; body: string }>,
+        send: [] as Array<{ from: string | null; to: string; body: string; requestKey?: string }>,
         reply: [] as Array<{ id: string; body: string }>,
     };
     const teamService = {
@@ -43,8 +45,14 @@ function ctxWithStubs(
             calls.recent.push({ limit });
             return opts.recent ?? { messages: [], count: 0 };
         },
-        sendMessage: async (from: string | null, to: string, body: string): Promise<SendResult> => {
-            calls.send.push({ from, to, body });
+        sendMessage: async (
+            from: string | null,
+            to: string,
+            body: string,
+            _replyTo?: string,
+            requestKey?: string,
+        ): Promise<SendResult> => {
+            calls.send.push({ from, to, body, requestKey });
             if (opts.sendThrows) throw opts.sendThrows;
             return { msgId: `msg-${calls.send.length}`, toId: to, status: 'queued', injected: false };
         },
@@ -54,7 +62,7 @@ function ctxWithStubs(
             return { msgId: `reply-${calls.reply.length}`, toId: 'sender', status: 'queued', injected: false };
         },
     } as unknown as TeamService;
-    const ctx = { teamService: () => teamService } as unknown as ServerContext;
+    const ctx = { cwd: opts.cwd ?? '/repo/wt', teamService: () => teamService } as unknown as ServerContext;
     return { ctx, calls };
 }
 
@@ -286,5 +294,75 @@ describe('messages module', () => {
         // Should not throw and should register no routes.
         messagesModule.mount(app, undefined);
         // Nothing to assert beyond "did not throw"; route absence verified by fetch 404.
+    });
+});
+
+// ── 0844 R4: project-scoped requests ──
+
+describe('POST /api/messages projectPath guard (0844 R4)', () => {
+    function app(ctx: ServerContext): Hono {
+        const hono = new Hono();
+        messagesModule.mount(hono, ctx);
+        return hono;
+    }
+
+    test('matching projectPath is accepted and forwarded to TeamService', async () => {
+        const { ctx, calls } = ctxWithStubs({ cwd: '/repo/wt' });
+        const res = await app(ctx).request('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to: 'lead',
+                from: 'board-operator',
+                body: 'hi',
+                requestKey: 'rk-1',
+                projectPath: '/repo/wt',
+            }),
+        });
+        expect(res.status).toBe(201);
+        expect(calls.send).toHaveLength(1);
+        expect(calls.send[0]?.requestKey).toBe('rk-1');
+    });
+
+    test('mismatched projectPath → 409 and NO row written', async () => {
+        const { ctx, calls } = ctxWithStubs({ cwd: '/repo/wt' });
+        const res = await app(ctx).request('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                to: 'lead',
+                from: 'board-operator',
+                body: 'hi',
+                requestKey: 'rk-1',
+                projectPath: '/other/project',
+            }),
+        });
+        expect(res.status).toBe(409);
+        const payload = (await res.json()) as { error?: string };
+        expect(payload.error).toContain('project mismatch');
+        expect(payload.error).toContain('/other/project');
+        expect(calls.send).toHaveLength(0); // no row, no TeamService traffic
+    });
+
+    test('absent projectPath keeps working (CLI + Inbox module parity)', async () => {
+        const { ctx, calls } = ctxWithStubs({ cwd: '/repo/wt' });
+        const res = await app(ctx).request('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: 'lead', body: 'plain message' }),
+        });
+        expect(res.status).toBe(201);
+        expect(calls.send).toHaveLength(1);
+    });
+
+    test('present-but-empty projectPath → 400 (validated when present)', async () => {
+        const { ctx, calls } = ctxWithStubs({ cwd: '/repo/wt' });
+        const res = await app(ctx).request('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ to: 'lead', body: 'hi', projectPath: '' }),
+        });
+        expect(res.status).toBe(400);
+        expect(calls.send).toHaveLength(0);
     });
 });

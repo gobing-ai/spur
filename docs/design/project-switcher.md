@@ -120,7 +120,7 @@ unchanged.
 
 ## 7. HTTP API
 
-Existing: `GET /api/project` → `{ name }` (current cwd basename).
+Existing: `GET /api/project` → `{ name, path }` (cwd basename + normalized worktree path; both null without a server project context — 0840 added `path`).
 
 New:
 
@@ -131,14 +131,121 @@ GET /api/projects
 POST /api/projects/start
 body: { "name"?: string, "path"?: string }
 → { "name", "path", "port", "running": true, "url": "http://localhost:<port>" }
+
+GET /api/project/fleet   (0840)
+→ { "path": string|null, "strategy": { "name": "rest"|"gtd", "version": number }|null,
+    "orchestrator": { "state": "bound-online"|"bound-offline"|"missing"|"unresolvable", "instanceId"?, "holderId"?, "reason"? },
+    "members": [{ "instanceId", "role"?, "executor", "enabled", "writeCapable", "capabilityState" }],
+    "capacity": { "total", "enabled", "writeCapable", "missing": string[] } }
 ```
 
 - `running` is live-checked (TCP or `GET /api/health` with short timeout), not only `port > 0`.
 - `current` marks the board’s own project.
 - Start is idempotent if already running (return existing port/url).
 - CF Worker: list may return empty / not configured; start returns 501 — registry is local-disk only.
+- `/api/project/fleet` (0840) reads the served project's own migrated db and `.spur/fleet.json`
+  through `FleetService` + `StrategyRuntime`; every fact degrades to a named state
+  (`missing`/`unresolvable`/`null`) instead of a 500.
+- Wire contract (0840 review F1): `orchestrator` is a **claim projection** —
+  `{ state, instanceId?, holderId?, reason? }`. `holderId` is intentionally included on
+  `bound-online`; the raw `project_claims` row is never echoed. 0841-0843 freeze on this shape.
+- An invalid/unreadable `.spur/fleet.json` keeps FleetService's purpose-built detail (file +
+  reason) in `capacity.missing` (0840 review F3) — never a placeholder, never a 500.
 
 Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
+
+### Request envelope (0841)
+
+Board requests travel as ordinary `inbox_messages` rows — operator mailbox
+`board-operator` to the orchestrator instance, read back through the existing
+non-consuming `GET /api/messages/inbox` (no new endpoint, no client-side
+message store). When the request carries explicit references, the web client
+prefixes the body with a single envelope line; a request without refs stays a
+plain message so `spur message` output and the Inbox module see the operator's
+text verbatim:
+
+```
+SPUR-REQUEST/1 {"refs":[{"kind":"task","wbs":"0844"},{"kind":"feature","id":"G63"}]}
+
+<human request text, verbatim>
+```
+
+- `refs` items are `{kind:'task', wbs}` or `{kind:'feature', id}`; fields are
+  serialized in that fixed order so the envelope is deterministic.
+- Decoding is prefix-guarded and total: missing prefix, truncated or non-JSON
+  payload, wrong shape, or malformed ref items degrade to the whole body as
+  text with `refs: []` — a malformed envelope is prose, never a dropped
+  message.
+- Owner: `apps/web/src/modules/projects/conversation.ts`
+  (`encodeRequestEnvelope` / `decodeRequestEnvelope`); submission wiring is
+  task 0844.
+
+### Agents roster two-fact card (0842)
+
+The Agents tab renders the served project's fleet as cards that join two
+independent facts, never collapsed into one indicator:
+
+- DECLARED — the member from `GET /api/project/fleet` (`members`, the 0840
+  wire of FleetService 0835): role, executor, `enabled`, `capabilityState`.
+- OBSERVED — the process from the existing `GET /api/team/processes` read:
+  `running` / `exited` / `not-started`, pid, startedAt, exitCode.
+
+They disagree in both directions (declared-but-not-running; a live process
+with no declared member) and the card shows both, joined by `instanceId`.
+Issue labels are frozen and shared with the global input receipts (0844):
+
+| Condition | Label | Next action |
+| --- | --- | --- |
+| `capabilityState === 'unavailable'` | executor unavailable | the executor cannot run here — check the executor's install/attestation |
+| `capabilityState === 'unknown'` | capability unknown | no attestation exists; it grants nothing and is not a failure |
+| not running, no capability issue | not running | start it |
+| orchestrator + `bound-offline` | orchestrator offline | its claim is held but stale — see `project_claims` |
+
+- Join: pure `buildRoster(snapshot, processes)` in
+  `apps/web/src/modules/projects/roster.ts`. The orchestrator is marked only
+  when the binding carries a matching `instanceId` (never guessed on
+  `missing`/`unresolvable`); undeclared live processes are appended
+  (`undeclared`); the operator mailbox `board-operator` is never rendered.
+- Member detail: a pane (not a route, no focus trap) mounting the existing
+  process/terminal (`MemberTerminal`), messages (non-consuming
+  `GET /api/messages/inbox`), activity (`GET /api/events/history`), and the
+  lifecycle verbs `/api/team/*` already exposes — start, stop, stdin. Escape
+  restores focus to the opener card.
+- Test attributes: `data-roster-entry`, `data-roster-declared`,
+  `data-roster-observed`, `data-roster-issue`, `data-member-detail`,
+  `data-g6="open-member"` (the prototype selector, reused by 0845).
+
+### Work view embed and reference capture (0843)
+
+The Work tab renders the EXISTING board surfaces — no third task-rendering
+path, no fork:
+
+- Tasks section mounts `KanbanBoard` (the embed seam one level below
+  `TaskKanbanView`, whose `useTaskParams().selectTask` would navigate out of
+  the module to `/board/tasks/<wbs>`) with a project-local `onSelectTask`:
+  selecting a card captures a structured reference into the shared draft
+  (`addRef({kind:'task', wbs})`, deduplicated) and switches to the
+  Conversation tab. It never navigates to `/board/tasks/<wbs>` and never
+  opens a second detail surface.
+- Features section mounts `FeaturesShell` exactly as the features module does
+  — no props, no headless variant; the shell exposes no selection seam, so a
+  feature reference reaches the draft through the same `addRef` contract
+  (`{kind:'feature', id}`) without a Work-side capture affordance.
+- No project filter (R3): one server instance serves one project (0840), so
+  the embedded views' fetches ARE the served project's corpus.
+  `ProjectContext.path` is never narrowed into a query parameter; the
+  no-filter invariant is asserted in tests (the embedded board issues the
+  byte-for-byte identical task-list request the bare embed makes), not
+  re-implemented as a filter that would guarantee nothing.
+- Draft placement: `ConversationDraftContext` is provided by `BoardLayout`
+  (0841) because Work and Conversation are sibling panels — only the active
+  panel mounts.
+- Test attributes: `data-work-section="<id>"` on the section switch,
+  `data-g6="use-task"` on the tasks section host, `data-g6="task-chip"` on
+  the conversation's task reference chip — the prototype's selectors, so
+  0845's ported assertions need no rename.
+- Owner: `apps/web/src/modules/projects/WorkView.tsx`; `tabs.tsx` mounts it as
+  the frozen `work` tab. `task-kanban` / `features` are imported unmodified.
 
 ## 8. Web UI
 
