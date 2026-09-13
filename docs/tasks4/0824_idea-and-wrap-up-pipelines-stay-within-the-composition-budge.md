@@ -4,7 +4,7 @@ name: idea and wrap-up pipelines stay within the composition budgets
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.073Z
-updated_at: "2026-09-12T01:52:56.339Z"
+updated_at: "2026-09-13T05:57:12.436Z"
 feature_id: I21
 priority: P2
 tags:
@@ -419,7 +419,11 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | config/workflows/idea-pipeline.yaml:429-430 sets both answerFile and expectFile to the spec-literal `.spur/run/${vars.__runId}-ready-prepare-answer.txt` matching spec:164; spec:168 semantics hold since the output check is the answer file while ready-prepare:1 (yaml:432-445) still seeds an empty idea-ready sidecar when absent then runs the unchanged fail-closed jq shape check so a missing sidecar degrades to refineall and never fails the run; test pin updated at idea-pipeline-definition.test.ts:457-458 asserting the new literal plus expectFile === answerFile with a comment at :454-456 citing spec:168 and spec:316; input pin idea-ready.json kept per spec:282 (test:453, yaml input block :426-428 unchanged); ready-prepare:1 jq pins intact (test:461-464) and handoff-finalize locator-wrapper pins unchanged (test:482-484, :515-517); full gate spur-check PASS with digest 5ddef904225b0b1aa676a5afaf0450b809d89fa970d0234d95b932bbe423e89f per task statement |
+| R1 | MET | Both graphs and model-query counts preserved. Handoff reuses its bundled application writer; wrap-up status, metrics and sync behavior retain their tests; moved prompts and fail-closed wrappers are covered. `plugins/sp/scripts/idea-handoff.ts:25`; `plugins/sp/scripts/wrapup-steps.ts:128`; `packages/app/tests/workflow/idea-pipeline-definition.test.ts:482`; `plugins/sp/tests/wrapup-steps.test.ts:344`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — idea and wrap-up pipelines stay within the composition budgets | MET | test | Both graphs and model-query counts preserved. Handoff reuses its bundled application writer; wrap-up status, metrics and sync behavior retain their tests; moved prompts and fail-closed wrappers are covered. `plugins/sp/scripts/idea-handoff.ts:25`; `plugins/sp/scripts/wrapup-steps.ts:128`; `packages/app/tests/workflow/idea-pipeline-definition.test.ts:482`; `plugins/sp/tests/wrapup-steps.test.ts:344`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -431,6 +435,13 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0824-verify-answer.txt:1-33` and `.spur/run/0824-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | workflow-audit | — | `bun .spur/run/I21-verifyall-20260912/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
