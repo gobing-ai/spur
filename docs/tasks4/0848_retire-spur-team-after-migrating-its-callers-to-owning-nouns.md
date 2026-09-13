@@ -4,7 +4,7 @@ name: Retire spur team after migrating its callers to owning nouns
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
-updated_at: "2026-09-13T02:49:35.554Z"
+updated_at: "2026-09-13T20:08:02.382Z"
 feature_id: G64
 priority: P2
 tags:
@@ -254,58 +254,27 @@ evidence. 0850 records the ADR supersession that this retirement makes true.
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+The retiring team noun remains operational and warns once. Assignment lives under task update;
+agent start/stop use the existing supervisor endpoints; agent list merges live process status.
+The public-surface consent rows and the two-sided retirement shim remain in place.
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/commands/agent.ts:234` |
-| `apps/cli/src/commands/agent.ts:314` |
-| `apps/cli/src/commands/agent.ts:320` |
-| `apps/cli/src/commands/agent.ts:34` |
-| `apps/cli/src/commands/agent.ts:350` |
-| `apps/cli/src/commands/agent.ts:364` |
-| `apps/cli/src/commands/agent.ts:372` |
-| `apps/cli/src/commands/agent.ts:48` |
-| `apps/cli/src/commands/agent.ts:55` |
-| `apps/cli/src/commands/projects.ts:15` |
-| `apps/cli/src/commands/projects.ts:4` |
-| `apps/cli/src/commands/projects.ts:416` |
-| `apps/cli/src/commands/projects.ts:8` |
-| `apps/cli/src/commands/shared-options.ts:105` |
-| `apps/cli/src/commands/task.ts:35` |
-| `apps/cli/src/commands/task.ts:39` |
-| `apps/cli/src/commands/task.ts:454` |
-| `apps/cli/src/commands/task.ts:473` |
-| `apps/cli/src/commands/task.ts:59` |
-| `apps/cli/src/commands/team.ts:110` |
-| `apps/cli/src/commands/team.ts:114` |
-| `apps/cli/src/commands/team.ts:123` |
-| `apps/cli/src/commands/team.ts:127` |
-| `apps/cli/src/commands/team.ts:135` |
-| `apps/cli/src/commands/team.ts:139` |
-| `apps/cli/src/commands/team.ts:147` |
-| `apps/cli/src/commands/team.ts:151` |
-| `apps/cli/src/commands/team.ts:157` |
-| `apps/cli/src/commands/team.ts:263` |
-| `apps/cli/src/commands/team.ts:267` |
-| `apps/cli/src/commands/team.ts:310` |
-| `apps/cli/src/commands/team.ts:38` |
-| `apps/cli/src/commands/team.ts:381` |
-| `apps/cli/src/commands/team.ts:87` |
-| `apps/cli/src/commands/team.ts:97` |
-| `apps/cli/src/commands/team.ts:99` |
-| `apps/cli/tests/commands/projects.test.ts:423` |
-| `apps/cli/tests/json-envelope-inventory.test.ts:197` |
-| `apps/cli/tests/json-envelope-inventory.test.ts:238` |
-| `apps/cli/tests/json-envelope-inventory.test.ts:245` |
-| `apps/cli/tests/json-envelope-inventory.test.ts:275` |
-| `apps/cli/tests/json-envelope-inventory.test.ts:283` |
-| `apps/web/src/modules/teams/ProcessesTab.tsx:302` |
-| `apps/web/tests/modules/teams/components.test.tsx:283` |
-| `packages/app/src/index.ts:287` |
-| `packages/config/src/index.ts:358` |
-| `packages/domain/src/dao/index.ts:3` |
+Verification fix (2026-09-13): the promised config-based replacement for team up had no production
+caller. `apps/server/src/serve.ts:689` now materializes a declared fleet after quota updates drain and
+before autostart or HTTP admission. Invalid declarations stop startup and stop the quota consumer.
+Registration preserves the existing project name so a migrated mailbox prefix survives server startup.
+
+`packages/app/src/services/agent-roles.ts:30` owns the existing role resolver, moved unchanged from
+the CLI so server and CLI share config overrides and stage-floor validation. The CLI re-exports it
+for existing consumers; this introduces no public command.
+
+`apps/server/tests/serve.test.ts:257` verifies that a configured role member's spec exists before the
+app is admitted, the legacy registry prefix survives registration, and invalid fleet JSON refuses
+startup. The complete server test file passes 51 tests; CLI role and retirement tests pass 24 tests.
+The architecture and project-switcher surface owners describe the startup order. Normal build output
+regenerates the affected plugin bundle.
+
+Removal remains conditional on the recorded cutover window. No team command, Board module, config
+schema, or transition shim is removed by this repair.
 
 ### Testing
 

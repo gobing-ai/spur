@@ -94,6 +94,11 @@ Extend `startServer` / `registerServeCommand` (no new server process type):
    add registry deregister in the same teardown so intentional and crash-adjacent exits clear the port.
 5. SIGKILL: cannot run handlers; next `list`/`/api/projects` stale-heal clears the port.
 
+When `.spur/fleet.json` exists, startup materializes its enabled members after the quota-update drain
+and before autostart or HTTP admission. CLI and server share `resolveAgentRoles`, including configured
+role overrides and stage-floor validation. Invalid declarations or ground-truth mismatches stop startup.
+Registration preserves an existing project name because fleet mailbox IDs use that name as their prefix.
+
 **Port assignment**
 
 - If CLI `--port` set → use it (fail if bind fails).

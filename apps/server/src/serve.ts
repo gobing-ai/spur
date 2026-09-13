@@ -6,6 +6,7 @@ import {
     configuredSecretValues,
     createSystemEventCatchAllSink,
     type FeatureActionJob,
+    FleetService,
     HISTORY_REFRESH_JOB,
     handleHistoryRefreshJob,
     handleSchedulerCustomJob,
@@ -14,6 +15,7 @@ import {
     JobHandlerRegistry,
     JobWorkerService,
     ProjectRegistry,
+    resolveAgentRoles,
     resolveAutostartSet,
     resolveHistoryRefreshTimeoutMs,
     resolveKillGraceMs,
@@ -684,6 +686,24 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 appRt.logger.warn('agent quota update consumer failed to start', { error: String(error) });
             }
 
+            // Fleet declarations replace `team up`: project specs must exist before
+            // autostart reads them. Resolve after the quota drain so disabled executors
+            // are honored on the first launch; retain the fleet's ground-truth guard.
+            if (await fs.exists(join(projectRoot, '.spur', 'fleet.json'))) {
+                try {
+                    const fleetConfig = await loadSpurConfig(projectRoot);
+                    await new FleetService({
+                        fs,
+                        spurConfig: fleetConfig,
+                        roles: resolveAgentRoles(fleetConfig?.agent),
+                        openDb: () => ctx.getDb(),
+                    }).materialize(projectRoot);
+                } catch (error) {
+                    await quotaConsumer?.stop();
+                    throw error;
+                }
+            }
+
             // Team process autostart (0195/0207 + 0258 R8): members whose effective
             // autostart is true across `agent.team.*`, unioned with the SPUR_TEAM_AUTOSTART
             // env. `resolveAutostartSet` handles both; a load failure degrades to env-only.
@@ -861,7 +881,12 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             const projectCwd = projectRoot;
             const projectName = basename(projectCwd);
             try {
-                await projectRegistry.upsert({ path: projectCwd, name: projectName, port: server.port });
+                const existingProject = await projectRegistry.getByPath(projectCwd);
+                await projectRegistry.upsert({
+                    path: projectCwd,
+                    name: existingProject?.name ?? projectName,
+                    port: server.port,
+                });
             } catch (err) {
                 appRt.logger.warn('Failed to register project in ProjectRegistry', { error: String(err) });
             }

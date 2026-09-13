@@ -66,6 +66,7 @@ export {
     recordAgentQuotaEvent,
     startAgentQuotaUpdateConsumer,
 } from './services/agent-quota-updates';
+export { resolveAgentRoles } from './services/agent-roles';
 export type {
     AgentConfig,
     AgentExecutorConfig,

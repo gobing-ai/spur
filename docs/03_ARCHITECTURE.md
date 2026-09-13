@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.45.1
+version: 1.46.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-13
@@ -522,6 +522,10 @@ A final launch guard checks owner/strategy after executor resolution. Capacity r
 the originating owner and write generation; reconciliation precedes slot release. Rest starts no
 queued assignments. This adds no message transport or workflow engine. Boundary details:
 [project fleet dispatch](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
+
+Server startup materializes declared fleet specs after the quota-update drain and before autostart
+or request admission. CLI and server use the same role resolver; registration retains the project
+name used as the mailbox prefix. Invalid fleet declarations fail startup before serving requests.
 
 The merge is a **pure function** in `apps/web/src/modules/inbox/timeline.ts`:
 `mergeTimeline(messages, frames, agentId) → TimelineEntry[]` — a discriminated union

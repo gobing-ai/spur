@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { handleSchedulerCustomJob, registerSystemEventTap } from '@gobing-ai/spur-app';
+import { handleSchedulerCustomJob, ProjectRegistry, registerSystemEventTap } from '@gobing-ai/spur-app';
 import { AgentExecutorUpdateDao, applyCliMigrations, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus, type ExecutionContext, type ScheduledAction } from '@gobing-ai/ts-infra';
@@ -252,6 +252,73 @@ describe('startServer', () => {
 
     test('exports as a function', () => {
         expect(typeof startServer).toBe('function');
+    });
+
+    test('0848: materializes the fleet before serving and preserves its registered mailbox prefix', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const originalCwd = process.cwd();
+        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
+        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const root = mkdtempSync(join(tmpdir(), 'spur-fleet-start-'));
+        const project = join(root, 'project');
+        mkdirSync(join(project, '.spur'), { recursive: true });
+        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        try {
+            process.chdir(project);
+            await new ProjectRegistry().upsert({ path: project, name: 'legacy' });
+            writeFileSync(
+                join(project, '.spur', 'config.yaml'),
+                'agent:\n  executors:\n    - name: worker\n      agent: claude\n      tier: standard\n',
+            );
+            writeFileSync(
+                join(project, '.spur', 'fleet.json'),
+                JSON.stringify({
+                    version: 1,
+                    members: [{ id: 'coder', role: 'coder' }],
+                }),
+            );
+            const specPath = join(project, '.spur', 'agents', 'legacy-coder.yaml');
+            const deps = makeDeps({
+                createNodeFileSystem,
+                createServerContext: (() => ({
+                    cwd: project,
+                    getDb: async () => db,
+                    eventBus: () => bus,
+                    supervisor: () => ({ stopAll: async () => {} }),
+                })) as unknown as StartServerDeps['createServerContext'],
+                createApp: (() => {
+                    expect(existsSync(specPath)).toBe(true);
+                    return fakeApp();
+                }) as unknown as StartServerDeps['createApp'],
+            });
+            await startServer(
+                { port: 5009, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: project },
+                deps,
+            );
+            expect(readFileSync(specPath, 'utf8')).toContain('legacy-coder');
+            expect((await new ProjectRegistry().getByPath(project))?.name).toBe('legacy');
+            sigHandlers.SIGINT?.();
+            await exitCalled;
+            writeFileSync(join(project, '.spur', 'fleet.json'), '{invalid');
+            await expect(
+                startServer(
+                    { port: 5009, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: project },
+                    deps,
+                ),
+            ).rejects.toThrow('Invalid fleet declaration');
+        } finally {
+            process.chdir(originalCwd);
+            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
+            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
     });
 
     test('StartServerOptions shape validates at type level', () => {
