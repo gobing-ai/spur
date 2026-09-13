@@ -335,6 +335,8 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `spur-composer`             | 1.0   | Cross-noun composition — workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning; applies accepted `spur-doctor` proposals through `spur` verbs; never judges its own output and never runs a recurring loop                                              |
 | `spur-doctor`               | 1.0   | Cross-noun evaluation — read-only CLI evidence per noun (task/feature/rule/workflow/agent spec), reflection over `history-anatomy` findings through a closed action-class map, and a proposal table; writes nothing; diagnoses artifacts, not runtime environments (`spur agent doctor`'s job)                |
 | `redesign-web-ui`           | 1.0   | Existing-UI visual upgrade — audit generic AI fingerprints, apply in-stack polish against `DESIGN.md` / live tokens, verify behavior and viewports; does not migrate frameworks                                                                                                                            |
+| `taste-refactoring-api`     | —     | API design and refactoring for REST/HTTP, RPC/gRPC, GraphQL, and event contracts; compatibility, security, and migration review |
+| `taste-refactoring-ui`      | —     | UI design and refactoring with visual hierarchy, typography, spacing, color, and interaction review |
 
 #### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)
 
