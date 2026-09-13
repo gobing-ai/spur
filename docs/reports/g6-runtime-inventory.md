@@ -1,6 +1,6 @@
 # G6 runtime inventory — project fleet identity, delivery, and legacy migration
 
-Task 0828 · report only (no production change) · consumed by 0829 (rest/GTD dispatch prototypes) and 0830 (Projects conversation/agents/work/global-input prototypes).
+Task 0828 · historical investigation (no production change) · consumed by 0829 and 0830. Sections 1–5 describe the recorded baseline, not the current runtime; see the re-audit below before using the handoff for implementation.
 Frozen sections: **Provenance · Runtime path · Fault probes · Migration matrix · Handoff**.
 
 ## 1. Provenance
@@ -159,3 +159,20 @@ Deferred decisions (owner: Robin / later production design): breaking cutover wi
 ## Verification corrections — 2026-09-12
 
 The invocation probes now assert exactly one fake runner call; the failure probe covers both a throw and a returned nonzero exit. Duplicate submission asserts both distinct IDs and consumption of both queued rows. Competing consumers remain a shared-adapter characterization, not a cross-process lease test. The notification probe has no sink to disable and no event bus; it does not disprove server message events. Plugin `--agent` is a skill execution selector, not a literal `spur agent --agent` command.
+
+## Current-tree re-audit — 2026-09-12
+
+Rechecked at `a11e70667493f11cdae1deb46d71bab3d3a5c2fe`. The historical source observations above remain evidence of the investigation baseline; retrieve that source with `git show 6070879e8:<path>` and the strengthened characterization suite with `git show 07482a850:apps/cli/tests/commands/agent-team.test.ts`. Historical line numbers and related-feature statuses are not current-state assertions.
+
+The documented workspace commands now exercise successor regressions. G61 deliberately flipped probes 1–3 and 6; a green current suite no longer proves the old missing guarantees. Fresh results: `bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts` in apps/cli: 60 pass, 0 fail; `bun test tests/services/occupant-wait.test.ts` in packages/app: 16 pass, 0 fail. All use isolated fake executors and test databases.
+
+| Original probe | Current executable evidence | Observation at re-audit |
+| --- | --- | --- |
+| Drain before spawn | `apps/cli/tests/commands/agent-team.test.ts:629` and `apps/cli/tests/commands/agent-team.test.ts:671` | Started invocation settles delivered; failure before start releases the claim with its attempt count preserved (0831). |
+| Throw / nonzero | `apps/cli/tests/commands/agent-team.test.ts:706` and `apps/cli/tests/commands/agent-team.test.ts:750` | Never-started throws retry three times then remain failed; a started nonzero run settles delivery without declaring task success (0831). |
+| Duplicate submission | `apps/cli/tests/commands/agent-team.test.ts:797` | Repeating the same explicit request key returns one message identity and one delivery (0832); unkeyed sends retain separate identities. |
+| Competing consumers | `apps/cli/tests/commands/agent-team.test.ts:834` | Shared-adapter drains still claim a queued row at most once; this does not prove a cross-process leadership lease. |
+| Stale generation | `packages/app/tests/services/occupant-wait.test.ts:299` | Pinned wait still fails with run_replaced and separately exposes the successor; automatic retargeting remains unproven. |
+| Completion association | `apps/cli/tests/commands/agent-team.test.ts:878` | A durable run/message/task receipt now survives independently of notification; zero exit is run-exit-only, not task verification (0833). |
+
+Downstream planning must re-evaluate the proposed missing seams against current owners rather than implement them again. In particular, `apps/cli/src/commands/agent.ts:541` owns claim settlement, `packages/app/src/services/team-service.ts:515` accepts request keys, and `apps/web/src/components/GlobalAgentBar.tsx:89` now submits through the Projects request context. The original composer-stub and absent-receipt descriptions are superseded. The migration matrix remains a historical proposal; this re-audit authorizes no conversion, cutover, or changes to other feature statuses.

@@ -4,7 +4,7 @@ name: Inventory and probe project fleet identity, delivery, and legacy migration
 status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.267Z
-updated_at: "2026-09-12T04:16:23.916Z"
+updated_at: "2026-09-13T06:24:53.825Z"
 feature_id: G6
 priority: P1
 tags:
@@ -106,17 +106,17 @@ Change map (no production code; deliverables = report + characterization probes 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/reports/g6-runtime-inventory.md:18` — source inventory audited against TeamService, CLI loop and plugin callers; `spur task check 0828 --strict-core --json` exit 0. |
-| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:620` and `packages/app/tests/services/occupant-wait.test.ts:299` — workspace `bun test` commands exit 0; 34 CLI tests and 16 app tests; throw/nonzero cases and exact invocation counts asserted. |
-| R3 | MET | `docs/reports/g6-runtime-inventory.md:94` — migration rows inspected with conflict/rollback notes; only task-owned report/tests changed (`git diff --name-only`). |
-| R4 | MET | `docs/reports/g6-runtime-inventory.md:117` — existing/absent/proposed handoff reviewed against 0829/0830; report correction preserves the prototype-only boundary. |
+| R1 | MET | `docs/reports/g6-runtime-inventory.md:20` and `docs/reports/g6-runtime-inventory.md:163` — source inventory and current/historical boundary reviewed; git show 6070879e8:apps/web/src/components/GlobalAgentBar.tsx exits 0 and confirms the original stub; current GlobalAgentBar submission inspected separately. |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:629` and `packages/app/tests/services/occupant-wait.test.ts:299` — apps/cli bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass); packages/app bun test tests/services/occupant-wait.test.ts exits 0 (16 pass). Current successor probes replace historical expectations as mapped in the report. |
+| R3 | MET | `docs/reports/g6-runtime-inventory.md:94` — migration matrix inspected for generated/manual/orphan specs, duplicate roles, ordering, paths, CLI/routes/schema and related work; rg -n 'rollback\|conflict\|Orphan\|Duplicate\|reorder\|workspace' docs/reports/g6-runtime-inventory.md exits 0. No live migration or other task-status mutation. |
+| R4 | MET | `docs/reports/g6-runtime-inventory.md:123` and `docs/reports/g6-runtime-inventory.md:178` — original absent/proposed primitives and owning packages retained; current delivery/dedup/receipt successors explicitly supersede those gaps. rg -n 'Owning package\|Deferred decisions\|0830 input\|Current-tree re-audit' docs/reports/g6-runtime-inventory.md exits 0. Artifacts rewritten: .spur/run/0828-verify-answer.txt lines 1-34; .spur/run/0828-verdict.json (derived). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 (R1) | MET | command | `docs/reports/g6-runtime-inventory.md:18` — source inventory audited against TeamService, CLI loop and plugin callers; `spur task check 0828 --strict-core --json` exit 0. |
-| AC-2 (R2) | MET | test | `apps/cli/tests/commands/agent-team.test.ts:620` and `packages/app/tests/services/occupant-wait.test.ts:299` — workspace `bun test` commands exit 0; 34 CLI tests and 16 app tests; throw/nonzero cases and exact invocation counts asserted. |
-| AC-3 (R3) | MET | command | `docs/reports/g6-runtime-inventory.md:94` — migration rows inspected with conflict/rollback notes; only task-owned report/tests changed (`git diff --name-only`). |
-| AC-4 (R4) | MET | command | `docs/reports/g6-runtime-inventory.md:117` — existing/absent/proposed handoff reviewed against 0829/0830; report correction preserves the prototype-only boundary. |
+| AC-1 (R1) | MET | command | `docs/reports/g6-runtime-inventory.md:20` and `docs/reports/g6-runtime-inventory.md:163` — source inventory and current/historical boundary reviewed; git show 6070879e8:apps/web/src/components/GlobalAgentBar.tsx exits 0 and confirms the original stub; current GlobalAgentBar submission inspected separately. |
+| AC-2 (R2) | MET | test | `apps/cli/tests/commands/agent-team.test.ts:629` and `packages/app/tests/services/occupant-wait.test.ts:299` — apps/cli bun test tests/commands/agent-team.test.ts tests/commands/g6-strategy-prototype.test.ts exits 0 (60 pass); packages/app bun test tests/services/occupant-wait.test.ts exits 0 (16 pass). Current successor probes replace historical expectations as mapped in the report. |
+| AC-3 (R3) | MET | command | `docs/reports/g6-runtime-inventory.md:94` — migration matrix inspected for generated/manual/orphan specs, duplicate roles, ordering, paths, CLI/routes/schema and related work; rg -n 'rollback\|conflict\|Orphan\|Duplicate\|reorder\|workspace' docs/reports/g6-runtime-inventory.md exits 0. No live migration or other task-status mutation. |
+| AC-4 (R4) | MET | command | `docs/reports/g6-runtime-inventory.md:123` and `docs/reports/g6-runtime-inventory.md:178` — original absent/proposed primitives and owning packages retained; current delivery/dedup/receipt successors explicitly supersede those gaps. rg -n 'Owning package\|Deferred decisions\|0830 input\|Current-tree re-audit' docs/reports/g6-runtime-inventory.md exits 0. Artifacts rewritten: .spur/run/0828-verify-answer.txt lines 1-34; .spur/run/0828-verdict.json (derived). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -128,10 +128,9 @@ Change map (no production code; deliverables = report + characterization probes 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | task-check | — | spur task check 0828 --strict-core --json exit 0 |
-| P4 | design-conformance | — | Report + isolated characterization only; no production or live-data changes. |
-| P4 | fix-artifacts | — | Rewrote .spur/run/0828-verify-answer.txt; derived .spur/run/0828-verdict.json; fresh logs .spur/run/g6-verifyall/0828-tests.log and app-tests.log. |
-| P4 | scope-creep | — | Changes limited to task 0828 report, characterization tests and task evidence. |
+| P4 | design-conformance | — | Historical inventory and migration proposal retained; correction identifies current successor probes without production changes. |
+| P4 | scope-creep | — | Only report and task verification evidence changed. |
+| P4 | fix-artifacts | — | Rewrote .spur/run/0828-verify-answer.txt lines 1-34 and derived .spur/run/0828-verdict.json; tracked Testing names these gitignored artifacts. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
