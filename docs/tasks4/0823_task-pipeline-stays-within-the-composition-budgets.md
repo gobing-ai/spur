@@ -4,7 +4,7 @@ name: task-pipeline stays within the composition budgets
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.072Z
-updated_at: "2026-09-11T23:12:17.833Z"
+updated_at: "2026-09-13T05:49:14.105Z"
 feature_id: I21
 priority: P2
 tags:
@@ -342,6 +342,8 @@ Each entry cites the first changed line per file (`file:line`).
 | `plugins/sp/tests/task-pipeline-resilience.test.ts:242` |
 | `plugins/sp/tests/task-pipeline-resilience.test.ts:262` |
 | `plugins/sp/tests/task-pipeline-resilience.test.ts:287` |
+
+Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/quality-gate.ts:115` captures both streams through one file descriptor to preserve ordering and avoid the subprocess pipe-buffer cap; the Superskill-generated twin is `plugins/sp/scripts/quality-gate.mjs:61`. `plugins/sp/tests/quality-gate.test.ts:224` checks interleaved output and a 2 MiB capture. `docs/design/workflow-shell-ownership.md:200` owns the capture contract. The regression failed before the fix; all 12 quality-gate tests pass afterward.
 
 ### Testing
 

@@ -27,7 +27,19 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+    appendFileSync,
+    closeSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    openSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export const MAX_GATE_ATTEMPTS = 5;
@@ -101,11 +113,20 @@ function gateSleep(ms: number): void {
 
 /** `sh -c <cmd> > <attempt log> 2>&1` equivalent: merged output plus exit code. */
 export function runShellCommand(cmd: string, cwd: string | undefined): { output: string; code: number } {
-    const result = spawnSync('sh', ['-c', cmd], { cwd, encoding: 'utf8' });
-    if (result.error !== undefined) {
-        return { output: `sh -c failed: ${result.error.message}\n`, code: 1 };
+    const dir = mkdtempSync(join(tmpdir(), 'spur-quality-gate-'));
+    const path = join(dir, 'output');
+    const fd = openSync(path, 'w');
+    try {
+        // One file descriptor preserves stream order and avoids spawnSync's pipe buffer limit.
+        const result = spawnSync('sh', ['-c', cmd], { cwd, stdio: ['ignore', fd, fd] });
+        if (result.error !== undefined) {
+            return { output: `sh -c failed: ${result.error.message}\n`, code: 1 };
+        }
+        return { output: readFileSync(path, 'utf8'), code: result.status ?? 1 };
+    } finally {
+        closeSync(fd);
+        rmSync(dir, { recursive: true, force: true });
     }
-    return { output: `${result.stdout ?? ''}${result.stderr ?? ''}`, code: result.status ?? 1 };
 }
 
 export function runQualityGate(

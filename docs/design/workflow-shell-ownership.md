@@ -198,6 +198,9 @@ now `command.gate` built-ins (option c), the quality gate is the `quality-gate.t
 the action (R1) — as does the warn-band `verify → test-fix` guard, whose sibling `verify → record`
 collapsed to the single `jq -e` verdict predicate.
 
+The quality-gate runner captures stdout and stderr through one file descriptor, preserving their
+write order without a subprocess pipe-buffer cap before appending each attempt to the gate log.
+
 | Program | Disposition | Reason |
 | --- | --- | --- |
 | `precheck:onEnter:0` | GLUE (warn) | git-status hygiene WARNING/NOTE; advisory |

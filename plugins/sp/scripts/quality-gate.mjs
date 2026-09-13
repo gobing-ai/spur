@@ -3,7 +3,19 @@
 
 // plugins/sp/scripts/quality-gate.ts
 import { spawnSync } from "child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "fs";
+import { tmpdir } from "os";
 import { join } from "path";
 var MAX_GATE_ATTEMPTS = 5;
 var MAX_FINDINGS = 20;
@@ -43,12 +55,20 @@ function gateSleep(ms) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 function runShellCommand(cmd, cwd) {
-  const result = spawnSync("sh", ["-c", cmd], { cwd, encoding: "utf8" });
-  if (result.error !== undefined) {
-    return { output: `sh -c failed: ${result.error.message}
+  const dir = mkdtempSync(join(tmpdir(), "spur-quality-gate-"));
+  const path = join(dir, "output");
+  const fd = openSync(path, "w");
+  try {
+    const result = spawnSync("sh", ["-c", cmd], { cwd, stdio: ["ignore", fd, fd] });
+    if (result.error !== undefined) {
+      return { output: `sh -c failed: ${result.error.message}
 `, code: 1 };
+    }
+    return { output: readFileSync(path, "utf8"), code: result.status ?? 1 };
+  } finally {
+    closeSync(fd);
+    rmSync(dir, { recursive: true, force: true });
   }
-  return { output: `${result.stdout ?? ""}${result.stderr ?? ""}`, code: result.status ?? 1 };
 }
 function runQualityGate(mode, env, options = {}) {
   const cwd = options.cwd;
