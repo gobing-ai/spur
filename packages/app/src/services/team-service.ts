@@ -16,6 +16,7 @@ import {
     InboxRecentDao,
     isTierEligible,
     MarkdownDocument,
+    SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
@@ -528,7 +529,7 @@ export class TeamService {
         const msgId = keyed?.id ?? (await dao.enqueue(fromId, toId, body, replyTo));
         // Emit a single lifecycle event: `message.replied` when this send is a reply
         // (thread context), otherwise `message.sent`. Metadata only — never the body.
-        this.emitMessageEvent(replyTo !== undefined ? 'message.replied' : 'message.sent', {
+        await this.emitMessageEvent(replyTo !== undefined ? 'message.replied' : 'message.sent', {
             msgId,
             fromId,
             toId,
@@ -1064,17 +1065,30 @@ export class TeamService {
     }
 
     /**
-     * Publish a message lifecycle event when a bus is wired. No-op without one
-     * (CLI default). Isolated try/catch so a bus failure never breaks the send —
-     * the row is already durable; the event is observable metadata.
+     * Publish through the attached bus, or persist the wake directly for CLI
+     * senders. The inbox row is already durable; an event failure cannot undo it.
      */
-    private emitMessageEvent(name: 'message.sent' | 'message.replied', payload: MessageEventPayload): void {
+    private async emitMessageEvent(
+        name: 'message.sent' | 'message.replied',
+        payload: MessageEventPayload,
+    ): Promise<void> {
         const bus = this.ctx.eventBus;
-        if (!bus) return;
         try {
-            bus.emit(name, { ...payload, severity: 'info' });
-        } catch {
-            // Swallow — see method doc.
+            if (bus) {
+                bus.emit(name, { ...payload, severity: 'info' });
+            } else {
+                await new SystemEventDao(await this.ctx.getDb()).insert({
+                    id: crypto.randomUUID(),
+                    event_name: name,
+                    occurred_at: payload.createdAt,
+                    actor: payload.fromId ?? 'operator',
+                    payload_json: JSON.stringify(payload),
+                });
+            }
+        } catch (error) {
+            this.ctx.output.error(
+                `Message stored, but wake event failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
         }
     }
 

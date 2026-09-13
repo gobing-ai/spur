@@ -185,6 +185,31 @@ describe('agent loop wake sources (0839 R1)', () => {
         }
     });
 
+    test.each(['task.created', 'task.updated', 'message.replied'])('%s wakes the loop', async (name) => {
+        const rig = await makeRig();
+        try {
+            expect(await runOneWokenIteration(rig, (r) => insertWake(r, name, {}))).toBeLessThan(2500);
+            expect(rig.run).toHaveBeenCalledTimes(0);
+        } finally {
+            rig.cleanup();
+        }
+    });
+
+    test('a plain CLI sender persists the wake without an injected event bus', async () => {
+        const rig = await makeRig();
+        try {
+            const team = new TeamService(rig.ctx);
+            expect(
+                await runOneWokenIteration(rig, async () => {
+                    await team.sendMessage('operator', 'wake-worker', 'CLI request');
+                }),
+            ).toBeLessThan(2500);
+            expect(rig.run).toHaveBeenCalledTimes(1);
+        } finally {
+            rig.cleanup();
+        }
+    });
+
     test('fleet.capacity.changed wakes the loop (R1 capacity change)', async () => {
         const rig = await makeRig();
         try {

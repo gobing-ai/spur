@@ -866,6 +866,9 @@ function formatReconcileReport(report: {
  */
 const WAKE_EVENT_NAMES = [
     'message.sent', // human request / orchestrator order   (existing)
+    'message.replied',
+    'task.created',
+    'task.updated',
     'strategy.changed', // strategy change                      (new)
     'fleet.capacity.changed', // task or capacity change        (new)
     'agent.invoke.exit', // completion receipt (0833 writes it in the same sink)
@@ -1051,6 +1054,7 @@ export async function runAgentLoop(
     while (!runtime.signal?.aborted && (runtime.maxIterations === undefined || iteration < runtime.maxIterations)) {
         const wake = await waitForWake(wakeDao, cursor, pollMs, runtime.signal);
         cursor = wake.sequence;
+        if (runtime.signal?.aborted) break;
         // Rest keeps accepted input queued, including assignments sent before
         // the strategy switch. Projects without a fleet retain legacy draining.
         const declaration = await new FleetService({ fs: context.fs }).load(context.cwd);
@@ -1075,12 +1079,15 @@ export async function runAgentLoop(
         if (prompt !== undefined) {
             // Reset per iteration: each drain is an independent delivery attempt.
             invocationStarted = false;
+            const ledger = await attachSystemEventLedger(bus, context);
             try {
                 await svc.run(prompt, rewritten, deps);
             } finally {
                 // 0831 R4: settle even on abort; the loop keeps iterating either
                 // way — a released row redelivers on the next drain.
                 await settleClaimedMessages(context, claimed, invocationStarted ? 'accepted' : 'not-started');
+                await ledger.flush();
+                ledger.unsubscribe();
             }
             // The hold that described the previous idle stretch is stale: work
             // ran, so the next idle wake records a fresh hold row.
