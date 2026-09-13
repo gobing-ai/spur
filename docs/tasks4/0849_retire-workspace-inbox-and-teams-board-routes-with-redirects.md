@@ -4,7 +4,7 @@ name: Retire Workspace, Inbox, and Teams board routes with redirects
 status: cancelled
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
-updated_at: "2026-09-13T15:10:05.371Z"
+updated_at: "2026-09-13T20:15:14.135Z"
 feature_id: G64
 priority: P2
 tags:
@@ -271,11 +271,38 @@ scope (Workspace Overview removal, Inbox/Teams label split) is entirely on the s
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: FAIL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | UNMET | `apps/web/src/modules/workspace/index.tsx:13`; `apps/web/src/modules/inbox/index.tsx:14`; `apps/web/src/modules/teams/index.tsx:13` — all legacy modules remain registered; refreshed local verification scratch `.spur/run/0849-verify-answer.txt` lines 1-37 and derived `.spur/run/0849-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R2 | UNMET | `apps/web/src/router.tsx:15` — routes are still generated from legacy modules; no retirement redirects |
+| R3 | UNMET | `apps/cli/src/commands/agent.ts:773` — spec-id warning shim remains |
+| R4 | MET | No cutover/removal performed; task remains cancelled under commit 4cc0f9d65 |
+| R5 | UNMET | `apps/web/src/modules/projects/MemberDetail.tsx:4` — Projects still imports the Teams terminal; module/test migration did not occur |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Board routes retire with a migration path | UNMET | command | Current router and module registrations inspected: no legacy-to-Projects redirects; all three legacy routes remain |
+| Scenario: The spec-id shim retires only when unused | UNMET | command | `apps/cli/src/commands/agent.ts:773` and transition-shim manifest still contain agent-flag-spec-id |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: FAIL)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | NOT DONE: removal, redirects and shim retirement. The explicit cancellation is preserved; --force re-audits evidence and does not authorize a breaking cutover. |
+| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
+| P4 | task-check | — | spur task check 0849 --strict-core --json — exit 0 |
+| P4 | secua-review | — | Cancelled-as-superseded claim is not supported by the shipping route/shim surface. Requires explicit disposition or cutover authorization. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
