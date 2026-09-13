@@ -4,7 +4,7 @@ name: Idempotency key on message send with receipt replay
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:30.146Z
-updated_at: "2026-09-13T06:49:51.103Z"
+updated_at: "2026-09-13T07:03:09.152Z"
 feature_id: G61
 
 ---
@@ -194,7 +194,7 @@ Re-audit fixes and current change map:
 - `apps/cli/tests/commands/message.test.ts:26` — fresh CLI golden path invokes main repeatedly against disk SQLite: replay, new key, conflict, blank-key rejection, exactly two rows
 - `apps/server/tests/modules/messages/index.test.ts:70` — fresh POST route test verifies key forwarding and rejects invalid key types/empty keys
 - `packages/domain/src/migrations.ts:47` — nullable key and partial unique index; fresh ts-db tests cover concurrent insert arbitration and keyless compatibility
-- `apps/cli/tests/commands/agent-team.test.ts:800` — fresh regression asserts one message and one drain delivery; changed body conflicts
+- `apps/cli/tests/commands/agent-team.test.ts:829` — fresh regression asserts one message and one drain delivery; changed body conflicts
 
 Engine origin: @gobing-ai/ts-db `src/inbox-message-dao.ts` line 168 uses insert-first constraint arbitration, and `src/embedded-migrations.ts` line 49 owns the additive key migration. Spur mirrors schema provisioning in its own migration journal (0043); this goal-equivalent exception to the old Design was confirmed during implementation. No new public verb.
 
@@ -207,46 +207,47 @@ Engine origin: @gobing-ai/ts-db `src/inbox-message-dao.ts` line 168 uses insert-
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `packages/app/src/services/team-service.ts:511` — keyed send uses durable enqueueIdempotent; keyless branch unchanged; receipt carries requestKey |
-| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:800` — fresh regression asserts one message and one drain delivery; changed body conflicts |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:829` — fresh regression asserts one message and one drain delivery; changed body conflicts |
 | R3 | MET | `apps/cli/tests/commands/message.test.ts:26` — fresh CLI golden path invokes main repeatedly against disk SQLite: replay, new key, conflict, blank-key rejection, exactly two rows |
 | R4 | MET | `apps/server/tests/modules/messages/index.test.ts:70` — fresh POST route test verifies key forwarding and rejects invalid key types/empty keys |
 | R5 | MET | `packages/domain/src/migrations.ts:47` — nullable key and partial unique index; fresh ts-db tests cover concurrent insert arbitration and keyless compatibility |
 | R6 | MET | `packages/domain/src/migrations.ts:47` — nullable key and partial unique index; fresh ts-db tests cover concurrent insert arbitration and keyless compatibility |
-| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:866` — fresh competing-consumer regression preserves atomic one-claim behavior |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: A retried submission is idempotent | MET | test | `apps/cli/tests/commands/agent-team.test.ts:800` — fresh regression asserts one message and one drain delivery; changed body conflicts; command: apps/cli: bun test tests/commands/message.test.ts; apps/server: bun test tests/modules/messages/index.test.ts; ts-libs/packages/db: bun test tests/inbox-message-dao.test.ts (exit 0) |
+| Scenario: A retried submission is idempotent | MET | test | `apps/cli/tests/commands/agent-team.test.ts:829` — fresh regression asserts one message and one drain delivery; changed body conflicts; command: apps/cli: bun test tests/commands/message.test.ts; apps/server: bun test tests/modules/messages/index.test.ts; ts-libs/packages/db: bun test tests/inbox-message-dao.test.ts (exit 0) |
 | Scenario: A changed payload mints a new identity | MET | test | `apps/cli/tests/commands/message.test.ts:26` — fresh CLI golden path invokes main repeatedly against disk SQLite: replay, new key, conflict, blank-key rejection, exactly two rows; command: apps/cli: bun test tests/commands/message.test.ts; apps/server: bun test tests/modules/messages/index.test.ts; ts-libs/packages/db: bun test tests/inbox-message-dao.test.ts (exit 0) |
 | Scenario: Replay survives a restart | MET | test | `apps/cli/tests/commands/message.test.ts:26` — fresh CLI golden path invokes main repeatedly against disk SQLite: replay, new key, conflict, blank-key rejection, exactly two rows; command: apps/cli: bun test tests/commands/message.test.ts; apps/server: bun test tests/modules/messages/index.test.ts; ts-libs/packages/db: bun test tests/inbox-message-dao.test.ts (exit 0) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-#### G61 forced re-audit — 0832
+#### G61 final forced re-audit — 0832
 
 Verdict: PASS
 
-Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source and the fixes in this run.
+Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source. No remaining findings in this task.
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | All | `packages/app/src/services/team-service.ts:511` | No unresolved blocker or major finding after this task's fixes; feature-level dependency failure remains owned by 0831. |
+| P4 | All | `packages/app/src/services/team-service.ts:511` | No remaining findings after fixes and verification against published 0.4.66. |
 
 #### Functional traceability
 | Req | Status | Evidence |
 | --- | --- | --- |
 | R1 | MET | `packages/app/src/services/team-service.ts:511` — keyed send uses durable enqueueIdempotent; keyless branch unchanged; receipt carries requestKey |
-| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:800` — fresh regression asserts one message and one drain delivery; changed body conflicts |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:829` — fresh regression asserts one message and one drain delivery; changed body conflicts |
 | R3 | MET | `apps/cli/tests/commands/message.test.ts:26` — fresh CLI golden path invokes main repeatedly against disk SQLite: replay, new key, conflict, blank-key rejection, exactly two rows |
 | R4 | MET | `apps/server/tests/modules/messages/index.test.ts:70` — fresh POST route test verifies key forwarding and rejects invalid key types/empty keys |
 | R5 | MET | `packages/domain/src/migrations.ts:47` — nullable key and partial unique index; fresh ts-db tests cover concurrent insert arbitration and keyless compatibility |
 | R6 | MET | `packages/domain/src/migrations.ts:47` — nullable key and partial unique index; fresh ts-db tests cover concurrent insert arbitration and keyless compatibility |
-| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:866` — fresh competing-consumer regression preserves atomic one-claim behavior |
 
-Verification: fresh bun run spur-check exit 0 (8496 tests, 99.21% functions / 98.99% lines), bun run test-cf exit 0, bun run build exit 0. Focused evidence and corrected Design deviations are recorded in Testing and Solution. No new public verb or dependency-local workaround.
 
---next: no-op - task already terminal (done). Existing done status is historical; the current verdict above is the re-audit result.
+Verification: final bun run spur-check exit 0 (8498 tests, 0 failures; 99.21% functions / 98.99% lines), bun run test-cf exit 0 (1 test), bun run build exit 0. Published ts-ai-runner 0.4.66 is installed; its probe verifies acceptance only after process creation. Focused evidence and Design corrections are recorded in Testing and Solution.
+
+--next: no-op — task already terminal (done). All four G61 tasks are re-verified against the final dependency and code state.
 
 ### References
 

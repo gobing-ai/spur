@@ -4,7 +4,7 @@ name: Restart reconciliation and operator-visible delivery failure states
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:30.594Z
-updated_at: "2026-09-13T06:49:54.768Z"
+updated_at: "2026-09-13T07:03:12.833Z"
 feature_id: G61
 
 dependencies: ["0831", "0833"]
@@ -257,16 +257,15 @@ Goal-equivalent Design corrections: delivered is only a delivery state and remai
 
 ### Review
 
-#### G61 forced re-audit — 0834
+#### G61 final forced re-audit — 0834
 
 Verdict: PASS
 
-Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source and the fixes in this run.
+Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source. No remaining findings in this task.
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | All | `packages/app/src/services/delivery-reconciler.ts:56` | No unresolved blocker or major finding after this task's fixes; feature-level dependency failure remains owned by 0831. |
-| P3 | Efficiency | `packages/app/src/services/delivery-reconciler.ts:56` | Reconciliation reads all candidate messages and queries their receipts individually. Retained existing approach; revisit with measured large-mailbox cost. |
+| P4 | All | `packages/app/src/services/delivery-reconciler.ts:56` | No remaining findings after fixes and verification against published 0.4.66. |
 
 #### Functional traceability
 | Req | Status | Evidence |
@@ -279,9 +278,10 @@ Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (se
 | R6 | MET | `apps/cli/tests/commands/message.test.ts:227` — fresh CLI JSON invocation shows run/task/artifacts for a delivered row; unresolved tests cover attempts and errors |
 | R7 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:235` — fresh regression changes unknown to exit-only without replay |
 
-Verification: fresh bun run spur-check exit 0 (8496 tests, 99.21% functions / 98.99% lines), bun run test-cf exit 0, bun run build exit 0. Focused evidence and corrected Design deviations are recorded in Testing and Solution. No new public verb or dependency-local workaround.
 
---next: no-op - task already terminal (done). Existing done status is historical; the current verdict above is the re-audit result.
+Verification: final bun run spur-check exit 0 (8498 tests, 0 failures; 99.21% functions / 98.99% lines), bun run test-cf exit 0 (1 test), bun run build exit 0. Published ts-ai-runner 0.4.66 is installed; its probe verifies acceptance only after process creation. Focused evidence and Design corrections are recorded in Testing and Solution.
+
+--next: no-op — task already terminal (done). All four G61 tasks are re-verified against the final dependency and code state.
 
 ### References
 

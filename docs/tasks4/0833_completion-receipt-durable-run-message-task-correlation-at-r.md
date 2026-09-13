@@ -4,7 +4,7 @@ name: "Completion receipt: durable run-message-task correlation at run exit"
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:30.370Z
-updated_at: "2026-09-13T06:49:52.928Z"
+updated_at: "2026-09-13T07:03:10.980Z"
 feature_id: G61
 
 dependencies: ["0831"]
@@ -213,7 +213,7 @@ Re-audit fixes and current change map:
 - `packages/app/src/services/agent-service.ts:1126` — request message IDs and task ID persisted before dispatch; unaddressed runs also receive a row
 - `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition
 - `packages/app/tests/services/agent-service.test.ts:30` — fresh real AiRunner/fake process integration observes exited receipt before notification; throwing listener leaves it durable
-- `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request
+- `apps/cli/tests/commands/agent-team.test.ts:910` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request
 - `packages/domain/tests/dao/coordination-run-dao.test.ts:216` — fresh pre-0044 upgrade test preserves existing rows; additive defaults and task index
 
 Goal-equivalent Design corrections: receipt schema uses 0044 because 0043 belongs to request keys; message/task origin is also stored on insertStart for crash attribution. Empty spec_id represents an unaddressed run without inventing an occupant. The routed invoke-exit event is buffered until durable updateExit; notification failures cannot erase the receipt. No task advancement or new schema is added in this re-audit.
@@ -230,29 +230,29 @@ Goal-equivalent Design corrections: receipt schema uses 0044 because 0043 belong
 | R2 | MET | `packages/app/tests/services/agent-service.test.ts:30` — fresh real AiRunner/fake process integration observes exited receipt before notification; throwing listener leaves it durable |
 | R3 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
 | R4 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
-| R5 | MET | `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request |
+| R5 | MET | `apps/cli/tests/commands/agent-team.test.ts:910` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request |
 | R6 | MET | `packages/domain/tests/dao/coordination-run-dao.test.ts:216` — fresh pre-0044 upgrade test preserves existing rows; additive defaults and task index |
-| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:980` — fresh regression preserves empty message list and no task advancement |
-| R8 | MET | `apps/cli/tests/commands/agent-team.test.ts:923` — fresh drain integration verifies request/task association before invocation and after exit |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:1009` — fresh regression preserves empty message list and no task advancement |
+| R8 | MET | `apps/cli/tests/commands/agent-team.test.ts:952` — fresh drain integration verifies request/task association before invocation and after exit |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: A finished run is correlated back to its request and task | MET | test | `apps/cli/tests/commands/agent-team.test.ts:923` — fresh drain integration verifies request/task association before invocation and after exit; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
+| Scenario: A finished run is correlated back to its request and task | MET | test | `apps/cli/tests/commands/agent-team.test.ts:952` — fresh drain integration verifies request/task association before invocation and after exit; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
 | Scenario: Run exit is not task completion | MET | test | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
-| Scenario: A run with no originating request still records its outcome | MET | test | `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
+| Scenario: A run with no originating request still records its outcome | MET | test | `apps/cli/tests/commands/agent-team.test.ts:910` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-#### G61 forced re-audit — 0833
+#### G61 final forced re-audit — 0833
 
 Verdict: PASS
 
-Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source and the fixes in this run.
+Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source. No remaining findings in this task.
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | All | `packages/app/src/services/agent-service.ts:1473` | No unresolved blocker or major finding after this task's fixes; feature-level dependency failure remains owned by 0831. |
+| P4 | All | `packages/app/src/services/agent-service.ts:1473` | No remaining findings after fixes and verification against published 0.4.66. |
 
 #### Functional traceability
 | Req | Status | Evidence |
@@ -261,14 +261,15 @@ Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (se
 | R2 | MET | `packages/app/tests/services/agent-service.test.ts:30` — fresh real AiRunner/fake process integration observes exited receipt before notification; throwing listener leaves it durable |
 | R3 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
 | R4 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
-| R5 | MET | `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request |
+| R5 | MET | `apps/cli/tests/commands/agent-team.test.ts:910` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request |
 | R6 | MET | `packages/domain/tests/dao/coordination-run-dao.test.ts:216` — fresh pre-0044 upgrade test preserves existing rows; additive defaults and task index |
-| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:980` — fresh regression preserves empty message list and no task advancement |
-| R8 | MET | `apps/cli/tests/commands/agent-team.test.ts:923` — fresh drain integration verifies request/task association before invocation and after exit |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:1009` — fresh regression preserves empty message list and no task advancement |
+| R8 | MET | `apps/cli/tests/commands/agent-team.test.ts:952` — fresh drain integration verifies request/task association before invocation and after exit |
 
-Verification: fresh bun run spur-check exit 0 (8496 tests, 99.21% functions / 98.99% lines), bun run test-cf exit 0, bun run build exit 0. Focused evidence and corrected Design deviations are recorded in Testing and Solution. No new public verb or dependency-local workaround.
 
---next: no-op - task already terminal (done). Existing done status is historical; the current verdict above is the re-audit result.
+Verification: final bun run spur-check exit 0 (8498 tests, 0 failures; 99.21% functions / 98.99% lines), bun run test-cf exit 0 (1 test), bun run build exit 0. Published ts-ai-runner 0.4.66 is installed; its probe verifies acceptance only after process creation. Focused evidence and Design corrections are recorded in Testing and Solution.
+
+--next: no-op — task already terminal (done). All four G61 tasks are re-verified against the final dependency and code state.
 
 ### References
 

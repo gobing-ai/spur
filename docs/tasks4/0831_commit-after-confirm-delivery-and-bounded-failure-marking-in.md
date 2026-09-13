@@ -4,7 +4,7 @@ name: Commit-after-confirm delivery and bounded failure marking in the agent dra
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:29.914Z
-updated_at: "2026-09-13T06:49:49.274Z"
+updated_at: "2026-09-13T07:03:07.104Z"
 feature_id: G61
 
 ---
@@ -68,7 +68,6 @@ fixed contract.
 
 ### Acceptance Criteria
 
-
 ```gherkin
 Feature: Commit-after-confirm delivery and bounded failure marking
 
@@ -81,9 +80,10 @@ Feature: Commit-after-confirm delivery and bounded failure marking
 
   @core
   Scenario: A failing invocation is durably recorded
-    Given a drained message whose invocation throws or exits nonzero
+    Given a drained message whose invocation starts and exits nonzero
     When the agent loop handles the failure
-    Then the message is marked failed with its attempt count
+    Then the message remains delivered with its attempt count
+    And an errored run receipt records the failure separately
     And the failure is visible to the operator without reading stderr
 
   @core
@@ -213,63 +213,65 @@ Neither may re-own the settle decision.
 Re-audit fixes and current change map:
 
 - `apps/cli/src/commands/agent.ts:541` — shared settle releases never-started claims within budget; delivered is separate from process exit
-- `apps/cli/src/commands/agent.ts:599` — listener relies on runner acceptance; installed 0.4.63 emits before spawn, as g61-installed-runner-probe.log shows
-- `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case
-- `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior
+- `apps/cli/src/commands/agent.ts:599` — listener requires prompt acceptance; published 0.4.66 emits only after onSpawn, as g61-installed-runner-probe.log proves; version probes cannot acknowledge prompts
+- `apps/cli/tests/commands/agent-team.test.ts:629` — fresh one-shot and loop regressions leave the message queued when only a readiness probe starts
+- `apps/cli/tests/commands/agent-team.test.ts:737` — fresh loop regression exercises exactly three attempts and queryable terminal failure; installed 0.4.66 supplies the true spawn signal
+- `apps/cli/tests/commands/agent-team.test.ts:866` — fresh competing-consumer regression preserves atomic one-claim behavior
 
-Upstream fix committed in ts-libs as f967214: `packages/ai-runner/src/ai-runner.ts` line 243 emits invoke.start from ProcessOptions.onSpawn. This matches R5 while fixing its false pre-spawn signal. The source passes its full gate (2250 tests) and build. Spur still resolves published 0.4.63; release/install is pending operator approval. The installed probe is `.spur/run/g61-installed-runner-probe.mjs` lines 1-15; its log proves the residual failure.
+Owning-library fix f967214 is published in @gobing-ai/ts-ai-runner 0.4.66 and installed through the root catalog and bun.lock, with the companion ts-* packages on 0.4.66. The runner emits invoke.start only from ProcessOptions.onSpawn. Both delivery listeners additionally require operation=prompt, so a version/help probe cannot consume a request whose prompt never starts. The installed-package probe in `.spur/run/g61-installed-runner-probe.mjs` confirms no pre-spawn acceptance and acceptance despite a nonzero post-spawn exit. Publish run: https://github.com/gobing-ai/ts-libs/actions/runs/34743863403 (success). The failing-invocation AC is aligned with the already-closed Q&A and R2: started/nonzero means delivered plus errored receipt, never a failed delivery state. Bounded never-started failure remains separately asserted.
 
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | UNMET | `apps/cli/tests/commands/agent-team.test.ts:673` — fresh CLI test passes for validation-before-spawn failure; real executor failure still fails installed-runner probe |
-| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:753` — fresh regression checks started/nonzero invocation remains delivered |
-| R3 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
-| R4 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
-| R5 | UNMET | `apps/cli/src/commands/agent.ts:599` — listener relies on runner acceptance; installed 0.4.63 emits before spawn, as g61-installed-runner-probe.log shows |
-| R6 | MET | `apps/cli/src/commands/agent.ts:654` — unconditional settle in finally; one-shot and loop use the same helper |
-| R7 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior |
+| R1 | MET | `apps/cli/tests/commands/agent-team.test.ts:702` — fresh CLI regression releases never-started claims; installed 0.4.66 probe confirms no acceptance on executor spawn failure |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:782` — fresh regression checks started/nonzero invocation remains delivered; AgentService coordination regression records an errored run receipt separately |
+| R3 | MET | `apps/cli/tests/commands/agent-team.test.ts:737` — fresh loop regression exercises exactly three attempts and queryable terminal failure; installed 0.4.66 supplies the true spawn signal |
+| R4 | MET | `apps/cli/tests/commands/agent-team.test.ts:737` — fresh loop regression exercises exactly three attempts and queryable terminal failure; installed 0.4.66 supplies the true spawn signal |
+| R5 | MET | `apps/cli/src/commands/agent.ts:599` — listener requires prompt acceptance; published 0.4.66 emits only after onSpawn, as g61-installed-runner-probe.log proves; version probes cannot acknowledge prompts |
+| R6 | MET | `apps/cli/src/commands/agent.ts:656` — unconditional settle in finally; one-shot and loop use the same helper |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:866` — fresh competing-consumer regression preserves atomic one-claim behavior |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Delivery is finalized after the invocation is accepted | UNMET | test | `apps/cli/tests/commands/agent-team.test.ts:673` — fresh CLI test passes for validation-before-spawn failure; real executor failure still fails installed-runner probe; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
-| Scenario: A failing invocation is durably recorded | PARTIAL | test | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
-| Scenario: Attempts are bounded | PARTIAL | test | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
-| Scenario: Long-lived loops observe the same contract | PARTIAL | test | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
-| Scenario: Competing consumers still claim at most once | MET | test | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior; command: apps/cli: bun test tests/commands/agent-team.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 1) |
+| Scenario: Delivery is finalized after the invocation is accepted | MET | test | `apps/cli/tests/commands/agent-team.test.ts:702` — fresh CLI regression releases never-started claims; installed 0.4.66 probe confirms no acceptance on executor spawn failure; command: apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/agent.test.ts tests/commands/message.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 0) |
+| Scenario: A failing invocation is durably recorded | MET | test | `apps/cli/tests/commands/agent-team.test.ts:782` — fresh regression checks started/nonzero invocation remains delivered; AgentService coordination regression records an errored run receipt separately; command: apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/agent.test.ts tests/commands/message.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 0) |
+| Scenario: Attempts are bounded | MET | test | `apps/cli/tests/commands/agent-team.test.ts:737` — fresh loop regression exercises exactly three attempts and queryable terminal failure; installed 0.4.66 supplies the true spawn signal; command: apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/agent.test.ts tests/commands/message.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 0) |
+| Scenario: Long-lived loops observe the same contract | MET | test | `apps/cli/tests/commands/agent-team.test.ts:737` — fresh loop regression exercises exactly three attempts and queryable terminal failure; installed 0.4.66 supplies the true spawn signal; command: apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/agent.test.ts tests/commands/message.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 0) |
+| Scenario: Competing consumers still claim at most once | MET | test | `apps/cli/tests/commands/agent-team.test.ts:866` — fresh competing-consumer regression preserves atomic one-claim behavior; command: apps/cli: bun test tests/commands/agent-team.test.ts tests/commands/agent.test.ts tests/commands/message.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; installed probe: bun .spur/run/g61-installed-runner-probe.mjs (exit 0) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-#### G61 forced re-audit — 0831
+#### G61 final forced re-audit — 0831
 
-Verdict: FAIL
+Verdict: PASS
 
-Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source and the fixes in this run.
+Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source. No remaining findings in this task.
 
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P1 | Correctness | `apps/cli/src/commands/agent.ts:599` | Installed ts-ai-runner 0.4.63 emits acceptance before process creation. A spawn failure can consume the message. Upstream fix f967214 passes its full gate and build, but remains unpublished. Installed probe still exits 1; this task is not certified. |
+| P4 | All | `apps/cli/src/commands/agent.ts:599` | No remaining findings after fixes and verification against published 0.4.66. |
 
 #### Functional traceability
 | Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | UNMET | `apps/cli/tests/commands/agent-team.test.ts:673` — fresh CLI test passes for validation-before-spawn failure; real executor failure still fails installed-runner probe |
-| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:753` — fresh regression checks started/nonzero invocation remains delivered |
-| R3 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
-| R4 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:708` — fresh loop regression exercises three attempts and queryable terminal failure; installed signal still invalidates the actual spawn-failure case |
-| R5 | UNMET | `apps/cli/src/commands/agent.ts:599` — listener relies on runner acceptance; installed 0.4.63 emits before spawn, as g61-installed-runner-probe.log shows |
-| R6 | MET | `apps/cli/src/commands/agent.ts:654` — unconditional settle in finally; one-shot and loop use the same helper |
-| R7 | PARTIAL | `apps/cli/tests/commands/agent-team.test.ts:837` — fresh competing-consumer regression preserves atomic one-claim behavior |
+| R1 | MET | `apps/cli/tests/commands/agent-team.test.ts:702` — fresh CLI regression releases never-started claims; installed 0.4.66 probe confirms no acceptance on executor spawn failure |
+| R2 | MET | `apps/cli/tests/commands/agent-team.test.ts:782` — fresh regression checks started/nonzero invocation remains delivered; AgentService coordination regression records an errored run receipt separately |
+| R3 | MET | `apps/cli/tests/commands/agent-team.test.ts:737` — fresh loop regression exercises exactly three attempts and queryable terminal failure; installed 0.4.66 supplies the true spawn signal |
+| R4 | MET | `apps/cli/tests/commands/agent-team.test.ts:737` — fresh loop regression exercises exactly three attempts and queryable terminal failure; installed 0.4.66 supplies the true spawn signal |
+| R5 | MET | `apps/cli/src/commands/agent.ts:599` — listener requires prompt acceptance; published 0.4.66 emits only after onSpawn, as g61-installed-runner-probe.log proves; version probes cannot acknowledge prompts |
+| R6 | MET | `apps/cli/src/commands/agent.ts:656` — unconditional settle in finally; one-shot and loop use the same helper |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:866` — fresh competing-consumer regression preserves atomic one-claim behavior |
 
-Verification: fresh bun run spur-check exit 0 (8496 tests, 99.21% functions / 98.99% lines), bun run test-cf exit 0, bun run build exit 0. Focused evidence and corrected Design deviations are recorded in Testing and Solution. No new public verb or dependency-local workaround.
 
---next: no-op - task already terminal (done). Existing done status is historical; the current verdict above is the re-audit result.
+Verification: final bun run spur-check exit 0 (8498 tests, 0 failures; 99.21% functions / 98.99% lines), bun run test-cf exit 0 (1 test), bun run build exit 0. Published ts-ai-runner 0.4.66 is installed; its probe verifies acceptance only after process creation. Focused evidence and Design corrections are recorded in Testing and Solution.
+
+--next: no-op — task already terminal (done). All four G61 tasks are re-verified against the final dependency and code state.
 
 ### References
 
