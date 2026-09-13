@@ -4,7 +4,7 @@ name: Workflow list and name resolution share the project, registered and shared
 status: done
 template: feature-impl
 created_at: 2026-09-10T22:18:37.281Z
-updated_at: "2026-09-11T18:39:01.725Z"
+updated_at: "2026-09-13T05:48:00.986Z"
 feature_id: I21
 priority: P2
 tags:
@@ -237,6 +237,8 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/domain/src/dao/index.ts:26` |
 | `packages/domain/src/dao/run-dao.ts:35` |
 | `packages/domain/src/dao/run-dao.ts:9` |
+
+Re-audit fix (R4, 2026-09-12): `packages/app/src/workflow/workflow-resolver.ts:282` resolves listed names by layer before shared filename fallback. `apps/cli/src/commands/workflow.ts:1207` lets the shared resolver handle registered-only names for show. Regressions: `packages/app/tests/workflow/workflow-resolver.test.ts:486` and `apps/cli/tests/commands/workflow.test.ts:2590`; both reproduced the defect before the fix and pass after it. `docs/design/spur-artifact-evolution.md:19` clarifies name precedence.
 
 ### Testing
 

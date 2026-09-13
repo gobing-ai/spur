@@ -483,4 +483,30 @@ terminalStates:
             await rm(dir, { recursive: true, force: true });
         }
     });
+
+    test('R4: layer names take precedence over shared filename fallback, while explicit paths stay pinned', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-0819-precedence-'));
+        const registeredDir = join(dir, 'ops');
+        const projectDir = join(dir, '.spur', 'workflows');
+        await mkdir(registeredDir, { recursive: true });
+        await mkdir(projectDir, { recursive: true });
+        const registeredFile = join(registeredDir, 'custom.yaml');
+        const projectFile = join(projectDir, 'custom.yaml');
+        const sharedFile = join(bundledConfigRoot() as string, 'workflows', 'basic.yaml');
+        await writeFile(registeredFile, MINIMAL('basic'));
+        try {
+            expect((await resolveWorkflowDefinition(dir, 'basic', { registered: [registeredDir] })).path).toBe(
+                registeredFile,
+            );
+            await writeFile(projectFile, MINIMAL('basic'));
+            expect((await resolveWorkflowDefinition(dir, 'basic', { registered: [registeredDir] })).path).toBe(
+                projectFile,
+            );
+            expect((await resolveWorkflowDefinition(dir, sharedFile, { registered: [registeredDir] })).path).toBe(
+                sharedFile,
+            );
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
 });

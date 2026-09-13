@@ -279,7 +279,13 @@ export async function resolveWorkflowDefinition(
     options: ResolveWorkflowDefinitionOptions = {},
 ): Promise<ResolvedWorkflowDefinition> {
     const registered = options.registered ?? [];
-    let resolved = resolveWorkflowFile(cwd, fileOrName);
+    // Listed names follow layer precedence before filename aliases can select a shared copy.
+    const bareName = basename(fileOrName) === fileOrName && !/\.ya?ml$/.test(fileOrName);
+    const named =
+        bareName && !createNodeFileSystem().exists(resolve(cwd, fileOrName))
+            ? await scanWorkflowByName(cwd, fileOrName, registered)
+            : null;
+    let resolved = named ?? resolveWorkflowFile(cwd, fileOrName);
     if (resolved.path === null) {
         const scanned = await scanWorkflowByName(cwd, fileOrName, registered);
         if (scanned !== null) {

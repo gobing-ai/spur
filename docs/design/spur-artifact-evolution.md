@@ -17,7 +17,9 @@ their owners: [CLI contracts](cli-contracts.md) (`workflow list` and `show`) and
 
 - One application function returns this ordered list. `WorkflowService.list` scans it, and bare-name
   resolution probes it in the same order, so `list` shows exactly the folders a name can resolve
-  from. Explicit file paths still resolve first and keep the `project` label.
+  from. A listed name is resolved across those layers before shared filename aliases; `show`
+  uses the same resolver, including registered-only names. Explicit file paths still resolve
+  first and keep the `project` label.
 - Dedupe compares normalized absolute paths, after `bundled:` expansion and without a trailing
   slash. The legacy entries `.spur/workflows/`, `bundled:workflows` and an absolute package path
   collapse into the project or shared layer, so existing configs keep working.

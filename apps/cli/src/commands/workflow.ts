@@ -20,7 +20,6 @@ import {
     renderWorkflowTodo,
     resolveOutputLogConfig,
     resolveWorkflowDefinition,
-    resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
     type SteeringAck,
     type StepEvent,
@@ -1205,22 +1204,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
                 return;
             }
-            const resolved = resolveWorkflowFile(context.cwd, file);
-            if (resolved.path === null) {
-                const [probedProject, probedShared] = resolved.probed;
-                writeJsonError(
-                    context.output,
-                    options,
-                    `workflow show: file not found: ${probedProject}${probedShared !== null ? ` (shared: ${probedShared})` : ''}`,
-                    'NOT_FOUND',
-                );
-                context.setExitCode(1);
-                return;
-            }
             // 0768 R1: `show` resolves through the SAME shared resolver as run/resume,
             // so the displayed identity (digest + version) is exactly what a run of
             // this file would stamp. Error envelopes are preserved: file-not-found
-            // stays NOT_FOUND above; a read/parse/schema/version failure stays
+            // stays NOT_FOUND; a read/parse/schema/version failure stays
             // VALIDATION_FAILED with the resolver's message.
             let resolvedDefinition: ResolvedWorkflowDefinition;
             try {
@@ -1229,11 +1216,15 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     registered: resolveWorkflowPaths(context.spurConfig ?? null),
                 });
             } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                const missing = message.startsWith('Workflow not found:');
                 writeJsonError(
                     context.output,
                     options,
-                    `workflow show: cannot read or parse ${file} — ${err instanceof Error ? err.message : String(err)}`,
-                    'VALIDATION_FAILED',
+                    missing
+                        ? message.replace('Workflow not found:', 'workflow show: file not found:')
+                        : `workflow show: cannot read or parse ${file} — ${message}`,
+                    missing ? 'NOT_FOUND' : 'VALIDATION_FAILED',
                 );
                 context.setExitCode(1);
                 return;

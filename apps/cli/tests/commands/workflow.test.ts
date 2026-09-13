@@ -4,7 +4,7 @@
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { readdirSync } from 'node:fs';
-import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, realpath, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -2588,6 +2588,24 @@ describe('followRunLog', () => {
 });
 
 describe('spur workflow show', () => {
+    test('R4: show resolves registered-only names in both formats', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur'), { recursive: true });
+        await mkdir(join(dir, 'ops'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'config.yaml'), 'workflows:\n  paths:\n    - ops\n');
+        const wf = join(dir, 'ops', 'custom.yaml');
+        await writeFile(wf, MINIMAL_WORKFLOW_YAML);
+        try {
+            for (const format of ['mermaid', 'todo']) {
+                const result = await runCli(['workflow', 'show', 'cli-test-flow', '--format', format, '--json'], dir);
+                expect(result.code).toBe(0);
+                expect(result.json).toMatchObject({ source: { layer: 'registered', path: await realpath(wf) } });
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
     test('renders a fenced mermaid diagram for a valid definition', async () => {
         const dir = await createTempProject();
         const wf = join(dir, 'wf.yaml');
