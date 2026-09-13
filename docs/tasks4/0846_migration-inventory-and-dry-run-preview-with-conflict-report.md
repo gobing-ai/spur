@@ -4,7 +4,7 @@ name: Migration inventory and dry-run preview with conflict reporting
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.298Z
-updated_at: "2026-09-13T00:13:50.802Z"
+updated_at: "2026-09-13T20:15:12.775Z"
 feature_id: G64
 priority: P2
 tags:
@@ -331,16 +331,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | legacy-migration.test.ts:114-152,167-233,518-547 — 13/13 pass; classification precedence chain legacy-migration.ts:278-333 |
-| R2 | MET | preview()/buildSteps legacy-migration.ts:179-181,442-473; preservesId exact-equality test :374-404; conflict-blocks-plan test :449-465 |
-| R3 | MET | zero-write: deny-writes fs Proxy + tree-snapshot equality test :477-506; readRaw-only registry; SELECT DISTINCT dao addressed-spec-ids.ts:15-18 |
-| R4 | MET | five conflict kinds legacy-migration.ts:29-34 with tests :236-345; addressedSpecIds union test in in-memory SQLite :167-233 |
-| R5 | MET | 11 types + service exported packages/app/src/index.ts:287-303; JSON.stringify exercised test :281; CLI surface owned by 0847 per re-scope |
+| R1 | MET | `packages/app/tests/services/legacy-migration.test.ts:426`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; refreshed local verification scratch `.spur/run/0846-verify-answer.txt` lines 1-38 and derived `.spur/run/0846-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R2 | MET | `packages/app/tests/services/legacy-migration.test.ts:686`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass |
+| R3 | MET | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
+| R4 | MET | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `packages/app/tests/services/legacy-migration.test.ts:603`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `packages/app/tests/services/legacy-migration.test.ts:630`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass |
+| R5 | MET | `apps/cli/tests/commands/projects.test.ts:555`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Migration previews before it changes anything | MET | test | deny-writes zero-write test on full fixture legacy-migration.test.ts:477-506 (snapshotTree equality :505) |
-| Scenario: Conflicts are named, not summarized | MET | test | test :264-289 — one conflict, both sources named, no merge proposed, no pick/winner in serialized JSON |
+| Scenario: Migration previews before it changes anything | MET | test | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
+| Scenario: Conflicts are named, not summarized | MET | test | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
