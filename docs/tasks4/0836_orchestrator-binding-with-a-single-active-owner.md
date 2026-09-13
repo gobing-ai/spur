@@ -4,7 +4,7 @@ name: Orchestrator binding with a single active owner
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.723Z
-updated_at: "2026-09-12T17:29:52.193Z"
+updated_at: "2026-09-13T07:27:53.206Z"
 feature_id: G62
 priority: P1
 tags:
@@ -319,26 +319,32 @@ Tests (`<pkg>/tests/**/*.test.ts` per sp:code-testing):
   on a fresh db (663552 → 659456 bytes). The guarantee that matters — never crashes, never GROWS the
   file — is what the test now asserts (`bytesAfter <= bytesBefore`).
 
+#### 2026-09-13 forced re-audit
+
+Re-audit repair: online binding now requires the live holder to match the declared instance. The same-spec orchestrator re-claim remains a failing ownership probe; no claim/heartbeat launch integration is certified.
+
+Current per-requirement evidence and residuals are in Testing and `docs/reports/g62-verifyall-2026-09-13.md`. Earlier implementation-time anchors and completion statements above are historical; this re-audit supersedes them.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: FAIL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/fleet-service.ts:249-299` — resolveOrchestrator 4-step precedence; live claim → bound-online with exactly one holder (test `fleet-service.test.ts:702` "a live claim reads bound-online…R1", fresh 27 pass/0 fail); exclusivity enforced by composite PK `(project_path, slot)` in `drizzle/0045_spur_cli_project_claims.sql` + `packages/domain/src/migrations.ts:297` |
-| R2 | MET | Carrier = existing `purpose` + `role==='planner'`, both asserted at resolve (`fleet-service.ts:276-291`); tests `fleet-service.test.ts:635` (non-planner → unresolvable, R2) and `:654` (planner without purpose → unresolvable, R2); config adds only the pointer `orchestrator: z.string().min(1).optional()` (`packages/config/src/index.ts:547`); AGENT_ROLE_NAMES unchanged |
-| R3 | MET | `packages/domain/src/dao/project-claim-dao.ts:77-101` — single-statement `INSERT … ON CONFLICT(project_path, slot) DO UPDATE … WHERE expires_at <= excluded.claimed_at OR holder_id = excluded.holder_id`, `SELECT changes()` probe, zero changed rows ⇒ null (refused, never queued); test `project-claim-dao.test.ts:14` "refuses a second live claimant" and `:30` "claim after expiry … increments ownerEpoch" (fresh 6 pass/0 fail) |
-| R4 | MET | `missing` and `bound-offline` are distinct OrchestratorState values with distinct reasons (`fleet-service.ts:84-100`, `:259` no-orchestrator-declared vs `:297` no-live-claim); tests `fleet-service.test.ts:669` "bound-offline — distinct from missing (R4)" and `:685` "an EXPIRED claim still reads bound-offline, not online (R4)"; distinct CLI lines `apps/cli/src/commands/projects.ts:228-243` |
-| R5 | MET | Value-never-throw resolution; empty fleet / no pointer → `missing` resolves cleanly (test `fleet-service.test.ts:589` "an empty fleet resolves cleanly (R5)"); unresolvable names the pointer, never infers (`:604,620,635,654`); CLI per-project `orchestratorError` isolation renders `unavailable (<error>)` (`projects.ts:243-245`) without failing the listing |
+| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:723` — online requires the claim holder to match the declared binding; `bun run spur-check` (exit 0). |
+| R2 | MET | `packages/app/tests/services/fleet-service.test.ts:654` — planner role and existing purpose carrier are required; no new role; `bun run spur-check` (exit 0). |
+| R3 | UNMET | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 6; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): a second claimant with the same spec receives a live claim. `packages/domain/src/dao/project-claim-dao.ts:115`. |
+| R4 | MET | `packages/app/tests/services/fleet-service.test.ts:669` — missing and offline remain distinct; mismatched holder now stays offline; `bun run spur-check` (exit 0). |
+| R5 | MET | `packages/app/tests/services/fleet-service.test.ts:589` — empty fleet resolves cleanly and names missing binding; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| One member is the project's orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:702` "a live claim reads bound-online with the claim (R1: exactly one orchestrator)" — fresh run 27 pass/0 fail; claim returned with holderId, ownerEpoch 1 |
-| A second owner cannot claim the role | MET | test | `packages/domain/tests/dao/project-claim-dao.test.ts:14` "claims, then refuses a second live claimant — refused, not queued" returns null — fresh run 6 pass/0 fail, 21 expect |
-| Missing and offline are different answers | MET | test | `packages/app/tests/services/fleet-service.test.ts:669` "bound-offline — distinct from missing (R4)" + `:685` "EXPIRED claim still reads bound-offline, not online (R4)" — fresh run 27 pass/0 fail |
-| An empty fleet still resolves | MET | test | `packages/app/tests/services/fleet-service.test.ts:589` "a declaration without a pointer is missing — an empty fleet resolves cleanly (R5)" — fresh run 27 pass/0 fail; also empty-roster case in same suite |
+| One member is the project's orchestrator | MET | test | `packages/app/tests/services/fleet-service.test.ts:723` — online requires the claim holder to match the declared binding; `bun run spur-check` (exit 0). |
+| A second owner cannot claim the role | UNMET | command | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 6; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): a second claimant with the same spec receives a live claim. `packages/domain/src/dao/project-claim-dao.ts:115`. |
+| Missing and offline are different answers | MET | test | `packages/app/tests/services/fleet-service.test.ts:669` — missing and offline remain distinct; mismatched holder now stays offline; `bun run spur-check` (exit 0). |
+| An empty fleet still resolves | MET | test | `packages/app/tests/services/fleet-service.test.ts:589` — empty fleet resolves cleanly and names missing binding; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
