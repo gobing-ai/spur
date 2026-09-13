@@ -670,7 +670,7 @@ describe('spur projects CLI command', () => {
         });
         const normalizedOnline = normalizeProjectPath(onlineDir);
         const onlineDb = await createMigratedDb({ url: join(normalizedOnline, '.spur', 'spur.db') });
-        await new ProjectClaimDao(onlineDb).claim(normalizedOnline, 'orchestrator', 'holder-online-1', 60_000);
+        await new ProjectClaimDao(onlineDb).claim(normalizedOnline, 'orchestrator', 'orch-online-lead', 60_000);
         onlineDb.close();
 
         // bound-offline: declared binding, no live claim (R4 — start/heartbeat fixes it).
@@ -706,7 +706,7 @@ describe('spur projects CLI command', () => {
             const text = mock.getText();
             expect(text).toContain('fleet: no enabled members');
             expect(text).toContain('bound-online');
-            expect(text).toContain('(holder holder-online-1)');
+            expect(text).toContain('(holder orch-online-lead)');
             expect(text).toContain('bound-offline');
             expect(text).toContain('(no live claim)');
             expect(text).toContain('orchestrator: unresolvable (unknown-member:ghost');
