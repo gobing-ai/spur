@@ -1,5 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { type DbAdapter, type ProjectClaim, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    type DbAdapter,
+    type ProjectClaim,
+    ProjectClaimDao,
+    ProjectStrategyDao,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import type { FleetService, ResolvedFleetMember } from './fleet-service';
 import { normalizeProjectPath } from './project-registry';
 
@@ -106,13 +112,20 @@ export class WriteSlotService {
 
         // 1. stale-owner — the orchestrator claim is the fencing source (R3).
         const orchestrator = await dao.get(projectPath, 'orchestrator');
-        if (decision.ownerEpoch < (orchestrator?.ownerEpoch ?? 0)) {
+        if (
+            orchestrator !== null &&
+            (decision.ownerEpoch !== orchestrator.ownerEpoch || orchestrator.expiresAt <= Date.now())
+        ) {
             return { ok: false, refusal: 'stale-owner' };
         }
-        // 2. stale-strategy (R4). `strategy_version` is NULL until 0838 mints;
-        //    a NULL fence refuses nothing.
-        const currentVersion = orchestrator?.strategyVersion;
-        if (currentVersion !== null && currentVersion !== undefined && decision.strategyVersion < currentVersion) {
+        // The persisted strategy is authoritative; an orchestrator claim may
+        // predate a strategy change and still carry NULL or an older version.
+        const strategy = await new ProjectStrategyDao(db).get(projectPath);
+        const currentVersion = strategy?.strategyVersion ?? orchestrator?.strategyVersion;
+        if (
+            (currentVersion !== null && currentVersion !== undefined && decision.strategyVersion !== currentVersion) ||
+            (strategy !== null && strategy.strategy !== 'gtd')
+        ) {
             return { ok: false, refusal: 'stale-strategy' };
         }
         // 3. read-only only with PROVEN-absent fsWrite (R5).
@@ -130,12 +143,25 @@ export class WriteSlotService {
             decision.instanceId,
             WRITE_SLOT_TTL_MS,
             decision.strategyVersion,
+            { ownerEpoch: orchestrator?.ownerEpoch, strategyVersion: strategy?.strategyVersion },
         );
-        if (lease === null) return { ok: false, refusal: 'slot-held' };
-        // 0836 advisory (b): the dao's post-write re-read can describe a
-        // concurrent winner — the row is advisory; holder identity is the
-        // authority. A row naming another holder is a refusal, not a lease.
-        if (lease.holderId !== decision.instanceId) return { ok: false, refusal: 'slot-held' };
+        if (lease === null) {
+            const ownerNow = await dao.get(projectPath, 'orchestrator');
+            if (
+                orchestrator !== null &&
+                (ownerNow?.ownerEpoch !== decision.ownerEpoch || ownerNow.expiresAt <= Date.now())
+            ) {
+                return { ok: false, refusal: 'stale-owner' };
+            }
+            const strategyNow = await new ProjectStrategyDao(db).get(projectPath);
+            if (
+                strategy !== null &&
+                (strategyNow?.strategyVersion !== decision.strategyVersion || strategyNow.strategy !== 'gtd')
+            ) {
+                return { ok: false, refusal: 'stale-strategy' };
+            }
+            return { ok: false, refusal: 'slot-held' };
+        }
         // 0839 R1: a taken slot is a capacity change — one named ledger row so
         // an idle orchestrator wakes on the fact (proven read-only claims take
         // no slot and emit nothing).
@@ -158,13 +184,9 @@ export class WriteSlotService {
     }
 
     /**
-     * Gate a reported result on the reporter's claim generation (R3). A lower
-     * `ownerEpoch` than the write claim's current row means the reporter was
-     * replaced: the verdict is `'stale-owner-rejected'`, a `system_events`
-     * diagnostic is recorded naming the run/task ids when given, and the task
-     * is NOT advanced — this service only refuses; advancement stays with
-     * `task-pipeline.yaml`. A missing claim row (never claimed, or released at
-     * completion) fences nothing — the legitimate final result must pass.
+     * Accept only the current write holder and its exact claim generation.
+     * Missing/released claims cannot certify results. Reconcile before release;
+     * rejected results produce a diagnostic without advancing the task (R3).
      */
     async validateResult(
         projectPath: string,
@@ -176,7 +198,7 @@ export class WriteSlotService {
         const db = await this.ctx.openDb(normalized);
         const row = await new ProjectClaimDao(db).get(normalized, 'write');
         const current = row?.ownerEpoch ?? 0;
-        if (ownerEpoch >= current) return 'accepted';
+        if (row !== null && row.holderId === instanceId && ownerEpoch === current) return 'accepted';
         await new SystemEventDao(db).insert({
             id: randomUUID(),
             event_name: 'fleet.write-slot.stale-owner-rejected',

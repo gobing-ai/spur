@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
-import { type DbAdapter, ProjectClaimDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import { type DbAdapter, ProjectClaimDao, ProjectStrategyDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
@@ -114,6 +114,35 @@ function writeDecision(rig: Rig, instanceId: string, opts?: Partial<DispatchDeci
 // ---------------------------------------------------------------------------
 
 describe('WriteSlotService claim (0837)', () => {
+    test('the persisted strategy fences a decision even when the orchestrator row has no version', async () => {
+        const rig = await makeRig();
+        try {
+            await rig.dao.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const strategy = new ProjectStrategyDao(rig.db);
+            await strategy.set(rig.project, 'gtd');
+            await strategy.set(rig.project, 'rest');
+            expect(await rig.service.claim(writeDecision(rig, 'proj-coder'))).toEqual({
+                ok: false,
+                refusal: 'stale-strategy',
+            });
+            expect(await rig.dao.get(rig.project, 'write')).toBeNull();
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('two simultaneous assignments to the same writer cannot both acquire its live slot', async () => {
+        const rig = await makeRig();
+        try {
+            const outcomes = await Promise.all([
+                rig.service.claim(writeDecision(rig, 'proj-coder')),
+                rig.service.claim(writeDecision(rig, 'proj-coder')),
+            ]);
+            expect(outcomes.filter((outcome) => outcome.ok)).toHaveLength(1);
+        } finally {
+            await rig.cleanup();
+        }
+    });
     test('two racing write claims: exactly one holder, the loser refused slot-held (R2)', async () => {
         const rig = await makeRig();
         try {
@@ -226,6 +255,31 @@ describe('WriteSlotService claim (0837)', () => {
 // ---------------------------------------------------------------------------
 
 describe('WriteSlotService validateResult (0837 R3)', () => {
+    test('a different holder cannot report a result with the current or a future epoch', async () => {
+        const rig = await makeRig();
+        try {
+            await rig.dao.claim(rig.project, 'write', 'proj-coder', 30_000);
+            expect(await rig.service.validateResult(rig.project, 'proj-ghost', 1)).toBe('stale-owner-rejected');
+            expect(await rig.service.validateResult(rig.project, 'proj-coder', 99)).toBe('stale-owner-rejected');
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('release and reclaim preserve the generation fence against an older run of the same member', async () => {
+        const rig = await makeRig();
+        try {
+            const first = await rig.dao.claim(rig.project, 'write', 'proj-coder', 30_000);
+            await rig.service.release(rig.project, 'proj-coder');
+            const second = await rig.dao.claim(rig.project, 'write', 'proj-coder', 30_000);
+            expect(second?.ownerEpoch).toBeGreaterThan(first?.ownerEpoch ?? 0);
+            expect(await rig.service.validateResult(rig.project, 'proj-coder', first?.ownerEpoch ?? 0)).toBe(
+                'stale-owner-rejected',
+            );
+        } finally {
+            await rig.cleanup();
+        }
+    });
     test('result from a replaced owner → stale-owner-rejected + diagnostic, slot state unchanged', async () => {
         const rig = await makeRig();
         try {
@@ -258,7 +312,7 @@ describe('WriteSlotService validateResult (0837 R3)', () => {
         }
     });
 
-    test('current-generation result accepted; released slot fences nothing (the final result passes)', async () => {
+    test('current-generation result is accepted before release; a released slot cannot certify a late result', async () => {
         const rig = await makeRig();
         try {
             await rig.dao.claim(rig.project, 'write', 'proj-coder', 30_000, 1);
@@ -266,7 +320,7 @@ describe('WriteSlotService validateResult (0837 R3)', () => {
             expect(await rig.service.validateResult(rig.project, 'proj-coder', 0)).toBe('stale-owner-rejected');
 
             await rig.service.release(rig.project, 'proj-coder');
-            expect(await rig.service.validateResult(rig.project, 'proj-coder', 1)).toBe('accepted');
+            expect(await rig.service.validateResult(rig.project, 'proj-coder', 1)).toBe('stale-owner-rejected');
         } finally {
             await rig.cleanup();
         }

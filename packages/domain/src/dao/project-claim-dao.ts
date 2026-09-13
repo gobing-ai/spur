@@ -82,6 +82,7 @@ export class ProjectClaimDao {
         holderId: string,
         ttlMs: number,
         strategyVersion?: number,
+        fence?: { ownerEpoch?: number; strategyVersion?: number },
     ): Promise<ProjectClaim | null> {
         const now = Date.now();
         const version = strategyVersion ?? null;
@@ -94,7 +95,14 @@ export class ProjectClaimDao {
         // that could describe someone else's win.
         const row = await this.db.queryFirst<ProjectClaimRow>(
             `INSERT INTO project_claims (project_path, slot, holder_id, owner_epoch, strategy_version, claimed_at, heartbeat_at, expires_at)
-             VALUES (?, ?, ?, 1, ?, ?, ?, ?)
+             SELECT ?, ?, ?, 1, ?, ?, ?, ?
+             WHERE (? IS NULL OR EXISTS (
+                 SELECT 1 FROM project_claims WHERE project_path = ? AND slot = 'orchestrator'
+                 AND owner_epoch = ? AND expires_at > ?
+             )) AND (? IS NULL OR EXISTS (
+                 SELECT 1 FROM project_strategy WHERE project_path = ?
+                 AND strategy_version = ? AND strategy = 'gtd'
+             ))
              ON CONFLICT(project_path, slot) DO UPDATE SET
                  holder_id = excluded.holder_id,
                  owner_epoch = project_claims.owner_epoch + 1,
@@ -103,7 +111,7 @@ export class ProjectClaimDao {
                  heartbeat_at = excluded.heartbeat_at,
                  expires_at = excluded.expires_at
              WHERE project_claims.expires_at <= excluded.claimed_at
-                OR project_claims.holder_id = excluded.holder_id
+                OR (excluded.slot = 'orchestrator' AND project_claims.holder_id = excluded.holder_id)
              RETURNING project_path, slot, holder_id, owner_epoch, strategy_version, claimed_at, heartbeat_at, expires_at`,
             projectPath,
             slot,
@@ -112,6 +120,13 @@ export class ProjectClaimDao {
             now,
             now,
             now + ttlMs,
+            fence?.ownerEpoch ?? null,
+            projectPath,
+            fence?.ownerEpoch ?? null,
+            now,
+            fence?.strategyVersion ?? null,
+            projectPath,
+            fence?.strategyVersion ?? null,
         );
         return row === undefined ? null : toClaim(row);
     }
@@ -123,17 +138,18 @@ export class ProjectClaimDao {
      */
     async heartbeat(projectPath: string, slot: ClaimSlot, holderId: string, ttlMs: number): Promise<boolean> {
         const now = Date.now();
-        await this.db.run(
+        const changed = await this.db.queryFirst<{ holder_id: string }>(
             `UPDATE project_claims SET heartbeat_at = ?, expires_at = ?
-             WHERE project_path = ? AND slot = ? AND holder_id = ?`,
+             WHERE project_path = ? AND slot = ? AND holder_id = ? AND expires_at > ?
+             RETURNING holder_id`,
             now,
             now + ttlMs,
             projectPath,
             slot,
             holderId,
+            now,
         );
-        const changed = await this.db.queryFirst<{ n: number }>('SELECT changes() AS n');
-        return (changed?.n ?? 0) > 0;
+        return changed !== undefined;
     }
 
     /** The current claim row, or null. Live-ness is the caller's clock check (`expiresAt > now`). */
@@ -141,7 +157,7 @@ export class ProjectClaimDao {
         const row = await this.db.queryFirst<ProjectClaimRow>(
             `SELECT project_path, slot, holder_id, owner_epoch, strategy_version, claimed_at, heartbeat_at, expires_at
              FROM project_claims
-             WHERE project_path = ? AND slot = ?`,
+             WHERE project_path = ? AND slot = ? AND expires_at > 0`,
             projectPath,
             slot,
         );
@@ -150,13 +166,16 @@ export class ProjectClaimDao {
 
     /** Release the claim, only if `holderId` still holds it. True when this call released it. */
     async release(projectPath: string, slot: ClaimSlot, holderId: string): Promise<boolean> {
-        await this.db.run(
-            'DELETE FROM project_claims WHERE project_path = ? AND slot = ? AND holder_id = ?',
+        // Keep the generation after release: deleting it lets a later run reuse
+        // epoch 1 and accept an old result. Zero expiry is the released marker.
+        const changed = await this.db.queryFirst<{ holder_id: string }>(
+            `UPDATE project_claims SET expires_at = 0
+             WHERE project_path = ? AND slot = ? AND holder_id = ? AND expires_at > 0
+             RETURNING holder_id`,
             projectPath,
             slot,
             holderId,
         );
-        const changed = await this.db.queryFirst<{ n: number }>('SELECT changes() AS n');
-        return (changed?.n ?? 0) > 0;
+        return changed !== undefined;
     }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
-import { applyCliMigrations, ProjectClaimDao } from '../../src/index';
+import { applyCliMigrations, ProjectClaimDao, ProjectStrategyDao } from '../../src/index';
 
 const P = '/tmp/proj-a';
 
@@ -11,6 +11,34 @@ async function makeDao(): Promise<{ dao: ProjectClaimDao; adapter: DbAdapter }> 
 }
 
 describe('ProjectClaimDao (0836 R3)', () => {
+    test('write acquisition rechecks owner and strategy in the atomic statement', async () => {
+        const { dao, adapter } = await makeDao();
+        try {
+            const strategies = new ProjectStrategyDao(adapter);
+            await strategies.set(P, 'gtd');
+            await dao.claim(P, 'orchestrator', 'lead', 30_000);
+            await strategies.set(P, 'rest');
+            expect(await dao.claim(P, 'write', 'writer', 30_000, 1, { ownerEpoch: 1, strategyVersion: 1 })).toBeNull();
+            await strategies.set(P, 'gtd');
+            await dao.claim(P, 'orchestrator', 'lead', 30_000);
+            expect(await dao.claim(P, 'write', 'writer', 30_000, 3, { ownerEpoch: 1, strategyVersion: 3 })).toBeNull();
+            expect(await dao.get(P, 'write')).toBeNull();
+        } finally {
+            adapter.close();
+        }
+    });
+
+    test('a released generation cannot be heartbeated back to life and is not reused', async () => {
+        const { dao, adapter } = await makeDao();
+        try {
+            await dao.claim(P, 'write', 'writer', 30_000);
+            expect(await dao.release(P, 'write', 'writer')).toBe(true);
+            expect(await dao.heartbeat(P, 'write', 'writer', 30_000)).toBe(false);
+            expect((await dao.claim(P, 'write', 'writer', 30_000))?.ownerEpoch).toBe(2);
+        } finally {
+            adapter.close();
+        }
+    });
     test('claims, then refuses a second live claimant — refused, not queued', async () => {
         const { dao, adapter } = await makeDao();
         const first = await dao.claim(P, 'orchestrator', 'proj-planner-1', 30_000);
