@@ -4,7 +4,7 @@ name: Reconcile superseded authority across ADRs, architecture, and templates
 status: cancelled
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
-updated_at: "2026-09-13T15:10:10.486Z"
+updated_at: "2026-09-13T20:15:14.583Z"
 feature_id: G64
 priority: P3
 tags:
@@ -251,11 +251,38 @@ this program. Nothing in 0851 depends on this task's text beyond ADR-116 existin
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: FAIL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | UNMET | `docs/00_ADR.md:500` — ADR-052 is Accepted; ADR-116 is absent; refreshed local verification scratch `.spur/run/0850-verify-answer.txt` lines 1-37 and derived `.spur/run/0850-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R2 | PARTIAL | Existing historical ADRs remain, but no replacement decision explicitly records the planned retained authorities |
+| R3 | PARTIAL | Migration and fleet startup surfaces are documented; the planned retirement/supersession is absent, so retirement-era authority reconciliation is incomplete |
+| R4 | PARTIAL | No retirement template migration is present; cancelled task did not execute its portable reconciliation plan |
+| R5 | MET | This audit preserves historical ADRs and changes only the owners of repaired runtime facts |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Superseded authority is corrected at its owner | UNMET | command | `docs/00_ADR.md:500` — Accepted remains; search for ADR-116 returned no replacement decision |
+| Scenario: History is preserved | MET | command | git diff of docs/00_ADR.md is empty; historical decision bodies preserved |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: FAIL)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | NOT DONE: ADR-052 supersession, replacement decision, and retirement template reconciliation. Cancellation does not establish supersession. |
+| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
+| P4 | task-check | — | spur task check 0850 --strict-core --json — exit 0 |
+| P4 | secua-review | — | Authority supersession required by G64 R6 is missing; cancelled task remains cancelled pending an explicit disposition. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
