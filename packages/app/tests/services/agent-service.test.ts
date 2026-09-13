@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentExecutorConfig } from '@gobing-ai/spur-config';
-import { applyCliMigrations, RunSessionDao } from '@gobing-ai/spur-domain';
+import { applyCliMigrations, CoordinationRunDao, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
 import { createDbAdapter } from '@gobing-ai/ts-db';
@@ -25,6 +25,45 @@ import { RolePropagatingProcessExecutor } from '../../src/services/agent-service
 // process, so never inherit another file's marker state.
 beforeEach(() => {
     _resetAgentServiceShimsForTest();
+});
+
+test('receipt is committed before invoke-exit listeners run, even when a listener fails', async () => {
+    const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+    await applyCliMigrations(db);
+    const events = new EventBus<Record<string, (event: unknown) => void>>();
+    const observed: Array<Promise<string>> = [];
+    events.on('agent.invoke.exit', () => {
+        observed.push(new CoordinationRunDao(db).getByRunId('receipt-order').then((row) => row?.status ?? 'missing'));
+        throw new Error('notification unavailable');
+    });
+    const original = RolePropagatingProcessExecutor.prototype.run;
+    RolePropagatingProcessExecutor.prototype.run = async (options) => ({
+        command: options.command,
+        args: options.args ?? [],
+        exitCode: 0,
+        stdout: '',
+        stderr: '',
+        durationMs: 1,
+    });
+    try {
+        const svc = new AgentService({ cwd: '/tmp', env: {}, output: nullOutput(), events, getDb: async () => db });
+        const { deps } = mockDeps();
+        expect(
+            await svc.run(
+                'work',
+                { agent: 'pi', json: true, 'run-id': 'receipt-order' },
+                {
+                    detector: deps.detector,
+                    doctorRunner: deps.doctorRunner,
+                },
+            ),
+        ).toBe(0);
+        expect(await Promise.all(observed)).toEqual(['exited']);
+        expect((await new CoordinationRunDao(db).getByRunId('receipt-order'))?.outcome).toBe('run-exit-only');
+    } finally {
+        RolePropagatingProcessExecutor.prototype.run = original;
+        await db.close();
+    }
 });
 
 // ---------------------------------------------------------------------------

@@ -961,11 +961,29 @@ export class AgentService {
         // the invoke bridge reads it at emit time.
         let routing: AgentRoutingAttribution | undefined;
         const invokeBridge = this.ctx.events !== undefined ? bridgeEventBus(this.ctx.events) : undefined;
+        let receiptRunId: string | undefined;
+        const pendingExits: Record<string, unknown>[] = [];
+        const publishExit = async (detail: Record<string, unknown>): Promise<void> => {
+            const correlation = detail.correlation;
+            if (
+                receiptRunId !== undefined &&
+                correlation !== null &&
+                typeof correlation === 'object' &&
+                'runId' in correlation &&
+                correlation.runId === receiptRunId
+            ) {
+                pendingExits.push(detail);
+            } else {
+                await this.ctx.events?.emit('agent.invoke.exit', detail);
+            }
+        };
         const runner =
             deps?.runner ??
             new AiRunner({
                 processExecutor: dispatchExecutor,
-                ...(invokeBridge !== undefined ? { events: withInvokeRouting(invokeBridge, () => routing) } : {}),
+                ...(invokeBridge !== undefined
+                    ? { events: withInvokeRouting(invokeBridge, () => routing, publishExit) }
+                    : {}),
                 ...(invokeBridge !== undefined ? { processEvents: invokeBridge } : {}),
             });
 
@@ -1093,6 +1111,7 @@ export class AgentService {
         const coordinationRunId = options.execution?.correlation?.runId ?? lifecycle.identity.runId;
         let occupantRef: OccupantRef | undefined;
         if (this.ctx.getDb !== undefined) {
+            receiptRunId = coordinationRunId;
             try {
                 const dao = new CoordinationRunDao(await this.ctx.getDb());
                 const generation = ((await dao.maxGeneration(specId)) ?? 0) + 1;
@@ -1463,6 +1482,7 @@ export class AgentService {
                         JSON.stringify(refs),
                         receipt,
                     );
+                    for (const detail of pendingExits) await this.ctx.events?.emit('agent.invoke.exit', detail);
                 } catch (error) {
                     if (!jsonOutput) {
                         this.ctx.output.error(

@@ -60,6 +60,7 @@ export function withWorkflowIdentity<T extends EventMap>(bridge: EventBus<T>, de
 export function withInvokeRouting<T extends EventMap>(
     bridge: EventBus<T>,
     readRouting: () => AgentRoutingAttribution | undefined,
+    publishExit?: (detail: Record<string, unknown>) => Promise<void>,
 ): EventBus<T> {
     // Loose reference for payload access; the wrapper is cast to the caller's
     // typed EventBus at the single structural cast site, like bridgeEventBus.
@@ -74,6 +75,8 @@ export function withInvokeRouting<T extends EventMap>(
                 typeof detail === 'object'
             ) {
                 const routing = readRouting();
+                const payload = { ...(detail as Record<string, unknown>), ...(routing ? { routing } : {}) };
+                if (event === 'agent.invoke.exit' && publishExit !== undefined) return publishExit(payload);
                 if (routing !== undefined) {
                     return Promise.resolve(loose.emit(event, { ...(detail as Record<string, unknown>), routing }));
                 }
