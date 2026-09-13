@@ -31,6 +31,7 @@ import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
 import { makeCheckService, makeService } from './task';
+import { DEFAULT_TEAM_SERVER, fetchServerProcesses, runTeamStart, runTeamStop } from './team';
 
 export type { AgentRunDeps };
 
@@ -44,12 +45,14 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .option('--specs', 'List team specs instead of detected agents')
+        .option('--server <url>', 'Server API URL for live run status (with --specs)', DEFAULT_TEAM_SERVER)
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
             const code = await runAgentList(svc, context, {
                 json: options.json,
                 jsonEnvelope: options.jsonEnvelope,
                 specs: options.specs,
+                server: options.server,
             });
             context.setExitCode(code);
         });
@@ -228,6 +231,45 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             const code = await runAgentDelete(id, context, flags);
             context.setExitCode(code);
         });
+
+    // 0848: per-spec process lifecycle moved here from `spur team start|stop` (R1).
+    // Both delegate to the team.ts runners — same POST /api/team/agents/:id/{start,stop}
+    // endpoints, same response translation, same unreachable-server error text.
+    agent
+        .command('start')
+        .description('Start a supervised agent process (requires spur serve).')
+        .argument('<spec-id>', 'Agent spec id')
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (specId, options) => {
+            // 0697 AC4: the advertised flag's decision rides visibly on the delegated
+            // options — the implementation envelopes when `json` is set and `jsonEnvelope`
+            // picks the envelope form (runTeamStart, the moved team.ts implementation).
+            const code = await runTeamStart(
+                specId,
+                { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
+                context,
+            );
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('stop')
+        .description('Stop a supervised agent process (requires spur serve).')
+        .argument('<spec-id>', 'Agent spec id')
+        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (specId, options) => {
+            // Same threading contract as `agent start` (0697 AC4).
+            const code = await runTeamStop(
+                specId,
+                { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
+                context,
+            );
+            context.setExitCode(code);
+        });
 }
 
 /** Map commander-style camelCase option keys to kebab-case flags internal handlers expect. */
@@ -269,12 +311,29 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
 async function runAgentList(
     svc: AgentService,
     context: CliContext,
-    opts: { json?: boolean; jsonEnvelope?: boolean; specs?: boolean },
+    opts: { json?: boolean; jsonEnvelope?: boolean; specs?: boolean; server?: string },
 ): Promise<number> {
     if (!opts.specs) {
         return svc.list({ json: opts.json ?? false, enveloped: opts.jsonEnvelope });
     }
     const specs = await new TeamService(context).listAgentSpecs();
+    // 0848: `agent list --specs` inherited `team status`'s live-run merge. The CLI
+    // process never owns the supervisor — specs are spawned by `spur serve` — so the
+    // local listing is only the desired state until the server's process table
+    // overrides it. Unreachable server ⇒ same fallback (all `stopped`) and same
+    // stderr warning as `team status`, so offline listing still works.
+    const server = opts.server ?? DEFAULT_TEAM_SERVER;
+    const live = await fetchServerProcesses(server);
+    if (live === null) {
+        context.output.error(
+            `Cannot reach server at ${server} — showing local specs as stopped. Is spur serve running?`,
+        );
+    }
+    const statusOf = (id: string): { status: string; pid?: number } => {
+        const proc = live?.get(id);
+        if (proc === undefined) return { status: 'stopped' };
+        return proc.pid !== null ? { status: proc.status, pid: proc.pid } : { status: proc.status };
+    };
     if (opts.json) {
         context.output.write(
             toEnvelopeJson(
@@ -288,6 +347,7 @@ async function runAgentList(
                             ? { role: spec.config.role }
                             : {}),
                         ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
+                        ...statusOf(spec.id),
                         path: `.spur/agents/${spec.id}.yaml`,
                     })),
                 },
@@ -301,13 +361,17 @@ async function runAgentList(
         return 0;
     }
     // 0544 R2/R4: role and executor are distinct columns; undeclared renders `unset`.
+    // 0848: live run status is the trailing column (`stopped` + pid suffix), mirroring
+    // `team status`'s `pid=<n>` rendering.
     context.output.write(
         specs
             .map((spec) => {
                 const role =
                     typeof spec.config?.role === 'string' && spec.config.role.length > 0 ? spec.config.role : 'unset';
                 const executor = spec.executor ?? 'unset';
-                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}`;
+                const { status, pid } = statusOf(spec.id);
+                const pidSuffix = pid === undefined ? '' : ` pid=${pid}`;
+                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}\t${status}${pidSuffix}`;
             })
             .join('\n'),
     );

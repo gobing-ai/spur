@@ -5,7 +5,21 @@ see_also:
   - spur-cli
 ---
 
-# spur team - team coordination and supervision
+# spur team - team coordination and supervision (DEPRECATED — 0848)
+
+> **Deprecated (0848, feature G64):** every `spur team` capability has moved to its owning noun.
+> The noun keeps working until the G64 cutover window is recorded, emitting a one-time stderr
+> warning per process. Migrate invocations now:
+>
+> | Old verb | New home |
+> | --- | --- |
+> | `spur team assign <task-id> <agent-id>` | `spur task update <wbs> --assignee <spec-id>` |
+> | `spur team status` | `spur agent list --specs` (same live-run merge) |
+> | `spur team status --by-team` | dropped — one project has one fleet; `spur agent list --specs` is the single fleet listing |
+> | `spur team up <team>` | fleet materialization at `spur serve` start (`.spur/fleet.json`); `up --check` diff → `spur projects list --fleet` |
+> | `spur team down <team> [--purge]` | `spur agent stop <spec-id>` per member (`spur agent delete <id>` replaces `--purge`) |
+> | `spur team start <agent-id>` | `spur agent start <spec-id>` |
+> | `spur team stop <agent-id>` | `spur agent stop <spec-id>` |
 
 `spur team` is the CLI for **coordinating team agent assignments and supervision**. It sits above
 `spur agent` specs: `up` / `down` materialize and tear down rosters, `start` / `stop` manage

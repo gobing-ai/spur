@@ -1,16 +1,17 @@
 ---
 schema_version: 1
 name: Roster conversion with verbatim spec-ID preservation and rollback
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.301Z
-updated_at: "2026-09-12T16:32:25.226Z"
+updated_at: "2026-09-13T01:40:01.222Z"
 feature_id: G64
 priority: P2
 tags:
   - g6-program
 
 dependencies: ["0846", "0835"]
+ac_altitude: task-local
 ---
 
 ## 0847. Roster conversion with verbatim spec-ID preservation and rollback
@@ -268,15 +269,56 @@ task writes — the shapes must match `FleetDeclarationSchema` exactly, or `load
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/projects.ts:15` |
+| `apps/cli/src/commands/projects.ts:4` |
+| `apps/cli/src/commands/projects.ts:416` |
+| `apps/cli/src/commands/projects.ts:8` |
+| `apps/cli/src/commands/shared-options.ts:105` |
+| `apps/cli/tests/commands/projects.test.ts:423` |
+| `apps/cli/tests/json-envelope-inventory.test.ts:259` |
+| `packages/app/src/index.ts:287` |
+| `packages/domain/src/dao/index.ts:3` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/legacy-migration.ts:257 (apply writes only .spur/fleet.json; specs + config.yaml untouched); packages/app/tests/services/legacy-migration.test.ts:163 (tree diff: exactly one new file; written object re-parses under FleetDeclarationSchema), :342 (write-verb spy: nothing under .spur/agents/, nothing named config.yaml), :404 (hand-authored specs preserve) |
+| R2 | MET | packages/app/src/services/legacy-migration.ts:289-297 (preservedIds verbatim <teamId>-<localId>), :304-321 (addressed-id-without-spec halt); packages/app/tests/services/legacy-migration.test.ts:163 (preservedIds equal on-disk spec ids character-for-character), :251 (addressed id without spec blocks, zero writes); packages/domain/tests/dao/addressed-spec-ids.test.ts:6 (inbox ∪ coordination union) |
+| R3 | MET | packages/app/src/services/legacy-migration.ts:289 (memberLocalId called once, id written explicit); packages/app/tests/services/legacy-migration.test.ts:163 (ids claude/coder-1/coder-2 match on-disk specs), :195 (reordered roster keeps coder-1/coder-2/claude) |
+| R4 | MET | packages/app/src/services/legacy-migration.ts:187-196 (stableValue deep-equal), :324-339 (unchanged: no write, no backup); packages/app/tests/services/legacy-migration.test.ts:163 (second apply unchanged, snapshot identical), :276 (key order/indent no rewrite); apps/cli/tests/commands/projects.test.ts:478 (CLI re-run 'Already converted') |
+| R5 | MET | packages/app/src/services/legacy-migration.ts:344-348 (backup to .bak then atomicWriteAsync), :357-370 (rollback restored/removed/nothing-to-roll-back); packages/app/tests/services/legacy-migration.test.ts:296 (.bak byte-for-byte restore), :318 (removed + nothing-to-roll-back), :342 (only fleet.json writes); apps/cli/tests/commands/projects.test.ts:567 (CLI backup on changed roster) |
+| R6 | MET | No alias construct exists (deliberate absence per task Q&A: verbatim preservation needs no alias; derived-id-collision halts instead); packages/app/tests/services/legacy-migration.test.ts:388 (comments-stripped source has no /alias/i match; config/transition-shims.json has no legacy-migration entry) |
+| R7 | MET | packages/app/src/services/legacy-migration.ts:274-276 (blocked refused before any side effect); DB read-only via listAddressedSpecIds SELECTs (packages/domain/src/dao/addressed-spec-ids.ts:15); packages/app/tests/services/legacy-migration.test.ts:222 (two-teams-one-project blocked, deny-writes fs + snapshot equality, no .bak), :251 (blocked snapshot identical); apps/cli/tests/commands/projects.test.ts:505 (exit 2, no fleet.json written) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Mailbox identity survives conversion | MET | test | packages/app/tests/services/legacy-migration.test.ts:163 (every on-disk spec id preserved verbatim + pinned as explicit fleet ids), :251 (inbox-addressed id without spec file blocks conversion — no row can be orphaned), :342 (apply writes only fleet.json; specs and DB untouched); packages/domain/tests/dao/addressed-spec-ids.test.ts:6 (addressed set = inbox to_id ∪ coordination spec_id) |
+| Conflicts halt rather than merge silently | MET | test | packages/app/tests/services/legacy-migration.test.ts:222 (two-teams-one-project: apply() blocked, zero writes, no backup), :581 (work-dir-mismatch named as conflict; any conflict halts apply() at step 1, legacy-migration.ts:274-276); apps/cli/tests/commands/projects.test.ts:505 (preview and --apply exit 2, nothing written); rollback restores prior state: packages/app/tests/services/legacy-migration.test.ts:296, :318 |
+| Re-running changes nothing | MET | test | packages/app/tests/services/legacy-migration.test.ts:163 (second apply() unchanged, tree snapshot byte-identical), :276 (formatting/key-order differences do not rewrite); apps/cli/tests/commands/projects.test.ts:478 (CLI --apply re-run 'Already converted', exit 0) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | design-conformance | — | 5/5 frozen names + 6-step algorithm implemented as designed (legacy-migration.ts:134-146, 122-129, 257-351); rollback uses in-memory appliedFleetPaths provenance without adding a fleet.json marker field (0835 schema untouched); no ## Solution deviations |
+| P4 | consent-row-documentation | — | docs/design/harness-surface-governance.md:116 (§4 line 108): 2026-09-12 row for 0846/0847 documents provenance ('Operator consent granted in the G64 runall session') and rejected alternatives (top-level spur migrate noun; spur fleet noun) |
+| P4 | scope | — | Diff hunks map to plan items 1-9 + required fallout (json-envelope-inventory 70→71, help/reference/governance docs, feature status corpus writes); no unmapped source scope-creep |
+| P4 | secua-minor | — | apps/cli/src/commands/projects.ts:441-447 — CLI preview opens an existing project db via createMigratedDb, a no-op on up-to-date dbs (mtime untouched, proven by projects.test.ts:459) but would apply pending migrations on a stale-schema db; migrations never delete rows so R7 holds. Non-blocking, 0846's surface |
 
 ### References
 
@@ -287,3 +329,8 @@ task writes — the shapes must match `FleetDeclarationSchema` exactly, or `load
 - Preserved owner: G4 (occupant identity, coordination run records)
 
 ### History
+
+- 2026-09-13T00:14:29.330Z todo → wip (system)
+- 2026-09-13T01:39:59.474Z wip → testing (system)
+- 2026-09-13T01:40:01.222Z testing → done (system)
+

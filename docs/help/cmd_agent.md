@@ -17,6 +17,8 @@
 | `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` |
 | `edit <id>` | Open an agent spec in `$EDITOR` (or print its path) |
 | `delete <id>` | Remove an agent spec (requires `--force`) |
+| `start <spec-id>` | Start a supervised agent process (requires `spur serve`; 0848 moved home of `spur team start`) |
+| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`; 0848 moved home of `spur team stop`) |
 
 ## spur agent run
 
@@ -108,7 +110,12 @@ spur agent list [options]
 | Flag | Description |
 |---|---|
 | `--specs` | List team specs under `.spur/agents/` instead of detected agents |
+| `--server <url>` | With `--specs`: supervisor API for live run status (default `http://localhost:3000/api`) |
 | `--json` | Output machine-readable JSON |
+
+With `--specs`, each row carries live run status merged from the server's supervisor (0848; the
+moved home of `spur team status`): trailing `status` column plus `pid=<n>` where a process exists.
+When `spur serve` is unreachable, the listing falls back to all `stopped` with a stderr warning.
 
 Detected agents (canonical ids from `ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): `claude`, `codex`,
 `gemini`, `pi`, `omp`, `opencode`, `antigravity-cli`, `openclaw`, `hermes`, `grok`.
@@ -274,6 +281,34 @@ spur agent delete [options] <id>
 | `--force` | Required for delete; the verb refuses (exit 2) without it |
 
 Removes the spec. Errors (exit 1) if missing.
+
+## spur agent start
+
+```
+spur agent start [options] <spec-id>
+```
+
+Starts a supervised agent process via `spur serve` (0848: the moved home of `spur team start`).
+
+| Flag | Description |
+|---|---|
+| `--server <url>` | Server API URL (default `http://localhost:3000/api`) |
+| `--json` | Output machine-readable JSON |
+
+Exit `1` when the server is unreachable or the start fails.
+
+## spur agent stop
+
+```
+spur agent stop [options] <spec-id>
+```
+
+Stops a supervised agent process via `spur serve` (0848: the moved home of `spur team stop`).
+
+| Flag | Description |
+|---|---|
+| `--server <url>` | Server API URL (default `http://localhost:3000/api`) |
+| `--json` | Output machine-readable JSON |
 
 ## See Also
 

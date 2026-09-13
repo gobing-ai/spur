@@ -32,9 +32,11 @@ import {
     TaskPreparationError,
     TaskService,
     type TaskSummary,
+    TeamService,
     type VerdictAggregate,
     WbsCollisionError,
 } from '@gobing-ai/spur-app';
+import { AGENT_ID_REGEX } from '@gobing-ai/spur-config';
 import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
     extractTemplateBodies,
@@ -54,6 +56,7 @@ import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
 import { SHARED_OPTIONS } from './shared-options';
+import { runTeamAssign } from './team';
 
 /** Per-status column title for the human-readable board. */
 const STATUS_TITLE: Record<(typeof TASK_STATUSES)[number], string> = {
@@ -449,6 +452,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
         )
         .option(
+            '--assignee <spec-id>',
+            'Set the assignee frontmatter field to an agent spec id (0848: the moved home of `spur team assign`)',
+        )
+        .option(
             '--force-done',
             'Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292). Waives the verdict only — the FSM path still applies, so from an earlier status walk the hops first: `todo` → `wip` → `testing` → `done` (each hop runs the structural `spur task check`)',
         )
@@ -463,6 +470,46 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .action(async (wbs, status, options) => {
             const svc = await makeService(context, options.folder, options.lifecycle === false);
             try {
+                // 0848: `--assignee` is the moved home of `spur team assign` — same
+                // TeamService.assignTask implementation (frontmatter write +
+                // team.member.assigned ledger event), validated at this boundary
+                // against the agent-id format and the on-disk spec set.
+                if (options.assignee !== undefined) {
+                    if (options.section !== undefined) {
+                        writeJsonError(
+                            context.output,
+                            options,
+                            '--assignee cannot be combined with --section',
+                            'VALIDATION_FAILED',
+                        );
+                        context.setExitCode(2);
+                        return;
+                    }
+                    if (!AGENT_ID_REGEX.test(options.assignee)) {
+                        writeJsonError(
+                            context.output,
+                            options,
+                            `Invalid agent spec id '${options.assignee}' — must match ${AGENT_ID_REGEX.toString()}`,
+                            'VALIDATION_FAILED',
+                        );
+                        context.setExitCode(2);
+                        return;
+                    }
+                    const specs = await new TeamService(context).listAgentSpecs();
+                    if (!specs.some((spec) => spec.id === options.assignee)) {
+                        writeJsonError(
+                            context.output,
+                            options,
+                            `Unknown agent spec '${options.assignee}' — no spec resolves under .spur/agents/`,
+                            'VALIDATION_FAILED',
+                        );
+                        context.setExitCode(2);
+                        return;
+                    }
+                    const code = await runTeamAssign(wbs, options.assignee, context);
+                    context.setExitCode(code);
+                    return;
+                }
                 if (options.section !== undefined) {
                     if (options.fromFile === undefined) {
                         writeJsonError(

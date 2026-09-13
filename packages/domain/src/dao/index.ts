@@ -1,5 +1,6 @@
 export { type InboxMessage, InboxMessageDao } from '@gobing-ai/ts-db';
 export { ActionRunDao, type ActionRunRow } from './action-run-dao';
+export { listAddressedSpecIds } from './addressed-spec-ids';
 export {
     AgentExecutorUpdateDao,
     type AgentExecutorUpdateRow,

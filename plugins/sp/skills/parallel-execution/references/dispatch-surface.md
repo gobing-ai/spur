@@ -128,7 +128,7 @@ rule at the source, so no per-path shim is needed:
 | `spur agent run` (CLI) | `AgentService.run` → resolution → child process | Declared wins; absent inherits via `SPUR_ROLE`; envelope carries `roleOrigin` |
 | Workflow `agent.run` step | `AgentRunActionRunner` → `AgentService.runTraced` | Step `role:` is **mandatory** (0538 R2, `agent-run.ts` fails a role-less step before dispatch) — always a declaration (`roleOrigin: 'declared'`); inheritance applies at the next fan-out boundary the step's subagent itself dispatches |
 | `spur agent loop` | `AgentService.run` per drained iteration | Same resolution path as `spur agent run`; inherits its own `SPUR_ROLE` |
-| `spur team` supervisor → member | spawns `spur agent loop` | Member inherits the supervisor's `SPUR_ROLE` (recursive by construction) |
+| `spur serve` team supervisor → member | spawns `spur agent loop` | Member inherits the supervisor's `SPUR_ROLE` (recursive by construction) |
 | Native subagent fan-out (this skill's default) | in-session `Task()`/`Skill()` | In-session subagents share the host session; when they themselves dispatch, the host's role is already in the session env — the rule holds at the next `spur agent run` boundary |
 | `plugins/sp/evals/run-eval.ts` | `spawnSync('spur agent run', …)` per scenario | Out of scope: a top-level eval harness, not a fan-out — no dispatcher role exists to inherit; each scenario is an independent top-level run (documented, no shim) |
 

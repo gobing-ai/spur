@@ -194,6 +194,17 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
                 start = i + 1;
             }
             if (verb !== undefined) blocks.push({ verb, start, end: lines.length });
+            // Bound each registration span at the first column-0 `}` after it starts —
+            // registrations live inside the module's register* function, so that brace
+            // closes the span. Without this, the LAST advertising block's to-EOF span
+            // swallows the whole file tail: unrelated helpers count as "called by an
+            // advertising block" and their failure sites get attributed to the wrong verb
+            // (0848: registering `agent stop` late flagged `runAgentEdit`, which belongs
+            // to the non-advertising `agent edit` verb).
+            for (const block of blocks) {
+                const close = lines.findIndex((l, idx) => idx > block.start && l === '}');
+                if (close > block.start) block.end = Math.min(block.end, close);
+            }
             const advertising = blocks.filter((b) =>
                 lines.slice(b.start, b.end).join('\n').includes('SHARED_OPTIONS.jsonEnvelope'),
             );
@@ -224,10 +235,23 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
             for (const [i, line] of lines.entries()) {
                 if (!line.includes('context.output.error(')) continue;
                 const ln = i + 1;
-                const block = advertising.find((b) => ln > b.start && ln <= b.end);
+                // Attribution: a helper an ADVERTISING block calls is in scope (its verb
+                // declared the flag); otherwise a site only counts when it lexically sits
+                // inside the verb's own registration block. Without this guard, the LAST
+                // advertising block's to-EOF span swallows unrelated helpers' failure
+                // sites (0848: registering `agent stop` late flagged `runAgentEdit`, which
+                // belongs to the non-advertising `agent edit` verb).
                 const helper = helpers.find((fn) => ln >= fn.start && ln <= fn.end);
-                if (block === undefined && helper === undefined) continue;
-
+                let verb: string | undefined;
+                if (helper !== undefined) {
+                    verb = `${helper.name}()`;
+                } else {
+                    const block = advertising.find((b) => ln > b.start && ln <= b.end);
+                    if (block === undefined) continue;
+                    const enclosing = fns.find((fn) => ln >= fn.start && ln <= fn.end);
+                    if (enclosing !== undefined) continue; // belongs to another verb's helper
+                    verb = block.verb;
+                }
                 let end = i;
                 let depth = 0;
                 let started = false;
@@ -248,7 +272,7 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
                     /process\.exit\(\s*[1-9]/.test(trailer);
                 if (!exitsNonZero) continue; // a warning beside a successful run, not a failure path
                 if (jsonPathCannotReach(lines, i)) continue;
-                sites.push({ noun, verb: block?.verb ?? `${helper?.name}()`, line: ln });
+                sites.push({ noun, verb, line: ln });
             }
         }
         return sites;
@@ -256,7 +280,9 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
 
     test('the census reaches every flag-declaring verb, not a sample', () => {
         const advertising = collectVerbBlocks().filter((b) => b.body.includes('SHARED_OPTIONS.jsonEnvelope'));
-        expect(advertising.length).toBe(70);
+        // 0847: bump for each new verb advertising --json-envelope (70 → 71 for projects migrate).
+        // 0848: 71 → 73 for `agent start` / `agent stop`.
+        expect(advertising.length).toBe(73);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

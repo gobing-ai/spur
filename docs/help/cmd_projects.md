@@ -11,6 +11,7 @@
 | `list` | List registered projects |
 | `start <target>` | Start a project's server (`--port <n>` to bind explicitly) |
 | `stop <target>` | Stop a project's server |
+| `migrate [path]` | Preview (default) or apply the legacy `agent.team` → `fleet.json` conversion |
 
 All verbs accept `--json` for machine-readable output.
 
@@ -82,6 +83,30 @@ spur projects stop [options] <target>
 | Flag | Description |
 |---|---|
 | `--json` | Output JSON response |
+
+## spur projects migrate
+
+```
+spur projects migrate [options] [path]
+```
+
+Legacy G64 cutover: converts the single `agent.team.<id>` roster resolving to `path`
+into `.spur/fleet.json` with every spec id preserved verbatim. Dry-run by default;
+refuses to write on any reported conflict. Additive only — specs, `config.yaml`, and
+the database are never modified.
+
+| Argument | Description |
+|---|---|
+| `path` | Project root directory path (default: current directory) |
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Preview the conversion; nothing is written (the default — `--apply` writes) |
+| `--apply` | Write the conversion: back up any prior fleet.json to .bak, then write the declaration (default is dry-run) |
+| `--json` | Output machine-readable JSON |
+
+Exit codes: 0 on success (preview or converted/unchanged/nothing-to-convert); 2 when
+conflicts block the run (the payload still carries the full plan/result); 1 on error.
 
 ## Example
 

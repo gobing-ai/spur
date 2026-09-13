@@ -285,6 +285,28 @@ export {
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export type {
+    ConversionResult,
+    LegacyArtifact,
+    LegacyArtifactKind,
+    LegacyConflict,
+    LegacyConflictKind,
+    LegacyDisposition,
+    LegacyMigrationServiceContext,
+    LegacyWarning,
+    LegacyWarningKind,
+    MigrationInventory,
+    MigrationPlan,
+    MigrationPlanStep,
+    RollbackResult,
+} from './services/legacy-migration';
+// Legacy team→fleet migration: inventory + dry-run preview (0846); apply/rollback (0847);
+// config-block removal halt guard (0848)
+export {
+    assertConfigBlockRemovalSafe,
+    ConfigBlockRemovalBlockedError,
+    LegacyMigrationService,
+} from './services/legacy-migration';
+export type {
     InvokeEventSnapshot,
     OccupantLifecycle,
     OccupantPin,

@@ -202,9 +202,9 @@ spur history        daily   [--since <iso>] [--until <iso>] [--json]
 spur message        send    <body> --to <id> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]
 spur message        inbox   --agent <id> [--json]
 spur message        reply   <msg-id> <body> [--json]
-spur team           assign  <task-id> <agent-id>
-spur team           status  [--json]
-spur team           start | stop  <agent-id> [--server <url>] [--json]   # supervised processes; requires spur serve
+spur task           update  <wbs> --assignee <spec-id>      # assign a task to an agent spec
+spur agent          list    --specs [--server <url>] [--json]     # agent specs + live run status
+spur agent          start | stop  <spec-id> [--server <url>] [--json]   # supervised processes; requires spur serve
 ```
 
 Every command supports `--json` for machine-readable output.
@@ -547,10 +547,10 @@ Durable inter-agent messaging and task assignment.
 
 ```bash
 # Assign a task to an agent spec
-spur team assign 0089 reviewer
+spur task update 0089 --assignee reviewer
 
 # List agent specs and their run status
-spur team status
+spur agent list --specs
 
 # Send a message to an agent
 spur message send "Please review the auth endpoint" --to reviewer
@@ -775,7 +775,7 @@ spur agent list --json       # → { agents: [{name, installed, version, ...}] }
 spur agent doctor --json     # → { agents: [{agent, installed, authenticated, usable, tier, ...}] }
 spur agent run ... --json    # → { exitCode, stdout, stderr, durationMs }
 spur status --json           # → { ok, packageJson, spurConfig, git: {root, branch, dirty}, agentSpecs, path? }
-spur team status --json      # → { agents: [...] }
+spur agent list --specs --json   # → { specs: [{id, status, pid?, ...}] }
 spur message inbox --agent X --json   # → { messages: [...], count }
 ```
 
@@ -866,8 +866,9 @@ features:
 - **`spur history report`** renders the artifact written by `spur history analyze` (or
   `history daily`); it never touches the database. `--mode forensics`, `--task <wbs>`, and
   `--top <n>` narrow the already-loaded artifact.
-- **`spur team start|stop`** manage supervised agent processes and require a reachable
+- **`spur agent start|stop`** manage supervised agent processes and require a reachable
   `spur serve`; without it, use `agent run --spec <id> --drain` for store-and-forward runs.
+  (`spur team start|stop` still work but warn — deprecated by 0848; removal waits for the G64 cutover window)
 - **`spur task migrate`** now runs the one-time **A17** task-corpus normalization pass
   (`--dry-run` previews, `--folder` scopes, `--json` for machine output). Run it once when
   adopting the A17 layout on an older corpus; it is not part of the daily loop.

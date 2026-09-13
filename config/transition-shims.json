@@ -28,6 +28,13 @@
             "file": "packages/app/src/services/agent-service.ts",
             "keepsWorking": "a configured executor name in agent.default still resolves during the transition, warned once by warnAgentDefaultExecutorOnce; the value domain moved to roles (recommended default: coder)",
             "removalCondition": "no agent.default value names an agent.executors entry (scan .spur/config.yaml and config/config.example.yaml against the agent.executors names)"
+        },
+        {
+            "id": "team-noun-retired",
+            "wbs": "0848",
+            "file": "apps/cli/src/commands/team.ts",
+            "keepsWorking": "the `spur team` noun keeps working after its six verbs moved to owning nouns (0848): assign → `spur task update --assignee`, status → `spur agent list --specs`, up → fleet materialization at serve start (`spur projects list --fleet` for --check), down/start/stop → `spur agent stop|start|stop <spec-id>`; a one-time stderr warning (warnTeamNounRetiredOnce) names the replacement for the invoked verb and every verb keeps its previous exit code and output",
+            "removalCondition": "no `spur team` invocation remains in config/workflows/, plugins/sp/, scripts/, or docs/, and the cutover window is recorded in docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md"
         }
     ]
 }

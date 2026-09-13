@@ -355,7 +355,9 @@ export type AgentRoleConfig = z.infer<typeof AgentRoleConfigSchema>;
  * CF-safe core free of a ts-ai-runner dependency (ADR-027). Keep in sync if the
  * runner's id format ever changes.
  */
-const AGENT_ID_REGEX = /^[a-z][a-z0-9_-]{1,63}$/;
+// 0848: exported for the `spur task update --assignee` boundary — the same format
+// check the team roster applies, now that assignment lives under `spur task`.
+export const AGENT_ID_REGEX = /^[a-z][a-z0-9_-]{1,63}$/;
 
 /**
  * Schema for a single team member reference under `agent.team.<id>.members`.

@@ -1,16 +1,17 @@
 ---
 schema_version: 1
 name: Retire spur team after migrating its callers to owning nouns
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
-updated_at: "2026-09-12T16:37:07.188Z"
+updated_at: "2026-09-13T02:49:35.554Z"
 feature_id: G64
 priority: P2
 tags:
   - g6-program
 
 dependencies: ["0847"]
+ac_altitude: task-local
 ---
 
 ## 0848. Retire spur team after migrating its callers to owning nouns
@@ -253,15 +254,90 @@ evidence. 0850 records the ADR supersession that this retirement makes true.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:234` |
+| `apps/cli/src/commands/agent.ts:314` |
+| `apps/cli/src/commands/agent.ts:320` |
+| `apps/cli/src/commands/agent.ts:34` |
+| `apps/cli/src/commands/agent.ts:350` |
+| `apps/cli/src/commands/agent.ts:364` |
+| `apps/cli/src/commands/agent.ts:372` |
+| `apps/cli/src/commands/agent.ts:48` |
+| `apps/cli/src/commands/agent.ts:55` |
+| `apps/cli/src/commands/projects.ts:15` |
+| `apps/cli/src/commands/projects.ts:4` |
+| `apps/cli/src/commands/projects.ts:416` |
+| `apps/cli/src/commands/projects.ts:8` |
+| `apps/cli/src/commands/shared-options.ts:105` |
+| `apps/cli/src/commands/task.ts:35` |
+| `apps/cli/src/commands/task.ts:39` |
+| `apps/cli/src/commands/task.ts:454` |
+| `apps/cli/src/commands/task.ts:473` |
+| `apps/cli/src/commands/task.ts:59` |
+| `apps/cli/src/commands/team.ts:110` |
+| `apps/cli/src/commands/team.ts:114` |
+| `apps/cli/src/commands/team.ts:123` |
+| `apps/cli/src/commands/team.ts:127` |
+| `apps/cli/src/commands/team.ts:135` |
+| `apps/cli/src/commands/team.ts:139` |
+| `apps/cli/src/commands/team.ts:147` |
+| `apps/cli/src/commands/team.ts:151` |
+| `apps/cli/src/commands/team.ts:157` |
+| `apps/cli/src/commands/team.ts:263` |
+| `apps/cli/src/commands/team.ts:267` |
+| `apps/cli/src/commands/team.ts:310` |
+| `apps/cli/src/commands/team.ts:38` |
+| `apps/cli/src/commands/team.ts:381` |
+| `apps/cli/src/commands/team.ts:87` |
+| `apps/cli/src/commands/team.ts:97` |
+| `apps/cli/src/commands/team.ts:99` |
+| `apps/cli/tests/commands/projects.test.ts:423` |
+| `apps/cli/tests/json-envelope-inventory.test.ts:197` |
+| `apps/cli/tests/json-envelope-inventory.test.ts:238` |
+| `apps/cli/tests/json-envelope-inventory.test.ts:245` |
+| `apps/cli/tests/json-envelope-inventory.test.ts:275` |
+| `apps/cli/tests/json-envelope-inventory.test.ts:283` |
+| `apps/web/src/modules/teams/ProcessesTab.tsx:302` |
+| `apps/web/tests/modules/teams/components.test.tsx:283` |
+| `packages/app/src/index.ts:287` |
+| `packages/config/src/index.ts:358` |
+| `packages/domain/src/dao/index.ts:3` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | apps/cli/tests/commands/team-retirement.test.ts:109 pins all owning-noun registrations (team keeps six verbs; agent start/stop; agent list --server; task update --assignee); impl apps/cli/src/commands/task.ts:455, apps/cli/src/commands/agent.ts:239,258,48, apps/cli/src/commands/projects.ts:108 (--fleet, up --check home), apps/cli/src/commands/agent.ts:225 (delete, down --purge home) |
+| R2 | MET | git diff HEAD on packages/app/src/services/team-service.ts and apps/server/src/modules/team/index.ts is empty (service untouched); delegation parity asserted at apps/cli/tests/commands/team-retirement.test.ts:192,217,245 (same endpoint + error text) and :356 (assignTask frontmatter write + team.member.assigned persisted) |
+| R3 | MET | docs/design/harness-surface-governance.md:117 — 0848 consent row names the granted scope (agent start/stop verbs, task update --assignee flag, agent list --specs output change + --server flag), reason, rejected shapes, and provenance (G64 runall session, 2026-09-13); consent treated as granted per standing operator decision |
+| R4 | MET | rg 'spur team' config/workflows scripts → zero hits (run this turn); plugins migrated (plugins/sp/skills/spur-cli/references/team.md:9-22 migration table; agent.md; message.md; dispatch-surface.md:131; serve/projects/self/tasks refs); Board caller apps/web/src/modules/teams/ProcessesTab.tsx:302 with test apps/web/tests/modules/teams/components.test.tsx:284; residual P3 noted: docs/help/cmd_agent.md:221 |
+| R5 | MET | apps/cli/src/commands/team.ts:41 marker, :67 one-time per-verb warning wired at :87-151; config/transition-shims.json:31-37 entry team-noun-retired (wbs 0848) with removal condition naming the G64 window; two-sided gate bun run transition-shim-check PASS; tests apps/cli/tests/commands/team-retirement.test.ts:128,160,432 |
+| R6 | MET | Coverage table in task Design + plugins/sp/skills/spur-cli/references/team.md:14-22 + manifest keepsWorking (config/transition-shims.json:35), verified true against the tree (--by-team dropped with recorded rationale: group key removed, not capability); executable coverage assertion apps/cli/tests/commands/team-retirement.test.ts:109 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: spur team is retired only after its callers move | MET | test | apps/cli/tests/commands/team-retirement.test.ts:109 (every replacement registered while the noun still stands) + :432 (two-sided shim gate: noun cannot be deleted without the manifest pair, forcing the removal commit to carry the completed caller migration) + parity :192,217,245,356; removal act deferred to the recorded window per R5 (closed Q&A decision) |
+| Scenario: Removal waits for the recorded window | MET | test | Given holds: no cutover window recorded (docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:123); Then holds: apps/cli/tests/commands/team-retirement.test.ts:128 (warns once naming replacement, verb still works exit 0) and :160 (stderr-only, prior exit codes/output unchanged) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | design-conformance | — | WHERE table honored: agent.ts start/stop thin delegation; task.ts --assignee; team.ts warn-only; manifest entry; team-service.ts and server team module untouched |
+| P3 | residual-doc-residue-cmd_agent-221 | — | docs/help/cmd_agent.md:221 still names spur team up/start (P3 doc residue; superseded-authority slices are 0850) |
 
 ### References
 
@@ -271,3 +347,8 @@ evidence. 0850 records the ADR supersession that this retirement makes true.
 - CLI reference: `plugins/sp/skills/spur-cli/references/`
 
 ### History
+
+- 2026-09-13T01:40:17.842Z todo → wip (system)
+- 2026-09-13T02:48:51.308Z wip → testing (system)
+- 2026-09-13T02:49:35.554Z testing → done (system)
+

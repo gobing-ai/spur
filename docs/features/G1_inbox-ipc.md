@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: []
 created_at: "2026-07-03T23:28:33.480Z"
-updated_at: "2026-08-24T17:41:20.415Z"
+updated_at: "2026-09-13T02:54:42.245Z"
 ---
 
 # G1: Inbox IPC
@@ -70,6 +70,8 @@ Feature: Inbox IPC
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
+Authority retained, not forked: G61–G64 (project agent fleet program) consume this feature's message events, server message API, and `spur message watch`; recorded by G64's reconciliation (task 0851, 2026-09-13).
 
 ## History
 - 2026-08-24T17:41:20.040Z backlog → active (system)

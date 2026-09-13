@@ -22,6 +22,7 @@ shapes live in `apps/cli/src/commands/projects.ts`.
 | `list` | List entries with live running status | `--json` `--fleet` |
 | `start <target>` | Start or reuse a detached project server | `--port <n>` `--json` |
 | `stop <target>` | Best-effort stop the listener and clear its recorded port | `--json` |
+| `migrate [path]` | Preview (default) or apply the legacy `agent.team` → `fleet.json` conversion (0847) | `--dry-run` `--apply` `--json` |
 
 Every verb also advertises `--json-envelope`; use the facade's machine-output contract. Success is
 exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
@@ -59,6 +60,22 @@ exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
   persisted row, or `unavailable (<error>)` on a db failure. Under `--json` each
   project gains `strategy` (`{ strategy, strategyVersion }`, `null` when
   unpersisted) and, on failure, `strategyError`.
+- `migrate [path]` (0847) converts the single legacy `agent.team.<id>` roster whose
+  `work_dir` resolves to the project into `<project>/.spur/fleet.json`, preserving
+  every spec id verbatim (explicit member ids freeze the `<role>-<n>` derivation).
+  Dry-run is the default: it emits the 0846 plan (steps + conflicts + warnings) and
+  writes nothing — not even the project db, which is opened in-memory when absent.
+  `--apply` validates first, deep-equals an existing declaration (`unchanged`, no
+  rewrite), backs up a differing prior file to `.bak`, then atomically writes the
+  declaration (`converted`). It is purely additive — specs, `config.yaml`, and the
+  database are never touched — and it refuses to write while any conflict exists
+  (`addressed-id-without-spec`, `two-teams-one-project`, …). Exit codes: `0` for a
+  clean preview or `converted`/`unchanged`/`nothing-to-convert`; `2` when blocked
+  (the JSON payload still carries the full plan/result); `1` on error. Under
+  `--json` the payload is the raw `MigrationPlan` (preview) or `ConversionResult`
+  (apply). `rollback` is a service-level API (no CLI verb): restore the `.bak` a
+  previous apply created, remove a file that apply created when no `.bak` exists,
+  or report `nothing-to-roll-back`.
 
 ## Server lifecycle
 

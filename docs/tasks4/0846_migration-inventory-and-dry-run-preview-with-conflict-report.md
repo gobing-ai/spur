@@ -1,15 +1,16 @@
 ---
 schema_version: 1
 name: Migration inventory and dry-run preview with conflict reporting
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.298Z
-updated_at: "2026-09-12T16:31:13.260Z"
+updated_at: "2026-09-13T00:13:50.802Z"
 feature_id: G64
 priority: P2
 tags:
   - g6-program
 
+ac_altitude: task-local
 ---
 
 ## 0846. Migration inventory and dry-run preview with conflict reporting
@@ -35,7 +36,7 @@ This task writes nothing. Conversion is the next task.
 - **R3** — Zero writes: no file, config, or database row changes during inventory or preview.
 - **R4** — Conflicts are named explicitly: two legacy teams resolving to one project path, `work_dir`
   disagreeing with the project, orphan specs, and duplicate spec ids.
-- **R5** — Output is machine-readable (`--json`) as well as operator-readable.
+- **R5** — Output is machine-readable: the preview/inventory types (`MigrationPlan`, `MigrationInventory`) are structured, JSON-serializable, and exported from `packages/app` for downstream consumers. The operator-facing CLI surface (`spur projects migrate` verb registration, human output, exit-0/2 contract) is Plan step 7 and belongs to task 0847, which lands it together with the §4 consent row (operator consent granted in the G64 runall session).
 
 ### Acceptance Criteria
 
@@ -314,15 +315,88 @@ consumes the `legacy-flag-usage` artifacts as its proof that the `--agent <spec-
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/index.ts:287` |
+| `packages/domain/src/dao/index.ts:3` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | legacy-migration.test.ts:114-152,167-233,518-547 — 13/13 pass; classification precedence chain legacy-migration.ts:278-333 |
+| R2 | MET | preview()/buildSteps legacy-migration.ts:179-181,442-473; preservesId exact-equality test :374-404; conflict-blocks-plan test :449-465 |
+| R3 | MET | zero-write: deny-writes fs Proxy + tree-snapshot equality test :477-506; readRaw-only registry; SELECT DISTINCT dao addressed-spec-ids.ts:15-18 |
+| R4 | MET | five conflict kinds legacy-migration.ts:29-34 with tests :236-345; addressedSpecIds union test in in-memory SQLite :167-233 |
+| R5 | MET | 11 types + service exported packages/app/src/index.ts:287-303; JSON.stringify exercised test :281; CLI surface owned by 0847 per re-scope |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Migration previews before it changes anything | MET | test | deny-writes zero-write test on full fixture legacy-migration.test.ts:477-506 (snapshotTree equality :505) |
+| Scenario: Conflicts are named, not summarized | MET | test | test :264-289 — one conflict, both sources named, no merge proposed, no pick/winner in serialized JSON |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- Pipeline review hop 2026-09-12 (sp-super-reviewer at review depth, --auto): observe-only over the
+     uncommitted working tree; code untouched; task status unchanged by review. -->
+
+#### Review Report — 0846
+
+**Scope:** `git diff HEAD` + untracked `packages/app/src/services/legacy-migration.ts`,
+`packages/app/tests/services/legacy-migration.test.ts`, `packages/domain/src/dao/addressed-spec-ids.ts`,
+`packages/domain/tests/dao/addressed-spec-ids.test.ts` (+export lines in `packages/app/src/index.ts`,
+`packages/domain/src/dao/index.ts`).
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture.
+**Verdict:** PASS — approve. No P1 (blocker) or P2 (major) findings.
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | process | Task record `Solution`/`Testing` sections are unfilled placeholders — implementation/testing evidence is not recorded in the task file (review gathered fresh executable evidence instead); must be filled at verify/wrap | `docs/tasks4/0846_*.md` §Solution, §Testing |
+| 2 | P4 (advisory) | architecture | Service defines its own narrow read-only context slice instead of the Plan's "existing service context" — justified: the injected `fs`/`registry` ports are what make the R3 deny-write test possible; direct `loadAgentSpecs(configDir, fs)` is the same read `TeamService.listAgentSpecs` delegates to, and inline `resolve(base, work_dir)` matches `resolveWorkspaceDir` semantics | `packages/app/src/services/legacy-migration.ts:117-135`; `packages/app/src/services/team-service.ts:822-824,1034-1036` |
+| 3 | P4 (advisory) | correctness | `counts` tallies `legacy-flag-usage` artifacts under `retire` (matrix-consistent, §4 legacy-CLI row), so 0851's `counts.retire` mixes doc/workflow flag usages with spec retirements; the kind split is recoverable from `artifacts` | `packages/app/src/services/legacy-migration.ts:346-348,549-558` |
+| 4 | P4 (advisory) | usability | `spec-workspace-disagreement` names both sides in the message but carries only the spec file in `sources` (1 entry, consistent with the frozen "1 for a mismatch" contract); the team config key is only in the message | `packages/app/src/services/legacy-migration.ts:268-277` |
+| 5 | P4 (advisory) | correctness | derived-id-collision also skips tag-less on-disk holders, not only "different team tag" — correct per the preserve contract (materialize skips non-generated specs) and documented in-code | `packages/app/src/services/legacy-migration.ts:305-318`; `packages/app/src/services/team-service.ts:432` |
+| 6 | P4 (advisory) | efficiency | flag scan reads every file under `docs/` + `plugins/` into memory per run — acceptable for an operator-run evidence tool; fail-loud `ValueError` on a malformed/duplicate spec file aborts the whole inventory (deterministic; Design silent) | `packages/app/src/services/legacy-migration.ts:518-545,175` |
+
+##### Functional Traceability (P1)
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Five-step precedence chain verbatim `packages/app/src/services/legacy-migration.ts:222-301`; team-config artifacts :212-226; legacy-flag-usage scan :518-565 (§4 "Retire after no usage"); counts :346-348; classification test asserts all four dispositions (`packages/app/tests/services/legacy-migration.test.ts:96-141`, pass) |
+| R2 | MET | `preview()` :159-162 re-classifies fresh, projects steps, sets `blocked`; `preservesId` asserted character-for-character (test :330-364) — the assertion 0847 R2 inherits |
+| R3 | MET | Reads only: fs `exists`/`readDir`/`readFile` (:509-521,528); registry `readRaw()` not `list()` (:176; `list()` heals/writes — `packages/app/src/services/project-registry.ts:241-276`); DB through `SELECT DISTINCT` only (`packages/domain/src/dao/addressed-spec-ids.ts`); never `materializeTeam`/`teardownTeam`/`withLock` (source-scan test, test :456-461). Proven by mechanism: deny-writes proxy over every `FileSystem` write verb + tree-snapshot equality (test :441-454) |
+| R4 | MET | All five conflict kinds; `two-teams-one-project` dedupes to ONE conflict naming both config keys with "no merge is proposed" and no pick/winner anywhere in JSON (test :250-277); orphan named in both relink (:283-291) and retire (:292-299) branches; `addressedSpecIds` = sorted union of `inbox_messages.to_id` ∪ `coordination_runs.spec_id` (`packages/domain/src/dao/addressed-spec-ids.ts:15-18`; columns verified in `packages/domain/src/migrations.ts:30,159`) |
+| R5 | PARTIAL — gated, by design | Structured `MigrationPlan` is machine-readable at service level; the `--json`/human-output/exit-2 CLI surface is Plan step 7, gated on the §4 consent row — verified absent today (`docs/design/harness-surface-governance.md` §4 has no 0846/0847 row; no `migrate` verb in `apps/cli/src/commands/projects.ts`), exactly the Q&A gate. Intended gap; 0847 closes it after consent |
+
+AC scenarios: scenario 1 (preview before anything changes) MET via the deny-writes zero-write test on the full fixture; scenario 2 (conflict with both sources, no merge) MET via test :250-277.
+
+##### SECUA (P2)
+
+No security findings: zero-write by construction (verified against the actual `ProjectRegistry` and `FileSystem` implementations, not the comments); constant parameterless SQL; bounded flag regex; no secrets; no `console.*`/`Bun.spawnSync` in app code (grep-clean); correct layers (DAO read helper in `packages/domain` — sole ts-db consumer; service in `packages/app`; no transport wiring). The 'no such table' swallow in `distinctOrEmpty` follows the existing domain read-path precedent (`packages/domain/src/analytics/retro-correlation.ts:101` et al.) and is tested.
+
+##### Architecture (P3)
+
+Idempotence contract for 0847 holds: `preview()` never caches — each call re-runs `classify()`. `memberLocalId` is reused, never re-derived (:305-307,:373-377). Dedupe of conflicts by kind+sorted sources with shared identity across artifacts (test :274-276 asserts instance identity). Export surfaces match the diff claim (+15 app, +1 domain).
+
+##### Tests encode intent (P4)
+
+Every Plan step's stated test intent is present and asserts the WHY: step-2 precedence keeps a tagged hand-authored spec out of the convert set; warning-vs-conflict keeps `plan.blocked` false (0848's halt input); relink/retire routed on addressed rows in in-memory SQLite; verbatim `preservesId`; zero-write proven by mechanism, not diff review; flag scan discriminates role selectors (`agent: coder`) from spec ids (`--agent=web-coder`).
+
+**Verification run by review:** `cd packages/app && bun test tests/services/legacy-migration.test.ts` → 13 pass / 0 fail (78 expect); `cd packages/domain && bun test tests/dao/addressed-spec-ids.test.ts` → 3 pass / 0 fail; `bunx tsc --noEmit` in both workspaces → clean; `bunx biome check` on the six changed files → clean.
+
+**Residual risk:** R5's CLI half + exit-2 contract land in 0847 behind the consent row — consent row and verb must land together; human-output wording ("nothing to migrate", exit codes) is unverifiable until then. Finding #1 (empty Solution/Testing) must be closed at verify/wrap.
+
+**Next:** proceed to verify hop; fill §Solution/§Testing; keep step 7 unlanded until the consent row exists.
 
 ### References
 
@@ -332,3 +406,8 @@ consumes the `legacy-flag-usage` artifacts as its proof that the `--agent <spec-
 - Gate: Robin owns the compatibility and removal window (G64 Notes)
 
 ### History
+
+- 2026-09-12T21:08:13.677Z todo → wip (system)
+- 2026-09-13T00:13:09.824Z wip → testing (system)
+- 2026-09-13T00:13:50.802Z testing → done (system)
+

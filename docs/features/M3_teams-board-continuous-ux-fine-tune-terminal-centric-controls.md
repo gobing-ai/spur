@@ -2,11 +2,11 @@
 schema_version: 1
 id: "M3"
 name: "Teams board continuous UX fine-tune (Terminal-centric controls)"
-status: verifying
+status: cancelled
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-16T18:17:26.784Z"
-updated_at: "2026-07-25T19:33:19.814Z"
+updated_at: "2026-09-13T02:54:33.253Z"
 ---
 
 # M3: Teams board continuous UX fine-tune (Terminal-centric controls)
@@ -109,6 +109,7 @@ Feature: Teams board continuous UX fine-tune (Terminal-centric controls)
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 ### Destination
 
 Ship a Terminal-centric Teams board: one refined Terminal toolbar (left focus + right roster), read-only system-wide Process watch list, global Message/Activity feeds with team·member·agent identity, confirm-gated destructive stops, and the small API enrichments those surfaces need.
@@ -155,6 +156,29 @@ _(none — fog cleared by 0269 implementation + residual cleanup)_
 
 - `sp:spur-cli` for corpus updates; `/sp:dev-run 0269` was the execution path.
 - Prefer existing UI primitives (`Badge`, `Button`, `Modal`, `Select` from `@/ui`).
+
+### Reconciliation with G64 (2026-09-13, task 0851)
+
+**Ordering rule (from 0851's Design):** if this feature's verification runs before 0849 (retire the
+Board modules) merges, advance to `done` on `0269`'s receipt; if 0849 merges first, set `cancelled`
+citing the retirement. Either way this scope is not re-implemented on a surface being removed.
+
+**Branch applied: `cancelled`.** At reconciliation time (2026-09-13) 0849 had not yet merged — it is
+sequenced on the G64 runall branch `sp/runall-g64-260912a` and `apps/web/src/modules/teams/` still
+existed — but this feature's verification is owned here, was deferred to this feature's own
+verify/wrap run, and was not scheduled before that merge, so verification-after-deletion is
+impossible. The deciding artifact is the 0849 retirement merge on that branch (task 0849; its commit
+did not exist when this note was written, so it is named by task and branch rather than hash).
+`cancelled` claims no verification that never ran; `done` on `0269`'s receipt would have.
+
+**Backend half survives.** `GET /api/team/teams` optional `model`, `/api/messages` identity
+enrichment, and `process.*` events in Activity are server surfaces that G63's Agents view (0842)
+consumes; 0849 deletes the Board modules, not `apps/server/src/modules/team/`. Nothing shipped by
+`0269` is discarded by this closure.
+
 ## History
+
 - 2026-07-25T19:33:19.577Z backlog → active (system)
 - 2026-07-25T19:33:19.814Z active → verifying (system)
+- 2026-09-13T02:54:33.253Z verifying → cancelled (system)
+
