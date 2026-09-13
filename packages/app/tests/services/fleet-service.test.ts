@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
@@ -733,6 +733,72 @@ describe('FleetService resolveOrchestrator (0836)', () => {
             db.close();
         } finally {
             await cleanup();
+        }
+    });
+});
+
+describe('fleet registration and launch ground truth (G62)', () => {
+    test('registration rejects a foreign filesystem root despite matching process cwd', async () => {
+        const local = await makeProject();
+        const foreign = await makeProject();
+        const previous = process.cwd();
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            process.chdir(local.project);
+            const team = new TeamService({
+                cwd: local.project,
+                fs: createNodeFileSystem(foreign.project),
+                env: { SPUR_SPEC_ID: 'proj-lead' },
+                getDb: async () => db,
+            });
+            await expect(
+                team.createAgentSpec({ id: 'proj-lead', type: 'pi', tags: ['fleet:generated'] }),
+            ).rejects.toThrow('Ground-truth mismatch');
+        } finally {
+            process.chdir(previous);
+            await db.close();
+            await local.cleanup();
+            await foreign.cleanup();
+        }
+    });
+
+    test('the backing database must belong to the actual project storage root', async () => {
+        const local = await makeProject();
+        const foreign = await makeProject();
+        const previous = process.cwd();
+        const db = await createMigratedDb({ url: join(foreign.project, '.spur', 'spur.db') });
+        try {
+            process.chdir(local.project);
+            const service = new FleetService({ fs: createNodeFileSystem(local.project), openDb: async () => db });
+            await expect(service.assertLaunchGroundTruth(local.project)).rejects.toThrow('database root');
+        } finally {
+            process.chdir(previous);
+            await db.close();
+            await local.cleanup();
+            await foreign.cleanup();
+        }
+    });
+
+    test('a symlink to the project is accepted, but a storage symlink to another project is rejected', async () => {
+        const local = await makeProject();
+        const foreign = await makeProject();
+        const previous = process.cwd();
+        const alias = `${local.project}-alias`;
+        try {
+            await symlink(local.project, alias);
+            process.chdir(alias);
+            await expect(
+                new FleetService({ fs: createNodeFileSystem(alias) }).assertLaunchGroundTruth(alias),
+            ).resolves.toBeUndefined();
+            await rm(join(local.project, '.spur'), { recursive: true });
+            await symlink(join(foreign.project, '.spur'), join(local.project, '.spur'));
+            await expect(
+                new FleetService({ fs: createNodeFileSystem(alias) }).assertLaunchGroundTruth(alias),
+            ).rejects.toThrow('Ground-truth mismatch');
+        } finally {
+            process.chdir(previous);
+            await local.cleanup();
+            await foreign.cleanup();
         }
     });
 });

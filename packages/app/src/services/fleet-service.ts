@@ -1,4 +1,4 @@
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
     type AgentConfig,
     type AgentRoleName,
@@ -315,7 +315,7 @@ export class FleetService {
      */
     async materialize(projectPath: string, opts?: { check?: boolean }): Promise<MaterializeResult> {
         const normalized = normalizeProjectPath(projectPath);
-        this.assertLaunchGroundTruth(normalized);
+        await this.assertLaunchGroundTruth(normalized);
 
         const declaration = await this.load(normalized);
         if (declaration === null) {
@@ -363,6 +363,7 @@ export class FleetService {
         // The registry display name is the id prefix; a name that cannot form a
         // valid agent id fails here, naming the fix, before anything writes.
         for (const spec of toUpsert) {
+            await this.assertLaunchGroundTruth(spec.workspace);
             try {
                 validateAgentId(spec.id);
             } catch (error) {
@@ -437,14 +438,18 @@ export class FleetService {
      * mismatch is a loud error naming both paths; `SPUR_SPEC_ID` /
      * `SPUR_TEAM_ID` / `SPUR_RUN_ID` env values are never consulted as proof.
      */
-    private assertLaunchGroundTruth(projectPath: string): void {
+    async assertLaunchGroundTruth(projectPath: string): Promise<void> {
         const expected = normalizeProjectPath(projectPath);
-        const expectedStorageRoot = normalizeProjectPath(join(expected, '.spur'));
+        const expectedStorageRoot = join(expected, '.spur');
         const cwd = normalizeProjectPath(process.cwd());
-        const storageRoot = normalizeProjectPath(join(cwd, '.spur'));
-        if (cwd !== expected || storageRoot !== expectedStorageRoot) {
+        const storageRoot = normalizeProjectPath(this.fs.resolve('.spur'));
+        const databasePath = this.ctx.openDb
+            ? await new ProjectClaimDao(await this.ctx.openDb(expected)).databasePath()
+            : '';
+        const databaseRoot = databasePath === '' ? expectedStorageRoot : normalizeProjectPath(dirname(databasePath));
+        if (cwd !== expected || storageRoot !== expectedStorageRoot || databaseRoot !== expectedStorageRoot) {
             throw new Error(
-                `Ground-truth mismatch for fleet at ${expected}: process cwd resolves to ${cwd}, storage root (.spur) resolves to ${storageRoot} — materialization only launches for the project it runs in; SPUR_* environment values are context, not proof (0835 R6)`,
+                `Ground-truth mismatch for fleet at ${expected}: process cwd resolves to ${cwd}, storage root (.spur) resolves to ${storageRoot}, database root resolves to ${databaseRoot} — materialization only launches for the project it runs in; SPUR_* environment values are context, not proof (0835 R6)`,
             );
         }
     }
