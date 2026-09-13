@@ -304,7 +304,14 @@ describe('feature-dev-precheck script (0825 d)', () => {
     });
 
     test('usage: argv arguments are refused with exit 2; no-argv exits 0 in a scoped cwd', () => {
-        expect(main(['unexpected'])).toBe(2);
+        // main() tees its usage/status lines to the real stdio; capture to keep the reporter clean.
+        const stderrWrite = process.stderr.write;
+        process.stderr.write = () => true;
+        try {
+            expect(main(['unexpected'])).toBe(2);
+        } finally {
+            process.stderr.write = stderrWrite;
+        }
         expect(FEATURE_DEV_PRECHECK_USAGE).toContain('featureId');
         // The no-argv path must never run against the repo cwd (it would write .spur/run
         // artifacts and invoke the real spur CLI), so it is spawned in a scratch dir.
@@ -434,10 +441,15 @@ describe('feature-dev-precheck in-process error paths (0825 d)', () => {
             seed(dir, { id: 'F1' }, MIXED_ROSTER);
             const previousCwd = process.cwd();
             process.chdir(dir);
+            const writes = [process.stdout.write, process.stderr.write];
+            process.stdout.write = () => true;
+            process.stderr.write = () => true;
             try {
                 expect(main([], { featureId: 'F1', __runId: RUN_ID, spurBin: stub })).toBe(0);
             } finally {
                 process.chdir(previousCwd);
+                process.stdout.write = writes[0];
+                process.stderr.write = writes[1];
             }
             expect(readFileSync(join(dir, '.spur/run/run-0825-feature-dev-precheck.status'), 'utf8')).toBe('PASS\n');
             expect(readFileSync(join(dir, '.spur/run/run-0825-feature-dev-tasks.txt'), 'utf8')).toBe('0781,0782');

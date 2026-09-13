@@ -1,6 +1,6 @@
 registerHappyDom();
 
-import { afterAll, afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
@@ -21,6 +21,19 @@ afterEach(() => {
     resetFetchForTesting();
     localStorage.clear();
 });
+
+// Default router so the bar's on-mount polls (/api/project/requests etc.) never hit the
+// dev server (CORS noise); tests install their own fetchRouter when they need payloads.
+beforeEach(() => {
+    setFetchForTesting(fetchRouter({ posts: [] }));
+});
+
+/** Settle mount fetches inside act — happy-dom resolves Response bodies on macrotasks. */
+async function settleInAct(): Promise<void> {
+    await act(async () => {
+        for (let tick = 0; tick < 10; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
 
 function setPromptValue(textarea: Element, value: string): void {
     const holder = textarea as unknown as Record<string, Record<string, unknown> | undefined>;
@@ -111,8 +124,9 @@ describe('GlobalAgentBar', () => {
         expect(getByTestId('agent-bar-dock')).toBeDefined();
     });
 
-    test('Send is disabled while the prompt is empty, enabled once text is entered', () => {
+    test('Send is disabled while the prompt is empty, enabled once text is entered', async () => {
         const { getByTestId, getByText } = harness();
+        await settleInAct(); // bar mount polls /api/* on mount
         fireEvent.click(getByTestId('agent-bar-dock'));
         const send = getByText('Send') as HTMLButtonElement;
         expect(send.disabled).toBe(true);
@@ -120,14 +134,26 @@ describe('GlobalAgentBar', () => {
         expect((send as HTMLButtonElement).disabled).toBe(false);
     });
 
-    test('BoardLayout renders the global agent bar dock', () => {
-        setFetchForTesting((async () => new Response('{}', { status: 200 })) as unknown as typeof fetch);
-        const { getByTestId } = render(
+    test('BoardLayout renders the global agent bar dock', async () => {
+        // Minimal VALID fleet snapshot: the settle drain lets the provider resolve, and
+        // GlobalAgentBar destructures fleet.orchestrator (a bare {} would crash it).
+        const fleet = {
+            path: '/repo/wt',
+            strategy: null,
+            orchestrator: { state: 'missing' as const },
+            members: [],
+            capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
+        };
+        setFetchForTesting(
+            (async () => new Response(JSON.stringify(fleet), { status: 200 })) as unknown as typeof fetch,
+        );
+        const view = render(
             <MemoryRouter initialEntries={['/board/tasks']}>
                 <BoardLayout />
             </MemoryRouter>,
         );
-        expect(getByTestId('agent-bar-dock')).toBeDefined();
+        await settleInAct(); // lazy tasks module + agent bar mount fetches
+        expect(view.getByTestId('agent-bar-dock')).toBeDefined();
     });
 });
 
@@ -243,7 +269,7 @@ describe('GlobalAgentBar context, chips, and execution drawer', () => {
         expect(getByTestId('agent-bar-context').textContent).toBe('Context: Board');
     });
 
-    test('renders task-route chip set and clicking a chip populates the prompt input', () => {
+    test('renders task-route chip set and clicking a chip populates the prompt input', async () => {
         const tasksModule: WebModule = {
             id: 'tasks',
             name: 'Tasks',
@@ -254,6 +280,7 @@ describe('GlobalAgentBar context, chips, and execution drawer', () => {
         };
 
         const { getByTestId, getByText } = harness(projectCtx(), tasksModule);
+        await settleInAct(); // bar mount polls /api/* inside the provider
         fireEvent.click(getByTestId('agent-bar-dock'));
 
         const chips = getByTestId('agent-bar-chips');

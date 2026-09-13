@@ -1,7 +1,7 @@
 registerHappyDom();
 
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import BoardLayout from '../../src/components/BoardLayout';
 import { resetLayoutState, STORAGE_KEY } from '../../src/lib/layout-state';
@@ -140,12 +140,21 @@ function installSilentApiFetch(): void {
     }) as typeof fetch);
 }
 
-function renderBoard() {
-    return render(
+/** Settle lazy module + provider fetch chains inside act — happy-dom resolves bodies on macrotasks. */
+async function settleInAct(): Promise<void> {
+    await act(async () => {
+        for (let tick = 0; tick < 10; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
+
+async function renderBoard() {
+    const view = render(
         <MemoryRouter initialEntries={['/board/board']}>
             <BoardLayout />
         </MemoryRouter>,
     );
+    await settleInAct();
+    return view;
 }
 
 // File-scoped teardown: reset the injected fetch, then unregister only after BOTH describe blocks
@@ -169,15 +178,15 @@ describe('BoardLayout', () => {
         localStorage.clear();
     });
 
-    test('renders with the sidebar collapsed and right panel collapsed by default', () => {
-        const { container } = renderBoard();
+    test('renders with the sidebar collapsed and right panel collapsed by default', async () => {
+        const { container } = await renderBoard();
         const root = container.querySelector('.board-layout');
         expect(root?.getAttribute('data-sidebar-collapsed')).toBe('true');
         expect(root?.getAttribute('data-rightpanel-collapsed')).toBe('true');
     });
 
     test('keeps long module content inside the viewport-owned workspace scrollport in BoardLayout', async () => {
-        const { container } = renderBoard();
+        const { container } = await renderBoard();
         const workspace = container.querySelector('main');
         const scrollport = Array.from(workspace?.children ?? []).find((child) =>
             child.classList.contains('overflow-auto'),
@@ -194,7 +203,7 @@ describe('BoardLayout', () => {
         expect(rootRule).toContain('--rightpanel-w: 0px');
     });
 
-    test('collapse toggle flips data-sidebar-collapsed and persists', () => {
+    test('collapse toggle flips data-sidebar-collapsed and persists', async () => {
         localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
@@ -204,7 +213,7 @@ describe('BoardLayout', () => {
                 rightPanelCollapsed: true,
             }),
         );
-        const { container, getByLabelText } = renderBoard();
+        const { container, getByLabelText } = await renderBoard();
         const root = container.querySelector('.board-layout');
         expect(root?.getAttribute('data-sidebar-collapsed')).toBe('false');
 
@@ -215,7 +224,7 @@ describe('BoardLayout', () => {
         expect(persisted.sidebarCollapsed).toBe(true);
     });
 
-    test('expand toggle restores data-sidebar-collapsed=false and persists', () => {
+    test('expand toggle restores data-sidebar-collapsed=false and persists', async () => {
         // Fold then unfold — both directions must work; expand was the broken path.
         localStorage.setItem(
             STORAGE_KEY,
@@ -226,7 +235,7 @@ describe('BoardLayout', () => {
                 rightPanelCollapsed: true,
             }),
         );
-        const { container, getByTestId } = renderBoard();
+        const { container, getByTestId } = await renderBoard();
         const root = container.querySelector('.board-layout');
         expect(root?.getAttribute('data-sidebar-collapsed')).toBe('true');
 
@@ -239,8 +248,8 @@ describe('BoardLayout', () => {
         expect(getByTestId('sidebar-collapse')).toBeTruthy();
     });
 
-    test('right panel toggle expands the panel and persists', () => {
-        const { container, getByLabelText } = renderBoard();
+    test('right panel toggle expands the panel and persists', async () => {
+        const { container, getByLabelText } = await renderBoard();
         const root = container.querySelector('.board-layout');
         expect(root?.getAttribute('data-rightpanel-collapsed')).toBe('true');
 
@@ -251,7 +260,7 @@ describe('BoardLayout', () => {
         expect(persisted.rightPanelCollapsed).toBe(false);
     });
 
-    test('restores persisted collapse state on mount', () => {
+    test('restores persisted collapse state on mount', async () => {
         localStorage.setItem(
             STORAGE_KEY,
             JSON.stringify({
@@ -261,13 +270,13 @@ describe('BoardLayout', () => {
                 rightPanelCollapsed: false,
             }),
         );
-        const { container } = renderBoard();
+        const { container } = await renderBoard();
         const root = container.querySelector('.board-layout');
         expect(root?.getAttribute('data-sidebar-collapsed')).toBe('true');
         expect(root?.getAttribute('data-rightpanel-collapsed')).toBe('false');
     });
 
-    test('migrates legacy unversioned storage key to v2 and enforces folded sidebar default', () => {
+    test('migrates legacy unversioned storage key to v2 and enforces folded sidebar default', async () => {
         localStorage.setItem(
             'spur-board-layout',
             JSON.stringify({
@@ -277,7 +286,7 @@ describe('BoardLayout', () => {
                 rightPanelCollapsed: true,
             }),
         );
-        const { container } = renderBoard();
+        const { container } = await renderBoard();
         const root = container.querySelector('.board-layout');
         // Legacy sidebarCollapsed: false is overridden to true by migration
         expect(root?.getAttribute('data-sidebar-collapsed')).toBe('true');
@@ -288,8 +297,8 @@ describe('BoardLayout', () => {
         expect(persisted.rightPanelWidth).toBe(340);
     });
 
-    test('dragging the sidebar handle updates the CSS var and persists sidebarWidth on pointer up', () => {
-        const { container } = renderBoard();
+    test('dragging the sidebar handle updates the CSS var and persists sidebarWidth on pointer up', async () => {
+        const { container } = await renderBoard();
         const handle = container.querySelectorAll('[data-testid^="resize-handle"]')[0] as HTMLElement;
         expect(handle).toBeDefined();
         // happy-dom needs setPointerCapture stubbed.
@@ -306,8 +315,8 @@ describe('BoardLayout', () => {
         expect(persisted.sidebarWidth).toBe(300);
     });
 
-    test('dragging the right-panel handle persists rightPanelWidth on pointer up', () => {
-        const { container, getByLabelText } = renderBoard();
+    test('dragging the right-panel handle persists rightPanelWidth on pointer up', async () => {
+        const { container, getByLabelText } = await renderBoard();
         // Right panel is collapsed by default; expand so its handle is interactive.
         fireEvent.click(getByLabelText('Expand panel'));
         const handle = container.querySelectorAll('[data-testid^="resize-handle"]')[1] as HTMLElement;
@@ -325,7 +334,7 @@ describe('BoardLayout', () => {
     });
 
     test('single-backdrop invariant: mobile backdrop dismisses drawer and panel, and stylesheet contains no pseudo-scrim', async () => {
-        const { getByLabelText, container } = renderBoard();
+        const { getByLabelText, container } = await renderBoard();
         const root = container.querySelector('.board-layout');
         expect(root).toBeDefined();
 

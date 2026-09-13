@@ -6,7 +6,7 @@ registerHappyDom();
  * DOM-contract level: attributes, roles, focus identity — no focus simulation
  * gymnastics.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import GlobalAgentBar from '../../../src/components/GlobalAgentBar';
@@ -49,6 +49,19 @@ afterEach(() => {
     resetFetchForTesting();
     localStorage.clear();
 });
+
+// Default fetch stub so panels that poll /api/* never hit the dev server (CORS noise);
+// tests needing specific payloads install their own stub inside the test body.
+beforeEach(() => {
+    setFetchForTesting(stubFetch());
+});
+
+/** Settle lazy-import→fetch→parse macrotask chains inside act (happy-dom resolves bodies on ticks). */
+async function settleInAct(): Promise<void> {
+    await act(async () => {
+        for (let tick = 0; tick < 10; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
 
 function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMember {
     return {
@@ -99,10 +112,10 @@ function stubFetch(): typeof fetch {
     }) as typeof fetch;
 }
 
-function renderShell(initial = ['/board/projects']) {
+async function renderShell(initial = ['/board/projects']) {
     // ConversationDraftProvider wraps the shell exactly as BoardLayout does in
     // production — without it useConversationDraft() falls back to noopDraft.
-    return render(
+    const view = render(
         <MemoryRouter initialEntries={initial}>
             <ProjectContext.Provider value={ctx() as never}>
                 <ConversationDraftProvider>
@@ -111,16 +124,20 @@ function renderShell(initial = ['/board/projects']) {
             </ProjectContext.Provider>
         </MemoryRouter>,
     );
+    await settleInAct();
+    return view;
 }
 
-function renderBar() {
-    return render(
+async function renderBar() {
+    const view = render(
         <ProjectContext.Provider value={ctx() as never}>
             <ConversationDraftProvider>
                 <GlobalAgentBar />
             </ConversationDraftProvider>
         </ProjectContext.Provider>,
     );
+    await settleInAct();
+    return view;
 }
 
 function setPromptValue(textarea: Element, value: string): void {
@@ -132,9 +149,9 @@ function setPromptValue(textarea: Element, value: string): void {
 }
 
 describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablist)', () => {
-    test('tablist/tab roles, aria-selected, and aria-controls↔id pairing', () => {
+    test('tablist/tab roles, aria-selected, and aria-controls↔id pairing', async () => {
         setFetchForTesting(stubFetch());
-        const { container } = renderShell();
+        const { container } = await renderShell();
         const tablist = container.querySelector('[role="tablist"]');
         expect(tablist?.getAttribute('aria-label')).toBe('Projects tabs');
         const tabs = [...container.querySelectorAll('[data-projects-tab]')];
@@ -155,21 +172,23 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
         expect(panel?.getAttribute('aria-labelledby')).toBe(active?.getAttribute('id'));
     });
 
-    test('ArrowRight/ArrowLeft move the active tab and focus follows', () => {
+    test('ArrowRight/ArrowLeft move the active tab and focus follows', async () => {
         setFetchForTesting(stubFetch());
-        const { container } = renderShell();
+        const { container } = await renderShell();
         const tablist = container.querySelector('[role="tablist"]') as HTMLElement;
         const tab = (id: string) => container.querySelector(`[data-projects-tab="${id}"]`) as HTMLButtonElement;
         tab('conversation').focus();
         expect(document.activeElement).toBe(tab('conversation'));
 
         fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+        await settleInAct(); // panel switch mounts the agents panel, which fetches on mount
         expect(tab('agents').getAttribute('aria-selected')).toBe('true');
         expect(tab('conversation').getAttribute('aria-selected')).toBe('false');
         expect(container.querySelector('#projects-tab-panel-agents')).not.toBeNull();
         expect(document.activeElement).toBe(tab('agents'));
 
         fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
+        await settleInAct(); // panel switch mounts the conversation panel, which fetches on mount
         expect(tab('conversation').getAttribute('aria-selected')).toBe('true');
         expect(document.activeElement).toBe(tab('conversation'));
     });
@@ -178,7 +197,7 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
 describe('KB-4: Escape closes member detail and restores focus to its opener (0842)', () => {
     test('Escape closes the pane and document.activeElement is the opening card', async () => {
         setFetchForTesting(stubFetch());
-        const view = renderShell(['/board/projects/agents']);
+        const view = await renderShell(['/board/projects/agents']);
         await act(async () => {});
         const card = view.container.querySelector(
             '[data-g6="open-member"][data-roster-entry="a1"]',
@@ -247,7 +266,7 @@ describe('R3: status is never colour-alone and state changes are announced (0844
         }) as typeof fetch);
 
         saveDraft({ path: '/repo/wt', text: 'announce me', refs: [], revision: 1 });
-        const view = renderBar();
+        const view = await renderBar();
         fireEvent.click(view.getByTestId('agent-bar-dock'));
 
         // Region exists before any receipt (stable node, empty content).
@@ -287,7 +306,7 @@ describe('R3: status is never colour-alone and state changes are announced (0844
 });
 
 describe('carried 0841 P3: the task chip is keyboard-operable, labeled, and removable', () => {
-    test('data-g6="task-chip" is a native button with a remove label and removes via activation', () => {
+    test('data-g6="task-chip" is a native button with a remove label and removes via activation', async () => {
         setFetchForTesting(stubFetch());
         saveDraft({
             path: '/repo/wt',
@@ -295,7 +314,7 @@ describe('carried 0841 P3: the task chip is keyboard-operable, labeled, and remo
             refs: [{ kind: 'task', wbs: '0841' }],
             revision: 1,
         });
-        const { container } = renderShell(['/board/projects/conversation']);
+        const { container } = await renderShell(['/board/projects/conversation']);
         const chip = container.querySelector('[data-g6="task-chip"]') as HTMLButtonElement;
         expect(chip).not.toBeNull();
         expect(chip.tagName).toBe('BUTTON'); // keyboard-focusable and Enter/Space activatable
@@ -308,8 +327,8 @@ describe('carried 0841 P3: the task chip is keyboard-operable, labeled, and remo
 });
 
 describe('0844 bar controls stay reachable and labeled (keyboard parity)', () => {
-    test('dock, drawer toggle, collapse, composer, and Send are labeled native controls', () => {
-        const { getByTestId, getByLabelText, getByText } = renderBar();
+    test('dock, drawer toggle, collapse, composer, and Send are labeled native controls', async () => {
+        const { getByTestId, getByLabelText, getByText } = await renderBar();
         const dock = getByTestId('agent-bar-dock');
         expect(dock.tagName).toBe('BUTTON');
         expect(dock.getAttribute('aria-label')).toBe('Open agent prompt bar');

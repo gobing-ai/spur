@@ -33,11 +33,19 @@ function gate(
     script: string,
     extra: Record<string, string> = {},
 ): QualityGateResult {
-    return runQualityGate(
-        mode,
-        { wbs: '0823', qualityGateCmd: script, SPUR_QUALITY_GATE_RETRY_DELAY_MS: '0', ...extra },
-        { cwd: dir },
-    );
+    // runQualityGate tees its retry/PASS/FAIL status lines to process.stdout; in-process
+    // invocation would otherwise leak them into the bun test reporter stream.
+    const originalWrite = process.stdout.write;
+    process.stdout.write = () => true;
+    try {
+        return runQualityGate(
+            mode,
+            { wbs: '0823', qualityGateCmd: script, SPUR_QUALITY_GATE_RETRY_DELAY_MS: '0', ...extra },
+            { cwd: dir },
+        );
+    } finally {
+        process.stdout.write = originalWrite;
+    }
 }
 
 describe('quality-gate script (0823 d)', () => {

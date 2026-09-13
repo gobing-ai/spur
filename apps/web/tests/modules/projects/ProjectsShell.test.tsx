@@ -1,8 +1,9 @@
 registerHappyDom();
 
-import { afterAll, afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { act, cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import { discoverModules } from '../../../src/modules/discover';
 import { module as projectsModule } from '../../../src/modules/projects/index';
 import ProjectsShell from '../../../src/modules/projects/ProjectsShell';
@@ -11,7 +12,25 @@ import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterAll(teardownHappyDom);
 
-afterEach(() => cleanup());
+// Tab panels poll /api/* on mount; tests that do not install their own fetch stub would
+// otherwise hit the dev server and log CORS noise into the reporter stream.
+beforeEach(() => {
+    setFetchForTesting(((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/project/requests')) {
+            return Promise.resolve(new Response(JSON.stringify({ requests: [] }), { status: 200 }));
+        }
+        if (url.includes('/team/processes')) {
+            return Promise.resolve(new Response(JSON.stringify({ processes: [] }), { status: 200 }));
+        }
+        return Promise.resolve(new Response(JSON.stringify({ messages: [], count: 0 }), { status: 200 }));
+    }) as typeof fetch);
+});
+
+afterEach(() => {
+    cleanup();
+    resetFetchForTesting();
+});
 
 function fleet(overrides: Partial<ProjectFleetSnapshot> = {}): ProjectFleetSnapshot {
     return {
@@ -37,14 +56,23 @@ function ctx(overrides: Record<string, unknown> = {}) {
     return { path: '/repo/wt', name: 'spur', fleet: fleet(), state: 'ready' as const, ...overrides };
 }
 
-function renderShell(contextValue: Record<string, unknown>, initial = ['/board/projects']) {
-    return render(
+/** Settle lazy-import→fetch→parse macrotask chains inside act (happy-dom resolves bodies on ticks). */
+async function settleInAct(): Promise<void> {
+    await act(async () => {
+        for (let tick = 0; tick < 10; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
+
+async function renderShell(contextValue: Record<string, unknown>, initial = ['/board/projects']) {
+    const view = render(
         <MemoryRouter initialEntries={initial}>
             <ProjectContext.Provider value={contextValue as never}>
                 <ProjectsShell />
             </ProjectContext.Provider>
         </MemoryRouter>,
     );
+    await settleInAct();
+    return view;
 }
 
 describe('Projects module registration (0840 R6)', () => {
@@ -62,8 +90,8 @@ describe('Projects module registration (0840 R6)', () => {
 });
 
 describe('ProjectsShell header (0840 R5)', () => {
-    test('renders name + path and ready state when everything resolves', () => {
-        const { container } = renderShell(ctx());
+    test('renders name + path and ready state when everything resolves', async () => {
+        const { container } = await renderShell(ctx());
         const header = container.querySelector('[data-projects-header]');
         expect(header?.getAttribute('data-projects-state')).toBe('ready');
         expect(container.textContent).toContain('spur');
@@ -73,13 +101,13 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.textContent).toContain('1 member');
     });
 
-    test('loading state (context default)', () => {
-        const { container } = renderShell({ path: null, name: '', fleet: null, state: 'loading' });
+    test('loading state (context default)', async () => {
+        const { container } = await renderShell({ path: null, name: '', fleet: null, state: 'loading' });
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe('loading');
     });
 
-    test('unresolvable state names the missing path, tabs still mounted', () => {
-        const { container } = renderShell({ path: null, name: '', fleet: null, state: 'unresolvable' });
+    test('unresolvable state names the missing path, tabs still mounted', async () => {
+        const { container } = await renderShell({ path: null, name: '', fleet: null, state: 'unresolvable' });
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'unresolvable',
         );
@@ -87,16 +115,16 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.querySelectorAll('[data-projects-tab]')).toHaveLength(3);
     });
 
-    test('fleet-unavailable when identity is ready but fleet fetch failed', () => {
-        const { container } = renderShell(ctx({ fleet: null }));
+    test('fleet-unavailable when identity is ready but fleet fetch failed', async () => {
+        const { container } = await renderShell(ctx({ fleet: null }));
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'fleet-unavailable',
         );
         expect(container.textContent).toContain('Fleet status unavailable');
     });
 
-    test('no-fleet state names the expected fleet.json path', () => {
-        const { container } = renderShell(
+    test('no-fleet state names the expected fleet.json path', async () => {
+        const { container } = await renderShell(
             ctx({
                 fleet: fleet({
                     members: [],
@@ -110,8 +138,8 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.textContent).toContain('/repo/wt/.spur/fleet.json');
     });
 
-    test('capacity-missing state lists unresolved members', () => {
-        const { container } = renderShell(
+    test('capacity-missing state lists unresolved members', async () => {
+        const { container } = await renderShell(
             ctx({ fleet: fleet({ capacity: { total: 1, enabled: 0, writeCapable: 0, missing: ['writer-x'] } }) }),
         );
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
@@ -120,8 +148,8 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.textContent).toContain('writer-x');
     });
 
-    test('bound-offline orchestrator state wins over facts', () => {
-        const { container } = renderShell(
+    test('bound-offline orchestrator state wins over facts', async () => {
+        const { container } = await renderShell(
             ctx({ fleet: fleet({ orchestrator: { state: 'bound-offline', reason: 'no-live-claim' } }) }),
         );
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
@@ -132,8 +160,8 @@ describe('ProjectsShell header (0840 R5)', () => {
 });
 
 describe('ProjectsShell tabs (0840 R3/R5)', () => {
-    test('three tabs render with the WorkspaceShell aria contract and deep-link selection', () => {
-        const { container } = renderShell(ctx(), ['/board/projects/agents']);
+    test('three tabs render with the WorkspaceShell aria contract and deep-link selection', async () => {
+        const { container } = await renderShell(ctx(), ['/board/projects/agents']);
         const tabs = container.querySelectorAll('[data-projects-tab]');
         expect(tabs).toHaveLength(3);
         const agents = container.querySelector('#projects-tab-agents');
@@ -144,10 +172,11 @@ describe('ProjectsShell tabs (0840 R3/R5)', () => {
         expect(panel?.getAttribute('aria-labelledby')).toBe('projects-tab-agents');
     });
 
-    test('tab click swaps the active panel and aria-selected', () => {
-        const { container } = renderShell(ctx());
+    test('tab click swaps the active panel and aria-selected', async () => {
+        const { container } = await renderShell(ctx());
         expect(container.querySelector('#projects-tab-panel-conversation')).not.toBeNull();
         act(() => (container.querySelector('[data-projects-tab="work"]') as HTMLButtonElement).click());
+        await settleInAct(); // the lazily imported workspace module fetches on mount
         expect(container.querySelector('#projects-tab-panel-work')).not.toBeNull();
         expect(container.querySelector('#projects-tab-panel-conversation')).toBeNull();
         expect(container.querySelector('#projects-tab-work')?.getAttribute('aria-selected')).toBe('true');
