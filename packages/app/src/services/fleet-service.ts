@@ -296,6 +296,9 @@ export class FleetService {
         if (claim === null || claim.expiresAt <= Date.now()) {
             return { state: 'bound-offline', instanceId, reason: 'no-live-claim' };
         }
+        if (claim.holderId !== instanceId) {
+            return { state: 'bound-offline', instanceId, reason: `claim-holder-mismatch:${claim.holderId}` };
+        }
         return { state: 'bound-online', instanceId, holderId: claim.holderId, claim };
     }
 

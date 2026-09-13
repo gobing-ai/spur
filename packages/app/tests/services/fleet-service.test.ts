@@ -719,4 +719,20 @@ describe('FleetService resolveOrchestrator (0836)', () => {
             await cleanup();
         }
     });
+
+    test('a live claim for a replaced binding does not make the configured orchestrator online', async () => {
+        const { project, cleanup } = await makeProject();
+        try {
+            const { svc, db } = await makeOrchestratorService(project);
+            await writeOrchestratorFleet(project, [PLANNER], 'planner-1');
+            await new ProjectClaimDao(db).claim(normalizeProjectPath(project), 'orchestrator', 'proj-old', 30_000);
+            const binding = await svc.resolveOrchestrator(project);
+            expect(binding.state).toBe('bound-offline');
+            expect(binding.instanceId).toBe('proj-planner-1');
+            expect(binding.reason).toContain('claim-holder-mismatch');
+            db.close();
+        } finally {
+            await cleanup();
+        }
+    });
 });
