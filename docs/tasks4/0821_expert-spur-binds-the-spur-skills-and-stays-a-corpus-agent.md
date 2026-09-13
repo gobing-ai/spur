@@ -4,7 +4,7 @@ name: expert-spur binds the spur-* skills and stays a corpus agent
 status: done
 template: feature-impl
 created_at: 2026-09-10T22:18:37.285Z
-updated_at: "2026-09-11T19:41:50.059Z"
+updated_at: "2026-09-13T05:57:07.050Z"
 feature_id: I21
 priority: P2
 tags:
@@ -130,10 +130,17 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | expert-spur.md:15 binds exactly the three skills; :85 keeps the lifecycle line verbatim; :46 One bounded campaign per dispatch; :88 no batch driving, no recurring loops, no coordination dispatch; :30 not a coordinator, and not a recurring loop; test-pinned at skill-structure.test.ts:1736-1743 |
-| R2 | MET | expert-spur.md:48-49 and :88-89 hand loops and coordination to sp:super-planner or a workflow, plus a dedicated Hand-offs section at :121-127; spur-composer SKILL.md:37-38 and :142-143; spur-doctor SKILL.md:43-44 and :111; asserted in skill-structure.test.ts:1746-1754 |
-| R3 | MET | expert-spur.md:90 Never list names spur team and spur agent loop as forbidden surfaces and :127 repeats the ban; spur-composer SKILL.md:39-40 and spur-doctor SKILL.md:45-46 name both as forbidden; team.md:7-11 carries the Retiring banner; asserted at skill-structure.test.ts:1755-1759 |
-| R4 | MET | Driver-verified: full bun run spur-check PASS (includes skill-structure tests and cli-surface-parity.test.ts) and 1033 plugin tests; superskill agent evaluate expert-spur.md --json 0.98 grade A PASS equals the recorded 0.98 baseline; extended R56 test present at skill-structure.test.ts:1726-1759 |
+| R1 | MET | The three skill bindings retain the corpus-only charter. `plugins/sp/agents/expert-spur.md:15`; `plugins/sp/tests/skill-structure.test.ts:1729`. Executed: `bun run spur-check` (exit 0). |
+| R2 | MET | Coordination and recurring loops hand off to super-planner. `plugins/sp/agents/expert-spur.md:120`; `plugins/sp/tests/skill-structure.test.ts:1729`. Executed: `bun run spur-check` (exit 0). |
+| R3 | MET | All three surfaces ban team/agent-loop use and the team reference has its retirement notice. `plugins/sp/skills/spur-cli/references/team.md:24`; `plugins/sp/tests/skill-structure.test.ts:1729`. Executed: `bun run spur-check` (exit 0). |
+| R4 | MET | Plugin structure and CLI parity pass; Superskill evaluation scored 0.98 against the 0.98 baseline. `plugins/sp/tests/skill-structure.test.ts:1729`; `plugins/sp/tests/cli-surface-parity.test.ts:254`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — expert-spur is a corpus agent, not a coordinator | MET | test | The three skill bindings retain the corpus-only charter. `plugins/sp/agents/expert-spur.md:15`; `plugins/sp/tests/skill-structure.test.ts:1729`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R2 — coordination and evolution loops route to super-planner | MET | test | Coordination and recurring loops hand off to super-planner. `plugins/sp/agents/expert-spur.md:120`; `plugins/sp/tests/skill-structure.test.ts:1729`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R3 — no spur-* guidance uses spur team | MET | test | All three surfaces ban team/agent-loop use and the team reference has its retirement notice. `plugins/sp/skills/spur-cli/references/team.md:24`; `plugins/sp/tests/skill-structure.test.ts:1729`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R4 — existing gates still pass | MET | test | Plugin structure and CLI parity pass; Superskill evaluation scored 0.98 against the 0.98 baseline. `plugins/sp/tests/skill-structure.test.ts:1729`; `plugins/sp/tests/cli-surface-parity.test.ts:254`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -145,6 +152,13 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0821-verify-answer.txt:1-39` and `.spur/run/0821-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | expert-spur-score | — | `superskill agent evaluate plugins/sp/agents/expert-spur.md --json` exit 0; aggregate 0.9800000000000001. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
