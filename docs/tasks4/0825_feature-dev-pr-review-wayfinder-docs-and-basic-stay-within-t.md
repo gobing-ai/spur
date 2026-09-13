@@ -4,7 +4,7 @@ name: feature-dev, pr-review, wayfinder, docs and basic stay within the composit
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.074Z
-updated_at: "2026-09-13T05:57:14.248Z"
+updated_at: "2026-09-13T06:11:23.881Z"
 feature_id: I21
 priority: P2
 tags:
@@ -35,7 +35,7 @@ Ordering: after the validator task. Grouped as the rest of the catalog; each wor
 
 ### Requirements
 
-- [x] R1. `spur workflow validate --json` on `feature-dev.yaml`, `pr-review.yaml`, `wayfinder-resolution.yaml`, `docs-pipeline.yaml` and `basic.yaml` reports no error-level composition finding and no `agent-run-output` finding. Over-cap programs and the docs `verify→record` guard move to owners from the closed fix vocabulary (governance §1.1 (a)–(d)); a stays-shell reason (e) is valid only inside the warn band. Every remaining warn-band program, guard and non-slash `agent.run` input carries a one-line reason as a YAML comment directly above it. The `investigate` prompt body moves into an `sp:wayfinder` skill reference, and its input carries only the operation, its vars and the bundle path. The two `execute-tasks` steps and basic `fix` declare an `answerFile` equal to their `expectFile`, and docs `verify:6` adds an `expectFile` equal to its `answerFile`. Routes, `.spur/run` artifacts, status values, exit semantics and test-pinned messages stay the same, with two exceptions: the integration-review collect now receives its `--status-file`, and a seeded project without the `sp` plugin fails closed at the feature-dev precheck. Existing workflow assertions pass, moved with the logic they pin. The `run --dry-run` graphs are unchanged, `build:bundle` parity holds and no model query is added. A new public `spur` verb or flag lands only with its own consent entry.
+- [x] R1. `spur workflow validate --json` on `feature-dev.yaml`, `pr-review.yaml`, `wayfinder-resolution.yaml`, `docs-pipeline.yaml` and `basic.yaml` reports no error-level composition finding and no `agent-run-output` finding. Over-cap programs and the docs `verify→record` guard move to owners from the closed fix vocabulary (governance §1.1 (a)–(d)); a stays-shell reason (e) is valid only inside the warn band. Every remaining warn-band program, guard and non-slash `agent.run` input carries a one-line reason as a YAML comment directly above it. The `investigate` prompt body moves into an `sp:wayfinder` skill reference, and its input carries only the operation, its vars and the bundle path. The two `execute-tasks` steps and basic `fix` declare an `answerFile` equal to their `expectFile`, and docs `verify:6` adds an `expectFile` equal to its `answerFile`. Routes, `.spur/run` artifacts, status values, exit semantics and test-pinned messages stay the same, with three exceptions: the integration-review collect now receives its `--status-file`, a seeded project without the `sp` plugin fails closed at the feature-dev precheck, and the docs precheck guard reads the current run-scoped status produced by its precheck action. Current-run PASS allows drafting; FAIL, missing evidence, or another run/task's stale PASS never does. Existing workflow assertions pass, moved with the logic they pin. The `run --dry-run` graphs are unchanged, `build:bundle` parity holds and no model query is added. A new public `spur` verb or flag lands only with its own consent entry.
 
 Non-goals:
 - `stateEffect`/`evidenceEffect` declarations. The progress projection hard-codes them and ADR-115 asks for none.
@@ -43,7 +43,6 @@ Non-goals:
 - Changing integration review's advisory semantics (D5-P) or pr-review's pending/unavailable handling.
 - task-pipeline (0823), idea and wrap-up (0824), the `spur-check` gate and budget coverage (0826).
 - Pipeline budget changes.
-- The docs precheck status path. `precheck:2` writes `.spur/run/$__runId-docs-precheck.status`, but the `precheck→draft` guard (`docs-pipeline.yaml:266`) reads `.spur/run/$wbs-docs-precheck.status`. That routing defect is deferred to its own task.
 
 ### Acceptance Criteria
 
@@ -81,6 +80,10 @@ Refined at depth=ready (refineall I21, 2026-09-10). Closed decisions:
 - **Test migration.** Assertions follow the logic they pin. The feature-dev dispatch-equality checks compare first lines, because the hint follows the slash args.
 - **R44 measures SKILL.md only.** `references/pipeline-resolution.md` sits outside the byte budget; only the 52-byte pointer counts.
 - **Docs precheck status path deferred.** `precheck:2` and the `precheck→draft` guard name different files. That routing defect is unrelated to the composition caps, and fixing it here would change a route.
+
+#### Q&A entry — 2026-09-13T06:06:37.438Z
+
+I21 closeout authorization (2026-09-12): Robin requested completion of all remaining I21 items with all checks PASS and shippable before the next commit. This supersedes the earlier docs-precheck deferral and frozen-program restriction solely for the precheck→draft guard. Repair that guard to consume the existing $__runId-scoped status; preserve graph nodes, all other guards and model queries. Add executable regressions for current PASS/FAIL, missing evidence and stale task/foreign-run status. No further commits in this step; operator schedules commit next.
 
 ### Design
 
@@ -315,6 +318,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:102` rejects null and primitive roster members before field access, preserving the existing FAIL status and error route. The Superskill-generated twin is `plugins/sp/scripts/feature-dev-precheck.mjs:31`. Regression `plugins/sp/tests/feature-dev-precheck.test.ts:219` reproduced the crash and now verifies the persisted FAIL artifact.
 
+Closeout (R1, 2026-09-12): the operator requested closure of the recorded deferrals before the next commit. `config/workflows/docs-pipeline.yaml:267` now reads the same $__runId-scoped precheck status its producer writes. `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:90` executes the producer and guard with conflicting stale task/foreign-run statuses: current PASS succeeds, every failed/missing current result denies. All six new cases failed before the one-line fix and pass afterward. The docs suites pass 36 tests. `docs/design/workflow-shell-ownership.md:175` documents run-scoped routing. Graph structure and model queries remain unchanged; the previously deferred erroneous guard behavior is intentionally corrected under the superseding Q&A decision.
+
 ### Testing
 
 **Pipeline verify results**
@@ -323,11 +328,11 @@ Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:102` 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | All five graphs and query counts preserved; caps/output declarations and moved prompt checks pass. Null roster entries now produce the required FAIL status; integration collect receives its status-file. `plugins/sp/scripts/feature-dev-precheck.ts:102`; `plugins/sp/tests/feature-dev-precheck.test.ts:219`; `packages/app/tests/workflow/feature-dev-definition.test.ts:79`; `packages/app/tests/workflow/wayfinder-resolution.test.ts:133`. Executed: `bun run spur-check` (exit 0). |
+| R1 | MET | All five graphs and query counts preserved; caps/output declarations and moved prompt checks pass. Null roster entries now produce the required FAIL status; integration collect receives its status-file. `plugins/sp/scripts/feature-dev-precheck.ts:102`; `plugins/sp/tests/feature-dev-precheck.test.ts:219`; `packages/app/tests/workflow/feature-dev-definition.test.ts:79`; `packages/app/tests/workflow/wayfinder-resolution.test.ts:133`. Executed: `bun run spur-check` (exit 0). Closeout: the docs precheck guard now consumes its current run-scoped producer status. Executable regressions prove PASS routes forward and FAIL/missing/stale task or foreign-run evidence cannot. `config/workflows/docs-pipeline.yaml:267`; `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:90`. Six cases failed before the fix; all 36 docs tests pass afterward. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — feature-dev, pr-review, wayfinder, docs and basic stay within the composition budgets | MET | test | All five graphs and query counts preserved; caps/output declarations and moved prompt checks pass. Null roster entries now produce the required FAIL status; integration collect receives its status-file. `plugins/sp/scripts/feature-dev-precheck.ts:102`; `plugins/sp/tests/feature-dev-precheck.test.ts:219`; `packages/app/tests/workflow/feature-dev-definition.test.ts:79`; `packages/app/tests/workflow/wayfinder-resolution.test.ts:133`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R1 — feature-dev, pr-review, wayfinder, docs and basic stay within the composition budgets | MET | test | All five graphs and query counts preserved; caps/output declarations and moved prompt checks pass. Null roster entries now produce the required FAIL status; integration collect receives its status-file. `plugins/sp/scripts/feature-dev-precheck.ts:102`; `plugins/sp/tests/feature-dev-precheck.test.ts:219`; `packages/app/tests/workflow/feature-dev-definition.test.ts:79`; `packages/app/tests/workflow/wayfinder-resolution.test.ts:133`. Executed: `bun run spur-check` (exit 0). Closeout: the docs precheck guard now consumes its current run-scoped producer status. Executable regressions prove PASS routes forward and FAIL/missing/stale task or foreign-run evidence cannot. `config/workflows/docs-pipeline.yaml:267`; `packages/app/tests/workflow/docs-pipeline-measured-verdict.test.ts:90`. Six cases failed before the fix; all 36 docs tests pass afterward. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -339,12 +344,12 @@ Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:102` 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
-| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved; closeout Q&A supersedes only the two explicit deferrals. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-closeout/spur-check.log`. |
 | P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
 | P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
 | P4 | artifact-disclosure | — | Rebuilt `.spur/run/0825-verify-answer.txt:1-33` and `.spur/run/0825-verdict.json` from fresh evidence; Testing rendered by task record. |
-| P4 | workflow-audit | — | `bun .spur/run/I21-verifyall-20260912/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
+| P4 | workflow-audit | — | `bun .spur/run/I21-closeout/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References

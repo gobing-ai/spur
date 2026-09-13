@@ -264,7 +264,7 @@ transitions:
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$wbs-docs-precheck.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$__runId-docs-precheck.status 2>/dev/null)" = PASS'
   - from: precheck
     to: failed
     description: Precheck FAIL — stop before draft.

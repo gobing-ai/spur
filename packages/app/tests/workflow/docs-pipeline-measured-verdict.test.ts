@@ -87,6 +87,35 @@ const FAIL_VERDICT = PASS_VERDICT.replace('"verdict":"PASS"', '"verdict":"FAIL"'
 const GOOD_DIGEST = 'sha256:'.concat('a'.repeat(64));
 const RUN_ENV = { wbs: '0704', __runId: 'r-fixt-01', proofDigest: GOOD_DIGEST, proofDigestNow: GOOD_DIGEST };
 
+describe('docs-pipeline precheck uses current-run evidence (0825 closeout)', () => {
+    test.each([
+        ['PASS', 'PASS', 'FAIL', 0],
+        ['PASS', 'FAIL', 'PASS', 1],
+        ['FAIL', 'PASS', 'PASS', 1],
+        ['FAIL', 'FAIL', 'PASS', 1],
+        ['', 'PASS', 'PASS', 1],
+    ])('task=%s agent=%s stale task status=%s yields %i', (task, agent, stale, expected) => {
+        const command = [...shellCommands('precheck'), guardOf('precheck', 'draft')].join('\n');
+        expect(
+            runGuard(command, RUN_ENV, {
+                '.spur/run/r-fixt-01-docs-precheck-task.status': String(task),
+                '.spur/run/r-fixt-01-docs-precheck-agent.status': String(agent),
+                '.spur/run/0704-docs-precheck.status': String(stale),
+                '.spur/run/other-run-docs-precheck.status': 'PASS',
+            }),
+        ).toBe(Number(expected));
+    });
+
+    test('missing current-run evidence cannot inherit another run or a stale task PASS', () => {
+        expect(
+            runGuard(guardOf('precheck', 'draft'), RUN_ENV, {
+                '.spur/run/0704-docs-precheck.status': 'PASS',
+                '.spur/run/other-run-docs-precheck.status': 'PASS',
+            }),
+        ).toBe(1);
+    });
+});
+
 describe('docs-pipeline measured verification (task 0704, ordered by 0769)', () => {
     test('no state manufactures a verdict: the synthetic PASS writer is gone (R1)', () => {
         for (const state of DEF.states) {

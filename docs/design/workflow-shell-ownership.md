@@ -172,7 +172,9 @@ verdict/digest, and `record → failed` always — a denied record is never conv
 an exit 0. The former synthetic PASS writer in `done` is gone — no state manufactures a verdict,
 and non-PASS/malformed/mismatched evidence routes to `failed`. Temporary captures are
 run-scoped (`.spur/run/<runId>-docs-*`); the verdict artifact keeps its wbs-named compatibility
-path with `runId` stamped inside. 0825 condenses the `verify → record` guard to four shell
+path with `runId` stamped inside. The `precheck → draft` guard consumes the same current-run
+status written by precheck; stale task-scoped or other-run status cannot authorize drafting.
+0825 condenses the `verify → record` guard to four shell
 predicates — the digest-locked measured-PASS comparison keeps its fail-closed semantics
 (empty/malformed evidence still routes to `failed`) — and the verifier `agent.run`
 (`verify:onEnter:6`) now declares `expectFile` equal to its `answerFile`.
