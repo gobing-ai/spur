@@ -1,10 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { type DbAdapter, ProjectClaimDao, ProjectStrategyDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    CoordinationRunDao,
+    type DbAdapter,
+    ProjectClaimDao,
+    ProjectStrategyDao,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import { DeliveryReconciler, type UnresolvedDelivery } from './delivery-reconciler';
 import type { FleetService, OrchestratorBinding, ResolvedFleetMember } from './fleet-service';
 import { normalizeProjectPath } from './project-registry';
 import type { TaskService, TaskSummary } from './task-service';
-import type { DispatchDecision } from './write-slot-service';
+import { type DispatchDecision, WRITE_SLOT_TTL_MS, WriteSlotService } from './write-slot-service';
 
 // ---------------------------------------------------------------------------
 // Frozen vocabulary (0838, feature G62 — persisted rest/GTD strategy runtime)
@@ -56,6 +62,7 @@ export interface StrategyContext {
      * `dependencies[]` itself.
      */
     dependencyBlocked: (wbs: string) => string | null;
+    ready?: (wbs: string) => boolean;
 }
 
 /** The strategy's whole output: decisions to dispatch, holds for everything skipped. */
@@ -128,7 +135,7 @@ export const gtdStrategy: Strategy = {
                 continue;
             }
             // 2. readiness — dispatch readiness, not refine-readiness.
-            if (candidate.status !== 'todo') {
+            if (candidate.status !== 'todo' || ctx.ready?.(candidate.wbs) === false) {
                 hold('not-ready');
                 continue;
             }
@@ -140,14 +147,20 @@ export const gtdStrategy: Strategy = {
             }
             // 4. capacity — an instance holding a run is not idle; once idle
             //    runs out every remaining survivor holds (R4: no silent skip).
-            const member = idle.shift();
+            const assignee = candidate.frontmatter.assignee;
+            const memberIndex = idle.findIndex((member) =>
+                typeof assignee === 'string' && assignee !== ''
+                    ? member.instanceId === assignee
+                    : member.role === undefined || member.role === 'coder',
+            );
+            const member = memberIndex < 0 ? undefined : idle.splice(memberIndex, 1)[0];
             if (member === undefined) {
                 hold('no-idle-instance');
                 continue;
             }
             // 5. executor resolution — '' is the unresolved marker (0835); the
             //    unusable member stays consumed.
-            if (member.executor === '') {
+            if (member.executor === '' || member.capabilityState === 'unknown') {
                 hold('executor-unavailable');
                 continue;
             }
@@ -188,6 +201,7 @@ export interface StrategyRuntimeContext {
      * rule) — injected, never re-parsed here (Q&A — CLOSED).
      */
     dependencyBlocked: (projectPath: string, wbs: string) => Promise<string | null>;
+    ready?: (candidate: TaskSummary) => Promise<boolean>;
 }
 
 /** R6: what a restart found and whether the runtime may accept dispatch work. */
@@ -219,7 +233,7 @@ export class StrategyRuntime {
         const row = await new ProjectStrategyDao(await this.ctx.openDb(normalized)).get(normalized);
         return row === null
             ? { name: DEFAULT_STRATEGY, version: 1 }
-            : { name: row.strategy as StrategyName, version: row.strategyVersion };
+            : { name: row.strategy === 'gtd' ? 'gtd' : DEFAULT_STRATEGY, version: row.strategyVersion };
     }
 
     /**
@@ -255,12 +269,9 @@ export class StrategyRuntime {
     async resume(projectPath: string): Promise<ResumeReport> {
         const normalized = normalizeProjectPath(projectPath);
         const dao = new ProjectStrategyDao(await this.ctx.openDb(normalized));
-        const row = await dao.get(normalized);
-        const strategy: StrategyName = row === null ? DEFAULT_STRATEGY : (row.strategy as StrategyName);
-        const version =
-            row === null
-                ? await dao.set(normalized, DEFAULT_STRATEGY).then((r) => r.strategyVersion)
-                : row.strategyVersion;
+        const row = await dao.set(normalized, DEFAULT_STRATEGY, true);
+        const strategy: StrategyName = row.strategy === 'gtd' ? 'gtd' : DEFAULT_STRATEGY;
+        const version = row.strategyVersion;
 
         const orchestrator = await this.ctx.fleet.resolveOrchestrator(normalized);
         if (orchestrator.state !== 'bound-online') {
@@ -269,6 +280,89 @@ export class StrategyRuntime {
         const reconciler = new DeliveryReconciler({ getDb: async () => this.ctx.openDb(normalized) });
         const report = await reconciler.reconcile();
         return { strategy, version, orchestrator, unresolved: report.unresolved, reconciled: true };
+    }
+
+    /** A managed wake dispatches through the existing agent runner, never transitions tasks. */
+    async dispatchNext(
+        projectPath: string,
+        ownerEpoch: number,
+        invoke: (decision: DispatchDecision, signal: AbortSignal, beforeDispatch: () => Promise<void>) => Promise<void>,
+    ): Promise<StrategyResult> {
+        const selected = await this.selectNext(projectPath);
+        const slots = new WriteSlotService(this.ctx);
+        const claims = new ProjectClaimDao(await this.ctx.openDb(normalizeProjectPath(projectPath)));
+        const dispatched: DispatchDecision[] = [];
+        for (const decision of selected.decisions) {
+            if (decision.ownerEpoch !== ownerEpoch) break;
+            // Recheck task gates after preceding work, then atomically re-fence
+            // the persisted strategy and owner at acquisition (rest holds queues).
+            const current = await this.selectNext(projectPath);
+            if (!current.decisions.some((d) => d.taskId === decision.taskId && d.instanceId === decision.instanceId))
+                continue;
+            const outcome = await slots.claim(decision);
+            if (!outcome.ok) {
+                selected.holds.push({
+                    wbs: decision.taskId ?? '',
+                    reason: 'no-idle-instance',
+                    detail: outcome.refusal,
+                });
+                continue;
+            }
+            const controller = new AbortController();
+            const lease = outcome.lease;
+            let heartbeat = Promise.resolve();
+            const timer = setInterval(() => {
+                heartbeat = heartbeat
+                    .then(async () => {
+                        // Keep a running writer reserved even if its owner is replaced;
+                        // abort that run, reconcile, and only then release its slot.
+                        if (
+                            lease &&
+                            !(await claims.heartbeat(
+                                lease.projectPath,
+                                'write',
+                                lease.holderId,
+                                WRITE_SLOT_TTL_MS,
+                                lease.ownerEpoch,
+                            ))
+                        )
+                            controller.abort();
+                        const owner = await claims.get(decision.projectPath, 'orchestrator');
+                        if (owner?.ownerEpoch !== ownerEpoch || owner.expiresAt <= Date.now()) controller.abort();
+                    })
+                    .catch(() => controller.abort());
+            }, WRITE_SLOT_TTL_MS / 3);
+            try {
+                await invoke(decision, controller.signal, async () => {
+                    const owner = await claims.get(decision.projectPath, 'orchestrator');
+                    const strategy = await this.getStrategy(decision.projectPath);
+                    if (owner?.ownerEpoch !== ownerEpoch || owner.expiresAt <= Date.now())
+                        throw new Error('stale-owner');
+                    if (strategy.name !== 'gtd' || strategy.version !== decision.strategyVersion)
+                        throw new Error('stale-strategy');
+                    if (
+                        lease &&
+                        (await slots.validateResult(lease.projectPath, lease.holderId, lease.ownerEpoch)) !== 'accepted'
+                    ) {
+                        throw new Error('stale-owner');
+                    }
+                });
+                dispatched.push(decision);
+                if (lease)
+                    await slots.validateResult(lease.projectPath, lease.holderId, lease.ownerEpoch, {
+                        taskId: decision.taskId,
+                    });
+            } finally {
+                try {
+                    await new DeliveryReconciler({ getDb: () => this.ctx.openDb(decision.projectPath) }).reconcile();
+                    if (lease) await slots.release(lease.projectPath, lease.holderId, lease.ownerEpoch);
+                } finally {
+                    clearInterval(timer);
+                    await heartbeat;
+                }
+            }
+        }
+        return { decisions: dispatched, holds: selected.holds };
     }
 
     /**
@@ -283,7 +377,8 @@ export class StrategyRuntime {
      */
     async selectNext(projectPath: string): Promise<StrategyResult> {
         const normalized = normalizeProjectPath(projectPath);
-        let { name, version } = await this.getStrategy(normalized);
+        const resumed = await this.resume(normalized);
+        const { strategy: name, version } = resumed;
         const db = await this.ctx.openDb(normalized);
         const claims = new ProjectClaimDao(db);
 
@@ -292,9 +387,6 @@ export class StrategyRuntime {
 
         const candidates = await this.ctx.tasks.list({ status: 'todo' });
         if (name === 'gtd') {
-            const resumed = await this.resume(normalized);
-            name = resumed.strategy;
-            version = resumed.version;
             if (!resumed.reconciled || resumed.unresolved.length > 0) {
                 const detail = !resumed.reconciled
                     ? `orchestrator:${resumed.orchestrator.state}; restore its live claim before dispatch`
@@ -309,11 +401,27 @@ export class StrategyRuntime {
         const resolved = await this.ctx.fleet.resolve(normalized);
         const writeHolder = await claims.get(normalized, 'write');
         const writeHeldLive = writeHolder !== null && writeHolder.expiresAt > Date.now() ? writeHolder.holderId : null;
-        const idleInstances = resolved.members.filter((m) => m.enabled && m.instanceId !== writeHeldLive);
-
+        const runs = new CoordinationRunDao(db);
+        const idleInstances: ResolvedFleetMember[] = [];
+        for (const member of resolved.members) {
+            const busy = await runs.hasRunning(member.instanceId);
+            if (member.enabled && member.instanceId !== writeHeldLive && !busy) {
+                idleInstances.push(member);
+            }
+        }
+        const ready = new Map<string, boolean>();
         const blocked = new Map<string, string | null>();
         for (const candidate of candidates) {
-            blocked.set(candidate.wbs, await this.ctx.dependencyBlocked(normalized, candidate.wbs));
+            const previous = await runs.listByTaskId(candidate.wbs);
+            // A prior invocation is not a fresh todo, even after a restart.
+            // Malformed candidate documents hold that task without starving others.
+            try {
+                const eligible = previous.length === 0 && (await this.ctx.ready?.(candidate)) === true;
+                ready.set(candidate.wbs, eligible);
+                if (eligible) blocked.set(candidate.wbs, await this.ctx.dependencyBlocked(normalized, candidate.wbs));
+            } catch {
+                ready.set(candidate.wbs, false);
+            }
         }
 
         return (STRATEGIES[name] ?? STRATEGIES[DEFAULT_STRATEGY]).select({
@@ -323,6 +431,7 @@ export class StrategyRuntime {
             candidates,
             idleInstances,
             dependencyBlocked: (wbs) => blocked.get(wbs) ?? null,
+            ready: (wbs) => ready.get(wbs) === true,
         });
     }
 }

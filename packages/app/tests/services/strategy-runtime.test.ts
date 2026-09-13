@@ -1,9 +1,15 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test, vi } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
-import { type DbAdapter, ProjectClaimDao, ProjectStrategyDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    CoordinationRunDao,
+    type DbAdapter,
+    ProjectClaimDao,
+    ProjectStrategyDao,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
@@ -122,6 +128,7 @@ async function makeRig(opts?: { strategy?: string }): Promise<Rig> {
     const ctx: StrategyRuntimeContext = {
         openDb: async () => db,
         tasks: { list: async () => candidates },
+        ready: async () => true,
         fleet,
         dependencyBlocked: async (_projectPath, wbs) => blocked[wbs] ?? null,
     };
@@ -373,8 +380,8 @@ describe('StrategyRuntime.selectNext wiring (0838 R3)', () => {
                 { wbs: '0842', reason: 'unauthorized' },
             ]);
             // Priority order also owns capacity allocation: P0 gets the first instance.
-            expect(result.decisions.map((d) => d.instanceId)).toEqual(['proj-orch', 'proj-coder']);
-            expect(result.decisions.map((d) => d.requiresWrite)).toEqual([true, true]);
+            expect(result.decisions.map((d) => d.instanceId)).toEqual(['proj-coder', 'proj-reader']);
+            expect(result.decisions.map((d) => d.requiresWrite)).toEqual([true, false]);
         } finally {
             await rig.cleanup();
         }
@@ -511,6 +518,109 @@ describe('StrategyRuntime wake emits (0839 R1)', () => {
             const rows = await new SystemEventDao(rig.db).query({ names: ['strategy.changed'], limit: 10 });
             expect(rows).toHaveLength(0);
         } finally {
+            await rig.cleanup();
+        }
+    });
+});
+
+describe('managed GTD dispatch and reconciliation (G62)', () => {
+    test('only ready work starts; rest during work retains the slot through reconciliation and holds the next task', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const started: string[] = [];
+            const result = await rig.runtime.dispatchNext(rig.project, 1, async (decision, _signal, beforeDispatch) => {
+                await beforeDispatch();
+                started.push(decision.taskId ?? '');
+                expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe(decision.instanceId);
+                await rig.runtime.setStrategy(rig.project, 'rest');
+                expect((await rig.claims.get(rig.project, 'write'))?.holderId).toBe(decision.instanceId);
+                expect((await rig.runtime.selectNext(rig.project)).decisions).toEqual([]);
+            });
+            expect(started).toEqual(['0841']);
+            expect(result.decisions).toHaveLength(1);
+            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
+            expect((await rig.runtime.getStrategy(rig.project)).name).toBe('rest');
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('a strategy switch during executor resolution is refused at the final launch boundary', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            let started = false;
+            await expect(
+                rig.runtime.dispatchNext(rig.project, 1, async (_decision, _signal, beforeDispatch) => {
+                    await rig.runtime.setStrategy(rig.project, 'rest');
+                    await beforeDispatch();
+                    started = true;
+                }),
+            ).rejects.toThrow('stale-strategy');
+            expect(started).toBe(false);
+            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('running readers consume instance capacity and prior task receipts prevent duplicate dispatch after restart', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        try {
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+            const runs = new CoordinationRunDao(rig.db);
+            await runs.insertStart({
+                specId: 'proj-reader',
+                agentKind: 'claude-code',
+                processId: null,
+                runId: 'reader-running',
+                generation: 1,
+                startedAt: new Date().toISOString(),
+                taskId: '0841',
+            });
+            const result = await rig.runtime.selectNext(rig.project);
+            expect(result.decisions.map((d) => d.instanceId)).toEqual(['proj-coder']);
+            expect(result.decisions.map((d) => d.taskId)).toEqual(['0843']);
+            expect(result.holds).toContainEqual({ wbs: '0841', reason: 'not-ready' });
+            await runs.updateExit('reader-running', 'exited', new Date().toISOString(), '[]', {
+                messageIds: [],
+                taskId: '0841',
+                outcome: 'run-exit-only',
+            });
+            const restarted = await rig.runtime.selectNext(rig.project);
+            expect(restarted.decisions.some((d) => d.taskId === '0841')).toBe(false);
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('the running writer renews its generation beyond the original TTL', async () => {
+        const rig = await makeRig({ strategy: 'gtd' });
+        vi.useFakeTimers();
+        const clock = spyOn(Date, 'now');
+        try {
+            const start = Date.now();
+            await rig.claims.claim(rig.project, 'orchestrator', 'proj-orch', 120_000);
+            await rig.runtime.dispatchNext(rig.project, 1, async (_decision, _signal, beforeDispatch) => {
+                await beforeDispatch();
+                const original = await rig.claims.get(rig.project, 'write');
+                for (let i = 0; i < 4; i++) {
+                    clock.mockReturnValue(start + (i + 1) * 10_000);
+                    vi.advanceTimersByTime(10_000);
+                    // Drain the async DAO heartbeat work scheduled by the interval.
+                    for (let j = 0; j < 20; j++) await Promise.resolve();
+                }
+                const renewed = await rig.claims.get(rig.project, 'write');
+                expect(renewed?.expiresAt).toBeGreaterThan(original?.expiresAt ?? 0);
+                expect(renewed?.expiresAt).toBeGreaterThan(Date.now());
+                expect(await rig.claims.claim(rig.project, 'write', 'competing-writer', 30_000)).toBeNull();
+                await rig.runtime.setStrategy(rig.project, 'rest');
+            });
+            expect(await rig.claims.get(rig.project, 'write')).toBeNull();
+        } finally {
+            clock.mockRestore();
+            vi.useRealTimers();
             await rig.cleanup();
         }
     });
