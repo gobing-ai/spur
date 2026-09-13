@@ -4,7 +4,7 @@ name: spur-composer and spur-doctor skills compose, evaluate and evolve spur art
 status: done
 template: feature-impl
 created_at: 2026-09-10T22:18:37.284Z
-updated_at: "2026-09-11T19:21:53.805Z"
+updated_at: "2026-09-13T05:57:05.251Z"
 feature_id: I21
 priority: P2
 tags:
@@ -180,14 +180,25 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | spur-composer/SKILL.md:44-53 covers task/feature/rule/workflow/agent spec; :33-36 links sp:spur-cli, never restates catalogs; :37-39 loops to sp:super-planner, forbids spur team and spur agent loop; test skill-structure.test.ts:2003 |
-| R2 | MET | spur-doctor/SKILL.md:41-49 names a read-only evidence source per noun; :3 description says diagnoses spur artifacts not runtime environments like spur agent doctor; :30-33 loop routing plus forbidden surfaces; test skill-structure.test.ts:2042 |
-| R3 | MET | spur-doctor/SKILL.md:28-29 history enters only via sp:history-anatomy, never raw records; :60-79 first-match-wins map; :72-75 five closed action classes; test skill-structure.test.ts:2065 |
-| R4 | MET | spur-doctor/SKILL.md:25-27 read-only invariant, no task/feature/rule/workflow write; :84-101 proposal table key/evidence/action/change/apply/verify; spur-composer/SKILL.md:121-135 applies accepted rows via spur verbs and re-runs verify; test skill-structure.test.ts:2076 |
-| R5 | MET | operations.md:62-88 find-existing-workflow step 1 enumerates via spur workflow list --json across all layers using source and description; :70 never glob .spur/workflows; test skill-structure.test.ts:2104 |
-| R6 | MET | spur-composer/SKILL.md:72-87 ephemeral-project-shared ladder, each step gated on spur workflow validate and run --dry-run; :82-84 shared step adds recorded operator consent plus build:bundle parity; test skill-structure.test.ts:2022 |
-| R7 | MET | spur-composer/SKILL.md:109-119 loop starts from spur rule trace --json, tunes via fine-tuning levers, ends with spur rule validate and spur rule run on affected inputs plus trace compare; test skill-structure.test.ts:2033 |
-| R8 | MET | workflow-fit-and-tuning.md:152-179 teaches consolidation and cache-window rules (gate/HITL/independence splits, author vs certifier freshSession, work outside agent.run) linking the composition contract at :156; spur-composer/SKILL.md:90-101 applies them with ADR-115 budgets; test skill-structure.test.ts:2114 |
+| R1 | MET | Composer covers five nouns and links the CLI facade. `plugins/sp/skills/spur-composer/SKILL.md:44`; `plugins/sp/tests/skill-structure.test.ts:2041`. Executed: `bun run spur-check` (exit 0). |
+| R2 | MET | Doctor names read-only evidence sources and its artifact diagnosis boundary. `plugins/sp/skills/spur-doctor/SKILL.md:48`; `plugins/sp/tests/skill-structure.test.ts:2080`. Executed: `bun run spur-check` (exit 0). |
+| R3 | MET | History findings use the first-match map over the five closed action classes. `plugins/sp/skills/spur-doctor/SKILL.md:92`; `plugins/sp/tests/skill-structure.test.ts:2103`. Executed: `bun run spur-check` (exit 0). |
+| R4 | MET | Doctor proposes; composer applies accepted rows and reruns their verification. `plugins/sp/skills/spur-composer/SKILL.md:121`; `plugins/sp/tests/skill-structure.test.ts:2114`. Executed: `bun run spur-check` (exit 0). |
+| R5 | MET | Workflow discovery consumes the complete CLI layer catalog. `plugins/sp/skills/spur-cli/references/workflows/operations.md:62`; `plugins/sp/tests/skill-structure.test.ts:2142`. Executed: `bun run spur-check` (exit 0). |
+| R6 | MET | Every promotion has validation and dry-run gates; shared promotion requires consent. `plugins/sp/skills/spur-composer/SKILL.md:72`; `plugins/sp/tests/skill-structure.test.ts:2060`. Executed: `bun run spur-check` (exit 0). |
+| R7 | MET | Rule tuning starts with trace evidence and ends with validate and affected-input rerun. `plugins/sp/skills/spur-composer/SKILL.md:109`; `plugins/sp/tests/skill-structure.test.ts:2071`. Executed: `bun run spur-check` (exit 0). |
+| R8 | MET | Composition guidance preserves author/certifier independence and cache-window limits. `plugins/sp/skills/spur-composer/SKILL.md:90`; `plugins/sp/tests/skill-structure.test.ts:2152`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — sp:spur-composer composes and tunes every spur noun | MET | test | Composer covers five nouns and links the CLI facade. `plugins/sp/skills/spur-composer/SKILL.md:44`; `plugins/sp/tests/skill-structure.test.ts:2041`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R2 — sp:spur-doctor evaluates spur artifacts from CLI evidence | MET | test | Doctor names read-only evidence sources and its artifact diagnosis boundary. `plugins/sp/skills/spur-doctor/SKILL.md:48`; `plugins/sp/tests/skill-structure.test.ts:2080`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R3 — spur-doctor reflects over history through history-anatomy findings | MET | test | History findings use the first-match map over the five closed action classes. `plugins/sp/skills/spur-doctor/SKILL.md:92`; `plugins/sp/tests/skill-structure.test.ts:2103`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R4 — spur-doctor proposes and spur-composer applies | MET | test | Doctor proposes; composer applies accepted rows and reruns their verification. `plugins/sp/skills/spur-composer/SKILL.md:121`; `plugins/sp/tests/skill-structure.test.ts:2114`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R5 — find-existing-workflow searches every listed layer | MET | test | Workflow discovery consumes the complete CLI layer catalog. `plugins/sp/skills/spur-cli/references/workflows/operations.md:62`; `plugins/sp/tests/skill-structure.test.ts:2142`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R6 — the composition ladder gates every promotion | MET | test | Every promotion has validation and dry-run gates; shared promotion requires consent. `plugins/sp/skills/spur-composer/SKILL.md:72`; `plugins/sp/tests/skill-structure.test.ts:2060`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R7 — rule tuning is driven by rule trace evidence | MET | test | Rule tuning starts with trace evidence and ends with validate and affected-input rerun. `plugins/sp/skills/spur-composer/SKILL.md:109`; `plugins/sp/tests/skill-structure.test.ts:2071`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R8 — spur-composer composes to the composition budgets | MET | test | Composition guidance preserves author/certifier independence and cache-window limits. `plugins/sp/skills/spur-composer/SKILL.md:90`; `plugins/sp/tests/skill-structure.test.ts:2152`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -199,6 +210,12 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0820-verify-answer.txt:1-46` and `.spur/run/0820-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
