@@ -159,6 +159,7 @@ export interface SendResult {
     injected: boolean;
     /** Present only on a keyed send (0832): true when the request key replayed an earlier submission. */
     replayed?: boolean;
+    requestKey?: string;
 }
 
 /** A single inbox row in display form. */
@@ -516,6 +517,9 @@ export class TeamService {
     ): Promise<SendResult> {
         validateAgentId(toId);
         if (fromId !== null) validateAgentId(fromId);
+        if (requestKey !== undefined && requestKey.trim() === '') {
+            throw new Error('requestKey must be a non-empty string');
+        }
         const dao = await this.inboxDao();
         // Keyed send (0832): routes through `enqueueIdempotent` — same key + same payload
         // replays the original row (no second row, no second delivery). Keyless path unchanged.
@@ -533,7 +537,7 @@ export class TeamService {
         });
         return keyed === null
             ? { msgId, toId, status: 'queued', injected: false }
-            : { msgId, toId, status: 'queued', injected: false, replayed: keyed.replayed };
+            : { msgId, toId, status: 'queued', injected: false, replayed: keyed.replayed, requestKey };
     }
 
     /** List the pending + delivered messages addressed to an agent. */

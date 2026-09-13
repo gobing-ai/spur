@@ -23,6 +23,38 @@ async function makeCtx(): Promise<{
 }
 
 describe('spur message send', () => {
+    test('request keys survive CLI restarts, replay receipts, and reject changed bodies', async () => {
+        const { cwd, dbUrl, cleanup } = await makeCtx();
+        const send = async (key: string, body: string) => {
+            const output = createCapturedOutput();
+            const code = await main(['message', 'send', '--to', 'planner', '--request-key', key, '--json', body], {
+                cwd,
+                dbUrl,
+                output,
+            });
+            return { code, receipt: JSON.parse(output.messages[0] ?? '{}') };
+        };
+        try {
+            const first = await send('request-1', 'work');
+            const replay = await send('request-1', 'work');
+            expect(first.code).toBe(0);
+            expect(first.receipt).toMatchObject({ requestKey: 'request-1', replayed: false });
+            expect(replay.receipt).toMatchObject({
+                msgId: first.receipt.msgId,
+                requestKey: 'request-1',
+                replayed: true,
+            });
+            expect((await send('request-1', 'different')).code).not.toBe(0);
+            expect((await send('request-2', 'different')).receipt.msgId).not.toBe(first.receipt.msgId);
+            expect((await send('   ', 'work')).code).not.toBe(0);
+            const db = await createMigratedDb({ url: dbUrl });
+            expect(await new InboxMessageDao(db).inbox('planner', 10)).toHaveLength(2);
+            await db.close();
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('enqueues a message and prints the id', async () => {
         const { cwd, out, dbUrl, cleanup } = await makeCtx();
         try {

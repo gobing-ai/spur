@@ -34,6 +34,8 @@ spur message send [options] <body>
 | `--timeout <ms>` | — | Caller deadline for `--wait` |
 | `--json` | — | Output machine-readable JSON |
 
+Keyed JSON receipts include `requestKey` and `replayed`; blank request keys are rejected.
+
 `--wait` snapshots the occupant **before** `send`, then waits on that pin in the same process
 (G4 wave 2). A later occupant cannot satisfy the wait; enqueue is **not** rolled back if the
 wait later fails. Failures use the same `{ error: { code, message } }` envelope as

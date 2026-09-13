@@ -67,6 +67,21 @@ function ctxWithStubs(
 }
 
 describe('messages module', () => {
+    test('POST forwards the request key and rejects invalid keys before sending', async () => {
+        const { ctx, calls } = ctxWithStubs();
+        const app = new Hono();
+        messagesModule.mount(app, ctx);
+        for (const requestKey of ['key-1', '', 17]) {
+            const response = await app.request('/api/messages', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ to: 'worker', body: 'work', requestKey }),
+            });
+            expect(response.status).toBe(requestKey === 'key-1' ? 201 : 400);
+        }
+        expect(calls.send).toEqual([{ from: null, to: 'worker', body: 'work', requestKey: 'key-1' }]);
+    });
+
     describe('GET /api/messages/inbox', () => {
         test('returns 400 when agent query param is missing', async () => {
             const { ctx } = ctxWithStubs({});

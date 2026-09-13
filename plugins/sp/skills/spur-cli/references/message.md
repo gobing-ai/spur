@@ -54,6 +54,7 @@ wait; enqueue is **not** rolled back if the wait later fails.
 | `--from <id>` | Sender id (default: `operator`). |
 | `--request-key <key>` | Caller-minted idempotency key. The same key with the same body + recipient replays the original receipt (`replayed: true`, no second row/delivery); the same key with a different payload fails with a request-key-conflict error (0832). |
 | `replayed` receipt field | Present on keyed sends: `true` when this submission was a replay of an earlier accepted send. |
+| `requestKey` receipt field | Present on keyed sends, including replays; echoes the accepted key. Blank keys are rejected. |
 | `--wait` | Block until the recipient reaches `--until` (snapshots occupant before send). |
 | `--until <state>` | Wait target: `injected` \| `invoke-exit` (repeatable OR). Default `invoke-exit`. |
 | `--timeout <ms>` | Caller deadline in milliseconds. |
