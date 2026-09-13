@@ -596,8 +596,10 @@ export async function runAgentRun(
     // never from an exit code (exit 2 is both a pre-spawn validation failure and a
     // legitimate agent exit). The sync listener flips before `svc.run` resolves.
     let invocationStarted = false;
-    bus.on('agent.invoke.start', () => {
-        invocationStarted = true;
+    bus.on('agent.invoke.start', (event) => {
+        if (event && typeof event === 'object' && 'operation' in event && event.operation === 'prompt') {
+            invocationStarted = true;
+        }
     });
     let claimed: string[] = [];
     try {
@@ -1029,8 +1031,10 @@ export async function runAgentLoop(
     context.output.write(formatReconcileReport(report));
 
     let invocationStarted = false;
-    bus.on('agent.invoke.start', () => {
-        invocationStarted = true;
+    bus.on('agent.invoke.start', (event) => {
+        if (event && typeof event === 'object' && 'operation' in event && event.operation === 'prompt') {
+            invocationStarted = true;
+        }
     });
 
     // 0839 R4 wake-then-drain: the drain runs only AFTER a wake (a wake event on

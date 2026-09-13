@@ -603,15 +603,15 @@ import { CoordinationRunDao, createMigratedDb, InboxMessageDao } from '@gobing-a
  * `agent.invoke.start` on ANY EventBus — the same moment the real runner emits
  * at spawn time. Mirror of `EventBus.prototype.on`; failed subscriptions skip.
  */
-function captureInvokeStart(): { restore: () => void; fire: () => void } {
+function captureInvokeStart(): { restore: () => void; fire: (operation?: string) => void } {
     const proto = EventBus.prototype as unknown as {
         on: (event: string, handler: (...args: unknown[]) => void, opts?: unknown) => void;
     };
     const origOn = proto.on;
-    const handlers: Array<() => void> = [];
+    const handlers: Array<(operation: string) => void> = [];
     proto.on = function (event, handler, opts) {
         if (event === 'agent.invoke.start') {
-            handlers.push(() => handler({ agent: 'claude', operation: 'prompt', severity: 'info' }));
+            handlers.push((operation) => handler({ agent: 'claude', operation, severity: 'info' }));
         }
         return origOn.call(this, event, handler, opts);
     };
@@ -619,13 +619,42 @@ function captureInvokeStart(): { restore: () => void; fire: () => void } {
         restore: () => {
             proto.on = origOn;
         },
-        fire: () => {
-            for (const fire of handlers) fire();
+        fire: (operation = 'prompt') => {
+            for (const fire of handlers) fire(operation);
         },
     };
 }
 
 describe('G61 delivery settle regressions (0831)', () => {
+    test.each(['run', 'loop'])('%s: a started version probe cannot acknowledge an unstarted prompt', async (mode) => {
+        const { ctx, cleanup } = await makeCtx();
+        const accepted = captureInvokeStart();
+        try {
+            const team = new TeamService(ctx);
+            await team.createAgentSpec({ id: 'planner', type: 'claude' });
+            const sent = await team.sendMessage('operator', 'planner', 'must reach the prompt');
+            const deps = {
+                runner: {
+                    runPromptCommand: async () => {
+                        accepted.fire('version');
+                        throw new Error('prompt spawn failed');
+                    },
+                } as G6MockRunner,
+                detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
+                doctorRunner: g6Doctor() as G6MockDoctor,
+            } as unknown as AgentRunDeps;
+            if (mode === 'run') await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
+            else await runAgentLoop(ctx, { agent: 'planner', poll: '1' }, { maxIterations: 1 }, deps);
+            expect(await new InboxMessageDao(await ctx.getDb()).getById(sent.msgId)).toMatchObject({
+                status: 'queued',
+                injectAttempts: 1,
+            });
+        } finally {
+            accepted.restore();
+            await cleanup();
+        }
+    });
+
     test('a successful drain+invocation settles the message delivered (R2 — was 0828 probe 1)', async () => {
         // The claim happens before spawn, but 0831's settle step runs after the
         // invocation attempt. Delivery state is final only after the run, and an
