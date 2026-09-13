@@ -4,7 +4,7 @@ name: Restart reconciliation and operator-visible delivery failure states
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:30.594Z
-updated_at: "2026-09-12T08:14:20.973Z"
+updated_at: "2026-09-13T06:49:54.768Z"
 feature_id: G61
 
 dependencies: ["0831", "0833"]
@@ -222,47 +222,15 @@ states; the names above are the contract between them.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Re-audit fixes and current change map:
 
-The classifier, one call site, one widened read — exactly the spec's WHERE table; no requeue/release
-anywhere, no new verb, no status-column collapse.
+- `packages/app/src/services/delivery-reconciler.ts:110` — callable report classifies all candidates; shared classify is read-only and ambiguous work is never released
+- `packages/app/tests/services/delivery-reconciler.test.ts:86` — fresh test carries run ID, task ID, running state, persisted artifacts; message remains injected
+- `packages/app/tests/services/delivery-reconciler.test.ts:61` — fresh test retains delivered failed and exit-only runs; only verified receipt removes the hold
+- `packages/app/tests/services/delivery-reconciler.test.ts:214` — fresh test asserts identical unresolved rows and no second write; attempts-exhausted is stable
+- `apps/cli/tests/commands/message.test.ts:227` — fresh CLI JSON invocation shows run/task/artifacts for a delivered row; unresolved tests cover attempts and errors
 
-- **`packages/app/src/services/delivery-reconciler.ts` (new)** — the classifier.
-  `MAX_INJECT_ATTEMPTS` (`delivery-reconciler.ts:16`) is 0831's budget hoisted here from the CLI
-  drain path so settle and reconcile share one constant (the CLI now imports it — no re-derivation);
-  frozen types `HoldReason`/`UnresolvedDelivery`/`ReconcileReport` (`:23`, `:26`, `:38`);
-  `DeliveryReconciler.reconcile` (`:89`) implements the five-step precedence, first match wins:
-  failed→`delivery-failed` (`:114`); injected+receipt → `run-exit-only`/`delivery-failed` by the
-  run's outcome, `verified` treated as a finished request and omitted (`:118-137`); injected without
-  a receipt → `outcome-unknown` with `artifacts: []` — no refs may be inferred without a
-  receipt-listing run row (`:120-123`); queued at/over budget → `attempts-exhausted` and the ONLY
-  write, `markFailed(..., "attempts exhausted after N deliveries")` (`:142-146`); queued under
-  budget → omitted. Steps 1–3 are pure reads, so a second pass over a pass-1 write claims the row at
-  step 1 — idempotent (R5).
-- **`packages/domain/src/dao/inbox-unfinished-dao.ts` (new)** — `listUnfinished(toId?)`
-  (`inbox-unfinished-dao.ts:26-34`): the reconciler's scan set (all `status != 'delivered'` rows
-  with attempt/error fields), cross-recipient when no id is given (G62's 0838 caller). Raw SQL lives
-  in domain per `raw-sql-only-in-domain`; exported at `packages/domain/src/dao/index.ts:22`.
-- **`apps/cli/src/commands/agent.ts:822-823`** — R2 call site: `runAgentLoop` reconciles
-  `reconcile(recipient)` once at startup, before the first drain, and writes the report to the run
-  log via `formatReconcileReport` (`agent.ts:772`); the loop is never gated on the report. Local
-  `MAX_INJECT_ATTEMPTS` deleted; imported from `@gobing-ai/spur-app` (`agent.ts:9`).
-- **`apps/cli/src/commands/message.ts:115-119`** — `--unresolved` on `spur message inbox`;
-  `runMessageInbox` (`message.ts:366`) runs the reconciler first (so its one authorized write is
-  reflected in the listing), filters to holds with `--unresolved`, and widens every `--json` row via
-  `widenInboxRow` (`message.ts:403`) with `injectAttempts`, `injectError`, `reason`, `runId`,
-  `taskId`, `artifacts`. Plain-text output without `--unresolved` is byte-identical to before.
-- **`packages/app/src/services/team-service.ts:172`** — `InboxEntry` gains optional
-  `injectAttempts`/`injectError`, populated by `getInbox` (`team-service.ts:364-365`) so the CLI can
-  widen rows without a second read. Additive/optional; watch and board consumers untouched.
-- **Exports** — `packages/app/src/index.ts:156-162`.
-- **Docs** — `plugins/sp/skills/spur-cli/references/message.md` (verb map + "Delivery failure
-  states (0834)" section), `docs/help/cmd_message.md` (`--unresolved` row + JSON shape),
-  `docs/help2/message.md`.
-
-Anti-patterns respected: no requeue/release/re-dispatch (outcome-unknown rows stay `injected` —
-asserted in tests), four distinct hold reasons from named fields, no new public verb, no
-terminal/process-list inference, budget imported not re-derived.
+Goal-equivalent Design corrections: delivered is only a delivery state and remains a reconciliation candidate; running rows cannot establish completion. The shared classifier retains runStatus and artifacts, preserves attempts-exhausted across passes, and never requeues ambiguous work. This supersedes the old five-step exclusion of delivered rows and old pass-two relabeling. Legacy rows without an attributable origin remain unknown without invented artifacts.
 
 ### Testing
 
@@ -272,58 +240,48 @@ terminal/process-list inference, budget imported not re-derived.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Callable classifier, not a hook: `packages/app/src/services/delivery-reconciler.ts:89` `DeliveryReconciler.reconcile(agentId?)` returns `ReconcileReport {unresolved, exhausted, scanned}`; fresh run 11/11 pass incl. "reconcile() with no agentId scans all recipients" |
-| R2 | MET | `apps/cli/src/commands/agent.ts:824-825` — `runAgentLoop` reconciles `recipient` before entering the poll loop and logs via `formatReconcileReport` (`:772`), non-gating; test `apps/cli/tests/commands/agent.test.ts:834` "loop startup reconciles in-flight work before its first drain" pass |
-| R3 | MET | `delivery-reconciler.ts:112-115` — injected with no receipt → `outcome-unknown`, artifacts `[]` (none inferred), row left `injected`, never requeued/released; test `delivery-reconciler.test.ts:104` "outcome-unknown, no artifacts inferred, no requeue" and `:179` late-receipt reclassification still never requeued |
-| R4 | MET | Four distinct HoldReasons each from a named field: `status='failed'`→delivery-failed (`:106`); run `outcome`→run-exit-only/delivery-failed (`:118-127`); no run row→outcome-unknown (`:114`); `inject_attempts>=MAX_INJECT_ATTEMPTS`→attempts-exhausted (`:136`, import not re-derived `:16`); no status-column collapse |
-| R5 | MET | Steps 1-3 pure reads; only write is `markFailed` queued→failed at budget (`:134`) which removes itself from its own selection; test `delivery-reconciler.test.ts:157` "double reconcile: identical classification, exhausted empty on pass 2" pass |
-| R6 | MET | `apps/cli/src/commands/message.ts:115-119` `--unresolved` on existing inbox verb (no new verb); `runMessageInbox:366` reconciles first, `widenInboxRow:401` adds injectAttempts/injectError/reason/runId/taskId/artifacts to `--json`; docs satellites `plugins/sp/skills/spur-cli/references/message.md:70-78`, `docs/help/cmd_message.md`, `docs/help2/message.md`; 3 CLI tests pass (message.test.ts 48/48) |
-| R7 | MET | All five scenarios: restart in-flight via loop (agent.test.ts:834), missing receipt (:104), exhausted budget (step-4 test), late receipt (:179), double reconcile (:157) — 13/13 reconciler+DAO, 48/48 message, 48/48 agent, all fresh this verify |
+| R1 | MET | `packages/app/src/services/delivery-reconciler.ts:110` — callable report classifies all candidates; shared classify is read-only and ambiguous work is never released |
+| R2 | MET | `apps/cli/tests/commands/agent.test.ts:826` — fresh loop integration reconciles before its first drain |
+| R3 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:86` — fresh test carries run ID, task ID, running state, persisted artifacts; message remains injected |
+| R4 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:61` — fresh test retains delivered failed and exit-only runs; only verified receipt removes the hold |
+| R5 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:214` — fresh test asserts identical unresolved rows and no second write; attempts-exhausted is stable |
+| R6 | MET | `apps/cli/tests/commands/message.test.ts:227` — fresh CLI JSON invocation shows run/task/artifacts for a delivered row; unresolved tests cover attempts and errors |
+| R7 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:235` — fresh regression changes unknown to exit-only without replay |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Ambiguous outcomes hold instead of replaying | MET | test | delivery-reconciler.test.ts:104 "step 3: injected with no receipt → outcome-unknown, no artifacts inferred, no requeue" (pass): status stays `injected`, artifacts [] , no requeue/release anywhere in `delivery-reconciler.ts` |
-| Reconciliation precedes new dispatch | MET | test | agent.test.ts:834 "0834: loop startup reconciles in-flight work before its first drain" (pass): report in run log at agent.ts:824-825 before first `drainIntoPrompt` iteration |
-| Delivery failure is readable without stderr | MET | test | message.test.ts 3× 0834 tests (pass): "--unresolved --json shows held messages with reason, attempts, error, run correlation", run-correlated rows carry runId/taskId/artifacts, plain-text --unresolved filtering — no stderr, no new verb |
+| Scenario: Ambiguous outcomes hold instead of replaying | MET | test | `packages/app/tests/services/delivery-reconciler.test.ts:86` — fresh test carries run ID, task ID, running state, persisted artifacts; message remains injected; command: packages/app: bun test tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; apps/cli: bun test tests/commands/message.test.ts tests/commands/agent-team.test.ts tests/commands/agent.test.ts; apps/server: bun test tests/modules/health.test.ts (exit 0) |
+| Scenario: Reconciliation precedes new dispatch | MET | test | `apps/cli/tests/commands/agent.test.ts:826` — fresh loop integration reconciles before its first drain; command: packages/app: bun test tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; apps/cli: bun test tests/commands/message.test.ts tests/commands/agent-team.test.ts tests/commands/agent.test.ts; apps/server: bun test tests/modules/health.test.ts (exit 0) |
+| Scenario: Delivery failure is readable without stderr | MET | test | `apps/cli/tests/commands/message.test.ts:227` — fresh CLI JSON invocation shows run/task/artifacts for a delivered row; unresolved tests cover attempts and errors; command: packages/app: bun test tests/services/delivery-reconciler.test.ts tests/services/strategy-runtime.test.ts; apps/cli: bun test tests/commands/message.test.ts tests/commands/agent-team.test.ts tests/commands/agent.test.ts; apps/server: bun test tests/modules/health.test.ts (exit 0) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-#### Review Report — 0834 (pipeline Phase 7, profile=auto, mode=safety)
+#### G61 forced re-audit — 0834
 
-**Scope:** 0834 diff surface only (HEAD 3761051f9; 0831/0832/0833 changes excluded): `packages/app/src/services/delivery-reconciler.ts` (new), `packages/domain/src/dao/inbox-unfinished-dao.ts` (new) + dao/index.ts export, `apps/cli/src/commands/agent.ts` (formatReconcileReport, runAgentLoop startup), `apps/cli/src/commands/message.ts` (--unresolved, reconcile-first, widenInboxRow), team-service InboxEntry widening, app/domain exports, 3 doc files, 4 test files.
-**Dimensions:** functional, security, efficiency, correctness, usability, architecture
-**Verdict:** PASS
+Verdict: PASS
 
-##### Findings (ranked)
+Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source and the fixes in this run.
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P3 (minor) | correctness | Multi-receipt tie-break is undefined by the spec: a message listed by >1 `coordination_runs` row (redelivered, consumed twice) takes the newest-start receipt (`[0]` of `listByMessageId`, newest-first). Deterministic and sensible (latest evidence wins), but an older `errored` receipt superseded by a newer `verified` one silently omits the message as finished — no test covers the multi-receipt case | `packages/app/src/services/delivery-reconciler.ts:121` |
-| 2 | P4 (advisory) | usability | `spur message inbox --json` without `--unresolved` still runs the reconciler, so its one authorized write (queued→failed at budget) fires on every JSON read — a polling script mutates state as a read side effect. Spec'd (reason field requires classification; Solution documents it) and idempotent | `apps/cli/src/commands/message.ts:371` |
-| 3 | P4 (advisory) | architecture | New `InboxUnfinishedDao` is a WHERE-table addition (spec's WHERE lists only reconciler + 2 CLI files + reuse of `listByMessageId`). Justified: per-recipient `inbox()` has no status filter, the cross-recipient scan needs raw SQL, and `raw-sql-only-in-domain` forbids it in app — precedent exists (`InboxRecentDao`); disclosed in Solution with its own domain tests | `packages/domain/src/dao/inbox-unfinished-dao.ts:26-34` |
-| 4 | P4 (advisory) | correctness | For the outcome-unknown case R3's "carrying run id, artifacts" is vacuously satisfied: no receipt-listing run row exists by construction, so runId/taskId are undefined and artifacts `[]`. Correct per the no-inference anti-pattern (last-known state `injectAttempts`/`injectError` is carried); no defect | `packages/app/src/services/delivery-reconciler.ts:122-125` |
-| 5 | P4 (advisory) | correctness | Any receipt outcome outside the frozen `{run-exit-only, errored, verified}` is silently omitted as finished. Safe default today (vocabulary is closed, dao:58-66); a future "still-working" outcome would under-report | `packages/app/src/services/delivery-reconciler.ts:135-137` |
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | All | `packages/app/src/services/delivery-reconciler.ts:56` | No unresolved blocker or major finding after this task's fixes; feature-level dependency failure remains owned by 0831. |
+| P3 | Efficiency | `packages/app/src/services/delivery-reconciler.ts:56` | Reconciliation reads all candidate messages and queries their receipts individually. Retained existing approach; revisit with measured large-mailbox cost. |
 
-##### Functional Traceability
-
+#### Functional traceability
 | Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | Callable class + report; no hidden hook — `delivery-reconciler.ts:89` `reconcile()`; scanned/unresolved/exhausted per frozen `ReconcileReport` |
-| R2 | MET | `runAgentLoop` reconciles before the first drain, logs via `formatReconcileReport` (`agent.ts:822-823`, `:772`), never gates; tested through the real call path (`agent.test.ts:834`) |
-| R3 | MET | `injected` + no receipt → `outcome-unknown`, row left `injected` (asserted), nothing requeued/released/inferred (`delivery-reconciler.ts:122-125`; reconciler test "no requeue") |
-| R4 | MET | Four distinct reasons, each from a named field: `status` → `delivery-failed`; run `outcome` → `run-exit-only`/`delivery-failed`; absent run → `outcome-unknown`; `inject_attempts` ≥ budget → `attempts-exhausted`. No status-column collapse. `verified` correctly omitted as finished |
-| R5 | MET | Steps 1–3 pure reads; step 4's `queued→failed` removes itself from its own selection; pass 2 claims the row at step 1 with `exhausted: []` — tested (`delivery-reconciler.test.ts` "double reconcile") |
-| R6 | MET | `--unresolved` + widened `--json` rows (`injectAttempts`, `injectError`, `reason`, `runId`, `taskId`, `artifacts`) at `message.ts:115-119`/`:366`/`:403`; plain text without flags byte-identical (`classify=false`, `formatInboxLine` untouched); no new verb; docs updated in all 3 surfaces (reference/message.md §0834, cmd_message.md, help2/message.md) |
-| R7 | MET | All five scenarios: restart-with-in-flight via loop (`agent.test.ts:834`), missing receipt, exhausted budget, late receipt (`outcome-unknown → run-exit-only`, still injected), double reconcile — 11 reconciler cases + DAO tests + CLI tests |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/delivery-reconciler.ts:110` — callable report classifies all candidates; shared classify is read-only and ambiguous work is never released |
+| R2 | MET | `apps/cli/tests/commands/agent.test.ts:826` — fresh loop integration reconciles before its first drain |
+| R3 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:86` — fresh test carries run ID, task ID, running state, persisted artifacts; message remains injected |
+| R4 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:61` — fresh test retains delivered failed and exit-only runs; only verified receipt removes the hold |
+| R5 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:214` — fresh test asserts identical unresolved rows and no second write; attempts-exhausted is stable |
+| R6 | MET | `apps/cli/tests/commands/message.test.ts:227` — fresh CLI JSON invocation shows run/task/artifacts for a delivered row; unresolved tests cover attempts and errors |
+| R7 | MET | `packages/app/tests/services/delivery-reconciler.test.ts:235` — fresh regression changes unknown to exit-only without replay |
 
-**Scrutiny results (all clean):** precedence branches match the spec exactly incl. `verified`-omitted; single-write idempotence verified pass-2-empty; no requeue/inference anywhere in the diff; `MAX_INJECT_ATTEMPTS` defined once (`delivery-reconciler.ts:16`), CLI imports it (`agent.ts:9`), local copy deleted, zero other hardcodings; reconcile-first in `runMessageInbox` is justified (its write must precede the listing it filters); raw SQL confined to domain; no terminal-output/process-list inference; frozen type shapes match the spec verbatim.
+Verification: fresh bun run spur-check exit 0 (8496 tests, 99.21% functions / 98.99% lines), bun run test-cf exit 0, bun run build exit 0. Focused evidence and corrected Design deviations are recorded in Testing and Solution. No new public verb or dependency-local workaround.
 
-**Verification (fresh, this review):** `bun test packages/app/tests/services/delivery-reconciler.test.ts packages/domain/tests/dao/inbox-unfinished-dao.test.ts` → 13 pass, 0 fail. `bun test apps/cli/tests/commands/message.test.ts apps/cli/tests/commands/agent.test.ts` → 96 pass, 0 fail. Implementer's `spur-check` rc 0 (8071 tests) on record.
-
-**Residual risk:** multi-receipt precedence (finding 1) is the only behavioral surface without an explicit spec rule or test; recommend a task-0844/G62 follow-up note, not a fix now. Read-verb write side effect (finding 2) is accepted spec behavior — document if operators poll `--json`.
-
-**Next:** PASS — no blockers; disposition 0834 as done. Carry finding 1 (multi-receipt tie-break test) as an advisory into 0838's reconcile-caller work.
+--next: no-op - task already terminal (done). Existing done status is historical; the current verdict above is the re-audit result.
 
 ### References
 
