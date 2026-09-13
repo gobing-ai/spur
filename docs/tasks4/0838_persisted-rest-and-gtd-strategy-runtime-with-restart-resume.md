@@ -4,7 +4,7 @@ name: Persisted rest and GTD strategy runtime with restart resume
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.725Z
-updated_at: "2026-09-13T07:27:53.776Z"
+updated_at: "2026-09-13T07:31:49.681Z"
 feature_id: G62
 priority: P1
 tags:
@@ -323,7 +323,7 @@ Current per-requirement evidence and residuals are in Testing and `docs/reports/
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/strategy-runtime.test.ts:318` — default rest and read-only Board access preserve persisted strategy; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:328` — version increases on every set; `bun run spur-check` (exit 0). |
+| R1 | MET | `packages/app/tests/services/strategy-runtime.test.ts:318` — default rest and read-only Board access preserve persisted strategy; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:328` — version increases on every set; `bun run spur-check` (exit 0). Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0838-verify-answer.txt` line 1–40; Evidence: G62 re-audit `.spur/run/0838-verdict.json` line 1–99. Measured repository coverage: 98.99% lines, 99.21% functions. |
 | R2 | PARTIAL | `apps/cli/tests/commands/agent-loop-wake.test.ts:250` — queued fleet input stays unstarted in rest; `bun run spur-check` (exit 0). `packages/app/tests/services/strategy-runtime.test.ts:395` — rest selection preserves an existing slot; `bun run spur-check` (exit 0). Running-loop lease heartbeat/reconciliation integration is still absent. |
 | R3 | UNMET | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/runtime-gap.test.ts` line 318; `cd apps/cli && bun test ../../.spur/run/g62-verifyall-20260913/runtime-gap.test.ts --test-name-pattern G62` (exit 1): GTD invokes queued input with no live owner or dispatch claim. `packages/app/tests/services/strategy-runtime.test.ts:170` — priority-before-capacity selection is repaired, but not used by dispatch; `bun run spur-check` (exit 0). |
 | R4 | PARTIAL | `packages/app/tests/services/strategy-runtime.test.ts:191` — selection emits a hold for each skipped candidate; `bun run spur-check` (exit 0). Managed GTD draining bypasses those readiness/capacity holds. |

@@ -4,7 +4,7 @@ name: Event-driven orchestrator wakeup replacing the drain poll
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.725Z
-updated_at: "2026-09-13T07:27:54.108Z"
+updated_at: "2026-09-13T07:31:50.250Z"
 feature_id: G62
 priority: P2
 tags:
@@ -280,7 +280,7 @@ Current per-requirement evidence and residuals are in Testing and `docs/reports/
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:198` — plain send persists a wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:188` — task creation/update and replies wake the consumer; `bun run spur-check` (exit 0). Strategy/capacity producers and invocation ledger are covered by the same suite. |
+| R1 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:198` — plain send persists a wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:188` — task creation/update and replies wake the consumer; `bun run spur-check` (exit 0). Strategy/capacity producers and invocation ledger are covered by the same suite. Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0839-verify-answer.txt` line 1–36; Evidence: G62 re-audit `.spur/run/0839-verdict.json` line 1–94. Measured repository coverage: 98.99% lines, 99.21% functions. |
 | R2 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — repeated idle wakes make zero model calls and no dispatch; `bun run spur-check` (exit 0). |
 | R3 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — operator-readable hold is recorded once per unchanged idle state; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:302` — new idle stretch records a fresh hold; `bun run spur-check` (exit 0). |
 | R4 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:329` — wake precedes draining and consumed events do not replay; `bun run spur-check` (exit 0). |

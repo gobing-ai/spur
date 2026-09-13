@@ -4,7 +4,7 @@ name: Per-project write-slot lease with ownerEpoch and strategyVersion fencing
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.724Z
-updated_at: "2026-09-13T07:27:53.492Z"
+updated_at: "2026-09-13T07:31:49.130Z"
 feature_id: G62
 priority: P2
 tags:

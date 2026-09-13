@@ -4,7 +4,7 @@ name: Orchestrator binding with a single active owner
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.723Z
-updated_at: "2026-09-13T07:27:53.206Z"
+updated_at: "2026-09-13T07:31:48.584Z"
 feature_id: G62
 priority: P1
 tags:
@@ -333,7 +333,7 @@ Current per-requirement evidence and residuals are in Testing and `docs/reports/
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:723` — online requires the claim holder to match the declared binding; `bun run spur-check` (exit 0). |
+| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:723` — online requires the claim holder to match the declared binding; `bun run spur-check` (exit 0). Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0836-verify-answer.txt` line 1–37; Evidence: G62 re-audit `.spur/run/0836-verdict.json` line 1–100. Measured repository coverage: 98.99% lines, 99.21% functions. |
 | R2 | MET | `packages/app/tests/services/fleet-service.test.ts:654` — planner role and existing purpose carrier are required; no new role; `bun run spur-check` (exit 0). |
 | R3 | UNMET | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 6; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): a second claimant with the same spec receives a live claim. `packages/domain/src/dao/project-claim-dao.ts:115`. |
 | R4 | MET | `packages/app/tests/services/fleet-service.test.ts:669` — missing and offline remain distinct; mismatched holder now stays offline; `bun run spur-check` (exit 0). |

@@ -4,7 +4,7 @@ name: Project fleet declaration with stable instance identity
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.720Z
-updated_at: "2026-09-13T07:27:52.897Z"
+updated_at: "2026-09-13T07:31:48.025Z"
 feature_id: G62
 priority: P1
 tags:
@@ -254,7 +254,7 @@ to decide who may take the write slot; 0838 selects among enabled members; 0847 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves stable member identity and capability state; `bun run spur-check` (exit 0). |
+| R1 | MET | `packages/app/tests/services/fleet-service.test.ts:147` — declaration resolves stable member identity and capability state; `bun run spur-check` (exit 0). Replaced audit artifacts: Evidence: G62 re-audit `.spur/run/0835-verify-answer.txt` line 1–39; Evidence: G62 re-audit `.spur/run/0835-verdict.json` line 1–110. Measured repository coverage: 98.99% lines, 99.21% functions. |
 | R2 | MET | `packages/app/tests/services/fleet-service.test.ts:352` — hand-authored specs survive projection; generated specs are pruned separately; `bun run spur-check` (exit 0). |
 | R3 | MET | `packages/app/tests/services/fleet-service.test.ts:183` — explicit member identity survives executor replacement and reorder through the shared allocator; `bun run spur-check` (exit 0). |
 | R4 | MET | `packages/app/tests/services/fleet-service.test.ts:234` — capability comes from executor attestation, never role; `bun run spur-check` (exit 0). |

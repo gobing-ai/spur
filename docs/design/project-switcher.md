@@ -3,7 +3,7 @@ doc: design/project-switcher
 feature_id: K1
 owns: SURFACE + mechanism for multi-project Spur Board switching
 authority: derived (ADR wins on conflict)
-updated_at: 2026-07-29
+updated_at: 2026-09-13
 ---
 
 # Project switcher — system design (feature K1)
@@ -153,6 +153,30 @@ GET /api/project/fleet   (0840)
   reason) in `capacity.missing` (0840 review F3) — never a placeholder, never a 500.
 
 Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
+
+### Fleet ownership and dispatch boundaries (G62)
+
+- `bound-online` requires an unexpired claim whose holder matches the declared orchestrator
+  instance. A different holder produces `bound-offline` with `claim-holder-mismatch:<holder>`.
+- Write acquisition uses the persisted `project_strategy` version and repeats the observed owner
+  and strategy fences inside the claim statement. A live write lease cannot be acquired twice,
+  even by the same member. Release retains its generation with zero expiry; reads treat that
+  marker as absent and later acquisition increments the generation. Heartbeats cannot revive it.
+- Result validation requires the exact current write holder and generation, before release.
+  This write-generation check does not yet preserve the originating orchestrator generation;
+  replacing the orchestrator remains a separate unresolved fence.
+- GTD allocates instances in priority/WBS order. Selection reconciles first and returns holds
+  when ownership is offline or prior deliveries are unresolved. Managed fleet loops leave input
+  queued in `rest` (also the absent-strategy default); loops without a declaration retain their
+  existing drain behavior.
+- Wake consumers include messages/replies, task creation/update, strategy/capacity changes, and
+  invocation exits. CLI senders persist metadata-only wake events without an injected bus;
+  managed loop invocations attach and flush the existing ledger. `--poll` remains the backstop.
+
+These service contracts do not establish end-to-end GTD dispatch. The managed GTD loop still
+drains input without selection/claim/heartbeat/fenced-completion integration, and orchestrator
+claims still permit the same spec identity to reclaim a live owner. The current verification
+evidence and recovery scope live in [the G62 re-audit](../reports/g62-verifyall-2026-09-13.md).
 
 ### Request envelope (0841)
 
