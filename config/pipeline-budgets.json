@@ -11,11 +11,15 @@
             "decision": null
         },
         "idea-pipeline": {
-            "modelQueries": 5,
+            "modelQueries": 6,
             "wallClockMs": 7200000,
             "tokenCostUsd": null,
             "source": "No fixture (0607 option a). Real-run reading (R5): median ~435s, max-sane 8.8h (n=37). Budget = 2h gross-regression ceiling; authoritative fixture measurement pending (operator command in 0607 Solution).",
-            "decision": null
+            "decision": {
+                "date": "2026-09-12",
+                "wbs": "0826",
+                "note": "I21 closeout: operator requested completion of the remaining items before commit. Reconcile the stale 5-query budget with the six existing stages: discovery, feature-create, ac-generate, system-design, decompose and ready-prepare (0788). Gates and corpus creation separate these judgments; preserve ready preparation and add no dispatch. Static live-count regression now guards the ceiling. Wall-clock and cost limits are unchanged."
+            }
         },
         "wrapup-pipeline": {
             "modelQueries": 1,

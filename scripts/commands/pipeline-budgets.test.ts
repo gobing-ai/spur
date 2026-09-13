@@ -187,5 +187,12 @@ describe('checkBudgetCoverage (0826 R2)', () => {
         expect(Object.keys(counts).sort()).toEqual(files);
         const { budgets } = await loadPipelineBudgets();
         expect(checkBudgetCoverage(counts, budgets)).toEqual([]);
+        const measured = Object.fromEntries(
+            Object.entries(counts).map(([name, modelQueries]) => [
+                name,
+                { modelQueries, wallClockMs: null, tokenCostUsd: null },
+            ]),
+        );
+        expect(checkBudgets(measured, budgets)).toEqual([]);
     });
 });

@@ -4,7 +4,7 @@ name: spur-check enforces shared-workflow composition caps and pipeline-budget c
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.074Z
-updated_at: "2026-09-13T05:57:16.071Z"
+updated_at: "2026-09-13T06:11:24.529Z"
 feature_id: I21
 priority: P2
 tags:
@@ -33,10 +33,10 @@ Ordering: last. It needs 0822 (finding `level`, exit 1) and the three extraction
 ### Requirements
 
 - [x] R1. `bun run spur-check` validates every `config/workflows/*.yaml` definition with full schema resolution and fails on any error-level composition finding, naming the workflow, state and action key. The definitions are enumerated from the directory, not from a hard-coded list. Warn-level findings never fail it, and it passes on the shipped catalog.
-- [x] R2. `bun run spur-check` and `check-pipeline-budgets` both fail when a `config/workflows` definition with at least one model query has no entry in `config/pipeline-budgets.json`, and name it. A new entry records the live query count, with null wall-clock and cost budgets. A later count above an entry still needs a `decision` record.
+- [x] R2. `bun run spur-check` and `check-pipeline-budgets` both fail when a `config/workflows` definition with at least one model query has no entry in `config/pipeline-budgets.json`, and name it. A new entry records the live query count, with null wall-clock and cost budgets. A later count above an entry still needs a `decision` record. Static live model-query counts also fit their recorded budgets in spur-check. Close the existing idea-pipeline 5-to-6 drift with a fresh decision preserving its six existing stages; keep measured wall-clock and token-cost limits unchanged.
 
 Non-goals:
-- Budget values. The gate checks that an entry exists, not that it covers the live count; `idea-pipeline` (budget 5, live 6) is unchanged.
+- Raising wall-clock or token-cost limits; these remain unchanged. The explicitly authorized idea-pipeline model-query reconciliation is in scope.
 - Project and registered layers. `workflow run`, `run --dry-run` and `continue` never consult findings (governance §1.3).
 - Moving `check-pipeline-budgets` into `spur-check`. Its wall-clock half needs real runs.
 - Budget entries for workflows that no longer exist.
@@ -86,6 +86,10 @@ Refined at depth=ready (refineall I21, 2026-09-11). Closed decisions:
   - `check-pipeline-budgets` reports the drift once idea runs are measured.
   - The fix is a raise to 6 with a decision recorded in the same commit, or dropping a query. That is the operator's call, and it is reported in the I21 handoff.
 - **No vacuous pass.** `loadQueryCounts` returns `{}` on any read or parse error. The live test therefore asserts one count per `config/workflows/*.yaml` before checking coverage.
+
+#### Q&A entry — 2026-09-13T06:06:37.949Z
+
+I21 closeout authorization (2026-09-12): Robin requested completion of all remaining I21 items with all checks PASS and shippable before the next commit. This supersedes the earlier budget-value deferral and rejection of a static live-count ceiling assertion. Retain the six existing idea stages (discovery, feature-create, ac-generate, system-design, decompose, ready-prepare): deterministic/HITL gates and corpus creation separate their judgments. Update the stale modelQueries budget 5→6 with a fresh decision in the same pending changes; do not delete ready preparation or change any model dispatch. Extend the existing live coverage test using checkBudgets so future count drift fails spur-check. Wall-clock and cost limits stay unchanged; run the real measurement gate. No further commits in this step; operator schedules commit next.
 
 ### Design
 
@@ -187,6 +191,8 @@ Each entry cites the first changed line per file (`file:line`).
 | `scripts/commands/pipeline-budgets.ts:256` |
 | `scripts/commands/pipeline-budgets.ts:259` |
 
+Closeout (R2, 2026-09-12): the operator requested closure of the recorded deferrals before the next commit. `config/pipeline-budgets.json:14` reconciles idea-pipeline modelQueries from 5 to its existing 6, with a fresh decision preserving the six gated judgments and leaving wall-clock/cost limits unchanged. `scripts/commands/pipeline-budgets.test.ts:190` reuses checkBudgets to gate static live counts inside spur-check; it failed with budget=5/measured=6 before the correction. All 15 budget tests now pass, and `bun scripts/spur-dev.ts check-pipeline-budgets` reports PASS (9 pipelines, 0 violations) against live measurements. No model dispatch was added or removed.
+
 ### Testing
 
 **Pipeline verify results**
@@ -196,12 +202,12 @@ Each entry cites the first changed line per file (`file:line`).
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | The gate enumerates the shipped workflow directory and rejects error-level findings while permitting warnings. `apps/cli/tests/commands/workflow.test.ts:96`; `apps/cli/tests/commands/workflow.test.ts:141`. Executed: `bun run spur-check` (exit 0). |
-| R2 | MET | Every model-query workflow has a budget entry; missing entries fail by name in both checking paths. `scripts/commands/pipeline-budgets.ts:202`; `scripts/commands/pipeline-budgets.test.ts:164`. Executed: `bun run spur-check` (exit 0). |
+| R2 | MET | Every model-query workflow has a budget entry; missing entries fail by name in both checking paths. `scripts/commands/pipeline-budgets.ts:202`; `scripts/commands/pipeline-budgets.test.ts:164`. Executed: `bun run spur-check` (exit 0). Closeout: the existing six idea stages are covered by a fresh 5-to-6 budget decision; live static query counts are now gated inside spur-check. `config/pipeline-budgets.json:14`; `scripts/commands/pipeline-budgets.test.ts:190`. The regression failed at 5 versus 6 before correction. All 15 budget tests and the live measurement gate pass (9 pipelines, 0 violations); wall-clock and cost limits are unchanged. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | Scenario: R1 — the shared-workflow composition gate fails on error-level findings | MET | test | The gate enumerates the shipped workflow directory and rejects error-level findings while permitting warnings. `apps/cli/tests/commands/workflow.test.ts:96`; `apps/cli/tests/commands/workflow.test.ts:141`. Executed: `bun run spur-check` (exit 0). |
-| Scenario: R2 — every shared workflow with a model query has a pipeline budget | MET | test | Every model-query workflow has a budget entry; missing entries fail by name in both checking paths. `scripts/commands/pipeline-budgets.ts:202`; `scripts/commands/pipeline-budgets.test.ts:164`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R2 — every shared workflow with a model query has a pipeline budget | MET | test | Every model-query workflow has a budget entry; missing entries fail by name in both checking paths. `scripts/commands/pipeline-budgets.ts:202`; `scripts/commands/pipeline-budgets.test.ts:164`. Executed: `bun run spur-check` (exit 0). Closeout: the existing six idea stages are covered by a fresh 5-to-6 budget decision; live static query counts are now gated inside spur-check. `config/pipeline-budgets.json:14`; `scripts/commands/pipeline-budgets.test.ts:190`. The regression failed at 5 versus 6 before correction. All 15 budget tests and the live measurement gate pass (9 pipelines, 0 violations); wall-clock and cost limits are unchanged. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -213,12 +219,12 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
-| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved; closeout Q&A supersedes only the two explicit deferrals. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-closeout/spur-check.log`. |
 | P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
 | P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
 | P4 | artifact-disclosure | — | Rebuilt `.spur/run/0826-verify-answer.txt:1-35` and `.spur/run/0826-verdict.json` from fresh evidence; Testing rendered by task record. |
-| P4 | workflow-audit | — | `bun .spur/run/I21-verifyall-20260912/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
+| P4 | workflow-audit | — | `bun .spur/run/I21-closeout/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
