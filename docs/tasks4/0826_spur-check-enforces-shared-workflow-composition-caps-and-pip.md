@@ -4,7 +4,7 @@ name: spur-check enforces shared-workflow composition caps and pipeline-budget c
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.074Z
-updated_at: "2026-09-12T05:14:07.154Z"
+updated_at: "2026-09-13T05:57:16.071Z"
 feature_id: I21
 priority: P2
 tags:
@@ -195,8 +195,13 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Directory-enumerated loop (workflow.test.ts:141-152, 11 `config/workflows/*.yaml` per ls), helper `validateWorkflowFile` full schema resolution via `--json` (workflow.test.ts:96-111), three ordered AC assertions valid→errorFindings→exit 0 (:150-152), error findings name workflow/state/actionKey (:105-107), warn-only never asserted (:374-389 negative test asserts error `error start start:onEnter:0 shell-lines=11`, warn → `[]` exit 0); init relax branch gone (init.test.ts:80-86, `expect(exitCode).toBe(0)`), `rg "restored by 0826" apps/cli/tests` empty, gate inside `test` within spur-check (package.json:77,81). |
-| R2 | MET | `checkBudgetCoverage` names count>0 definitions lacking an entry (pipeline-budgets.ts:202-213), wired into `checkPipelineBudgets` with `MISSING BUDGET: pipeline=… modelQueries=…` to stderr + `failures++` → exit 1 (:256-262); live anti-vacuous test pins count keys to directory and asserts coverage `[]` (pipeline-budgets.test.ts:179-190), zero-query exemption covered (:171-177); four new entries with `modelQueries` history-anatomy 4 / feature-dev 2 / wayfinder-resolution 2 / basic 1, `wallClockMs`+`tokenCostUsd`+`decision` null (pipeline-budgets.json) — counts independently match `kind: agent.run` occurrences in those four definitions; `./scripts` in root `test` (package.json:77). |
+| R1 | MET | The gate enumerates the shipped workflow directory and rejects error-level findings while permitting warnings. `apps/cli/tests/commands/workflow.test.ts:96`; `apps/cli/tests/commands/workflow.test.ts:141`. Executed: `bun run spur-check` (exit 0). |
+| R2 | MET | Every model-query workflow has a budget entry; missing entries fail by name in both checking paths. `scripts/commands/pipeline-budgets.ts:202`; `scripts/commands/pipeline-budgets.test.ts:164`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — the shared-workflow composition gate fails on error-level findings | MET | test | The gate enumerates the shipped workflow directory and rejects error-level findings while permitting warnings. `apps/cli/tests/commands/workflow.test.ts:96`; `apps/cli/tests/commands/workflow.test.ts:141`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R2 — every shared workflow with a model query has a pipeline budget | MET | test | Every model-query workflow has a budget entry; missing entries fail by name in both checking paths. `scripts/commands/pipeline-budgets.ts:202`; `scripts/commands/pipeline-budgets.test.ts:164`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -208,6 +213,13 @@ Each entry cites the first changed line per file (`file:line`).
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0826-verify-answer.txt:1-35` and `.spur/run/0826-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | workflow-audit | — | `bun .spur/run/I21-verifyall-20260912/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
