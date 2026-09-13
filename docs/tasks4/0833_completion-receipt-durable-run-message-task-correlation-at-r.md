@@ -4,7 +4,7 @@ name: "Completion receipt: durable run-message-task correlation at run exit"
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:45:30.370Z
-updated_at: "2026-09-12T07:40:51.603Z"
+updated_at: "2026-09-13T06:49:52.928Z"
 feature_id: G61
 
 dependencies: ["0831"]
@@ -208,31 +208,15 @@ wakeup (0839) triggers on receipt writes; G63's result states (0844) render `out
 
 ### Solution
 
-**Spec drift correction applied (logged in run ledger):** the spec's "next free Spur migration prefix:
-**0043**" is stale — 0043 is taken by 0832's `0043_spur_cli_inbox_messages_request_key`
-(`drizzle/0043_…`, registered at `packages/domain/src/migrations.ts:1357`). Everything the spec calls
-0043 for the receipt migration was renumbered to **0044**:
-`drizzle/0044_spur_cli_coordination_runs_receipt_columns.sql`, step id
-`0044_spur_cli_coordination_runs_receipt_columns`. Everything else in the spec stands unchanged.
+Re-audit fixes and current change map:
 
-Change map:
+- `packages/app/src/services/agent-service.ts:1126` — request message IDs and task ID persisted before dispatch; unaddressed runs also receive a row
+- `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition
+- `packages/app/tests/services/agent-service.test.ts:30` — fresh real AiRunner/fake process integration observes exited receipt before notification; throwing listener leaves it durable
+- `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request
+- `packages/domain/tests/dao/coordination-run-dao.test.ts:216` — fresh pre-0044 upgrade test preserves existing rows; additive defaults and task index
 
-| Layer | Change |
-| --- | --- |
-| `packages/domain/src/migrations.ts:140-176` | `COORDINATION_RUNS_SCHEMA_SQL` widened with `message_ids_json TEXT NOT NULL DEFAULT '[]'`, `task_id TEXT`, `outcome TEXT NOT NULL DEFAULT 'run-exit-only'` + `idx_coordination_runs_task` (frozen names; column order matches the 0044 ALTER order byte-for-byte) |
-| `packages/domain/src/migrations.ts:178-196` | new `COORDINATION_RUNS_RECEIPT_COLUMNS_SCHEMA_SQL` — three narrow ALTERs + the task index, the 0041 queue-jobs precedent |
-| `packages/domain/src/migrations.ts:1358-1366` | step `0044_spur_cli_coordination_runs_receipt_columns` registered with `addColumnIfMissing: { coordination_runs, message_ids_json }` |
-| `packages/domain/src/migrations.ts:1593-1597,1649` | table-absence skip guard (0041/0043 precedent): DBs without `coordination_runs` (the drizzle folder-load path ships no 0010 step) journal without executing |
-| `drizzle/0044_spur_cli_coordination_runs_receipt_columns.sql` | folder-load mirror, byte-compatible with the constant |
-| `packages/domain/src/dao/coordination-run-dao.ts:52-69` | `CoordinationRunReceipt { messageIds, taskId?, outcome }`; `CoordinationRunRow` widened with the three columns |
-| `packages/domain/src/dao/coordination-run-dao.ts:105-156` | `updateExit` gains the REQUIRED 5th `receipt` argument; `listByMessageId` (json1 `json_each`), `listByTaskId`; `getByRunId` SELECT widened |
-| `packages/domain/src/dao/index.ts:16` | `CoordinationRunReceipt` re-exported |
-| `packages/app/src/services/agent-service.ts:1041-1045` | `requestMessageIds` parsed from the `requestMessage`/`request-message` flags (dual-spelling per `sessionDir`); absent flag → empty list, never inferred (R7) |
-| `packages/app/src/services/agent-service.ts:1448-1466` | exit sink builds the receipt — `outcome = result?.exitCode === 0 ? 'run-exit-only' : 'errored'`; **never** `'verified'` from this sink — and passes it to the existing `updateExit` call, which still precedes every notification (R2) |
-| `apps/cli/src/commands/agent.ts:640-649` | `drainIntoPrompt` writes 0831's claimed ids into the rewritten flags as comma-joined `requestMessage` + `request-message` (both `runAgentRun` and `runAgentLoop` drain paths route through here) |
-
-Untouched by design: no second sink, no receipts table, no ts-db change, no task advancement, no
-config flag, `NOT NULL` columns all defaulted so pre-0044 rows survive (R6).
+Goal-equivalent Design corrections: receipt schema uses 0044 because 0043 belongs to request keys; message/task origin is also stored on insertStart for crash attribution. Empty spec_id represents an unaddressed run without inventing an occupant. The routed invoke-exit event is buffered until durable updateExit; notification failures cannot erase the receipt. No task advancement or new schema is added in this re-audit.
 
 ### Testing
 
@@ -242,58 +226,49 @@ config flag, `NOT NULL` columns all defaulted so pre-0044 rows survive (R6).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-service.ts:1454-1466` — exit sink builds CoordinationRunReceipt and passes it to the single updateExit; ids via requestMessage flags `agent-service.ts:1041-1045`, written from 0831 claimed in `apps/cli/src/commands/agent.ts:640-649`; round-trip test `packages/domain/tests/dao/coordination-run-dao.test.ts:116-142` |
-| R2 | MET | Receipt written in executeRun's finally `packages/app/src/services/agent-service.ts:1447-1471`; settleDelivered runs in CLI after svc.run returns (`apps/cli/src/commands/agent.ts:479` vs `:567,:578,:825`) — strictly after the receipt write |
-| R3 | MET | Sink outcome vocabulary only 'run-exit-only'/'errored', never 'verified' (`packages/app/src/services/agent-service.ts:1457-1459`); probe asserts delivery stays 'delivered' and task not advanced (`apps/cli/tests/commands/agent-team.test.ts:961-964`) |
-| R4 | MET | Zero exit with no verification stored as 'run-exit-only' (`packages/app/src/services/agent-service.ts:1458`); asserted stored-not-inferred `apps/cli/tests/commands/agent-team.test.ts:952-954`; nonzero-exit records 'errored' `apps/cli/tests/commands/agent-team.test.ts:1000-1020` |
-| R5 | MET | `packages/domain/src/dao/coordination-run-dao.ts:126-158` — listByMessageId (json1 json_each), listByTaskId, getByRunId SELECT widened; query tests `packages/domain/tests/dao/coordination-run-dao.test.ts:144-182`; probe reads by message id + run id post-exit `apps/cli/tests/commands/agent-team.test.ts:946-958` |
-| R6 | MET | Additive nullable/defaulted columns + idx_coordination_runs_task `packages/domain/src/migrations.ts:158-172`; ALTER constant `:175-183`; step 0044 with addColumnIfMissing `:1363-1366`; byte-compatible drizzle mirror `drizzle/0044_spur_cli_coordination_runs_receipt_columns.sql:9-12` asserted statement-identical `packages/domain/tests/dao/migrations.test.ts:849-861`; idempotent on pre-0044 table with surviving row `packages/domain/tests/dao/coordination-run-dao.test.ts:216-270`; no config flag |
-| R7 | MET | Absent flag → empty list, never inferred `packages/app/src/services/agent-service.ts:1041-1045`; empty receipt valid DAO case `packages/domain/tests/dao/coordination-run-dao.test.ts:189-212`; CLI regression message_ids_json='[]', no invented inbox traffic `apps/cli/tests/commands/agent-team.test.ts:967-999` |
-| R8 | MET | Probe 6 rewritten as three regressions in describe 'G61 completion receipt regressions (0833)' `apps/cli/tests/commands/agent-team.test.ts:911-1040`: correlation+state-distinctness (912), R7 empty receipt (967), nonzero-exit errored (1000) |
+| R1 | MET | `packages/app/src/services/agent-service.ts:1126` — request message IDs and task ID persisted before dispatch; unaddressed runs also receive a row |
+| R2 | MET | `packages/app/tests/services/agent-service.test.ts:30` — fresh real AiRunner/fake process integration observes exited receipt before notification; throwing listener leaves it durable |
+| R3 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
+| R4 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
+| R5 | MET | `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request |
+| R6 | MET | `packages/domain/tests/dao/coordination-run-dao.test.ts:216` — fresh pre-0044 upgrade test preserves existing rows; additive defaults and task index |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:980` — fresh regression preserves empty message list and no task advancement |
+| R8 | MET | `apps/cli/tests/commands/agent-team.test.ts:923` — fresh drain integration verifies request/task association before invocation and after exit |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| A finished run is correlated back to its request and task | MET | test | `apps/cli/tests/commands/agent-team.test.ts:912-964` — drained run exits, coordination_runs row carries msgId + task_id, readable by listByMessageId and getByRunId after exit; plus `packages/domain/tests/dao/coordination-run-dao.test.ts:116-182` |
-| Run exit is not task completion | MET | test | `apps/cli/tests/commands/agent-team.test.ts:952-964` — outcome stored 'run-exit-only', delivery stays 'delivered', task not advanced; sink never writes 'verified' (`packages/app/src/services/agent-service.ts:1457-1459`) |
-| A run with no originating request still records its outcome | MET | test | `apps/cli/tests/commands/agent-team.test.ts:967-999` — no-drain run writes receipt with message_ids_json='[]', task id recorded, no invented inbox traffic; plus `packages/domain/tests/dao/coordination-run-dao.test.ts:189-212` |
+| Scenario: A finished run is correlated back to its request and task | MET | test | `apps/cli/tests/commands/agent-team.test.ts:923` — fresh drain integration verifies request/task association before invocation and after exit; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
+| Scenario: Run exit is not task completion | MET | test | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
+| Scenario: A run with no originating request still records its outcome | MET | test | `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request; command: apps/cli: bun test tests/commands/agent-team.test.ts; packages/app: bun test tests/services/agent-service.test.ts tests/services/event-bridge.test.ts; packages/domain: bun test tests/dao/coordination-run-dao.test.ts (exit 0) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-#### Review Report — 0833 (2026-09-12, pipeline Phase 7, profile=auto mode=safety)
+#### G61 forced re-audit — 0833
 
-**Scope:** 0833 diff surface on HEAD 3761051f9 — migrations.ts (140-176, 1358-1366, 1593-1597), drizzle/0044, coordination-run-dao.ts (63-160) + dao/index.ts:16, agent-service.ts (1041-1045, 1448-1466), agent.ts (640-649), domain dao/migrations tests, agent-team.test.ts:911+. 0831/0832 changes in the worktree excluded per review charter.
-**Dimensions:** functional (R1-R8), SECUA quality, architecture
-**Verdict:** PASS
+Verdict: PASS
 
-##### Findings (ranked)
+Review coordinator: inline sp-super-reviewer; functional traceability, SECUA (security, efficiency, correctness, usability, architecture), and architecture-improvement lenses applied to current source and the fixes in this run.
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P4 (advisory) | correctness | `status` and `receipt.outcome` are derived from the same `result?.exitCode === 0` expression, so until the deferred verification writer lands, `outcome` is a function of `status`. Intentional per spec Q&A (deferred, owner: workflow verification path) — re-check divergence when that writer exists. | `packages/app/src/services/agent-service.ts:1452-1458` |
-| 2 | P4 (advisory) | correctness | Receipt and exit pin share one try block: a `resolveArtifactRefs` throw skips the receipt write too, warning-only. Matches the sink's pre-existing failure posture and the "never fail the run" anti-pattern guard, but receipt durability is bounded by refs resolution succeeding. | `packages/app/src/services/agent-service.ts:1448-1471` |
-| 3 | P4 (advisory) | architecture | `applyCliMigrations` skip-guard handling is now ~20 hand-named booleans plus a compound `if`; 0044 correctly follows the 0041/0043 precedent but the pattern accretes. Future consolidation: a declarative `skipIf(adapter)` field on `CliMigration`. Out of scope here. | `packages/domain/src/migrations.ts:1570-1650` |
+| Priority | Dimension | Location | Finding |
+| --- | --- | --- | --- |
+| P4 | All | `packages/app/src/services/agent-service.ts:1473` | No unresolved blocker or major finding after this task's fixes; feature-level dependency failure remains owned by 0831. |
 
-##### Functional Traceability
-
+#### Functional traceability
 | Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | Receipt written by the existing exit sink: `agent-service.ts:1454-1466` builds `CoordinationRunReceipt` and passes it to the single `updateExit`; ids arrive via `requestMessage` flags (`agent-service.ts:1041-1045`) written from 0831's `claimed` in `drainIntoPrompt` (`agent.ts:640-649`), which both `runAgentRun` (:547) and `runAgentLoop` (:817) route through. |
-| R2 | MET | `updateExit` runs in `executeRun`'s `finally` before the promise resolves; `settleDelivered` runs in the CLI after `svc.run` returns (`agent.ts:479` vs :567/:578/:825) — strictly after. |
-| R3 | MET | Sink writes only `run-exit-only`/`errored`, never `verified` (`agent-service.ts:1457`); no task advancement anywhere in the sink; probe regression asserts delivery stays `delivered` and task untouched (`agent-team.test.ts:961-964`). |
-| R4 | MET | Zero exit with no verification stored as `run-exit-only` (`agent-service.ts:1457`), asserted stored-not-inferred in probe 6 flipped (`agent-team.test.ts:952-954`) and the nonzero-exit regression asserts `errored`. |
-| R5 | MET | `getByRunId` (pre-existing, SELECT widened), new `listByMessageId` (json1 `json_each`) and `listByTaskId` (`coordination-run-dao.ts:126-158`); rows durable in `coordination_runs`; probe asserts post-exit read by message id and run id. |
-| R6 | MET | Additive nullable/defaulted columns + `idx_coordination_runs_task` (`migrations.ts:140-176`, constant and `drizzle/0044` byte-compatible — asserted statement-identical at `migrations.test.ts:849-861`); no config flag. Idempotency proven against a pre-0044 table with a surviving row (`coordination-run-dao.test.ts:216-280`); table-absent DBs journal without executing (`migrations.ts:1593-1597`). |
-| R7 | MET | Absent flag → empty list, never inferred (`agent-service.ts:1041-1045` comment + code); empty receipt a first-class DAO case (`coordination-run-dao.test.ts:189`) and a CLI regression with `message_ids_json = '[]'` and no invented inbox traffic (`agent-team.test.ts:968-999`). |
-| R8 | MET | Probe 6 rewritten as three regressions in `G61 completion receipt regressions (0833)` (`agent-team.test.ts:911-1080`): correlation+delivery-distinctness, R7 empty receipt, nonzero-exit `errored`. |
+| --- | --- | --- |
+| R1 | MET | `packages/app/src/services/agent-service.ts:1126` — request message IDs and task ID persisted before dispatch; unaddressed runs also receive a row |
+| R2 | MET | `packages/app/tests/services/agent-service.test.ts:30` — fresh real AiRunner/fake process integration observes exited receipt before notification; throwing listener leaves it durable |
+| R3 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
+| R4 | MET | `packages/app/src/services/agent-service.ts:1473` — exit writes run/message/task correlation and run-exit-only or errored; no task transition |
+| R5 | MET | `apps/cli/tests/commands/agent-team.test.ts:881` — fresh integration checks running row before dispatch and reopens disk SQLite to read terminal receipt, without a spec or request |
+| R6 | MET | `packages/domain/tests/dao/coordination-run-dao.test.ts:216` — fresh pre-0044 upgrade test preserves existing rows; additive defaults and task index |
+| R7 | MET | `apps/cli/tests/commands/agent-team.test.ts:980` — fresh regression preserves empty message list and no task advancement |
+| R8 | MET | `apps/cli/tests/commands/agent-team.test.ts:923` — fresh drain integration verifies request/task association before invocation and after exit |
 
-SECUA: parameterized SQL throughout (no injection surface); json1 fed only by DAO-written `JSON.stringify` values or the `'[]'` default; no secrets/stdout bodies stored (path-only refs, unchanged); no ts-db change. Architecture: `CoordinationRunDao` stays deep — the correlation widened the row and one required argument, not the caller surface; `CoordinationRunReceipt` re-exported (`dao/index.ts:16`); no second sink, no receipts table. Spec-drift renumber 0043→0044 (0832 took 0043) verified collision-free: registry index 44 with `addColumnIfMissing: { coordination_runs, message_ids_json }` (`migrations.test.ts:188-190`), legacy-stub/journal counts bumped, 0022-0044 convergence test retitled.
+Verification: fresh bun run spur-check exit 0 (8496 tests, 99.21% functions / 98.99% lines), bun run test-cf exit 0, bun run build exit 0. Focused evidence and corrected Design deviations are recorded in Testing and Solution. No new public verb or dependency-local workaround.
 
-**Gate evidence (fresh, this review):** `bun run spur-check` rc 0 — 8054 pass, 0 fail (445 files); `packages/domain` dao+migrations subset 64 pass; `apps/cli` agent-team 37 pass; `packages/app` 2844 pass, 0 fail.
-
-**Residual risk:** (a) comma-joined `requestMessage` flag transport would mis-split an id containing `,` — no such id exists in the current inbox id space (probe round-trips real enqueued ids), and the list is also carried directly in `drainIntoPrompt`'s return; (b) `outcome='verified'` writer is deferred outside G61 — 0834/G63 consumers must treat `run-exit-only` as unverified until it lands; (c) receipt durability bounded by `resolveArtifactRefs` (finding 2).
-
-**Next:** No blocking findings — proceed to the 0833 approve gate; findings 1-3 are record-only P4s.
+--next: no-op - task already terminal (done). Existing done status is historical; the current verdict above is the re-audit result.
 
 ### References
 
