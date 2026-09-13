@@ -105,11 +105,18 @@ export const restStrategy: Strategy = {
 export const gtdStrategy: Strategy = {
     name: 'gtd',
     select: (ctx) => {
-        const chosen: Array<{ candidate: TaskSummary; decision: DispatchDecision }> = [];
+        const decisions: DispatchDecision[] = [];
         const holds: DispatchHold[] = [];
         const idle = [...ctx.idleInstances];
-
-        for (const candidate of ctx.candidates) {
+        const priorityOf = (c: TaskSummary): string => {
+            const p = c.frontmatter.priority;
+            return typeof p === 'string' && p !== '' ? p : 'P9';
+        };
+        // Allocate scarce instances in dispatch order, not corpus order.
+        const candidates = [...ctx.candidates].sort(
+            (a, b) => priorityOf(a).localeCompare(priorityOf(b)) || a.wbs.localeCompare(b.wbs),
+        );
+        for (const candidate of candidates) {
             const hold = (reason: DispatchHoldReason, detail?: string): void => {
                 holds.push({ wbs: candidate.wbs, reason, ...(detail !== undefined && { detail }) });
             };
@@ -143,35 +150,18 @@ export const gtdStrategy: Strategy = {
                 hold('executor-unavailable');
                 continue;
             }
-            chosen.push({
-                candidate,
-                decision: {
-                    projectPath: ctx.projectPath,
-                    instanceId: member.instanceId,
-                    ownerEpoch: ctx.ownerEpoch,
-                    strategyVersion: ctx.strategyVersion,
-                    // 0837: requiresWrite mirrors the member's fsWrite attestation —
-                    // a proven read-only member claims no slot; anything less proven
-                    // is refused at claim time, never here.
-                    requiresWrite: member.writeCapable,
-                    taskId: candidate.wbs,
-                },
+            decisions.push({
+                projectPath: ctx.projectPath,
+                instanceId: member.instanceId,
+                ownerEpoch: ctx.ownerEpoch,
+                strategyVersion: ctx.strategyVersion,
+                // 0837: requiresWrite mirrors the member's fsWrite attestation —
+                // a proven read-only member claims no slot; anything less proven
+                // is refused at claim time, never here.
+                requiresWrite: member.writeCapable,
+                taskId: candidate.wbs,
             });
         }
-
-        // R3 ordering: priority ascending as a string (the existing P0<P1<… vocabulary;
-        // a missing priority sorts last under the sentinel 'P9') then wbs ascending.
-        const priorityOf = (c: TaskSummary): string => {
-            const p = c.frontmatter.priority;
-            return typeof p === 'string' && p !== '' ? p : 'P9';
-        };
-        const decisions = chosen
-            .sort(
-                (a, b) =>
-                    priorityOf(a.candidate).localeCompare(priorityOf(b.candidate)) ||
-                    a.candidate.wbs.localeCompare(b.candidate.wbs),
-            )
-            .map((entry) => entry.decision);
         return { decisions, holds };
     },
 };
@@ -292,7 +282,7 @@ export class StrategyRuntime {
      */
     async selectNext(projectPath: string): Promise<StrategyResult> {
         const normalized = normalizeProjectPath(projectPath);
-        const { name, version } = await this.getStrategy(normalized);
+        let { name, version } = await this.getStrategy(normalized);
         const db = await this.ctx.openDb(normalized);
         const claims = new ProjectClaimDao(db);
 
@@ -300,6 +290,20 @@ export class StrategyRuntime {
         const ownerEpoch = orchestrator !== null && orchestrator.expiresAt > Date.now() ? orchestrator.ownerEpoch : 0;
 
         const candidates = await this.ctx.tasks.list({ status: 'todo' });
+        if (name === 'gtd') {
+            const resumed = await this.resume(normalized);
+            name = resumed.strategy;
+            version = resumed.version;
+            if (!resumed.reconciled || resumed.unresolved.length > 0) {
+                const detail = !resumed.reconciled
+                    ? `orchestrator:${resumed.orchestrator.state}; restore its live claim before dispatch`
+                    : 'unresolved-deliveries; reconcile prior results before dispatch';
+                return {
+                    decisions: [],
+                    holds: candidates.map((candidate) => ({ wbs: candidate.wbs, reason: 'no-idle-instance', detail })),
+                };
+            }
+        }
 
         const resolved = await this.ctx.fleet.resolve(normalized);
         const writeHolder = await claims.get(normalized, 'write');

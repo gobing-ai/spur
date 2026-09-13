@@ -167,6 +167,27 @@ describe('restStrategy.select (0838 R2)', () => {
 });
 
 describe('gtdStrategy.select (0838 R3/R4)', () => {
+    test('priority chooses the work before a scarce idle instance is consumed', () => {
+        const result = gtdStrategy.select(
+            pureCtx({
+                candidates: [
+                    task('0801', { tags: [FLEET_AUTO_TAG], priority: 'P3' }),
+                    task('0802', { tags: [FLEET_AUTO_TAG], priority: 'P0' }),
+                ],
+                idleInstances: [
+                    {
+                        instanceId: 'writer',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                    },
+                ],
+            }),
+        );
+        expect(result.decisions.map((decision) => decision.taskId)).toEqual(['0802']);
+        expect(result.holds).toEqual([{ wbs: '0801', reason: 'no-idle-instance' }]);
+    });
     test('five-step precedence: every skip gets exactly one hold reason, first failure wins', () => {
         const result = gtdStrategy.select(
             pureCtx({
@@ -351,23 +372,21 @@ describe('StrategyRuntime.selectNext wiring (0838 R3)', () => {
                 { wbs: '0841', reason: 'unmet-dependency', detail: '0899' },
                 { wbs: '0842', reason: 'unauthorized' },
             ]);
-            // The frozen five-step assigns idle instances in candidate iteration
-            // order (0840 pops the first member), THEN survivors sort — so P0 0843
-            // carries the second resolved member. Instances are fungible in v1.
-            expect(result.decisions.map((d) => d.instanceId)).toEqual(['proj-coder', 'proj-orch']);
+            // Priority order also owns capacity allocation: P0 gets the first instance.
+            expect(result.decisions.map((d) => d.instanceId)).toEqual(['proj-orch', 'proj-coder']);
             expect(result.decisions.map((d) => d.requiresWrite)).toEqual([true, true]);
         } finally {
             await rig.cleanup();
         }
     });
 
-    test('idle capacity excludes the live write-slot holder; no live orchestrator claim → epoch 0 (fences every claim)', async () => {
+    test('no live orchestrator blocks selection rather than minting epoch-zero decisions', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
         try {
             await rig.claims.claim(rig.project, 'write', 'proj-orch', 30_000); // orch is running work
             const result = await rig.runtime.selectNext(rig.project);
-            expect(result.decisions.map((d) => d.instanceId)).not.toContain('proj-orch');
-            expect(result.decisions.every((d) => d.ownerEpoch === 0)).toBe(true);
+            expect(result.decisions).toEqual([]);
+            expect(result.holds.every((hold) => hold.detail?.includes('bound-offline'))).toBe(true);
         } finally {
             await rig.cleanup();
         }
@@ -456,6 +475,9 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
             expect(report.reconciled).toBe(true);
             expect(report.orchestrator.state).toBe('bound-online');
             expect(report.unresolved.map((u) => [u.messageId, u.reason])).toEqual([[messageId, 'outcome-unknown']]);
+            const selected = await rig.runtime.selectNext(rig.project);
+            expect(selected.decisions).toEqual([]);
+            expect(selected.holds.every((hold) => hold.detail?.includes('unresolved-deliveries'))).toBe(true);
         } finally {
             await rig.cleanup();
         }
