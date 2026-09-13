@@ -69,12 +69,13 @@ export class ProjectClaimDao {
 
     /**
      * Attempt to claim `(projectPath, slot)` for `holderId` for `ttlMs`. The
-     * upsert's WHERE admits only an expired claim or a re-entrant claim by the
-     * same holder; a live claim held by someone else REFUSES the caller —
+     * upsert's WHERE admits an expired claim, or an orchestrator reclaim by the
+     * same holder; a live writer cannot re-enter; a live claim held by someone else REFUSES the caller —
      * returns `null`, never queues (R3). Takeover on
      * expiry bumps `ownerEpoch` (the fencing token 0837 reads). The optional
      * `strategyVersion` (0837) is written on insert AND on takeover; omitted
-     * (0836 orchestrator callers) stays/lands NULL.
+     * (0836 orchestrator callers) stays/lands NULL. Optional owner/strategy
+     * fences are checked inside the acquisition statement.
      */
     async claim(
         projectPath: string,
@@ -152,7 +153,7 @@ export class ProjectClaimDao {
         return changed !== undefined;
     }
 
-    /** The current claim row, or null. Live-ness is the caller's clock check (`expiresAt > now`). */
+    /** Current unreleased claim, or null. Liveness is the caller's clock check (`expiresAt > now`). */
     async get(projectPath: string, slot: ClaimSlot): Promise<ProjectClaim | null> {
         const row = await this.db.queryFirst<ProjectClaimRow>(
             `SELECT project_path, slot, holder_id, owner_epoch, strategy_version, claimed_at, heartbeat_at, expires_at

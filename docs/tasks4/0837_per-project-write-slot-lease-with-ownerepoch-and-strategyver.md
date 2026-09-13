@@ -4,7 +4,7 @@ name: Per-project write-slot lease with ownerEpoch and strategyVersion fencing
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.724Z
-updated_at: "2026-09-12T18:14:24.142Z"
+updated_at: "2026-09-13T07:27:53.492Z"
 feature_id: G62
 priority: P2
 tags:
@@ -228,9 +228,9 @@ are unchanged.
 
 **0836 advisory handoffs honored.** (a) `owner_epoch` is read as claim-generation: the
 stale-owner test drives it through a RE-ENTRANT same-holder orchestrator claim (epoch 1 → 2) and a
-decision pinned at 1 is refused `stale-owner` (`write-slot-service.test.ts:137`). (b)
+decision pinned at 1 is refused `stale-owner` (`packages/app/tests/services/write-slot-service.test.ts:167`). (b)
 `claim()`'s returned row treated as advisory: the service re-derives authority from holder identity
-after a dao claim (`write-slot-service.ts:147-149`), and the dao fix below removes the ambiguity at
+after a dao claim (`packages/app/src/services/write-slot-service.ts:113`), and the dao fix below removes the ambiguity at
 the source.
 
 **ROOT-CAUSE FIX in the dao (found by the two-claimant race test).** 0836's `claim()` decided the
@@ -291,26 +291,32 @@ fleet-service consumption — flag-not-verb rule held, no public-surface change 
 Handoffs honored: 0838 mints `strategyVersion`, supplies `DispatchDecision`, maps `ClaimRefusal`
 to hold reasons; G63 0844 renders refusals.
 
+#### 2026-09-13 forced re-audit
+
+Re-audit repair: persisted strategy and owner snapshots are rechecked inside writer acquisition; live writer re-entry is refused. Release keeps a hidden zero-expiry generation marker, and result validation requires exact current holder and write generation before release. This changes the former delete-on-release and accept-after-release design in order to prevent epoch reuse and false certification. Originating orchestrator generation is still absent from result correlation, and production dispatch/heartbeat integration remains incomplete.
+
+Current per-requirement evidence and residuals are in Testing and `docs/reports/g62-verifyall-2026-09-13.md`. Earlier implementation-time anchors and completion statements above are historical; this re-audit supersedes them.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: FAIL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/write-slot-service.ts:50` `WRITE_SLOT_TTL_MS = 30_000`, one write slot per worktree (`claim` `slot: 'write'` `write-slot-service.ts:143-149`, holder-scoped `release` :182-187); tests: 11 pass / 0 fail fresh run (race `tests/services/write-slot-service.test.ts:116`, release+re-claim :209) |
-| R2 | MET | ONE `INSERT … ON CONFLICT … DO UPDATE … WHERE … RETURNING` decides and reports — `packages/domain/src/dao/project-claim-dao.ts:79-115` (no read-then-write); fresh race test: two concurrent claimants → exactly one holder, loser `slot-held` (`tests/services/write-slot-service.test.ts:116-135`) |
-| R3 | MET | takeover bumps epoch `owner_epoch = project_claims.owner_epoch + 1` (`project-claim-dao.ts:100`); `validateResult` rejects lower epoch → ONE `system_events` diagnostic `fleet.write-slot.stale-owner-rejected` (`write-slot-service.ts:151-180`, event :164) and never mutates task state (guard test `tests/services/write-slot-service.test.ts:291-309`, replaced-owner test :229-253) |
-| R4 | MET | `strategyVersion` written on insert AND takeover (`project-claim-dao.ts:101`); stale decision → `stale-strategy`, NULL fences nothing (`write-slot-service.ts:125-129`); fresh tests :150-160 (stale-strategy) and :162-171 (NULL no-op) |
-| R5 | MET | proven read-only (`capabilityState === 'unavailable'`) runs WITHOUT the slot; unknown/absent member → `write-capability-unproven`, role name never consulted (`write-slot-service.ts:132-141`); fresh tests :172-186 (concurrent with held slot) and :196-206 (unknown/absent refused) |
-| R6 | MET | no new migration: 0836's step `0045_spur_cli_project_claims` is the only `project_claims` migration (`packages/domain/src/migrations.ts:1405`, drizzle mirror `drizzle/0045_spur_cli_project_claims.sql`); 0837 adds the `'write'` slot value on that table only |
+| R1 | PARTIAL | `packages/app/tests/services/write-slot-service.test.ts:146` — durable singleton slot refuses a second writer; `bun run spur-check` (exit 0). No production dispatch/heartbeat path holds the lease through a running assignment and reconciliation. |
+| R2 | MET | `packages/domain/tests/dao/project-claim-dao.test.ts:14` — atomic statement gates acquisition on owner and strategy; `bun run spur-check` (exit 0). `packages/app/tests/services/write-slot-service.test.ts:134` — one member cannot acquire two simultaneous live write leases; `bun run spur-check` (exit 0). |
+| R3 | UNMET | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 15; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): replacing the orchestrator still accepts the old writer result. `packages/app/src/services/write-slot-service.ts:186` compares write generation without the originating orchestrator generation. |
+| R4 | PARTIAL | `packages/app/tests/services/write-slot-service.test.ts:117` — persisted strategy changes fence writers, repeated atomically at acquisition; `bun run spur-check` (exit 0). Production dispatch does not consume the refusal or reselect work; read-only admission also has no atomic launch boundary. |
+| R5 | MET | `packages/app/tests/services/write-slot-service.test.ts:203` — slot-free admission requires unavailable fsWrite; unknown never grants read-only concurrency; `bun run spur-check` (exit 0). |
+| R6 | MET | `packages/domain/tests/dao/project-claim-dao.test.ts:31` — release retains generation in the existing table; no new migration or table was added; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R4 — One writer per worktree | MET | test | `packages/app/tests/services/write-slot-service.test.ts:116-135` second write dispatch refused `slot-held`; :172-186 read-only proceeds only with fsWrite attestation, slot untouched |
-| R5 — Stale decisions and replaced owners cannot act | MET | test | `packages/app/tests/services/write-slot-service.test.ts:137-148` stale-owner refused before slot touched; :150-160 stale-strategy re-evaluated; :229-253 replaced owner → `stale-owner-rejected` + diagnostic, task state unchanged |
-| Claiming is atomic across instance and slot | MET | test | `packages/app/tests/services/write-slot-service.test.ts:116-135` two `Promise.all` claimants → exactly one holder, loser `slot-held`, over the single-statement RETURNING claim (`project-claim-dao.ts:79-115`) |
+| R4 — One writer per worktree | PARTIAL | test | `packages/app/tests/services/write-slot-service.test.ts:146` — durable singleton slot refuses a second writer; `bun run spur-check` (exit 0). No production dispatch/heartbeat path holds the lease through a running assignment and reconciliation. |
+| R5 — Stale decisions and replaced owners cannot act | UNMET | command | Evidence: G62 re-audit `.spur/run/g62-verifyall-20260913/service-gap.test.ts` line 15; `bun test ./.spur/run/g62-verifyall-20260913/service-gap.test.ts` (exit 1): replacing the orchestrator still accepts the old writer result. `packages/app/src/services/write-slot-service.ts:186` compares write generation without the originating orchestrator generation. |
+| Claiming is atomic across instance and slot | MET | test | `packages/domain/tests/dao/project-claim-dao.test.ts:14` — atomic statement gates acquisition on owner and strategy; `bun run spur-check` (exit 0). `packages/app/tests/services/write-slot-service.test.ts:134` — one member cannot acquire two simultaneous live write leases; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

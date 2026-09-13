@@ -36,8 +36,8 @@ export interface DispatchDecision {
 /** Why a claim was refused. First refusal in the precedence wins; never an exception. */
 export type ClaimRefusal =
     | 'slot-held' // another live holder (R1, R2)
-    | 'stale-owner' // decision.ownerEpoch < current orchestrator epoch (R3)
-    | 'stale-strategy' // decision.strategyVersion < current strategy version (R4)
+    | 'stale-owner' // owner generation differs or its lease expired (R3)
+    | 'stale-strategy' // strategy generation differs or the strategy holds dispatch (R4)
     | 'write-capability-unproven'; // requiresWrite false but fsWrite not attested read-only (R5)
 
 /**
@@ -87,23 +87,9 @@ export class WriteSlotService {
     ) {}
 
     /**
-     * Attempt to act on `decision`. Claim precedence (R2–R5), first refusal
-     * wins:
-     *
-     * 1. `decision.ownerEpoch` below the current orchestrator claim's →
-     *    `stale-owner` — BEFORE touching the write slot: a replaced owner must
-     *    not even attempt to claim. No claim row reads as epoch 0.
-     * 2. `decision.strategyVersion` below the orchestrator claim's →
-     *    `stale-strategy`; the caller re-evaluates under the current strategy
-     *    instead of dispatching (R4). NULL (0838 not minting yet) fences
-     *    nothing.
-     * 3. `requiresWrite: false` needs the member's `fsWrite` attestation to be
-     *    `'unavailable'` — write PROVEN absent. `'unknown'` and an absent
-     *    axis/member grant nothing (`write-capability-unproven`); the role
-     *    name is never evidence. Proven read-only returns ok WITHOUT the slot
-     *    (the asymmetry that lets many readers run beside one writer).
-     * 4. Otherwise the atomic dao claim (`slot: 'write'`); `null` →
-     *    `slot-held`.
+     * Refuse stale owner/strategy decisions, require proven read-only capability
+     * for a slot-free claim, and atomically fence a writer's acquisition against
+     * the observed owner and persisted strategy. Refusals never start work.
      */
     async claim(decision: DispatchDecision): Promise<ClaimOutcome> {
         const projectPath = normalizeProjectPath(decision.projectPath);
