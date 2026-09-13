@@ -6,7 +6,7 @@ status: cancelled
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-16T18:17:26.784Z"
-updated_at: "2026-09-13T02:54:33.253Z"
+updated_at: "2026-09-13T20:09:20.087Z"
 ---
 
 # M3: Teams board continuous UX fine-tune (Terminal-centric controls)
@@ -175,6 +175,19 @@ did not exist when this note was written, so it is named by task and branch rath
 enrichment, and `process.*` events in Activity are server surfaces that G63's Agents view (0842)
 consumes; 0849 deletes the Board modules, not `apps/server/src/modules/team/`. Nothing shipped by
 `0269` is discarded by this closure.
+
+### Verification correction (2026-09-13, G64 / task 0851)
+
+The earlier retirement-based closure rationale is not evidence of shipped removal. Tasks 0849 and
+0850 were cancelled by commit 4cc0f9d65, while Workspace, Inbox, and Teams remain registered and
+ADR-052 remains Accepted; ADR-116 does not exist. The anticipated 0849 retirement merge never landed.
+The historical cancellation is retained, but retirement-dependent scope is unresolved and must not
+be counted as delivered. Reconciliation requires an explicit disposition at the owning feature or
+completion of the retirement after its cutover gate; G64 is not shippable on these records.
+
+The Projects member detail now exists, but contains neither workDir nor model. The previously
+open inspection gate is therefore resolved to a missing-field finding. No speculative duplicate
+implementation task is created during this verification batch; that residual remains explicit.
 
 ## History
 

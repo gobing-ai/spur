@@ -4,7 +4,7 @@ name: Reconcile M6, M3, G1, and G4 remaining work into this program
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
-updated_at: "2026-09-13T03:18:05.456Z"
+updated_at: "2026-09-13T20:15:15.042Z"
 feature_id: G64
 priority: P3
 tags:
@@ -261,40 +261,48 @@ R4 proof: `spur task list --feature G64 --json` → exactly 0846–0851 (six tas
 No source code was modified: this task's deliverable is corpus records only (Design: "mutationPolicy
 none for source"); inventing a diff would be the failure mode the Design warns about.
 
+Verification correction (2026-09-13): **PARTIAL**. The earlier closure rationale depended on a
+future retirement merge, not shipped evidence. M3/M6 and G64 Notes now explicitly correct that claim.
+G1/G4 remain retained owners, and the G64 task set still contains exactly six tasks. The retirement
+disposition and the missing workDir/model fields remain unresolved; no duplicate task was created.
+Current evidence: `apps/web/src/modules/teams/index.tsx:13` retains the Teams module,
+`docs/00_ADR.md:500` retains ADR-052, and `apps/web/src/modules/projects/MemberDetail.tsx:22`
+contains the member detail component without the two deferred fields.
+
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PASS (from verdict artifact)
+- Verdict: PARTIAL (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:86-103 five-row per-item disposition table (subsumed by 0849 / moot after 0849 / rejected by G6 per ADR-116 via 0850 / evidence-gated residual / honored) + closure rationale; status `cancelled` at :5, history `backlog → cancelled` at :106; residual `workDir`+`model` gate verified open this run (0842 `todo`; `apps/web/src/modules/` has no `projects/` dir) so no speculative task exists |
-| R2 | MET | docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:160-171 ordering rule + applied branch `cancelled` naming task 0849 and branch `sp/runall-g64-260912a` (current branch, verified); no G64 task re-implements M3 scope (task set = 0846-0851); backend half recorded surviving at :174-178; history `verifying → cancelled` at :180 |
-| R3 | MET | docs/features/G1_inbox-ipc.md:74 and docs/features/G4_inter-agent-control-plane.md:119 one consumer line each naming G61-G64, G61's coordination_runs extension, 0847 verbatim spec ids; live `feature show G1\|G4 --json` statuses remain `verifying` with no 2026-09-13 status transition in either History |
-| R4 | MET | `bun apps/cli/src/index.ts task list --feature G64 --json` this run: COUNT 6, set exactly {0846,0847,0848,0849,0850,0851}; no seventh task; evidence-gated residual deliberately not created (gate open) per G64:268 R4 assertion and M6:92-93 |
-| R5 | MET | docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:230-268 `### Feature reconciliation (2026-09-13, task 0851)` with four-feature state table matching live corpus; cross-referenced blocks M6:86, M3:160, G1:74, G4:119; no new docs/reports/ file (reports dir unchanged) |
+| R1 | PARTIAL | `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:104` — closure correction recorded; retirement and workDir/model residual remain unresolved; refreshed local verification scratch `.spur/run/0851-verify-answer.txt` lines 1-37 and derived `.spur/run/0851-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R2 | PARTIAL | `docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:179` — the future retirement merge used as closure evidence never landed |
+| R3 | MET | `docs/features/G1_inbox-ipc.md:74`; `docs/features/G4_inter-agent-control-plane.md:119` — retained owners, both still verifying |
+| R4 | MET | Frozen task-list JSON contains exactly 0846–0851; no duplicate task created this run |
+| R5 | MET | `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:270` — dated correction makes unsupported closure claims and residuals auditable |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Overlapping scope is resolved once | MET | corpus | M6 closed `cancelled` at its owner with the per-item disposition evidence (M6:86-103, transition at :106); M3 reconciled via the deterministic ordering rule and closed `cancelled` naming 0849 + branch sp/runall-g64-260912a (M3:160-171); no duplicate ticket exists for owner-owned work — G64 task set remains exactly 0846-0851 (task list --feature G64 --json, count 6) |
-| Existing owners are preserved | MET | corpus | G1 and G4 live statuses remain `verifying` (feature show --json this run); sole edits are the consumer lines at G1:74 and G4:119 naming G61-G64 as consumers and confirming reuse-not-fork (coordination_runs extended, not forked; spec ids preserved across 0847); no status/priority/section change in either feature History |
+| Scenario: Overlapping scope is resolved once | PARTIAL | command | M3/M6 closure premises are disproved by retained legacy modules and missing ADR supersession; correction recorded through feature update |
+| Scenario: Existing owners are preserved | MET | command | spur feature show G1/G4 --json — both remain verifying; their retained-authority Notes are unchanged |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | reconciliation-table-matches-live-corpus | — | G64:232-238 state table (M6 backlog/zero, M3 verifying/0269 done, G1 verifying/4 done, G4 verifying/3 done) verified against live `feature show M6\|M3\|G1\|G4 --json` and M3:108 task table; then-vs-now status deltas match M6:106 and M3:180 history lines |
-| P4 | merge-order-rule-recorded | — | M3:160-171 records rule + applied branch citing task 0849 and branch `sp/runall-g64-260912a`; branch exists and is the current checkout; 0849 `todo` in live corpus is consistent with 'not yet merged' at write time |
-| P4 | g64-task-set-exact | — | `task list --feature G64 --json` -> exactly 0846-0851, count 6; R4 no-duplicate assertion holds |
-| P4 | residual-gate-honesty | — | 0842 status `todo` (task show 0842 --json) and `apps/web/src/modules/` contains no `projects/` directory — gate correctly recorded open; no speculative task created |
-| P4 | adr116-forward-pointer | — | ADR-116 cited at M6:95 / G64:248 as the supersession record does not yet exist in docs/00_ADR.md; it is owned by 0850 (todo) and both citations name 0850 as the recording vehicle — forward-looking pointer consistent with the corpus, not a claim ADR-116 already landed |
-| P4 | structural-gates | — | `feature check M6\|M3\|G1\|G4\|G64` all exit 0; `task check 0851` exit 0 (this run) |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | PARTIAL: no duplication and retained G1/G4 ownership hold; corrected audit record now admits that the M3/M6 retirement-based disposition was premature. |
+| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
+| P4 | task-check | — | spur task check 0851 --strict-core --json — exit 0 |
+| P4 | secua-review | — | M3/M6 retirement-dependent scope and the missing member workDir/model fields still need an owning disposition; no implement tasks auto-created to force ship readiness. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 

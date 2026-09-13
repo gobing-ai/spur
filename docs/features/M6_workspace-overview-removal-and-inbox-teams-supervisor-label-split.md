@@ -6,7 +6,7 @@ status: cancelled
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:33.143Z"
-updated_at: "2026-09-13T02:54:19.895Z"
+updated_at: "2026-09-13T20:09:19.686Z"
 ---
 
 # M6: Workspace Overview removal and Inbox/Teams supervisor-label split
@@ -100,6 +100,19 @@ Closure rationale: nothing in this feature was implemented as specified. Its Ove
 happens as a side effect of 0849 deleting the entire module, its label split becomes impossible
 rather than satisfied, and its "keep Workspace as a lens" decision is explicitly reversed by
 ADR-116. `cancelled` records what actually happened; `done` would claim this design shipped.
+
+### Verification correction (2026-09-13, G64 / task 0851)
+
+The earlier retirement-based closure rationale is not evidence of shipped removal. Tasks 0849 and
+0850 were cancelled by commit 4cc0f9d65, while Workspace, Inbox, and Teams remain registered and
+ADR-052 remains Accepted; ADR-116 does not exist. The anticipated 0849 retirement merge never landed.
+The historical cancellation is retained, but retirement-dependent scope is unresolved and must not
+be counted as delivered. Reconciliation requires an explicit disposition at the owning feature or
+completion of the retirement after its cutover gate; G64 is not shippable on these records.
+
+The Projects member detail now exists, but contains neither workDir nor model. The previously
+open inspection gate is therefore resolved to a missing-field finding. No speculative duplicate
+implementation task is created during this verification batch; that residual remains explicit.
 
 ## History
 
