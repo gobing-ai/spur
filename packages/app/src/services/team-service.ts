@@ -1086,7 +1086,7 @@ export class TeamService {
                 });
             }
         } catch (error) {
-            this.ctx.output.error(
+            this.ctx.output?.error(
                 `Message stored, but wake event failed: ${error instanceof Error ? error.message : String(error)}`,
             );
         }

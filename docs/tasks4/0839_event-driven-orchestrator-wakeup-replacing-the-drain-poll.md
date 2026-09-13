@@ -4,7 +4,7 @@ name: Event-driven orchestrator wakeup replacing the drain poll
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:53:38.725Z
-updated_at: "2026-09-12T19:51:06.660Z"
+updated_at: "2026-09-13T07:27:54.108Z"
 feature_id: G62
 priority: P2
 tags:
@@ -266,6 +266,12 @@ Wake-then-drain loop on the existing `system_events` ledger — no new transport
 - `message.sent` durability gap: DOCUMENTED, no code change — bare-CLI `TeamService` senders attach no ledger bus, so a CLI-side send writes no wake fact; Board/server senders persist it and the R5 backstop still drains every `--poll` ms.
 - Heartbeat: no `ProjectClaimDao` heartbeat added — the loop holds no live write claim (`WriteSlotService.claim` has no CLI caller on this path).
 
+#### 2026-09-13 forced re-audit
+
+Re-audit repair: task.created, task.updated, and message.replied now wake the consumer. Plain CLI message senders persist metadata-only wake events when no bus is attached. Loop invocations attach/flush the existing ledger; abort is checked after waiting. The earlier CLI-sender durability-gap disposition is superseded. GTD dispatch integration remains a feature-level gap owned by the strategy/claim tasks, not proof supplied by synthetic wake rows.
+
+Current per-requirement evidence and residuals are in Testing and `docs/reports/g62-verifyall-2026-09-13.md`. Earlier implementation-time anchors and completion statements above are historical; this re-audit supersedes them.
+
 ### Testing
 
 **Pipeline verify results**
@@ -274,18 +280,18 @@ Wake-then-drain loop on the existing `system_events` ledger — no new transport
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Catalog `packages/app/src/services/event-names.ts:306,310` (strategy.changed, fleet.capacity.changed); producers `packages/app/src/services/strategy-runtime.ts:248` (setStrategy) + `packages/app/src/services/write-slot-service.ts:144,209` (claim/release); consumer `apps/cli/src/commands/agent.ts:793-801` WAKE_EVENT_NAMES = [message.sent, strategy.changed, fleet.capacity.changed, agent.invoke.exit]; §11 rows `docs/design/event-tracking.md:294-295`; fresh emit tests pass (strategy-runtime 2 wake-emit, write-slot 2 wake-emit) |
-| R2 | MET | `apps/cli/src/commands/agent.ts:979-1010` — svc.run only behind `prompt !== undefined` after a wake; fresh test `apps/cli/tests/commands/agent-loop-wake.test.ts:231` — `rig.run` called 0 times across 3 idle wakes ("idle wakes dispatch nothing (R2)"); non-message wake tests each assert run count 0 |
-| R3 | MET | `apps/cli/src/commands/agent.ts:872-912` recordIdleHold — writes one `fleet.idle-hold` row ONLY on hold-key change (holds from 0838 StrategyRuntime.selectNext); fresh tests "steady idle writes exactly ONE hold row across three wakes (on-change-only, R3)" + "a run resets the hold" pass |
-| R4 | MET | `apps/cli/src/commands/agent.ts:979-1010` — cursor starts at `latestSequence()`, loop is wake-then-drain (waitForWake at :830-856, forward-only keyset follow, no fixed-tick drain; sleep seam removed); fresh test "the cursor never replays: an idle iteration after a run does not re-run (R4)" pass |
-| R5 | MET | `DEFAULT_LOOP_POLL_MS = 2000` kept verbatim (`apps/cli/src/commands/agent.ts:719`) + parseLoopPoll kept; `--poll` re-documented as backstop (`apps/cli/src/commands/shared-options.ts:61` "Wakeup backstop timeout"); fresh test "backstop still drains a pre-queued message when no wake event arrives (R5)" pass (poll:100, queued message drained, run once) |
-| R6 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts` fresh run 8 pass / 0 fail — zero model calls on repeated idle wakes (run count 0) + wake asserted per each declared source (elapsed <2500ms vs 5000ms backstop); corroborated by full gate rc0: `.spur/run/0839-test-gate.status` "PASS rc=0", 8156 pass / 0 fail / 453 files |
+| R1 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:198` — plain send persists a wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:188` — task creation/update and replies wake the consumer; `bun run spur-check` (exit 0). Strategy/capacity producers and invocation ledger are covered by the same suite. |
+| R2 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — repeated idle wakes make zero model calls and no dispatch; `bun run spur-check` (exit 0). |
+| R3 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — operator-readable hold is recorded once per unchanged idle state; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:302` — new idle stretch records a fresh hold; `bun run spur-check` (exit 0). |
+| R4 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:329` — wake precedes draining and consumed events do not replay; `bun run spur-check` (exit 0). |
+| R5 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:264` — legacy queues drain on the unchanged poll backstop without migration; `bun run spur-check` (exit 0). |
+| R6 | MET | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — idle model-call assertion; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:230` — completion wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:175` — strategy wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:213` — capacity wake; `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R7 — Idle costs nothing | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:229-240` fresh pass — 3 idle wakes → `rig.run` called 0 times (no model call, no dispatch) and exactly ONE `fleet.idle-hold` row (operator-readable hold reason, holds payload wbs:reason) |
-| Each declared source wakes the orchestrator | MET | test | Fresh passes: message.sent organic via ledger-attached TeamService sendMessage (drains + runs once); strategy.changed / fleet.capacity.changed / agent.invoke.exit via direct ledger rows — each wakes <2500ms ≪ 5000ms backstop, 4/4 pass |
-| Existing loops keep working | MET | test | Fresh pass `agent-loop-wake.test.ts` "backstop still drains a pre-queued message… (R5)" — inbox-only row with no ledger event, poll:100 → drained and run once, no migration; `--poll` name/default/parser unchanged (`agent.ts:719,725-730`) |
+| R7 — Idle costs nothing | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:278` — repeated idle wakes make zero model calls and no dispatch; `bun run spur-check` (exit 0). |
+| Each declared source wakes the orchestrator | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:198` — plain send persists a wake; `bun run spur-check` (exit 0). `apps/cli/tests/commands/agent-loop-wake.test.ts:188` — task creation/update and replies wake the consumer; `bun run spur-check` (exit 0). Strategy/capacity producers and invocation ledger are covered by the same suite. |
+| Existing loops keep working | MET | test | `apps/cli/tests/commands/agent-loop-wake.test.ts:264` — legacy queues drain on the unchanged poll backstop without migration; `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -297,8 +303,12 @@ Wake-then-drain loop on the existing `system_events` ledger — no new transport
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | repository-gate | — | `bun run spur-check` (exit 0): 8511 tests, 0 failures; lint/typecheck; 45 pre-rules and 2 post-rules pass. |
+| P4 | coverage | — | Coverage: 98.99% lines, 99.21% functions, measured by the repository gate. |
+| P4 | cloudflare | — | `bun run test-cf` (exit 0): 1 test passed. |
+| P4 | design-conformance | — | Wake transport remains the existing ledger; extra task/reply events and CLI persistence close the producer/consumer gaps. Poll backstop is retained. |
+| P4 | artifact-provenance | — | Evidence: G62 re-audit `.spur/run/0839-verify-answer.txt` line 1 through EOF and `.spur/run/0839-verdict.json` line 1 through EOF replace prior verification artifacts. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:02938c69a096992d867ae9cf7e87b843445d520b2721f3ca5d248a7468d39cb1 |
 
 ### References
 
