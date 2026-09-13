@@ -4,7 +4,7 @@ name: feature-dev, pr-review, wayfinder, docs and basic stay within the composit
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.074Z
-updated_at: "2026-09-13T05:50:34.910Z"
+updated_at: "2026-09-13T05:57:14.248Z"
 feature_id: I21
 priority: P2
 tags:
@@ -313,7 +313,7 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/tests/workflow/feature-dev-definition.test.ts:456` |
 | `packages/app/tests/workflow/wayfinder-resolution.test.ts:133` |
 
-Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:107` rejects null and primitive roster members before field access, preserving the existing FAIL status and error route. The Superskill-generated twin is `plugins/sp/scripts/feature-dev-precheck.mjs:52`. Regression `plugins/sp/tests/feature-dev-precheck.test.ts:220` reproduced the crash and now verifies the persisted FAIL artifact.
+Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:102` rejects null and primitive roster members before field access, preserving the existing FAIL status and error route. The Superskill-generated twin is `plugins/sp/scripts/feature-dev-precheck.mjs:31`. Regression `plugins/sp/tests/feature-dev-precheck.test.ts:219` reproduced the crash and now verifies the persisted FAIL artifact.
 
 ### Testing
 
@@ -323,7 +323,11 @@ Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:107` 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | (1) Driver-attested validate ×5 zero error-level and zero agent-run-output; spot-check from shape holds — every agent.run in the five declares expectFile or requireDiff (feature-dev.yaml:141-142,162-163; basic.yaml:100-101; wayfinder-resolution.yaml:90-91,129-130; docs-pipeline.yaml:184-186 answerFile+expectFile, draft requireDiff docs-pipeline.yaml:176), all shell actions ≤10 commands and ≤800 chars per the recorded measures in the reason comments (pr-review.yaml:155 10-of-10, feature-dev.yaml:195 8/734), guards ≤5 (docs-pipeline.yaml:317 4-line, wayfinder-resolution.yaml:233 5-line, pr-review.yaml:297 4-predicate); caps confirmed unedited at workflow-service.ts:262-265; full gate 8073 pass 0 fail with proof-digest 193960b4… matching .spur/run/0825-proof.digest (0825-test-gate.log). (2) Owners per governance §1.1 closed vocabulary (harness-surface-governance.md:25-29): feature-dev precheck → (d) plugin script wrapper (feature-dev.yaml:94-100, plugins/sp/scripts/feature-dev-precheck.ts:1-58 registered config/plugin-scripts.json feature-dev-precheck.ts entry + package.json:61 build:scripts convert), feature-verify condensed 9 lines (feature-dev.yaml:160-163), integration-review split request+collect (feature-dev.yaml:187-197), pr-review precheck/request/collect condensed (pr-review.yaml:107,155,204), wayfinder precheck condensed (wayfinder-resolution.yaml:63-66), docs verify→record guard condensed 4-line one-jq-select (docs-pipeline.yaml:313-322). (3) Every warn-band item carries a one-line (e) YAML reason directly above the action/guard: feature-dev.yaml:160,187,195; pr-review.yaml:70,88,107,119,136,155,177,204,297; wayfinder-resolution.yaml:63,81,104,140,233; docs-pipeline.yaml:141,158,201,317,338; basic.yaml:59 — wrapping/placement residual is known-accepted. (4) investigate prompt body moved to plugins/sp/skills/wayfinder/references/pipeline-resolution.md (boundary/procedure/evidence-anchor contract, all pinned literals present), input at wayfinder-resolution.yaml:84-86 is operation+vars+bundle path only with reason at :81; SKILL.md:131 pointer appended; pins migrated with whitespace collapse (wayfinder-resolution.test.ts:126-158); R44 baseline wayfinder 26_264 unchanged (skill-structure.test.ts:820). (5) execute-tasks-auto:1 and execute-tasks:1 answerFile===expectFile feature-dev-runall-answer.txt (feature-dev.yaml:141-142,162-163); basic fix:1 answerFile===expectFile basic-fix-answer.txt (basic.yaml:100-101); docs verify:6 expectFile added equal to answerFile (docs-pipeline.yaml:184-186). (6) integration-review collect passes --status-file .spur/run/$__runId-integration-review-collect.status (feature-dev.yaml:195-197); seeded project without sp plugin fails closed — wrapper else-branch echoes 'superskill install sp', writes FAIL, exit 0 (feature-dev.yaml:94-100) pinned by plugins/sp/tests/feature-dev-precheck.test.ts wrapper fail-closed case. (7) Routes/artifacts/status/exit semantics unchanged apart from the two deltas: transition order pinned (feature-dev-definition.test.ts:203-218), pr-reviewing.test.ts:71-97 counts hold (since/head ×3, into-var ×4, no node -e, no PAIR=), docs guard keeps test -n proofDigest/proofDigestNow, = PASS, .proof.digest, = "$proofDigest" (docs-pipeline-measured-verdict.test.ts:181-189), assertions moved with logic (precheck pins feature-dev-definition.test.ts:176-189, plugins symlink :321, dispatch first-line equality + answer-file pin :407-413,451-458, REVIEWER_TS writes CLEAN to the real collect status), baseline graphs recorded ×5 (.spur/run/0825-baseline-*-graph.json), no agent.run added (no model query added), no new public verb/flag (script-only surface, script-contract-check 23 baselined PASS in gate log), build:bundle parity driver-attested via bundle-config regeneration. (8) Non-goals untouched: no 0825 markers in task-pipeline/idea-pipeline/wrapup-pipeline.yaml (driver-attested byte-identical empty diff), docs precheck:2 $wbs status-path defect deferred unchanged (docs-pipeline.yaml writes $__runId-docs-precheck.status at :110-114, guard precheck→draft still reads $wbs-docs-precheck.status at :254-257), no stateEffect/evidenceEffect anywhere in config/workflows, advisory D5-P and pr-review pending/TIMEOUT edges unchanged (feature-dev.yaml:213-238, pr-review.yaml wait→pending/collect→pending), COMPOSITION_CAPS and the spur-check chain (package.json:81) unedited. |
+| R1 | MET | All five graphs and query counts preserved; caps/output declarations and moved prompt checks pass. Null roster entries now produce the required FAIL status; integration collect receives its status-file. `plugins/sp/scripts/feature-dev-precheck.ts:102`; `plugins/sp/tests/feature-dev-precheck.test.ts:219`; `packages/app/tests/workflow/feature-dev-definition.test.ts:79`; `packages/app/tests/workflow/wayfinder-resolution.test.ts:133`. Executed: `bun run spur-check` (exit 0). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1 — feature-dev, pr-review, wayfinder, docs and basic stay within the composition budgets | MET | test | All five graphs and query counts preserved; caps/output declarations and moved prompt checks pass. Null roster entries now produce the required FAIL status; integration collect receives its status-file. `plugins/sp/scripts/feature-dev-precheck.ts:102`; `plugins/sp/tests/feature-dev-precheck.test.ts:219`; `packages/app/tests/workflow/feature-dev-definition.test.ts:79`; `packages/app/tests/workflow/wayfinder-resolution.test.ts:133`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -335,6 +339,13 @@ Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:107` 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Requirements, Design and Plan mapped to current implementations and tests; documented extraction choices preserved. |
+| P4 | quality-gate | — | `bun run spur-check` exit 0; final log `.spur/run/I21-verifyall-20260912/spur-check-final.log`. |
+| P4 | build-and-cloudflare | — | build:scripts, CLI/server/web builds, build:bundle and test-cf exited 0. |
+| P4 | secua-review | — | All five dimensions checked; re-audit fixes on 0819, 0823 and 0825 have red/green regression evidence. |
+| P4 | artifact-disclosure | — | Rebuilt `.spur/run/0825-verify-answer.txt:1-33` and `.spur/run/0825-verdict.json` from fresh evidence; Testing rendered by task record. |
+| P4 | workflow-audit | — | `bun .spur/run/I21-verifyall-20260912/workflow-audit.ts` exit 0: 11 definitions validate; eight graphs and dry-run outcomes equal pre-extraction baselines. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
