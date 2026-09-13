@@ -31,6 +31,8 @@ function rosterIsNonEmptyArray(raw) {
 function rosterContractHolds(rows) {
   const seen = new Set;
   for (const row of rows) {
+    if (row === null || typeof row !== "object")
+      return false;
     if (typeof row.wbs !== "string" || row.wbs.length === 0)
       return false;
     if (seen.has(row.wbs))

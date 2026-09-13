@@ -216,6 +216,20 @@ describe('feature-dev-precheck script (0825 d)', () => {
         }
     });
 
+    test('null roster member records FAIL instead of crashing without a status', () => {
+        const { dir, cleanup } = scratch('spur-fdp-null-');
+        try {
+            installStub(dir);
+            seed(dir, { id: 'F1' }, [null]);
+            const out = spawnScript(dir, SCRIPT, ENV);
+            expect(out.code).toBe(0);
+            expect(out.stderr).toContain('refusing to batch a broken roster');
+            expect(readFileSync(join(dir, '.spur/run/run-0825-feature-dev-precheck.status'), 'utf8')).toBe('FAIL\n');
+        } finally {
+            cleanup();
+        }
+    });
+
     test('unknown row status: message 3', () => {
         const { dir, cleanup } = scratch('spur-fdp-status-');
         try {

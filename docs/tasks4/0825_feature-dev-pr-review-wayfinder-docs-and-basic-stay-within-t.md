@@ -4,7 +4,7 @@ name: feature-dev, pr-review, wayfinder, docs and basic stay within the composit
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.074Z
-updated_at: "2026-09-12T04:23:51.712Z"
+updated_at: "2026-09-13T05:50:34.910Z"
 feature_id: I21
 priority: P2
 tags:
@@ -312,6 +312,8 @@ Each entry cites the first changed line per file (`file:line`).
 | `packages/app/tests/workflow/feature-dev-definition.test.ts:410` |
 | `packages/app/tests/workflow/feature-dev-definition.test.ts:456` |
 | `packages/app/tests/workflow/wayfinder-resolution.test.ts:133` |
+
+Re-audit fix (R1, 2026-09-12): `plugins/sp/scripts/feature-dev-precheck.ts:107` rejects null and primitive roster members before field access, preserving the existing FAIL status and error route. The Superskill-generated twin is `plugins/sp/scripts/feature-dev-precheck.mjs:52`. Regression `plugins/sp/tests/feature-dev-precheck.test.ts:220` reproduced the crash and now verifies the persisted FAIL artifact.
 
 ### Testing
 
