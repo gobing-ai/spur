@@ -817,3 +817,10 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - DD-09 insertion must land AFTER a complete scenario; a bare title dropped mid-scenario orphans its Given/When/Then body (repaired via python once in 0837/0838 window).
 - Migration renumber when plan races: log in Solution, never edit frozen spec (0045→0046 precedent).
 - Event-driven loop: forward-only in-memory cursor + `--poll` backstop; lost wake events degrade to latency, never lost work.
+
+## G64 runall batch (2026-09-12, commit bb4b459c4)
+- Batch 0846/0847/0848/0851 done via inline task-pipeline (host driver, worker subagents). 0849/0850 remain todo: dep 0845 (G63) unstarted.
+- Verdict-artifact schema gotchas: requirements/acceptanceCriteria must be ARRAYS of rows; checks must be array of OBJECTS (strings fail L4.malformed-verdict-artifact at record).
+- Record writes Testing/Review sections BEFORE the guard runs — a guard denial leaves a stub "Verdict: UNKNOWN" Testing section that must be hand-replaced before re-record.
+- Worktree contract: if base branch advanced after allocation, FF is impossible; cherry-pick (verified with `git cherry -`) then branch -D is the equivalent clean landing. Zero-overlap check first (`comm -12` of changed-file sets).
+- Temp git-index tree-hash needs `read-tree HEAD` init; bare mktemp index fails rc=128.
