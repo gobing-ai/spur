@@ -4,7 +4,7 @@ Prototype-only simulation at **`docs/prototypes/g6-projects/index.html`** with a
 interaction checks in **`apps/web/tests/prototypes/g6-projects.test.ts`** (happy-dom, run inside
 apps/web). Design tokens come from `DESIGN.md` (`--ink-*`, `--surface-*`, `--s-*`, `--r-*`,
 `--hairline`). Everything visible is labeled "simulation", "MOCK", or "(SIMULATED)". No network,
-no CDN, no framework — one HTML file, open it and it works offline.
+no CDN, no framework — one HTML file, open it and it works offline. Legacy/runtime comparisons below describe the 0828 investigation baseline; current production behavior has advanced independently, as recorded in its re-audit.
 
 ## Viewing instructions
 
@@ -168,3 +168,11 @@ The added regression checks initially failed on three defects: same-text newer d
 Browser composition is now exercised through Chromium's input engine as well as the happy-dom `isComposing`/229 guards. OS IME candidate UI, other browsers and assistive-technology speech remain untested compatibility surfaces. The earlier all-browser-unverified receipt is superseded by the Chrome evidence above.
 
 Result rows with a captured task reference expose **Open linked work (mock)**, which navigates to Work in the result's original project and announces its task/feature identity. Member Terminal/Messages input is a local simulated echo; it never calls stdin or message routes.
+
+## Forced prototype re-audit — 2026-09-12
+
+Fresh `bun test tests/prototypes/g6-projects.test.ts` inside apps/web: **19 pass, 0 fail, 200 assertions**. The former gitignored browser runner was absent in this checkout, so this run recreated it at `.spur/run/g6-verifyall-recheck/browser-check.mjs`; `node .spur/run/g6-verifyall-recheck/browser-check.mjs` exited 0 using the already-installed Playwright and Chrome **153.0.8010.36**. No dependency or prototype changes were needed.
+
+At **390×900** and **1440×900**, real browser checks passed Enter, native Shift+Enter, CDP `Input.imeSetComposition` followed by Enter without submission, newer-draft preservation, actual page reload with project isolation, arrow-key tabs, and Escape focus restoration. Conversation, Agents and Work each had zero horizontal overflow; both contexts had zero page errors. Results are in `.spur/run/g6-verifyall-recheck/browser-results.json`; six fresh screenshots use `<view>-<width>.png` in that directory. Existing tracked screenshots remain the portable review package. Native OS candidate windows, mobile keyboards and assistive-technology speech were not exercised.
+
+This receipt verifies only the standalone G6 artifact. The separate G63 production receipt above is historical evidence, not a production-browser check repeated by this run. Legacy-route mappings likewise retain their original investigation scope rather than asserting that the production composer is still a stub.

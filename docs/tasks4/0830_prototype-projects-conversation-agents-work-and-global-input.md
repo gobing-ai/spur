@@ -4,7 +4,7 @@ name: Prototype Projects conversation, agents, work, and global input interactio
 status: done
 template: feature-impl
 created_at: 2026-09-11T18:07:39.271Z
-updated_at: "2026-09-12T04:15:58.917Z"
+updated_at: "2026-09-13T06:27:15.653Z"
 feature_id: G6
 priority: P2
 tags:
@@ -112,17 +112,17 @@ Chrome input-engine composition is verified; operating-system candidate windows,
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/web/tests/prototypes/g6-projects.test.ts:497` and `apps/web/tests/prototypes/g6-projects.test.ts:545` — mock lifecycle/member input and project-bound result navigation; workspace `bun test tests/prototypes/g6-projects.test.ts` exit 0 (19 tests, 200 assertions). |
-| R2 | MET | `apps/web/tests/prototypes/g6-projects.test.ts:458` — revision-safe clear; task-reference retry and unknown-outcome regression cases at lines 468 and 486; same command exit 0. Chrome actual reload preserves project isolation. |
-| R3 | MET | `docs/prototypes/g6-projects/index.html:850` — selectable state cards; workspace suite exercises every required state and prevents unknown-outcome replay; same test command exit 0. |
-| R4 | MET | `docs/reports/g6-projects-prototype.md:76` — Chrome 153 at 390/1440 px: keyboard, browser input-engine composition, detail focus, reload isolation and zero overflow/page errors; browser-check.mjs exit 0. Tracked screenshots and complete legacy mapping; OS candidate UI untested. |
+| R1 | MET | `apps/web/tests/prototypes/g6-projects.test.ts:393` and `apps/web/tests/prototypes/g6-projects.test.ts:497` — apps/web: bun test tests/prototypes/g6-projects.test.ts exits 0 (19 pass, 200 assertions); three views, member lifecycle/input/details and contextual work navigation remain visibly simulated. |
+| R2 | MET | `apps/web/tests/prototypes/g6-projects.test.ts:128` and `apps/web/tests/prototypes/g6-projects.test.ts:458` — apps/web: bun test tests/prototypes/g6-projects.test.ts exits 0 (19 pass, 200 assertions); project-bound immutable requests, delayed receipts, newer revisions, retry references and outcome-unknown suppression asserted; real Chrome reload/project isolation also passes. |
+| R3 | MET | `apps/web/tests/prototypes/g6-projects.test.ts:320` and `apps/web/tests/prototypes/g6-projects.test.ts:486` — apps/web: bun test tests/prototypes/g6-projects.test.ts exits 0 (19 pass, 200 assertions); all named state fixtures, actionable labels and unknown-outcome no-replay behavior asserted. |
+| R4 | MET | `docs/reports/g6-projects-prototype.md:172` — node .spur/run/g6-verifyall-recheck/browser-check.mjs exits 0: Chrome 153.0.8010.36, 390/1440 px, real Chromium composition, keyboard/focus, reload, three-view overflow and page-error assertions pass. Runtime/legacy mapping is explicitly historical. Artifacts rewritten: .spur/run/0830-verify-answer.txt lines 1-34 and derived .spur/run/0830-verdict.json; fresh runner .spur/run/g6-verifyall-recheck/browser-check.mjs lines 1-55 and browser-results.json. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 (R1) | MET | test | `apps/web/tests/prototypes/g6-projects.test.ts:497` and `apps/web/tests/prototypes/g6-projects.test.ts:545` — mock lifecycle/member input and project-bound result navigation; workspace `bun test tests/prototypes/g6-projects.test.ts` exit 0 (19 tests, 200 assertions). |
-| AC-2 (R2) | MET | test | `apps/web/tests/prototypes/g6-projects.test.ts:458` — revision-safe clear; task-reference retry and unknown-outcome regression cases at lines 468 and 486; same command exit 0. Chrome actual reload preserves project isolation. |
-| AC-3 (R3) | MET | test | `docs/prototypes/g6-projects/index.html:850` — selectable state cards; workspace suite exercises every required state and prevents unknown-outcome replay; same test command exit 0. |
-| AC-4 (R4) | MET | command | `docs/reports/g6-projects-prototype.md:76` — Chrome 153 at 390/1440 px: keyboard, browser input-engine composition, detail focus, reload isolation and zero overflow/page errors; browser-check.mjs exit 0. Tracked screenshots and complete legacy mapping; OS candidate UI untested. |
+| AC-1 (R1) | MET | test | `apps/web/tests/prototypes/g6-projects.test.ts:393` and `apps/web/tests/prototypes/g6-projects.test.ts:497` — apps/web: bun test tests/prototypes/g6-projects.test.ts exits 0 (19 pass, 200 assertions); three views, member lifecycle/input/details and contextual work navigation remain visibly simulated. |
+| AC-2 (R2) | MET | test | `apps/web/tests/prototypes/g6-projects.test.ts:128` and `apps/web/tests/prototypes/g6-projects.test.ts:458` — apps/web: bun test tests/prototypes/g6-projects.test.ts exits 0 (19 pass, 200 assertions); project-bound immutable requests, delayed receipts, newer revisions, retry references and outcome-unknown suppression asserted; real Chrome reload/project isolation also passes. |
+| AC-3 (R3) | MET | test | `apps/web/tests/prototypes/g6-projects.test.ts:320` and `apps/web/tests/prototypes/g6-projects.test.ts:486` — apps/web: bun test tests/prototypes/g6-projects.test.ts exits 0 (19 pass, 200 assertions); all named state fixtures, actionable labels and unknown-outcome no-replay behavior asserted. |
+| AC-4 (R4) | MET | command | `docs/reports/g6-projects-prototype.md:172` — node .spur/run/g6-verifyall-recheck/browser-check.mjs exits 0: Chrome 153.0.8010.36, 390/1440 px, real Chromium composition, keyboard/focus, reload, three-view overflow and page-error assertions pass. Runtime/legacy mapping is explicitly historical. Artifacts rewritten: .spur/run/0830-verify-answer.txt lines 1-34 and derived .spur/run/0830-verdict.json; fresh runner .spur/run/g6-verifyall-recheck/browser-check.mjs lines 1-55 and browser-results.json. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -134,10 +134,9 @@ Chrome input-engine composition is verified; operating-system candidate windows,
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Self-contained prototype, retained controls, per-project immutable requests and revision-aware clearing; screenshots and real Chromium composition/focus evidence replace the old browser-unverified receipt. |
-| P4 | scope-creep | — | Prototype, task-owned tests/report/screenshots only; production Board and APIs untouched. |
-| P4 | browser | — | node .spur/run/g6-verifyall/browser-check.mjs exit 0; Chrome 153.0.8010.36 at 390x900 and 1440x900; OS candidate UI and mobile keyboards not exercised. |
-| P4 | fix-artifacts | — | Rewrote .spur/run/0830-verify-answer.txt lines 1-31; derived .spur/run/0830-verdict.json; .spur/run/g6-verifyall/0830-red.log, 0830-tests.log, browser-check.mjs and browser-results.json disclose checks. |
+| P4 | design-conformance | — | Standalone simulated three-view artifact, revision-safe composer and retained-control mapping meet the task design. |
+| P4 | scope-creep | — | Only report and task evidence changed; new browser runner/screenshots are gitignored local receipts. |
+| P4 | repository-gates | — | bun run spur-check exits 0 (8490 pass, zero fail; lint/typecheck and rules pass); bun run test-cf and bun run build exit 0. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
