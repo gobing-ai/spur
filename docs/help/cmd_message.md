@@ -96,6 +96,7 @@ spur message inbox --agent reviewer --json
       "reason": "outcome-unknown",
       "runId": "run-abc",
       "taskId": "task-9",
+      "runStatus": "running",
       "artifacts": [{ "kind": "result", "path": "/tmp/x.json" }]
     }
   ],

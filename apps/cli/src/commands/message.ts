@@ -407,6 +407,7 @@ function widenInboxRow(
     reason?: string;
     runId?: string;
     taskId?: string;
+    runStatus?: string;
     artifacts: UnresolvedDelivery['artifacts'];
 } {
     return {
@@ -416,6 +417,7 @@ function widenInboxRow(
         reason: hold?.reason,
         runId: hold?.runId,
         taskId: hold?.taskId,
+        runStatus: hold?.runStatus,
         artifacts: hold?.artifacts ?? [],
     };
 }

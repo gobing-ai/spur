@@ -22,7 +22,7 @@ async function insertInbox(
 }
 
 describe('InboxUnfinishedDao (0834)', () => {
-    test('listUnfinished returns every non-delivered row, newest first, with attempt fields', async () => {
+    test('listUnfinished includes delivered rows because delivery is not a verified outcome', async () => {
         const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(adapter);
         const dao = new InboxUnfinishedDao(adapter);
@@ -33,8 +33,8 @@ describe('InboxUnfinishedDao (0834)', () => {
         await insertInbox(adapter, 'bob', 'delivered', 4000);
 
         const rows = await dao.listUnfinished();
-        expect(rows).toHaveLength(3);
-        expect(rows.map((r) => r.status)).toEqual(['failed', 'injected', 'queued']);
+        expect(rows).toHaveLength(4);
+        expect(rows.map((r) => r.status)).toEqual(['delivered', 'failed', 'injected', 'queued']);
         const failed = rows.find((r) => r.status === 'failed');
         expect(failed?.inject_attempts).toBe(3);
     });

@@ -77,8 +77,11 @@ Lists messages addressed to `--agent <id>`, oldest first. The body is truncated 
 ### Delivery failure states (0834)
 
 `--unresolved` filters the listing to messages the delivery reconciler holds, and every `--json` row
-gains the operator-read fields: `injectAttempts`, `injectError`, `reason`, `runId`, `taskId`,
+gains the operator-read fields: `injectAttempts`, `injectError`, `reason`, `runId`, `taskId`, `runStatus`,
 `artifacts`. The hold reasons are distinct and durable — never one overloaded status column:
+
+Delivered messages remain eligible for holds until their receipt is verified. Interrupted runs
+carry their persisted origin and run status; exhausted attempts keep the same reason on repeated reads.
 
 | `reason` | Meaning |
 | -------- | --------- |

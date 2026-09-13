@@ -58,6 +58,62 @@ beforeEach(async () => {
 });
 
 describe('0834 five-step classification precedence', () => {
+    test('delivered run outcomes remain visible; only a verified receipt clears the hold', async () => {
+        const id = await seedQueued();
+        await claim();
+        await inbox.markDelivered(id);
+        await writeReceipt('delivered-run', [id], 'errored', [{ kind: 'log', path: '/tmp/failure.log' }], '0834');
+        expect((await reconciler.classify('worker'))[0]).toMatchObject({
+            messageId: id,
+            reason: 'delivery-failed',
+            runId: 'delivered-run',
+            taskId: '0834',
+            runStatus: 'errored',
+        });
+        await runs.updateExit('delivered-run', 'exited', new Date().toISOString(), '[]', {
+            messageIds: [id],
+            outcome: 'run-exit-only',
+        });
+        expect(reasons(await reconciler.reconcile('worker'))).toEqual([[id, 'run-exit-only']]);
+        await runs.updateExit('delivered-run', 'exited', new Date().toISOString(), '[]', {
+            messageIds: [id],
+            outcome: 'verified',
+        });
+        expect(await reconciler.classify('worker')).toEqual([]);
+        expect((await inbox.getById(id))?.status).toBe('delivered');
+    });
+
+    test('an interrupted run carries its durable origin and artifacts without claiming an exit', async () => {
+        const id = await seedQueued();
+        await claim();
+        await runs.insertStart({
+            specId: 'worker',
+            agentKind: 'codex',
+            processId: null,
+            runId: 'interrupted',
+            generation: 1,
+            startedAt: new Date().toISOString(),
+            messageIds: [id],
+            taskId: '0834',
+        });
+        await db.run(
+            'UPDATE coordination_runs SET artifact_refs_json = ? WHERE run_id = ?',
+            JSON.stringify([{ kind: 'log', path: '/tmp/interrupted.log' }]),
+            'interrupted',
+        );
+        const report = await reconciler.reconcile('worker');
+        expect(report.unresolved[0]).toMatchObject({
+            messageId: id,
+            reason: 'outcome-unknown',
+            runId: 'interrupted',
+            taskId: '0834',
+            runStatus: 'running',
+            artifacts: [{ kind: 'log', path: '/tmp/interrupted.log' }],
+        });
+        expect(await reconciler.classify('worker')).toEqual(report.unresolved);
+        expect((await inbox.getById(id))?.status).toBe('injected');
+    });
+
     test('step 1: failed row → delivery-failed with its injectError', async () => {
         const id = await seedQueued();
         await claim();
@@ -133,13 +189,14 @@ describe('0834 five-step classification precedence', () => {
         expect((await inbox.getById(id))?.status).toBe('queued');
     });
 
-    test('delivered rows are terminal success — never scanned as unfinished', async () => {
+    test('delivered rows without a receipt remain outcome-unknown and are never replayed', async () => {
         const id = await seedQueued();
         await claim();
         await inbox.markDelivered(id);
         const report = await reconciler.reconcile('worker');
-        expect(report.scanned).toBe(0);
-        expect(report.unresolved).toEqual([]);
+        expect(report.scanned).toBe(1);
+        expect(reasons(report)).toEqual([[id, 'outcome-unknown']]);
+        expect((await inbox.getById(id))?.status).toBe('delivered');
     });
 
     test('reconcile() with no agentId scans all recipients', async () => {
@@ -165,14 +222,13 @@ describe('0834 idempotence and late receipts', () => {
 
         expect(pass1.exhausted).toEqual([overBudget]);
         expect(pass2.exhausted).toEqual([]);
-        // Same message-id set and scanned count; the marked row is claimed by
-        // step 1 on pass 2 (delivery-failed), exactly per the spec's contract.
+        expect(pass2.unresolved).toEqual(pass1.unresolved);
         expect(new Set(pass2.unresolved.map((u) => u.messageId))).toEqual(
             new Set(pass1.unresolved.map((u) => u.messageId)),
         );
         expect(pass2.scanned).toBe(pass1.scanned);
         const pass2Reasons = new Map(reasons(pass2));
-        expect(pass2Reasons.get(overBudget)).toBe('delivery-failed');
+        expect(pass2Reasons.get(overBudget)).toBe('attempts-exhausted');
         expect(pass2Reasons.get(noReceipt)).toBe('outcome-unknown');
     });
 

@@ -230,3 +230,10 @@ it never advances the task or asserts workflow verification.
 Unaddressed invocations also persist receipts, using an empty `spec_id` and no occupant pin.
 An absent originating request is represented by an empty message list, never an inferred
 mailbox association. Receipt reads support run, message, and task IDs.
+
+Reconciliation includes delivered messages: delivery success does not imply run success or task
+verification. A run without a terminal receipt is `outcome-unknown`, retaining its persisted run
+ID, status, task ID, and artifact references. No ambiguous request is automatically requeued.
+Only an explicit verified receipt clears the corresponding hold. Exhausted attempts remain
+`attempts-exhausted` on subsequent reads; reconciliation and read-only classification share one
+classifier.

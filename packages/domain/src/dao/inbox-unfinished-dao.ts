@@ -1,9 +1,8 @@
 import type { DbAdapter } from '@gobing-ai/ts-db';
 
 /**
- * Raw non-delivered inbox row for reconciliation (0834). `status` is any state
- * except the terminal success `delivered` — i.e. `queued`, `injected`, `failed`
- * — the exact scan set of the delivery reconciler's five-step precedence.
+ * Inbox candidate for request reconciliation, including delivered messages.
+ * Delivery success alone does not establish a completed or verified run.
  */
 export interface InboxUnfinishedRow {
     id: string;
@@ -15,8 +14,7 @@ export interface InboxUnfinishedRow {
 }
 
 /**
- * Read-side DAO over the `inbox_messages` table listing every message whose
- * delivery is not terminally successful (0834 R1). Extends the ts-db
+ * Read-side DAO over all request candidates in `inbox_messages` (0834 R1). Extends the ts-db
  * {@link InboxMessageDao} surface — per-recipient `inbox()` has no status
  * filter and the reconciler must also scan across all recipients — with one
  * unfinished scan. Raw SQL lives here in domain so `packages/app` stays
@@ -27,7 +25,7 @@ export class InboxUnfinishedDao {
     constructor(private readonly db: DbAdapter) {}
 
     /**
-     * List non-delivered messages (`status != 'delivered'`), newest first,
+     * List request candidates, newest first,
      * optionally scoped to one recipient. An unknown future status is returned
      * too and simply falls through every classification branch upstream.
      */
@@ -38,7 +36,7 @@ export class InboxUnfinishedDao {
                     (await this.db.queryAll<InboxUnfinishedRow>(
                         `SELECT id, to_id, status, inject_attempts, inject_error, created_at
                          FROM inbox_messages
-                         WHERE status != 'delivered' AND to_id = ?1
+                         WHERE to_id = ?1
                          ORDER BY created_at DESC`,
                         toId,
                     )) ?? []
@@ -48,7 +46,6 @@ export class InboxUnfinishedDao {
                 (await this.db.queryAll<InboxUnfinishedRow>(
                     `SELECT id, to_id, status, inject_attempts, inject_error, created_at
                      FROM inbox_messages
-                     WHERE status != 'delivered'
                      ORDER BY created_at DESC`,
                 )) ?? []
             );

@@ -231,6 +231,7 @@ describe('spur message inbox', () => {
         const runs = new CoordinationRunDao(db);
         const msg = await inbox.enqueue('operator', 'planner', 'exit-only work');
         await inbox.drainPending('planner');
+        await inbox.markDelivered(msg);
         await runs.insertStart({
             specId: 'planner',
             agentKind: 'claude-code',

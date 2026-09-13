@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { TeamService } from '@gobing-ai/spur-app';
+import { DeliveryReconciler, TeamService } from '@gobing-ai/spur-app';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { RequestKeyConflictError } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -661,6 +661,9 @@ describe('G61 delivery settle regressions (0831)', () => {
             expect(rows.length).toBe(1);
             expect(rows[0]?.status).toBe('delivered');
             expect((await team.drainPending('planner')).count).toBe(0);
+            expect((await new DeliveryReconciler(ctx).reconcile('planner')).unresolved[0]?.reason).toBe(
+                'run-exit-only',
+            );
         } finally {
             accepted.restore();
             await cleanup();
