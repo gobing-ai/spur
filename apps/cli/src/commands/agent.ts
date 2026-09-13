@@ -21,7 +21,7 @@ import {
     waitForOccupant,
 } from '@gobing-ai/spur-app';
 import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
-import { InboxMessageDao, SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
+import { InboxMessageDao, ProjectStrategyDao, SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -1051,6 +1051,17 @@ export async function runAgentLoop(
     while (!runtime.signal?.aborted && (runtime.maxIterations === undefined || iteration < runtime.maxIterations)) {
         const wake = await waitForWake(wakeDao, cursor, pollMs, runtime.signal);
         cursor = wake.sequence;
+        // Rest keeps accepted input queued, including assignments sent before
+        // the strategy switch. Projects without a fleet retain legacy draining.
+        const declaration = await new FleetService({ fs: context.fs }).load(context.cwd);
+        if (declaration !== null) {
+            const strategy = await new ProjectStrategyDao(await context.getDb()).get(normalizeProjectPath(context.cwd));
+            if (strategy?.strategy !== 'gtd') {
+                lastHoldKey = await recordIdleHold(context, recipient, wake.source, lastHoldKey);
+                iteration++;
+                continue;
+            }
+        }
         // Consume this member's inbox (queued → injected). A non-empty drain yields a
         // prompt to run the agent on; an empty drain records the idle hold (R3).
         const {

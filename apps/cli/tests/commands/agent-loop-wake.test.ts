@@ -13,7 +13,13 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { _resetAgentServiceShimsForTest, type SystemEventBus, TeamService } from '@gobing-ai/spur-app';
-import { createMigratedDb, type DbAdapter, InboxMessageDao, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    createMigratedDb,
+    type DbAdapter,
+    InboxMessageDao,
+    ProjectStrategyDao,
+    SystemEventDao,
+} from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { runAgentLoop } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
@@ -216,6 +222,20 @@ describe('agent loop wake sources (0839 R1)', () => {
 });
 
 describe('agent loop backstop and idle holds (0839 R3/R5)', () => {
+    test('a declared fleet in rest keeps queued assignments unstarted (0838 R2)', async () => {
+        const rig = await makeRig({ corpus: true });
+        try {
+            writeFileSync(join(rig.tempDir, '.spur', 'fleet.json'), JSON.stringify({ version: 1, members: [] }));
+            await new ProjectStrategyDao(rig.db).set(realpathSync(rig.tempDir), 'rest');
+            await rig.inbox.enqueue('operator', 'wake-worker', 'queued assignment');
+            await runAgentLoop(rig.customCtx, { spec: 'wake-worker', poll: '10' }, { maxIterations: 1 });
+            expect(rig.run).toHaveBeenCalledTimes(0);
+            const inbox = await rig.inbox.inbox('wake-worker');
+            expect(inbox[0]?.status).toBe('queued');
+        } finally {
+            rig.cleanup();
+        }
+    });
     test('backstop still drains a pre-queued message when no wake event arrives (R5)', async () => {
         const rig = await makeRig();
         try {
