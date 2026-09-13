@@ -176,3 +176,13 @@ Fresh `bun test tests/prototypes/g6-projects.test.ts` inside apps/web: **19 pass
 At **390×900** and **1440×900**, real browser checks passed Enter, native Shift+Enter, CDP `Input.imeSetComposition` followed by Enter without submission, newer-draft preservation, actual page reload with project isolation, arrow-key tabs, and Escape focus restoration. Conversation, Agents and Work each had zero horizontal overflow; both contexts had zero page errors. Results are in `.spur/run/g6-verifyall-recheck/browser-results.json`; six fresh screenshots use `<view>-<width>.png` in that directory. Existing tracked screenshots remain the portable review package. Native OS candidate windows, mobile keyboards and assistive-technology speech were not exercised.
 
 This receipt verifies only the standalone G6 artifact. The separate G63 production receipt above is historical evidence, not a production-browser check repeated by this run. Legacy-route mappings likewise retain their original investigation scope rather than asserting that the production composer is still a stub.
+
+## Production browser re-verification — 2026-09-13 (0845, fresh run)
+
+Fresh production UI run: `node .spur/run/g63-projects/browser-check.mjs` exited 0 with Chrome
+153.0.8010.36 at 390×900 and 1440×900. The runner exercises the real Astro/React production
+components while stubbing only HTTP responses for deterministic fleet, message, process, and
+receipt fixtures. It passed the Enter/Shift+Enter/IME composition guard, durable POST path, arrow
+tab navigation, Escape focus restoration, and Conversation/Agents/Work rendering at both widths.
+All six viewport checks reported `scrollWidth === innerWidth`, with zero page errors. Results and
+screenshots are in `.spur/run/g63-projects/browser-results.json` and the adjacent per-view PNGs.
