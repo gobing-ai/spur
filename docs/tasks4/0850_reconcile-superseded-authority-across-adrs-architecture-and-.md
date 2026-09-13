@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Reconcile superseded authority across ADRs, architecture, and templates
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
-updated_at: "2026-09-12T16:43:10.662Z"
+updated_at: "2026-09-13T15:10:10.486Z"
 feature_id: G64
 priority: P3
 tags:
@@ -265,3 +265,6 @@ this program. Nothing in 0851 depends on this task's text beyond ADR-116 existin
 - Process: `docs/99_PROJECT_CONSTITUTION.md` placement guard
 
 ### History
+
+- 2026-09-13T15:10:10.486Z todo → cancelled (system)
+

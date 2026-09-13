@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Retire Workspace, Inbox, and Teams board routes with redirects
-status: todo
+status: cancelled
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
-updated_at: "2026-09-12T16:40:31.534Z"
+updated_at: "2026-09-13T15:10:05.371Z"
 feature_id: G64
 priority: P2
 tags:
@@ -285,3 +285,6 @@ scope (Workspace Overview removal, Inbox/Teams label split) is entirely on the s
 - Shim: `--agent <spec-id>` warn-once path — [G6 runtime inventory](../reports/g6-runtime-inventory.md) §4
 
 ### History
+
+- 2026-09-13T15:10:05.371Z todo → cancelled (system)
+
