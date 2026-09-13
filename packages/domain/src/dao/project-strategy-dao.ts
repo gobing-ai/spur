@@ -59,7 +59,7 @@ export class ProjectStrategyDao {
      * statement wrote (the `ProjectClaimDao.claim` precedent — no post-write
      * re-read that a concurrent writer could alias).
      */
-    async set(projectPath: string, strategy: string): Promise<ProjectStrategy> {
+    async set(projectPath: string, strategy: string, onlyIfMissing = false): Promise<ProjectStrategy> {
         const row = await this.db.queryFirst<ProjectStrategyRow>(
             `INSERT INTO project_strategy (project_path, strategy, strategy_version, updated_at)
              VALUES (?, ?, 1, ?)
@@ -67,11 +67,17 @@ export class ProjectStrategyDao {
                  strategy = excluded.strategy,
                  strategy_version = project_strategy.strategy_version + 1,
                  updated_at = excluded.updated_at
+             WHERE ? = 0
              RETURNING project_path, strategy, strategy_version, updated_at`,
             projectPath,
             strategy,
             Date.now(),
+            onlyIfMissing ? 1 : 0,
         );
+        if (row === undefined && onlyIfMissing) {
+            const existing = await this.get(projectPath);
+            if (existing !== null) return existing;
+        }
         if (row === undefined) throw new Error(`ProjectStrategyDao.set wrote no row for ${projectPath}`);
         return toStrategy(row);
     }

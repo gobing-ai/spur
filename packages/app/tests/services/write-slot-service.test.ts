@@ -85,6 +85,8 @@ async function makeRig(): Promise<Rig> {
     const { project, cleanup } = await makeProject();
     await writeFile(join(project, '.spur', 'fleet.json'), JSON.stringify(FLEET));
     const db = await createMigratedDb();
+    await new ProjectClaimDao(db).claim(project, 'orchestrator', 'proj-orch', 30_000);
+    await new ProjectStrategyDao(db).set(project, 'gtd');
     const fleet = new FleetService({
         spurConfig: parseConfig(EXECUTORS_YAML),
         fs: createNodeFileSystem(project),
@@ -168,7 +170,8 @@ describe('WriteSlotService claim (0837)', () => {
         const rig = await makeRig();
         try {
             await rig.dao.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
-            await rig.dao.claim(rig.project, 'orchestrator', 'proj-orch', 30_000); // re-entrant → epoch 2 (claim-generation)
+            await rig.dao.release(rig.project, 'orchestrator', 'proj-orch', 1);
+            await rig.dao.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
             const outcome = await rig.service.claim(writeDecision(rig, 'proj-coder', { ownerEpoch: 1 }));
             expect(outcome).toEqual({ ok: false, refusal: 'stale-owner' });
             expect(await rig.dao.get(rig.project, 'write')).toBeNull();
@@ -189,7 +192,7 @@ describe('WriteSlotService claim (0837)', () => {
         }
     });
 
-    test('NULL strategy_version fences nothing (0838 not minting yet)', async () => {
+    test('the persisted strategy is authoritative when the orchestrator version is NULL', async () => {
         const rig = await makeRig();
         try {
             await rig.dao.claim(rig.project, 'orchestrator', 'proj-orch', 30_000); // strategy_version NULL
@@ -235,11 +238,11 @@ describe('WriteSlotService claim (0837)', () => {
     test('claim stores strategyVersion on the lease; release is holder-scoped and the slot re-claims', async () => {
         const rig = await makeRig();
         try {
-            const held = await rig.service.claim(writeDecision(rig, 'proj-coder', { strategyVersion: 7 }));
-            expect(held.ok && held.lease?.strategyVersion).toBe(7);
+            const held = await rig.service.claim(writeDecision(rig, 'proj-coder', { strategyVersion: 1 }));
+            expect(held.ok && held.lease?.strategyVersion).toBe(1);
 
-            expect(await rig.service.release(rig.project, 'proj-orch')).toBe(false);
-            expect(await rig.service.release(rig.project, 'proj-coder')).toBe(true);
+            expect(await rig.service.release(rig.project, 'proj-orch', 1)).toBe(false);
+            expect(await rig.service.release(rig.project, 'proj-coder', 1)).toBe(true);
             expect(await rig.dao.get(rig.project, 'write')).toBeNull();
 
             const next = await rig.service.claim(writeDecision(rig, 'proj-ghost'));
@@ -270,7 +273,7 @@ describe('WriteSlotService validateResult (0837 R3)', () => {
         const rig = await makeRig();
         try {
             const first = await rig.dao.claim(rig.project, 'write', 'proj-coder', 30_000);
-            await rig.service.release(rig.project, 'proj-coder');
+            await rig.service.release(rig.project, 'proj-coder', 1);
             const second = await rig.dao.claim(rig.project, 'write', 'proj-coder', 30_000);
             expect(second?.ownerEpoch).toBeGreaterThan(first?.ownerEpoch ?? 0);
             expect(await rig.service.validateResult(rig.project, 'proj-coder', first?.ownerEpoch ?? 0)).toBe(
@@ -315,11 +318,11 @@ describe('WriteSlotService validateResult (0837 R3)', () => {
     test('current-generation result is accepted before release; a released slot cannot certify a late result', async () => {
         const rig = await makeRig();
         try {
-            await rig.dao.claim(rig.project, 'write', 'proj-coder', 30_000, 1);
+            await rig.service.claim(writeDecision(rig, 'proj-coder'));
             expect(await rig.service.validateResult(rig.project, 'proj-coder', 1)).toBe('accepted');
             expect(await rig.service.validateResult(rig.project, 'proj-coder', 0)).toBe('stale-owner-rejected');
 
-            await rig.service.release(rig.project, 'proj-coder');
+            await rig.service.release(rig.project, 'proj-coder', 1);
             expect(await rig.service.validateResult(rig.project, 'proj-coder', 1)).toBe('stale-owner-rejected');
         } finally {
             await rig.cleanup();
@@ -379,8 +382,8 @@ describe('WriteSlotService wake emits (0839 R1)', () => {
         const rig = await makeRig();
         try {
             await rig.service.claim(writeDecision(rig, 'proj-coder'));
-            expect(await rig.service.release(rig.project, 'proj-coder')).toBe(true);
-            expect(await rig.service.release(rig.project, 'proj-coder')).toBe(false);
+            expect(await rig.service.release(rig.project, 'proj-coder', 1)).toBe(true);
+            expect(await rig.service.release(rig.project, 'proj-coder', 1)).toBe(false);
             const rows = await new SystemEventDao(rig.db).query({ names: ['fleet.capacity.changed'], limit: 10 });
             const changes = rows.map((r) => (JSON.parse(r.payload_json ?? '{}') as { change?: string }).change).sort(); // query orders occurred_at DESC — same-ms inserts are tie-broken unstably
             expect(changes).toEqual(['claim', 'release']);
@@ -388,4 +391,38 @@ describe('WriteSlotService wake emits (0839 R1)', () => {
             await rig.cleanup();
         }
     });
+});
+
+test('replacing only the orchestrator rejects the original writer result', async () => {
+    const rig = await makeRig();
+    try {
+        const claimed = await rig.service.claim(writeDecision(rig, 'proj-coder'));
+        expect(claimed.ok).toBe(true);
+        expect(await rig.service.validateResult(rig.project, 'proj-coder', 1)).toBe('accepted');
+        await rig.dao.release(rig.project, 'orchestrator', 'proj-orch', 1);
+        await rig.dao.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+        expect(await rig.service.validateResult(rig.project, 'proj-coder', 1)).toBe('stale-owner-rejected');
+        expect((await rig.dao.get(rig.project, 'write'))?.holderId).toBe('proj-coder');
+    } finally {
+        await rig.cleanup();
+    }
+});
+
+test('missing ownership or strategy never authorizes a fleet assignment', async () => {
+    const rig = await makeRig();
+    try {
+        await rig.dao.release(rig.project, 'orchestrator', 'proj-orch', 1);
+        expect(await rig.service.claim(writeDecision(rig, 'proj-coder'))).toEqual({
+            ok: false,
+            refusal: 'stale-owner',
+        });
+        await rig.dao.claim(rig.project, 'orchestrator', 'proj-orch', 30_000);
+        await rig.db.run('DELETE FROM project_strategy');
+        expect(await rig.service.claim(writeDecision(rig, 'proj-coder', { ownerEpoch: 2 }))).toEqual({
+            ok: false,
+            refusal: 'stale-strategy',
+        });
+    } finally {
+        await rig.cleanup();
+    }
 });

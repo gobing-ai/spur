@@ -69,8 +69,8 @@ export class ProjectClaimDao {
 
     /**
      * Attempt to claim `(projectPath, slot)` for `holderId` for `ttlMs`. The
-     * upsert's WHERE admits an expired claim, or an orchestrator reclaim by the
-     * same holder; a live writer cannot re-enter; a live claim held by someone else REFUSES the caller —
+     * upsert's WHERE admits only an expired claim. Even the same spec in another
+     * process is refused while the current generation is live —
      * returns `null`, never queues (R3). Takeover on
      * expiry bumps `ownerEpoch` (the fencing token 0837 reads). The optional
      * `strategyVersion` (0837) is written on insert AND on takeover; omitted
@@ -112,7 +112,6 @@ export class ProjectClaimDao {
                  heartbeat_at = excluded.heartbeat_at,
                  expires_at = excluded.expires_at
              WHERE project_claims.expires_at <= excluded.claimed_at
-                OR (excluded.slot = 'orchestrator' AND project_claims.holder_id = excluded.holder_id)
              RETURNING project_path, slot, holder_id, owner_epoch, strategy_version, claimed_at, heartbeat_at, expires_at`,
             projectPath,
             slot,
@@ -137,20 +136,33 @@ export class ProjectClaimDao {
      * the holder has been displaced (or never held the claim) — the caller must
      * stop acting as owner.
      */
-    async heartbeat(projectPath: string, slot: ClaimSlot, holderId: string, ttlMs: number): Promise<boolean> {
+    async heartbeat(
+        projectPath: string,
+        slot: ClaimSlot,
+        holderId: string,
+        ttlMs: number,
+        ownerEpoch: number,
+    ): Promise<boolean> {
         const now = Date.now();
         const changed = await this.db.queryFirst<{ holder_id: string }>(
             `UPDATE project_claims SET heartbeat_at = ?, expires_at = ?
-             WHERE project_path = ? AND slot = ? AND holder_id = ? AND expires_at > ?
+             WHERE project_path = ? AND slot = ? AND holder_id = ? AND owner_epoch = ? AND expires_at > ?
              RETURNING holder_id`,
             now,
             now + ttlMs,
             projectPath,
             slot,
             holderId,
+            ownerEpoch,
             now,
         );
         return changed !== undefined;
+    }
+
+    /** SQLite's actual backing file; empty only for an in-memory adapter. */
+    async databasePath(): Promise<string> {
+        const rows = await this.db.queryAll<{ name: string; file: string }>('PRAGMA database_list');
+        return rows?.find((row) => row.name === 'main')?.file ?? '';
     }
 
     /** Current unreleased claim, or null. Liveness is the caller's clock check (`expiresAt > now`). */
@@ -166,16 +178,17 @@ export class ProjectClaimDao {
     }
 
     /** Release the claim, only if `holderId` still holds it. True when this call released it. */
-    async release(projectPath: string, slot: ClaimSlot, holderId: string): Promise<boolean> {
+    async release(projectPath: string, slot: ClaimSlot, holderId: string, ownerEpoch: number): Promise<boolean> {
         // Keep the generation after release: deleting it lets a later run reuse
         // epoch 1 and accept an old result. Zero expiry is the released marker.
         const changed = await this.db.queryFirst<{ holder_id: string }>(
             `UPDATE project_claims SET expires_at = 0
-             WHERE project_path = ? AND slot = ? AND holder_id = ? AND expires_at > 0
+             WHERE project_path = ? AND slot = ? AND holder_id = ? AND owner_epoch = ? AND expires_at > 0
              RETURNING holder_id`,
             projectPath,
             slot,
             holderId,
+            ownerEpoch,
         );
         return changed !== undefined;
     }

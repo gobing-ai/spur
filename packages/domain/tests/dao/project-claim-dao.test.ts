@@ -20,6 +20,7 @@ describe('ProjectClaimDao (0836 R3)', () => {
             await strategies.set(P, 'rest');
             expect(await dao.claim(P, 'write', 'writer', 30_000, 1, { ownerEpoch: 1, strategyVersion: 1 })).toBeNull();
             await strategies.set(P, 'gtd');
+            await dao.release(P, 'orchestrator', 'lead', 1);
             await dao.claim(P, 'orchestrator', 'lead', 30_000);
             expect(await dao.claim(P, 'write', 'writer', 30_000, 3, { ownerEpoch: 1, strategyVersion: 3 })).toBeNull();
             expect(await dao.get(P, 'write')).toBeNull();
@@ -32,8 +33,8 @@ describe('ProjectClaimDao (0836 R3)', () => {
         const { dao, adapter } = await makeDao();
         try {
             await dao.claim(P, 'write', 'writer', 30_000);
-            expect(await dao.release(P, 'write', 'writer')).toBe(true);
-            expect(await dao.heartbeat(P, 'write', 'writer', 30_000)).toBe(false);
+            expect(await dao.release(P, 'write', 'writer', 1)).toBe(true);
+            expect(await dao.heartbeat(P, 'write', 'writer', 30_000, 1)).toBe(false);
             expect((await dao.claim(P, 'write', 'writer', 30_000))?.ownerEpoch).toBe(2);
         } finally {
             adapter.close();
@@ -64,11 +65,15 @@ describe('ProjectClaimDao (0836 R3)', () => {
         adapter.close();
     });
 
-    test('re-entrant claim by the same holder succeeds without a second row', async () => {
+    test('a second process using the same spec cannot re-enter a live claim', async () => {
         const { dao, adapter } = await makeDao();
         await dao.claim(P, 'orchestrator', 'proj-planner-1', 30_000);
         const again = await dao.claim(P, 'orchestrator', 'proj-planner-1', 30_000);
-        expect(again?.holderId).toBe('proj-planner-1');
+        expect(again).toBeNull();
+        await dao.release(P, 'orchestrator', 'proj-planner-1', 1);
+        expect((await dao.claim(P, 'orchestrator', 'proj-planner-1', 30_000))?.ownerEpoch).toBe(2);
+        expect(await dao.heartbeat(P, 'orchestrator', 'proj-planner-1', 30_000, 1)).toBe(false);
+        expect(await dao.release(P, 'orchestrator', 'proj-planner-1', 1)).toBe(false);
 
         const rows = await adapter.queryAll('SELECT * FROM project_claims');
         expect(rows).toHaveLength(1);
@@ -80,10 +85,10 @@ describe('ProjectClaimDao (0836 R3)', () => {
         const first = await dao.claim(P, 'orchestrator', 'proj-planner-1', 0);
         await dao.claim(P, 'orchestrator', 'proj-planner-2', 30_000); // displaced planner-1
 
-        expect(await dao.heartbeat(P, 'orchestrator', 'proj-planner-1', 30_000)).toBe(false);
+        expect(await dao.heartbeat(P, 'orchestrator', 'proj-planner-1', 30_000, 1)).toBe(false);
 
         const before = await dao.get(P, 'orchestrator');
-        expect(await dao.heartbeat(P, 'orchestrator', 'proj-planner-2', 60_000)).toBe(true);
+        expect(await dao.heartbeat(P, 'orchestrator', 'proj-planner-2', 60_000, 2)).toBe(true);
         const after = await dao.get(P, 'orchestrator');
         expect(after?.expiresAt).toBeGreaterThanOrEqual(before?.expiresAt ?? 0);
         expect(after?.heartbeatAt).toBeGreaterThanOrEqual(before?.heartbeatAt ?? 0);
@@ -95,10 +100,10 @@ describe('ProjectClaimDao (0836 R3)', () => {
         const { dao, adapter } = await makeDao();
         await dao.claim(P, 'orchestrator', 'proj-planner-1', 30_000);
 
-        expect(await dao.release(P, 'orchestrator', 'proj-planner-2')).toBe(false);
+        expect(await dao.release(P, 'orchestrator', 'proj-planner-2', 1)).toBe(false);
         expect((await dao.get(P, 'orchestrator'))?.holderId).toBe('proj-planner-1');
 
-        expect(await dao.release(P, 'orchestrator', 'proj-planner-1')).toBe(true);
+        expect(await dao.release(P, 'orchestrator', 'proj-planner-1', 1)).toBe(true);
         expect(await dao.get(P, 'orchestrator')).toBeNull();
         adapter.close();
     });
