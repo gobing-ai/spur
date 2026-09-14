@@ -68,9 +68,9 @@ superskill install sp --marketplace gobing-ai/spur
 # or, go with the full path of the github URL
 superskill install sp --marketplace https://github.com/gobing-ai/spur
 # or, go with pre-installed via bun
-superskill install sp --marketplace $(bun pm bin -g)/@gobing-ai/spur
+superskill install sp --marketplace $(dirname $(bun pm bin -g))/install/global/node_modules/@gobing-ai/spur
 # or, go with pre-installed via npm
-superskill install sp --marketplace $(npm root -g)/@gobing-ai/spur
+superskill install sp --marketplace $(dirname $(npm root -g))/node_modules/@gobing-ai/spur
 # or, go with already downloaded source code
 superskill install sp --marketplace /Users/robin/xprojects/spur-new
 ```
