@@ -33,7 +33,7 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
             if (options.all === true) args.push('--all');
             if (options.push === true) args.push('--push');
             try {
-                await bumpVer(args, context.cwd, context.output);
+                await bumpVer(args, context.cwd, context.output, context.spurConfig);
                 if (options.json === true) {
                     context.output.write(
                         toEnvelopeJson(
@@ -85,7 +85,7 @@ export function registerBuilderCommand(program: Command, context: CliContext): v
             if (options.all === true) args.push('--all');
             if (options.remote === true) args.push('--remote');
             try {
-                await dropTags(args, context.cwd, context.output);
+                await dropTags(args, context.cwd, context.output, context.spurConfig);
                 if (options.json === true) {
                     context.output.write(
                         toEnvelopeJson(

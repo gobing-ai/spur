@@ -858,6 +858,44 @@ export const HistoryConfigSchema = z.object({
     refresh: HistoryRefreshConfigSchema.optional(),
 });
 
+/**
+ * Schema for the `builder.bump-ver` section (release automation knobs for
+ * `spur builder bump-ver` / `drop-tags`). Every field has a zod default equal
+ * to the previous hardcoded value, so a project without a `builder` section
+ * keeps the built-in behavior; projects with different release conventions
+ * (tag format, publish workflow, commit style) configure them in
+ * `.spur/config.yaml` instead of patching release scripts.
+ */
+export const BuilderBumpVerConfigSchema = z.object({
+    /** Release tag format: `<package><separator><version>` (default `-v` → `pkg-v1.2.3`). */
+    tagVersionSeparator: z.string().min(1).default('-v'),
+    /** GitHub Actions workflow file the pushed release tag triggers. */
+    publishWorkflow: z.string().min(1).default('publish.yml'),
+    releaseCommitType: z.string().min(1).default('chore'),
+    releaseCommitScope: z.string().min(1).default('release'),
+    /** `gh run list --limit` used to point at the triggered publish run. */
+    ghRunListLimit: z.number().int().positive().default(5),
+});
+
+/** Schema for the `builder` section. */
+export const BuilderConfigSchema = z.object({
+    'bump-ver': BuilderBumpVerConfigSchema.optional(),
+});
+
+/** Effective `builder.bump-ver` configuration after schema defaults apply. */
+export type BuilderBumpVerConfig = z.infer<typeof BuilderBumpVerConfigSchema>;
+
+/**
+ * Resolve the effective `builder.bump-ver` config from a (possibly absent) config.
+ * The zod defaults above are the single source; a missing section parses to the
+ * built-in release conventions (`-v`, `publish.yml`, `chore(release)`, limit 5).
+ */
+export function resolveBuilderBumpVerConfig(
+    config: Pick<SpurConfig, 'builder'> | null | undefined,
+): BuilderBumpVerConfig {
+    return BuilderBumpVerConfigSchema.parse(config?.builder?.['bump-ver'] ?? {});
+}
+
 /** Effective history-refresh trigger configuration after schema defaults apply. */
 export interface HistoryRefreshTriggerConfig {
     onCompletion: boolean;
@@ -902,6 +940,7 @@ export const spurConfigSchema = z.object({
     workflow: WorkflowConfigSchema.optional(),
     redaction: RedactionConfigSchema.optional(),
     history: HistoryConfigSchema.optional(),
+    builder: BuilderConfigSchema.optional(),
     tasks: tasksConfigSchema.optional(),
     features: featuresConfigSchema.optional(),
 });

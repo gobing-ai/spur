@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { BuilderBumpVerConfig, SpurConfig } from '@gobing-ai/spur-config';
+import { resolveBuilderBumpVerConfig } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CommandOutput } from './output';
 import { consoleOutput } from './output';
@@ -132,7 +134,10 @@ function workspaceDirs(repoRoot: string): string[] {
  * Discover every workspace package and derive its release config. The CLI id for each
  * package is its unscoped name (`@gobing-ai/spur` -> `spur`).
  */
-async function releaseContext(repoRoot: string): Promise<ReleaseContext> {
+async function releaseContext(
+    repoRoot: string,
+    bumpVerConfig: BuilderBumpVerConfig = resolveBuilderBumpVerConfig(null),
+): Promise<ReleaseContext> {
     const rootManifest = await readJson(join(repoRoot, 'package.json'));
     if (rootManifest === null) {
         throw new Error(`no package.json found at ${repoRoot} — builder operates on a package workspace root.`);
@@ -161,13 +166,13 @@ async function releaseContext(repoRoot: string): Promise<ReleaseContext> {
             packageDir: ws.dir,
             packageName: ws.name,
             versionSourceFile,
-            tagVersionSeparator: '-v',
-            publishWorkflow: 'publish.yml',
-            releaseCommitType: 'chore',
-            releaseCommitScope: 'release',
+            tagVersionSeparator: bumpVerConfig.tagVersionSeparator,
+            publishWorkflow: bumpVerConfig.publishWorkflow,
+            releaseCommitType: bumpVerConfig.releaseCommitType,
+            releaseCommitScope: bumpVerConfig.releaseCommitScope,
             releaseCommitSubject: (version: string) => `bump ${shortName(ws.name)} to ${version}`,
             releaseTagMessage: (tag: string) => `release: ${tag}`,
-            ghRunListLimit: 5,
+            ghRunListLimit: bumpVerConfig.ghRunListLimit,
         });
     }
 
@@ -281,18 +286,16 @@ async function syncMarketplaceAndPlugins(
     const rawPlugins = marketplace?.plugins;
     if (marketplace === null || !Array.isArray(rawPlugins)) return;
 
-    const isPlugin = (entry: unknown): entry is { name: string; version: string; source: string } =>
+    type MarketplacePlugin = Record<string, unknown> & { name: string; version: string; source: string };
+    const isPlugin = (entry: unknown): entry is MarketplacePlugin =>
         entry !== null &&
         typeof entry === 'object' &&
         typeof (entry as Record<string, unknown>).name === 'string' &&
         typeof (entry as Record<string, unknown>).version === 'string' &&
         typeof (entry as Record<string, unknown>).source === 'string';
-    const plugins: Array<{ name: string; version: string; source: string }> = [];
-    for (const entry of rawPlugins) {
-        if (isPlugin(entry)) {
-            plugins.push({ name: entry.name, version: entry.version, source: entry.source });
-        }
-    }
+    // Mutate the parsed entries in place: extra fields (e.g. description) must
+    // survive the version rewrite — narrowed copies would silently drop them.
+    const plugins = rawPlugins.filter(isPlugin);
 
     let mpUpdated = false;
     for (const entry of plugins) {
@@ -326,7 +329,17 @@ async function syncMarketplaceAndPlugins(
 }
 
 async function assertCleanTreeOnBranch(ctx: ReleaseContext): Promise<string> {
-    if ((await git(ctx.repoRoot, ['status', '--porcelain'])) !== '') {
+    // CLI startup eagerly creates the runtime SQLite state (.spur/spur.db* + logs/),
+    // which dirties a pristine repo before dispatch — that noise is not
+    // release-relevant state. Everything else (tracked edits, other untracked
+    // files) still blocks. -uall is required because porcelain collapses a fully
+    // untracked .spur/ into `?? .spur/`, hiding the per-file distinction.
+    const RUNTIME_NOISE = /^\?\? \.spur\/(?:spur\.db|spur\.db-shm|spur\.db-wal|logs\/)/;
+    const status = (await git(ctx.repoRoot, ['status', '--porcelain', '--untracked-files=all']))
+        .split('\n')
+        .filter((line) => line !== '' && !RUNTIME_NOISE.test(line))
+        .join('\n');
+    if (status !== '') {
         throw new Error('working tree is not clean. Commit or stash changes before releasing.');
     }
     const branch = await git(ctx.repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD']);
@@ -607,8 +620,9 @@ export async function bumpVer(
     args: string[],
     repoRoot: string = process.cwd(),
     output: CommandOutput = consoleOutput,
+    spurConfig?: Pick<SpurConfig, 'builder'> | null,
 ): Promise<void> {
-    const ctx = await releaseContext(repoRoot);
+    const ctx = await releaseContext(repoRoot, resolveBuilderBumpVerConfig(spurConfig));
     const positional = args.filter((arg) => !arg.startsWith('--'));
     if (args.includes('--all') || (positional.length === 1 && SEMVER.test(positional[0] ?? ''))) {
         const allVersion = positional[0];
@@ -635,8 +649,9 @@ export async function dropTags(
     args: string[],
     repoRoot: string = process.cwd(),
     output: CommandOutput = consoleOutput,
+    spurConfig?: Pick<SpurConfig, 'builder'> | null,
 ): Promise<void> {
-    const ctx = await releaseContext(repoRoot);
+    const ctx = await releaseContext(repoRoot, resolveBuilderBumpVerConfig(spurConfig));
     const positional = args.filter((arg) => !arg.startsWith('--'));
     if (args.includes('--all') || (positional.length === 1 && SEMVER.test(positional[0] ?? ''))) {
         const allVersion = positional[0];

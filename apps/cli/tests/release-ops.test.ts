@@ -174,6 +174,31 @@ describe('builder bump-ver', () => {
         await expect(bumpVer(['lib', '0.2.0'], repo)).rejects.toThrow('working tree is not clean');
     });
 
+    test('tolerates runtime db noise (.spur/spur.db* / logs) left by CLI startup on a pristine repo', async () => {
+        const { repo } = mkRepo();
+        mkdirSync(join(repo, '.spur', 'logs'), { recursive: true });
+        writeFileSync(join(repo, '.spur', 'spur.db'), '');
+        writeFileSync(join(repo, '.spur', 'spur.db-wal'), '');
+        writeFileSync(join(repo, '.spur', 'logs', 'run.log'), '');
+        await bumpVer(['lib', '0.2.0'], repo);
+        expect(localTags(repo)).toContain('@demo/lib-v0.2.0');
+    });
+
+    test('builder.bump-ver config overrides tag separator and commit scope', async () => {
+        const { repo } = mkRepo();
+        await runBumpVer(
+            ['lib', '0.2.0'],
+            repo,
+            createCapturedOutput(),
+            // Partial by intent: zod defaults fill the unset knobs.
+            { builder: { 'bump-ver': { tagVersionSeparator: '--', releaseCommitScope: 'ship' } } } as Parameters<
+                typeof runBumpVer
+            >[3],
+        );
+        expect(localTags(repo)).toContain('@demo/lib--0.2.0');
+        expect(sh(repo, ['git', 'log', '-1', '--format=%s'])).toBe('chore(ship): bump lib to 0.2.0');
+    });
+
     test('refuses to re-tag an existing local tag', async () => {
         const { repo } = mkRepo();
         await bumpVer(['lib', '0.2.0'], repo);
@@ -288,7 +313,7 @@ describe('builder edge paths', () => {
         mkdirSync(join(repo, '.claude-plugin', 'plugins', 'sp'), { recursive: true });
         writeFileSync(
             join(repo, '.claude-plugin', 'marketplace.json'),
-            `${JSON.stringify({ name: 'demo', plugins: [{ name: 'sp', version: '0.1.0', source: '.claude-plugin/plugins/sp' }] }, null, 4)}\n`,
+            `${JSON.stringify({ name: 'demo', plugins: [{ name: 'sp', description: 'demo plugin', version: '0.1.0', source: '.claude-plugin/plugins/sp' }] }, null, 4)}\n`,
         );
         writeFileSync(
             join(repo, '.claude-plugin', 'plugins', 'sp', 'plugin.json'),
@@ -304,6 +329,8 @@ describe('builder edge paths', () => {
         );
         const marketplace = await Bun.file(join(repo, '.claude-plugin', 'marketplace.json')).json();
         expect(marketplace.plugins[0].version).toBe('0.2.0');
+        // Extra fields must survive the rewrite, not be rebuilt away.
+        expect(marketplace.plugins[0].description).toBe('demo plugin');
         const pluginJson = await Bun.file(join(repo, '.claude-plugin', 'plugins', 'sp', 'plugin.json')).json();
         expect(pluginJson.version).toBe('0.2.0');
         const manifest = await Bun.file(join(repo, 'pkgs', 'lib', 'package.json')).json();

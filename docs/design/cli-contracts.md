@@ -171,6 +171,32 @@ Package ids are unscoped short names (`@gobing-ai/spur` → `spur`). Unknown ids
 dirty tree, a detached HEAD, or an existing local/origin tag abort with exit 1 and usage text
 (`releaseUsage`). Output and exit behavior are identical to the legacy `spur-dev release` path.
 
+**Release knobs are project config, not code (`.spur/config.yaml` `builder.bump-ver`).** The tag
+separator, publish workflow, commit type/scope, and `gh run list` limit resolve from the merged
+global+project config (zod defaults = the original hardcoded values), so projects with different
+release conventions configure them instead of patching release scripts:
+
+```yaml
+builder:
+  bump-ver:
+    tagVersionSeparator: "-v"   # release tag = <package><separator><version>
+    publishWorkflow: publish.yml # workflow the pushed tag triggers
+    releaseCommitType: chore
+    releaseCommitScope: release
+    ghRunListLimit: 5
+```
+
+**Marketplace/plugin version carriers.** When `.claude-plugin/marketplace.json` exists, every
+listed plugin's `version` (and its own `<source>/plugin.json`) is bumped to the release version in
+the same commit — superskill's update check reads the marketplace version first, so leaving it
+stale silently degrades staleness detection. Entries are mutated in place; unrelated fields
+(e.g. `description`) survive.
+
+**Runtime-noise tolerance.** CLI startup eagerly creates the runtime SQLite state
+(`.spur/spur.db*`, `.spur/logs/`), which dirties a pristine repo before dispatch; the clean-tree
+gate ignores exactly those untracked paths (`status --porcelain -uall`) and still blocks on
+anything else.
+
 <a id="spur-agent-run-prompt---agent-name---spec-id---continue---model-name---mode-mode---cwd-path---drain---json"></a>
 
 #### `spur agent run <prompt> [--agent <name>] [--spec <id>] [--continue] [--model <name>] [--mode <mode>] [--cwd <path>] [--drain] [--json]`
