@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.46.0
+version: 1.47.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-13
+updated_at: 2026-09-14
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]

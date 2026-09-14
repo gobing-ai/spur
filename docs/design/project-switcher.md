@@ -3,7 +3,7 @@ doc: design/project-switcher
 feature_id: K1
 owns: SURFACE + mechanism for multi-project Spur Board switching and the project fleet
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-13
+updated_at: 2026-09-14
 ---
 
 # Project switcher — system design (feature K1)
@@ -153,7 +153,7 @@ Registration preserves an existing project name because fleet mailbox IDs use th
 | --- | --- |
 | `add <path> [--name]` | Upsert entry with `port: 0`; require valid Spur project root (`.spur/` or monorepo signal) |
 | `remove <name\|path>` | Drop entry (does not kill a running process — warn if port > 0) |
-| `list [--json]` | Table / JSON of name, path, port, running |
+| `list [--json] [--fleet]` | Table / JSON of name, path, port, running; `--fleet` (0835/0836) also resolves each project's `.spur/fleet.json` declaration, orchestrator binding and capacity under the same verb |
 | `start <name\|path> [--port]` | Spawn `spur serve` in project path (detached child); wait until health OK; update registry |
 | `stop <name\|path>` | SIGTERM process listening on registered port (or recorded pid if we add it later); set port 0 |
 | `migrate [path] [--dry-run\|--apply] [--json]` | Preview legacy team conversion by default; explicit `--apply` backs up a differing fleet declaration and writes the conversion. Conflicts exit 2. |

@@ -391,7 +391,7 @@ Exit 0 on success, 1 on agent-not-found, 2 on invalid arguments, 3 on agent exec
 
 <a id="spur-agent-list---json---specs"></a>
 
-#### `spur agent list [--json] [--specs]`
+#### `spur agent list [--json] [--specs] [--server <url>]`
 
 Detect installed agents; prints `ok|missing <name> [version]`. Backed by `ts-ai-runner`
 `AgentDetector` / `DISPLAY_ORDER`. Canonical agents (0.4.8+): `claude`, `codex`, `gemini`, `pi`,
@@ -399,7 +399,10 @@ Detect installed agents; prints `ok|missing <name> [version]`. Backed by `ts-ai-
 alias of `antigravity-cli`). With `--specs`, lists the team agent specs under `.spur/agents/` instead
 (`<id> <type> <role> <executor> <purpose>` — role and executor are distinct columns; an undeclared
 role renders `unset`, 0544 R2/R4; `--json` includes the spec path plus `role`/`executor` fields,
-omitted when unset).
+omitted when unset). Since 0848 `--specs` also merges live run status from the `spur serve`
+supervisor through `--server <url>` (default `http://localhost:3000/api`), each row gaining a
+`running`/`stopped`/`errored`/`unknown` column and `pid=<n>` where a process exists; an unreachable
+server falls back to all `stopped` with a stderr warning.
 
 <a id="spur-agent-doctor-agent---json---probe-health---force-refresh"></a>
 

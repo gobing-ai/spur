@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.73.0
+version: 1.74.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-09-09
+updated_at: 2026-09-14
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -39,7 +39,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | rd3 Migration — System Design | [rd3-migration-design.md](design/rd3-migration-design.md) |
 | Server-Side Adjustment — Design | [server-side-adjustment-design.md](design/server-side-adjustment-design.md) |
 | Server-Side Adjustment — Finalized Feature List | [server-side-adjustment-feature-finalized.md](design/server-side-adjustment-feature-finalized.md) |
-| Spur Team Mode — Design Document | [spur-team-mode-design.md](design/spur-team-mode-design.md) |
+| Spur Team Mode — Design Document — **superseded by ADR-116** (the team-scoped composition proposal it describes was replaced by project-scoped fleets; current surface in [project-switcher.md](design/project-switcher.md)) | [spur-team-mode-design.md](design/spur-team-mode-design.md) |
 | Workflow run observability | [workflow-observability.md](design/workflow-observability.md) |
 | Workflow composition contract | [workflow-composition-contract.md](design/workflow-composition-contract.md) |
 | Spur artifact composition and evolution: workflow layers, spur-composer, spur-doctor (feature I21) | [spur-artifact-evolution.md](design/spur-artifact-evolution.md) |
@@ -120,7 +120,7 @@ See [contract detail](design/cli-contracts.md#spur-builder-bump-ver-package-id--
 
 See [contract detail](design/cli-contracts.md#spur-agent-run-prompt---agent-name---spec-id---continue---model-name---mode-mode---cwd-path---drain---json).
 
-#### `spur agent list [--json] [--specs]`
+#### `spur agent list [--json] [--specs] [--server <url>]`
 
 See [contract detail](design/cli-contracts.md#spur-agent-list---json---specs).
 
