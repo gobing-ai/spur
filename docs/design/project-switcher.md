@@ -247,7 +247,7 @@ Board requests travel as ordinary `inbox_messages` rows — operator mailbox
 non-consuming `GET /api/messages/inbox` (no new endpoint, no client-side
 message store). When the request carries explicit references, the web client
 prefixes the body with a single envelope line; a request without refs stays a
-plain message so `spur message` output and the Inbox module see the operator's
+plain message so `spur message` output and the Projects Conversation tab see the operator's
 text verbatim:
 
 ```
