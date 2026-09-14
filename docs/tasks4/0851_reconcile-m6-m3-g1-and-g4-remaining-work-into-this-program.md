@@ -4,7 +4,7 @@ name: Reconcile M6, M3, G1, and G4 remaining work into this program
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
-updated_at: "2026-09-13T20:15:15.042Z"
+updated_at: "2026-09-13T21:22:50.001Z"
 feature_id: G64
 priority: P3
 tags:
@@ -188,6 +188,15 @@ occupant addressing keeps working. Their `verifying` status belongs to their own
 - Do not touch `docs/tasks*/` receipts for M3, G1, or G4.
 
 **Handoff.** This is the last task of G64 and of the G6 program. Nothing depends on it.
+
+**Operator amendment — 2026-09-13, pre-cleanup completion.** Robin explicitly keeps 0849 and
+0850 temporarily cancelled and will re-enable them after the other G64 tasks pass. Their retirement
+work remains assigned to those existing tasks; the reconciliation must not depend on pretending it
+already shipped. M3/M6 cancellations represent superseded plans with a deferred cleanup owner, not
+delivered retirement. Close the confirmed member detail workDir/model gap in 0851 using the existing
+shared teams read API and hook, without a duplicate task. This narrowly replaces the source-mutation
+prohibition and follow-up-ticket branch above. Keep G1/G4 authority and all feature statuses unchanged.
+The four-task pre-cleanup release may pass independently; full G64 R5/R6 remain deferred.
 
 ### Plan
 

@@ -116,6 +116,38 @@ afterEach(() => {
 });
 
 describe('MemberDetail pane (0842 R3)', () => {
+    test('0851: shows the selected member model and workDir, then clears them for an unknown member', async () => {
+        const fallback = stubFetch();
+        setFetchForTesting(((input: RequestInfo | URL) => {
+            if (new URL((input as Request).url).pathname === '/api/team/teams') {
+                return Promise.resolve(
+                    Response.json({
+                        teams: [
+                            {
+                                teamId: 'project',
+                                name: 'project',
+                                workDir: '/work/project',
+                                members: [
+                                    { id: 'other', type: 'codex', status: 'unknown', model: 'wrong-model' },
+                                    { id: 'a1', type: 'claude', status: 'unknown', model: 'configured-model' },
+                                ],
+                            },
+                        ],
+                    }),
+                );
+            }
+            return fallback(input);
+        }) as typeof fetch);
+        const view = render(<MemberDetail entry={entry()} onClose={() => {}} />);
+        await act(async () => {});
+        expect(view.container.querySelector('[data-member-workdir]')?.textContent).toBe('/work/project');
+        expect(view.container.querySelector('[data-member-model]')?.textContent).toBe('configured-model');
+        view.rerender(<MemberDetail entry={{ ...entry(), instanceId: 'unknown' }} onClose={() => {}} />);
+        await act(async () => {});
+        expect(view.container.querySelector('[data-member-workdir]')?.textContent).toBe('Unavailable');
+        expect(view.container.querySelector('[data-member-model]')?.textContent).toBe('Unavailable');
+    });
+
     test('mounts terminal + member inbox read + activity read; no new transport, no POST on open', async () => {
         setFetchForTesting(stubFetch());
         const view = render(<MemberDetail entry={entry()} onClose={() => {}} />);

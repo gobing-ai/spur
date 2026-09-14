@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
+import { useTeamsData } from '../../lib/use-teams-data';
 import { type ActivityRow, historyUrl, parseHistory } from '../teams/ActivityTab';
 import MemberTerminal from '../teams/MemberTerminal';
 import { type InboxMessage, parseInboxMessages } from './conversation';
@@ -20,6 +21,9 @@ const lifecycleUrl = (id: string, verb: 'start' | 'stop') =>
  * opener element).
  */
 export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; onClose: () => void }) {
+    const { teams, error: detailsError } = useTeamsData();
+    const team = detailsError ? undefined : teams.find((t) => t.members.some((m) => m.id === entry.instanceId));
+    const member = team?.members.find((m) => m.id === entry.instanceId);
     const [messages, setMessages] = useState<InboxMessage[] | null>(null);
     const [activity, setActivity] = useState<ActivityRow[] | null>(null);
     const [busy, setBusy] = useState(false);
@@ -128,6 +132,16 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
                         {entry.observed.exitCode !== null ? ` — exit ${entry.observed.exitCode}` : ''}
                     </span>
                 </span>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+                    <dt className="text-spur-text-muted">Working directory</dt>
+                    <dd className="font-mono text-spur-text break-all" data-member-workdir>
+                        {team?.workDir ?? 'Unavailable'}
+                    </dd>
+                    <dt className="text-spur-text-muted">Model</dt>
+                    <dd className="font-mono text-spur-text break-all" data-member-model>
+                        {member ? (member.model ?? 'Executor default') : 'Unavailable'}
+                    </dd>
+                </dl>
             </div>
             <div className="px-3 py-2 border-b border-spur-border shrink-0 flex items-center gap-2 flex-wrap">
                 <button
