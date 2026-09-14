@@ -497,7 +497,7 @@ These applications do not create additional architectural decisions.
 
 ## ADR-052: Team-Scoped Board Composition with Separate Control and Message Planes
 
-- **Status:** Accepted · **Date:** 2026-08-11 · **Feature:** G3 · **Supersedes:** ADR-042
+- **Status:** Superseded by ADR-116 · **Date:** 2026-08-11 · **Feature:** G3 · **Supersedes:** ADR-042
 - **Decision:** Use `agent.team.<teamId>` as the v1 workspace context. Teams exclusively owns roster,
   process lifecycle, terminal I/O, and activity; Inbox owns durable messages only; the Workspace Board
   module composes team-scoped Teams, Inbox, and Tasks views. Add no workspace schema, service, API, or
@@ -1664,3 +1664,19 @@ times the cache of those within five minutes.
 posture); [workflow composition](design/workflow-composition-contract.md#composition-budgets-adr-115)
 (rules); [spur artifact evolution](design/spur-artifact-evolution.md) §10 (doctor evidence);
 [CLI contracts](design/cli-contracts.md) (`workflow validate`).
+
+## ADR-116: Project-Scoped Fleet Composition Replaces Team-Scoped Board Composition
+
+- **Status:** Accepted · **Date:** 2026-09-14 · **Feature:** G6 · **Supersedes:** ADR-052
+- **Decision:** A project — one worktree path — is the composition unit. Its agent roster is a
+  **fleet** declared in `<projectPath>/.spur/fleet.json` (task 0835) and resolved by `FleetService`;
+  the Projects Board module owns Conversation, Agents, and Work; `agent.team.<teamId>` and the
+  Workspace / Inbox / Teams modules are retired. Spec ids stay the mailbox identity and occupant
+  address, preserved verbatim across conversion.
+- **Why:** `agent.team.<teamId>` made the roster a config-global keyed by a name the project does not
+  own, so two teams could claim one worktree and a project had no single roster. Keying on the
+  worktree path removes the ambiguity and makes the fleet addressable from the project registry that
+  already exists (ADR-037).
+- **Retains:** ADR-037 (project registry), ADR-057 (control-plane boundary), ADR-022 (task lifecycle).
+- **Detail:** `docs/plans/2026-09-11-project-agent-fleet-brainstorm.md`;
+  `docs/design/project-switcher.md` § fleet; features G61–G64.

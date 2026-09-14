@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-14T14:19:04.054Z"
+updated_at: "2026-09-14T15:01:13.491Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -104,6 +104,13 @@ Feature: Retire Workspace, Inbox, Teams, and spur team
     When no workflow or plugin caller remains
     Then the shim is removed
 
+
+  @core
+  Scenario: R8 — History is preserved
+    Given historical ADRs and feature receipts
+    When the supersession is recorded
+    Then no historical decision or receipt is rewritten
+
 ```
 
 ## Tasks
@@ -114,8 +121,8 @@ Feature: Retire Workspace, Inbox, Teams, and spur team
 | 0846 | Migration inventory and dry-run preview with conflict reporting | done |
 | 0847 | Roster conversion with verbatim spec-ID preservation and rollback | done |
 | 0848 | Retire spur team after migrating its callers to owning nouns | done |
-| 0849 | Retire Workspace, Inbox, and Teams board routes with redirects | testing |
-| 0850 | Reconcile superseded authority across ADRs, architecture, and templates | todo |
+| 0849 | Retire Workspace, Inbox, and Teams board routes with redirects | done |
+| 0850 | Reconcile superseded authority across ADRs, architecture, and templates | done |
 | 0851 | Reconcile M6, M3, G1, and G4 remaining work into this program | done |
 | 0852 | Restore Board reachability for the retired process watch list (executions + filters) | backlog |
 | 0853 | Record ownership for the retired Teams supervisor facets (uptime, live activity, team up/down) | backlog |

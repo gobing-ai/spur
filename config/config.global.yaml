@@ -17,8 +17,11 @@
 #     here.
 #
 # Only machine-wide keys belong in this file. Project-shaped keys — `name`,
-# `bootstrap`, `rules`, `redaction`, `tasks`, `features`, `agent.team` — resolve
-# against a project's own folder structure and must stay in `.spur/config.yaml`.
+# `bootstrap`, `rules`, `redaction`, `tasks`, `features` — resolve against a
+# project's own folder structure and must stay in `.spur/config.yaml`. The agent
+# roster is not a config key at all any more: it is `<projectPath>/.spur/fleet.json`
+# (ADR-116, task 0835). The legacy `agent.team` key still parses; the `spur team`
+# noun is deprecated (0848).
 
 $schema: "@gobing-ai/spur/schemas/spur-config.schema.json"
 

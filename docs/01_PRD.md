@@ -95,7 +95,7 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | Inter-agent durable messages                               | `spur message send\|inbox\|reply`                  | `MessageService` + ts-db                   |
 | Team coordination                                          | `spur task update --assignee`, `spur agent list --specs\|start\|stop` | `TeamService` + `SupervisorService` (`spur serve`) |
 | Inter-agent control plane (occupant identity, coordination artifacts, pinned wait) | existing `spur agent` / `spur message` (no new noun) | ADR-057; feature G4 |
-| Team-scoped Board composition                              | Spur Board Teams / Inbox / Workspace                | existing team, message, and task surfaces  |
+| Project-scoped fleet composition                              | Spur Board Projects (Conversation / Agents / Work); `.spur/fleet.json` fleet | `FleetService` (`spur serve`); ADR-116 supersedes ADR-052 |
 | Constraint rule evaluation / discovery / validation        | `spur rule run\|list\|validate`                    | `ts-rule-engine`                           |
 | Rule / workflow run history                                | `spur rule trace` / `spur workflow trace`          | engine persistence via ts-db               |
 | Actionable local observability context                     | Spur Board System Events + existing trace commands | system-event ledger + engine persistence   |

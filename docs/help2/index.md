@@ -42,7 +42,7 @@ spur task create "Investigate flaky login test" --skip-ready
 | `spur feature` | [feature](./feature.md) | `spur serve` | [serve](./serve.md) |
 | `spur history` | [history](./history.md) | `spur status` | [status](./status.md) |
 | `spur init` | [init](./init.md) | `spur task` | [task](./task.md) |
-| `spur maintain` | [maintain](./maintain.md) | `spur team` | [team](./team.md) |
+| `spur maintain` | [maintain](./maintain.md) | `spur team` (deprecated 0848) | [team](./team.md) |
 | `spur message` | [message](./message.md) | `spur workflow` | [workflow](./workflow.md) |
 | `spur migrate` | [migrate](./migrate.md) | | |
 

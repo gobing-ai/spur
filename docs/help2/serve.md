@@ -31,8 +31,8 @@ spur serve --json                   # machine-readable { port, url, pid }, then 
 
 ## What it serves
 
-- **Web UI** — task kanban, workflow runs, history analytics, team status.
-- **Supervisor API** — `spur team start/stop` and supervised agent loops require a reachable
+- **Web UI** — task kanban, workflow runs, history analytics, project fleet status.
+- **Supervisor API** — `spur agent start/stop <spec-id>` and supervised agent loops require a reachable
   `spur serve`; without it, use `spur agent run --spec <id> --drain` for store-and-forward runs.
 
 ## Environment variables

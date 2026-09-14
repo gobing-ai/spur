@@ -3,8 +3,12 @@ doc: design/workspace
 feature_id: G3
 owns: SURFACE + mechanism for team-scoped Board composition
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-29
+updated_at: 2026-09-14
 ---
+
+> **Superseded (ADR-116).** Team-scoped Board composition is retired: project-scoped fleets replace it,
+> and the Workspace module was deleted with its routes redirecting into Projects (task 0849). Current
+> surface: [project switcher](project-switcher.md) § fleet. Kept as the historical record of G3.
 
 # Workspace Board module — team-scoped composition
 

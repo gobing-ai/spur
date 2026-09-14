@@ -493,18 +493,23 @@ Invariants:
 
 Concrete shapes and rollout: `docs/design/dev-command-argument-contract.md`.
 
-## 14. Web Board Modules & Team-Scoped Composition (ADR-052)
+## 14. Web Board Modules & Project-Scoped Composition (ADR-116)
 
 `apps/web` renders the Board as a set of **auto-discovered modules**: `apps/web/src/modules/discover.ts`
 eagerly globs sibling directories that export a named `module: WebModule` (`id`, `route`,
 `sidebarLabel`, `order`, `component`). A new module needs **no registry edit** — discovery is
-automatic; `order` only places it in the sidebar. Current modules: `teams`, `inbox`, `task-kanban`,
-`observability`, `features`, plus shell-level pieces (sidebar, project switcher).
+automatic; `order` only places it in the sidebar. Current modules: `observability` (10), `history`
+(20), `features` (30), `task-kanban` id `tasks` (40), `projects` (45), plus shell-level pieces
+(sidebar, project switcher). Workspace, Inbox, and Teams were retired by task 0849 once the Projects
+module carried their capabilities; their routes redirect into Projects (`apps/web/src/router.tsx`
+`RETIRED_ROUTES`).
 
-### 14.1 Current shipped state: two channels merged client-side
+### 14.1 Current shipped state: two channels, two panes
 
-Spur has **two independent channels** between the Board and a backend coding agent. They are merged
-_for display_ by the Inbox module; they are never merged in storage and delivery is unchanged.
+Spur has **two independent channels** between the Board and a backend coding agent. They are never
+merged — not in storage, not in delivery, and no longer in a single display surface. The Projects
+module presents each channel where it is consumed: durable messages in the Conversation tab, process
+frames in the Agents tab's member terminal.
 
 | | Durable message queue | Process pipe |
 | --- | --- | --- |
@@ -513,6 +518,13 @@ _for display_ by the Inbox module; they are never merged in storage and delivery
 | Delivery to agent | Undeclared projects use `agent loop` → `drainPending`; fleets use the dispatch gate below | written straight to `PipeProcess` stdin |
 | Storage | SQLite (`inbox_messages`), durable, `queued → injected` lifecycle | in-memory ring buffer, bounded (default 500), lost on restart |
 | Ordering cursor | `createdAt` | `seq` (monotonic) + `ts` |
+
+The Board surfaces of these two channels are separate by design: Conversation (0841) renders the
+request/response thread over the durable queue, and the Agents tab's `MemberDetail` (0842) mounts the
+member terminal over the process stream plus a read-only inbox and activity pane. The retired Inbox
+module's client-side `mergeTimeline` (a discriminated union of messages and frames in
+`apps/web/src/modules/inbox/timeline.ts`) went with that module; nothing replaced it, because each
+channel now has its own pane and a per-agent timeline was the only place the two ever met.
 
 Declared fleets use one generation-fenced orchestrator loop. On a ledger wake, `StrategyRuntime`
 restores strategy, reconciles deliveries, and selects authorized tasks through the existing task
@@ -527,26 +539,31 @@ Server startup materializes declared fleet specs after the quota-update drain an
 or request admission. CLI and server use the same role resolver; registration retains the project
 name used as the mailbox prefix. Invalid fleet declarations fail startup before serving requests.
 
-The merge is a **pure function** in `apps/web/src/modules/inbox/timeline.ts`:
-`mergeTimeline(messages, frames, agentId) → TimelineEntry[]` — a discriminated union
-(`kind: message | frame`, `direction: in | out`). Pure keeps R5/R6 testable without mounting a
-component. The oldest frame's `ts` is the process-frame **history boundary** (R6): entries older
-than it are messages only, rendered behind a marker; an agent with no frames renders a message-only
-timeline, not an error.
+The merge is retired: `apps/web/src/modules/inbox/timeline.ts` and its `mergeTimeline(messages,
+frames, agentId) → TimelineEntry[]` pure function were deleted with the Inbox module (0849). Its two
+inputs survive as separate panes (§14.1): durable rows in the Conversation thread, process frames in
+the member terminal, each read through the transports in the table above and each with its own
+narrowing function (`parseInboxMessages` in `projects/conversation.ts`, `parseFrame` in
+`lib/process-stream.ts`). The process-frame **history boundary** it used (`seq` monotonic per
+stream) still governs the terminal's ring buffer.
 
 ### 14.2 Shared process-stream helpers (R9)
 
 `parseFrame`, `appendFrame`, `nextBackoff`, and `streamUrl` live once in
-`apps/web/src/lib/process-stream.ts` and are imported by both `teams/MemberTerminal` and the Inbox
-agent timeline. No duplicated frame-parsing logic.
+`apps/web/src/lib/process-stream.ts`. After the Workspace/Inbox/Teams retirement their single
+remaining importer is `apps/web/src/modules/projects/MemberTerminal.tsx`; no duplicated frame-parsing
+logic exists.
 
-### 14.3 Accepted G3 boundary (ADR-052)
+### 14.3 Accepted boundary (ADR-116)
 
-G3 removes the display merge above. `agent.team.<teamId>` is the v1 workspace context: the team
-config already owns its work folder and roster. Teams owns roster/process lifecycle/terminal/activity;
-Inbox owns durable `inbox_messages`; Workspace is a Board composition shell that passes `teamId`
-scope into existing Team, Inbox, and Task views. It introduces no workspace persistence, service,
-HTTP route, or CLI noun. Until task 0197 lands, §14.1–14.2 describe the shipped transitional state.
+ADR-116 replaces ADR-052's team-scoped composition: **a project — one worktree path — is the
+composition unit.** Its agent roster is a **fleet** declared in `<projectPath>/.spur/fleet.json`
+(task 0835) and resolved by `FleetService`; the Projects Board module owns Conversation, Agents, and
+Work (0840's three-tab contract, `apps/web/src/modules/projects/tabs.tsx`); `agent.team.<teamId>`, the
+three retired Board modules, and their routes are gone (0849). Spec ids stay the mailbox identity and
+occupant address, preserved verbatim across conversion. Fleet shape, resolution, and the dispatch
+boundaries: [project switcher § fleet](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
+Nothing in this section introduces new persistence, service, HTTP route, or CLI noun.
 
 ### 14.4 Module-scoped DESIGN.md palette (R10–R13)
 
@@ -565,7 +582,7 @@ header and body sharing one horizontal padding so lanes align under the header. 
 the old in-board toolbar (phase select, lane toggles, combined WBS/feature input, `+ New Task`) and
 `TaskFilters.tsx` is deleted.
 
-Embed rule: a module embedded under another module (Workspace ⊃ Tasks) exports a **headerless**
+Embed rule: a module embedded under another module (Projects ⊃ Tasks) exports a **headerless**
 view (`TaskKanbanView`) rendering pure content; the shell is the route component only. Header-owned
 state (phase folder, lane visibility) reaches the board as optional controlled props with
 uncontrolled in-board defaults, so the embed keeps working with no shell present. Enforceable
@@ -668,8 +685,9 @@ Task 0685 adds an exact-one selector above this unchanged pin layer: `--role` re
 Layer-1 role or executor name through `AgentInstanceStore.byRole` / `byExecutor`; zero or multiple
 matches fail with count + candidates. `agent wait` and `message send --wait` snapshot the resolved
 spec's occupant; an unwaited send queues to the resolved `specId` without requiring an occupant.
-The Board Inbox `mergeTimeline` remains display-only; G3 (ADR-052) still owns un-merging it and
-is not this section's work.
+The retired Board Inbox `mergeTimeline` no longer exists (0849 removed it with the Inbox module);
+durable messages and process frames are presented in their own Projects panes, so there is no
+display merge left to un-merge.
 
 ### 17.1 Target topology
 

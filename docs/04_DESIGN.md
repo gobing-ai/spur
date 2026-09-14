@@ -59,12 +59,12 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | History Refresh Process Isolation and Single-Flight Execution | [history-refresh-process-isolation.md](design/history-refresh-process-isolation.md) |
 | History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving | [history-incremental-materialization.md](design/history-incremental-materialization.md) |
 | Project switcher — system design (feature K1) | [project-switcher.md](design/project-switcher.md) |
-| Inbox Board module — durable message plane | [inbox-board-module.md](design/inbox-board-module.md) |
+| Inbox Board module — durable message plane — **superseded by ADR-116** (retired by 0849; message plane now in the Projects Conversation tab) | [inbox-board-module.md](design/inbox-board-module.md) |
 | Workflow run log (all-in-one per-run log) | [workflow-run-log.md](design/workflow-run-log.md) |
 | Brainstorm: Workflow observability, traceability, live output, and steering for `spur workflow run` | [brainstorm-workflow-observability-steering.md](design/brainstorm-workflow-observability-steering.md) |
 | Cross-process workflow steering control channel | [workflow-steering-control-channel.md](design/workflow-steering-control-channel.md) |
 | Spur Board UI Layout Optimization & Global Orchestrator Agent Interface — Design | [board-ui-layout-and-global-agent-bar.md](design/board-ui-layout-and-global-agent-bar.md) |
-| Workspace Board module — team-scoped composition | [workspace-design.md](design/workspace-design.md) |
+| Workspace Board module — team-scoped composition — **superseded by ADR-116** (retired by 0849; project scope now lives in the Projects module) | [workspace-design.md](design/workspace-design.md) |
 | Plugin-Surface Parity Harness — design | [plugin-surface-parity.md](design/plugin-surface-parity.md) |
 | Actionable observability context | [actionable-observability-context.md](design/actionable-observability-context.md) |
 | System Events human table projection | [system-events-human-table.md](design/system-events-human-table.md) |
@@ -72,7 +72,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
 | Run-record proposal — implementation deferred | [run-record-contract.md](design/run-record-contract.md) |
-| Board module-boundary recommendations | [board-module-boundaries.md](design/board-module-boundaries.md) |
+| Board module-boundary recommendations — **superseded by ADR-116** (the Workspace/Inbox/Teams split is retired; current boundary in [project-switcher.md](design/project-switcher.md)) | [board-module-boundaries.md](design/board-module-boundaries.md) |
 | History Board module — Conversation Analytics & Agent Forensic Plane | [history-board-module.md](design/history-board-module.md) |
 | Design Satellite: History Board Tool Using Tab | [history-board-tool-using-tab.md](design/history-board-tool-using-tab.md) |
 | Observability Board module — Frontend Enhancement & Tab Consolidation | [observability-frontend-enhancement.md](design/observability-frontend-enhancement.md) |
@@ -141,6 +141,21 @@ See [contract detail](design/cli-contracts.md#spur-agent-wait-specid---role-name
 See [contract detail](design/cli-contracts.md#spur-message-send---to-id-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json--spur-message-inbox---agent-id---json--spur-message-reply-msg-id-body---json--spur-message-watch---agent-id---interval-ms---json).
 
 #### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team] [--server <url>]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
+
+**Deprecated (0848, feature G64).** All six verbs still run with a one-time stderr warning; the
+replacements below are the owning nouns, and `up` has no CLI verb at all:
+
+| `spur team …` | Replacement |
+| --- | --- |
+| `assign <task-id> <agent-id>` | `spur task update <wbs> --assignee <spec-id>` |
+| `status` | `spur agent list --specs` (live run-status merged) |
+| `up <team>` | no verb — fleet materialization happens at serve start; `spur projects list --fleet` is the `--check` preview |
+| `down <team>` | `spur agent stop <spec-id>` (plus the existing `spur agent delete`) |
+| `start <agent-id>` / `stop <agent-id>` | `spur agent start <spec-id>` / `spur agent stop <spec-id>` |
+
+`--by-team` is dropped with the noun: one project has one fleet, so the group key ceases to exist.
+The noun itself is removed once no caller remains (the `team-noun-retired` transition shim in
+`config/transition-shims.json` tracks that condition).
 
 See [contract detail](design/cli-contracts.md#spur-team-assign-task-id-agent-id--spur-team-status---json---by-team---server-url--spur-team-up-team---check---server-url---json--spur-team-down-team---purge---server-url---json--spur-team-start-agent-id---server-url---json--spur-team-stop-agent-id---server-url---json).
 

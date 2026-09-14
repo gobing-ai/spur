@@ -39,7 +39,7 @@ spur message send "Build the report" --to builder --wait --timeout 60000
 
 > **Delivery semantics:** `send` enqueues; it does not run the recipient. Pair with
 > `spur agent run --spec <id> --drain` (store-and-forward) or a supervised member
-> (`spur team start`) for actual dispatch. `--wait --until injected` returns once the message is
+> (`spur agent start`) for actual dispatch. `--wait --until injected` returns once the message is
 > folded into a run; `invoke-exit` waits for the run to exit.
 
 ## spur message inbox / reply / watch

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Reconcile superseded authority across ADRs, architecture, and templates
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
-updated_at: "2026-09-13T20:15:14.583Z"
+updated_at: "2026-09-14T16:38:54.165Z"
 feature_id: G64
 priority: P3
 tags:
@@ -90,7 +90,7 @@ project registry and Board-switching surface, which is what the fleet attaches t
 would restate its project-identity and registry sections to reach the same place. Recorded as a
 rejected alternative with a revisit condition rather than left implicit.
 
-**Q: What is the portable artifact R4 is about?** `config/config.example.yaml`. `init.ts:170` seeds it
+**Q: What is the portable artifact R4 is about?** `config/config.example.yaml`. `apps/cli/src/commands/init.ts:170-179` seeds it
 as `~/.config/spur/config.yaml` on first run, so its `agent.team` template block is inherited by every
 new project. Updating this repo's docs while leaving that block would keep teaching the retired
 concept to new installs — which is precisely the gap R4 names.
@@ -247,43 +247,186 @@ fleet equivalent, since`init.ts:170` seeds this file into every new install. _(R
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Allocated ADR number:** **116** (`docs/00_ADR.md:1668`) — the ceiling re-checked immediately before
+writing showed ADR-115 as the last entry (`docs/00_ADR.md:1639`), so no renumbering was needed.
+
+**Where.** ADR-052's status line flipped (`docs/00_ADR.md:500`), ADR-116 appended
+(`docs/00_ADR.md:1668`), a supersession test added (`apps/cli/tests/adr-supersession.test.ts`), §14 of
+the architecture rewritten to project scope (`docs/03_ARCHITECTURE.md:496-568`), satellites bannered,
+the fleet data contract added to `docs/design/project-switcher.md` §3.1, `04_DESIGN` rows + the
+`spur team` deprecation block, `01_PRD`'s board-composition row, six `help2/` pages, and both seeded
+config templates.
+
+**Final file list — R5's proof, not a claim.** 21 paths changed (`git status --porcelain`): 20
+deliverables plus this task file. In the Design's owner inventory: `apps/cli/tests/adr-supersession.test.ts`,
+`config/config.example.yaml`, `docs/00_ADR.md`, `docs/01_PRD.md`, `docs/03_ARCHITECTURE.md`,
+`docs/04_DESIGN.md`, `docs/design/{board-module-boundaries,inbox-board-module,project-switcher,workspace-design}.md`,
+`docs/help2/{agent,daily-development-workflow,index,message,serve,team}.md`. Added by a recorded
+deviation: `config/config.global.yaml`, `docs/design/{cli-contracts,spur-team-mode-design}.md` (the
+portable global template and two further satellites that still presented the retired noun as current).
+Present but fingerprinted-input-neutral: `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md`
+(one AC scenario) and this task file. Nothing else is staged or untracked.
+
+**Deviations, each with its trigger.**
+
+- **G64's AC gained `Scenario: R8 — History is preserved`.** The `record → done` guard failed
+  `L4.uncovered-task-scenario`: this task's second scenario had no feature-level counterpart. G64's
+  `## Scope` already names "Do not rewrite historical ADRs or feature receipts" as in-scope, so the
+  feature AC was incomplete, not the task over-reaching; flipping 0850's `ac_altitude` to `task-local`
+  would have declared a real ship criterion task-local. The scenario sits at R6's altitude and is
+  `@core`. Verified: `spur feature check G64` passes with the error gone.
+- **R4's premise corrected.** `apps/cli/src/commands/init.ts:170-179` seeds the bundled
+  **`config.global.yaml`** (`BUNDLED_GLOBAL_CONFIG`, `packages/config/src/bundled-config.ts:120`) as
+  `~/.config/spur/config.yaml` on first run — the comment at `apps/cli/src/commands/init.ts:170` still says
+  `config.example.yaml`, which is where the failure mode in this task's Q&A came from.
+  `config/config.example.yaml` is the checked-in project template. Both are portable artifacts and both
+  now describe the fleet; `spur init` into a clean HOME + project was run and seeds the fleet text with
+  zero occurrences of the retired `spur team up` teaching string.
+- **Three extra files joined the banner/template set** (review pass 1 P4s, judgement confirmed by
+  inspection): `docs/design/spur-team-mode-design.md` (status line → Superseded, banner naming
+  ADR-116 and the fleet), `docs/design/cli-contracts.md` (deprecation note on the `spur team` section
+  pointing at the per-verb table), `config/config.global.yaml` (stale claim that `agent.team` is a
+  project-shaped key). Bodies are otherwise untouched.
+- **Plan step 10 needed no edit.** 0848 had already re-pointed `team.md`, `agent.md`, `tasks.md`,
+  `message.md`, `self.md`, and `projects.md`; `plugins/sp/skills/parallel-execution/references/dispatch-surface.md`
+  carries no `spur team` noun reference. Verified by inspection, so R5 forbids touching them.
+
+**Tree history — recorded, not hidden.** The change set was implemented in the `--worktree` tree
+(`../spur-new-run-0850-5f6382`, branch `sp/run-0850-5f6382` @ `4430b54bf`, retained) and cherry-picked
+into the main checkout for certification, because `bun run spur-check` cannot go green inside a git
+worktree on this machine: `scripts/commands/bundle-plugin-lib.test.ts` compares the committed
+`plugins/sp/lib/idea-handoff.generated.mjs` against a fresh bundle and the minified identifiers differ
+between the main checkout and a worktree install (46 renames, no semantic difference; main reproduces
+the committed bytes exactly, a worktree does not, and renaming the worktree path changes nothing).
+Both trees collected the identical proof digest, since the fingerprint is content-based. The three
+review-remediation files (`config/config.global.yaml`, `docs/design/cli-contracts.md`,
+`docs/design/spur-team-mode-design.md`) exist only here — the retained branch stops at the original
+18-path change set and is kept for recovery, not as a complete copy.
 
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: FAIL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
-| Requirement | Status  | Evidence                                                                                                                                                                                                                                                                         |
-| ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| R1          | UNMET   | `docs/00_ADR.md:500` — ADR-052 is Accepted; ADR-116 is absent; refreshed local verification scratch `.spur/run/0850-verify-answer.txt` lines 1-37 and derived `.spur/run/0850-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
-| R2          | PARTIAL | Existing historical ADRs remain, but no replacement decision explicitly records the planned retained authorities                                                                                                                                                                 |
-| R3          | PARTIAL | Migration and fleet startup surfaces are documented; the planned retirement/supersession is absent, so retirement-era authority reconciliation is incomplete                                                                                                                     |
-| R4          | PARTIAL | No retirement template migration is present; cancelled task did not execute its portable reconciliation plan                                                                                                                                                                     |
-| R5          | MET     | This audit preserves historical ADRs and changes only the owners of repaired runtime facts                                                                                                                                                                                       |
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `docs/00_ADR.md:500` — ADR-052's status line reads `Superseded by ADR-116`, with date, `Feature: G3` and `Supersedes: ADR-042` intact; `docs/00_ADR.md:1668` appends ADR-116, whose `**Supersedes:** ADR-052` is at `docs/00_ADR.md:1670` and whose `**Retains:** ADR-037 / ADR-057 / ADR-022` is at `docs/00_ADR.md:1680`. The pre-append ceiling was ADR-115 (`docs/00_ADR.md:1639`), so 116 was the next free number and nothing was renumbered. Machine-checked fresh this run: `bun test apps/cli/tests/adr-supersession.test.ts` → 4 pass / 0 fail / 32 expect (45.00ms). |
+| R2 | MET | Additive shape re-derived this run: `git diff HEAD --numstat -- docs/00_ADR.md` → 17 added / 1 removed, exactly two hunks (`@@ -497,7 +497,7 @@` and `@@ -1664,3 +1664,19 @@`), and the single removed line is ADR-052's old status line — no historical decision text moves. ADR-037 / ADR-057 / ADR-022 are unmodified and retained by name at `docs/00_ADR.md:1680`. The four bannered satellites keep their bodies and gain only a head note (`docs/design/workspace-design.md:9-11`, `docs/design/inbox-board-module.md:9-11`, `docs/design/board-module-boundaries.md:9-12`, `docs/design/spur-team-mode-design.md:3-8`). `git status --porcelain` (21 paths) contains no `docs/tasks*/` receipt other than this task's own record. Test (a) freezes ADR-052's Decision and Why, (b) asserts the Retains line, (c1) asserts ADR-052 is the only pre-116 ADR carrying the pointer — all green this run. The durable-assertion limit on (c2) is recorded as P4 #2 below. |
+| R3 | MET | The derived surface matches the shipped tree, re-verified against source this run. Module inventory: `docs/03_ARCHITECTURE.md:496-502` names exactly the five live modules with their orders, and each claim resolves — `apps/web/src/modules/observability/index.tsx:13,20` (10), `apps/web/src/modules/history/index.tsx:11,18` (20), `apps/web/src/modules/features/index.tsx:14,21` (30), `apps/web/src/modules/task-kanban/index.tsx:33,40` (id `tasks`, 40), `apps/web/src/modules/projects/index.tsx:17,24` (45); `apps/web/src/modules/` holds no workspace, inbox or teams directory. Retired merge: `mergeTimeline` → 0 hits under `apps/web/src`, and the two named replacements exist (`apps/web/src/modules/projects/conversation.ts:111` `parseInboxMessages`; the single `process-stream` importer `apps/web/src/modules/projects/MemberTerminal.tsx`, mounted at `apps/web/src/modules/projects/MemberDetail.tsx:177`). Redirects match `apps/web/src/router.tsx:14-19` (`workspace`, `inbox`, `teams` → `/board/projects...`). Fleet contract matches code: `FleetDeclarationSchema` at `packages/config/src/index.ts:537` and `FleetService` at `packages/app/src/services/fleet-service.ts:136,173,250,317,442` implement exactly the five methods `docs/design/project-switcher.md:64-102` names. `docs/01_PRD.md` retains zero `spur team` occurrences (grep exit 1); deprecation surfaces present at `docs/04_DESIGN.md:145-159`, `docs/help2/team.md:3-11`, `docs/design/cli-contracts.md:520-524`. |
+| R4 | MET | Premise corrected in code, independently confirmed: `apps/cli/src/commands/init.ts:31` sets `GLOBAL_CONFIG_EXAMPLE = BUNDLED_GLOBAL_CONFIG` and `packages/config/src/bundled-config.ts:120` defines that as `config.global.yaml`; `apps/cli/src/commands/init.ts:170-179` seeds it as `GLOBAL_CONFIG_FILE` = `~/.config/spur/config.yaml`. Outcome re-proven fresh this turn on a clean HOME and a fresh project: `HOME=/tmp/0850-verify/home bun apps/cli/src/index.ts init --minimal` → `~/.config/spur/config.yaml` written, and `diff` against `config/config.global.yaml` is EMPTY (byte-identical), carrying the fleet text at `config/config.global.yaml:22-23`. `grep -n "spur team up" config/config.global.yaml config/config.example.yaml` → no match in either template, and both templates now carry the fleet (`config/config.example.yaml:183-205`). |
+| R5 | MET | `git status --porcelain` → 21 paths, 0 untracked, and the tally closes exactly: 16 Design-inventory deliverables + 3 recorded deviation files (`config/config.global.yaml`, `docs/design/cli-contracts.md`, `docs/design/spur-team-mode-design.md`) + `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md` (the recorded R8 deviation) = 20 deliverables, plus this task file. Each deviation carries a trigger and every trigger was independently confirmed this run. Deviation 4 ("Plan step 10 needed no edit") verified rather than trusted: the plugin reference tree already carries the 0848 deprecation (`plugins/sp/skills/spur-cli/references/team.md:3,8-24` and `plugins/sp/skills/spur-cli/references/agent.md:262,268`), and `plugins/sp/skills/parallel-execution/references/dispatch-surface.md` contains no `spur team` noun at all. |
 
-| Acceptance Criteria                                      | Status | Evidence Type | Evidence                                                                                     |
-| -------------------------------------------------------- | ------ | ------------- | -------------------------------------------------------------------------------------------- |
-| Scenario: Superseded authority is corrected at its owner | UNMET  | command       | `docs/00_ADR.md:500` — Accepted remains; search for ADR-116 returned no replacement decision |
-| Scenario: History is preserved                           | MET    | command       | git diff of docs/00_ADR.md is empty; historical decision bodies preserved                    |
-
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: Superseded authority is corrected at its owner | MET | test | Supersession recorded at its owner: `bun test apps/cli/tests/adr-supersession.test.ts` → 4 pass / 0 fail / 32 expect, fresh this run, asserting (a) the status flip with ADR-052's body frozen and (b) ADR-116's existence, `Supersedes: ADR-052` and Retains line. The derived-owners half is verified against source, not against prose: architecture module inventory vs `apps/web/src/modules/*/index.tsx`, retired merge vs `mergeTimeline` → 0 hits and `parseInboxMessages` at `apps/web/src/modules/projects/conversation.ts:111`, design satellites bannered (`docs/design/workspace-design.md:9-11`, `docs/design/inbox-board-module.md:9-11`, `docs/design/board-module-boundaries.md:9-12`), fleet contract vs `packages/app/src/services/fleet-service.ts:136,173,250,317,442`, and init templates vs the clean-HOME `spur init` seed above. Commands fresh this run: `bun apps/cli/src/index.ts task check 0850 --as done` → PASS; `bun apps/cli/src/index.ts task check 0850 --strict-core` → PASS, exit 0; `bun apps/cli/src/index.ts feature check G64` → PASS (only the two `L4.scenario-unverified` warnings that this PASS verdict clears). |
+| Scenario: History is preserved | MET | command | `git diff HEAD --numstat -- docs/00_ADR.md` → 17 added / 1 removed across two hunks, the one deletion being ADR-052's old status line. Test (c2) executed its real assertions this run (the change is still uncommitted, so `git diff HEAD -- docs/00_ADR.md` is non-empty and the vacuous-return branch is not taken): every added line must be the new status line or belong to ADR-116, and every removed line must be the old status line — green. Durable guards green: (c1) ADR-052 is the only pre-116 ADR carrying the pointer; (a) freezes ADR-052's Decision and Why; (b) asserts ADR-037 / ADR-057 / ADR-022 in the Retains line. No `docs/tasks*/` receipt is modified and the three superseded satellites keep their bodies. The one receipt-class file touched, `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md` (status `active`, this program's own parent), gained exactly one appended `@core` scenario under a recorded deviation — an append to a live document, not a rewrite of a historical receipt. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+#### Review Report — 0850 · pass 3 (post second remediation hop)
 
-**SECU findings** (pipeline verify step — verdict: FAIL)
+**Scope:** task `docs/tasks4/0850_reconcile-superseded-authority-across-adrs-architecture-and-.md`, requirements R1–R5 and both Gherkin scenarios, against the working diff — 21 paths (`git status --porcelain`, 20 deliverables + this task file) vs HEAD `f2f0bb234`.
+**Dimensions:** functional traceability, correctness, security, efficiency, usability, architecture
+**Verdict:** PASS — no P1/P2; one P3 introduced by this hop (finding #1), carried for closure
 
-| Priority | Dimension          | Location | Finding                                                                                                                                                                      |
-| -------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P4       | spur task check    | —        | task check passed                                                                                                                                                            |
-| P4       | design-conformance | —        | NOT DONE: ADR-052 supersession, replacement decision, and retirement template reconciliation. Cancellation does not establish supersession.                                  |
-| P4       | scoped-checks      | —        | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
-| P4       | task-check         | —        | spur task check 0850 --strict-core --json — exit 0                                                                                                                           |
-| P4       | secua-review       | —        | Authority supersession required by G64 R6 is missing; cancelled task remains cancelled pending an explicit disposition.                                                      |
-| P4       | evidence-rule-pass | —        | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral.                                                                                      |
+**Fresh evidence, captured in this order.**
+
+- `bun run spur-check` (re-run after the hop) → **8481 pass / 0 fail**, 34641 expect() calls, 476 files (205.26s); `recommended-pre-check` → "All 45 rules passed", `recommended-post-check` → "All 2 rules passed" (`.spur/run/0850-test-gate.log:26-27,380-381`; `.spur/run/0850-test-gate.status` = `PASS`).
+- Proof digest recomputed independently this pass: `bun .spur/run/proof-digest.ts <task> <feature>` → `sha256:99e50d04b385398d832611f4ac845e77544ff6b289cd21be8b80840bf6904cff` — byte-identical to `.spur/run/0850-test-gate.log:382` and `/tmp/0850-digest-main`. Scope verified in code, not assumed: the spec half is `Background, Requirements, Acceptance Criteria, Design, Plan` (`packages/app/src/workflow/proof-input-fingerprint.ts:100`), and the tree half excludes `docs/tasks*`, so this pass's `Solution`/`Q&A` writes sit outside the fingerprint; the digest moved only because `docs/help2/serve.md:34` changed.
+- Change set since pass 2 enumerated, not asserted: `find . -newermt "2026-09-14 09:22:30" -type f` (excluding `.git`, `.spur`) → `docs/help2/serve.md`, this task file, plus the gate's own regenerated artefacts (`plugins/sp/lib/*.generated.mjs`, `.coverage/lcov.info`). No other source file moved.
+- `bun test apps/cli/tests/adr-supersession.test.ts` → 4 pass / 0 fail (32 assertions).
+- `bun test plugins/sp/tests/cli-surface-parity.test.ts plugins/sp/tests/command-flag-parity.test.ts` → 99 pass / 0 fail (405 assertions).
+- `spur task check 0850 --as done` → **PASS** with one `L4` warning; `spur task check 0850 --strict-core` → PASS, same single warning, exit 0.
+- `spur feature check G64 --json` → PASS; only the two expected `L4.scenario-unverified` warnings for R6/R8, which clear at this run's verify stage.
+- Retained branch re-checked: `sp/run-0850-5f6382` @ `4430b54bf` (checked out at `../spur-new-run-0850-5f6382`), working tree clean, `fleet` count 0 in its `config/config.global.yaml`, banner/deprecation counts 0 in its `docs/design/{cli-contracts,spur-team-mode-design}.md`.
+
+**The three claimed changes, verified one by one.**
+
+- `docs/help2/serve.md:34` — `- **Web UI** — task kanban, workflow runs, history analytics, project fleet status.` Real fix, not a rewording: the shipped surface is the Projects module's roster reading `GET /api/project/fleet` (`apps/web/src/modules/projects/AgentsView.tsx:9,84-85`), and the retired `teams` route now redirects there (`apps/web/src/router.tsx:14-18`).
+- `Solution` count → "21 paths … 20 deliverables plus this task file": accurate. `git status --porcelain | wc -l` = 21 with no `??` entry; the enumeration is 16 inventory paths + 3 recorded deviations + the G64 feature file = 20 deliverables, plus this task file.
+- `apps/cli/src/commands/init.ts:170-179` anchor: resolves and names the right subject — those ten lines are the `GLOBAL_CONFIG_EXAMPLE` → `GLOBAL_CONFIG_FILE` seed block (`apps/cli/src/commands/init.ts:31,34,170-179`). The tree-history sentence is also true as written, verified against the branch above.
+- `Q&A` anchor qualification: **not achieved** — see finding #1. The original bare anchor survives and the fix also duplicated the entry.
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | traceability | **New this hop.** The Q&A "anchor qualification" landed as an append, not a replace: `--section "Q&A"` appends a timestamped entry by design (`apps/cli/src/commands/task.ts:434-435`), so the complete 2026-09-12 entry now exists twice — copy A verbatim with the stale bare `init.ts:170` (`:93`), copy B with the qualified anchor (`:150`) nested under a new, otherwise empty `2026-09-14T16:23:25.232Z` wrapper (`:112`). `diff` between the two copies is exactly that one anchor line; 44 lines are duplicated. Net effect: the anchor the edit targeted still reads bare in the live record, and a reader meets the whole refinement Q&A twice. Closure fix: `spur task update 0850 --section Q&A --from-file <body starting with \`<!-- qa:replace -->\`>` (documented at `apps/cli/src/commands/task.ts:435`), or accept the duplication explicitly. | `docs/tasks4/0850_…md:112-162` (duplicate), `:93` (stale copy) |
+| 2 | P4 (advisory) | correctness | The single remaining `L4.stale-line-anchor` warning is `init.ts:170` cited **in prose inside the Solution**, not in the Plan: the corrected R4 bullet cites the full path at `:330` and then refers back to it with the bare form at `:332`. Accepted — see the acceptance note below. The attributed section is not part of the proof fingerprint, so it is fixable without a digest loop, and the checker classes it `warning` (exit 0 under both `--as done` and `--strict-core`). | `docs/tasks4/0850_…md:332` |
+| 3 | P4 (advisory) | correctness | Carried from pass 2 (#5). The approved Design still sends a reader to the wrong portable artifact — `config/config.example.yaml` is named as the file `init.ts:170` seeds — and Plan step 12 repeats it; the Q&A now carries both the stale sentence and the corrected copy, which muddies the reader path instead of annotating it. The recorded deviation in the Solution is the sanctioned path, so this is advisory on the reader path only. | `docs/tasks4/0850_…md:222`, `:289`, also `:93` |
+| 4 | P4 (advisory) | consistency | Carried from pass 2 (#6). ADR-086 still presents `agent.team.<id>.members` as the roster config layer and prescribes the commented-in `agent.team.demo` example — the teaching artefact this task replaced in `config/config.example.yaml`. ADR-116's retention line names ADR-037/057/022, so ADR-086 is neither superseded nor declared retained. Not false today (the legacy key still parses) and R5 justifies leaving authority alone, so this belongs to the cutover commit. | `docs/00_ADR.md:1116`, `:1124`, `:1144` |
+| 5 | P4 (advisory) | consistency | Carried from pass 1 (#3 rider) and pass 2 (#7). The R8 scenario insert left a double blank line inside G64's AC fence. Does not affect the scenario's parse or `spur feature check G64` (PASS). | `docs/features/G64_…md:106-107` |
+
+##### Prior pass disposition
+
+One table covering both earlier passes. Pass 1's verbatim report is preserved at `.spur/run/0850-review-pass1.md`; pass 2's report was superseded in place by this section — the `Review` section is replace-on-write, not archived — and is dispositioned row by row below rather than quoted. `git show :docs/tasks4/0850_…md` is not a pass-2 snapshot: it is an older index revision that still holds the pre-`Solution` state and the legacy SECU review block.
+
+| Pass | Finding | Priority | Status now | Evidence |
+|------|---------|----------|-----------|----------|
+| 1 | 1 — stale `### Testing` FAIL table contradicting the Review | P2 (major) | **RESOLVED** | `### Testing` still carries the pending note naming why the table was removed (`docs/tasks4/0850_…md:358-364`); the only `UNMET`/`Verdict: FAIL` string left in the file is inside this disposition table's own text (`:402`); `spur task check 0850 --as done` → PASS. The section's subject belongs to the verify stage. |
+| 1 | 2 — `### Solution` empty | P3 (minor) | **RESOLVED** | Solution holds the ADR number, the WHERE map, the 20-path list and four triggered deviations (`:300-356`). |
+| 1 | 3 — G64 R8 deviation recorded nowhere in-tree | P3 (minor) | **RESOLVED** (substance); cosmetic rider open (finding #5) | Rationale and trigger in the Solution; `spur feature check G64 --json` → PASS with no `L4.uncovered-task-scenario`. |
+| 1 | 4 — R4's stated premise is false | P3 (minor) | **RESOLVED**; reader path open (finding #3) | Correction at `:329-334`; seeded global layer fixed (`config/config.global.yaml:19-25`); root cause anchored at `apps/cli/src/commands/init.ts:31`. |
+| 1 | 5 — live seeded global layer still listed `agent.team` | P4 (advisory) | **RESOLVED** | `config/config.global.yaml:19-25` — roster is `.spur/fleet.json`, legacy key parses, noun deprecated. |
+| 1 | 6 — `cli-contracts.md` team block carried no deprecation note | P4 (advisory) | **RESOLVED** | `docs/design/cli-contracts.md:520-524` — "Deprecated (0848, feature G64)" with the per-verb pointer and the `team-noun-retired` removal condition. |
+| 1 | 7 — team-mode satellite presented `spur team` as current | P4 (advisory) | **RESOLVED** | `docs/design/spur-team-mode-design.md:3-9` — banner plus the status line flipped to "Superseded (ADR-116)"; body untouched. |
+| 1 | 8 — ADR-test `(c2)` goes vacuous once committed | P4 (advisory) | **ACCEPTED AS RECORDED** | Documented in-line at `apps/cli/tests/adr-supersession.test.ts:84-88`; `(c1)` remains the durable guard and is green. |
+| 1 | 9 — tree switch recorded for retention but not the cherry-pick | P4 (advisory) | **RESOLVED** | The tree-history paragraph names the worktree, branch, commit, retention and the bundle-plugin-lib reason (`:347-356`). |
+| 2 | 1 — stale headline count ("18 paths" against a 20-path list) | P3 (minor) | **RESOLVED** | Now "21 paths … 20 deliverables plus this task file" (`:312-313`); `git status --porcelain` = 21, no `??`. |
+| 2 | 2 — bare `init.ts:170` anchor, reported as `L4.stale-line-anchor` | P3 (minor) | **PARTIAL** — qualified copy added, stale copies survive; a duplicate was introduced | `:330` now cites `apps/cli/src/commands/init.ts:170-179`, but the same bullet keeps a bare form at `:332` (finding #2), the Plan copy at `:289` is untouched, and the original Q&A copy at `:93` survives because the Q&A write appended instead of replacing (finding #1, new this pass). |
+| 2 | 3 — `docs/help2/serve.md` still advertised "team status" | P3 (minor) | **RESOLVED** | `docs/help2/serve.md:34` → "project fleet status", verified accurate against the live roster fetch (`AgentsView.tsx:9,84-85`) and `RETIRED_ROUTES` (`apps/web/src/router.tsx:14-18`). |
+| 2 | 4 — tree-history paragraph described only the pass-1 transfer | P3 (minor) | **RESOLVED** | The added sentence names the three review-remediation files and states the branch stops at the original 18-path set — both verified this pass against the clean branch at `4430b54bf`. |
+| 2 | 5 — Design/Q&A/Plan still assert the corrected R4 premise, unannotated | P4 (advisory) | **STILL OPEN** (finding #3) | Design `:222` and Plan `:289` unchanged; the Q&A now holds both versions, so the ambiguity widened rather than closed. |
+| 2 | 6 — ADR-086 presents the retired mechanism as current | P4 (advisory) | **UNCHANGED, by design** (finding #4) | Owner is the cutover commit; no edit since pass 2. |
+| 2 | 7 — double blank line inside G64's AC fence | P4 (advisory) | **STILL OPEN** (finding #5) | `docs/features/G64_…md:106-107`. |
+
+##### Traceability — R1–R5
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `docs/00_ADR.md:500` — ADR-052's status line reads `Superseded by ADR-116` with date, feature, `Supersedes: ADR-042` intact. `docs/00_ADR.md:1668` — ADR-116 appended, `**Supersedes:** ADR-052` at `:1670`, `**Retains:**` at `:1680`; the pre-append ceiling was ADR-115 (`:1639`), so 116 was the next free number and nothing was renumbered. Machine-checked: `apps/cli/tests/adr-supersession.test.ts` → 4 pass / 0 fail this pass. |
+| R2 | MET | `git diff HEAD --numstat -- docs/00_ADR.md` = 17 added / 1 removed in exactly two hunks (`@@ -497,7 +497,7 @@`, `@@ -1664,3 +1664,19 @@`) — the status line and the append, nothing else. Test `(c1)` asserts ADR-052 is the only pre-116 ADR carrying the pointer; `(c2)` asserts the removed line is the old status line. ADR-037, ADR-057 and ADR-022 are unmodified and retained by name at `:1680`. The superseded satellites stay banner-only (`docs/design/workspace-design.md:9`, `inbox-board-module.md:9`, `board-module-boundaries.md:9`, `spur-team-mode-design.md:3-9`, `cli-contracts.md:520-524`) with bodies untouched. No `docs/tasks*/` receipt is modified. |
+| R3 | MET | §14 retitled and rewritten to project scope with the live module inventory (`docs/03_ARCHITECTURE.md:496-502`); fleet data contract in `docs/design/project-switcher.md:64-102` with `owns:` widened (`:4`) and `FleetService`'s five methods named (`packages/app/src/services/fleet-service.ts:136,173,250,317,442`) against `FleetDeclarationSchema` (`packages/config/src/index.ts:530-538`); deprecation surfaces per-verb (`docs/help2/team.md:3-14`, `docs/design/cli-contracts.md:520-524`, `docs/04_DESIGN.md:143-160`); plugin references verified already correct and deliberately untouched; the one help-page miss from pass 2 is fixed and now matches the shipped roster (`docs/help2/serve.md:34`). |
+| R4 | MET | Both portable artefacts carry the fleet rather than the retired noun: `config/config.example.yaml:183-205` (shape shown, "Materialized at `spur serve` start", legacy key parses) and `config/config.global.yaml:19-25` (roster is `.spur/fleet.json`, not a config key). Seeding path re-anchored and correct: `apps/cli/src/commands/init.ts:31,170-179` with `BUNDLED_GLOBAL_CONFIG` (`packages/config/src/bundled-config.ts:120`). The clean-HOME `spur init` proof was collected at pass 2 and is unchanged since — no config file appears in this pass's mtime diff. |
+| R5 | MET | 21 porcelain paths, none untracked; each maps to a Plan step or a recorded deviation, and the headline count now matches the enumeration. The three deviation files (`config/config.global.yaml`, `docs/design/cli-contracts.md`, `docs/design/spur-team-mode-design.md`) are recorded with triggers, and the G64 feature file is the recorded R8 deviation. |
+
+##### Scenario verdicts
+
+| Scenario | Status | Evidence type | Evidence |
+|----------|--------|---------------|----------|
+| Superseded authority is corrected at its owner | MET | command | Status flip + ADR-116 (`docs/00_ADR.md:500`, `:1668-1680`); architecture, satellites, design index, CLI references and both seeded templates verified against the shipped surface above; `spur task check 0850 --as done` → PASS; `spur task check 0850 --strict-core` → PASS. |
+| History is preserved | MET | command | `git diff HEAD -- docs/00_ADR.md` = the two allowed hunks only; `apps/cli/tests/adr-supersession.test.ts` (c1)/(c2) green; ADR-037/057/022 unmodified and retained by name; the four bannered satellites have untouched bodies; no receipt under `docs/tasks*/` is touched. |
+
+##### Judgment calls
+
+**The residual `L4.stale-line-anchor` warning — accepted, but the stated attribution needs correcting.** `spur task check 0850 --json` reports the warning in **section `Solution`**, triggered by the bare `init.ts:170` at `docs/tasks4/0850_…md:332` — not by the Plan's prose. Both sections carry the bare form (Solution `:332`, Plan step 12 `:289`, plus the stale Q&A copy at `:93`), but the checker only scans `Testing` and `Solution` (`packages/app/src/services/task-check.ts:1447-1460`), so the Plan occurrence costs nothing at all. The "fingerprinted section, left untouched to avoid another certification loop" rationale therefore does not hold as stated in either direction: the Plan is fingerprinted but is not scanned, and the Solution *is* scanned but is **not** fingerprinted (`proof-input-fingerprint.ts:100`), so fixing `:332` would not move the digest. Verdict on acceptance: yes — accept the warning as non-blocking. It is `warning`-class (exit 0 under both `--as done` and `--strict-core`), it is prose referring back to the fully-qualified anchor one line above it at `:330`, and R1–R5 and both scenarios are unaffected. If anything is done at closure, the cheap and correct move is to qualify `:332` (no digest loop, no gate re-run needed) rather than to leave it and cite the Plan; otherwise record the acceptance explicitly with the corrected attribution.
+
+**The Q&A duplication is the only defect introduced since pass 2, and it is a record defect, not a requirement miss.** Root cause is the writer's semantics, not the edit's intent: `spur task update --section "Q&A"` appends a timestamped entry (`apps/cli/src/commands/task.ts:434-435`), and the staging file `/tmp/0850-qa.md` (09:23 local, matching this run's `updated_at` `2026-09-14T16:23:25.233Z`) is the whole section body with no wrapper heading — exactly what an append cannot consume. Rated P3 (minor) because it is localized to the task record, contradicts no requirement, fails no checker, and touches no shipped artefact; it nevertheless must be dispositioned (fix, or accept 44 duplicated lines) rather than left implicit, since the intended qualification only half-landed. P1/P2 are unaffected either way: no requirement verdict changes.
+
+**Tree switch (worktree → main) — still faithful, re-verified independently.** The branch `sp/run-0850-5f6382` @ `4430b54bf` is clean and predates the review-remediation edits (0 occurrences of the fleet text or banners in the three files), which is what the new tree-history sentence claims; the certified tree is main and it is the tree the gate, the digest and this review describe. `git status` shows no untracked path, so nothing beyond the enumerated 21 leaks into the proof.
+
+**ADR-116 allocation and R2's diff boundary — checkable, and they check out.** Two hunks, 17 added / 1 removed, ADR-052's Decision/Why/Detail byte-identical, ADR-116 at `:1668` with `Supersedes` and `Retains` present. Test `(c2)`'s commit-time vacuity remains the one accepted-by-design guard gap (pass-1 #8).
+
+**Architecture, security, efficiency, usability — no material findings, unchanged from pass 2.** The change set is documentation, two config templates and one repo-invariant test; no runtime module, API or data path is touched, so the deepening lens has nothing to bite on. `apps/cli/tests/adr-supersession.test.ts` remains the right seam for a doc invariant (sibling tests own this class), and its only subprocess call is `execFileSync('git', ['diff', …])` with literal arguments — no injection surface. The one usability-visible artefact changed this pass (`docs/help2/serve.md:34`) is now accurate and reader-first.
+
+##### Residuals and owners
+
+| Residual | Owner |
+|----------|-------|
+| Finding #1 — duplicated Q&A entry (44 lines), stale bare anchor still in the surviving copy | **0850's own closure** — `--section Q&A --from-file` with `<!-- qa:replace -->`, or explicit acceptance |
+| Finding #2 — the single `L4.stale-line-anchor` warning at `Solution:332` | **0850's own closure** if fixed (accepted for now, one-line change, no digest impact); the Plan copy at `:289` needs nothing |
+| Finding #3 — Design `:222` / Plan `:289` (and the surviving Q&A copy) still name `config/config.example.yaml` as the seeded artefact | **0850's own closure** (annotate in place) or accepted as the recorded deviation |
+| Finding #5 — double blank line inside G64's AC fence | **0850's own closure** (cosmetic) |
+| `### Testing` holds a pending note rather than a verdict | Pipeline verify stage, scheduled after approve — the correct state now, not a gap |
+| Pass 2's verbatim report body is no longer stored anywhere (the `Review` section is replace-on-write) | Process/acceptance, **not 0850's implementation** — the mitigation is the per-finding disposition table above; if verbatim retention matters, the writer would have to archive to `.spur/run/` as pass 1 did |
+| Finding #4 — ADR-086 still presents `agent.team.<id>.members` and the `agent.team.demo` example as current | The **cutover commit** that removes the noun — same owner as the deferred satellite/reference deletions recorded in this task's Q&A. Not 0852/0853: both are Board-reachability/ownership tasks |
+| Retired Board surfaces: the process watch list (executions + 0267 filters) and the three Teams supervisor facets (uptime, live last-activity, team up/down) | **0852** and **0853** respectively (both backlog under G64, created from the 0849 review). Outside 0850's R3: no doc in this change set asserts those facets exist — `docs/help2/*.md`, `docs/03_ARCHITECTURE.md` and `docs/04_DESIGN.md` contain no surviving claim about uptime or live activity as a Board capability |
+| Bundle-plugin-lib determinism: `bun run spur-check` cannot go green inside a git worktree on this machine (46 minified-identifier renames in `plugins/sp/lib/idea-handoff.generated.mjs`) | **Unassigned / not 0850's** — a harness residual that forced the tree switch and will recur for any `--worktree` run of a plugin-lib-touching task |
+| Deferred by design per the task's Q&A: deleting the superseded satellites and the `spur team` reference/help files; whether G61–G63 need their own ADRs | Robin — the cutover commit, and Robin respectively (unchanged) |
+
+**Disposition.** R1–R5 and both Gherkin scenarios are MET on evidence collected this pass; no P1 or P2 remains, so nothing blocks approve → verify. The hop's three claims verify — `serve.md:34` is corrected and accurate, the count now says 21/20 as the tree shows, the `init.ts:170-179` anchor is the right subject, and the tree-history clause matches the branch — with one exception: the Q&A qualification appended a duplicate instead of replacing, leaving the stale anchor in place (finding #1, P3, the only new defect since pass 2). Of the residuals, three belong to 0850's own closure (findings #1, #3, #5, plus #2 if the operator prefers fixing the warning over accepting it), one to the cutover commit (#4), two to backlog tasks 0852/0853 in scope that does not overlap this one, and the worktree gate determinism issue to no task at all. The acknowledged residual `L4.stale-line-anchor` warning is **accepted** as non-blocking, with the attribution corrected to the Solution section. **Next:** record PASS and let the closure items be fixed or explicitly accepted at 0850 closure.
 
 ### References
 
@@ -295,3 +438,7 @@ fleet equivalent, since`init.ts:170` seeds this file into every new install. _(R
 ### History
 
 - 2026-09-13T15:10:10.486Z todo → cancelled (system)
+- 2026-09-14T15:01:38.382Z todo → wip (system)
+- 2026-09-14T16:38:47.887Z wip → testing (system)
+- 2026-09-14T16:38:54.165Z testing → done (system)
+

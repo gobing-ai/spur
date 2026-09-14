@@ -132,7 +132,7 @@ spur history daily                         # import → analyze → prune, run-o
 ```bash
 spur message send "Please review the auth endpoint" --to reviewer
 spur message inbox --agent reviewer
-spur team status --by-team
+spur agent list --specs          # fleet roster with live run status (`--by-team` is gone: one project, one fleet)
 ```
 
 ## 7. The JSON convention

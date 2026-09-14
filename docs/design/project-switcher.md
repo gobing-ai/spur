@@ -1,7 +1,7 @@
 ---
 doc: design/project-switcher
 feature_id: K1
-owns: SURFACE + mechanism for multi-project Spur Board switching
+owns: SURFACE + mechanism for multi-project Spur Board switching and the project fleet
 authority: derived (ADR wins on conflict)
 updated_at: 2026-09-13
 ---
@@ -60,6 +60,46 @@ interface ProjectEntry {
 
 Path matching: expand `~`, resolve realpath when the directory exists; identity key is normalized
 absolute path (name is display-only, unique by convention).
+
+### 3.1 Project fleet declaration — `<projectPath>/.spur/fleet.json` (0835)
+
+The **project** is the composition unit (ADR-116). Its agent roster is a fleet declared in the
+project's own tree, schema owned by `packages/config/src/index.ts` (`FleetDeclarationSchema`):
+
+```typescript
+interface FleetDeclaration {
+    version: 1;
+    members: FleetMember[];
+    /** memberLocalId of the planner-role member carrying purpose: 'orchestrator'; absent = none declared. */
+    orchestrator?: string;
+}
+
+interface FleetMember {
+    id?: string; // explicit stable id — wins outright in the memberLocalId allocator (0835 R3)
+    role?: string; // closed Layer-1 role vocabulary, shared with team members
+    executor?: string; // agent.executors name
+    purpose?: string;
+    enabled?: boolean; // default true; false keeps the derived `<role>-<n>` index but is not materialized
+}
+```
+
+Invariants: a member declares `role` or `executor` (at least one); the declaration is **desired state
+only** — no process or liveness fields, which are read from the occupant and supervisor surfaces;
+`enabled: false` preserves the member's derived id index so later members never silently reallocate.
+A declaration with no enabled members is valid and resolves to a fleet whose `missing` names the fix.
+
+**Resolution.** `FleetService` (`packages/app/src/services/fleet-service.ts`) owns the lifecycle:
+`load(projectPath)` reads and validates the declaration, `resolve(projectPath)` produces the
+resolved fleet plus `capacity.missing`, `resolveOrchestrator(projectPath)` returns the bound
+orchestrator (absent ⇒ `missing`, never inferred by search), `materialize(projectPath, { check })`
+reconciles specs (the `spur projects list --fleet` preview is the `check` path), and
+`assertLaunchGroundTruth(projectPath)` is the serve-start gate. Delivery and capacity receipts are
+[§7 fleet ownership and dispatch boundaries](#fleet-ownership-and-dispatch-boundaries-g62).
+
+**Board surface.** The Projects module (`apps/web/src/modules/projects/`) renders the fleet as the
+Agents tab's declared-vs-observed roster, with Conversation and Work as its sibling tabs (0840's
+three-tab contract); the roster reads `/api/project/fleet` rather than the retired
+`GET /api/team/teams` roster shape.
 
 ## 4. Module boundaries
 

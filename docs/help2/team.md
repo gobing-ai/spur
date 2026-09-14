@@ -1,5 +1,17 @@
 # spur team
 
+> **Deprecated (0848, feature G64) — use the owning nouns.** Every verb below still runs and emits a
+> one-time stderr warning; the noun is removed once no caller remains. Replacements:
+>
+> | Old verb | New home |
+> | --- | --- |
+> | `assign <task-id> <agent-id>` | `spur task update <wbs> --assignee <spec-id>` |
+> | `status` | `spur agent list --specs` |
+> | `status --by-team` | dropped — one project has one fleet |
+> | `up <team>` | fleet materialization at `spur serve` start (`.spur/fleet.json`); `--check` → `spur projects list --fleet` |
+> | `down <team> [--purge]` | `spur agent stop <spec-id>` per member (`spur agent delete <id>` replaces `--purge`) |
+> | `start <agent-id>` / `stop <agent-id>` | `spur agent start <spec-id>` / `spur agent stop <spec-id>` |
+
 Coordinate team agent assignments and status: materialize rosters into agent specs, assign tasks,
 and manage supervised agent processes (supervised processes need `spur serve`).
 

@@ -1,6 +1,12 @@
 # Spur Team Mode — Design Document
 
-**Status:** Proposal · **Date:** 2026-06-02
+> **Superseded (ADR-116).** This proposal's composition unit is retired: a project — one worktree
+> path — is the unit, its roster is a **fleet** in `<projectPath>/.spur/fleet.json`, and the `spur team`
+> noun is deprecated (0848) with its verbs moved to `spur agent` / `spur task update --assignee` /
+> `spur projects list --fleet`. Current surface: [project switcher](project-switcher.md) § fleet.
+> Kept as the historical record of the team-mode proposal.
+
+**Status:** Superseded (ADR-116) · **Date:** 2026-06-02
 **Source:** relaydeck deep-dive analysis + design discussion with Robin Min
 **Derived from:** `docs/00_ADR.md`, `docs/04_DESIGN.md`, `docs/analysis/relaydeck-vs-spur-analysis.md`
 

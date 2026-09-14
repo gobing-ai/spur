@@ -3,8 +3,12 @@ doc: design/inbox-board-module
 feature_id: M4
 owns: SURFACE + mechanism for the Inbox Board module (message plane)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-11
+updated_at: 2026-09-14
 ---
+
+> **Superseded (ADR-116).** The Inbox Board module is retired: the durable message plane now lives in
+> the Projects Conversation tab (0841) and its route redirects into it (task 0849). Current surface:
+> [project switcher](project-switcher.md). Kept as the historical record of the Inbox module.
 
 # Inbox Board module — durable message plane
 

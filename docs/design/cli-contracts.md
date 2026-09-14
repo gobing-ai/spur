@@ -517,6 +517,11 @@ Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by 
 
 #### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team] [--server <url>]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
 
+> **Deprecated (0848, feature G64).** Every verb keeps working with a one-time stderr warning; the
+> per-verb replacements live in [04_DESIGN](../04_DESIGN.md) § `spur team` and
+> [spur-cli team.md](../../plugins/sp/skills/spur-cli/references/team.md). The noun and this section
+> are removed once no caller remains (the `team-noun-retired` transition shim tracks that).
+
 Team coordination (backed by `TeamService` + `SupervisorService` via `spur serve`). There is no
 `spur team attach` verb: attach is `GET /api/team/processes/:id/stream` (SSE) plus Board/HTTP clients.
 

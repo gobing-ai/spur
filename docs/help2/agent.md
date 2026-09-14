@@ -90,7 +90,7 @@ spur agent loop [--spec <id>] [--agent <id>] [--poll <ms>]
 The persistent self-draining inbox loop for a team member: poll for pending messages
 (`--poll <ms>`, default 2000), dispatch each through `agent run`, repeat. `--spec <id>` names
 the occupant; `--agent <id>` is the legacy spelling of the same thing. You rarely run this by
-hand — the supervisor (`spur serve` + `spur team start`) manages loop processes for started
+hand — the supervisor (`spur serve` + `spur agent start`) manages loop processes for started
 members.
 
 ## spur agent create / edit / delete
