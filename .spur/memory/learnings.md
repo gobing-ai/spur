@@ -1569,3 +1569,42 @@ Verification of the repair: `bun run test-pre-check` green (45 rules); `consiste
 - All `04` → `docs/design/*.md` pointers resolve (zero missing).
 - ADR-116 banners present on all four superseded satellites; `03` §14.3 names fleet.json/FleetService/modules-projects, all of which exist (`FleetService`, `spur projects list --fleet` at `projects.ts:113`).
 - Frontmatter contracts for `00`/`03`/`04`: owns/authority/edit_rules/sync match constitution §4.1 verbatim in meaning; `updated_at: 2026-09-14` = last commit `e23efdaaa`. **Zero drift found — no repairs required.**
+Doc-evolve wrapup complete. Drift report:
+
+- **docs/00_ADR.md** (authority) — already repaired by task 0854 itself (ADR-042 supersession chain, ADR-086 dated amendment, ADR-116 transitive `**Supersedes:**`); verified against the diff, no further edit.
+- **docs/03_ARCHITECTURE.md** — no drift: §14/§14.1/§17 already record the 0849 retirement, `mergeTimeline` deletion, and ADR-116 replacing ADR-052.
+- **docs/04_DESIGN.md** — no drift: index rows for all four retired satellites already carry `superseded by ADR-116`; `spur team` deprecation block present.
+- **docs/design/*** — three stale claims repaired in live docs:
+  - `inter-agent-control-plane.md:24` — `mergeTimeline` row no longer "Display only until G3"; records retirement by 0849, ADR-116 supersession, and the two surviving Projects panes.
+  - `inter-agent-control-plane.md:211` — Wave-3 "G3 Board un-merge (feature G3 / ADR-052)" annotated as landed via retirement (0849 deleted the merge; ADR-116 supersedes ADR-052). This closes the review's carried finding #3 on the doc-evolve surface it was assigned to.
+  - `project-switcher.md:250` — plain-message consumer re-pointed from the deleted Inbox module to the Projects Conversation tab.
+- Checked and deliberately untouched: `cli-contracts.md:460` (`team up` still materializes via shared `materializeRoster` under the deprecation shim — accurate), `data-output-contracts.md:26` (inert reserved draft), feature/task receipts (CLI-gated corpus, out of scope), `board-ui-layout-and-global-agent-bar.md` (A7 draft, not implicated by 0854's authority changes).
+
+Verification: `bun test apps/cli/tests/adr-supersession.test.ts` → 7 pass / 0 fail / 69 expect on the post-wrapup tree. Artifact written to `.spur/run/e19046ce-b73b-4d79-8186-c12134465c80-wrapup-learnings.md`.
+
+# Wrapup learnings
+
+## 2026-09-14
+
+### 0854 — Retire the team-scoped ADRs the fleet model replaced
+
+**Conventions (ADR corpus)**
+
+- Supersession is a status-line edit, never a rewrite: `- **Status:** Superseded by ADR-116 (via ADR-052)` — live authority first, the single-hop chain parenthesized so transitive retirements stay readable. The replacement ADR must name the full set (`**Supersedes:** ADR-052 (and ADR-042 via it)`) plus a `**Retains:**` line so live neighbors are not swept up.
+- A decision that survives with stale framing gets an additive dated amendment (`**Amendment (YYYY-MM-DD · ADR-116 / task 0854):**`), not a supersession — superseding a live decision to fix a stale example misstates the corpus (ADR-086's three-layer taxonomy was fine; only its roster carrier moved to `.spur/fleet.json` + `FleetService.materialize`).
+- Retired design satellites get a `> **Superseded (ADR-116).**` banner right after frontmatter naming the current surface; the body stays as the historical record (pattern already on workspace-design.md, inbox-board-module.md, board-module-boundaries.md).
+
+**Errors fixed / review craft**
+
+- Pass-2 review hole: the diff-additivity guard's `allowedRemovals` was broader than the change, so an Accepted-bearing status swap passed 7/7. Fix: derive removable lines only from statuses that actually moved (exactly the diff's two `**Status:**` lines).
+- Adjudicate handoff mutation claims in two halves — reproduced in substance, refuted in attribution: the named witness mutation already failed pre-fix; the mutation the fix actually closes was the Accepted-bearing swap. Verify which mutation a guard really kills before repeating the claim.
+- `computeProofInputFingerprint` folds only spec sections (Background/Requirements/AC/Design/Plan), not Review/Solution — writing the review report does not stale recorded gate evidence. Proved by recomputation, not assumed.
+- The diff guard `(e)` is transient by construction (early-returns once committed); the durable committed-state guard is `(a)`–`(d)` + `(f)`. State that explicitly or a later reader mistakes the early return for drift.
+
+**Gotchas**
+
+- Compat surface is recorded, not deleted: `agent.team.*` is still live — it selects autostart members at serve boot (unioned with `SPUR_TEAM_AUTOSTART`), is accepted via `misplacedGlobalKeys`, and its removal is gated by the `team-noun-retired` entry in `config/transition-shims.json`. The cutover commit owns that deletion, not the ADR amendment.
+- Feature receipts and the task corpus are CLI-gated; stale derived claims inside them (`G4` receipt, `G64` row) are recorded as findings with owners, never edited in a docs task (R5).
+- Doc-evolve wrapup detection found `03`, `04`, and the retired-module satellites already reconciled; residual drift hides in *live* satellites: a non-goals row still saying `mergeTimeline` is "display only until G3", a wave table labeling a landed-via-retirement item `(feature G3 / ADR-052)`, and `project-switcher.md` naming the deleted Inbox module as the plain-message consumer. Repair is one line each, naming current authority (0849/ADR-116, Projects Conversation tab).
+- `spur team up` still materializes through the shared `materializeRoster` under its deprecation shim, so `cli-contracts.md`'s description stays accurate — check code before "repairing" a true sentence about a deprecated-but-working verb.
+- Wrapup verification: `bun test apps/cli/tests/adr-supersession.test.ts` → 7 pass / 0 fail / 69 expect after the satellite edits (the suite pins `docs/00_ADR.md` only; satellite edits cannot stale it).
