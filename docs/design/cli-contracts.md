@@ -192,6 +192,25 @@ the same commit — superskill's update check reads the marketplace version firs
 stale silently degrades staleness detection. Entries are mutated in place; unrelated fields
 (e.g. `description`) survive.
 
+**Version carriers are project config (`builder.bump-ver.versionCarriers`).** Beyond the built-in
+carriers (workspace `package.json` files; marketplace + entry `plugin.json`; the `binaryVersion`
+literal in `src/config.ts`), a repo declares extra ones per project:
+
+```yaml
+builder:
+  bump-ver:
+    versionCarriers:
+      - type: plugin-manifest            # repo-wide manifests no marketplace entry covers,
+        paths: [.cursor-plugin/plugin.json, .codex-plugin/plugin.json]  # synced + staged with the release
+      - type: ts-literal                 # override the probed file/identifier
+        file: src/version.ts             #   (package-relative; default src/config.ts)
+        identifier: APP_VERSION          #   (default binaryVersion)
+```
+
+Example: superskill's git-tracked `.cursor-plugin/` and `.codex-plugin/` mirrors previously went
+stale (0.3.1 vs marketplace 0.3.27) because nothing reached them; declaring them as
+`plugin-manifest` carriers folds them into every release commit.
+
 **Runtime-noise tolerance.** CLI startup eagerly creates the runtime SQLite state
 (`.spur/spur.db*`, `.spur/logs/`), which dirties a pristine repo before dispatch; the clean-tree
 gate ignores exactly those untracked paths (`status --porcelain -uall`) and still blocks on

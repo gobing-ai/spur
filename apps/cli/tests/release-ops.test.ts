@@ -199,6 +199,53 @@ describe('builder bump-ver', () => {
         expect(sh(repo, ['git', 'log', '-1', '--format=%s'])).toBe('chore(ship): bump lib to 0.2.0');
     });
 
+    test('plugin-manifest carriers sync per-platform mirrors and stage them', async () => {
+        const { repo } = mkRepo();
+        for (const dir of ['.cursor-plugin', '.codex-plugin']) {
+            mkdirSync(join(repo, dir), { recursive: true });
+            writeFileSync(
+                join(repo, dir, 'plugin.json'),
+                `${JSON.stringify({ name: 'cc', version: '0.1.0', description: 'mirror' }, null, 4)}\n`,
+            );
+        }
+        sh(repo, ['git', 'add', '.']);
+        sh(repo, ['git', 'commit', '-m', 'add mirrors']);
+
+        await runBumpVer(['lib', '0.2.0'], repo, createCapturedOutput(), {
+            builder: {
+                'bump-ver': {
+                    versionCarriers: [
+                        { type: 'plugin-manifest', paths: ['.cursor-plugin/plugin.json', '.codex-plugin/plugin.json'] },
+                    ],
+                },
+            },
+        } as Parameters<typeof runBumpVer>[3]);
+        for (const dir of ['.cursor-plugin', '.codex-plugin']) {
+            const manifest = await Bun.file(join(repo, dir, 'plugin.json')).json();
+            expect(manifest.version).toBe('0.2.0');
+            expect(manifest.description).toBe('mirror');
+        }
+        // Carriers are part of the release commit, not left dangling in the tree.
+        expect(sh(repo, ['git', 'status', '--porcelain'])).toBe('');
+    });
+
+    test('ts-literal carrier overrides the probed file and identifier', async () => {
+        const { repo } = mkRepo();
+        mkdirSync(join(repo, 'pkgs', 'lib', 'src'), { recursive: true });
+        writeFileSync(join(repo, 'pkgs', 'lib', 'src', 'version.ts'), `export const APP_VERSION: '0.1.0';\n`);
+        sh(repo, ['git', 'add', '.']);
+        sh(repo, ['git', 'commit', '-m', 'add version source']);
+
+        await runBumpVer(['lib', '0.2.0'], repo, createCapturedOutput(), {
+            builder: {
+                'bump-ver': {
+                    versionCarriers: [{ type: 'ts-literal', file: 'src/version.ts', identifier: 'APP_VERSION' }],
+                },
+            },
+        } as Parameters<typeof runBumpVer>[3]);
+        expect(await Bun.file(join(repo, 'pkgs', 'lib', 'src', 'version.ts')).text()).toContain("APP_VERSION: '0.2.0'");
+    });
+
     test('refuses to re-tag an existing local tag', async () => {
         const { repo } = mkRepo();
         await bumpVer(['lib', '0.2.0'], repo);

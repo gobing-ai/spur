@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BuilderBumpVerConfig, SpurConfig } from '@gobing-ai/spur-config';
-import { resolveBuilderBumpVerConfig } from '@gobing-ai/spur-config';
+import { resolveBuilderBumpVerConfig, type TsLiteralCarrier, type VersionCarrier } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CommandOutput } from './output';
 import { consoleOutput } from './output';
@@ -24,6 +24,8 @@ interface ReleaseConfig {
     packageName: string;
     /** Optional source file whose version constant must be rewritten alongside package.json. */
     versionSourceFile?: string;
+    /** Identifier carrying the version in `versionSourceFile` (default `binaryVersion`). */
+    versionLiteralIdentifier?: string;
     tagVersionSeparator: string;
     publishWorkflow: string;
     releaseCommitType: string;
@@ -47,6 +49,8 @@ interface ReleaseContext {
     packages: Map<string, ReleaseConfig>;
     /** Packages bumped together by the aggregate (`--all`) path: those pinned via `workspace:` by another workspace package. */
     allPackages: ReleaseConfig[];
+    /** Extra version carriers (plugin-manifest mirrors, ts-literal overrides) from `builder.bump-ver`. */
+    versionCarriers: VersionCarrier[];
 }
 
 /** The git tag that, when pushed, triggers the publish workflow. */
@@ -157,15 +161,16 @@ async function releaseContext(
     }
 
     const shortName = (name: string): string => name.split('/').pop() ?? name;
+    const tsLiteral = bumpVerConfig.versionCarriers.find((c): c is TsLiteralCarrier => c.type === 'ts-literal');
     const packages = new Map<string, ReleaseConfig>();
     for (const ws of workspaces) {
-        const versionSourceFile = existsSync(join(repoRoot, ws.dir, 'src', 'config.ts'))
-            ? `${ws.dir}/src/config.ts`
-            : undefined;
+        const literalProbe = join(ws.dir, tsLiteral?.file ?? 'src/config.ts');
+        const versionSourceFile = existsSync(join(repoRoot, literalProbe)) ? literalProbe : undefined;
         packages.set(shortName(ws.name), {
             packageDir: ws.dir,
             packageName: ws.name,
             versionSourceFile,
+            versionLiteralIdentifier: tsLiteral?.identifier,
             tagVersionSeparator: bumpVerConfig.tagVersionSeparator,
             publishWorkflow: bumpVerConfig.publishWorkflow,
             releaseCommitType: bumpVerConfig.releaseCommitType,
@@ -198,7 +203,7 @@ async function releaseContext(
     pinnedNames.add(rootName);
     const allPackages = [...packages.values()].filter((c) => pinnedNames.has(c.packageName));
 
-    return { repoRoot, rootName, packages, allPackages };
+    return { repoRoot, rootName, packages, allPackages, versionCarriers: bumpVerConfig.versionCarriers };
 }
 
 /**
@@ -250,21 +255,50 @@ async function updateVersionSourceFile(
     previous: string,
     next: string,
     output: CommandOutput,
+    identifier = 'binaryVersion',
 ): Promise<boolean> {
     const absPath = join(ctx.repoRoot, filePath);
     const content = await Bun.file(absPath).text();
-    // Match: binaryVersion: 'x.y.z' or binaryVersion: "x.y.z"
-    const updated = content.replace(
-        /(binaryVersion:\s*['"])\d+\.\d+\.\d+(?:-[0-9A-Za-z-.]+)?(?:\+[0-9A-Za-z-.]+)?(['"])/,
-        `$1${next}$2`,
+    // Match: <identifier>: 'x.y.z' or "x.y.z" (identifier is a code identifier; escape is belt-and-braces).
+    const pattern = new RegExp(
+        `(${identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\s*['"])\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z-.]+)?(?:\\+[0-9A-Za-z-.]+)?(['"])`,
     );
+    const updated = content.replace(pattern, `$1${next}$2`);
     if (updated === content) {
-        output.write(`  ⚠ ${filePath}: binaryVersion pattern not found (expected ${previous})`);
+        output.write(`  ⚠ ${filePath}: ${identifier} pattern not found (expected ${previous})`);
         return false;
     }
     await Bun.write(absPath, updated);
-    output.write(`  ↳ ${filePath}: binaryVersion ${previous} → ${next}`);
+    output.write(`  ↳ ${filePath}: ${identifier} ${previous} → ${next}`);
     return true;
+}
+
+/**
+ * Sync repo-wide extra plugin manifests declared as `plugin-manifest` version carriers
+ * (e.g. per-platform mirrors like `.cursor-plugin/plugin.json` that no marketplace entry covers).
+ */
+async function syncExtraPluginManifests(
+    ctx: ReleaseContext,
+    version: string,
+    staged: string[],
+    output: CommandOutput,
+): Promise<void> {
+    for (const carrier of ctx.versionCarriers) {
+        if (carrier.type !== 'plugin-manifest') continue;
+        for (const rel of carrier.paths) {
+            const absPath = join(ctx.repoRoot, rel);
+            const manifest = await readJson(absPath);
+            if (manifest === null) {
+                output.write(`  ⚠ ${rel}: not found or malformed — skipping`);
+                continue;
+            }
+            const previous = typeof manifest.version === 'string' ? manifest.version : '(none)';
+            manifest.version = version;
+            await Bun.write(absPath, `${JSON.stringify(manifest, null, 4)}\n`);
+            staged.push(rel);
+            output.write(`  ↳ ${rel}: ${previous} → ${version}`);
+        }
+    }
 }
 
 /**
@@ -404,12 +438,20 @@ async function bumpVersion(
     const staged = [`${config.packageDir}/package.json`];
     // Update in-source version constant (e.g. binaryVersion in config.ts) for compiled binaries.
     if (config.versionSourceFile) {
-        const updated = await updateVersionSourceFile(ctx, config.versionSourceFile, previous, version, output);
+        const updated = await updateVersionSourceFile(
+            ctx,
+            config.versionSourceFile,
+            previous,
+            version,
+            output,
+            config.versionLiteralIdentifier,
+        );
         if (updated) staged.push(config.versionSourceFile);
     }
     // Cascade workspace pin updates for consumers of this package.
     staged.push(...(await updateWorkspacePins(ctx, config.packageName, previous, version, output)));
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
+    await syncExtraPluginManifests(ctx, version, staged, output);
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');
     await git(ctx.repoRoot, ['add', ...staged]);
@@ -495,13 +537,21 @@ async function bumpAll(
         output.write(`${config.packageName}: ${previous} -> ${version}`);
         staged.push(`${config.packageDir}/package.json`);
         if (config.versionSourceFile) {
-            const updated = await updateVersionSourceFile(ctx, config.versionSourceFile, previous, version, output);
+            const updated = await updateVersionSourceFile(
+                ctx,
+                config.versionSourceFile,
+                previous,
+                version,
+                output,
+                config.versionLiteralIdentifier,
+            );
             if (updated) staged.push(config.versionSourceFile);
         }
         staged.push(...(await updateWorkspacePins(ctx, config.packageName, previous, version, output)));
     }
 
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
+    await syncExtraPluginManifests(ctx, version, staged, output);
 
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');

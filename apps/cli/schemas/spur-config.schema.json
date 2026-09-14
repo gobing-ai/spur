@@ -365,6 +365,45 @@
                             "type": "integer",
                             "minimum": 1,
                             "description": "gh run list --limit used to point at the triggered publish run. Default 5."
+                        },
+                        "versionCarriers": {
+                            "type": "array",
+                            "description": "Extra version carriers beyond workspace package.json files. Default: none.",
+                            "items": {
+                                "oneOf": [
+                                    {
+                                        "type": "object",
+                                        "description": "Repo-wide version-bearing manifests synced to the release version (e.g. per-platform plugin.json mirrors).",
+                                        "properties": {
+                                            "type": { "const": "plugin-manifest" },
+                                            "paths": {
+                                                "type": "array",
+                                                "minItems": 1,
+                                                "items": { "type": "string", "minLength": 1 }
+                                            }
+                                        },
+                                        "required": ["type", "paths"]
+                                    },
+                                    {
+                                        "type": "object",
+                                        "description": "Version constant inside a package source file, probed per workspace member.",
+                                        "properties": {
+                                            "type": { "const": "ts-literal" },
+                                            "file": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "Package-relative file. Default \"src/config.ts\"."
+                                            },
+                                            "identifier": {
+                                                "type": "string",
+                                                "minLength": 1,
+                                                "description": "Identifier carrying the version. Default \"binaryVersion\"."
+                                            }
+                                        },
+                                        "required": ["type"]
+                                    }
+                                ]
+                            }
                         }
                     }
                 }
