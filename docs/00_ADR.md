@@ -354,10 +354,16 @@ escalation test in `packages/app/tests/services/agent-service.test.ts`.
 
 ## ADR-042: One Inbox Module with Per-Agent Timelines
 
-- **Status:** Superseded by ADR-052 · **Date:** 2026-08-04
+- **Status:** Superseded by ADR-116 (via ADR-052) · **Date:** 2026-08-04
 - **Decision:** Consolidate Board messaging into `modules/inbox` with All, Supervisor, and member tabs; merge durable messages with process frames client-side. Remove duplicate message views; Supervisor remains a UI filter, not a routing identity.
 - **Why:** Three overlapping message surfaces fragmented one operator workflow.
 - **Detail:** `03 §14`; `docs/design/inbox-board-module.md`; feature M4.
+
+**Amendment (2026-09-14 · ADR-116 / task 0854):** The module this ADR decided is gone —
+`apps/web/src/modules/inbox/**` and its client-side `mergeTimeline` were deleted by task 0849 once the
+Projects module carried the surface. The durable message plane survives as the Projects Conversation
+tab (0841) and process frames in the Agents tab's member terminal (0842), as two panes rather than one
+merged timeline. The decision text above is unchanged; this line records the current authority.
 
 ## ADR-043: Workflow Agent Inputs Prefer Pure Slash Commands
 
@@ -588,6 +594,13 @@ detection is not mechanically reliable.
 **Why.** Copying multiplexer I/O would collapse ADR-052’s two planes and fight a harness that does not own PTYs.
 
 **Detail:** `03 §17`; `docs/design/inter-agent-control-plane.md`; feature G4. Complements ADR-052 (does not change Board composition).
+
+**Amendment (2026-09-14 · ADR-116 / task 0854):** The companion this ADR complemented — ADR-052,
+team-scoped Board composition — is **superseded by ADR-116** (project-scoped fleets). This decision is
+unaffected and is explicitly **retained** by ADR-116: agents still coordinate only through the durable
+message plane and the supervised process pipe, and the Board is still a client rather than a wait or
+command authority. The two planes it names survive as the Projects Conversation tab and the member
+terminal (0841/0842); only their composition unit changed. Decision text above is unchanged.
 
 ## ADR-058: Tracked Transition Shims — Two-Sided Manifest Gate
 
@@ -1143,6 +1156,20 @@ pointer file cannot provide.
 Untracked generated specs also imply the demo-story fix: an example roster ships as the commented-in
 `agent.team.demo` block in `.spur/config.yaml`, not as tracked spec files.
 
+**Amendment (2026-09-14 · ADR-116 / task 0854):** The three-layer taxonomy and the runtime-state
+decision above are **unchanged**; only the roster layer's carrier moved. Layer 2 is now a project
+**fleet** declared in `<projectPath>/.spur/fleet.json` (`FleetDeclarationSchema`, task 0835) and
+resolved by `FleetService` — the composition root materializes it with
+`FleetService.materialize(projectPath)` at `spur serve` start, not with `team up`. The demo example is
+the fleet shape now (`config/config.example.yaml`), not an `agent.team.demo` block.
+
+The legacy `agent.team.<id>.members` key is still **live**, not merely parseable: it selects
+**autostart** members at serve boot (`apps/server/src/serve.ts` unions `agent.team.*`'s `autostart`
+with `SPUR_TEAM_AUTOSTART`), while the fleet schema deliberately carries no autostart field. The key is
+accepted (`misplacedGlobalKeys` reports rather than rejects it) and the `spur team` noun is deprecated
+with every verb moved to its owning noun (0848, shim `team-noun-retired`). Removing the key and the
+noun is the cutover commit's work, not this amendment's.
+
 **Amendment (2026-08-26 · Task 0685 verification correction):** The capability catalog
 (`agent.roles`, `agent.executors`, `agent.default`) stays machine-global in
 `~/.config/spur/config.yaml`; `.spur/config.yaml` owns the project roster and optional project
@@ -1667,7 +1694,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 
 ## ADR-116: Project-Scoped Fleet Composition Replaces Team-Scoped Board Composition
 
-- **Status:** Accepted · **Date:** 2026-09-14 · **Feature:** G6 · **Supersedes:** ADR-052
+- **Status:** Accepted · **Date:** 2026-09-14 · **Feature:** G6 · **Supersedes:** ADR-052 (and ADR-042 via it)
 - **Decision:** A project — one worktree path — is the composition unit. Its agent roster is a
   **fleet** declared in `<projectPath>/.spur/fleet.json` (task 0835) and resolved by `FleetService`;
   the Projects Board module owns Conversation, Agents, and Work; `agent.team.<teamId>` and the

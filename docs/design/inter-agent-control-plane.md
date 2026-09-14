@@ -6,7 +6,7 @@ helper **landed** (task 0531). Spec addressing extended 0537/0542: `--spec <id>`
 carrier; drain rewrites to the spec's executor binding (feature B2). Task 0685 adds exact-one
 `--role` resolution above the existing occupant pin. First-class `blocked` /
 `agent report-state` remain accepted design.
-**Decision:** ADR-057 (complements ADR-052).
+**Decision:** ADR-057 (retained by ADR-116; its former companion ADR-052 is superseded).
 **Feature:** G4.
 
 Shapes + Wave-1/2 implementation notes. Rationale: `00` ADR-057 and `03` §17. Wave-2 verbs
@@ -21,7 +21,7 @@ Shapes + Wave-1/2 implementation notes. Rationale: `00` ADR-057 and `03` §17. W
 | `spur agent run` / `spur agent loop` | Occupant invoke; loop drains inbox | Peer socket |
 | `POST /api/team/processes/:id/stdin` + process SSE | Operator attach / process pipe | Agent-to-agent command bus |
 | `system_events` + EventBus | Wait follow-set after a snapshot sequence | A second EventHub ring |
-| Board Inbox `mergeTimeline` | Display only until G3 | Wait or send authority |
+| Board Inbox `mergeTimeline` | Retired by 0849 with the Inbox module (ADR-116 supersedes ADR-052); its two inputs survive as separate Projects panes | Wait or send authority |
 
 No new CLI noun. No Unix-socket JSON API beside oRPC. No terminal snapshot read. No `send-keys`.
 
@@ -208,7 +208,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 | --- | --- | --- |
 | 1 | `OccupantRef`, drain rewrite keeps `specId`, env injection, `CoordinationRun` persist + read — **LANDED (task 0529)** | wait verb, lifecycle enum as a public wait target, new noun |
 | 2 | `agent wait`, `message send --wait`, lifecycle table §5, error codes §7, skill + `04` signatures (T3, ADR-051 consent) — **LANDED (task 0530)** | Board SSE, `blocked` without a first-class signal, protocol ping |
-| 3 | Snapshot/seq helper reused by wait — `followSystemEventsAfter` **LANDED (task 0531)**; first-class `blocked` (and optional `agent report-state` only if it cannot be derived) **deferred — 0530 Testing contains no `BLOCKED_UNREACHABLE` signal** | G3 Board un-merge (feature G3 / ADR-052), live handoff, screen detection, `blocked` |
+| 3 | Snapshot/seq helper reused by wait — `followSystemEventsAfter` **LANDED (task 0531)**; first-class `blocked` (and optional `agent report-state` only if it cannot be derived) **deferred — 0530 Testing contains no `BLOCKED_UNREACHABLE` signal** | G3 Board un-merge (feature G3 / ADR-052 — landed via retirement: 0849 deleted the merge with the Inbox module; ADR-116 supersedes ADR-052), live handoff, screen detection, `blocked` |
 
 ## 10. Files likely to change (implementers)
 
