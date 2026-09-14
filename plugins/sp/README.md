@@ -337,6 +337,8 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `redesign-web-ui`           | 1.0   | Existing-UI visual upgrade — audit generic AI fingerprints, apply in-stack polish against `DESIGN.md` / live tokens, verify behavior and viewports; does not migrate frameworks                                                                                                                            |
 | `taste-refactoring-api`     | —     | API design and refactoring for REST/HTTP, RPC/gRPC, GraphQL, and event contracts; compatibility, security, and migration review |
 | `taste-refactoring-ui`      | —     | UI design and refactoring with visual hierarchy, typography, spacing, color, and interaction review |
+| `taste-refactoring-architect` | —   | Architecture review, simplification, and refactoring; boundary modeling, dependency reduction, and migration planning |
+| `taste-refactoring-tests`   | —     | Test suite refactoring for failure sensitivity, regression detection, and assertion strength; eliminates brittle mocks |
 
 #### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)
 

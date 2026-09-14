@@ -770,8 +770,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         const NON_ROUTER_BUDGET = 350;
         const ROUTER_BUDGET = 600;
         // 0820: +2 skills (spur-composer, spur-doctor) at the same per-skill allowance
-        // (~287 chars/skill when the cap was frozen at 31 skills; 34 x ~287 ≈ 9750).
-        const AGGREGATE_BUDGET = 9750;
+        // (~287 chars/skill when the cap was frozen at 31 skills; 34 x ~287 ≈ 9750; 38 x ~287 ≈ 10900).
+        const AGGREGATE_BUDGET = 11_000;
 
         let aggregate = 0;
         const offenders: string[] = [];

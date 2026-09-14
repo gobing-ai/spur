@@ -1,4 +1,9 @@
-# Skill: taste-refactoring-architect
+---
+name: taste-refactoring-architect
+description: Review, simplify, and refactor system architecture toward minimum sufficient architecture while preserving required capabilities, quality attributes, delivery safety, and data invariants. Backs architectural refactoring and boundary reviews.
+---
+
+# taste-refactoring-architect
 
 ## Purpose
 Use this skill to review, simplify, and refactor software/system architecture while preserving required capabilities and delivery qualities.

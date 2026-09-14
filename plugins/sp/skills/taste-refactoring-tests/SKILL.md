@@ -1,4 +1,9 @@
-# Skill: taste-refactoring-tests
+---
+name: taste-refactoring-tests
+description: Refactor unit tests for failure sensitivity, deterministic confidence, and regression protection without mock-heavy brittle tests or vanity coverage. Backs test suite quality audits.
+---
+
+# taste-refactoring-tests
 
 ## Purpose
 Use this skill to refactor existing unit tests so they provide **real delivery confidence**, not the illusion of safety created by a permanently green test suite.
