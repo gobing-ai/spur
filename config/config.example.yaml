@@ -210,6 +210,17 @@ workflows:
 redaction:
   enabled: false
 
+# ── Release (spur builder bump-ver / drop-tags) ──
+# Optional. Release plumbing knobs for `spur builder bump-ver` / `drop-tags`;
+# every value defaults as shown, so an absent section keeps default behavior.
+# builder:
+#   bump-ver:
+#     tagVersionSeparator: "-v"
+#     publishWorkflow: publish.yml
+#     releaseCommitType: chore
+#     releaseCommitScope: release
+#     ghRunListLimit: 5
+
 # ── Planning (design §2.1 / §9) ──
 tasks:
   active: docs/tasks

@@ -333,6 +333,43 @@
                 }
             }
         },
+        "builder": {
+            "type": "object",
+            "description": "Builder noun configuration. Currently hosts the release plumbing knobs for `spur builder bump-ver` / `drop-tags`; every field defaults to the built-in release convention, so an absent builder section keeps default behavior.",
+            "properties": {
+                "bump-ver": {
+                    "type": "object",
+                    "description": "Release knobs for bump-ver/drop-tags. Defaults: -v separator, publish.yml workflow, chore(release) commit, gh run list limit 5.",
+                    "properties": {
+                        "tagVersionSeparator": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Release tag format: <package><separator><version>. Default \"-v\"."
+                        },
+                        "publishWorkflow": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "GitHub Actions workflow file the pushed release tag triggers. Default \"publish.yml\"."
+                        },
+                        "releaseCommitType": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Conventional commit type for the release commit. Default \"chore\"."
+                        },
+                        "releaseCommitScope": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Conventional commit scope for the release commit. Default \"release\"."
+                        },
+                        "ghRunListLimit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "gh run list --limit used to point at the triggered publish run. Default 5."
+                        }
+                    }
+                }
+            }
+        },
         "tasks": {
             "type": "object",
             "description": "Task-folder registration (design \u00a79). Absorbs the legacy docs/.tasks/config.json folders + baseCounter concepts. Mirrors @gobing-ai/spur-config tasksConfigSchema (Zod is SSOT).",
