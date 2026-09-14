@@ -1,6 +1,6 @@
 ---
 name: taste-refactoring-api
-description: Design, review, and refactor REST/HTTP, RPC/gRPC, GraphQL, and event APIs. Use for resource models, schemas, errors, pagination, idempotency, compatibility, security, performance, documentation, and migration safety.
+description: Design, review, and refactor REST/HTTP, RPC/gRPC, GraphQL, and event API contracts safely.
 ---
 
 # taste-refactoring-api

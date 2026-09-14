@@ -1,6 +1,6 @@
 ---
 name: taste-refactoring-ui
-description: A practical UI taste and refactoring agent skill distilled from Refactoring UI. Use it to design new product interfaces, critique screenshots or code, refactor existing UI, create design-system constraints, and run a final visual-quality pass. Optimizes for hierarchy, spacing, typography, color, depth, imagery, consistency, and shippability.
+description: Design, review, and refactor UI hierarchy, layout, typography, spacing, color, and interactions.
 ---
 
 # taste-refactoring-ui
