@@ -8,6 +8,7 @@ import {
     setDetachedServeSpawnForTests,
     setPortProbeForTests,
 } from '@gobing-ai/spur-app';
+import { spurConfigSchema } from '@gobing-ai/spur-config';
 import { CoordinationRunDao, createMigratedDb, InboxMessageDao, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { Hono } from 'hono';
@@ -320,6 +321,47 @@ describe('healthModule', () => {
             expect(body.members[0]?.enabled).toBe(true);
             expect(body.members[0]?.executor).toBe('build');
             expect(body.capacity).toEqual({ total: 1, enabled: 1, writeCapable: 0, missing: [] });
+        } finally {
+            close();
+        }
+    });
+
+    test('0848: role-only fleet members resolve through fresh configured role tiers on the Board', async () => {
+        const { writeFileSync } = await import('node:fs');
+        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
+        writeFileSync(
+            join(tempDir, '.spur', 'fleet.json'),
+            JSON.stringify({
+                version: 1,
+                members: [{ id: 'coder', role: 'coder' }],
+            }),
+        );
+        let tier = 'capable-1';
+        ctx.reloadAgentConfig = async () =>
+            spurConfigSchema.parse({
+                agent: {
+                    roles: { coder: { tier } },
+                    executors: [
+                        { name: 'standard', agent: 'codex', tier: 'standard' },
+                        { name: 'capable', agent: 'codex', tier: 'capable-1' },
+                        { name: 'top', agent: 'codex', tier: 'capable-2' },
+                    ],
+                },
+            });
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+        try {
+            const first = (await (await app.request('/api/project/fleet')).json()) as {
+                members: Array<{ executor: string }>;
+                capacity: { missing: string[] };
+            };
+            expect(first.capacity.missing).toEqual([]);
+            expect(first.members.map((m) => m.executor)).toEqual(['capable']);
+            tier = 'capable-2';
+            const second = (await (await app.request('/api/project/fleet')).json()) as {
+                members: Array<{ executor: string }>;
+            };
+            expect(second.members.map((m) => m.executor)).toEqual(['top']);
         } finally {
             close();
         }

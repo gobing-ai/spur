@@ -17,6 +17,7 @@ import {
     validateAgentId,
 } from '@gobing-ai/ts-ai-runner';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import { resolveAgentRoles } from './agent-roles';
 import type { AgentRoleDefinition } from './agent-service';
 import { normalizeProjectPath, ProjectRegistry } from './project-registry';
 import { type MaterializeResult, materializeRoster, resolveMemberExecutor } from './team-service';
@@ -204,7 +205,7 @@ export class FleetService {
                 index,
                 label: `Fleet "${slug}"`,
                 agentConfig,
-                roles: this.ctx.roles,
+                roles: this.ctx.roles ?? resolveAgentRoles(agentConfig),
             });
             // R4: write capability is read from the RESOLVED executor profile's
             // `fsWrite` attestation (0706 vocabulary as-is). `enforced` or
@@ -346,7 +347,7 @@ export class FleetService {
             members: declaration.members as NormalizedTeamMember[],
             defaultWorkspace: normalized,
             agentConfig: config?.agent,
-            roles: this.ctx.roles,
+            roles: this.ctx.roles ?? resolveAgentRoles(config?.agent),
             specs,
         });
         // Namespace isolation (0835 review P2): fleet specs carry the
