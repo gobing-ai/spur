@@ -1432,3 +1432,99 @@ Tasks: 0815
 - **Task references sections outlive the task.** 0815's References remained the durable parking
   spot for unrelated session-review residuals (items 1–6) that predate and outlive the fix; if the
   task closes, those items need a new owner surface first.
+**Drift repaired and committed** — `e23efdaaa`, 5 paths, tree clean. Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/446990df-5098-4fd3-b269-d75d5a83acd1-wrapup-learnings.md`.
+
+Drift report (§7 + §4.3, over 0850's owners):
+
+| # | Doc | Reality | Doc said | Repair |
+|---|---|---|---|---|
+| 1–3 | `00_ADR`, `03_ARCHITECTURE`, `04_DESIGN` | content edited 2026-09-14 | `updated_at` 2026-09-09/09-13, version unbumped | minor bump + date |
+| 4 | `design/cli-contracts.md` | `spur agent list --specs` takes `--server <url>` and merges live supervisor status (`agent.ts:55,326-348`) | detection only | flag + behavior documented |
+| 5 | `design/project-switcher.md` | `spur projects list --fleet` exists (`projects.ts:113`) | `list [--json]` only; stale `updated_at` | row widened, date refreshed |
+| 5b | `04_DESIGN` index | satellite bannered superseded | row read as current | ADR-116 disclosure |
+
+Zero-finding checks backed by commands: CLI noun/verb + `--json` parity (`consistency.test.ts` 3 pass), module inventory vs `apps/web/src/modules/*/index.ts*`, `mergeTimeline` 0 hits, `RETIRED_ROUTES` match, `FleetDeclarationSchema`/`FleetService` match, `/api/team/*` still live, `AGENTS.md` map == §4.1, 65/65 `docs/design` files indexed, all new links/anchors resolve.
+
+Verification: `test-pre-check` green (45 rules); 48 doc-related tests pass. Full `spur-check`: 8480 pass / 1 fail — `agent.test.ts:1075` fails only because this session exports `SPUR_ROLE=coder`, which the inline path inherits via `ctx.env.SPUR_ROLE`; unsetting that one var gives 48/48 pass, and the failure reproduces with my doc changes reverted. Not a regression.
+
+---
+
+# Wrapup learnings — batch 0850 (feature G64)
+
+Batch 0850 — *Reconcile superseded authority across ADRs, architecture, and templates* — is `done` at `7db3fb9ba` (21 paths). This wrapup ran `sp-doc-evolve` (§7 drift-audit + §4.3 contract-verify) over the owners the task touched and repaired the surviving drift in `e23efdaaa` (5 paths).
+
+## 2026-09-14 · WBS 0850 · recording a supersession without rewriting history
+
+### Conventions
+
+- **Additive supersession, never a rewrite.** ADR-052 keeps its number, title, date, `Decision`, `Why` and `Detail` links byte-identical; only the status line becomes `Superseded by ADR-116` (`docs/00_ADR.md:500`). The replacement carries its own `Supersedes:` and `Retains:` lines. A reversal costs one status-line edit plus one appendix — history stays readable where it changed.
+- **Re-check the ADR ceiling in the same pass that writes the entry.** ADR-115 was reconfirmed as the last entry (`docs/00_ADR.md:1639`) immediately before ADR-116 was appended. Parallel planning can consume a number between "I picked 116" and "I wrote 116".
+- **One carrier per fact.** The pointer lives on the status line only, and a test enforces that ADR-052 is the *only* pre-116 ADR carrying it (`adr-supersession.test.ts` (c1)) — so a later well-meaning "also update ADR-086" edit fails loudly instead of silently doubling the authority.
+- **Superseded satellites are bannered, not rewritten.** `workspace-design.md`, `inbox-board-module.md`, `board-module-boundaries.md`, `spur-team-mode-design.md` keep their bodies as the historical record, gain a `> **Superseded (ADR-116).**` banner and a `**Status:**` line, and forward to the current owner. Deleting them is deferred to the cutover commit.
+- **Render a task-owned invariant as a test at the moment it could be violated.** (c2) reads the *working* diff of `docs/00_ADR.md` and allows only ADR-116 lines plus ADR-052's old/new status line — the assertable form of "no historical decision is rewritten".
+
+### Patterns
+
+- **Derived-owner reconciliation is a chain, not a vibe.** One decision propagated through: ADR (`00`) → architecture §14 (`03`) → index rows + per-verb deprecation table (`04`) → owning satellites (`docs/design/*`) → both seeded config templates → `01` scope row → `help2` pages. The 21-path diff is exactly that chain; skipping any link leaves a doc reading as current.
+- **Supersession is two-sided.** The new ADR must declare what it *Retains* (ADR-037/057/022). Without it, a retired decision's neighbours read as implicitly retired too.
+- **Widen the existing owner before inventing a satellite.** The fleet data contract (`FleetDeclaration`/`FleetService`) landed in `docs/design/project-switcher.md` §3.1 with its `owns:` line widened — no new file.
+- **Retire by redirect, not by deletion.** `RETIRED_ROUTES` in `apps/web/src/router.tsx:14-19` maps `workspace` / `inbox` / `teams` → `/board/projects*`, so stale URLs keep resolving while the modules are gone.
+- **Deprecate a CLI noun in place, then gate its removal on evidence.** All six `spur team` verbs keep running with a one-time stderr warning and unchanged exit codes; `config/transition-shims.json` (`team-noun-retired`) names the removal condition (no caller in `config/workflows/`, `plugins/sp/`, `scripts/`, `docs/`). The noun is removed by a *later* commit once that condition holds.
+- **Prove the surface claim from the shipped tree, not from the doc.** §14's module inventory was verified against `id`/`order` in each `apps/web/src/modules/*/index.tsx`: observability 10, history 20, features 30, `task-kanban` id `tasks` 40, projects 45.
+
+### Errors fixed
+
+| Symptom | Root cause | Fix |
+| --- | --- | --- |
+| `00_ADR`, `03_ARCHITECTURE`, `04_DESIGN` carry `updated_at` 2026-09-09 / 2026-09-13 despite 2026-09-14 content edits | §4.3 metadata not refreshed with the content | minor version bump + `updated_at: 2026-09-14` |
+| `project-switcher.md` `updated_at` stayed 2026-09-13 although `owns:` was widened and §3.1 added | its three sibling satellites were refreshed in the same commit, it was missed | `updated_at: 2026-09-14` |
+| `cli-contracts.md` `spur agent list` had no `--server <url>` and no live run-status merge | 0848 moved both from `spur team status`; `docs/help/cmd_agent.md:113` and the plugin reference were updated, the owning non-UI satellite was not | flag added to the heading + one sentence naming the merge, its states and the unreachable-server fallback |
+| `project-switcher.md` §6 listed `list [--json]` only | `owns:` widened to "the project fleet" but the verb table was not revisited, while `04_DESIGN` already cited `spur projects list --fleet` | `list [--json] [--fleet]` + the resolution it performs |
+| `04_DESIGN`'s index row for `spur-team-mode-design.md` read as current | three of four bannered satellites got an index disclosure; this one was missed | same "**superseded by ADR-116**" disclosure as its siblings |
+
+### Gotchas
+
+- **`spur task update --section "Q&A"` appends; it does not replace.** (`apps/cli/src/commands/task.ts:434-435`) An intended "anchor qualification" landed as a duplicate 44-line Q&A entry with the stale anchor surviving in the live copy. The replace path is a body starting with `<!-- qa:replace -->`. Use that marker whenever the intent is to *correct* an existing entry.
+- **A doc-diff guard can veto an unrelated metadata edit.** `adr-supersession.test.ts` (c2) reads the uncommitted `git diff HEAD -- docs/00_ADR.md` and rejects any added line that is not ADR-116 or the status line — so a §4.3 frontmatter refresh fails it while the tree is dirty. Its own docblock states the assertion is vacuous once committed, i.e. the guard is scoped to the task's working window; a doc repair belongs in its own commit.
+- **Ambient `SPUR_ROLE` breaks the test suite from inside a Spur-driven session.** `runAgentRun --agent inline` returns 1 instead of 0 (`apps/cli/tests/commands/agent.test.ts:1075`) because the auto path inherits the dispatcher role through `ctx.env.SPUR_ROLE` (`packages/app/src/services/agent-service.ts:2236`, 0551 R2) and the test's `agentConfig: {}` has no executor for `coder`. Bisected: unsetting **only** `SPUR_ROLE` turns 1 fail into 48 pass. Run the gate as `env -u SPUR_ROLE bun run spur-check`, or outside the session.
+- **The owning non-UI satellite is the link that gets missed.** CLI behavior changes tend to land in `docs/help/*` (parity enforced by `help-doc-parity.test.ts`) and the plugin reference tree, while `docs/design/*-contracts.md` — the §6.5 owner of signatures and defaults — has no parity test at all. Grep the owning satellite explicitly after any verb/flag change.
+- **Widening `owns:` does not update a document's tables.** Treat an `owns:` edit as a trigger to re-read the body for facts that just fell inside the widened responsibility.
+- **Cross-artifact identity matters in ADR/Plan prose.** `config/config.global.yaml` is the machine-wide layer `spur init` seeds as `~/.config/spur/config.yaml` (`apps/cli/src/commands/init.ts:31-34`; `:162` skips it from the project-template copy); `config/config.example.yaml` is the project template. Naming the wrong one sends readers to a file the command never reads.
+- **Do not "fix" a historical ADR that is still true.** ADR-086 presents `agent.team.<id>.members` and the `agent.team.demo` example as current. Verified *not* false: `team: z.record(z.string(), TeamConfigSchema).optional()` still parses (`packages/config/src/index.ts:658`) and `misplacedGlobalKeys` reports the key rather than rejecting it (`:979-990`). Owner is the cutover commit that removes the noun.
+- **A §4.3 metadata refresh is a content edit, not bookkeeping to defer.** `version:` had already been left behind once before (ADR-113/114/115 landed 2026-09-11 with no bump), so stale `updated_at` accumulates silently across a program rather than failing anywhere.
+
+### Unverified / open (carried, not fixed)
+
+- 0850's own closure items: the duplicated Q&A entry (P3), the Design/Plan reference to `config/config.example.yaml` as the seeded artifact, one accepted `L4.stale-line-anchor` warning, and a cosmetic double blank line in G64's AC fence.
+- Retired Board surfaces with no owning task claim — process watch list (0852) and the three Teams supervisor facets (0853).
+- `bun run spur-check` cannot go green inside a git worktree on this machine (minified-identifier renames in `plugins/sp/lib/idea-handoff.generated.mjs`) — unassigned harness residual.
+
+## Drift report — 2026-09-14 (doc-evolve over 0850's owners)
+
+Checks run: 8 (§7 items) · Findings: 5 · Repaired in `e23efdaaa`
+
+| # | Doc | Reality / source says | Doc said | Authority | Trigger | Repair |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `00_ADR.md` | content edited 2026-09-14 (ADR-116, ADR-052 status) | `version: 1.44.0`, `updated_at: 2026-09-09` | §4.3 | T1 | version 1.45.0, date refreshed |
+| 2 | `03_ARCHITECTURE.md` | §14 rewritten 2026-09-14 | `version: 1.46.0`, `updated_at: 2026-09-13` | §4.3 | T1 | version 1.47.0, date refreshed |
+| 3 | `04_DESIGN.md` | index rows + `spur team` deprecation table changed 2026-09-14 | `version: 1.73.0`, `updated_at: 2026-09-09` | §4.3 | T3/T9 | version 1.74.0, date refreshed |
+| 4 | `design/cli-contracts.md` | `spur agent list [--specs]` accepts `--server <url>` and merges live supervisor status (`agent.ts:55,326-348`; `docs/help/cmd_agent.md:113`) | detection only | §6.5 | T3 | flag added; merge, states, fallback documented |
+| 5 | `design/project-switcher.md` | `spur projects list` accepts `--fleet` (`projects.ts:113`); `04_DESIGN:152` already cites it | §6 listed `list [--json]`; `owns:`/§3.1 changed with stale `updated_at` | §6.5, §4.3 | T3 | row widened to `[--fleet]`; date refreshed |
+| 5b | `04_DESIGN.md` | `spur-team-mode-design.md` carries a superseded banner | index row read as current | §4.5, §7 | T9 | ADR-116 disclosure added |
+
+Zero-finding checks (with the command that produced zero):
+
+| §7 item | Evidence |
+| --- | --- |
+| Real CLI surface vs docs | `bun test apps/cli/tests/consistency.test.ts` — 3 pass: noun parity both directions, `--json` parity per verb |
+| `03` module inventory vs tree | `rg -n "id:\|order:" apps/web/src/modules/*/index.ts*` → 10/20/30/40/45 exactly as §14 states |
+| Retired module/merge claims | no `workspace`/`inbox`/`teams` dir under `apps/web/src/modules/`; `mergeTimeline` → 0 hits |
+| Redirect table | `apps/web/src/router.tsx:14-19` matches §14's `RETIRED_ROUTES` description |
+| Fleet contract vs code | `FleetDeclarationSchema` (`packages/config/src/index.ts:537`) and `FleetService`'s five methods match `project-switcher.md` §3.1 |
+| `/api/team/*` still live | 7 routes still registered under `apps/server/src/modules/team/`; §14.1's transport table accurate |
+| Doc-map agreement | `AGENTS.md:88-98` vs constitution §4.1 — same meaning, no edit owed (§4.4) |
+| Index discoverability | every file in `docs/design/` is referenced from `04_DESIGN.md` (65/65) |
+| Reference resolution | every link added by `7db3fb9ba` resolves; `<a id="spur-agent-list---json---specs">` preserved across the heading change |
+| Template identity | `init.ts:31,162` confirms `config.global.yaml` → `~/.config/spur/config.yaml` and `config.example.yaml` → project template |
+
+Verification of the repair: `bun run test-pre-check` green (45 rules); `consistency`, `help-doc-parity`, `agents-md-portable-alignment`, `init-templates`, `json-envelope-inventory` green (48 pass); `adr-supersession` green once the frontmatter refresh was committed (c2 vacuous by design). Full `bun run spur-check`: 8480 pass / 1 fail — the ambient `SPUR_ROLE` pollution above, reproduced identically with the doc changes reverted, so not a regression from this wrapup.
