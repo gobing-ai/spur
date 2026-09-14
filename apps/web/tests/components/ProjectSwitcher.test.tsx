@@ -187,4 +187,42 @@ describe('ProjectSwitcher', () => {
         fireEvent.keyDown(document, { key: 'Escape' });
         await waitFor(() => expect(queryByTestId('project-switcher-menu')).toBeNull());
     });
+
+    test('renders project glyph and chevron in collapsed mode, and opens flyout on click', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+            if (url.endsWith('/projects')) {
+                return new Response(
+                    JSON.stringify({
+                        projects: [
+                            { name: 'spur-new', path: '/path/spur-new', port: 3000, running: true, current: true },
+                            { name: 'other-proj', path: '/path/other', port: 0, running: false, current: false },
+                        ],
+                    }),
+                    { status: 200, headers: { 'content-type': 'application/json' } },
+                );
+            }
+            return new Response(null, { status: 404 });
+        }) as typeof fetch);
+
+        const { getByTestId, getByText, queryByTestId } = render(<ProjectSwitcher currentName="spur-new" collapsed />);
+
+        // Renders project avatar icon and hover switcher chevron
+        expect(getByTestId('project-avatar-icon')).toBeTruthy();
+        expect(getByTestId('project-switcher-chevron')).toBeTruthy();
+        expect(queryByTestId('project-switcher-menu')).toBeNull();
+
+        // Clicking the collapsed trigger opens the menu
+        fireEvent.click(getByTestId('project-switcher-trigger'));
+        await waitFor(() => expect(getByTestId('project-switcher-menu')).toBeTruthy());
+
+        const menu = getByTestId('project-switcher-menu');
+        expect(menu.className).toContain('left-full');
+        expect(menu.className).toContain('top-0');
+        expect(getByText('other-proj')).toBeTruthy();
+
+        // Clicking outside closes the flyout
+        fireEvent.mouseDown(document.body);
+        await waitFor(() => expect(queryByTestId('project-switcher-menu')).toBeNull());
+    });
 });

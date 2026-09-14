@@ -79,61 +79,72 @@ describe('LeftSidebar project name', () => {
 });
 
 describe('LeftSidebar fold / unfold controls', () => {
-    test('collapsed rail exposes a single top expand control (no edge tab)', () => {
+    test('collapsed rail exposes project switcher at top and expand control in footer', () => {
         silentProjectFetch();
         const onToggle = mock(() => {});
         const { getByTestId, queryByTestId, getByLabelText } = renderSidebar(true, onToggle);
 
-        expect(getByTestId('sidebar-expand')).toBeTruthy();
-        expect(queryByTestId('sidebar-expand-tab')).toBeNull();
+        // Top slot has the project switcher and avatar
+        expect(getByTestId('project-switcher-trigger')).toBeTruthy();
+        expect(getByTestId('project-avatar-icon')).toBeTruthy();
+
+        // Footer houses the expand control as the 3rd icon
+        const footer = getByTestId('sidebar-footer');
+        expect(footer).toBeTruthy();
+        const expandBtn = getByTestId('sidebar-expand');
+        expect(footer.contains(expandBtn)).toBe(true);
         expect(queryByTestId('sidebar-collapse')).toBeNull();
         expect(getByLabelText('Expand sidebar')).toBeTruthy();
 
-        fireEvent.click(getByTestId('sidebar-expand'));
+        fireEvent.click(expandBtn);
         expect(onToggle).toHaveBeenCalledTimes(1);
     });
 
-    test('expanded header exposes collapse control and theme toggle lives in footer', () => {
+    test('expanded sidebar exposes collapse control in footer as third icon', () => {
         silentProjectFetch();
         const onToggle = mock(() => {});
         const { getByTestId, queryByTestId, getByLabelText, container } = renderSidebar(false, onToggle);
 
-        expect(getByTestId('sidebar-collapse')).toBeTruthy();
-        expect(queryByTestId('sidebar-expand')).toBeNull();
-        expect(queryByTestId('sidebar-expand-tab')).toBeNull();
-        expect(getByLabelText('Collapse sidebar')).toBeTruthy();
-
-        // Theme toggle lives in sidebar-footer, not in the header action group.
+        // Collapse control lives in sidebar-footer
         const footer = getByTestId('sidebar-footer');
         expect(footer).toBeTruthy();
+        const collapseBtn = getByTestId('sidebar-collapse');
+        expect(footer.contains(collapseBtn)).toBe(true);
+        expect(queryByTestId('sidebar-expand')).toBeNull();
+        expect(getByLabelText('Collapse sidebar')).toBeTruthy();
+
+        // Theme toggle and settings also live in sidebar-footer
         const theme = getByLabelText(/Switch to (light|dark) mode/);
         expect(footer.contains(theme)).toBe(true);
+        expect(footer.contains(getByTestId('sidebar-settings'))).toBe(true);
 
-        // Title still present so the header is not icon-only when expanded.
+        // Title still present so the header is not icon-only when expanded
         expect(container.querySelector('aside span.font-semibold')).toBeTruthy();
 
-        fireEvent.click(getByTestId('sidebar-collapse'));
+        fireEvent.click(collapseBtn);
         expect(onToggle).toHaveBeenCalledTimes(1);
     });
 });
 
 describe('LeftSidebar footer and settings modal', () => {
-    test('renders footer with ThemeToggle and SettingsButton in expanded state', () => {
+    test('renders footer with ThemeToggle, SettingsButton, and SidebarFoldButton in expanded state', () => {
         silentProjectFetch();
         const { getByTestId, getByLabelText, getAllByLabelText } = renderSidebar(false);
         const footer = getByTestId('sidebar-footer');
         expect(footer).toBeTruthy();
         expect(getByTestId('sidebar-settings')).toBeTruthy();
+        expect(getByTestId('sidebar-collapse')).toBeTruthy();
         expect(getByLabelText('Open settings')).toBeTruthy();
         expect(getAllByLabelText(/Switch to (light|dark) mode/).length).toBe(1);
     });
 
-    test('renders footer with ThemeToggle and SettingsButton in collapsed state', () => {
+    test('renders footer with ThemeToggle, SettingsButton, and SidebarFoldButton in collapsed state', () => {
         silentProjectFetch();
         const { getByTestId, getByLabelText, getAllByLabelText } = renderSidebar(true);
         const footer = getByTestId('sidebar-footer');
         expect(footer).toBeTruthy();
         expect(getByTestId('sidebar-settings')).toBeTruthy();
+        expect(getByTestId('sidebar-expand')).toBeTruthy();
         expect(getByLabelText('Open settings')).toBeTruthy();
         expect(getAllByLabelText(/Switch to (light|dark) mode/).length).toBe(1);
     });

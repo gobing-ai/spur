@@ -38,8 +38,8 @@ function useProjectName(): string {
     return name;
 }
 
-/** Chevron used for fold/unfold — SVG so it always paints (unicode can be clipped/invisible). */
-function SidebarChevron({ direction }: { direction: 'expand' | 'collapse' }) {
+/** Panel toggle icon (PanelLeftClose / PanelLeftOpen). */
+function SidebarFoldIcon({ direction }: { direction: 'expand' | 'collapse' }) {
     const isExpand = direction === 'expand';
     return (
         <svg
@@ -47,21 +47,19 @@ function SidebarChevron({ direction }: { direction: 'expand' | 'collapse' }) {
             viewBox="0 0 16 16"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
             aria-hidden="true"
         >
-            {isExpand ? <path d="M6 3l5 5-5 5" /> : <path d="M10 3L5 8l5 5" />}
+            <rect x="2" y="2" width="12" height="12" rx="2" />
+            <line x1="6" y1="2" x2="6" y2="14" />
+            {isExpand ? <path d="M9 6l2 2-2 2" /> : <path d="M11 6l-2 2 2 2" />}
         </svg>
     );
 }
 
-/**
- * Plain fold/unfold control — intentionally not a daisyUI `Button`.
- * Pairing Tailwind `hidden` / `md:inline-flex` with `.btn { display:inline-flex }`
- * can leave the control permanently invisible depending on CSS layer order.
- */
+/** Plain fold/unfold control in sidebar footer. */
 function SidebarFoldButton({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
     const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
     return (
@@ -73,7 +71,7 @@ function SidebarFoldButton({ collapsed, onToggle }: { collapsed: boolean; onTogg
             data-testid={collapsed ? 'sidebar-expand' : 'sidebar-collapse'}
             className="flex h-8 w-8 items-center justify-center rounded-md text-spur-text-muted hover:bg-spur-accent/20 hover:text-spur-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-spur-accent"
         >
-            <SidebarChevron direction={collapsed ? 'expand' : 'collapse'} />
+            <SidebarFoldIcon direction={collapsed ? 'expand' : 'collapse'} />
         </button>
     );
 }
@@ -118,29 +116,26 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                 }`}
             >
                 {collapsed ? (
-                    // Collapsed rail: centered expand chevron at the top of the icon list.
-                    <div className="flex items-center justify-center border-b border-spur-border shrink-0 py-1">
-                        <SidebarFoldButton collapsed onToggle={onToggle} />
+                    // Collapsed rail: project icon/switcher at the top of the icon list.
+                    <div className="flex items-center justify-center border-b border-spur-border shrink-0 py-2">
+                        <ProjectSwitcher currentName={projectName} collapsed />
                     </div>
                 ) : (
-                    // Expanded: fold control + optional mobile close (ThemeToggle moved to footer).
+                    // Expanded: project switcher + optional mobile close (fold control moved to footer).
                     <div className="flex items-center justify-between gap-1 p-3 border-b border-spur-border shrink-0">
                         <ProjectSwitcher currentName={projectName} />
 
-                        <div className="flex items-center gap-0.5 shrink-0">
-                            <SidebarFoldButton collapsed={false} onToggle={onToggle} />
-                            {onMobileClose && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-spur-text-muted md:hidden"
-                                    onClick={onMobileClose}
-                                    aria-label="Close navigation"
-                                >
-                                    ✕
-                                </Button>
-                            )}
-                        </div>
+                        {onMobileClose && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-spur-text-muted md:hidden"
+                                onClick={onMobileClose}
+                                aria-label="Close navigation"
+                            >
+                                ✕
+                            </Button>
+                        )}
                     </div>
                 )}
 
@@ -190,8 +185,21 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
                             : 'p-3 flex items-center justify-between gap-2'
                     }`}
                 >
-                    <ThemeToggle />
-                    <SettingsButton onClick={() => setSettingsOpen(true)} />
+                    {collapsed ? (
+                        <>
+                            <ThemeToggle />
+                            <SettingsButton onClick={() => setSettingsOpen(true)} />
+                            <SidebarFoldButton collapsed onToggle={onToggle} />
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex items-center gap-2">
+                                <ThemeToggle />
+                                <SettingsButton onClick={() => setSettingsOpen(true)} />
+                            </div>
+                            <SidebarFoldButton collapsed={false} onToggle={onToggle} />
+                        </>
+                    )}
                 </div>
             </aside>
             <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
