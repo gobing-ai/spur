@@ -1528,3 +1528,44 @@ Zero-finding checks (with the command that produced zero):
 | Template identity | `init.ts:31,162` confirms `config.global.yaml` → `~/.config/spur/config.yaml` and `config.example.yaml` → project template |
 
 Verification of the repair: `bun run test-pre-check` green (45 rules); `consistency`, `help-doc-parity`, `agents-md-portable-alignment`, `init-templates`, `json-envelope-inventory` green (48 pass); `adr-supersession` green once the frontmatter refresh was committed (c2 vacuous by design). Full `bun run spur-check`: 8480 pass / 1 fail — the ambient `SPUR_ROLE` pollution above, reproduced identically with the doc changes reverted, so not a regression from this wrapup.
+**Wrapup complete — zero drift, zero repairs needed, no corpus writes.**
+
+- **Doc-evolve audit (§7):** batch resolved to task `0850` from the validated capture. All reconciliation 0850 required already landed in `7db3fb9ba` + `e23efdaaa`: real CLI verbs match `04`, `/api/team/*` routes are 9/9 parity with `observability-contracts.md`, every `04` pointer resolves, all four superseded satellites carry ADR-116 banners, and `00`/`03`/`04` frontmatter contracts pass §4.1. Per §7, a clean report lists its checks — all listed in the artifact.
+- **No repairs written:** nothing drifted. The uncommitted `docs/00_ADR.md` diff is task 0854's in-flight amendment work — left untouched.
+- **Learnings:** written to `/Users/robin/xprojects/spur-new/.spur/run/003152d0-a410-41ad-a94d-1bfac97f0461-wrapup-learnings.md`.
+
+# Wrapup Learnings — run 003152d0 (task 0850 · feature G64)
+
+## 2026-09-14 · Task 0850 — Reconcile superseded authority across ADRs, architecture, and templates
+
+### Conventions
+
+- Supersession is **additive, never destructive**: change the status line (`Superseded by ADR-116`), append an amendment block or banner, and leave decision text, ADR numbers, dates, and feature receipts untouched (R2). Retconning history is the failure mode, not staleness.
+- Retired design satellites get a **superseded banner at the head only** — bodies stay as historical record (`workspace-design.md`, `inbox-board-module.md`, `board-module-boundaries.md`, `spur-team-mode-design.md` all follow this).
+- Deprecation ≠ removal: docs must match the **shipped** CLI. While `spur team` verbs still run, they keep a deprecation header + per-verb replacement table (`04:143`, `cli-contracts.md:523`, `team.md`); deletion belongs to the cutover commit, not the deprecation commit.
+- Superseded authority is repaired **at its owner first** (00_ADR), then derived docs (03 → 04 → satellites → CLI references → init templates). Never patch a derived doc to disagree with its authority.
+
+### Errors fixed / avoided
+
+- **Sequencing trap in the task framing:** 0848 ships a deprecation *warning*, not a removal. Deleting `team.md` / the `spur team` help page during 0850 would have made references contradict the live CLI — exactly what R3 exists to prevent.
+- **ADR number allocation race:** next free number (116, after ADR-115) must be re-verified immediately before writing; another feature can land it first.
+- G61/G62/G63 shipping without ADRs was deliberate, not an oversight — authoring retroactive ADRs for already-shipped work is the retconning R2 forbids. ADR-116 is scoped to the composition unit only (the thing ADR-052 got wrong).
+
+### Patterns
+
+- Extend the satellite that already owns the attached surface instead of creating a new one: fleet composition went into `project-switcher.md` (it already owns project registry + Board switching) rather than a fresh G6 satellite. Rejected alternative recorded with a revisit condition, not left implicit.
+- Transition shims track removal conditions: `team-noun-retired` in `config/transition-shims.json` records "no caller remains" so the cutover commit is evidence-driven, not calendar-driven.
+- R2/R5 scope discipline: only owners whose facts changed get touched; `docs/tasks*/` and `docs/features/` are receipts of what was decided *at the time* — their `spur team` references are historical record, not authority.
+
+### Gotchas
+
+- **The portable artifact is `config/config.example.yaml`**, not a doc: `init.ts` seeds it as `~/.config/spur/config.yaml` on first run, so a stale `agent.team` template block teaches the retired composition to every new install (R4). Repo-docs-only propagation is the gap portable propagation exists to close.
+- `agent.team.<id>.members` still *parses* during deprecation (`packages/config` reports it via `misplacedGlobalKeys` rather than rejecting) — removal of key + noun is one cutover commit, coordinated with the shim condition.
+
+### Wrapup drift audit (detection evidence, this run)
+
+- Real CLI verbs (`.command()` across `apps/cli/src/commands/`) vs `04` documented surface: match; `spur team` correctly framed as deprecated with replacement table and `up`→no-verb note.
+- Server `/api/team/*` routes vs `observability-contracts.md` rows: **9/9 exact parity**; web still calls `/api/team/teams` + `/api/team/processes` (fleet read path).
+- All `04` → `docs/design/*.md` pointers resolve (zero missing).
+- ADR-116 banners present on all four superseded satellites; `03` §14.3 names fleet.json/FleetService/modules-projects, all of which exist (`FleetService`, `spur projects list --fleet` at `projects.ts:113`).
+- Frontmatter contracts for `00`/`03`/`04`: owns/authority/edit_rules/sync match constitution §4.1 verbatim in meaning; `updated_at: 2026-09-14` = last commit `e23efdaaa`. **Zero drift found — no repairs required.**
