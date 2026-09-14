@@ -5,6 +5,7 @@ import {
     resetLayoutState,
     STORAGE_KEY,
     saveLayoutState,
+    V2_STORAGE_KEY,
 } from '../../src/lib/layout-state';
 
 // mock localStorage
@@ -66,13 +67,13 @@ describe('layout-state', () => {
         expect(raw).toBeDefined();
         if (!raw) return;
         const parsed = JSON.parse(raw);
-        expect(parsed.version).toBe(2);
+        expect(parsed.version).toBe(3);
         expect(parsed.sidebarWidth).toBe(300);
         expect(parsed.sidebarCollapsed).toBe(true);
         restoreStorage();
     });
 
-    test('loadLayoutState restores persisted values from v2 storage', () => {
+    test('loadLayoutState restores persisted values from v3 storage', () => {
         mockStorage();
         saveLayoutState({
             sidebarWidth: 280,
@@ -87,7 +88,32 @@ describe('layout-state', () => {
         restoreStorage();
     });
 
-    test('loadLayoutState migrates legacy unversioned state to v2 with sidebarCollapsed=true', () => {
+    test('loadLayoutState migrates v2 state to v3 with sidebarCollapsed=true', () => {
+        mockStorage();
+        store.set(
+            V2_STORAGE_KEY,
+            JSON.stringify({
+                version: 2,
+                sidebarWidth: 280,
+                rightPanelWidth: 350,
+                sidebarCollapsed: false,
+                rightPanelCollapsed: false,
+            }),
+        );
+        const state = loadLayoutState();
+        // Preserves custom panel widths
+        expect(state.sidebarWidth).toBe(280);
+        expect(state.rightPanelWidth).toBe(350);
+        // Enforces folded default per A7 requirement 1.2
+        expect(state.sidebarCollapsed).toBe(true);
+        expect(state.rightPanelCollapsed).toBe(false);
+        // V2 key cleaned up and v3 key written
+        expect(store.get(V2_STORAGE_KEY)).toBeUndefined();
+        expect(store.get(STORAGE_KEY)).toBeDefined();
+        restoreStorage();
+    });
+
+    test('loadLayoutState migrates legacy unversioned state to v3 with sidebarCollapsed=true', () => {
         mockStorage();
         store.set(
             LEGACY_STORAGE_KEY,
@@ -105,7 +131,7 @@ describe('layout-state', () => {
         // Enforces folded default per A7 requirement 1.2
         expect(state.sidebarCollapsed).toBe(true);
         expect(state.rightPanelCollapsed).toBe(false);
-        // Legacy key cleaned up and v2 key written
+        // Legacy key cleaned up and v3 key written
         expect(store.get(LEGACY_STORAGE_KEY)).toBeUndefined();
         expect(store.get(STORAGE_KEY)).toBeDefined();
         restoreStorage();
@@ -120,9 +146,10 @@ describe('layout-state', () => {
         restoreStorage();
     });
 
-    test('resetLayoutState removes both v2 and legacy keys', () => {
+    test('resetLayoutState removes v3, v2, and legacy keys', () => {
         mockStorage();
         store.set(LEGACY_STORAGE_KEY, '{"sidebarWidth":200}');
+        store.set(V2_STORAGE_KEY, '{"sidebarWidth":220}');
         saveLayoutState({
             sidebarWidth: 300,
             rightPanelWidth: 400,
@@ -131,6 +158,7 @@ describe('layout-state', () => {
         });
         resetLayoutState();
         expect(store.get(STORAGE_KEY)).toBeUndefined();
+        expect(store.get(V2_STORAGE_KEY)).toBeUndefined();
         expect(store.get(LEGACY_STORAGE_KEY)).toBeUndefined();
         restoreStorage();
     });

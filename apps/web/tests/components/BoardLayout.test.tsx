@@ -276,7 +276,7 @@ describe('BoardLayout', () => {
         expect(root?.getAttribute('data-rightpanel-collapsed')).toBe('false');
     });
 
-    test('migrates legacy unversioned storage key to v2 and enforces folded sidebar default', async () => {
+    test('migrates legacy unversioned storage key to v3 and enforces folded sidebar default', async () => {
         localStorage.setItem(
             'spur-board-layout',
             JSON.stringify({
@@ -295,6 +295,29 @@ describe('BoardLayout', () => {
         expect(persisted.sidebarCollapsed).toBe(true);
         expect(persisted.sidebarWidth).toBe(260);
         expect(persisted.rightPanelWidth).toBe(340);
+    });
+
+    test('migrates v2 storage key to v3 and enforces folded sidebar default', async () => {
+        localStorage.setItem(
+            'spur-board-layout-v2',
+            JSON.stringify({
+                version: 2,
+                sidebarWidth: 275,
+                rightPanelWidth: 335,
+                sidebarCollapsed: false,
+                rightPanelCollapsed: true,
+            }),
+        );
+        const { container } = await renderBoard();
+        const root = container.querySelector('.board-layout');
+        // V2 sidebarCollapsed: false is overridden to true by migration
+        expect(root?.getAttribute('data-sidebar-collapsed')).toBe('true');
+        expect(root?.getAttribute('data-rightpanel-collapsed')).toBe('true');
+        const persisted = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}');
+        expect(persisted.sidebarCollapsed).toBe(true);
+        expect(persisted.sidebarWidth).toBe(275);
+        expect(persisted.rightPanelWidth).toBe(335);
+        expect(localStorage.getItem('spur-board-layout-v2')).toBeNull();
     });
 
     test('dragging the sidebar handle updates the CSS var and persists sidebarWidth on pointer up', async () => {
