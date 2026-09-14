@@ -158,6 +158,8 @@ GET /api/project/fleet   (0840)
 - `/api/project/fleet` (0840) reads the served project's own migrated db and `.spur/fleet.json`
   through `FleetService` + `StrategyRuntime`; every fact degrades to a named state
   (`missing`/`unresolvable`/`null`) instead of a 500.
+  Role-only members use the shared role resolver against fresh merged config, including configured
+  role tiers and stage-floor validation, even when the caller supplies no role table.
 - Wire contract (0840 review F1): `orchestrator` is a **claim projection** —
   `{ state, instanceId?, holderId?, reason? }`. `holderId` is intentionally included on
   `bound-online`; the raw `project_claims` row is never echoed. 0841-0843 freeze on this shape.
@@ -255,6 +257,10 @@ Issue labels are frozen and shared with the global input receipts (0844):
   `GET /api/messages/inbox`), activity (`GET /api/events/history`), and the
   lifecycle verbs `/api/team/*` already exposes — start, stop, stdin. Escape
   restores focus to the opener card.
+- Member details reuse the shared `GET /api/team/teams` feed for the selected spec's model and
+  common working directory. A missing model reports `Executor default`; an unresolved member,
+  unavailable feed, or unknown directory reports `Unavailable`. Values are matched by instance id,
+  so selecting another member cannot retain the previous member's details.
 - Test attributes: `data-roster-entry`, `data-roster-declared`,
   `data-roster-observed`, `data-roster-issue`, `data-member-detail`,
   `data-g6="open-member"` (the prototype selector, reused by 0845).
