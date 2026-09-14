@@ -4,7 +4,7 @@ name: Reconcile M6, M3, G1, and G4 remaining work into this program
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
-updated_at: "2026-09-13T21:22:50.001Z"
+updated_at: "2026-09-14T01:14:48.661Z"
 feature_id: G64
 priority: P3
 tags:
@@ -110,208 +110,118 @@ so it cannot become a speculative duplicate.
 Owner: each feature. Condition: their own verify/wrap runs. G64 has no standing to advance them and
 no information their owners lack.
 
+#### Q&A entry — 2026-09-14T01:08:51.486Z
+
+**Current operator decision (2026-09-13).** 0849 and 0850 are intentionally paused. Robin will
+re-enable them after the other G64 tasks pass; no removal window is inferred from this request.
+
+**M6/M3 disposition.** Preserve their cancellation as superseded plans, explicitly map unfinished
+retirement to existing tasks 0849/0850, and correct prior claims that retirement already happened.
+G1/G4 remain authoritative and retain their statuses.
+
+**Confirmed member-detail residual.** The pane exists and lacked workDir/model. Robin's request to
+complete all non-cleanup work authorizes implementing these fields here. Reuse the existing read API
+and hook instead of creating a duplicate ticket. This replaces the former evidence-gated follow-up.
+
+**Commit boundary.** Leave this pass uncommitted for Robin's next step.
+
 ### Design
 
-**WHAT.** A disposition record, not a batch of new tickets. The reconciliation was performed during
-this refine against the live corpus; the implementation applies the four dispositions and writes the
-record. R4 makes "no new ticket" the success condition, so the deliverable is deliberately small.
+Reconcile overlapping scope against Robin's staged release decision of 2026-09-13. Requirements
+and acceptance criteria are unchanged: each remaining item has one concrete task or closing evidence.
 
-**Corpus state, read at refine time.** The framing assumes four features with open scope. Three of
-them have none:
+- Preserve 0849/0850 as intentionally cancelled, with Robin owning their later re-enable/cutover.
+  Map Overview removal and tab-label collision to 0849, and ADR-052 supersession to 0850. A concrete
+  cleanup assignment satisfies reconciliation; it does not claim that cleanup shipped.
+- Preserve M3/M6 as cancelled superseded plans, replacing unsupported future-merge evidence with
+  the operator's explicit deferral and the existing task assignments. M3 implementation belongs to
+  0269; do not reimplement it while its final removal is assigned to 0849.
+- Close M6's confirmed non-cleanup residual in the existing Projects MemberDetail pane. Read model
+  and common workDir through `useTeamsData` / GET /api/team/teams, matching member instance ids.
+  Show Executor default for an unset model and Unavailable for missing member/directory or read
+  failure. Semantic labels, wrapping long paths, and existing keyboard/focus behavior are retained.
+- Keep G1/G4 authority, statuses, and receipts unchanged. Write the item-by-item disposition to
+  G64/M3/M6 Notes through the feature CLI. No seventh task or alternate message/identity path.
+- Verify all four included G64 tasks and the repository gates. Report their release readiness
+  separately from full G64 R5/R6, which remain intentionally deferred.
 
-| Feature | Status | Linked tasks | What is actually left |
-| --- | --- | --- | --- |
-| **M6** | `backlog` | **zero** | Its entire scope, never decomposed |
-| **M3** | `verifying` | `0269` **done** | A verification gate, on a module 0849 deletes |
-| **G1** | `verifying` | `0193`, `0204`, `0205`, `0206` — all **done** | A verification gate; surface retained |
-| **G4** | `verifying` | `0529`, `0530`, `0531` — all **done** | A verification gate; surface retained |
-
-So there is no unimplemented work in M3, G1, or G4 to convert or duplicate. `verifying` here is a
-verify/wrap gap at each feature's own owner, not remaining implementation — a distinction that
-decides three of the four dispositions.
-
-**M6, item by item (R1).** Its four scope lines map onto work this program already does:
-
-| M6 scope item | Disposition |
-| --- | --- |
-| Delete `apps/web/src/modules/workspace/OverviewTab.tsx` and its `WORKSPACE_TABS` entry | **Subsumed by 0849**, which deletes the whole `workspace/` directory — a superset |
-| Rename the Inbox `Supervisor` tab so it stops colliding with the Teams Supervisor tab | **Moot after 0849.** Both modules are deleted; the collision cannot occur. `FIXED_INBOX_TABS` (`inbox/tabs.ts`) and `TEAMS_TABS` (`teams/tabs.ts`) both disappear |
-| Keep Workspace as a lens over scoped Team / Inbox / Tasks | **Rejected by G6.** The Projects module replaces the lens; ADR-116 (0850) records the supersession |
-| Fold `workDir` and `model` into the Teams Supervisor team header / member row | **The one genuine residual** — see below |
-| Record the no-`role`-noun recommendation as the approach | **Honored.** G6 keeps role as a value on the agent spec against the closed set `['scribe','coder','reviewer','planner']`; no G6 task adds a `role` noun |
-
-**The single residual: `workDir` and `model` in member detail.** 0842 builds
-`apps/web/src/modules/projects/MemberDetail.tsx` mounting `MemberTerminal`, process facts, and the
-member inbox; it does not name `workDir` or `model`. Two fields in an existing pane is not a feature,
-and filing a task for it before 0842 ships would be exactly the duplicate R4 forbids. It is recorded
-as an **evidence-gated follow-up**: after 0842 lands, if neither field is present in member detail,
-one task is created against the Agents view. If they are present, M6's last item closes with that as
-its evidence.
-
-**M3 (R2) — verify before the surface is gone, or cancel with the retirement as evidence.** M3's
-scope is entirely Teams-module UX (`TeamControlStrip` removal, Terminal-only toolbar, Process
-read-only, Message/Activity identity columns) plus backend DTO enrichment that already shipped in
-`0269`. The module exists right up until 0849 merges, so the ordering is decidable rather than a
-judgment call:
-
-> If M3's verification runs **before** 0849 merges, advance it to `done` on `0269`'s receipt. If 0849
-> merges first, set M3 `cancelled` with the retirement commit as evidence.
-
-Either way M3 is **not re-implemented on a surface being removed**, which is what R2 asks. The
-backend half (`GET /api/team/teams` `model`, `/api/messages` identity enrichment, `process.*` in
-Activity) survives the Board retirement and is reused by 0842 — nothing there is lost.
-
-**G1 and G4 (R3) — untouched, and that is the finding.** Both are retained authorities, and G61's
-Notes already record the reuse: G1 owns message events / API / watch, G4 owns occupant identity,
-identity-pinned wait, and coordination run records. G61 extended `coordination_runs` rather than
-forking a receipt table; spec ids stay the mailbox identity across 0847's conversion precisely so G4's
-occupant addressing keeps working. Their `verifying` status belongs to their own owners and is
-**out of scope here** — G64's Notes forbid re-statusing them, and there is no G6 reason to.
-
-**Where the record lives (R5).** The feature corpus, through the CLI — not a new report file:
-
-- **G64 Notes** gain a `### Feature reconciliation` block carrying the table above, the M3 ordering
-  rule, and the single residual with its gate.
-- **M6 Notes** gain the per-item disposition with pointers to 0849 and 0850, written **before** its
-  status changes, so the evidence precedes the closure.
-- **M3 Notes** gain the ordering rule.
-- **G1 and G4 Notes** gain one line each naming G61–G64 as consumers. This is the only edit those two
-  features receive.
-
-**Anti-patterns — do not implement.**
-
-- Do not create a task for anything M6 lists. Every item is subsumed, moot, rejected, or gated.
-- Do not re-status G1 or G4. Their `verifying` gate is their owners' work.
-- Do not re-implement any M3 scope item on the Teams module.
-- Do not write a new `docs/reports/` file; the feature records are the audit surface (R5).
-- Do not close M6 before its Notes carry the evidence — the order is record, then status.
-- Do not touch `docs/tasks*/` receipts for M3, G1, or G4.
-
-**Handoff.** This is the last task of G64 and of the G6 program. Nothing depends on it.
-
-**Operator amendment — 2026-09-13, pre-cleanup completion.** Robin explicitly keeps 0849 and
-0850 temporarily cancelled and will re-enable them after the other G64 tasks pass. Their retirement
-work remains assigned to those existing tasks; the reconciliation must not depend on pretending it
-already shipped. M3/M6 cancellations represent superseded plans with a deferred cleanup owner, not
-delivered retirement. Close the confirmed member detail workDir/model gap in 0851 using the existing
-shared teams read API and hook, without a duplicate task. This narrowly replaces the source-mutation
-prohibition and follow-up-ticket branch above. Keep G1/G4 authority and all feature statuses unchanged.
-The four-task pre-cleanup release may pass independently; full G64 R5/R6 remain deferred.
+This operator-approved design replaces the earlier source-mutation prohibition and speculative
+follow-up branch solely for the confirmed member-detail gap. No cleanup implementation is included.
 
 ### Plan
 
-1. **Re-read the corpus before acting on the refine-time snapshot.**
-   `spur feature show M6|M3|G1|G4 --json` and confirm: M6 `backlog` with zero linked tasks; M3
-   `verifying` with `0269` done; G1 `verifying` with `0193/0204/0205/0206` done; G4 `verifying` with
-   `0529/0530/0531` done. Any drift changes a disposition — update the Design's table in the same
-   edit rather than proceeding on a stale premise. *(R1, R2, R3)*
-2. **Write M6's disposition into its own Notes** with `spur feature update M6 --section Notes
-   --from-file`, carrying the five-row item table from the Design and naming 0849 and 0850 as the
-   subsuming work. Evidence first, status second. *(R1, R5)*
-3. **Close M6.** `spur feature update M6 cancelled` — its scope is subsumed, moot, or rejected, and
-   the surfaces it describes no longer exist after 0849. `cancelled` is already in the corpus
-   vocabulary (two features use it). *(R1)*
-4. **Record M3's ordering rule** in M3's Notes: verify before 0849 merges → `done` on `0269`'s
-   receipt; 0849 merges first → `cancelled` citing the retirement commit. Then apply whichever branch
-   the actual merge order selected, with the deciding commit named in the Notes. *(R2)*
-5. **Add the consumer line to G1 and G4 Notes** — one sentence each naming G61–G64 as consumers and
-   confirming the authority is retained, not forked. Do not change either status, priority, or any
-   other section. *(R3)*
-6. **Write G64's `### Feature reconciliation` block** with `spur feature update G64 --section Notes
-   --from-file`: the four-feature state table, the M6 item table, the M3 ordering rule, and the single
-   residual with its gate. This is the auditable record R5 asks for. *(R5)*
-7. **Prove no duplicate ticket was created.** `spur task list --feature G64 --json` returns exactly
-   0846–0851 — the same six tasks this feature started with. A seventh task is an R4 violation unless
-   it is the gated residual from step 8. *(R4)*
-8. **Evaluate the one residual against reality, after 0842 has shipped.** Inspect
-   `apps/web/src/modules/projects/MemberDetail.tsx` for `workDir` and `model`. Present → record them
-   as M6's closing evidence in G64's Notes; absent → create exactly one task against the Agents view
-   for the two fields. Do not create it speculatively. *(R1, R4)*
-9. **Test intent.** This task's `mutationPolicy` is `none` for source: its deliverable is corpus
-   records, so the check is `spur feature check M6`, `M3`, `G1`, `G4`, and `G64` all passing after the
-   writes, plus the step-7 task-count assertion. There is no source diff to test, and inventing one
-   would be the failure mode this Design warns about. *(R1–R5)*
-10. **Gate.** `spur task check 0851`, then `spur feature check G64`. Record in the Solution section
-    the four dispositions actually applied, the M3 branch taken with its deciding commit, and whether
-    the residual task was created.
+1. Freeze 0846, 0847, 0848, and 0851 plus the current feature records; preserve the two cancelled
+   cleanup tasks and all owner statuses. (R1–R5)
+2. Replace premature closure claims with the explicit operator deferral and concrete assignments
+   to existing 0849/0850 in M3/M6/G64 Notes. (R1, R2, R5)
+3. Reproduce the missing member-detail fields, reuse the existing teams read hook, and verify
+   correct-member selection plus clearing details when no matching spec exists. (R1, R4)
+4. Confirm the unchanged G1/G4 consumer-authority notes and exactly six G64 tasks. (R3, R4)
+5. Run focused regressions, full repository gates, affected corpus checks, and derive/record all
+   four task verdicts. Classify full G64 findings against only the explicitly deferred R5/R6. (R1–R5)
+6. Leave all changes uncommitted for the operator's next step.
 
 ### Solution
 
-Dispositions applied (all four re-validated against the live corpus via `spur feature show` before
-writing — no drift from the Design's refine-time snapshot):
+Completed the non-cleanup reconciliation under Robin's explicit staged-release decision.
 
-- **M6 → `cancelled`.** Evidence first: `### Reconciliation with G64 (2026-09-13, task 0851)` with
-  the five-row per-item disposition table naming 0849/0850 and the evidence-gated residual written
-  into `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:86`,
-  then `spur feature update M6 cancelled` (backlog → `cancelled` at
-  `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:5`,
-  transition-guarded).
-- **M3 → `cancelled`.** Ordering rule plus applied branch recorded at
-  `docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:160` (status at
-  `:5`): 0849 merges first because M3's verification is owned by M3, was deferred to its own
-  verify/wrap run, and was not scheduled before the retirement merge on `sp/runall-g64-260912a`;
-  deciding artifact named by task + branch (commit did not exist at write time). Backend half
-  (`GET /api/team/teams` `model`, `/api/messages` identity enrichment, `process.*` in Activity)
-  recorded as surviving for 0842.
-- **G1 / G4 → untouched except one Notes line each:** `docs/features/G1_inbox-ipc.md:74` and
-  `docs/features/G4_inter-agent-control-plane.md:119` — authority retained, not forked; G61–G64
-  named as consumers; G61's `coordination_runs` extension and 0847's verbatim spec ids cited.
-  Statuses remain `verifying` — their gate, their owners.
-- **G64 Notes** gained `### Feature reconciliation (2026-09-13, task 0851)` at
-  `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:230`: four-feature state table,
-  M6 disposition summary, M3 branch with rule, residual gate state, and the R4 assertion.
-
-Residual (M6's `workDir` + `model` in member detail): gate open — 0842 has not shipped
-(`apps/web/src/modules/projects/` absent at execution time), so no task was created (R4). The gate,
-its deciding artifact, and both branches are recorded in G64's and M6's Notes.
-
-R4 proof: `spur task list --feature G64 --json` → exactly 0846–0851 (six tasks; no seventh created).
-
-No source code was modified: this task's deliverable is corpus records only (Design: "mutationPolicy
-none for source"); inventing a diff would be the failure mode the Design warns about.
-
-Verification correction (2026-09-13): **PARTIAL**. The earlier closure rationale depended on a
-future retirement merge, not shipped evidence. M3/M6 and G64 Notes now explicitly correct that claim.
-G1/G4 remain retained owners, and the G64 task set still contains exactly six tasks. The retirement
-disposition and the missing workDir/model fields remain unresolved; no duplicate task was created.
-Current evidence: `apps/web/src/modules/teams/index.tsx:13` retains the Teams module,
-`docs/00_ADR.md:500` retains ADR-052, and `apps/web/src/modules/projects/MemberDetail.tsx:22`
-contains the member detail component without the two deferred fields.
+- G64/M3/M6 Notes map Overview and label cleanup to existing task 0849, ADR reconciliation to
+  existing task 0850, and retain Robin as their re-enable/cutover owner. These remain concrete
+  deferred assignments; no retirement or ADR-116 is falsely claimed as shipped. See
+  `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:229`,
+  `docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:160`, and
+  `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:86`.
+- Closed M6's confirmed residual in `apps/web/src/modules/projects/MemberDetail.tsx:24` and
+  `apps/web/src/modules/projects/MemberDetail.tsx:137`: reuse the shared teams read hook, match the
+  selected instance id, and render model plus common working directory. Unknown members/read failures
+  show Unavailable; unset models show Executor default. Long paths wrap and existing focus behavior
+  is preserved. `apps/web/tests/modules/projects/MemberDetail.test.tsx:119` reproduced the missing
+  fields before the fix and checks correct selection plus clearing a prior member's values.
+- G1/G4 authority notes are unchanged at `docs/features/G1_inbox-ipc.md:74` and
+  `docs/features/G4_inter-agent-control-plane.md:119`. Statuses are untouched; no duplicate task was
+  created, and the six-task G64 roster is preserved.
+- The design amendment explicitly authorizes the small UI fix within this task. Full G64 R5/R6
+  remain deferred; completion of this reconciliation does not remove the 0849/0850 cleanup gate.
 
 ### Testing
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | PARTIAL | `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:104` — closure correction recorded; retirement and workDir/model residual remain unresolved; refreshed local verification scratch `.spur/run/0851-verify-answer.txt` lines 1-37 and derived `.spur/run/0851-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
-| R2 | PARTIAL | `docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:179` — the future retirement merge used as closure evidence never landed |
-| R3 | MET | `docs/features/G1_inbox-ipc.md:74`; `docs/features/G4_inter-agent-control-plane.md:119` — retained owners, both still verifying |
-| R4 | MET | Frozen task-list JSON contains exactly 0846–0851; no duplicate task created this run |
-| R5 | MET | `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:270` — dated correction makes unsupported closure claims and residuals auditable |
+| R1 | MET | `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:86` — operator-approved disposition maps cleanup to existing 0849/0850; `apps/web/tests/modules/projects/MemberDetail.test.tsx:119` — selected member model/workDir rendered and cleared for an unknown id; 16 focused web tests pass |
+| R2 | MET | `docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:160` — cancellation means superseded plan; 0269 implementation retained, final removal assigned to existing 0849; no future-merge claim |
+| R3 | MET | `docs/features/G1_inbox-ipc.md:74`; `docs/features/G4_inter-agent-control-plane.md:119` — retained authorities; current feature JSON confirms both still verifying |
+| R4 | MET | spur task list --feature G64 --json: exactly 0846–0851; current roster compared to frozen roster, no duplicate task |
+| R5 | MET | `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:229` — explicit per-item owners and staging decision, mirrored at M3/M6 through CLI writes |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Overlapping scope is resolved once | PARTIAL | command | M3/M6 closure premises are disproved by retained legacy modules and missing ADR supersession; correction recorded through feature update |
-| Scenario: Existing owners are preserved | MET | command | spur feature show G1/G4 --json — both remain verifying; their retained-authority Notes are unchanged |
+| Scenario: Overlapping scope is resolved once | MET | command | Current owner notes and exact six-task roster checked through feature/task CLI; 0849/0850 own deferred cleanup; `apps/web/tests/modules/projects/MemberDetail.test.tsx:119` — selected member model/workDir rendered and cleared for an unknown id; 16 focused web tests pass |
+| Scenario: Existing owners are preserved | MET | command | spur feature show G1/G4 --json and comparison with frozen snapshots: authority Notes and statuses unchanged |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verified all requirements and acceptance criteria for 0851 against current source and executable checks.
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+- Functional: every requirement/AC row is MET in the derived PASS verdict and recorded Testing.
+- SECUA: no blocking/major finding in scope. Read-only migration, stable mailbox identity, explicit
+  conflicts, existing lifecycle transports, and named unavailable states were checked as applicable.
+- Architecture: reuse existing application services and shared hooks; no new transport or duplicate
+  task. G1/G4 remain owners. 0849/0850 cleanup is explicitly deferred by Robin.
+- Validation: bun run spur-check — 8536 pass, 0 fail, lint/typecheck and pre/post rules pass;
+  bun run build and bun run test-cf — exit 0. Focused checks and concrete anchors are in Testing.
+- Release scope: 0846, 0847, 0848, 0851. Full G64 R5/R6 remain deferred, without a false retirement PASS.
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | PARTIAL: no duplication and retained G1/G4 ownership hold; corrected audit record now admits that the M3/M6 retirement-based disposition was premature. |
-| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
-| P4 | task-check | — | spur task check 0851 --strict-core --json — exit 0 |
-| P4 | secua-review | — | M3/M6 retirement-dependent scope and the missing member workDir/model fields still need an owning disposition; no implement tasks auto-created to force ship readiness. |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+The operator-approved design amendment closes the confirmed member model/workDir gap in this task and replaces unsupported future-merge closure claims with concrete cleanup assignments.
+
+| Priority | Dimension | Location | Finding / disposition |
+| --- | --- | --- | --- |
+| P4 | Traceability | Recorded Testing | All requirements and AC are MET; no unresolved blocking or major finding in this task. |
+| P4 | Release scope | G64 tasks 0849/0850 | Cleanup remains explicitly deferred by Robin; excluded from this four-task release and retained in full-feature gate findings. |
 
 ### References
 

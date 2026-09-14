@@ -4,7 +4,7 @@ name: Retire spur team after migrating its callers to owning nouns
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
-updated_at: "2026-09-13T20:15:13.687Z"
+updated_at: "2026-09-14T01:14:48.097Z"
 feature_id: G64
 priority: P2
 tags:
@@ -276,6 +276,12 @@ regenerates the affected plugin bundle.
 Removal remains conditional on the recorded cutover window. No team command, Board module, config
 schema, or transition shim is removed by this repair.
 
+Pre-cleanup verification repair: `packages/app/src/services/fleet-service.ts:208` and
+`packages/app/src/services/fleet-service.ts:350` resolve the role table from the effective agent
+config when the caller supplies no table. This covers read/resolve and materialization callers
+consistently, including the Board fleet API. `apps/server/tests/modules/health.test.ts:329` first
+reproduced the empty role-only roster, then verified configured role tiers and fresh config reloads.
+
 ### Testing
 
 **Pipeline verify results**
@@ -284,34 +290,38 @@ schema, or transition shim is removed by this repair.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/serve.test.ts — exit 0, 51 pass; refreshed local verification scratch `.spur/run/0848-verify-answer.txt` lines 1-39 and derived `.spur/run/0848-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R1 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts — exit 0, 71 pass; `apps/server/tests/modules/health.test.ts:329` — real fleet API request; role-only member uses configured tier and refreshes when that tier changes; 71 focused server tests pass |
 | R2 | MET | `apps/cli/tests/commands/team-retirement.test.ts:192`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/cli/tests/commands/team-retirement.test.ts:356`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
 | R3 | MET | `docs/design/harness-surface-governance.md:117`; consent row read this run; `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
 | R4 | MET | rg scan of plugins/sp/scripts, config/workflows and scripts found no executable spur team callers; compatibility examples remain in the deprecated noun reference |
 | R5 | MET | `apps/cli/tests/commands/team-retirement.test.ts:128`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/cli/tests/commands/team-retirement.test.ts:432`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
-| R6 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/serve.test.ts — exit 0, 51 pass |
+| R6 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts — exit 0, 71 pass; `apps/server/tests/modules/health.test.ts:329` — real fleet API request; role-only member uses configured tier and refreshes when that tier changes; 71 focused server tests pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: spur team is retired only after its callers move | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/serve.test.ts — exit 0, 51 pass |
+| Scenario: spur team is retired only after its callers move | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts — exit 0, 71 pass; `apps/server/tests/modules/health.test.ts:329` — real fleet API request; role-only member uses configured tier and refreshes when that tier changes; 71 focused server tests pass |
 | Scenario: Removal waits for the recorded window | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:128`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- spur:record-review -->
+Verified all requirements and acceptance criteria for 0848 against current source and executable checks.
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+- Functional: every requirement/AC row is MET in the derived PASS verdict and recorded Testing.
+- SECUA: no blocking/major finding in scope. Read-only migration, stable mailbox identity, explicit
+  conflicts, existing lifecycle transports, and named unavailable states were checked as applicable.
+- Architecture: reuse existing application services and shared hooks; no new transport or duplicate
+  task. G1/G4 remain owners. 0849/0850 cleanup is explicitly deferred by Robin.
+- Validation: bun run spur-check — 8536 pass, 0 fail, lint/typecheck and pre/post rules pass;
+  bun run build and bun run test-cf — exit 0. Focused checks and concrete anchors are in Testing.
+- Release scope: 0846, 0847, 0848, 0851. Full G64 R5/R6 remain deferred, without a false retirement PASS.
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | DONE: owning noun wrappers, consent, warning and shim; CHANGED: the missing fleet startup caller is now wired, and role resolution is shared with the CLI. Command removal stays gated. |
-| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
-| P4 | task-check | — | spur task check 0848 --strict-core --json — exit 0 |
-| P4 | cli-golden-path-present | — | Focused projects/team-retirement command tests invoke the real main() registration with --json; successful and refusal paths asserted |
-| P4 | secua-review | — | Fixed the missing production materialization caller and registry-prefix overwrite at startup; no team noun removal was authorized by this batch. |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+The role-only API regression reproduced before repair; FleetService now resolves configured role tiers when callers omit a role map.
+
+| Priority | Dimension | Location | Finding / disposition |
+| --- | --- | --- | --- |
+| P4 | Traceability | Recorded Testing | All requirements and AC are MET; no unresolved blocking or major finding in this task. |
+| P4 | Release scope | G64 tasks 0849/0850 | Cleanup remains explicitly deferred by Robin; excluded from this four-task release and retained in full-feature gate findings. |
 
 ### References
 

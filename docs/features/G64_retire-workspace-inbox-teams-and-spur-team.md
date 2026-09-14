@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-13T20:09:20.481Z"
+updated_at: "2026-09-14T01:08:50.776Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -226,59 +226,27 @@ the task Designs encode.
 - **Public-surface consent** for `spur projects migrate` (0846/0847) and for 0848's two verbs, one
   flag, and output change. Both rows are drafted in their task Designs, granted by nobody yet.
 
+### Current reconciliation — operator-approved staging (2026-09-13, task 0851)
 
-### Feature reconciliation (2026-09-13, task 0851)
+Robin explicitly keeps 0849 and 0850 temporarily cancelled until the other G64 tasks pass and are
+ready to ship. He will re-enable those two tasks for cleanup later. This supersedes the earlier
+merge-order assumption: no retirement merge or ADR-116 is claimed to exist. Existing cancellation
+statuses represent superseded plans and retained cleanup ownership, not delivered removal.
 
-Executed against the live corpus (`spur feature show M6|M3|G1|G4 --json` re-read before acting — no
-drift from the refine-time snapshot). This block is the audit record R5 asks for; the feature files
-are the surface, no separate report exists.
+| Remaining item | Single disposition / owner |
+| --- | --- |
+| M6 Overview deletion | Existing G64 task 0849 owns removal of the Workspace module; deferred by Robin. |
+| M6 Inbox/Teams Supervisor label collision | Existing task 0849 removes both surfaces; collision remains until that intentional cleanup, with no duplicate interim rename. |
+| M6 Workspace-as-lens decision | Existing task 0850 owns ADR-052 supersession after cutover; ADR-052 remains Accepted today. |
+| M6 member workDir/model | Resolved in 0851: Projects MemberDetail uses the existing shared teams feed, matches the selected spec id, shows its model and common working directory, and names unavailable/default values. |
+| M6 no-role-noun recommendation | Already honored: role remains a spec value, with no new role noun. |
+| M3 Teams UI verification/retirement | Existing task 0269 delivered the implementation; no UI reimplementation. Task 0849 owns final retirement. M3 stays cancelled as a superseded plan, not as evidence of shipped deletion. |
+| G1 message transport / G4 occupant identity | Retained authorities consumed by G61–G64; their own verify/wrap work and statuses remain with those features. |
 
-**Corpus state at reconciliation:**
-
-| Feature | Status then | Linked tasks | What was actually left |
-| --- | --- | --- | --- |
-| M6 | `backlog` | zero | Entire scope, never decomposed |
-| M3 | `verifying` | `0269` done | A verification gate, on a module 0849 deletes |
-| G1 | `verifying` | `0193`, `0204`, `0205`, `0206` — all done | A verification gate; surface retained |
-| G4 | `verifying` | `0529`, `0530`, `0531` — all done | A verification gate; surface retained |
-
-**M6 — closed `cancelled`, evidence first** (per-item disposition in M6's Notes, written before the
-status moved): Overview deletion **subsumed by 0849** (whole `workspace/` directory); Inbox/Teams
-label split **moot after 0849** (both tab lists disappear); "Workspace as a lens" **rejected by G6**
-(Projects replaces the lens; ADR-116 via 0850 records the supersession); no-`role`-noun
-recommendation **honored** (role stays a spec value against `['scribe','coder','reviewer','planner']`).
-
-**M3 — closed `cancelled` via the ordering rule.** Verified-before-merge → `done` on `0269`'s
-receipt; 0849-merges-first → `cancelled` citing the retirement. Branch taken: **cancelled** — M3's
-verification is owned by M3, was not scheduled before 0849's merge on this runall branch, and the
-deciding artifact is the 0849 retirement (named by task + branch `sp/runall-g64-260912a`; its commit
-did not exist at write time). The backend half (`GET /api/team/teams` `model`, `/api/messages`
-identity enrichment, `process.*` in Activity) survives and is reused by 0842.
-
-**G1 and G4 — untouched and retained.** One consumer line added to each feature's Notes naming
-G61–G64 as consumers; no status, priority, or other section changed. Their `verifying` gates belong
-to their own owners.
-
-**Single residual — evidence-gated, gate open.** M6's `workDir` + `model` in member detail: at
-reconciliation time 0842 had not shipped (`apps/web/src/modules/projects/` absent), so the gate could
-not be evaluated and **no task was created**. After 0842 lands, inspect
-`apps/web/src/modules/projects/MemberDetail.tsx`: both fields absent → create exactly one task
-against the Agents view; present → record as M6's closing evidence here.
-
-**R4 assertion:** `spur task list --feature G64` returns exactly 0846–0851 — no seventh task.
-
-### Verification correction (2026-09-13, G64 / task 0851)
-
-The earlier retirement-based closure rationale is not evidence of shipped removal. Tasks 0849 and
-0850 were cancelled by commit 4cc0f9d65, while Workspace, Inbox, and Teams remain registered and
-ADR-052 remains Accepted; ADR-116 does not exist. The anticipated 0849 retirement merge never landed.
-The historical cancellation is retained, but retirement-dependent scope is unresolved and must not
-be counted as delivered. Reconciliation requires an explicit disposition at the owning feature or
-completion of the retirement after its cutover gate; G64 is not shippable on these records.
-
-The Projects member detail now exists, but contains neither workDir nor model. The previously
-open inspection gate is therefore resolved to a missing-field finding. No speculative duplicate
-implementation task is created during this verification batch; that residual remains explicit.
+Every retirement-dependent item has a concrete existing task (0849 or 0850), including its deferred
+status and re-enable owner. The non-cleanup residual is implemented; no duplicate task was created.
+The G64 roster remains exactly 0846–0851. The four included tasks can be verified independently;
+full G64 R5/R6 retirement readiness stays pending until 0849/0850 are re-enabled and pass.
 
 ## History
 

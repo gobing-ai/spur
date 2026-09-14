@@ -6,7 +6,7 @@ status: cancelled
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-07-16T18:17:26.784Z"
-updated_at: "2026-09-13T20:09:20.087Z"
+updated_at: "2026-09-14T01:08:51.025Z"
 ---
 
 # M3: Teams board continuous UX fine-tune (Terminal-centric controls)
@@ -157,37 +157,27 @@ _(none — fog cleared by 0269 implementation + residual cleanup)_
 - `sp:spur-cli` for corpus updates; `/sp:dev-run 0269` was the execution path.
 - Prefer existing UI primitives (`Badge`, `Button`, `Modal`, `Select` from `@/ui`).
 
-### Reconciliation with G64 (2026-09-13, task 0851)
+### Current reconciliation — operator-approved staging (2026-09-13, task 0851)
 
-**Ordering rule (from 0851's Design):** if this feature's verification runs before 0849 (retire the
-Board modules) merges, advance to `done` on `0269`'s receipt; if 0849 merges first, set `cancelled`
-citing the retirement. Either way this scope is not re-implemented on a surface being removed.
+Robin explicitly keeps 0849 and 0850 temporarily cancelled until the other G64 tasks pass and are
+ready to ship. He will re-enable those two tasks for cleanup later. This supersedes the earlier
+merge-order assumption: no retirement merge or ADR-116 is claimed to exist. Existing cancellation
+statuses represent superseded plans and retained cleanup ownership, not delivered removal.
 
-**Branch applied: `cancelled`.** At reconciliation time (2026-09-13) 0849 had not yet merged — it is
-sequenced on the G64 runall branch `sp/runall-g64-260912a` and `apps/web/src/modules/teams/` still
-existed — but this feature's verification is owned here, was deferred to this feature's own
-verify/wrap run, and was not scheduled before that merge, so verification-after-deletion is
-impossible. The deciding artifact is the 0849 retirement merge on that branch (task 0849; its commit
-did not exist when this note was written, so it is named by task and branch rather than hash).
-`cancelled` claims no verification that never ran; `done` on `0269`'s receipt would have.
+| Remaining item | Single disposition / owner |
+| --- | --- |
+| M6 Overview deletion | Existing G64 task 0849 owns removal of the Workspace module; deferred by Robin. |
+| M6 Inbox/Teams Supervisor label collision | Existing task 0849 removes both surfaces; collision remains until that intentional cleanup, with no duplicate interim rename. |
+| M6 Workspace-as-lens decision | Existing task 0850 owns ADR-052 supersession after cutover; ADR-052 remains Accepted today. |
+| M6 member workDir/model | Resolved in 0851: Projects MemberDetail uses the existing shared teams feed, matches the selected spec id, shows its model and common working directory, and names unavailable/default values. |
+| M6 no-role-noun recommendation | Already honored: role remains a spec value, with no new role noun. |
+| M3 Teams UI verification/retirement | Existing task 0269 delivered the implementation; no UI reimplementation. Task 0849 owns final retirement. M3 stays cancelled as a superseded plan, not as evidence of shipped deletion. |
+| G1 message transport / G4 occupant identity | Retained authorities consumed by G61–G64; their own verify/wrap work and statuses remain with those features. |
 
-**Backend half survives.** `GET /api/team/teams` optional `model`, `/api/messages` identity
-enrichment, and `process.*` events in Activity are server surfaces that G63's Agents view (0842)
-consumes; 0849 deletes the Board modules, not `apps/server/src/modules/team/`. Nothing shipped by
-`0269` is discarded by this closure.
-
-### Verification correction (2026-09-13, G64 / task 0851)
-
-The earlier retirement-based closure rationale is not evidence of shipped removal. Tasks 0849 and
-0850 were cancelled by commit 4cc0f9d65, while Workspace, Inbox, and Teams remain registered and
-ADR-052 remains Accepted; ADR-116 does not exist. The anticipated 0849 retirement merge never landed.
-The historical cancellation is retained, but retirement-dependent scope is unresolved and must not
-be counted as delivered. Reconciliation requires an explicit disposition at the owning feature or
-completion of the retirement after its cutover gate; G64 is not shippable on these records.
-
-The Projects member detail now exists, but contains neither workDir nor model. The previously
-open inspection gate is therefore resolved to a missing-field finding. No speculative duplicate
-implementation task is created during this verification batch; that residual remains explicit.
+Every retirement-dependent item has a concrete existing task (0849 or 0850), including its deferred
+status and re-enable owner. The non-cleanup residual is implemented; no duplicate task was created.
+The G64 roster remains exactly 0846–0851. The four included tasks can be verified independently;
+full G64 R5/R6 retirement readiness stays pending until 0849/0850 are re-enabled and pass.
 
 ## History
 

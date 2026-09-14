@@ -4,7 +4,7 @@ name: Migration inventory and dry-run preview with conflict reporting
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.298Z
-updated_at: "2026-09-13T20:15:12.775Z"
+updated_at: "2026-09-14T01:14:46.967Z"
 feature_id: G64
 priority: P2
 tags:
@@ -331,72 +331,35 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/legacy-migration.test.ts:426`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; refreshed local verification scratch `.spur/run/0846-verify-answer.txt` lines 1-38 and derived `.spur/run/0846-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
-| R2 | MET | `packages/app/tests/services/legacy-migration.test.ts:686`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass |
-| R3 | MET | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
-| R4 | MET | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `packages/app/tests/services/legacy-migration.test.ts:603`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `packages/app/tests/services/legacy-migration.test.ts:630`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass |
+| R1 | MET | `packages/app/tests/services/legacy-migration.test.ts:426`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
+| R2 | MET | `packages/app/tests/services/legacy-migration.test.ts:686`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
+| R3 | MET | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
+| R4 | MET | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:603`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:630`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
 | R5 | MET | `apps/cli/tests/commands/projects.test.ts:555`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Migration previews before it changes anything | MET | test | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
-| Scenario: Conflicts are named, not summarized | MET | test | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/legacy-migration.test.ts — exit 0, 26 pass |
+| Scenario: Migration previews before it changes anything | MET | test | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
+| Scenario: Conflicts are named, not summarized | MET | test | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Pipeline review hop 2026-09-12 (sp-super-reviewer at review depth, --auto): observe-only over the
-     uncommitted working tree; code untouched; task status unchanged by review. -->
+Verified all requirements and acceptance criteria for 0846 against current source and executable checks.
 
-#### Review Report — 0846
+- Functional: every requirement/AC row is MET in the derived PASS verdict and recorded Testing.
+- SECUA: no blocking/major finding in scope. Read-only migration, stable mailbox identity, explicit
+  conflicts, existing lifecycle transports, and named unavailable states were checked as applicable.
+- Architecture: reuse existing application services and shared hooks; no new transport or duplicate
+  task. G1/G4 remain owners. 0849/0850 cleanup is explicitly deferred by Robin.
+- Validation: bun run spur-check — 8536 pass, 0 fail, lint/typecheck and pre/post rules pass;
+  bun run build and bun run test-cf — exit 0. Focused checks and concrete anchors are in Testing.
+- Release scope: 0846, 0847, 0848, 0851. Full G64 R5/R6 remain deferred, without a false retirement PASS.
 
-**Scope:** `git diff HEAD` + untracked `packages/app/src/services/legacy-migration.ts`,
-`packages/app/tests/services/legacy-migration.test.ts`, `packages/domain/src/dao/addressed-spec-ids.ts`,
-`packages/domain/tests/dao/addressed-spec-ids.test.ts` (+export lines in `packages/app/src/index.ts`,
-`packages/domain/src/dao/index.ts`).
-**Dimensions:** functional, security, efficiency, correctness, usability, architecture.
-**Verdict:** PASS — approve. No P1 (blocker) or P2 (major) findings.
-
-##### Findings (ranked)
-
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P3 (minor) | process | Task record `Solution`/`Testing` sections are unfilled placeholders — implementation/testing evidence is not recorded in the task file (review gathered fresh executable evidence instead); must be filled at verify/wrap | `docs/tasks4/0846_*.md` §Solution, §Testing |
-| 2 | P4 (advisory) | architecture | Service defines its own narrow read-only context slice instead of the Plan's "existing service context" — justified: the injected `fs`/`registry` ports are what make the R3 deny-write test possible; direct `loadAgentSpecs(configDir, fs)` is the same read `TeamService.listAgentSpecs` delegates to, and inline `resolve(base, work_dir)` matches `resolveWorkspaceDir` semantics | `packages/app/src/services/legacy-migration.ts:117-135`; `packages/app/src/services/team-service.ts:822-824,1034-1036` |
-| 3 | P4 (advisory) | correctness | `counts` tallies `legacy-flag-usage` artifacts under `retire` (matrix-consistent, §4 legacy-CLI row), so 0851's `counts.retire` mixes doc/workflow flag usages with spec retirements; the kind split is recoverable from `artifacts` | `packages/app/src/services/legacy-migration.ts:346-348,549-558` |
-| 4 | P4 (advisory) | usability | `spec-workspace-disagreement` names both sides in the message but carries only the spec file in `sources` (1 entry, consistent with the frozen "1 for a mismatch" contract); the team config key is only in the message | `packages/app/src/services/legacy-migration.ts:268-277` |
-| 5 | P4 (advisory) | correctness | derived-id-collision also skips tag-less on-disk holders, not only "different team tag" — correct per the preserve contract (materialize skips non-generated specs) and documented in-code | `packages/app/src/services/legacy-migration.ts:305-318`; `packages/app/src/services/team-service.ts:432` |
-| 6 | P4 (advisory) | efficiency | flag scan reads every file under `docs/` + `plugins/` into memory per run — acceptable for an operator-run evidence tool; fail-loud `ValueError` on a malformed/duplicate spec file aborts the whole inventory (deterministic; Design silent) | `packages/app/src/services/legacy-migration.ts:518-545,175` |
-
-##### Functional Traceability (P1)
-
-| Req | Status | Evidence |
-|-----|--------|----------|
-| R1 | MET | Five-step precedence chain verbatim `packages/app/src/services/legacy-migration.ts:222-301`; team-config artifacts :212-226; legacy-flag-usage scan :518-565 (§4 "Retire after no usage"); counts :346-348; classification test asserts all four dispositions (`packages/app/tests/services/legacy-migration.test.ts:96-141`, pass) |
-| R2 | MET | `preview()` :159-162 re-classifies fresh, projects steps, sets `blocked`; `preservesId` asserted character-for-character (test :330-364) — the assertion 0847 R2 inherits |
-| R3 | MET | Reads only: fs `exists`/`readDir`/`readFile` (:509-521,528); registry `readRaw()` not `list()` (:176; `list()` heals/writes — `packages/app/src/services/project-registry.ts:241-276`); DB through `SELECT DISTINCT` only (`packages/domain/src/dao/addressed-spec-ids.ts`); never `materializeTeam`/`teardownTeam`/`withLock` (source-scan test, test :456-461). Proven by mechanism: deny-writes proxy over every `FileSystem` write verb + tree-snapshot equality (test :441-454) |
-| R4 | MET | All five conflict kinds; `two-teams-one-project` dedupes to ONE conflict naming both config keys with "no merge is proposed" and no pick/winner anywhere in JSON (test :250-277); orphan named in both relink (:283-291) and retire (:292-299) branches; `addressedSpecIds` = sorted union of `inbox_messages.to_id` ∪ `coordination_runs.spec_id` (`packages/domain/src/dao/addressed-spec-ids.ts:15-18`; columns verified in `packages/domain/src/migrations.ts:30,159`) |
-| R5 | PARTIAL — gated, by design | Structured `MigrationPlan` is machine-readable at service level; the `--json`/human-output/exit-2 CLI surface is Plan step 7, gated on the §4 consent row — verified absent today (`docs/design/harness-surface-governance.md` §4 has no 0846/0847 row; no `migrate` verb in `apps/cli/src/commands/projects.ts`), exactly the Q&A gate. Intended gap; 0847 closes it after consent |
-
-AC scenarios: scenario 1 (preview before anything changes) MET via the deny-writes zero-write test on the full fixture; scenario 2 (conflict with both sources, no merge) MET via test :250-277.
-
-##### SECUA (P2)
-
-No security findings: zero-write by construction (verified against the actual `ProjectRegistry` and `FileSystem` implementations, not the comments); constant parameterless SQL; bounded flag regex; no secrets; no `console.*`/`Bun.spawnSync` in app code (grep-clean); correct layers (DAO read helper in `packages/domain` — sole ts-db consumer; service in `packages/app`; no transport wiring). The 'no such table' swallow in `distinctOrEmpty` follows the existing domain read-path precedent (`packages/domain/src/analytics/retro-correlation.ts:101` et al.) and is tested.
-
-##### Architecture (P3)
-
-Idempotence contract for 0847 holds: `preview()` never caches — each call re-runs `classify()`. `memberLocalId` is reused, never re-derived (:305-307,:373-377). Dedupe of conflicts by kind+sorted sources with shared identity across artifacts (test :274-276 asserts instance identity). Export surfaces match the diff claim (+15 app, +1 domain).
-
-##### Tests encode intent (P4)
-
-Every Plan step's stated test intent is present and asserts the WHY: step-2 precedence keeps a tagged hand-authored spec out of the convert set; warning-vs-conflict keeps `plan.blocked` false (0848's halt input); relink/retire routed on addressed rows in in-memory SQLite; verbatim `preservesId`; zero-write proven by mechanism, not diff review; flag scan discriminates role selectors (`agent: coder`) from spec ids (`--agent=web-coder`).
-
-**Verification run by review:** `cd packages/app && bun test tests/services/legacy-migration.test.ts` → 13 pass / 0 fail (78 expect); `cd packages/domain && bun test tests/dao/addressed-spec-ids.test.ts` → 3 pass / 0 fail; `bunx tsc --noEmit` in both workspaces → clean; `bunx biome check` on the six changed files → clean.
-
-**Residual risk:** R5's CLI half + exit-2 contract land in 0847 behind the consent row — consent row and verb must land together; human-output wording ("nothing to migrate", exit codes) is unverifiable until then. Finding #1 (empty Solution/Testing) must be closed at verify/wrap.
-
-**Next:** proceed to verify hop; fill §Solution/§Testing; keep step 7 unlanded until the consent row exists.
+| Priority | Dimension | Location | Finding / disposition |
+| --- | --- | --- | --- |
+| P4 | Traceability | Recorded Testing | All requirements and AC are MET; no unresolved blocking or major finding in this task. |
+| P4 | Release scope | G64 tasks 0849/0850 | Cleanup remains explicitly deferred by Robin; excluded from this four-task release and retained in full-feature gate findings. |
 
 ### References
 
