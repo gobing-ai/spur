@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-
+import type { ProcessStatus } from '../../../src/modules/projects/MemberTerminal';
 import { buildRoster, isOrchestratorEntry } from '../../../src/modules/projects/roster';
 import type { ProjectFleetSnapshot, ResolvedFleetMember } from '../../../src/modules/projects/useProjectContext';
-import type { ProcessStatus } from '../../../src/modules/teams/MemberTerminal';
 
 function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMember {
     return {

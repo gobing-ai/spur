@@ -51,7 +51,7 @@ export function sameRef(a: ConversationRef, b: ConversationRef): boolean {
 /**
  * Emit the deterministic envelope for a request with refs. A plain request
  * (no refs) stays a plain message — no prefix line — so `spur message` output
- * and the Inbox module see exactly the operator's text.
+ * and the member detail's message pane see exactly the operator's text.
  */
 export function encodeRequestEnvelope(text: string, refs: readonly ConversationRef[]): string {
     if (refs.length === 0) return text;

@@ -257,8 +257,9 @@ checkable against the repository — "remove when `config/workflows/` and `apps/
 bare-binary `--agent` value" qualifies; "remove when the binary-name form is unused" does not. A
 condition resolvable only by human judgement is rejected in review. Shims are registered by the
 tasks that create them: the mechanism shipped seeded empty with 0541; 0536/0537/0538/0542
-registered the four agent-role entries now in the manifest (`agent-bare-binary-name`,
-`spec-without-executor-field`, `agent-flag-spec-id`, `agent-default-executor`).
+registered the four agent-role entries, of which the manifest now carries three
+(`agent-bare-binary-name`, `spec-without-executor-field`, `agent-default-executor`) — task 0849
+removed `agent-flag-spec-id` once its scan proved no `--agent <spec-id>` caller remained.
 
 <a id="26-plugin-script-contract-manifest--gate-task-0600-adr-065"></a>
 

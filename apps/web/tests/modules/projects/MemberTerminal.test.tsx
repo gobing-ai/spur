@@ -4,7 +4,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { act, render, waitFor } from '@testing-library/react';
 import React from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
-import MemberTerminal, { parseProcessList, stdinUrl } from '../../../src/modules/teams/MemberTerminal';
+import MemberTerminal, { parseProcessList, stdinUrl } from '../../../src/modules/projects/MemberTerminal';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 /** Cast a mock fetch fn to typeof fetch (the real fetch has preconnect etc). */

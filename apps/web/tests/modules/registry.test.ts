@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
     createRegistry,
+    defaultModule,
     disableModule,
     enableModule,
     getEnabledModules,
@@ -86,6 +87,17 @@ describe('createRegistry', () => {
  * holding a handle from the Preact context. Coverage: lines 119/124/129.
  */
 describe('singleton registry instance', () => {
+    // 0849 R1: the retired modules (workspace 50, inbox 60, teams 70) are gone from disk, so the
+    // surviving declared orders are the whole enabled set in ascending order. This is the assertion
+    // that catches an accidental renumber — `projects` (45) must stay between `tasks` and nothing.
+    test('enabled modules are exactly the five surviving modules, in declared order', () => {
+        expect(getEnabledModules()).toEqual(['observability', 'history', 'features', 'tasks', 'projects']);
+    });
+
+    test('the default landing route is still observability (lowest declared order)', () => {
+        expect(defaultModule?.route).toBe('observability');
+    });
+
     test('getEnabledModules lists ids of all enabled modules', () => {
         // The singleton is seeded from the real discoverModules() fallback under bun test,
         // so it contains at least the `tasks` module.

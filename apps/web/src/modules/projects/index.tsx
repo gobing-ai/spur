@@ -8,8 +8,10 @@ export { default as ProjectsShell } from './ProjectsShell';
  *
  * Opens the SERVED project directly with Conversation, Agents, and Work tabs.
  * Auto-discovered by `apps/web/src/modules/discover.ts` — no wiring file
- * changes. `order: 45` sits above Workspace (50), Inbox (60), and Teams (70)
- * without renumbering them (R6; G64 owns retirement).
+ * changes. `order: 45` was set above Workspace (50), Inbox (60), and Teams (70)
+ * without renumbering them (0840 R6); those three modules were deleted by 0849
+ * and their routes redirect here, so this is now the lowest declared order after
+ * Observability (10), History (20), Features (30), and Tasks (40).
  */
 export const module: WebModule = {
     id: 'projects',

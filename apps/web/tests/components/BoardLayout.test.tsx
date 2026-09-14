@@ -8,7 +8,7 @@ import { resetLayoutState, STORAGE_KEY } from '../../src/lib/layout-state';
 import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
 import { modules } from '../../src/modules/registry';
 import type { WebModule } from '../../src/modules/types';
-import { createAppRouter, routes } from '../../src/router';
+import { createAppRouter, RETIRED_ROUTES, routes } from '../../src/router';
 import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
 /** The Tasks module is the contract for the kanban-board data-attribute assertions below. */
@@ -443,15 +443,58 @@ describe('router + module wiring', () => {
         expect(active?.getAttribute('href')).toBe(`/board/${TASKS_MODULE?.route}`);
     });
 
-    test('the route tree maps an index redirect plus two child routes per module', () => {
+    test('the route tree maps an index redirect, the retired-route redirects, and two child routes per module', () => {
         const boardRoute = routes.find((r) => r.path === '/board');
-        // One index redirect plus 2 children per module: `tasks` and `tasks/*`
-        expect(boardRoute?.children?.length).toBe(1 + modules.length * 2);
+        // One index redirect, two children per retired route (bare + wildcard), and two per module.
+        expect(boardRoute?.children?.length).toBe(1 + RETIRED_ROUTES.length * 2 + modules.length * 2);
         expect(boardRoute?.children?.some((c) => 'index' in c && c.index === true)).toBe(true);
         const childPaths = boardRoute?.children?.flatMap((c) => ('path' in c ? [c.path] : [])) ?? [];
         for (const mod of modules) {
             expect(childPaths).toContain(mod.route);
             expect(childPaths).toContain(`${mod.route}/*`);
+        }
+        for (const retired of RETIRED_ROUTES) {
+            expect(childPaths).toContain(retired.from);
+            expect(childPaths).toContain(`${retired.from}/*`);
+        }
+    });
+
+    // ── 0849 R2: retired Board routes keep their bookmarks working ──
+
+    test('retired board routes redirect into the Projects view that now owns the capability', async () => {
+        // The destination must carry the CAPABILITY, not merely the URL (0849 review P3):
+        // `useProjectTab` silently falls back to the default tab for an unknown segment, so a
+        // pathname-only assertion stays green even when the redirect lands on the wrong tab.
+        // Expected tabs are stated as data — deriving them from `RETIRED_ROUTES.to` would re-run the
+        // same fallback the app uses and could never fail on a stale tab id.
+        const EXPECTED_TAB: Record<string, string> = {
+            workspace: 'conversation', // /board/projects → the default tab
+            inbox: 'conversation',
+            teams: 'agents',
+        };
+        for (const retired of RETIRED_ROUTES) {
+            const router = createMemoryRouter(routes, { initialEntries: [`/board/${retired.from}`] });
+            const view = render(<RouterProvider router={router} />);
+            await waitFor(() => expect(router.state.location.pathname).toBe(retired.to));
+            const active = view.container.querySelector('[data-projects-tab][aria-selected="true"]');
+            expect(active?.getAttribute('data-projects-tab')).toBe(EXPECTED_TAB[retired.from]);
+            view.unmount();
+        }
+        expect(Object.keys(EXPECTED_TAB).sort()).toEqual(RETIRED_ROUTES.map((r) => r.from).sort());
+    });
+
+    test('retired board deep links redirect too, instead of 404ing on the wildcard', async () => {
+        for (const retired of RETIRED_ROUTES) {
+            const router = createMemoryRouter(routes, { initialEntries: [`/board/${retired.from}/anything`] });
+            const view = render(<RouterProvider router={router} />);
+            await waitFor(() => expect(router.state.location.pathname).toBe(retired.to));
+            view.unmount();
+        }
+    });
+
+    test('no enabled module reuses a retired route (a shadow would silently kill the redirect)', () => {
+        for (const retired of RETIRED_ROUTES) {
+            expect(modules.some((m) => m.route === retired.from)).toBe(false);
         }
     });
 

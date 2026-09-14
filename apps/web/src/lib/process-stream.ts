@@ -9,7 +9,8 @@ import { resolveApiUrl } from './rpc-client';
  * splices old frames from the front, so array indices shift under a live
  * cursor — the client MUST track `seq`, never index (supervisor-service.ts:14).
  *
- * Shared by the Teams member terminal and the Inbox agent timeline (0422 R9).
+ * Shared by the member terminal (`apps/web/src/modules/projects/MemberTerminal.tsx`; the Teams
+ * module that first used it was retired by 0849).
  */
 export interface Frame {
     stream: 'stdout' | 'stderr' | 'meta';

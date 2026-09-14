@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { useTeamsData } from '../../lib/use-teams-data';
-import { type ActivityRow, historyUrl, parseHistory } from '../teams/ActivityTab';
-import MemberTerminal from '../teams/MemberTerminal';
+import { type ActivityRow, historyUrl, parseHistory } from './activity-history';
 import { type InboxMessage, parseInboxMessages } from './conversation';
+import MemberTerminal from './MemberTerminal';
 import type { RosterEntry } from './roster';
 
 const inboxUrl = (agent: string) => `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;

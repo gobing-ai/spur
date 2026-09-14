@@ -76,7 +76,7 @@ async function renderShell(contextValue: Record<string, unknown>, initial = ['/b
 }
 
 describe('Projects module registration (0840 R6)', () => {
-    test('registers with unique id/route and order 45 (above Workspace 50)', () => {
+    test('registers with unique id/route and order 45, above every surviving module', () => {
         const discovered = discoverModules();
         const projects = discovered.find((m) => m.id === 'projects');
         expect(projects).toBeDefined();
@@ -85,7 +85,7 @@ describe('Projects module registration (0840 R6)', () => {
         expect(projectsModule.order).toBe(45);
         expect(discovered.filter((m) => m.id === 'projects')).toHaveLength(1);
         expect(discovered.filter((m) => m.route === 'projects')).toHaveLength(1);
-        expect(discovered.map((m) => m.id)).toHaveLength(8);
+        expect(discovered.map((m) => m.id)).toHaveLength(5);
     });
 });
 

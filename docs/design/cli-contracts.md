@@ -294,8 +294,8 @@ executor entry). An explicit selector never consults phase / `default-by-phase` 
 0542 R1) is matched against agent spec ids (`.spur/agents/<id>.yaml`); a match rewrites the
 selector to the spec's executor name before the executor-first lookup above runs, and the occupant
 pin `spec-id` is set before the rewrite so the ADR-057 wave 1 record persists. The legacy
-`--agent <spec-id>` still addresses the spec during the transition with a one-time warning (shim
-`agent-flag-spec-id`). The three selector
+`--agent <spec-id>` is still accepted as fallback addressing; task 0849 retired its `agent-flag-spec-id`
+deprecation warning once the flag-spec-id scan proved no caller remained. The three selector
 namespaces — role names (`scribe`/`coder`/`reviewer`/`planner`, task 0535), executor names, and
 spec ids — are proven pairwise disjoint at config load (0537 R4), so one `--agent` value can never
 mean two things; a config that collides them (executor named `coder`, member id shadowing an
@@ -346,7 +346,7 @@ project-relative files, never stdout/stderr bodies. A bare `spur agent run --age
 others including grok/hermes/opencode → `/plugin-command`).
 Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (`agent create`
 flags below), not from `run` flags. `--drain` resolves the addressed `--spec <id>` (or the legacy
-`--agent <spec-id>`, warned once) as an **agent
+`--agent <spec-id>` fallback, whose warn-once notice was retired by task 0849) as an **agent
 spec id** (a different namespace from the coding-agent type), folds that spec's pending inbox
 messages into the prompt, and rewrites `--agent` to the spec's **executor name** before dispatch
 (Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent). A

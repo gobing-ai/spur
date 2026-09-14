@@ -203,6 +203,21 @@ describe('lifecycle controls (0842 R6)', () => {
         expect(calls).toContainEqual({ url: '/api/team/agents/a1/stop', method: 'POST' });
         view.unmount();
     });
+
+    // Moved from the retired Teams SupervisorTab tests (0849 R5): the start verb is the
+    // same capability, now owned by this pane, and it was the one gap in the moved set.
+    test('a stopped member POSTs start to the existing endpoint, with no confirmation step', async () => {
+        setFetchForTesting(stubFetch());
+        const view = render(<MemberDetail entry={entry([], 'not-started')} onClose={() => {}} />);
+        await act(async () => {});
+        const start = view.container.querySelector('[data-member-start]') as HTMLButtonElement;
+        expect(start.disabled).toBe(false);
+        await act(async () => {
+            start.click();
+        });
+        expect(calls).toContainEqual({ url: '/api/team/agents/a1/start', method: 'POST' });
+        view.unmount();
+    });
 });
 
 describe('focus contract (0842 R4)', () => {

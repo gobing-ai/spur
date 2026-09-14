@@ -56,7 +56,7 @@ describe('ProjectProvider (0840 R4)', () => {
             if (req.url.endsWith('/project')) return jsonResponse({ name: 'spur', path: '/repo/wt' });
             return new Response('not found', { status: 404 });
         }) as typeof fetch);
-        renderProvider((v) => (latest = v), ['/board/inbox']);
+        renderProvider((v) => (latest = v), ['/board/projects']);
         await waitFor(() => expect(latest?.state).toBe('ready'));
         expect(latest?.path).toBe('/repo/wt');
         expect(latest?.name).toBe('spur');

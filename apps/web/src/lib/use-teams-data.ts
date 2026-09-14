@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from './rpc-client';
 
 // ── Team/member shapes returned by GET /api/team/teams (0256 R2) ──
-// Shared by TerminalTab, ActivityTab, and other Teams surfaces after 0268
-// extracted the duplicated polling + parsing out of each consumer.
+// After 0268 extracted the duplicated polling + parsing out of each Teams consumer, and after 0849
+// retired the Teams module, the surviving reader is `projects/MemberDetail.tsx` (workDir/model on
+// the member detail pane). Kept where it is rather than renamed: the server contract it mirrors
+// (`/api/team/teams`) still uses this vocabulary.
 export interface TeamMember {
     id: string;
     type: string;
@@ -83,8 +85,9 @@ export interface UseTeamsDataResult {
 }
 
 /**
- * Neutral shared teams feed (task 0197 R3). Moved out of the Teams module so
- * Teams, Inbox, and Workspace consume the same feed. Polls GET /api/team/teams
+ * Neutral shared teams feed (task 0197 R3). Moved out of the Teams module so the surfaces that
+ * needed it shared one feed; after 0849 retired Teams/Inbox/Workspace the surviving consumer is
+ * `projects/MemberDetail.tsx`. Polls GET /api/team/teams
  * every 5s with an AbortController-free fetchWithTimeout; exposes a `reload`
  * for the post-mutation refetch path. Callers own selection state — this hook
  * is purely the data layer (0268 R1, R3).

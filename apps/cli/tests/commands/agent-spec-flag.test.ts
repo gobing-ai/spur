@@ -1,22 +1,19 @@
 /**
  * `--spec <id>` occupant addressing (0542 R1).
  *
- * Lives in its own file so the legacy `--agent <spec-id>` drain tests in
- * agent.test.ts cannot consume the first warning before this file asserts on it.
- * A separate file is NOT a separate process, though — `bun test` batches several
- * files into one worker, so the process-global `warnAgentSpecIdOnce` set can
- * arrive warm (green on macOS, red on Linux CI where batching differs). The
- * `beforeEach` reset below is what actually makes "warns once, second call
- * silent" deterministic.
+ * The legacy `--agent <spec-id>` deprecation warning and its assertion were retired by task 0849
+ * (G64): the flag-spec-id scan proved no `--agent <spec-id>` caller remained, so the
+ * `agent-flag-spec-id` transition shim was deleted on both sides. The fallback addressing itself
+ * stays — only the warning went away.
  */
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type AgentConfig, TeamService } from '@gobing-ai/spur-app';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { _resetAgentFlagShimsForTest, runAgentRun } from '../../src/commands/agent';
+import { runAgentRun } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import type { CommandOutput } from '../../src/output';
 
@@ -36,10 +33,6 @@ function captureOutput(): CommandOutput & { stdout: string[]; stderr: string[] }
 }
 
 describe('runAgentRun --spec occupant addressing (0542 R1)', () => {
-    // The warn-once marker is process-global and bun batches test files per
-    // worker process — never inherit another file's marker state.
-    beforeEach(() => _resetAgentFlagShimsForTest());
-
     async function setupSpecCtx(): Promise<{
         tempDir: string;
         output: CommandOutput & { stdout: string[]; stderr: string[] };
@@ -93,25 +86,6 @@ describe('runAgentRun --spec occupant addressing (0542 R1)', () => {
             expect(prompt).toContain('Do step 1');
             // Canonical surface never warns about the legacy flag.
             expect(output.stderr.join('\n')).not.toContain('addressing a team spec via --agent');
-        } finally {
-            rmSync(tempDir, { recursive: true, force: true });
-        }
-    });
-
-    test('legacy --agent <spec-id> warns once and behaves identically (R1)', async () => {
-        const { tempDir, output, customCtx, run } = await setupSpecCtx();
-        try {
-            const code = await runAgentRun('Main task prompt', customCtx, { drain: true, agent: 'demo-spec' });
-            expect(code).toBe(0);
-            expect(run).toHaveBeenCalledTimes(1);
-            const [, flags] = run.mock.calls[0] as [string | undefined, Record<string, unknown>];
-            expect(flags['spec-id']).toBe('demo-spec');
-            expect(flags.agent).toBe('codex-sol');
-            // Fresh process: the first legacy use warns.
-            expect(output.stderr.join('\n')).toContain('addressing a team spec via --agent <spec-id> is deprecated');
-            // Second run warns no more (warn-once per process).
-            await runAgentRun('again', customCtx, { drain: true, agent: 'demo-spec' });
-            expect(output.stderr.join('\n').split('is deprecated').length - 1).toBe(1);
         } finally {
             rmSync(tempDir, { recursive: true, force: true });
         }

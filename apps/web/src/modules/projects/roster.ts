@@ -9,8 +9,9 @@
  * declared-but-not-running, and a live process with no declared member —
  * so they are never collapsed into one status (R2).
  */
-import type { ProcessStatus } from '../teams/MemberTerminal';
+
 import { OPERATOR_AGENT_ID } from './conversation';
+import type { ProcessStatus } from './MemberTerminal';
 import type { ProjectFleetSnapshot, ResolvedFleetMember } from './useProjectContext';
 
 /** Observed liveness narrowed to the roster's three-state vocabulary. */

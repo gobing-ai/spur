@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import { parseProcessList, STATUS_POLL_MS } from '../teams/MemberTerminal';
 import MemberDetail from './MemberDetail';
+import { parseProcessList, STATUS_POLL_MS } from './MemberTerminal';
 import { buildRoster, type MemberIssue, type RosterEntry } from './roster';
 import type { ProjectFleetSnapshot } from './useProjectContext';
 import { useProjectContext } from './useProjectContext';

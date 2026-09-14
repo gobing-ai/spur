@@ -16,13 +16,6 @@
             "removalCondition": "every spec under .spur/agents/ records an executor field (scan .spur/agents/*.yaml for the key; re-materialize the demo team first)"
         },
         {
-            "id": "agent-flag-spec-id",
-            "wbs": "0542",
-            "file": "apps/cli/src/commands/agent.ts",
-            "keepsWorking": "a team spec id passed to --agent <spec-id> still addresses the spec and drives the drain path, warned once by warnAgentSpecIdOnce; --spec <id> is the canonical carrier",
-            "removalCondition": "no --agent <spec-id> usage remains in config/workflows/, plugins/sp/, or docs/ (scan for --agent values that match a .spur/agents/ spec id)"
-        },
-        {
             "id": "agent-default-executor",
             "wbs": "0542",
             "file": "packages/app/src/services/agent-service.ts",

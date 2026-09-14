@@ -297,16 +297,16 @@ describe('GlobalAgentBar context, chips, and execution drawer', () => {
     });
 
     test('renders no chip set when module has no quick actions or is undefined', () => {
-        const workspaceModule: WebModule = {
-            id: 'workspace',
-            name: 'Workspace',
-            sidebarLabel: 'Workspace',
-            route: 'workspace',
+        const noActionModule: WebModule = {
+            id: 'projects',
+            name: 'Projects',
+            sidebarLabel: 'Projects',
+            route: 'projects',
             icon: '📂',
             component: () => null,
         };
 
-        const { getByTestId, queryByTestId, rerender } = render(<GlobalAgentBar activeModule={workspaceModule} />);
+        const { getByTestId, queryByTestId, rerender } = render(<GlobalAgentBar activeModule={noActionModule} />);
         fireEvent.click(getByTestId('agent-bar-dock'));
         expect(queryByTestId('agent-bar-chips')).toBeNull();
 

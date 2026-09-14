@@ -677,8 +677,9 @@ export async function runAgentRun(
  * carries no executor field — when a spec is found).
  *
  * R1 (0542): the spec id is read from `--spec <id>` (canonical). A spec id
- * passed to the legacy `--agent <spec-id>` still works during the transition,
- * warned once under the registered shim (`agent-flag-spec-id`). `spec-id` is
+ * passed to the legacy `--agent <spec-id>` is still accepted as fallback
+ * addressing; the deprecation warning was retired by 0849 once the flag-spec-id
+ * scan proved no caller remains. `spec-id` is
  * set BEFORE the rewrite so AgentService.executeRun can persist an occupant pin
  * (ADR-057 wave 1 R1) — the flag survives even when the inbox is empty, because
  * runAgentLoop relies on it.
@@ -698,10 +699,6 @@ async function drainIntoPrompt(
 
     const team = new TeamService(context);
     const spec = (await team.listAgentSpecs()).find((entry) => entry.id === recipient);
-    // Legacy `--agent <spec-id>` addressing: warn once per process (agent-flag-spec-id).
-    if (specFlag === '' && spec !== undefined) {
-        warnAgentSpecIdOnce(context);
-    }
     const flagsOut =
         spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: drainAgentSelector(spec, context) };
 
@@ -756,36 +753,6 @@ function drainAgentSelector(spec: AgentSpec, context: CliContext): string {
         );
     }
     return spec.executor;
-}
-
-/** Spec ids already warned via the legacy `--agent <spec-id>` path (warn once per process — 0542 R1). */
-const warnedAgentSpecId = new Set<string>();
-
-/**
- * One-time transition warning for addressing a team spec via the legacy
- * `--agent <spec-id>` flag; `--spec <id>` is the canonical carrier (0542 R1).
- * Warns once per process, so the supervised loop cannot spam stderr on every
- * drain iteration.
- */
-// @transition-shim(agent-flag-spec-id) — a team spec id passed to --agent still addresses the spec
-// during the transition, warned once; removal: no --agent <spec-id> usage remains in
-// .spur/workflows/, plugins/sp/, or docs/
-function warnAgentSpecIdOnce(context: CliContext): void {
-    if (warnedAgentSpecId.size > 0) return;
-    warnedAgentSpecId.add('*');
-    context.output.error(
-        'Warning: addressing a team spec via --agent <spec-id> is deprecated; use --spec <id> (config/transition-shims.json: agent-flag-spec-id).',
-    );
-}
-
-/**
- * Reset the process-global warn-once markers. Test seam: `bun test` batches
- * several test files per worker process, so a marker consumed by one file is
- * invisible to another on some platforms/schedules — assertions on first-warn
- * behavior must reset first.
- */
-export function _resetAgentFlagShimsForTest(): void {
-    warnedAgentSpecId.clear();
 }
 
 /** Default wakeup-backstop timeout for `spur agent loop` (ms) — `--poll` (0839 R5). */
@@ -1018,8 +985,9 @@ async function recordIdleHold(
  * Idle wakes cost no model call and no dispatch (R2). This is the long-lived,
  * attachable process — the member no longer dies after one successful drain.
  * Exits cleanly on abort (SIGINT/SIGTERM); crash-restart is the supervisor's
- * job. Legacy `--agent <id>` still works for the transition, warned once
- * (agent-flag-spec-id).
+ * job. Legacy `--agent <id>` addressing still works for the transition — the
+ * warn-once deprecation was retired by 0849 once the flag-spec-id scan proved no
+ * caller remained.
  */
 export async function runAgentLoop(
     context: CliContext,

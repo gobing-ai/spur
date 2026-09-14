@@ -42,7 +42,8 @@ interface OccupantRef {
 `specId` keeps the existing agent-spec alphabet (`[a-z][a-z0-9_-]{1,63}`). `runId` is a UUID minted at invoke start (`agent.invoke.start` already carries correlation `runId` in some paths; Wave 1 makes it the pin).
 
 **Rewrite rule (0537 / 0542):** a spec-addressed run — `--spec <id>` (canonical since 0542 R1), or
-the legacy `--agent <specId>` (warned once, shim `agent-flag-spec-id`) — rewrites `--agent` to the
+the legacy `--agent <specId>` fallback (its warn-once notice retired by task 0849) — rewrites
+`--agent` to the
 spec's **executor name** when the spec records one (task 0537: restores the operator's
 `{ agent, model }` + tier through `resolveExecutor`), falling back to the spec's coding-agent type
 only via the `spec-without-executor-field` shim. A spec whose executor is absent from

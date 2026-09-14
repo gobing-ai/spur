@@ -56,7 +56,7 @@ through a coding agent as an external process, producing a persisted run record 
 | `--mode <mode>` | Agent output mode: `text` or `json`. |
 | `--continue` | Resume the previous agent session instead of starting fresh. |
 | `--cwd <path>` | Working directory for agent execution (default: current directory). |
-| `--spec <id>` | Team agent spec id (occupant addressing, 0542 R1). Pairs with `--drain`; with `--spec` alone the run is addressed to the occupant without touching the inbox. A legacy `--agent <spec-id>` still works during the transition with a one-time warning (shim `agent-flag-spec-id`). |
+| `--spec <id>` | Team agent spec id (occupant addressing, 0542 R1). Pairs with `--drain`; with `--spec` alone the run is addressed to the occupant without touching the inbox. A legacy `--agent <spec-id>` is still accepted as fallback addressing (task 0849 retired the `agent-flag-spec-id` deprecation warning). |
 | `--drain` | Prepend pending inbox messages addressed to `--spec <id>` before the prompt. |
 | `--json` | Output machine-readable JSON where supported. |
 | `--json-envelope` | Wrap JSON using the facade's standard output contract. |

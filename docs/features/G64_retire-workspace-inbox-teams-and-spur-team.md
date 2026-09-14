@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-14T01:08:50.776Z"
+updated_at: "2026-09-14T14:19:04.054Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -89,7 +89,7 @@ Feature: Retire Workspace, Inbox, Teams, and spur team
     Given Workspace, Inbox, and Teams routes and bookmarks
     When the navigation entries are removed
     Then existing routes redirect into the equivalent Projects view
-    And no Board capability is unreachable
+    And no Board capability is unreachable, or its reduction is operator-accepted and owned
 
   @core
   Scenario: R6 — Superseded authority is corrected at its owner
@@ -97,6 +97,13 @@ Feature: Retire Workspace, Inbox, Teams, and spur team
     When this feature completes
     Then the supersession is recorded in docs/00_ADR.md with its replacement
     And architecture, design satellites, CLI references, and init templates match the shipped surface
+
+  @core
+  Scenario: R7 — The spec-id shim retires only when unused
+    Given the --agent spec-id warn-once shim
+    When no workflow or plugin caller remains
+    Then the shim is removed
+
 ```
 
 ## Tasks
@@ -107,9 +114,11 @@ Feature: Retire Workspace, Inbox, Teams, and spur team
 | 0846 | Migration inventory and dry-run preview with conflict reporting | done |
 | 0847 | Roster conversion with verbatim spec-ID preservation and rollback | done |
 | 0848 | Retire spur team after migrating its callers to owning nouns | done |
-| 0849 | Retire Workspace, Inbox, and Teams board routes with redirects | cancelled |
-| 0850 | Reconcile superseded authority across ADRs, architecture, and templates | cancelled |
+| 0849 | Retire Workspace, Inbox, and Teams board routes with redirects | testing |
+| 0850 | Reconcile superseded authority across ADRs, architecture, and templates | todo |
 | 0851 | Reconcile M6, M3, G1, and G4 remaining work into this program | done |
+| 0852 | Restore Board reachability for the retired process watch list (executions + filters) | backlog |
+| 0853 | Record ownership for the retired Teams supervisor facets (uptime, live activity, team up/down) | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -220,9 +229,14 @@ the task Designs encode.
 
 ### Still Robin's, unchanged
 
-- **The cutover window.** 0848's shim removal condition, 0849's merge gate, and 0850's deletion of
-  the superseded reference files all name this record as their trigger. Nothing destructive proceeds
-  until a date appears here.
+- **The cutover window — RECORDED, 2026-09-14.** 0848's shim removal condition, 0849's merge gate,
+  and 0850's deletion of the superseded reference files all name this record as their trigger.
+  Robin authorized the Board retirement to proceed in session on 2026-09-14 (task 0849 run):
+  **the cutover window is open as of 2026-09-14**, so the destructive steps in 0849 (module
+  deletion, redirects, shim removal) may land. G61/G62/G63 are functionally complete and 0840–0848
+  and 0851 are `done`. Rollback lever unchanged: `apps/web/src/modules/config.ts`'s
+  `disabledModules` is not used by 0849, and the redirect table is static, so a revert of the
+  retirement commit restores the three modules without touching routes.
 - **Public-surface consent** for `spur projects migrate` (0846/0847) and for 0848's two verbs, one
   flag, and output change. Both rows are drafted in their task Designs, granted by nobody yet.
 
@@ -247,6 +261,23 @@ Every retirement-dependent item has a concrete existing task (0849 or 0850), inc
 status and re-enable owner. The non-cleanup residual is implemented; no duplicate task was created.
 The G64 roster remains exactly 0846–0851. The four included tasks can be verified independently;
 full G64 R5/R6 retirement readiness stays pending until 0849/0850 are re-enabled and pass.
+
+### Supersession — 2026-09-14, tasks 0849/0850 executed
+
+The staging block above is history, not current state. Task 0849 ran on 2026-09-14 with the cutover
+window recorded (see "Still Robin's, unchanged"), which re-enables the destructive steps: the
+Workspace/Inbox/Teams modules and their routes are retired behind redirects, and the
+`agent-flag-spec-id` shim is deleted on both sides. Task 0850's ADR-116 supersession follows from the
+same window opening. The 2026-09-13 note's "no retirement merge is claimed to exist" is therefore
+superseded by 0849's retirement commit.
+
+Two facets that 0849's Design did not carry into Projects are owned rather than silently dropped: the
+process watch list (task 0852) and the 0378 supervisor facets — uptime, live roster activity, team
+up/down (task 0853). On this run's verify report (PARTIAL on R2/AC1 and on R5's deleted-not-moved test
+groups), **Robin accepted the reduction on 2026-09-14** rather than restoring them: 0852 and 0853 stay
+backlog owners for any future reinstatement, and the amended R2 reads "no Board capability becomes
+unreachable without a recorded, operator-accepted reduction that names its owning task". The redirect
+half is delivered and verified — resolved path, landing tab, deep links, and the shadow guard.
 
 ## History
 
