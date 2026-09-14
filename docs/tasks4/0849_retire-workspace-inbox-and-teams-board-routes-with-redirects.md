@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 name: Retire Workspace, Inbox, and Teams board routes with redirects
-status: cancelled
+status: todo
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
 updated_at: "2026-09-13T20:15:14.135Z"
@@ -136,14 +136,14 @@ not survive a read of the current tree:
 
 **WHERE.**
 
-| Change | Files |
-| --- | --- |
-| Delete modules | `apps/web/src/modules/{workspace,inbox,teams}/` — minus the moved file below |
-| Move (not delete) | `apps/web/src/modules/teams/MemberTerminal.tsx` → `apps/web/src/modules/projects/MemberTerminal.tsx`; update 0842's import |
-| Redirects | `apps/web/src/router.tsx` — new `RETIRED_ROUTES` table |
-| Tests | `apps/web/tests/modules/{workspace,inbox,teams}/**`, `tests/lib/use-teams-data.test.ts`, plus reference updates in `tests/components/{BoardLayout,GlobalAgentBar}.test.tsx` |
-| Shim | `apps/cli/src/commands/agent.ts` marker + `config/transition-shims.json` entry `agent-flag-spec-id` |
-| Untouched | `apps/web/src/lib/process-stream.ts` (MemberTerminal's transport), `apps/server/src/modules/team/` (G63 consumes `/api/team/*`), `packages/app/src/services/team-service.ts` |
+| Change            | Files                                                                                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delete modules    | `apps/web/src/modules/{workspace,inbox,teams}/` — minus the moved file below                                                                                                 |
+| Move (not delete) | `apps/web/src/modules/teams/MemberTerminal.tsx` → `apps/web/src/modules/projects/MemberTerminal.tsx`; update 0842's import                                                   |
+| Redirects         | `apps/web/src/router.tsx` — new `RETIRED_ROUTES` table                                                                                                                       |
+| Tests             | `apps/web/tests/modules/{workspace,inbox,teams}/**`, `tests/lib/use-teams-data.test.ts`, plus reference updates in `tests/components/{BoardLayout,GlobalAgentBar}.test.tsx`  |
+| Shim              | `apps/cli/src/commands/agent.ts` marker + `config/transition-shims.json` entry `agent-flag-spec-id`                                                                          |
+| Untouched         | `apps/web/src/lib/process-stream.ts` (MemberTerminal's transport), `apps/server/src/modules/team/` (G63 consumes `/api/team/*`), `packages/app/src/services/team-service.ts` |
 
 **Redirect table (R2), frozen.** A static array, because `router.tsx` derives every route from
 `modules.flatMap(...)` — once a module directory is gone there is no route object left to attach a
@@ -152,13 +152,13 @@ redirect to. Both the bare path and its wildcard are registered so deep links do
 ```ts
 // router.tsx
 export const RETIRED_ROUTES: ReadonlyArray<{ from: string; to: string }> = [
-    { from: 'workspace', to: '/board/projects' },
-    { from: 'inbox', to: '/board/projects/conversation' },
-    { from: 'teams', to: '/board/projects/agents' },
+  { from: "workspace", to: "/board/projects" },
+  { from: "inbox", to: "/board/projects/conversation" },
+  { from: "teams", to: "/board/projects/agents" },
 ];
 ```
 
-rendered as `{ path: from, element: <Navigate to={to} replace /> }` plus `{ path: `${from}/*`, … }`
+rendered as `{ path: from, element: <Navigate to={to} replace /> }` plus `{ path: `${from}/\*`, … }`
 inside the existing `/board` children array. Targets follow the capability, not the name: Workspace's
 default tab was Overview (a project summary the Projects header now carries), Inbox is the durable
 message plane (Conversation, 0841), Teams is the roster and member terminal (Agents, 0842).
@@ -169,7 +169,7 @@ so registering them as a shim would create a manifest entry that can never be re
 of the gate's purpose. Three `Navigate` elements are cheaper than the machinery.
 
 **Shim removal (R3) is a two-sided delete in one commit.** `transition-shim-check` fails on an
-unregistered marker *and* on a registered entry whose marker is gone, so deleting
+unregistered marker _and_ on a registered entry whose marker is gone, so deleting
 `warnAgentSpecIdOnce` + its `@transition-shim(agent-flag-spec-id)` marker and the manifest entry must
 land together. The evidence is 0846's `legacy-flag-usage` artifact kind, which already scans for
 `--agent <spec-id>` usage; a repo-wide grep at refine time found none — only role and executor values.
@@ -181,17 +181,17 @@ window is recorded in G64's Notes. If Robin wants a reversible canary first, the
 without deleting anything, and the redirect table works either way — the routes are static, not
 derived. That is the rollback lever, not a required step.
 
-**Test migration (R5), by kind.** Tests that assert a *capability* move to the Projects test that owns
-that capability; tests that assert a *deleted composition shell* go with it:
+**Test migration (R5), by kind.** Tests that assert a _capability_ move to the Projects test that owns
+that capability; tests that assert a _deleted composition shell_ go with it:
 
-| Test | Disposition |
-| --- | --- |
-| `tests/modules/teams/MemberTerminal.test.tsx` | moves with the file to `tests/modules/projects/` |
-| `tests/modules/teams/{tabs,components}.test.ts(x)` | roster/terminal assertions merge into 0842's Agents tests |
-| `tests/modules/inbox/{tabs,inbox}.test.ts(x)` | message-plane assertions merge into 0841's Conversation tests |
-| `tests/modules/workspace/**` | deleted — Workspace was a composition of the other three; it asserts no capability of its own |
-| `tests/lib/use-teams-data.test.ts` | deleted **only if** the hook is orphaned (see below) |
-| `tests/components/{BoardLayout,GlobalAgentBar}.test.tsx` | references updated in place; never deleted |
+| Test                                                     | Disposition                                                                                   |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `tests/modules/teams/MemberTerminal.test.tsx`            | moves with the file to `tests/modules/projects/`                                              |
+| `tests/modules/teams/{tabs,components}.test.ts(x)`       | roster/terminal assertions merge into 0842's Agents tests                                     |
+| `tests/modules/inbox/{tabs,inbox}.test.ts(x)`            | message-plane assertions merge into 0841's Conversation tests                                 |
+| `tests/modules/workspace/**`                             | deleted — Workspace was a composition of the other three; it asserts no capability of its own |
+| `tests/lib/use-teams-data.test.ts`                       | deleted **only if** the hook is orphaned (see below)                                          |
+| `tests/components/{BoardLayout,GlobalAgentBar}.test.tsx` | references updated in place; never deleted                                                    |
 
 **`useTeamsData` is expected to be orphaned, and that is checked, not assumed.** Its only importers
 today are `InboxShell`, `WorkspaceShell`, `OverviewTab`, and three `teams/` tabs — all deleted here.
@@ -219,48 +219,48 @@ scope (Workspace Overview removal, Inbox/Teams label split) is entirely on the s
 1. **Confirm G63 is functionally complete before touching anything.** `spur task show` each of
    0840–0845 and require every one to be `done` (all six are `todo` as of this refine), and confirm
    the Projects module actually renders Conversation, Agents, and Work. If any is not, stop — R1
-   makes this a precondition, not a checklist item. *(R1)*
+   makes this a precondition, not a checklist item. _(R1)_
 2. **Confirm the cutover window is recorded** in
    `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md` Notes. No merge without it.
-   *(R4)*
+   _(R4)_
 3. **Move `MemberTerminal`.** `git mv apps/web/src/modules/teams/MemberTerminal.tsx
-   apps/web/src/modules/projects/MemberTerminal.tsx` and `git mv` its test to
+apps/web/src/modules/projects/MemberTerminal.tsx` and `git mv` its test to
    `apps/web/tests/modules/projects/`. Update the import in 0842's `MemberDetail.tsx` from
    `../teams/MemberTerminal` to `./MemberTerminal`. Its `process-stream.ts` import is unchanged.
-   *Test:* the moved test passes unedited except for its import path — proof the component was moved,
-   not rewritten. *(R2)*
+   _Test:_ the moved test passes unedited except for its import path — proof the component was moved,
+   not rewritten. _(R2)_
 4. **Add the redirect table** to `apps/web/src/router.tsx` exactly as frozen in the Design, with both
-   the bare path and the `${from}/*` wildcard for each of the three entries. *(R2)*
+   the bare path and the `${from}/*` wildcard for each of the three entries. _(R2)_
 5. **Test intent — redirects.** Mount the memory router at `/board/teams`, `/board/inbox`,
    `/board/workspace`, and at a sub-path of each (`/board/teams/anything`), and assert the resolved
    location is the mapped Projects route. Add one guard asserting no enabled module's `route` equals
    a `RETIRED_ROUTES.from` value — a future module reusing the `inbox` route would shadow the
-   redirect silently. *(R2)*
+   redirect silently. _(R2)_
 6. **Delete the three module directories** (`workspace/`, `inbox/`, `teams/` — the latter now minus
    `MemberTerminal.tsx`). Discovery is directory-based, so deletion is the whole removal: the
-   registry, the sidebar, and the derived routes all follow. *(R1)*
+   registry, the sidebar, and the derived routes all follow. _(R1)_
 7. **Test intent — registry after removal.** Assert `getEnabledModules()` is exactly
    `['observability', 'history', 'features', 'tasks', 'projects']` in that order, and that
    `defaultModule.route === 'observability'` — the assertion that catches an accidental `order`
-   renumber. *(R1)*
+   renumber. _(R1)_
 8. **Migrate the tests per the Design's disposition table.** Merge the teams roster/terminal
    assertions into 0842's Agents tests and the inbox message-plane assertions into 0841's
    Conversation tests; delete only `tests/modules/workspace/**`. Update the retired-module references
    in `tests/components/BoardLayout.test.tsx` and `tests/components/GlobalAgentBar.test.tsx` in place.
-   *(R5)*
+   _(R5)_
 9. **Retire `useTeamsData` only if orphaned.** `rg -n "use-teams-data" apps/web/src`; on zero hits
    delete `apps/web/src/lib/use-teams-data.ts` and `apps/web/tests/lib/use-teams-data.test.ts`. On
-   any hit, keep both and record the surviving consumer in the Solution section. *(R5)*
+   any hit, keep both and record the surviving consumer in the Solution section. _(R5)_
 10. **Prove the `--agent <spec-id>` shim is unused.** Run 0846's `legacy-flag-usage` scan, or
     equivalently `rg -n -- "--agent " config/workflows .spur/workflows plugins/sp docs scripts` and
     check each hit against the spec ids under `.spur/agents/`. A single spec-id hit stops step 11.
-    *(R3)*
+    _(R3)_
 11. **Remove the shim on both sides in one commit:** delete `warnAgentSpecIdOnce` and its
     `@transition-shim(agent-flag-spec-id)` marker in `apps/cli/src/commands/agent.ts`, delete every
     call site, and delete the `agent-flag-spec-id` entry from `config/transition-shims.json`. Leave
-    the three sibling entries alone. *Test:* `bun run transition-shim-check` passes; a deliberate
+    the three sibling entries alone. _Test:_ `bun run transition-shim-check` passes; a deliberate
     half-removal (entry kept, marker gone) fails it — assert both directions so the gate is proven,
-    not trusted. *(R3)*
+    not trusted. _(R3)_
 12. **Gate.** `cd apps/web && bun test`, then `bun run spur-check`, then `spur task check 0849`.
     Record in the Solution section the three redirects with their targets, the moved file, and the
     orphan decision from step 9.
@@ -275,18 +275,19 @@ scope (Workspace Overview removal, Inbox/Teams label split) is entirely on the s
 
 - Verdict: FAIL (from verdict artifact)
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | UNMET | `apps/web/src/modules/workspace/index.tsx:13`; `apps/web/src/modules/inbox/index.tsx:14`; `apps/web/src/modules/teams/index.tsx:13` — all legacy modules remain registered; refreshed local verification scratch `.spur/run/0849-verify-answer.txt` lines 1-37 and derived `.spur/run/0849-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
-| R2 | UNMET | `apps/web/src/router.tsx:15` — routes are still generated from legacy modules; no retirement redirects |
-| R3 | UNMET | `apps/cli/src/commands/agent.ts:773` — spec-id warning shim remains |
-| R4 | MET | No cutover/removal performed; task remains cancelled under commit 4cc0f9d65 |
-| R5 | UNMET | `apps/web/src/modules/projects/MemberDetail.tsx:4` — Projects still imports the Teams terminal; module/test migration did not occur |
+| Requirement | Status | Evidence                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1          | UNMET  | `apps/web/src/modules/workspace/index.tsx:13`; `apps/web/src/modules/inbox/index.tsx:14`; `apps/web/src/modules/teams/index.tsx:13` — all legacy modules remain registered; refreshed local verification scratch `.spur/run/0849-verify-answer.txt` lines 1-37 and derived `.spur/run/0849-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R2          | UNMET  | `apps/web/src/router.tsx:15` — routes are still generated from legacy modules; no retirement redirects                                                                                                                                                                                                                                                                                        |
+| R3          | UNMET  | `apps/cli/src/commands/agent.ts:773` — spec-id warning shim remains                                                                                                                                                                                                                                                                                                                           |
+| R4          | MET    | No cutover/removal performed; task remains cancelled under commit 4cc0f9d65                                                                                                                                                                                                                                                                                                                   |
+| R5          | UNMET  | `apps/web/src/modules/projects/MemberDetail.tsx:4` — Projects still imports the Teams terminal; module/test migration did not occur                                                                                                                                                                                                                                                           |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: Board routes retire with a migration path | UNMET | command | Current router and module registrations inspected: no legacy-to-Projects redirects; all three legacy routes remain |
-| Scenario: The spec-id shim retires only when unused | UNMET | command | `apps/cli/src/commands/agent.ts:773` and transition-shim manifest still contain agent-flag-spec-id |
+| Acceptance Criteria                                 | Status | Evidence Type | Evidence                                                                                                           |
+| --------------------------------------------------- | ------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Scenario: Board routes retire with a migration path | UNMET  | command       | Current router and module registrations inspected: no legacy-to-Projects redirects; all three legacy routes remain |
+| Scenario: The spec-id shim retires only when unused | UNMET  | command       | `apps/cli/src/commands/agent.ts:773` and transition-shim manifest still contain agent-flag-spec-id                 |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -295,14 +296,14 @@ scope (Workspace Overview removal, Inbox/Teams label split) is entirely on the s
 
 **SECU findings** (pipeline verify step — verdict: FAIL)
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | NOT DONE: removal, redirects and shim retirement. The explicit cancellation is preserved; --force re-audits evidence and does not authorize a breaking cutover. |
-| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
-| P4 | task-check | — | spur task check 0849 --strict-core --json — exit 0 |
-| P4 | secua-review | — | Cancelled-as-superseded claim is not supported by the shipping route/shim surface. Requires explicit disposition or cutover authorization. |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| Priority | Dimension          | Location | Finding                                                                                                                                                                      |
+| -------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P4       | spur task check    | —        | task check passed                                                                                                                                                            |
+| P4       | design-conformance | —        | NOT DONE: removal, redirects and shim retirement. The explicit cancellation is preserved; --force re-audits evidence and does not authorize a breaking cutover.              |
+| P4       | scoped-checks      | —        | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
+| P4       | task-check         | —        | spur task check 0849 --strict-core --json — exit 0                                                                                                                           |
+| P4       | secua-review       | —        | Cancelled-as-superseded claim is not supported by the shipping route/shim surface. Requires explicit disposition or cutover authorization.                                   |
+| P4       | evidence-rule-pass | —        | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral.                                                                                      |
 
 ### References
 
@@ -314,4 +315,3 @@ scope (Workspace Overview removal, Inbox/Teams label split) is entirely on the s
 ### History
 
 - 2026-09-13T15:10:05.371Z todo → cancelled (system)
-

@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 name: Reconcile superseded authority across ADRs, architecture, and templates
-status: cancelled
+status: todo
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
 updated_at: "2026-09-13T20:15:14.583Z"
@@ -150,30 +150,30 @@ forbids.
 **Owner inventory (R3), verified against the tree at refine time.** Each row was located, not
 assumed; anything not on this list stays untouched.
 
-| Owner | Change | Trigger |
-| --- | --- | --- |
-| `docs/00_ADR.md:500` | status → `Superseded by ADR-116` | R1 |
-| `docs/00_ADR.md` (append) | ADR-116 as frozen above | R1 |
-| `docs/03_ARCHITECTURE.md` §14 (`:496` heading, `:530` §14.3, `:534`, `:555`, `:658`) | retitle §14 to project-scoped composition; replace the `teamId` scope description and the Workspace ⊃ Tasks embed rule with the Projects tab contract | R3 |
-| `docs/04_DESIGN.md:62,67,75` | satellite rows for Inbox / Workspace / board-boundaries marked superseded | R3 |
-| `docs/04_DESIGN.md:143` | `spur team` verb block gains the deprecation note and the 0848 replacements | R3 |
-| `docs/design/workspace-design.md` · `inbox-board-module.md` · `board-module-boundaries.md` | **superseded banner at the head only**; bodies untouched | R2 + R3 |
-| `docs/design/project-switcher.md` | new § describing `.spur/fleet.json` and fleet resolution; `owns:` widened | R3 |
-| `docs/01_PRD.md:65,96` | capability rows naming `spur team` → the owning nouns | R3 |
-| `plugins/sp/skills/spur-cli/references/team.md` | deprecation header + per-verb replacement table | R3 |
-| `…/references/agent.md:94,179,219,226` · `self.md:98,108` · `message.md:132` | cross-references to `spur team up/start/stop` | R3 |
-| `…/references/projects.md` | `--fleet`, and `migrate` if 0846's consent row was granted | R3 |
-| `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:131` | supervisor→member dispatch row | R3 |
-| `docs/help2/{team,index,agent,serve,message,daily-development-workflow}.md` | end-user help; hand-maintained, no generator | R3 |
-| `config/config.example.yaml:183-184` | the `agent.team` template block → fleet | **R4** |
+| Owner                                                                                      | Change                                                                                                                                                | Trigger |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `docs/00_ADR.md:500`                                                                       | status → `Superseded by ADR-116`                                                                                                                      | R1      |
+| `docs/00_ADR.md` (append)                                                                  | ADR-116 as frozen above                                                                                                                               | R1      |
+| `docs/03_ARCHITECTURE.md` §14 (`:496` heading, `:530` §14.3, `:534`, `:555`, `:658`)       | retitle §14 to project-scoped composition; replace the `teamId` scope description and the Workspace ⊃ Tasks embed rule with the Projects tab contract | R3      |
+| `docs/04_DESIGN.md:62,67,75`                                                               | satellite rows for Inbox / Workspace / board-boundaries marked superseded                                                                             | R3      |
+| `docs/04_DESIGN.md:143`                                                                    | `spur team` verb block gains the deprecation note and the 0848 replacements                                                                           | R3      |
+| `docs/design/workspace-design.md` · `inbox-board-module.md` · `board-module-boundaries.md` | **superseded banner at the head only**; bodies untouched                                                                                              | R2 + R3 |
+| `docs/design/project-switcher.md`                                                          | new § describing `.spur/fleet.json` and fleet resolution; `owns:` widened                                                                             | R3      |
+| `docs/01_PRD.md:65,96`                                                                     | capability rows naming `spur team` → the owning nouns                                                                                                 | R3      |
+| `plugins/sp/skills/spur-cli/references/team.md`                                            | deprecation header + per-verb replacement table                                                                                                       | R3      |
+| `…/references/agent.md:94,179,219,226` · `self.md:98,108` · `message.md:132`               | cross-references to `spur team up/start/stop`                                                                                                         | R3      |
+| `…/references/projects.md`                                                                 | `--fleet`, and `migrate` if 0846's consent row was granted                                                                                            | R3      |
+| `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:131`                  | supervisor→member dispatch row                                                                                                                        | R3      |
+| `docs/help2/{team,index,agent,serve,message,daily-development-workflow}.md`                | end-user help; hand-maintained, no generator                                                                                                          | R3      |
+| `config/config.example.yaml:183-184`                                                       | the `agent.team` template block → fleet                                                                                                               | **R4**  |
 
 **R4's one real portable artifact is `config/config.example.yaml`.** `apps/cli/src/commands/init.ts:170`
 seeds it as `~/.config/spur/config.yaml` on first run, so its `# Declarative teams (feature M) —
-materialize with \`spur team up <teamId>\`` comment at `:183` is what every new project inherits.
+materialize with \`spur team up <teamId>\``comment at`:183` is what every new project inherits.
 Leaving it is how a retired concept keeps being taught to new installs.
 
-**Sequencing correction — the noun still exists when this task runs.** 0848 ships a *deprecation
-warning*, not a removal: the six verbs keep working until Robin's cutover window. This task therefore
+**Sequencing correction — the noun still exists when this task runs.** 0848 ships a _deprecation
+warning_, not a removal: the six verbs keep working until Robin's cutover window. This task therefore
 **documents the deprecation with replacements**, and does not delete `team.md` or the `spur team`
 help page. Deleting them here would make the references contradict the shipped CLI, which is the
 exact failure R3 exists to prevent.
@@ -201,47 +201,47 @@ this program. Nothing in 0851 depends on this task's text beyond ADR-116 existin
 
 1. **Re-verify the ADR ceiling before allocating.** `grep -n "^## ADR-" docs/00_ADR.md | tail -1` must
    still show ADR-115. If another feature has landed 116 in the meantime, take the next free number
-   and update every reference in this task's Design in the same edit. *(R1)*
+   and update every reference in this task's Design in the same edit. _(R1)_
 2. **Flip ADR-052's status line** at `docs/00_ADR.md:500` to `**Status:** Superseded by ADR-116`,
-   leaving date, feature, `Supersedes: ADR-042`, Decision, Why, and Detail byte-identical. *(R1, R2)*
+   leaving date, feature, `Supersedes: ADR-042`, Decision, Why, and Detail byte-identical. _(R1, R2)_
 3. **Append ADR-116** exactly as frozen in the Design, with the ship date filled in and the Retains
-   line naming ADR-037, ADR-057, and ADR-022. *(R1, R2)*
+   line naming ADR-037, ADR-057, and ADR-022. _(R1, R2)_
 4. **Test intent — the supersession is machine-checkable.** A docs test asserting (a) ADR-052's status
    line reads `Superseded by ADR-116`, (b) ADR-116 exists with a `Supersedes: ADR-052` field, and
    (c) no ADR before 116 changed in this commit (`git diff --stat docs/00_ADR.md` touches only the two
-   known line ranges). (c) is what makes R2 an assertion rather than a promise. *(R1, R2)*
+   known line ranges). (c) is what makes R2 an assertion rather than a promise. _(R1, R2)_
 5. **Rewrite `docs/03_ARCHITECTURE.md` §14** — retitle the heading at `:496` and replace §14.3's
    accepted-boundary text (`:530-534`) and the Workspace ⊃ Tasks embed rule (`:555`) with the
    project-scoped equivalent: fleet resolution, the Projects tab contract from 0840, and the Inbox
-   `mergeTimeline` note at `:658` re-pointed at the Conversation tab. *(R3)*
+   `mergeTimeline` note at `:658` re-pointed at the Conversation tab. _(R3)_
 6. **Banner the three superseded satellites** — `workspace-design.md`, `inbox-board-module.md`,
    `board-module-boundaries.md` — with a one-line head note naming ADR-116 and the replacement
-   surface. Do not edit their bodies. *(R2, R3)*
+   surface. Do not edit their bodies. _(R2, R3)_
 7. **Extend `docs/design/project-switcher.md`** with the fleet section (`.spur/fleet.json` shape from
    0835, `FleetService` resolution, the Projects module's three tabs) and widen its `owns:` line to
-   cover the project fleet. *(R3)*
+   cover the project fleet. _(R3)_
 8. **Update `docs/04_DESIGN.md`** rows `:62`, `:67`, `:75` to mark the superseded satellites, and the
    `spur team` verb block at `:143` to carry the deprecation plus the replacement shapes 0848 shipped.
-   *(R3)*
+   _(R3)_
 9. **Update `docs/01_PRD.md:65,96`** so the capability rows name the owning nouns instead of
-   `spur team`. Touch nothing else in the PRD. *(R3, R5)*
+   `spur team`. Touch nothing else in the PRD. _(R3, R5)_
 10. **Update the plugin references** — `team.md` (deprecation header + per-verb replacement table),
     the cross-references in `agent.md:94,179,219,226`, `self.md:98,108`, `message.md:132`,
     `projects.md` (`--fleet`, plus `migrate` only if 0846's consent row was granted), and
-    `parallel-execution/references/dispatch-surface.md:131`. *(R3)*
+    `parallel-execution/references/dispatch-surface.md:131`. _(R3)_
 11. **Update `docs/help2/`** — `team.md` gains the deprecation and replacement table; `index.md`,
     `agent.md`, `serve.md`, `message.md`, and `daily-development-workflow.md` get their `spur team`
-    references re-pointed. These are hand-maintained; there is no generator to re-run. *(R3)*
+    references re-pointed. These are hand-maintained; there is no generator to re-run. _(R3)_
 12. **Update the init template** at `config/config.example.yaml:183-184`: replace the
-    `# Declarative teams (feature M) — materialize with \`spur team up <teamId>\`` block with the
-    fleet equivalent, since `init.ts:170` seeds this file into every new install. *(R4)*
+    `# Declarative teams (feature M) — materialize with \`spur team up <teamId>\``block with the
+fleet equivalent, since`init.ts:170` seeds this file into every new install. _(R4)_
 13. **Test intent — parity.** Run the existing plugin-surface parity suite (ADR-053) so the
     `sp:spur-cli` references, the spine step table, and `AGENTS.md` are diffed against the live CLI;
     a reference that now describes a verb the CLI does not expose fails there rather than in review.
-    *(R3)*
+    _(R3)_
 14. **Prove R5 by diff, not by claim.** `git diff --name-only` must list only the files in the
     Design's owner inventory. Any extra path is either added to the inventory with its trigger, or
-    reverted. *(R5)*
+    reverted. _(R5)_
 15. **Gate.** `bun run spur-check`, then `spur task check 0850`. Record the final file list and the
     ADR number actually allocated in the Solution section.
 
@@ -255,18 +255,19 @@ this program. Nothing in 0851 depends on this task's text beyond ADR-116 existin
 
 - Verdict: FAIL (from verdict artifact)
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | UNMET | `docs/00_ADR.md:500` — ADR-052 is Accepted; ADR-116 is absent; refreshed local verification scratch `.spur/run/0850-verify-answer.txt` lines 1-37 and derived `.spur/run/0850-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
-| R2 | PARTIAL | Existing historical ADRs remain, but no replacement decision explicitly records the planned retained authorities |
-| R3 | PARTIAL | Migration and fleet startup surfaces are documented; the planned retirement/supersession is absent, so retirement-era authority reconciliation is incomplete |
-| R4 | PARTIAL | No retirement template migration is present; cancelled task did not execute its portable reconciliation plan |
-| R5 | MET | This audit preserves historical ADRs and changes only the owners of repaired runtime facts |
+| Requirement | Status  | Evidence                                                                                                                                                                                                                                                                         |
+| ----------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R1          | UNMET   | `docs/00_ADR.md:500` — ADR-052 is Accepted; ADR-116 is absent; refreshed local verification scratch `.spur/run/0850-verify-answer.txt` lines 1-37 and derived `.spur/run/0850-verdict.json`; repository gate separately FAILs on three concurrent taste-refactoring skill checks |
+| R2          | PARTIAL | Existing historical ADRs remain, but no replacement decision explicitly records the planned retained authorities                                                                                                                                                                 |
+| R3          | PARTIAL | Migration and fleet startup surfaces are documented; the planned retirement/supersession is absent, so retirement-era authority reconciliation is incomplete                                                                                                                     |
+| R4          | PARTIAL | No retirement template migration is present; cancelled task did not execute its portable reconciliation plan                                                                                                                                                                     |
+| R5          | MET     | This audit preserves historical ADRs and changes only the owners of repaired runtime facts                                                                                                                                                                                       |
 
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| Scenario: Superseded authority is corrected at its owner | UNMET | command | `docs/00_ADR.md:500` — Accepted remains; search for ADR-116 returned no replacement decision |
-| Scenario: History is preserved | MET | command | git diff of docs/00_ADR.md is empty; historical decision bodies preserved |
+| Acceptance Criteria                                      | Status | Evidence Type | Evidence                                                                                     |
+| -------------------------------------------------------- | ------ | ------------- | -------------------------------------------------------------------------------------------- |
+| Scenario: Superseded authority is corrected at its owner | UNMET  | command       | `docs/00_ADR.md:500` — Accepted remains; search for ADR-116 returned no replacement decision |
+| Scenario: History is preserved                           | MET    | command       | git diff of docs/00_ADR.md is empty; historical decision bodies preserved                    |
+
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -275,14 +276,14 @@ this program. Nothing in 0851 depends on this task's text beyond ADR-116 existin
 
 **SECU findings** (pipeline verify step — verdict: FAIL)
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | NOT DONE: ADR-052 supersession, replacement decision, and retirement template reconciliation. Cancellation does not establish supersession. |
-| P4 | scoped-checks | — | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
-| P4 | task-check | — | spur task check 0850 --strict-core --json — exit 0 |
-| P4 | secua-review | — | Authority supersession required by G64 R6 is missing; cancelled task remains cancelled pending an explicit disposition. |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| Priority | Dimension          | Location | Finding                                                                                                                                                                      |
+| -------- | ------------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P4       | spur task check    | —        | task check passed                                                                                                                                                            |
+| P4       | design-conformance | —        | NOT DONE: ADR-052 supersession, replacement decision, and retirement template reconciliation. Cancellation does not establish supersession.                                  |
+| P4       | scoped-checks      | —        | G64 focused tests, bun run typecheck, bun run test-cf, bun run build — exit 0 this run; full repository gate separately failed on concurrent taste-refactoring skill changes |
+| P4       | task-check         | —        | spur task check 0850 --strict-core --json — exit 0                                                                                                                           |
+| P4       | secua-review       | —        | Authority supersession required by G64 R6 is missing; cancelled task remains cancelled pending an explicit disposition.                                                      |
+| P4       | evidence-rule-pass | —        | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral.                                                                                      |
 
 ### References
 
@@ -294,4 +295,3 @@ this program. Nothing in 0851 depends on this task's text beyond ADR-116 existin
 ### History
 
 - 2026-09-13T15:10:10.486Z todo → cancelled (system)
-
