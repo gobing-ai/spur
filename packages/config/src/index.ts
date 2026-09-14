@@ -866,28 +866,10 @@ export const HistoryConfigSchema = z.object({
  * (tag format, publish workflow, commit style) configure them in
  * `.spur/config.yaml` instead of patching release scripts.
  */
-/** Extra version-bearing manifests (e.g. per-platform plugin.json mirrors like `.cursor-plugin/`). */
-export const PluginManifestCarrierSchema = z.object({
-    type: z.literal('plugin-manifest'),
-    /** Repo-relative manifest paths, synced to the release version and staged. */
-    paths: z.array(z.string().min(1)).min(1),
-});
+/** One entry of `builder.bump-ver.versionCarriers`: an open object whose `type` names a registered carrier type. */
+const VersionCarrierEntrySchema = z.looseObject({ type: z.string().min(1) });
 
-/** Version constant inside a package source file (e.g. `binaryVersion: '1.2.3'` in `src/config.ts`). */
-export const TsLiteralCarrierSchema = z.object({
-    type: z.literal('ts-literal'),
-    /** Package-relative file probed per workspace member. Default `src/config.ts`. */
-    file: z.string().min(1).default('src/config.ts'),
-    /** Identifier whose string-literal value carries the version. Default `binaryVersion`. */
-    identifier: z.string().min(1).default('binaryVersion'),
-});
-
-export const VersionCarrierSchema = z.discriminatedUnion('type', [PluginManifestCarrierSchema, TsLiteralCarrierSchema]);
-
-export type PluginManifestCarrier = z.infer<typeof PluginManifestCarrierSchema>;
-export type TsLiteralCarrier = z.infer<typeof TsLiteralCarrierSchema>;
-export type VersionCarrier = z.infer<typeof VersionCarrierSchema>;
-
+/** Schema for the `builder.bump-ver` section — release knobs plus open `versionCarriers` instances. */
 export const BuilderBumpVerConfigSchema = z.object({
     /** Release tag format: `<package><separator><version>` (default `-v` → `pkg-v1.2.3`). */
     tagVersionSeparator: z.string().min(1).default('-v'),
@@ -897,8 +879,13 @@ export const BuilderBumpVerConfigSchema = z.object({
     releaseCommitScope: z.string().min(1).default('release'),
     /** `gh run list --limit` used to point at the triggered publish run. */
     ghRunListLimit: z.number().int().positive().default(5),
-    /** Extra version carriers beyond workspace package.json files. Default: none. */
-    versionCarriers: z.array(VersionCarrierSchema).default([]),
+    /** Extra version carriers beyond workspace package.json files. Default: none.
+     *
+     * Deliberately open here: `type` selects a carrier type registered in
+     * `apps/cli/src/version-carriers.ts` (`registerCarrierType`), which owns the
+     * per-type schema and validates instances at release time — new types need
+     * no edit to this schema. */
+    versionCarriers: z.array(VersionCarrierEntrySchema).default([]),
 });
 
 /** Schema for the `builder` section. */

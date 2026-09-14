@@ -368,41 +368,14 @@
                         },
                         "versionCarriers": {
                             "type": "array",
-                            "description": "Extra version carriers beyond workspace package.json files. Default: none.",
+                            "description": "Extra version carriers beyond workspace package.json files. Default: none. Types are registered in apps/cli/src/version-carriers.ts (registerCarrierType), which validates instances at release time; registering a new type extends this description in the same commit.",
                             "items": {
-                                "oneOf": [
-                                    {
-                                        "type": "object",
-                                        "description": "Repo-wide version-bearing manifests synced to the release version (e.g. per-platform plugin.json mirrors).",
-                                        "properties": {
-                                            "type": { "const": "plugin-manifest" },
-                                            "paths": {
-                                                "type": "array",
-                                                "minItems": 1,
-                                                "items": { "type": "string", "minLength": 1 }
-                                            }
-                                        },
-                                        "required": ["type", "paths"]
-                                    },
-                                    {
-                                        "type": "object",
-                                        "description": "Version constant inside a package source file, probed per workspace member.",
-                                        "properties": {
-                                            "type": { "const": "ts-literal" },
-                                            "file": {
-                                                "type": "string",
-                                                "minLength": 1,
-                                                "description": "Package-relative file. Default \"src/config.ts\"."
-                                            },
-                                            "identifier": {
-                                                "type": "string",
-                                                "minLength": 1,
-                                                "description": "Identifier carrying the version. Default \"binaryVersion\"."
-                                            }
-                                        },
-                                        "required": ["type"]
-                                    }
-                                ]
+                                "type": "object",
+                                "description": "One carrier instance. Required field: type (string). Built-ins: plugin-manifest { paths: [..] } — repo-wide manifests synced to the release version (e.g. per-platform plugin.json mirrors); ts-literal { file?, identifier? } — version constant in a package source file (defaults src/config.ts / binaryVersion).",
+                                "properties": {
+                                    "type": { "type": "string", "minLength": 1 }
+                                },
+                                "required": ["type"]
                             }
                         }
                     }

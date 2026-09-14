@@ -211,6 +211,13 @@ Example: superskill's git-tracked `.cursor-plugin/` and `.codex-plugin/` mirrors
 stale (0.3.1 vs marketplace 0.3.27) because nothing reached them; declaring them as
 `plugin-manifest` carriers folds them into every release commit.
 
+**Adding a carrier type is one registration.** Types live in
+`apps/cli/src/version-carriers.ts`: `registerCarrierType(name, { schema, ...hooks })` where a type
+implements only what it needs — `syncRepoWide` for repo-wide manifest carriers, `probePackageLiteral`
+for per-package version literals. Config parsing stays deliberately open (just `type` + fields); the
+registry validates each instance at release time and fails loudly with the registered type names
+before any mutation. The release flow itself never needs structural edits for a new type.
+
 **Runtime-noise tolerance.** CLI startup eagerly creates the runtime SQLite state
 (`.spur/spur.db*`, `.spur/logs/`), which dirties a pristine repo before dispatch; the clean-tree
 gate ignores exactly those untracked paths (`status --porcelain -uall`) and still blocks on

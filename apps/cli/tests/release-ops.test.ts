@@ -191,9 +191,9 @@ describe('builder bump-ver', () => {
             repo,
             createCapturedOutput(),
             // Partial by intent: zod defaults fill the unset knobs.
-            { builder: { 'bump-ver': { tagVersionSeparator: '--', releaseCommitScope: 'ship' } } } as Parameters<
-                typeof runBumpVer
-            >[3],
+            {
+                builder: { 'bump-ver': { tagVersionSeparator: '--', releaseCommitScope: 'ship' } },
+            } as unknown as Parameters<typeof runBumpVer>[3],
         );
         expect(localTags(repo)).toContain('@demo/lib--0.2.0');
         expect(sh(repo, ['git', 'log', '-1', '--format=%s'])).toBe('chore(ship): bump lib to 0.2.0');
@@ -219,7 +219,7 @@ describe('builder bump-ver', () => {
                     ],
                 },
             },
-        } as Parameters<typeof runBumpVer>[3]);
+        } as unknown as Parameters<typeof runBumpVer>[3]);
         for (const dir of ['.cursor-plugin', '.codex-plugin']) {
             const manifest = await Bun.file(join(repo, dir, 'plugin.json')).json();
             expect(manifest.version).toBe('0.2.0');
@@ -242,8 +242,19 @@ describe('builder bump-ver', () => {
                     versionCarriers: [{ type: 'ts-literal', file: 'src/version.ts', identifier: 'APP_VERSION' }],
                 },
             },
-        } as Parameters<typeof runBumpVer>[3]);
+        } as unknown as Parameters<typeof runBumpVer>[3]);
         expect(await Bun.file(join(repo, 'pkgs', 'lib', 'src', 'version.ts')).text()).toContain("APP_VERSION: '0.2.0'");
+    });
+
+    test('unknown carrier type fails loudly with the registered names, before any mutation', async () => {
+        const { repo } = mkRepo();
+        await expect(
+            runBumpVer(['lib', '0.2.0'], repo, createCapturedOutput(), {
+                builder: { 'bump-ver': { versionCarriers: [{ type: 'version-file', paths: ['VERSION'] }] } },
+            } as unknown as Parameters<typeof runBumpVer>[3]),
+        ).rejects.toThrow('unknown version carrier type "version-file" (registered: plugin-manifest, ts-literal)');
+        // Failed pre-flight must not have tagged or committed anything.
+        expect(localTags(repo)).toEqual([]);
     });
 
     test('refuses to re-tag an existing local tag', async () => {

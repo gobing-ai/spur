@@ -1,10 +1,16 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BuilderBumpVerConfig, SpurConfig } from '@gobing-ai/spur-config';
-import { resolveBuilderBumpVerConfig, type TsLiteralCarrier, type VersionCarrier } from '@gobing-ai/spur-config';
+import { resolveBuilderBumpVerConfig } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CommandOutput } from './output';
 import { consoleOutput } from './output';
+import {
+    defaultLiteralProbe,
+    findLiteralProbe,
+    parseVersionCarriers,
+    type RegisteredCarrier,
+} from './version-carriers';
 
 /**
  * Release plumbing shared by the public `spur builder` noun and the internal
@@ -49,8 +55,8 @@ interface ReleaseContext {
     packages: Map<string, ReleaseConfig>;
     /** Packages bumped together by the aggregate (`--all`) path: those pinned via `workspace:` by another workspace package. */
     allPackages: ReleaseConfig[];
-    /** Extra version carriers (plugin-manifest mirrors, ts-literal overrides) from `builder.bump-ver`. */
-    versionCarriers: VersionCarrier[];
+    /** Extra version carriers (plugin-manifest mirrors, ts-literal overrides) registered in `version-carriers.ts`. */
+    versionCarriers: RegisteredCarrier[];
 }
 
 /** The git tag that, when pushed, triggers the publish workflow. */
@@ -161,16 +167,17 @@ async function releaseContext(
     }
 
     const shortName = (name: string): string => name.split('/').pop() ?? name;
-    const tsLiteral = bumpVerConfig.versionCarriers.find((c): c is TsLiteralCarrier => c.type === 'ts-literal');
+    const versionCarriers = parseVersionCarriers(bumpVerConfig.versionCarriers);
     const packages = new Map<string, ReleaseConfig>();
     for (const ws of workspaces) {
-        const literalProbe = join(ws.dir, tsLiteral?.file ?? 'src/config.ts');
+        const probe = findLiteralProbe(versionCarriers, ws.dir) ?? defaultLiteralProbe;
+        const literalProbe = join(ws.dir, probe.file);
         const versionSourceFile = existsSync(join(repoRoot, literalProbe)) ? literalProbe : undefined;
         packages.set(shortName(ws.name), {
             packageDir: ws.dir,
             packageName: ws.name,
             versionSourceFile,
-            versionLiteralIdentifier: tsLiteral?.identifier,
+            versionLiteralIdentifier: versionSourceFile === undefined ? undefined : probe.identifier,
             tagVersionSeparator: bumpVerConfig.tagVersionSeparator,
             publishWorkflow: bumpVerConfig.publishWorkflow,
             releaseCommitType: bumpVerConfig.releaseCommitType,
@@ -203,7 +210,7 @@ async function releaseContext(
     pinnedNames.add(rootName);
     const allPackages = [...packages.values()].filter((c) => pinnedNames.has(c.packageName));
 
-    return { repoRoot, rootName, packages, allPackages, versionCarriers: bumpVerConfig.versionCarriers };
+    return { repoRoot, rootName, packages, allPackages, versionCarriers };
 }
 
 /**
@@ -274,30 +281,17 @@ async function updateVersionSourceFile(
 }
 
 /**
- * Sync repo-wide extra plugin manifests declared as `plugin-manifest` version carriers
- * (e.g. per-platform mirrors like `.cursor-plugin/plugin.json` that no marketplace entry covers).
+ * Run every registered repo-wide carrier sync (e.g. plugin-manifest mirrors).
+ * Carriers without repo-wide behavior are skipped by their missing hook.
  */
-async function syncExtraPluginManifests(
+async function syncExtraCarriers(
     ctx: ReleaseContext,
     version: string,
     staged: string[],
     output: CommandOutput,
 ): Promise<void> {
     for (const carrier of ctx.versionCarriers) {
-        if (carrier.type !== 'plugin-manifest') continue;
-        for (const rel of carrier.paths) {
-            const absPath = join(ctx.repoRoot, rel);
-            const manifest = await readJson(absPath);
-            if (manifest === null) {
-                output.write(`  ⚠ ${rel}: not found or malformed — skipping`);
-                continue;
-            }
-            const previous = typeof manifest.version === 'string' ? manifest.version : '(none)';
-            manifest.version = version;
-            await Bun.write(absPath, `${JSON.stringify(manifest, null, 4)}\n`);
-            staged.push(rel);
-            output.write(`  ↳ ${rel}: ${previous} → ${version}`);
-        }
+        await carrier.def.syncRepoWide?.(carrier.value, { repoRoot: ctx.repoRoot }, version, staged, output);
     }
 }
 
@@ -451,7 +445,7 @@ async function bumpVersion(
     // Cascade workspace pin updates for consumers of this package.
     staged.push(...(await updateWorkspacePins(ctx, config.packageName, previous, version, output)));
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
-    await syncExtraPluginManifests(ctx, version, staged, output);
+    await syncExtraCarriers(ctx, version, staged, output);
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');
     await git(ctx.repoRoot, ['add', ...staged]);
@@ -551,7 +545,7 @@ async function bumpAll(
     }
 
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
-    await syncExtraPluginManifests(ctx, version, staged, output);
+    await syncExtraCarriers(ctx, version, staged, output);
 
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');
