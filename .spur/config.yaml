@@ -81,6 +81,11 @@ builder:
     releaseCommitType: chore
     releaseCommitScope: release
     ghRunListLimit: 5
+    # The CLI's binaryVersion literal (src/config.ts) declared as an explicit
+    # ts-literal carrier — values are the built-in defaults; dogfoods the
+    # registry (apps/cli/src/version-carriers.ts).
+    versionCarriers:
+      - type: ts-literal
 
 # ── Planning (design §2.1 / §9) ──
 tasks:
