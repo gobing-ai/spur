@@ -488,6 +488,21 @@ describe('createServerContext', () => {
         expect(snap.capturedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     });
 
+    // 0855 removed the up/down route tests — the only callers exercising these lazy
+    // accessors — and context.ts dropped below the 90% function-coverage denominator.
+    // This replacement is sandbox-safe by design: getter construction and one config
+    // load only, no `ps` spawn, no DB round-trip.
+    test('lazy singletons: processInventory, runStoreService, reloadAgentConfig', async () => {
+        const appRt = makeAppRt();
+        const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs, dbUrl: ':memory:' });
+
+        expect(ctx.processInventory()).toBe(ctx.processInventory());
+        expect(ctx.runStoreService()).toBe(ctx.runStoreService());
+
+        const cfg = await ctx.reloadAgentConfig();
+        expect(cfg === null || typeof cfg === 'object').toBe(true);
+    });
+
     test('tokenLedger() returns empty snapshot when ledger missing', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test-no-ledger-0245', fs: testFs });
