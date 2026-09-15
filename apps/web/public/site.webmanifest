@@ -1,0 +1,31 @@
+{
+    "name": "Spur Board",
+    "short_name": "Spur",
+    "description": "Spur Board — Operations and task harness dashboard",
+    "icons": [
+        {
+            "src": "/favicon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml"
+        },
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "/apple-touch-icon.png",
+            "sizes": "180x180",
+            "type": "image/png"
+        }
+    ],
+    "theme_color": "#031f3c",
+    "background_color": "#031f3c",
+    "display": "standalone",
+    "start_url": "/"
+}
