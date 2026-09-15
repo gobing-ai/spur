@@ -89,7 +89,7 @@ builder:
 
 # ── Planning (design §2.1 / §9) ──
 tasks:
-  active: docs/tasks4
+  active: docs/tasks5
   folders:
     docs/tasks:
       baseCounter: 0
@@ -103,6 +103,9 @@ tasks:
     docs/tasks4:
       baseCounter: 488
       label: Phase 4
+    docs/tasks5:
+      baseCounter: 4855
+      label: Phase 5
 
 features:
   dir: docs/features
