@@ -4,9 +4,10 @@ name: Harden batch execution against the G65 failure modes
 status: todo
 template: issue
 created_at: 2026-09-15T20:37:23.908Z
-updated_at: "2026-09-15T20:39:22.307Z"
+updated_at: "2026-09-15T21:20:34.315Z"
 feature_id: D6
 
+ac_altitude: task-local
 ---
 
 ## 0862. Harden batch execution against the G65 failure modes
@@ -14,10 +15,10 @@ feature_id: D6
 ### Background
 
 Session-review triage of the G65 batch (2026-09-15). Six tasks shipped and landed on `main` (`26d0df827`), but the
-batch cost **6:49:31 of agent-active time** for roughly 2:00 of certified work, and three of its checks
-were blind to defects that independent review and verify later caught. This task owns the harness
-defects that produced both halves of that bill. It is the single triage task for that session review;
-the per-task product findings it is not the owner of are listed as pointers at the end.
+batch cost **6:49:31 of agent-active time** for roughly 2:00 of certified work. This task owns the
+harness defects behind that bill. Scope follows the operator direction of the same day: simplify the
+workflow and reduce corpus verification. Fix where a tool misreads the corpus or stays silent; do not
+add checkpoints.
 
 **Where the time went** (`.spur/run/worktree-runall-g65-ac87-batch-report.md`):
 
@@ -25,208 +26,233 @@ the per-task product findings it is not the owner of are listed as pointers at t
   30-minute host limit, each with a half-migrated tree that then needed host completion.
 - **1:37 to three remediation hops** — 0857's constant-rendered member model, 0860's dropped `teamId`
   wire key, 0861's stale help-diagram node: all invisible to a green gate.
-- **~0:56 to twelve quality-gate runs** plus three host diagnostics.
-- The enabler: `task-size-precheck.ts` reported `PASS — 0 R-items, 0 Plan items` for 0858, a task with
-  seven `- **R1** — …` requirements and a five-step Plan, so the gate that exists to force a
-  reviewer-tier executor or a split never fired.
+- **~0:56 to twelve quality-gate runs** plus three host diagnostics; one was a coverage-only red gate
+  (`0 fail`, exit 1) with an empty findings file.
+- The size precheck printed `PASS — 0 R-items, 0 Plan items` for 0858, a task with seven
+  `- **R1** — …` requirements and a five-step Plan: its counter recognizes only `- [ ] R1.`.
 
-**Already resolved by the session-review direct fixes (commit `0afd1405f`)** — not in scope here:
-the C5 documentation half (the `ac-style-guide` rule that a single-line `- **ACn — …**` criterion
-declares no id, and that at least one answer row must carry the verbatim feature scenario title) and
-the C10 documentation half (the inline driver's delegate-hygiene paragraph). The review's carried
-*documentation* findings are also closed there: the nonexistent `ts-ai-runner` `MessageService` chain,
-the `spur status` help label, the event-tracking producer anchor, the `team:<id>` docstring,
-`materializeTeam` comments, and 0861's survivor count.
+**Premise corrections (verified against the tree):**
 
-**Pointers, not owned here** (recorded so they are not lost; each needs its own owner decision):
-G65 cannot advance to `done` because 0857's verdict rows match no feature scenario and no
-`docs/dogfood/` artifact exists; the carried product findings are the fleet snapshot's `enabled`
-misreporting a declared-but-unresolvable roster (0858), the strategy default silently downgrading a
-persisted `gtd` row and a non-atomic reconcile (0859), `getStatus()`'s zero callers and the dead Board
-Team column (0860), and the untested `task.` activity prefix (0860).
+- **No D6 scenario is graduated here.** D6 `R1`/`R3` are delivered by 0607 and `R9` by 0781, all
+  `done`, so the Acceptance Criteria are task-local.
+- **A correct count alone would not have stopped 0858.** Since 0723 the precheck is count-only
+  (10 requirements / 16 Plan items), so 0858 (7/5) and 0860 (5) pass when counted correctly.
+  `execution-workflow.md` "Large tasks" item 3 and the `plugins/sp/README.md` precheck row still
+  describe the removed capability-tier gate.
+- **Stale-anchor warnings block nothing.** `L4.stale-line-anchor` is a warning outside the completion
+  set; on recorded `## Testing` bodies it is noise on historical evidence.
+- **The inline driver must validate a fresh proof digest** before record (0808 R4, 0809 R4) but has no
+  documented command to compute one.
 
-**Feature scenarios graduated:** D6 `R1` (cost measured per pipeline), `R3` (a pipeline over budget
-fails visibly), `R9` (findings remain actionable and truthful). The remaining criteria are task-local
-harness fixes, which is why they are checklist rows rather than Gherkin scenarios.
+**Already resolved — not in scope here:** commit `0afd1405f` landed the C5 documentation half (the
+`ac-style-guide` rule that a single-line `- **ACn — …**` criterion declares no id — R4 replaces that
+rule with parsing) and the C10 documentation half (the inline driver's delegate-hygiene paragraph),
+plus the review's carried documentation findings. Commit `d78ffdaf0` removed the stale `TeamSvc`
+diagram node.
+
+**Pointers, not owned here** (each needs its own owner decision): G65 cannot advance to `done` because
+0857's verdict rows match no feature scenario and no `docs/dogfood/` artifact exists; the carried
+product findings are the fleet snapshot's `enabled` misreporting a declared-but-unresolvable roster
+(0858), the strategy default silently downgrading a persisted `gtd` row and a non-atomic reconcile
+(0859), `getStatus()`'s zero callers and the dead Board Team column (0860), and the untested `task.`
+activity prefix (0860).
 
 **Evidence:** `.spur/run/worktree-runall-g65-ac87-{batch-report.md,verdicts/,reviews/}`;
-`.spur/run/runall-g65-*-ac87.log` (dispatch boundaries and host-fallback provenance).
+`.spur/run/runall-g65-*-ac87.log` (dispatch boundaries and host-fallback provenance);
+`.spur/run/refineall-g65-event-trace.md`.
 
 ### Requirements
 
-- **R1** — Count this corpus's requirement and Plan forms. `task-size-precheck.ts` must recognize
-  `- **R1** — …` bullets in `### Requirements` and numbered items in `### Plan`, so a task with
-  more than `maxImplementReqs` requirements or `maxImplementPlanItems` plan items fails the precheck
-  (naming the executor tier it needs) instead of reporting `0 R-items`. Evidence: the precheck's
-  `PASS — 0 R-items, 0 Plan items` on 0858 (seven requirements) and 0860 (five).
-- **R2** — Make the dispatch budget an admission fact, not a discovery. The precheck (or the driver's
-  Run setup) must estimate whether one `implement` dispatch can finish the task — workspace/file span
-  plus requirement count — and route an over-budget task to a split or a reviewer-tier executor,
-  with the estimate recorded in the run log. The `--worktree` / task-pipeline docs must state the
-  30-minute host dispatch ceiling. Evidence: three killed dispatches, each losing a full 30:00.
-- **R3** — Classify a coverage-threshold failure as a finding. When the project gate exits non-zero
-  with `0 fail` and a per-file coverage shortfall, `quality-gate.ts` must write a findings entry
-  naming the sub-threshold file and its measured values, so the fix hop receives a finding rather
-  than an empty file. Evidence: 0856's `.spur/run/0856-test-gate.findings` was 0 bytes while the log
-  showed `addressed-spec-ids.ts | 83.33 | 50.00`.
-- **R4** — Normalize evidence anchors at record time. `spur task record` must write repo-relative
-  `file:line` citations (or resolve short ones) instead of copying bare basenames from the verdict,
-  which currently surface as `L4 Testing: Stale line anchor` on every recorded task. Evidence:
-  `loader.ts:337`, `serve.ts:620`, `serve.ts:692`, `roster.ts:92` across 0857/0858/0860.
-- **R5** — Enforce the AC-id rule mechanically. The corpus checker (or the verify-answer lint) must
-  report a criterion that declares no machine-readable id — a single-line `- **ACn — …** Given …`
-  bullet — and must warn when a task's answer carries no row keyed to a feature scenario it
-  graduates, which is how 0857's verdict lost traceability. Evidence: 0857/0860 lint findings.
-- **R6** — Gate refinement on the feature strict preflight. `dev-refine` / `dev-refineall` must run
-  the feature-scoped strict check before reporting a refined set as ready, so an admission gate
-  cannot be defeated by an earlier pass that never ran it. Evidence: the 2026-09-14 refineall
-  reported `verdict clean` over the eight orphaned scenarios that aborted this batch.
-- **R7** — Check derived surfaces. A rule must compare a mermaid block's declared node ids against
-  its referenced ids (and flag retired names used as labels), because a stale `TeamSvc` edge shipped
-  in `docs/help/index.md` where no checker could see it.
-- **R8** — Detect invoking-tree divergence. A `--worktree` batch must detect that its base ref moved
-  during the run — at task boundaries, not only at the terminal merge — and report it, so the
-  merge-on-success promise never degrades silently into an operator decision. Evidence: `main`
-  advanced twice mid-batch (`8a06c3ba1`, `beaf96090`) and the fast-forward failed.
-- **R9** — Give the inline driver a first-class proof surface. `proof.fingerprint` and `run.artifact`
-  are engine built-ins with no CLI surface (ADR-051), so the inline driver reproduced the digest
-  through a gitignored scratch script importing `computeProofInputFingerprint`. Ship it as a
-  repo-only `plugins/sp/scripts` entry the driver calls, mirroring `inline-run-setup.ts` (0804).
-- **R10** — Surface delegate debris at the batch boundary. The batch report must list worktrees and
-  scratch paths a dispatched stage left behind, so an 867 MB `/private/tmp` worktree is a reported
-  fact rather than a manual discovery (the driver-side documentation half is already committed).
-- **R11** — Make the anchor check tolerant of resolvable short paths. A citation whose basename
-  resolves uniquely inside the repo must not read as a stale anchor; report only genuinely
-  unresolvable or ambiguous ones. Evidence: repeated `L4.anchor-subject-mismatch` /
-  `L4.stale-line-anchor` warnings on correct citations.
-- **R12** — Put the wire-shape standard on the review path. Reviews of route/response changes must
-  require a server-side assertion on the response key shape and at least one test that feeds the
-  real payload into the real client parser — the missing check behind 0860's P1, where 8329 green
-  tests coexisted with a hung Processes tab because fixtures carried the old key.
+Operator direction (2026-09-15): simplify the workflow and reduce corpus verification. Each requirement
+either makes an existing tool read the corpus as it is written, deletes stale text or checks, or reuses
+an existing surface. None adds a finding code, lint rule, repo check, report field or script.
+
+- **R1** — The size precheck counts the house requirement form. Both counters
+  (`packages/app/src/services/task-size-precheck.ts`, `plugins/sp/scripts/task-size-precheck.ts`)
+  count distinct `- **Rn** —` and legacy `- [ ] Rn.` items in `Requirements`, and top-level numbered
+  or checklist items in `Plan`; the 0858 shape (7 requirements, 5 numbered Plan steps) prints
+  `7 R-items, 5 Plan items`. Limits (10 / 16), output format and exit contract are unchanged. The
+  stale capability-tier gate text in `execution-workflow.md` ("Large tasks" item 3) and the
+  `plugins/sp/README.md` precheck row is deleted.
+- **R2** — A coverage-only quality-gate failure names its files. When `quality-gate.ts` sees a
+  non-zero gate exit whose log reports `0 fail`, it writes one `path:line` shortfall line per
+  coverage-table row below the `<cwd>/bunfig.toml` `coverageThreshold`, so the existing findings
+  extraction picks them up. Real test failures, an absent threshold, the findings pattern and the
+  always-exit-0 contract behave as today.
+- **R3** — Line-anchor checking skips terminal records. `checkLineAnchors` emits nothing for `done`
+  and `cancelled` tasks (historical evidence, ADR-092); live records keep today's path, bounds and
+  subject checks. Recorded `## Testing` bodies stop producing `L4.stale-line-anchor` warnings once
+  the task is done, with no record-time rewriting.
+- **R4** — AC ids are read from the bold head of a single-line bullet. `verify-answer-lint`
+  `buildAcIdentityIndex` declares the bold span of a `- **AC2 — Title.** Given …` bullet, and its
+  head before ` — ` or `:`, as identities, so answer rows keyed `AC2` or by the bold title resolve.
+  The `ac-style-guide.md` section "A single-line criterion bullet declares no id" shrinks to the
+  rules that still bind.
+- **R5** — The inline driver has one documented proof-capture command.
+  `plugins/sp/scripts/inline-run-setup.ts` gains `--fingerprint --task-file <path> [--feature-file <path>]`,
+  printing the engine digest (`sha256:<hex>`) from the exported proof-input functions;
+  `inline-pipeline-driver.md` names it where `proofBinding: current` is validated. No new script,
+  contract entry or `spur` verb.
+- **R6** — Review catches wire-shape drift. `review-lenses.md` Correctness gains one bullet: a
+  changed route response shape or client parser needs a server-side key-shape assertion and a
+  real-payload-through-real-parser test; missing either is P2.
+
+**Not doing** (decided 2026-09-15; reasons in Q&A):
+
+- No new finding code or lint failure for AC id forms — the parser accepts the form instead (R4).
+- No strict feature preflight in `refineall` — the batch 0510 preflight already stops a run on it.
+- No mermaid label check in `spur-check` — the only instance was fixed in `d78ffdaf0`.
+- No base-ref watch — the WT-4 fast-forward-only merge already halts when the base moved.
+- No `Debris:` report field, run-log size line, 0727 cross-link, or `migrate-anchors` hint.
+- No record-time anchor qualification — R3 removes the noise it targeted.
+- No threshold or limit changes; no fixes for the pointer findings in Background.
 
 ### Acceptance Criteria
 
-Graduates D6 scenarios R1, R3 and R9 — the Gherkin below carries their exact feature titles; the table
-under it is the task-local verify lens, one row per requirement (the verdict's requirement rows carry
-the same ids).
+Task-local criteria (`ac_altitude: task-local`); each checklist label is the declared AC id.
 
-```gherkin
-  Scenario: R1 — Model-query cost and wall-clock are measured per pipeline
-    Given the shipped pipelines carry agent.run hops whose cost has only ever been bounded as "not increasing"
-    When the cost baseline is captured
-    Then each pipeline records its model-query count and wall-clock against a named fixture set
-    And the measurement is reproducible from a source-local command, not a hand-timed run
-    And the numbers are committed as a checked budget rather than a prose claim
-
-  Scenario: R3 — A pipeline exceeding its cost budget fails visibly
-    Given a committed per-pipeline query and wall-clock budget
-    When a change pushes a pipeline past its budget
-    Then the gate fails naming the pipeline, the budget, and the measured value
-    And the budget can only be raised by an explicit recorded decision, never silently
-
-  Scenario: R9 — Findings remain actionable and truthful
-    Given the current workflow definitions and D8 D9 D61 obligations
-    When the audit is recorded
-    Then simple repairs carry fresh checks and larger repairs have scoped tasks
-    And delivery projections distinguish shipped work from newly discovered gaps
-```
-
-| Req | Acceptance | Verification |
-| --- | --- | --- |
-| R1 | The size precheck counts `- **Rn** — …` requirements and numbered Plan items | fixture task with 7 requirements fails the precheck naming the executor tier |
-| R2 | An over-budget task is routed to a split or reviewer-tier executor before implement | Run-setup estimate recorded in the run log; `--worktree` docs name the dispatch ceiling |
-| R3 | A per-file coverage shortfall becomes a finding, not a red gate with `0 fail` | gate run over a sub-threshold file yields a non-empty findings file naming it |
-| R4 | Recorded `## Testing` citations are repo-relative | `task record` on a fixture verdict; `task check --as done` reports no stale-anchor warning |
-| R5 | A criterion with no machine-readable id, and an answer with no scenario-keyed row, each report | fixture task + fixture answer produce the two named findings |
-| R6 | Refine/refineall runs the feature strict preflight before reporting a set ready | fixture feature with an orphaned scenario is not reported ready |
-| R7 | A mermaid reference that dangles or names a retired service fails the new rule | fixture doc with a `TeamSvc` edge fails; the committed corpus passes |
-| R8 | A base-ref move during a `--worktree` batch is reported at the task boundary | driver boundary check records the moved ref in the run log and batch report |
-| R9 | The inline driver computes the proof digest through a repo-only script, no scratch file | the script reproduces `computeProofInputFingerprint`'s digest for a fixture task |
-| R10 | The batch report lists leftover worktrees and scratch paths | report field populated from a run that leaves a worktree |
-| R11 | A uniquely resolvable basename is not reported stale; an unresolvable one still reports | fixture corpus with both citation forms |
-| R12 | The review path requires a response key-shape assertion and a real-payload parser test | review contract text + fixture route change carrying both |
+- [ ] R1: a fixture with seven `- **Rn** —` requirements and five numbered Plan steps prints `7 R-items, 5 Plan items` and PASS from both counters; an 11-requirement fixture FAILs; a legacy `- [ ] R1.` item still counts; a prose line starting `R1 ` does not; neither `execution-workflow.md` nor `plugins/sp/README.md` describes an executor-capability or tier gate for the precheck.
+- [ ] R2: a `runQualityGate` test whose command prints `0 fail` plus a coverage row below a 0.9 / 0.9 bunfig threshold and exits 1 produces a findings file containing that row's `path:line`; with a `1 fail` log or no bunfig threshold the findings are unchanged; `quality-gate.mjs` is regenerated and `bun run script-contract-check` passes.
+- [ ] R3: a `done` fixture task citing a missing file in `## Testing` yields no `L4.stale-line-anchor`; the same citation on a `wip` task still does.
+- [ ] R4: a lint fixture whose AC section has `- **AC2 — The roster runtime is gone (R3).** Given …` accepts answer rows keyed `AC2` and `AC2 — The roster runtime is gone (R3).`; an undeclared `AC9` row still fails.
+- [ ] R5: `bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <fixture>` prints the same `sha256:` digest as a direct `computeProofInputFingerprint` over the same temp git fixture; `inline-pipeline-driver.md` names the command.
+- [ ] R6: `review-lenses.md` Correctness contains the wire-shape bullet with its P2 severity.
 
 ### Q&A
 
-<!-- Clarifications and triage decisions. Keep empty if none. -->
+**Refine `--depth ready` (2026-09-15, inline, `--auto`), re-scoped the same day to the operator
+direction "simplify the workflow and skip or reduce the corpus verification".** The first refine
+(12 requirements, five slices) added checks. This entry replaces it and is the live decision record.
+
+- **Q: Does 0862 graduate D6 scenarios?** — **Decided: no.** D6 R1/R3 are delivered by 0607 and R9 by
+  0781, all `done`. AC is task-local.
+- **Q: What keeps a requirement in scope?** — **Decided:** it deletes or loosens something, makes an
+  existing tool read the corpus correctly, or reuses an existing surface. New finding codes, lints,
+  repo checks, report fields and scripts are out.
+- **Q: Undeclared single-line AC ids — a new `L3` warning plus a lint failure, or tolerant parsing?** —
+  **Decided: tolerant parsing (R4)**; the style-guide rule shrinks.
+- **Q: Record-time anchor qualification plus a `migrate-anchors` hint, or skip terminal records?** —
+  **Decided: skip terminal records (R3).** It clears the warnings for every done task, not only future
+  records, and leaves verifier output verbatim. `L4.stale-line-anchor` is a warning outside the
+  completion set, so no transition depended on it. Reverses 0714 R1 for terminal records only.
+- **Q: Strict feature preflight in `refineall`?** — **Decided: no.** The batch 0510 preflight already
+  stops a run on the same findings.
+- **Q: Mermaid retired-name check, base-ref watch, debris report field?** — **Decided: no.** The
+  diagram defect was one-off and fixed; WT-4's fast-forward-only merge already halts on a moved base;
+  `git status` at wrap shows debris.
+- **Q: Should the size limits move, or admission estimate a dispatch budget?** — **Deferred — owner:
+  operator.** 0858 (7 / 5) and 0860 (5) were killed below the 10 / 16 limits; three data points do
+  not support a threshold. R1 only makes the count true.
+- **Q: Inline proof capture — a new script, a mode on `inline-run-setup.ts`, or declaring proof binding
+  not applicable inline (like `timeoutMs`)?** — **Decided: a `--fingerprint` mode (R5)**, the smallest
+  change that keeps the 0785/0808/0809 inline certification contract. Dropping inline binding would
+  relax that contract. **Deferred — owner: operator**; if accepted, R5 becomes a driver-doc deletion.
+- **Q: Split the task?** — **Decided: no.** 6 requirements / 6 Plan steps is under the limits.
 
 ### Design
 
-Placement, one owner per defect — no new subsystem:
+**Principles** (supersede the first refine's "no gate is weakened"). Prefer, in order: delete stale
+text or checks → make the existing parser accept the form the corpus uses → reuse an existing script
+or helper → only then add code. No new finding code, lint rule, repo check, report field, script,
+contract-test file or `spur` verb. Thresholds stay (size 10 / 16, coverage 0.9 / 0.9). Tests extend
+existing test files. One implement pass, no slices: 6 requirements / 6 Plan steps is under the limits
+R1 makes real.
 
-| Defect | Owner surface |
-| --- | --- |
-| R1 size counting, R11 anchor tolerance | the existing checkers (`plugins/sp/scripts/task-size-precheck.ts`, the anchor check in the corpus checker) |
-| R3 coverage classification | `plugins/sp/scripts/quality-gate.ts` findings contract |
-| R2 dispatch budget | precheck/Run-setup estimate + `spur-dev` references (task-pipeline vars, `--worktree` flag) |
-| R4 anchor normalization | the record path in `packages/app` (task record), not the verifier's evidence text |
-| R5 AC-id enforcement, R7 mermaid ids | the rule catalog (`spur rule`), so both are gate-visible rather than prose-only |
-| R6 strict preflight, R12 wire-shape standard | `dev-refine*`'s exit gate and the review path contract |
-| R8 divergence detection, R10 debris report | the batch driver contract (`execution-batch.md`), implemented in the driver's boundary checks |
-| R9 proof fingerprint | a repo-only `plugins/sp/scripts` entry, mirroring `inline-run-setup.ts` (0804) |
+**R1 — size counting.** WHERE: `packages/app/src/services/task-size-precheck.ts` (`R_ITEM_RE` :39,
+`countRItems`, `countPlanItems`) and the lockstep copy `plugins/sp/scripts/task-size-precheck.ts`
+(:33; repo-only, no twin). WHAT: Requirements = body under `^#{2,3}\s+Requirements\s*$` to the next
+`^#{2,3}\s` (no heading → whole content, as today); count distinct `n` over
+`/^\s*[-*]\s+(?:\[[ xX]\]\s*)?[*_]{0,2}R(\d+)\.?[*_]{0,2}(?:\s|$)/gm` (list marker required; dedupe so
+a continuation citing `R1` does not double-count). Plan = top-level `/^\d+\.\s/` plus
+`/^\s*[-*]\s+\[[ xX]\]/` lines. Docs: in `execution-workflow.md` "Large tasks and timed-out implement
+resume" item 3, delete the paragraph claiming the precheck resolves `capabilityTier` and blocks below
+the `reviewer` floor, leaving one sentence: the gate is count-only (10 / 16), FAIL → split or a
+`--vars` override; keep the executor-choice advice as advice. In `plugins/sp/README.md` (~505) drop
+"+ size-vs-executor-capability gate (R3)". Tests: extend `plugins/sp/tests/task-size-precheck.test.ts`
+and `packages/app/tests/services/task-size-precheck.test.ts`; update assertions that encoded the
+legacy-only count. Handoff: the `task-service.ts` authoring warning uses the same service and starts
+warning on >10-requirement tasks — expected.
 
-Two invariants bound every item: **no gate is weakened to pass** (a threshold may only move through an
-explicit recorded decision), and **each fix carries its own fixture** so the defect cannot return
-silently. Items are independently shippable — R1 and R3 alone recover the largest share of the G65
-batch's lost time, so they are first rather than bundled with the rest.
+**R2 — coverage findings.** WHERE: `plugins/sp/scripts/quality-gate.ts`; regenerate its `standard`
+twin `quality-gate.mjs` with `superskill script convert`. WHAT: after the gate loop, before the
+PASS/FAIL summary, only when `gateRc !== 0`, the log matches `/^\s*0 fail\b/m` and does not match
+`/^\s*[1-9]\d*\s+fail\b/m`: read `<cwd>/bunfig.toml` and parse
+`coverageThreshold = { lines = x, functions = y }` (a missing key leaves that axis unchecked; absent or
+unparseable → do nothing). Scan rows `^\s*(\S+\.[A-Za-z]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*(\S*)`
+(bun's `File | % Funcs | % Lines | Uncovered Line #s`), skip `All files`, keep rows below either axis
+(×100), dedupe by path; write `quality gate: coverage shortfall <path>:<line> funcs=<f> lines=<l>` to
+stdout and append to the log, `line` = first number of the uncovered column, else `1`. Two exported
+pure helpers for the parse and the scan; no new module. Keep `FINDINGS_PATTERN`, `MAX_FINDINGS`, the
+status verdict and exit 0. Tests: extend `plugins/sp/tests/quality-gate.test.ts`.
+
+**R3 — terminal anchor skip.** WHERE: `packages/app/src/services/task-check.ts` `checkLineAnchors`
+(~1455). WHAT: return before the section loop when `terminal`; delete terminal-only branches that
+become dead; rewrite the method comment (terminal evidence is historical per ADR-092 — neither
+existence nor bounds are re-checked). This reverses 0714 R1's "path existence and line bounds
+regardless of status" for terminal records only; live-record behavior, `L4.anchor-subject-mismatch`
+and the external-evidence form are untouched. Tests: in `packages/app/tests/services/task-check.test.ts`
+add the `done` no-finding case, keep a live stale-anchor case, and flip any assertion that expected
+terminal findings. Checker-policy change → one `bun run corpus-check` (T10); findings only disappear.
+
+**R4 — bold-head AC ids.** WHERE: `plugins/sp/scripts/verify-answer-lint.ts` `buildAcIdentityIndex`
+(:319). WHAT: one more loop over the AC section,
+`/^[-*]\s+(?:\[[ xX]\]\s+)?\*\*(.+?)\*\*/gm` → `declareIdentity(inner)`, then
+`head = inner.split(/\s+[—–]\s+|:/)[0]?.trim()`, declared when non-empty and different. Existing
+loops, `normalizeAcTitle`, `resolveAcIdentity` and the AC-N rules are untouched; undeclared tokens
+still fail. Docs: replace the `ac-style-guide.md` section "A single-line criterion bullet declares no
+id" (~130) with three lines: the bold head of a bullet is its id; at least one answer row cites the
+verbatim graduated feature scenario title; requirements keep the `- **R1** — …` form. Tests: extend
+`plugins/sp/tests/verify-answer-lint.test.ts`.
+
+**R5 — proof capture.** WHERE: `plugins/sp/scripts/inline-run-setup.ts` (reuse `resolveAppEntry` :91
+and the argv loop :129); `packages/app/src/index.ts` adds `readProofInputContents` to the existing
+`./workflow/proof-input-fingerprint` export block (~744); `inline-pipeline-driver.md` `run.artifact`
+bullet (~208). WHAT: `--fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]`,
+refused together with `--run-id`/`--file` (usage, exit 2). Import the app entry, call
+`readProofInputContents(fs, cwd, { taskFile, featureFile })`, and on ok call
+`computeProofInputFingerprint` with the options `ProofFingerprintActionRunner` (`builtins.ts:100`)
+builds; print the digest, exit 0; read/resolve failure → exit 1. No `--expect`: the host compares the
+string. Driver: "capture the fresh digest with `bun "$SETUP_SCRIPT" --fingerprint --task-file …
+[--feature-file …]`". Tests: extend `plugins/sp/tests/inline-run-setup.test.ts` — stdout equals a
+direct call over a temp git fixture. Anti-patterns: reimplementing the digest; a new script or verb.
+
+**R6 — wire-shape lens.** WHERE: `plugins/sp/skills/code-review/references/review-lenses.md`
+Correctness (13-23). One bullet with its P2 severity; no contract test.
 
 ### Plan
 
-Repair the shared counting/keying surfaces first, then add the missing checks. Every fix lands with a
-fixture that fails before it and passes after; none may raise or lower a threshold, and none may
-weaken an existing gate to go green.
+One pass; each step lands with its test failing first.
 
-1. **R1 + R3 — make the two silent surfaces speak.** Teach `task-size-precheck.ts` the corpus's
-   `- **Rn** — …` / numbered-Plan forms (fixture: a task with 7 requirements must fail, naming the
-   executor tier); teach `quality-gate.ts` to classify a zero-fail non-zero exit with a per-file
-   coverage shortfall into a findings entry naming the file and its measured values (fixture: a
-   sub-threshold file must produce a non-empty findings file).
-2. **R2 — budget at admission.** Derive an estimate (requirements × workspaces touched) in the
-   precheck or the driver's Run setup, route over-budget tasks to a split or reviewer-tier executor,
-   and record the estimate plus the host dispatch ceiling in the run log and the `--worktree` /
-   task-pipeline docs.
-3. **R4 + R11 — normalize and tolerate anchors.** Normalize evidence citations to repo-relative paths
-   at record time; make the anchor check resolve a unique basename instead of reporting it stale, and
-   keep reporting genuinely unresolvable or ambiguous anchors.
-4. **R5 + R6 — enforce what the docs now state.** Check for a criterion that declares no
-   machine-readable id, and for an answer with no row keyed to a graduated feature scenario; run the
-   feature strict preflight as refine/refineall's exit gate.
-5. **R7 + R12 — close the two blind spots.** Add the mermaid declared-vs-referenced id rule (and
-   retired-name labels), and put the wire-shape requirement on the review path with a server-side
-   key-shape assertion convention.
-6. **R8 — watch the base ref.** Detect base-ref movement at each task boundary of a `--worktree`
-   batch and report it in the batch report, leaving the terminal merge decision to the operator.
-7. **R9 + R10 — own the inline surfaces.** Ship the proof-fingerprint script as a repo-only
-   `plugins/sp/scripts` entry (mirroring `inline-run-setup.ts`) and list leftover worktrees/scratch
-   paths in the batch report.
-8. **Gates.** `bun run spur-check`, the affected plugin tests, and a dry-run of the new fixtures.
+1. **R1** — widen both size counters and extend their tests (7/5 PASS, 11 FAIL, legacy form, prose
+   `R1`); delete the stale tier-gate text in `execution-workflow.md` item 3 and the README row.
+2. **R2** — coverage-shortfall lines in `quality-gate.ts` with tests; regenerate `quality-gate.mjs`.
+3. **R3** — early return for terminal records in `checkLineAnchors`; adjust task-check tests.
+4. **R4 + R6** — bold-head identities in `verify-answer-lint.ts` with tests; shrink the style-guide
+   section; add the review-lens bullet.
+5. **R5** — `--fingerprint` mode in `inline-run-setup.ts`, the `readProofInputContents` export, the
+   driver sentence and the digest-equality test.
+6. **Gates** — focused workspace tests, then `bun run spur-check`, `bun run corpus-check` once (R3 is a
+   checker-policy change, T10), and `spur task check 0862 --json`.
 
 ### Root Cause
 
-The batch pipeline's admission and evidence checks validate *shape* — a task file exists, a gate exited
-zero, a verdict artifact says PASS — but not the conditions that make the work completable or the
-evidence traceable. So:
+The G65 bill traces to tools that misread the corpus as it is written, or stay silent, rather than to
+missing checks:
 
-1. **Two counters read zero.** `task-size-precheck.ts` matches a requirement form this corpus does not
-   use (`- **Rn** — …`), so its count is always 0 and the size gate can never fire. The same class of
-   blindness makes the gate blind to mermaid ids and to the dispatch budget: nothing counts the thing
-   that actually decides the outcome (requirement mass, workspaces touched, rendered surfaces).
-2. **A failing gate can be silent.** `bun test` exits 1 for a per-file coverage shortfall while
-   printing `0 fail`, and `quality-gate.ts` derives its findings file only from rule output — so the
-   fix hop is handed an empty findings file and has to rediscover the cause from a coverage table.
-3. **Provenance is copied, not normalized.** The verdict artifact holds the verifier's evidence
-   strings verbatim (short basenames, whole bullet lines as ids); record and the feature gate then
-   read those same strings as identifiers and citations, and both fail on forms no author was told
-   to avoid.
-4. **The driver adapts around missing surfaces instead of owning them.** The engine-only action kinds
-   have no inline execution surface, so the driver invents a scratch script; delegate debris lands
-   outside the tree and is noticed only by hand.
+1. **The size counter reads zero.** It matches only the legacy `- [ ] Rn.` form, and the docs still
+   promise the capability-tier gate that 0723 removed.
+2. **A coverage-only failure is silent.** `bun test` exits 1 with `0 fail`; `quality-gate.ts` builds
+   findings only from `file.ext:line` anchors, so the fix hop gets an empty findings file.
+3. **Terminal records are re-verified.** `checkLineAnchors` re-checks path existence on `done` tasks,
+   so every recorded `## Testing` body that quotes verifier basenames becomes permanent warning noise.
+4. **The AC parser rejects the natural form.** A single-line `- **ACn — …**` bullet declares no id, so
+   answer rows lose their key; a style-guide rule was added to compensate instead of fixing the parser.
+5. **The inline driver must validate a digest it has no way to compute**, so it improvised a script.
+6. **Review has no lens for server/client wire-shape drift** (0860's dropped `teamId` key).
 
-Each defect is independently fixable and independently shippable. The ordering in Plan reflects
-blast radius: the counting and classification fixes (R1–R3) remove the largest share of the batch's
-cost, the keying fixes (R4, R5, R11) remove the recurring warning noise and restore traceability, and
-the checker additions (R6–R8, R12) close the blind spots that let three defects reach a green gate.
-No fix may lower a threshold, delete a check, or waive a gate to go green.
+The remaining G65 frictions (refineall preflight, the retired diagram name, base-ref movement,
+delegate debris) are either caught at one existing checkpoint or were one-off. Adding a second
+checkpoint for each is the verification growth this task declines.
 
 ### Solution
 
@@ -242,6 +268,14 @@ No fix may lower a threshold, delete a check, or waive a gate to go green.
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+- Evidence: `.spur/run/worktree-runall-g65-ac87-batch-report.md`, `.spur/run/refineall-g65-event-trace.md`
+- Size gate: `plugins/sp/scripts/task-size-precheck.ts`, `packages/app/src/services/task-size-precheck.ts`, `config/workflows/task-pipeline.yaml` (`maxImplementReqs`, `maxImplementPlanItems`)
+- Quality gate: `plugins/sp/scripts/quality-gate.ts`, `bunfig.toml` (`coverageThreshold`)
+- Anchors: `packages/app/src/services/task-check.ts` `checkLineAnchors` (0584, 0714); ADR-092
+- AC ids: `plugins/sp/scripts/verify-answer-lint.ts` (0804 R4, 0817 R3), `plugins/sp/skills/spur-dev/references/ac-style-guide.md`
+- Proof: `plugins/sp/scripts/inline-run-setup.ts`, `packages/app/src/workflow/proof-input-fingerprint.ts`, `packages/app/src/workflow/actions/proof-fingerprint.ts`, `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` (0785, 0808 R4, 0809 R4)
+- Docs: `plugins/sp/skills/spur-dev/references/execution-workflow.md`, `plugins/sp/README.md`, `plugins/sp/skills/code-review/references/review-lenses.md`
+- Commits: `0afd1405f` (C5/C10 doc halves), `d78ffdaf0` (TeamSvc diagram), `26d0df827` (G65 merge)
+- Related tasks: 0583, 0607, 0714, 0723, 0781, 0785, 0808, 0809, 0817
 
 ### History
