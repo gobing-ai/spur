@@ -29,6 +29,10 @@
  *
  * Usage:
  *   bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]
+ *   bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]
+ *
+ * The `--fingerprint` mode prints the engine's proof-input digest for the given spec files and
+ * creates nothing (task 0862 R5).
  *
  * Env: SPUR_BIN
  */
@@ -56,7 +60,10 @@ function usage(): never {
     console.error(
         'Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]',
     );
-    process.exit(1);
+    console.error(
+        '       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]',
+    );
+    process.exit(2);
 }
 
 /**
@@ -122,15 +129,76 @@ function writeOutcome(runId: string, outcome: SetupOutcome): void {
     writeFileSync(join(runDir, `${runId}-inline-setup.json`), `${JSON.stringify(outcome, null, 4)}\n`);
 }
 
+/**
+ * `--fingerprint` mode (task 0862 R5): print the engine's proof-input digest for a task file
+ * (plus optional feature file) instead of creating a run, so the inline driver can capture the
+ * fresh digest bound `run.artifact` registration checks against.
+ *
+ * The digest itself comes from the exported app functions — never reimplemented here — and the
+ * options mirror `ProofFingerprintActionRunner` (cwd, spec contents, fileSystem; no `--expect`).
+ * Returns the process exit code: 0 printed, 1 read/resolve failure.
+ */
+async function printFingerprint(taskFile: string, featureFile: string, spurBin: string): Promise<number> {
+    const { entry, repoRoot, chain } = resolveAppEntry(spurBin);
+    if (entry === null || repoRoot === null) {
+        console.error(
+            `inline-run-setup: FAIL — no monorepo checkout of spur is reachable via ${chain}. ` +
+                'The proof-input digest must be computed by the app service; a bundle-only install cannot do it.',
+        );
+        return 1;
+    }
+    const app = (await import(entry)) as {
+        computeProofInputFingerprint: (options: Record<string, unknown>) => Promise<string>;
+        readProofInputContents: (
+            fileSystem: unknown,
+            workdir: string,
+            options: { taskFile?: unknown; featureFile?: unknown },
+        ) => Promise<{ ok: true; taskContent?: string; featureContent?: string } | { ok: false; error: string }>;
+    };
+
+    const workdir = process.cwd();
+    // `undefined` fs takes readProofInputContents' node-filesystem default — the same default its
+    // sibling createGitAlternateTree applies, and the same Node FS the CLI's runner injects.
+    const inputs = await app.readProofInputContents(undefined, workdir, {
+        taskFile,
+        ...(featureFile.trim() !== '' ? { featureFile } : {}),
+    });
+    if (!inputs.ok) {
+        console.error(`inline-run-setup: FAIL — ${inputs.error}`);
+        return 1;
+    }
+
+    const digest = await app.computeProofInputFingerprint({
+        cwd: workdir,
+        ...(inputs.taskContent !== undefined ? { taskContent: inputs.taskContent } : {}),
+        ...(inputs.featureContent !== undefined ? { featureContent: inputs.featureContent } : {}),
+    });
+    process.stdout.write(`${digest}\n`);
+    return 0;
+}
+
 async function main(): Promise<void> {
     let runId = '';
     let file = '';
+    let fingerprint = false;
+    let taskFile = '';
+    let featureFile = '';
     let spurBin = process.env.SPUR_BIN ?? '';
     const argv = process.argv.slice(2);
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--run-id') runId = argv[++i] ?? '';
         else if (argv[i] === '--file') file = argv[++i] ?? '';
+        else if (argv[i] === '--fingerprint') fingerprint = true;
+        else if (argv[i] === '--task-file') taskFile = argv[++i] ?? '';
+        else if (argv[i] === '--feature-file') featureFile = argv[++i] ?? '';
         else if (argv[i] === '--spur-bin') spurBin = argv[++i] ?? spurBin;
+    }
+
+    // Two mutually exclusive modes share this entry point: create/attach a run (run-id + file), or
+    // print the proof digest for the inline driver (task 0862 R5). Mixing them is a usage error.
+    if (fingerprint) {
+        if (runId !== '' || file !== '' || taskFile.trim() === '') usage();
+        process.exit(await printFingerprint(taskFile, featureFile, spurBin));
     }
     if (runId.trim() === '' || file.trim() === '') usage();
     if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);

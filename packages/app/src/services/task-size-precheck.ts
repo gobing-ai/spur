@@ -8,9 +8,9 @@
 
 /** Per-task limits for the size precheck gate. */
 export interface TaskSizeLimits {
-    /** Max R-items in Requirements (default 10). Lines matching `- [ ] **R1.**` or `- [x] R1.` */
+    /** Max R-items in Requirements (default 10). House `- **R1** —` or legacy `- [ ] R1.` lines. */
     maxReqs: number;
-    /** Max checklist items under the Plan section (default 16). */
+    /** Max Plan items (default 16): top-level numbered steps plus checklist items. */
     maxPlanItems: number;
 }
 
@@ -33,44 +33,56 @@ export const DEFAULT_TASK_SIZE_LIMITS: TaskSizeLimits = {
 };
 
 /**
- * Regex for requirement items in the `## Requirements` section.
- * Matches `- [ ] **R1.**`, `- [x] **R1.**`, `- [ ] R1.`, `- [x] R1.` etc.
+ * Requirement item: one list marker required, then an optional checkbox, then the R-number in the
+ * house `- **R1** — <text>` or legacy `- [ ] R1. <text>` form. A bare `R1 <text>` line carries no
+ * list marker and stays prose, not a requirement. Mirrored by the lockstep copy in
+ * `plugins/sp/scripts/task-size-precheck.ts`.
  */
-const R_ITEM_RE = /^\s*-\s*\[[ xX]\]\s*(\*\*)?R\d+\./m;
+const R_ITEM_RE_SOURCE = '^\\s*[-*]\\s+(?:\\[[ xX]\\]\\s*)?[*_]{0,2}R(\\d+)\\.?[*_]{0,2}(?:\\s|$)';
+
+/** Top-level numbered Plan step (`1. <text>`). */
+const NUMBERED_PLAN_ITEM_RE_SOURCE = '^\\d+\\.\\s';
+
+/** Checklist Plan item (`- [ ] <text>`, `- [x] <text>`). */
+const CHECKLIST_ITEM_RE_SOURCE = '^\\s*[-*]\\s+\\[[ xX]\\]';
 
 /**
- * Regex for checklist items (any section, used under Plan).
+ * Body of a `##`/`###` section (heading line excluded), up to the next `##`/`###` heading.
+ * `null` when the heading is absent — callers decide the fallback.
  */
-const CHECKLIST_ITEM_RE = /^\s*-\s*\[[ xX]\]/m;
-
-/**
- * Count R-items in a task markdown body.
- * Pure function, no I/O.
- */
-export function countRItems(content: string): number {
-    const matches = content.match(new RegExp(R_ITEM_RE.source, 'gm'));
-    return matches?.length ?? 0;
+function sectionBody(content: string, headingPattern: string): string | null {
+    const heading = content.match(new RegExp(headingPattern, 'm'));
+    if (!heading) return null;
+    const rest = content.slice((heading.index ?? 0) + heading[0].length);
+    const nextHeading = rest.match(/^#{2,3}\s+/m);
+    return nextHeading ? rest.slice(0, nextHeading.index ?? 0) : rest;
 }
 
 /**
- * Extract the Plan section body from task markdown and count checklist items.
- * Looks for `## Plan` or `### Plan` heading, then counts `- [ ]` / `- [x]` lines.
- * Returns 0 when no Plan section found.
+ * Count distinct R-items in the `## Requirements` section (whole content when the heading is
+ * absent, as before). Deduped by number so a continuation line citing `R1` cannot double-count.
+ * Pure function, no I/O.
+ */
+export function countRItems(content: string): number {
+    const body = sectionBody(content, '^#{2,3}\\s+Requirements\\s*$') ?? content;
+    const numbers = new Set<string>();
+    for (const match of body.matchAll(new RegExp(R_ITEM_RE_SOURCE, 'gm'))) {
+        numbers.add(match[1] ?? '');
+    }
+    return numbers.size;
+}
+
+/**
+ * Extract the Plan section body and count its items: top-level numbered steps plus checklist
+ * items. Returns 0 when no Plan section is found.
  */
 export function countPlanItems(content: string): number {
-    // Find the Plan section heading
-    const planMatch = content.match(/^#{2,3}\s+Plan\s*$/m);
-    if (!planMatch) return 0;
+    const body = sectionBody(content, '^#{2,3}\\s+Plan\\s*$');
+    if (body === null) return 0;
 
-    const planStart = (planMatch.index ?? 0) + planMatch[0].length;
-    const rest = content.slice(planStart);
-
-    // Find the next section heading (## or ###) after Plan
-    const nextSection = rest.match(/^#{2,3}\s+/m);
-    const planBody = nextSection ? rest.slice(0, nextSection.index ?? 0) : rest;
-
-    const matches = planBody.match(new RegExp(CHECKLIST_ITEM_RE.source, 'gm'));
-    return matches?.length ?? 0;
+    const numbered = body.match(new RegExp(NUMBERED_PLAN_ITEM_RE_SOURCE, 'gm'))?.length ?? 0;
+    const checklist = body.match(new RegExp(CHECKLIST_ITEM_RE_SOURCE, 'gm'))?.length ?? 0;
+    return numbered + checklist;
 }
 
 /**

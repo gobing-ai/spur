@@ -592,3 +592,46 @@ describe('quote normalization (task 0809 R5)', () => {
         expect(r.stderr).toContain('matches no task AC checklist label or scenario title');
     });
 });
+
+// ─── Single-line criterion bullet: bold head is an id (0862 R4) ──────────────
+
+/** Task whose AC section carries a single-line `- **AC2 — …**` criterion bullet. */
+const SINGLE_LINE_AC_TASK = `## 0862. Fixture task
+
+### Requirements
+
+- [ ] **R1. First requirement.** Guard the thing.
+- [ ] **R2. Second requirement.** Lint the thing.
+
+### Acceptance Criteria
+
+- [ ] AC1 (R1): first acceptance criterion passes.
+- [ ] **AC2 — The roster runtime is gone (R3).** Given a fleet, when status is read, then no runtime.
+`;
+
+const BOLD_AC_TITLE = 'AC2 — The roster runtime is gone (R3).';
+
+describe('single-line criterion bullet declares its bold head (0862 R4)', () => {
+    test('an answer row keyed by the bold head token resolves', () => {
+        const sb = makeSandbox(SINGLE_LINE_AC_TASK);
+        const answer = completeAnswer().replace('| AC2 | MET | command |', '| AC2 | MET | test |');
+        expect(sb.exec(answer).code).toBe(0);
+    });
+
+    test('an answer row keyed by the full bold title resolves', () => {
+        const sb = makeSandbox(SINGLE_LINE_AC_TASK);
+        const answer = completeAnswer().replace(
+            '| AC2 | MET | command | `bun test` |',
+            `| ${BOLD_AC_TITLE} | MET | test | \`tests/a.test.ts:9\` |`,
+        );
+        const r = sb.exec(answer);
+        expect(r.code).toBe(0);
+    });
+
+    test('an undeclared AC row still fails', () => {
+        const sb = makeSandbox(SINGLE_LINE_AC_TASK);
+        const r = sb.exec(completeAnswer().replace('| AC2 | MET |', '| AC9 | MET |'));
+        expect(r.code).not.toBe(0);
+        expect(r.stderr).toContain('matches no task AC checklist label or scenario title');
+    });
+});

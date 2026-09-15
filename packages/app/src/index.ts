@@ -750,6 +750,7 @@ export {
     type FeatureProofData,
     ProofCaptureError,
     ProofInputFingerprint,
+    readProofInputContents,
     type TaskProofData,
 } from './workflow/proof-input-fingerprint';
 export {

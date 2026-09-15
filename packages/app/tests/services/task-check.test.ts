@@ -3535,10 +3535,11 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
             (f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR || f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
         );
 
-    // — Terminal records: path existence + line bounds only (ADR-092 — completed
-    // records are history); heuristics never run, so later code churn cannot
-    // manufacture warnings against evidence that is no longer current work.
-    describe('terminal records keep factual checks without heuristic churn', () => {
+    // — Terminal records: not re-checked at all (ADR-092, task 0862 R3 — completed
+    // records are history). Existence, bounds and heuristics all stop for `done`/
+    // `cancelled`, so later code churn cannot manufacture warnings against evidence
+    // that is no longer current work. Live records keep every check below.
+    describe('terminal records are not re-checked', () => {
         test('a done task whose cited subject moved elsewhere in the file stays silent', async () => {
             // Pre-0714 this shape reported drift ("now sits at line 3").
             const { fs, path, cleanup } = seedChangeMap(
@@ -3552,7 +3553,7 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
             expect(noContentWarnings(result)).toHaveLength(0);
         });
 
-        test('a done task still reports a missing path', async () => {
+        test('a done task citing a missing path yields no L4.stale-line-anchor', async () => {
             const { fs, path, cleanup } = seedChangeMap(
                 '`does-not-exist.ts:1` — closes `registerCancel`',
                 'export function registerCancel() {}\n',
@@ -3561,12 +3562,10 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
             const result = await new TaskCheckService(fs, matrix).check(path, '0001');
             cleanup();
 
-            const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-            expect(stale.length).toBeGreaterThanOrEqual(1);
-            expect(stale[0]?.message).toMatch(/file not found/i);
+            expect(noContentWarnings(result)).toHaveLength(0);
         });
 
-        test('a done task still reports an out-of-bounds line', async () => {
+        test('a done task citing a line past EOF yields no L4.stale-line-anchor', async () => {
             const { fs, path, cleanup } = seedChangeMap(
                 '`workflow.ts:99` — closes `registerCancel`',
                 'export function registerCancel() {}\n',
@@ -3575,9 +3574,19 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
             const result = await new TaskCheckService(fs, matrix).check(path, '0001');
             cleanup();
 
-            const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-            expect(stale.length).toBeGreaterThanOrEqual(1);
-            expect(stale[0]?.message).toMatch(/outside file|line 99/);
+            expect(noContentWarnings(result)).toHaveLength(0);
+        });
+
+        test('a cancelled task citing a missing path yields no L4.stale-line-anchor', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`does-not-exist.ts:1` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+                'cancelled',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            expect(noContentWarnings(result)).toHaveLength(0);
         });
     });
 

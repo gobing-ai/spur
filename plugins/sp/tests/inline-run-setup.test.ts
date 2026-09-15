@@ -206,3 +206,85 @@ test('delegate cleanup: an unsafe run id never opens the DB and writes no artifa
         stub.cleanup();
     }
 }, 30_000);
+
+// ─── --fingerprint mode (0862 R5) ────────────────────────────────────────────
+
+const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
+/** CLI entry passed as `--spur-bin`: `resolveAppEntry` derives the repo root and app entry from it. */
+const REAL_APP_ENTRY = join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts');
+/** The app barrel the script dynamically imports — the direct-call comparison target. */
+const APP_ENTRY = join(REPO_ROOT, 'packages', 'app', 'src', 'index.ts');
+
+/** Temp git repo holding one real task-spec file (the digest capture needs `HEAD` plus a task shape). */
+function makeFingerprintFixture(): { dir: string; cleanup: () => void } {
+    const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-fingerprint-'));
+    writeFileSync(
+        join(dir, 'task.md'),
+        '## 0862. Fixture task\n\n### Requirements\n\n- **R1** — fixture requirement\n',
+    );
+    spawnSync(
+        'sh',
+        [
+            '-c',
+            'git init -q && git config user.email t@example.com && git config user.name t && git add -A && git commit -qm init',
+        ],
+        { cwd: dir, stdio: 'pipe' },
+    );
+    return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+function runFingerprint(dir: string, args: string[]) {
+    return spawnSync('bun', [SCRIPT, '--fingerprint', ...args, '--spur-bin', `bun ${REAL_APP_ENTRY}`], {
+        cwd: dir,
+        stdio: 'pipe',
+        encoding: 'utf8',
+    });
+}
+
+test('--fingerprint prints the same digest as a direct computeProofInputFingerprint (0862 R5)', async () => {
+    const { dir, cleanup } = makeFingerprintFixture();
+    try {
+        const proc = runFingerprint(dir, ['--task-file', 'task.md']);
+        expect(proc.status).toBe(0);
+        expect(proc.stdout.trim()).toMatch(/^sha256:[a-f0-9]{64}$/);
+
+        const app = (await import(APP_ENTRY)) as {
+            readProofInputContents: (
+                fileSystem: unknown,
+                workdir: string,
+                options: { taskFile?: unknown; featureFile?: unknown },
+            ) => Promise<{ ok: true; taskContent?: string } | { ok: false; error: string }>;
+            computeProofInputFingerprint: (options: Record<string, unknown>) => Promise<string>;
+        };
+        const inputs = await app.readProofInputContents(undefined, dir, { taskFile: 'task.md' });
+        if (!inputs.ok) throw new Error(inputs.error);
+        const expected = await app.computeProofInputFingerprint({ cwd: dir, taskContent: inputs.taskContent });
+
+        expect(proc.stdout.trim()).toBe(expected);
+    } finally {
+        cleanup();
+    }
+}, 30_000);
+
+test('--fingerprint fails closed on an unreadable task file and creates no run', () => {
+    const { dir, cleanup } = makeFingerprintFixture();
+    try {
+        const proc = runFingerprint(dir, ['--task-file', 'no-such-task.md']);
+        expect(proc.status).toBe(1);
+        expect(proc.stderr).toContain('taskFile does not exist');
+        expect(existsSync(join(dir, '.spur'))).toBe(false);
+    } finally {
+        cleanup();
+    }
+});
+
+test('--fingerprint refuses a mixed invocation and a missing task file with usage (exit 2)', () => {
+    const { dir, cleanup } = makeFingerprintFixture();
+    try {
+        expect(runFingerprint(dir, ['--task-file', 'task.md', '--run-id', 'x']).status).toBe(2);
+        expect(runFingerprint(dir, []).status).toBe(2);
+        expect(existsSync(join(dir, '.spur'))).toBe(false);
+    } finally {
+        cleanup();
+    }
+});

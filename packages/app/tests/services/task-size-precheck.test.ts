@@ -47,6 +47,14 @@ ${Array.from({ length: 11 }, (_, i) => `- [ ] **R${i + 1}.** Requirement ${i + 1
 ${Array.from({ length: 17 }, (_, i) => `- [ ] Plan step ${i + 1}`).join('\n')}
 `;
 
+/** House form (the 0858 shape): 7 `- **Rn** — …` requirements and 5 numbered Plan steps. */
+const HOUSE_FORM_TASK = `## Requirements
+${Array.from({ length: 7 }, (_, i) => `- **R${i + 1}** — Requirement ${i + 1}`).join('\n')}
+
+### Plan
+${Array.from({ length: 5 }, (_, i) => `${i + 1}. Plan step ${i + 1}`).join('\n')}
+`;
+
 const NO_REQS_TASK = `## Some section
 Just prose.
 
@@ -110,6 +118,22 @@ describe('countRItems', () => {
     test('0454-style task with bold R-items', () => {
         expect(countRItems(ACTUAL_0454_TASK)).toBe(4);
     });
+
+    test('counts the house `- **Rn** —` form (0858 shape)', () => {
+        expect(countRItems(HOUSE_FORM_TASK)).toBe(7);
+    });
+
+    test('a prosy `R1 …` line with no list marker is not a requirement', () => {
+        expect(countRItems('## Requirements\nR1 covers the wiring\n- **R2** — real\n')).toBe(1);
+    });
+
+    test('dedupes by number so a continuation citing R1 cannot double-count', () => {
+        expect(countRItems('## Requirements\n- **R1** — real\n- R1 continues in another bullet\n')).toBe(1);
+    });
+
+    test('scopes to the Requirements section', () => {
+        expect(countRItems('## Background\n- **R1** — cited elsewhere\n\n## Requirements\n- **R2** — real\n')).toBe(1);
+    });
 });
 
 // ─── Tests: countPlanItems ──────────────────────────────────────────────────
@@ -145,6 +169,21 @@ describe('countPlanItems', () => {
     test('empty content returns 0', () => {
         expect(countPlanItems('')).toBe(0);
     });
+
+    test('counts numbered Plan steps alongside checklist items', () => {
+        expect(countPlanItems(HOUSE_FORM_TASK)).toBe(5);
+
+        const mixed = `### Plan
+1. First
+2. Second
+- [ ] Checklist item
+`;
+        expect(countPlanItems(mixed)).toBe(3);
+    });
+
+    test('does not count indented sub-items as top-level steps', () => {
+        expect(countPlanItems('### Plan\n1. First\n   1. Nested\n')).toBe(1);
+    });
 });
 
 // ─── Tests: evaluateTaskSize ─────────────────────────────────────────────────
@@ -172,6 +211,24 @@ describe('evaluateTaskSize', () => {
         expect(report.reasons.length).toBe(2);
         expect(report.reasons[0]).toContain('11 R-items (max 10)');
         expect(report.reasons[1]).toContain('17 Plan items (max 16)');
+    });
+
+    test('house form passes with defaults: 7 R-items / 5 numbered Plan steps (0858 shape)', () => {
+        const report = evaluateTaskSize(HOUSE_FORM_TASK);
+        expect(report.ok).toBe(true);
+        expect(report.reqCount).toBe(7);
+        expect(report.planItemCount).toBe(5);
+        expect(report.reasons).toEqual([]);
+    });
+
+    test('house form above the req ceiling fails closed', () => {
+        const overHouse = `## Requirements\n${Array.from({ length: 11 }, (_, i) => `- **R${i + 1}** — r${i + 1}`).join(
+            '\n',
+        )}\n\n### Plan\n1. one\n`;
+        const report = evaluateTaskSize(overHouse);
+        expect(report.ok).toBe(false);
+        expect(report.reqCount).toBe(11);
+        expect(report.reasons[0]).toContain('11 R-items (max 10)');
     });
 
     test('large task passes with raised limits', () => {

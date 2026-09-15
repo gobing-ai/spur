@@ -1447,15 +1447,17 @@ export class TaskCheckService extends PlanningCheckService {
      * Solution against the working tree. Emits L4.stale-line-anchor warnings when
      * the file is missing or the line is out of range (dogfood F81 P2).
      *
-     * Caps findings per section to 5. Task 0714 R1 narrows content matching to
-     * its provable form: every citation gets repository-relative path existence
-     * and line bounds regardless of status; terminal records (`done`/`cancelled`)
-     * stop there — their evidence is historical (ADR-092) and re-running subject
-     * heuristics after later code moves only manufactures churn. A live record is
-     * subject-matched only when its citing row carries exactly one parsed anchor
-     * and yields real subject tokens; failed exact-range matching then reports
-     * `L4.anchor-subject-mismatch`. No filename-derived subjects and no whole-file
-     * "first matching line" scan: neither verifies evidence, both guess it.
+     * Caps findings per section to 5. Terminal records (`done`/`cancelled`) are not
+     * checked at all: their evidence is historical (ADR-092) and re-verifying it after
+     * later code moves only manufactures permanent warnings on recorded `## Testing`
+     * bodies (task 0862 R3, reversing 0714 R1 for terminal records only).
+     *
+     * A live record first gets repository-relative path existence and line bounds; task
+     * 0714 R1 narrows content matching to its provable form: subject-matched only when
+     * its citing row carries exactly one parsed anchor and yields real subject tokens;
+     * failed exact-range matching then reports `L4.anchor-subject-mismatch`. No
+     * filename-derived subjects and no whole-file "first matching line" scan: neither
+     * verifies evidence, both guess it.
      */
     private async checkLineAnchors(
         doc: MarkdownDocument,
@@ -1463,8 +1465,9 @@ export class TaskCheckService extends PlanningCheckService {
         findings: CheckFindings[],
         status: string,
     ): Promise<void> {
-        const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
         const terminal = status === 'done' || status === 'cancelled';
+        if (terminal) return;
+        const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
         for (const section of ['Testing', 'Solution'] as const) {
             const body = doc.getSection(section);
             if (body === null || isPlaceholderBody(body)) continue; // External-evidence form (task 0584 R1): a named origin + backticked
@@ -1528,9 +1531,6 @@ export class TaskCheckService extends PlanningCheckService {
                         reported++;
                         continue;
                     }
-                    // Task 0714 R1: terminal records keep only the factual checks above;
-                    // subject/drift heuristics never run against historical evidence.
-                    if (terminal) continue;
                     const citingRow =
                         body.split('\n').find((l) => l.includes(`\`${cite.raw}\``)) ??
                         body.split('\n').find((l) => l.includes(cite.raw)) ??

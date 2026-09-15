@@ -7,10 +7,12 @@ import {
     isTransientLock,
     MAX_FINDINGS,
     main,
+    parseCoverageThreshold,
     QUALITY_GATE_USAGE,
     type QualityGateResult,
     runQualityGate,
     runShellCommand,
+    scanCoverageShortfalls,
     tailLines,
 } from '../scripts/quality-gate';
 
@@ -226,5 +228,96 @@ describe('quality-gate script (0823 d)', () => {
         const large = runShellCommand('head -c 2097152 /dev/zero', undefined);
         expect(large.code).toBe(0);
         expect(large.output.length).toBe(2097152);
+    });
+});
+
+// ─── Coverage-only failure findings (0862 R2) ────────────────────────────────
+
+/** Emits a bun-test summary with `0 fail` plus a coverage table, then exits non-zero. */
+const COVERAGE_ONLY_GATE = [
+    "printf '%s\\n' ' 3 pass'",
+    "printf '%s\\n' ' 0 fail'",
+    "printf '%s\\n' 'File             | % Funcs | % Lines | Uncovered Line #s'",
+    "printf '%s\\n' ' src/short.ts    |   50.00 |   80.00 | 12,13'",
+    "printf '%s\\n' ' src/ok.ts       |  100.00 |  100.00 |'",
+    'exit 1',
+].join('\n');
+
+describe('coverage shortfall findings (0862 R2)', () => {
+    test('a coverage-only failure names the under-threshold row as a findings anchor', () => {
+        const { dir, cleanup } = scratch('spur-qg-coverage-');
+        try {
+            writeFileSync(join(dir, 'bunfig.toml'), '[test]\ncoverageThreshold = { lines = 0.9, functions = 0.9 }\n');
+            const script = executable(dir, 'gate.sh', COVERAGE_ONLY_GATE);
+            const result = gate('run', dir, script);
+
+            expect(result.status).toBe('FAIL');
+            const findings = readFileSync(join(dir, '.spur/run/0823-test-gate.findings'), 'utf8');
+            expect(findings).toContain('src/short.ts:12');
+            expect(findings).not.toContain('src/ok.ts');
+            expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain(
+                'coverage shortfall src/short.ts:12 funcs=50.00 lines=80.00',
+            );
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('a real test failure leaves the findings unchanged', () => {
+        const { dir, cleanup } = scratch('spur-qg-real-fail-');
+        try {
+            writeFileSync(join(dir, 'bunfig.toml'), '[test]\ncoverageThreshold = { lines = 0.9, functions = 0.9 }\n');
+            const script = executable(dir, 'gate.sh', `${COVERAGE_ONLY_GATE.replace("' 0 fail'", "' 1 fail'")}`);
+            const result = gate('run', dir, script);
+
+            expect(result.status).toBe('FAIL');
+            const findings = readFileSync(join(dir, '.spur/run/0823-test-gate.findings'), 'utf8');
+            expect(findings).not.toContain('src/short.ts');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('no bunfig threshold leaves the findings unchanged', () => {
+        const { dir, cleanup } = scratch('spur-qg-no-threshold-');
+        try {
+            const script = executable(dir, 'gate.sh', COVERAGE_ONLY_GATE);
+            const result = gate('run', dir, script);
+
+            expect(result.status).toBe('FAIL');
+            expect(readFileSync(join(dir, '.spur/run/0823-test-gate.findings'), 'utf8')).not.toContain('src/short.ts');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('parseCoverageThreshold: per-axis keys, absent setting, unparseable text', () => {
+        expect(parseCoverageThreshold('coverageThreshold = { lines = 0.9, functions = 0.8 }')).toEqual({
+            functions: 0.8,
+            lines: 0.9,
+        });
+        expect(parseCoverageThreshold('coverageThreshold = { lines = 0.9 }')).toEqual({ lines: 0.9 });
+        expect(parseCoverageThreshold('[test]\ncoverage = true\n')).toBeNull();
+        expect(parseCoverageThreshold('coverageThreshold = { lines = nope }')).toBeNull();
+    });
+
+    test('scanCoverageShortfalls: first uncovered line, dedupe by path, `1` when the column is empty', () => {
+        const table = [
+            'File             | % Funcs | % Lines | Uncovered Line #s',
+            ' src/a.ts       |   50.00 |   80.00 | 12,13',
+            ' src/a.ts       |   50.00 |   80.00 | 12,13',
+            ' src/b.ts       |   10.00 |   99.00 |',
+            ' src/ok.ts      |  100.00 |  100.00 |',
+            'All files        |   43.00 |   40.00 |',
+        ].join('\n');
+
+        expect(scanCoverageShortfalls(table, { lines: 0.9, functions: 0.9 })).toEqual([
+            'quality gate: coverage shortfall src/a.ts:12 funcs=50.00 lines=80.00',
+            'quality gate: coverage shortfall src/b.ts:1 funcs=10.00 lines=99.00',
+        ]);
+        // One axis only: b.ts's functions are low, a.ts clears the lines floor.
+        expect(scanCoverageShortfalls(table, { lines: 0.9 })).toEqual([
+            'quality gate: coverage shortfall src/a.ts:12 funcs=50.00 lines=80.00',
+        ]);
     });
 });

@@ -27,13 +27,50 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// ─── Regex (sync with packages/app/src/services/task-size-precheck.ts) ───────
+// ─── Counting (sync with packages/app/src/services/task-size-precheck.ts) ────
 
-/** Matches `- [ ] **R1.**` or `- [x] R1.` etc. Requires period after digits. */
-const R_ITEM_RE = /^\s*-\s*\[[ xX]\]\s*(\*\*)?R\d+\./m;
+/**
+ * Requirement item: list marker required, then an optional checkbox, then the R-number in the
+ * house `- **R1** — <text>` or legacy `- [ ] R1. <text>` form. A bare `R1 <text>` line is prose.
+ */
+const R_ITEM_RE_SOURCE = '^\\s*[-*]\\s+(?:\\[[ xX]\\]\\s*)?[*_]{0,2}R(\\d+)\\.?[*_]{0,2}(?:\\s|$)';
 
-/** Matches checklist items under the Plan section. */
-const CHECKLIST_ITEM_RE = /^\s*-\s*\[[ xX]\]/m;
+/** Top-level numbered Plan step (`1. <text>`). */
+const NUMBERED_PLAN_ITEM_RE_SOURCE = '^\\d+\\.\\s';
+
+/** Checklist Plan item (`- [ ] <text>`, `- [x] <text>`). */
+const CHECKLIST_ITEM_RE_SOURCE = '^\\s*[-*]\\s+\\[[ xX]\\]';
+
+/**
+ * Body of a `##`/`###` section (heading line excluded), up to the next `##`/`###` heading.
+ * `null` when the heading is absent — callers decide the fallback.
+ */
+function sectionBody(content: string, headingPattern: string): string | null {
+    const heading = content.match(new RegExp(headingPattern, 'm'));
+    if (!heading) return null;
+    const rest = content.slice((heading.index ?? 0) + heading[0].length);
+    const nextHeading = rest.match(/^#{2,3}\s+/m);
+    return nextHeading ? rest.slice(0, nextHeading.index ?? 0) : rest;
+}
+
+/** Distinct R-items in `## Requirements` (whole content when the heading is absent). */
+function countRItems(taskContent: string): number {
+    const body = sectionBody(taskContent, '^#{2,3}\\s+Requirements\\s*$') ?? taskContent;
+    const numbers = new Set<string>();
+    for (const match of body.matchAll(new RegExp(R_ITEM_RE_SOURCE, 'gm'))) {
+        numbers.add(match[1] ?? '');
+    }
+    return numbers.size;
+}
+
+/** Plan items: top-level numbered steps plus checklist items under `## Plan`. */
+function countPlanItems(taskContent: string): number {
+    const body = sectionBody(taskContent, '^#{2,3}\\s+Plan\\s*$');
+    if (body === null) return 0;
+    const numbered = body.match(new RegExp(NUMBERED_PLAN_ITEM_RE_SOURCE, 'gm'))?.length ?? 0;
+    const checklist = body.match(new RegExp(CHECKLIST_ITEM_RE_SOURCE, 'gm'))?.length ?? 0;
+    return numbered + checklist;
+}
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
@@ -128,17 +165,8 @@ function main(): void {
         process.exit(0);
     }
 
-    const reqCount = taskContent.match(new RegExp(R_ITEM_RE.source, 'gm'))?.length ?? 0;
-
-    const planMatch = taskContent.match(/^#{2,3}\s+Plan\s*$/m);
-    const planBody = planMatch
-        ? (() => {
-              const rest = taskContent.slice((planMatch.index ?? 0) + planMatch[0].length);
-              const nextSection = rest.match(/^#{2,3}\s+/m);
-              return nextSection ? rest.slice(0, nextSection.index ?? 0) : rest;
-          })()
-        : '';
-    const planItemCount = planBody.match(new RegExp(CHECKLIST_ITEM_RE.source, 'gm'))?.length ?? 0;
+    const reqCount = countRItems(taskContent);
+    const planItemCount = countPlanItems(taskContent);
 
     const reasons: string[] = [];
     if (reqCount > maxReqs) {

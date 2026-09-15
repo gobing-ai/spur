@@ -18,6 +18,9 @@ Five dimensions for structured code review. Each lens has diagnostic questions; 
 - Are edge cases handled (empty, null, boundary, error)?
 - Are invariants preserved across the changed functions?
 - Is there a test that fails if the behavior is wrong?
+- A changed route response shape or client parser is covered both ways: a server-side key-shape
+  assertion and a test that runs a real payload through the real parser (a dropped key like `teamId`
+  must fail something). Missing either → P2.
 
 **Severity guide:** Logic errors that produce wrong output → P1. Missing edge case that could cause wrong output → P2. Unclear control flow that might hide bugs → P3.
 

@@ -332,6 +332,16 @@ function buildAcIdentityIndex(taskContent: string, featureContent: string | null
         const leading = label.split(/\s+/)[0] ?? '';
         if (leading && leading !== label) declareIdentity(leading);
     }
+    // Bold head of a single-line criterion bullet (task 0862 R4): the bold span and its
+    // head before the first ` — ` / `:` are declared ids, so `- **AC2 — Title.** Given …`
+    // answers to both `AC2` and the full bold title.
+    for (const m of section.matchAll(/^[-*]\s+(?:\[[ xX]\]\s+)?\*\*(.+?)\*\*/gm)) {
+        const inner = (m[1] ?? '').trim();
+        if (!inner) continue;
+        declareIdentity(inner);
+        const head = inner.split(/\s+[—–]\s+|:/)[0]?.trim() ?? '';
+        if (head && head !== inner) declareIdentity(head);
+    }
     // Bold-trajectory form (task 0817 R3): answers may cite an AC by a bare
     // `**AC id**` paragraph (house style for long/complex ids). Only whole-line
     // bold spans count — the line-anchored lazy regex rejects lines with two

@@ -206,7 +206,9 @@ Action semantics come from the YAML and the workflow action contract:
   state mutates the task, the host validates the same refusal conditions inline — the declared
   artifact exists at the resolved path and is canonical-valid for the run's wbs (for
   `verify-verdict`: verdict `PASS`), `proofBinding: current` is honored against a freshly captured
-  proof digest, and the run-scoped review-completion marker exists — then appends one provenance
+  proof digest — capture it with `bun "$SETUP_SCRIPT" --fingerprint --task-file <task path>
+  [--feature-file <feature path>]`, the same entry point used at Run setup, which prints the engine
+  `sha256:<hex>` digest — and the run-scoped review-completion marker exists — then appends one provenance
   line to `.spur/run/<run-id>.log` naming the equivalence (artifact kind, path, verdict, digest) and
   proceeds to `spur task record`. A failed validation stops at the state and follows the failure
   contract; the step is never silently skipped. Artifact-provenance consumers read that run-log

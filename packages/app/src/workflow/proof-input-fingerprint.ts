@@ -145,7 +145,7 @@ function taskDocumentShapeError(content: string): string | null {
 
 /** Reads the task/feature spec files for a proof run; fails when an option is not a string or a file is unreadable. */
 export async function readProofInputContents(
-    fileSystem: FileSystem,
+    fileSystem: FileSystem = createNodeFileSystem(),
     workdir: string,
     options: { taskFile?: unknown; featureFile?: unknown },
 ): Promise<ProofInputContents> {

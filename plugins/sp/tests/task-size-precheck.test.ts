@@ -169,3 +169,37 @@ test('a task within the default ceiling passes without any limit flag', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// ─── House requirement form (0862 R1 / 0858 shape) ───────────────────────────
+
+/** 7 `- **Rn** — …` requirements and 5 numbered Plan steps. */
+const HOUSE_FORM_BODY = `### Requirements\\n${Array.from({ length: 7 }, (_, i) => `- **R${i + 1}** — r${i + 1}`).join(
+    '\\n',
+)}\\n### Plan\\n${Array.from({ length: 5 }, (_, i) => `${i + 1}. step`).join('\\n')}`;
+
+test('house requirement form counts: 7 R-items, 5 Plan items, PASS', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-house-'));
+    try {
+        const fakeSpur = writeFakeSpur(dir, HOUSE_FORM_BODY);
+        const { status, stderr } = runPrecheck(dir, ['0858', '--spur-bin', fakeSpur]);
+        expect(status).toBe('PASS\n');
+        expect(stderr).toContain('7 R-items, 5 Plan items');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('a prose line starting `R1 ` with no list marker is not a requirement', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-prose-'));
+    try {
+        const fakeSpur = writeFakeSpur(
+            dir,
+            '### Requirements\\nR1 covers the wiring\\n- **R2** — real\\n### Plan\\n1. one',
+        );
+        const { status, stderr } = runPrecheck(dir, ['0862', '--spur-bin', fakeSpur]);
+        expect(status).toBe('PASS\n');
+        expect(stderr).toContain('1 R-items, 1 Plan items');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

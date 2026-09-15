@@ -53,6 +53,12 @@ export const LOCKED_PATTERN = /SQLiteError: database is locked|SQLite database .
 /** `file.ext:line` anchor extraction, mirroring the former grep -oE. */
 export const FINDINGS_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
 
+/**
+ * bun's coverage table row: `File | % Funcs | % Lines | Uncovered Line #s` (0862 R2).
+ * Group 4 (uncovered line numbers) may be empty — a fully covered file has no entry.
+ */
+export const COVERAGE_ROW_PATTERN = /^\s*(\S+\.[A-Za-z]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*(\S*)/;
+
 export interface QualityGateEnv {
     wbs: string;
     qualityGateCmd?: string;
@@ -100,6 +106,53 @@ export function tailLines(text: string, count: number): string {
 
 export function retryMessage(attempt: number): string {
     return `quality gate: database is locked; retrying (${attempt}/${MAX_GATE_ATTEMPTS}) in 10s\n`;
+}
+
+/** Per-axis coverage floor from `bunfig.toml`; a missing key leaves that axis unchecked. */
+export interface CoverageThreshold {
+    functions?: number;
+    lines?: number;
+}
+
+/**
+ * Parse `coverageThreshold = { lines = 0.9, functions = 0.9 }` out of bunfig text.
+ * `null` when the setting is absent — the caller then skips the shortfall scan entirely.
+ */
+export function parseCoverageThreshold(bunfigText: string): CoverageThreshold | null {
+    const block = bunfigText.match(/coverageThreshold\s*=\s*\{([^}]*)\}/);
+    if (!block) return null;
+    const threshold: CoverageThreshold = {};
+    for (const axis of ['functions', 'lines'] as const) {
+        const raw = block[1]?.match(new RegExp(`\\b${axis}\\s*=\\s*([\\d.]+)`))?.[1];
+        const value = raw === undefined ? Number.NaN : Number.parseFloat(raw);
+        if (Number.isFinite(value)) threshold[axis] = value;
+    }
+    return threshold.functions === undefined && threshold.lines === undefined ? null : threshold;
+}
+
+/**
+ * One `quality gate: coverage shortfall <path>:<line> funcs=<f> lines=<l>` line per distinct table
+ * row below either axis (thresholds are fractions, table numbers are percentages). `line` is the
+ * first number of the uncovered column, else `1`.
+ */
+export function scanCoverageShortfalls(logText: string, threshold: CoverageThreshold): string[] {
+    const shortfalls = new Map<string, string>();
+    for (const line of logText.split('\n')) {
+        const row = line.match(COVERAGE_ROW_PATTERN);
+        if (!row) continue;
+        const [, path, funcs, lines, uncovered] = row;
+        if (!path || path === 'All files' || shortfalls.has(path)) continue;
+        const belowFunctions =
+            threshold.functions !== undefined && Number.parseFloat(funcs ?? '') < threshold.functions * 100;
+        const belowLines = threshold.lines !== undefined && Number.parseFloat(lines ?? '') < threshold.lines * 100;
+        if (!belowFunctions && !belowLines) continue;
+        const firstUncovered = uncovered?.match(/\d+/)?.[0] ?? '1';
+        shortfalls.set(
+            path,
+            `quality gate: coverage shortfall ${path}:${firstUncovered} funcs=${funcs} lines=${lines}`,
+        );
+    }
+    return [...shortfalls.values()];
 }
 
 function retryDelayMs(env: QualityGateEnv): number {
@@ -175,6 +228,23 @@ export function runQualityGate(
             process.stdout.write(line); // tee: stdout and the log
             appendFileSync(abs(logFile), line);
             gateSleep(delayMs);
+        }
+    }
+
+    // Coverage-only failures carry no `file.ext:line` anchor, so findings extraction would hand the
+    // fix hop an empty file. Name one shortfall line per under-threshold row instead (0862 R2) —
+    // real test failures, an absent threshold and the exit-0 contract are untouched.
+    if (gateRc !== 0) {
+        const gateLog = existsSync(abs(logFile)) ? readFileSync(abs(logFile), 'utf8') : '';
+        if (/^\s*0 fail\b/m.test(gateLog) && !/^\s*[1-9]\d*\s+fail\b/m.test(gateLog)) {
+            const bunfigPath = cwd ? join(cwd, 'bunfig.toml') : 'bunfig.toml';
+            const threshold = existsSync(bunfigPath) ? parseCoverageThreshold(readFileSync(bunfigPath, 'utf8')) : null;
+            if (threshold) {
+                for (const shortfall of scanCoverageShortfalls(gateLog, threshold)) {
+                    process.stdout.write(`${shortfall}\n`); // tee: stdout and the log
+                    appendFileSync(abs(logFile), `${shortfall}\n`);
+                }
+            }
         }
     }
 

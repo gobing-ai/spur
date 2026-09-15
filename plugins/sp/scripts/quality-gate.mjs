@@ -23,6 +23,7 @@ var RETRY_DELAY_MS_DEFAULT = 1e4;
 var RETRY_DELAY_MS_ENV = "SPUR_QUALITY_GATE_RETRY_DELAY_MS";
 var LOCKED_PATTERN = /SQLiteError: database is locked|SQLite database .*is busy|SQLITE_BUSY/;
 var FINDINGS_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
+var COVERAGE_ROW_PATTERN = /^\s*(\S+\.[A-Za-z]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*(\S*)/;
 function isTransientLock(attemptOutput) {
   return LOCKED_PATTERN.test(attemptOutput);
 }
@@ -45,6 +46,38 @@ function tailLines(text, count) {
 function retryMessage(attempt) {
   return `quality gate: database is locked; retrying (${attempt}/${MAX_GATE_ATTEMPTS}) in 10s
 `;
+}
+function parseCoverageThreshold(bunfigText) {
+  const block = bunfigText.match(/coverageThreshold\s*=\s*\{([^}]*)\}/);
+  if (!block)
+    return null;
+  const threshold = {};
+  for (const axis of ["functions", "lines"]) {
+    const raw = block[1]?.match(new RegExp(`\\b${axis}\\s*=\\s*([\\d.]+)`))?.[1];
+    const value = raw === undefined ? Number.NaN : Number.parseFloat(raw);
+    if (Number.isFinite(value))
+      threshold[axis] = value;
+  }
+  return threshold.functions === undefined && threshold.lines === undefined ? null : threshold;
+}
+function scanCoverageShortfalls(logText, threshold) {
+  const shortfalls = new Map;
+  for (const line of logText.split(`
+`)) {
+    const row = line.match(COVERAGE_ROW_PATTERN);
+    if (!row)
+      continue;
+    const [, path, funcs, lines, uncovered] = row;
+    if (!path || path === "All files" || shortfalls.has(path))
+      continue;
+    const belowFunctions = threshold.functions !== undefined && Number.parseFloat(funcs ?? "") < threshold.functions * 100;
+    const belowLines = threshold.lines !== undefined && Number.parseFloat(lines ?? "") < threshold.lines * 100;
+    if (!belowFunctions && !belowLines)
+      continue;
+    const firstUncovered = uncovered?.match(/\d+/)?.[0] ?? "1";
+    shortfalls.set(path, `quality gate: coverage shortfall ${path}:${firstUncovered} funcs=${funcs} lines=${lines}`);
+  }
+  return [...shortfalls.values()];
 }
 function retryDelayMs(env) {
   const raw = Number.parseInt(env[RETRY_DELAY_MS_ENV] ?? "", 10);
@@ -111,6 +144,21 @@ function runQualityGate(mode, env, options = {}) {
       gateSleep(delayMs);
     }
   }
+  if (gateRc !== 0) {
+    const gateLog = existsSync(abs(logFile)) ? readFileSync(abs(logFile), "utf8") : "";
+    if (/^\s*0 fail\b/m.test(gateLog) && !/^\s*[1-9]\d*\s+fail\b/m.test(gateLog)) {
+      const bunfigPath = cwd ? join(cwd, "bunfig.toml") : "bunfig.toml";
+      const threshold = existsSync(bunfigPath) ? parseCoverageThreshold(readFileSync(bunfigPath, "utf8")) : null;
+      if (threshold) {
+        for (const shortfall of scanCoverageShortfalls(gateLog, threshold)) {
+          process.stdout.write(`${shortfall}
+`);
+          appendFileSync(abs(logFile), `${shortfall}
+`);
+        }
+      }
+    }
+  }
   if (gateRc === 0) {
     const bytes = existsSync(abs(logFile)) ? statSync(abs(logFile)).size : 0;
     const attemptsLabel = gateAttempt > 0 ? String(gateAttempt) : "";
@@ -149,9 +197,11 @@ function main(argv, env = process.env) {
 }
 export {
   tailLines,
+  scanCoverageShortfalls,
   runShellCommand,
   runQualityGate,
   retryMessage,
+  parseCoverageThreshold,
   main,
   isTransientLock,
   extractFindings,
@@ -161,5 +211,6 @@ export {
   MAX_GATE_ATTEMPTS,
   MAX_FINDINGS,
   LOCKED_PATTERN,
-  FINDINGS_PATTERN
+  FINDINGS_PATTERN,
+  COVERAGE_ROW_PATTERN
 };
