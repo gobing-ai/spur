@@ -76,6 +76,10 @@ redaction:
 # change (schema: packages/config/src/index.ts BuilderBumpVerConfigSchema).
 builder:
   bump-ver:
+    # The published package whose own tag triggers publish.yml. Not needed here — the root
+    # manifest is `@gobing-ai/spur`, which the built-in root-name discovery already matches.
+    # Declare it in repos whose root manifest name is unscoped (root `knowledge-kit` never
+    # matches `@gobing-ai/knowledge-kit`, so `--all` would skip the CLI entirely).
     tagVersionSeparator: "-v"
     publishWorkflow: publish.yml
     releaseCommitType: chore

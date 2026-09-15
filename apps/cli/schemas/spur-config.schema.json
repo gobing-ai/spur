@@ -312,6 +312,11 @@
                     "type": "object",
                     "description": "Release knobs for bump-ver/drop-tags. Defaults: -v separator, publish.yml workflow, chore(release) commit, gh run list limit 5.",
                     "properties": {
+                        "aggregatePackage": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Package whose own release tag is the publish trigger for the aggregate (--all) path, as an unscoped package id (e.g. \"spur\" for @gobing-ai/spur). Default: the package whose full name equals the workspace root manifest name."
+                        },
                         "tagVersionSeparator": {
                             "type": "string",
                             "minLength": 1,

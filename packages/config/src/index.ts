@@ -740,6 +740,12 @@ const VersionCarrierEntrySchema = z.looseObject({ type: z.string().min(1) });
 export const BuilderBumpVerConfigSchema = z.object({
     /** Release tag format: `<package><separator><version>` (default `-v` → `pkg-v1.2.3`). */
     tagVersionSeparator: z.string().min(1).default('-v'),
+    /** Package whose own release tag is the publish trigger for the aggregate (`--all`) path,
+     * as an unscoped package id (`spur` for `@gobing-ai/spur`). Default: the package whose full
+     * name equals the workspace root manifest name — which no repo can satisfy when that root
+     * name is unscoped (root `knowledge-kit` never matches `@gobing-ai/knowledge-kit`). Set this
+     * when the root manifest name is not the publishable package name. */
+    aggregatePackage: z.string().min(1).optional(),
     /** GitHub Actions workflow file the pushed release tag triggers. */
     publishWorkflow: z.string().min(1).default('publish.yml'),
     releaseCommitType: z.string().min(1).default('chore'),

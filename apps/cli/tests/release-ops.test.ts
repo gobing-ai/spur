@@ -158,6 +158,48 @@ describe('builder bump-ver', () => {
         expect(tags).toContain('@demo/lib-v0.3.0');
     });
 
+    test('builder.bump-ver.aggregatePackage names the publish target when the root name matches no package', async () => {
+        // Unscoped root (`knowledge-kit`) vs scoped CLI (`@gobing-ai/knowledge-kit`): the root-name
+        // default matches nothing, so --all bumped only the pinned packages and pushed an aggregate
+        // tag no publish workflow consumes (published 0.0.15 into silence on 2026-09-15). The
+        // config key names the publishable package explicitly.
+        const { repo } = mkRepo();
+        await runBumpVer(['--all', '0.3.0', '--push'], repo, createCapturedOutput(), {
+            builder: { 'bump-ver': { aggregatePackage: 'app' } },
+        } as unknown as Parameters<typeof runBumpVer>[3]);
+
+        const app = await Bun.file(join(repo, 'pkgs', 'app', 'package.json')).json();
+        const lib = await Bun.file(join(repo, 'pkgs', 'lib', 'package.json')).json();
+        expect(app.version).toBe('0.3.0');
+        expect(lib.version).toBe('0.3.0');
+        // The pushed trigger tag is the named package's own tag, not `<rootName>-v<version>`.
+        expect(remoteTags(repo)).toContain('@demo/app-v0.3.0');
+        expect(localTags(repo)).not.toContain('@demo/root-v0.3.0');
+    });
+
+    test('builder.bump-ver.aggregatePackage rejects an unknown id before mutating', async () => {
+        const { repo } = mkRepo();
+        await expect(
+            runBumpVer(['--all', '0.3.0'], repo, createCapturedOutput(), {
+                builder: { 'bump-ver': { aggregatePackage: 'nope' } },
+            } as unknown as Parameters<typeof runBumpVer>[3]),
+        ).rejects.toThrow('unknown builder.bump-ver.aggregatePackage "nope"');
+        expect(localTags(repo)).toEqual([]);
+    });
+
+    test('drop-tags --all removes the configured aggregate tag locally and on origin', async () => {
+        const { repo } = mkRepo();
+        const config = {
+            builder: { 'bump-ver': { aggregatePackage: 'app' } },
+        } as unknown as Parameters<typeof runBumpVer>[3];
+        await runBumpVer(['--all', '0.3.0', '--push'], repo, createCapturedOutput(), config);
+        expect(remoteTags(repo)).toContain('@demo/app-v0.3.0');
+
+        await runDropTags(['--all', '0.3.0', '--remote'], repo, createCapturedOutput(), config);
+        expect(remoteTags(repo)).not.toContain('@demo/app-v0.3.0');
+        expect(localTags(repo)).not.toContain('@demo/app-v0.3.0');
+    });
+
     test('rejects invalid semver', async () => {
         const { repo } = mkRepo();
         await expect(bumpVer(['lib', 'not-semver'], repo)).rejects.toThrow('not a valid semver');

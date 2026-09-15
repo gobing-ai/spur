@@ -52,6 +52,8 @@ interface WorkspaceManifest {
 interface ReleaseContext {
     repoRoot: string;
     rootName: string;
+    /** Package whose own tag triggers the publish workflow (see `resolveAggregatePackage`). */
+    aggregate?: ReleaseConfig;
     packages: Map<string, ReleaseConfig>;
     /** Packages bumped together by the aggregate (`--all`) path: those pinned via `workspace:` by another workspace package. */
     allPackages: ReleaseConfig[];
@@ -62,6 +64,40 @@ interface ReleaseContext {
 /** The git tag that, when pushed, triggers the publish workflow. */
 function releaseTag(config: ReleaseConfig, version: string): string {
     return `${config.packageName}${config.tagVersionSeparator}${version}`;
+}
+
+/**
+ * The package whose own release tag triggers the publish workflow for the aggregate (`--all`)
+ * path. `builder.bump-ver.aggregatePackage` names it by unscoped id; the default keeps the
+ * historical discovery — the package whose full name equals the workspace root manifest name
+ * (`@gobing-ai/spur` for the spur repo). That default is unreachable when the root manifest name
+ * is unscoped: root `knowledge-kit` never equals `@gobing-ai/knowledge-kit`, so `--all` skipped
+ * the CLI and pushed an aggregate tag no publish workflow matched.
+ */
+function resolveAggregatePackage(
+    aggregatePackage: string | undefined,
+    packages: Map<string, ReleaseConfig>,
+    rootName: string,
+): ReleaseConfig | undefined {
+    if (aggregatePackage !== undefined) {
+        const config = packages.get(aggregatePackage);
+        if (config === undefined) {
+            throw new Error(
+                `unknown builder.bump-ver.aggregatePackage "${aggregatePackage}". Package IDs: ${[...packages.keys()].join(', ')}`,
+            );
+        }
+        return config;
+    }
+    return [...packages.values()].find((c) => c.packageName === rootName);
+}
+
+/**
+ * The tag the `--all` path pushes to trigger the publish workflow. With a resolved aggregate
+ * package it is that package's own scoped release tag; without one the historical
+ * `<rootName>-v<version>` form is preserved byte-identical.
+ */
+function resolveAggregateTag(ctx: ReleaseContext, version: string): string {
+    return ctx.aggregate === undefined ? `${ctx.rootName}-v${version}` : releaseTag(ctx.aggregate, version);
 }
 
 /** Run a command, capturing stdout; never throws (caller checks `ok`). */
@@ -189,12 +225,14 @@ async function releaseContext(
     }
 
     // The `--all` set: workspace packages pinned as `workspace:` deps by any other workspace package,
-    // PLUS the package whose name equals the workspace root name (the CLI release target, e.g.
-    // `@gobing-ai/spur`). The aggregate tag is `<rootName>-v<version>` and that tag is what triggers
-    // the publish workflow, so the package it names MUST be bumped by `--all` — otherwise a bare
+    // PLUS the aggregate package whose tag triggers the publish workflow — named explicitly by
+    // `builder.bump-ver.aggregatePackage` or, by default, discovered as the package whose name
+    // equals the workspace root name (the CLI release target, e.g. `@gobing-ai/spur`). The package
+    // the aggregate tag names MUST be bumped by `--all` — otherwise a bare
     // `bump-ver <version> --push` pushes an aggregate tag whose version the CLI does not carry, and
     // the publish gate (tag version == package.json version) fails or the run never ships (dogfood
-    // 2026-08-21: 0.3.57 was never published because the CLI stayed at 0.3.55).
+    // 2026-08-21: 0.3.57 was never published because the CLI stayed at 0.3.55; the same class hit
+    // an unscoped root name, where the default silently matched no package at all).
     const pinnedNames = new Set<string>();
     for (const ws of workspaces) {
         for (const field of ['dependencies', 'devDependencies', 'peerDependencies'] as const) {
@@ -207,10 +245,11 @@ async function releaseContext(
             }
         }
     }
-    pinnedNames.add(rootName);
+    const aggregate = resolveAggregatePackage(bumpVerConfig.aggregatePackage, packages, rootName);
+    if (aggregate !== undefined) pinnedNames.add(aggregate.packageName);
     const allPackages = [...packages.values()].filter((c) => pinnedNames.has(c.packageName));
 
-    return { repoRoot, rootName, packages, allPackages, versionCarriers };
+    return { repoRoot, rootName, aggregate, packages, allPackages, versionCarriers };
 }
 
 /**
@@ -495,7 +534,7 @@ async function bumpAll(
 
     const branch = await assertCleanTreeOnBranch(ctx);
     const configs = ctx.allPackages;
-    const aggregateTag = `${ctx.rootName}-v${version}`;
+    const aggregateTag = resolveAggregateTag(ctx, version);
 
     // Pre-flight: check all tags (aggregate + per-package) and npm before touching any file.
     const existingLocal = new Set((await git(ctx.repoRoot, ['tag', '-l'])).split('\n').filter(Boolean));
@@ -564,7 +603,13 @@ async function bumpAll(
             output.write(`Tagged (trace): ${tag}`);
         }
     }
-    await git(ctx.repoRoot, ['tag', '-a', aggregateTag, '-m', `${ctx.rootName} ${version} — ${shortNames}`]);
+    await git(ctx.repoRoot, [
+        'tag',
+        '-a',
+        aggregateTag,
+        '-m',
+        `${ctx.aggregate?.packageName ?? ctx.rootName} ${version} — ${shortNames}`,
+    ]);
     output.write(`Tagged (publish): ${aggregateTag}`);
 
     if (!options.push) {
@@ -627,7 +672,7 @@ async function dropAll(
         await dropTagsFor(ctx, config, version, options, output);
     }
     // Also drop the aggregate tag.
-    const aggregateTag = `${ctx.rootName}-v${version}`;
+    const aggregateTag = resolveAggregateTag(ctx, version);
     const localTags = new Set((await git(ctx.repoRoot, ['tag', '-l'])).split('\n').filter(Boolean));
     if (localTags.has(aggregateTag)) {
         await git(ctx.repoRoot, ['tag', '-d', aggregateTag]);

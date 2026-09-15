@@ -161,8 +161,9 @@ future spur-dev → public-noun promotion needs its own consent-gate entry
   `chore(release): bump <pkg> to <version>`, create the annotated tag `<pkg>-v<version>`, and
   optionally `--push` the branch + tag.
 - `bump-ver --all <version> [--push]` (or a bare `bump-ver <version>`) — bump every package pinned
-  via `workspace:` by another workspace package, then add per-package trace tags plus the aggregate
-  `@<scope>/<root>-v<version>` publish tag.
+  via `workspace:` by another workspace package **plus the aggregate package**, then add
+  per-package trace tags plus the aggregate publish tag (the aggregate package's own
+  `<pkg>-v<version>` tag, or `<rootName>-v<version>` when no aggregate package resolves).
 - `drop-tags <package-id> <version> [--remote]` — delete the local tag; `--remote` also deletes it
   on origin.
 - `drop-tags --all <version> [--remote]` — drop the per-package + aggregate tags.
@@ -179,12 +180,24 @@ release conventions configure them instead of patching release scripts:
 ```yaml
 builder:
   bump-ver:
+    aggregatePackage: spur      # package whose own tag triggers the publish workflow
     tagVersionSeparator: "-v"   # release tag = <package><separator><version>
     publishWorkflow: publish.yml # workflow the pushed tag triggers
     releaseCommitType: chore
     releaseCommitScope: release
     ghRunListLimit: 5
 ```
+
+**`aggregatePackage` names the publish trigger, and it must be a package `--all` bumps.** The
+aggregate tag is the only tag `--all --push` pushes, so the package it names has to carry the
+version the publish gate checks (`tag version == package.json version`). Default: the package
+whose full name equals the workspace root manifest name — which only works when the root manifest
+is the publishable package (the spur repo itself: `@gobing-ai/spur`). A repo whose root name is
+unscoped (`knowledge-kit` vs `@gobing-ai/knowledge-kit`) matches nothing: `--all` bumped only the
+`workspace:`-pinned packages and pushed `knowledge-kit-v<version>`, a tag no workflow consumes
+(2026-09-15: 0.0.15 was committed and pushed but never published). Set `aggregatePackage` to the
+unscoped id of the published package in that shape; an id that matches no workspace package
+aborts before any mutation, listing the known ids.
 
 **Marketplace/plugin version carriers.** When `.claude-plugin/marketplace.json` exists, every
 listed plugin's `version` (and its own `<source>/plugin.json`) is bumped to the release version in
