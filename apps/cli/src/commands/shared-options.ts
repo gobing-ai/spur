@@ -98,10 +98,6 @@ export const SHARED_OPTIONS = {
     dryRunFeatureMap: ['--dry-run', 'Show the old→new ID map + affected tasks without writing'] as const,
     dryRunFeatureSync: ['--dry-run', 'Report proposed status sync transitions without applying'] as const,
     dryRunHistoryScan: ['--dry-run', 'Scan without persisting imported records'] as const,
-    dryRunProjectsMigrate: [
-        '--dry-run',
-        'Preview the conversion; nothing is written (the default — --apply writes)',
-    ] as const,
     dryRunRuleFix: ['--dry-run', 'Preview fixes without writing (use with --fix-mode auto)'] as const,
     dryRunTaskReport: ['--dry-run', 'Produce the full report without writing files'] as const,
     dryRunWorkflowValidate: ['--dry-run', 'Validate and walk transitions without executing actions'] as const,

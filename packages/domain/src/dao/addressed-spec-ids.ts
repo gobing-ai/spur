@@ -17,19 +17,6 @@ export async function listAddressedSpecIds(db: Pick<DbAdapter, 'queryAll'>): Pro
     return Array.from(new Set([...inboxIds, ...runIds])).sort();
 }
 
-/** Inspect legacy schemas without opening a writer or applying migrations. */
-export async function readAddressedSpecIds(databasePath: string): Promise<string[]> {
-    const { Database } = await import('@gobing-ai/ts-runtime/bun-sqlite');
-    const db = new Database(databasePath, { readonly: true });
-    try {
-        return await listAddressedSpecIds({
-            queryAll: async <T>(sql: string): Promise<T[]> => db.query<T, []>(sql).all(),
-        });
-    } finally {
-        db.close();
-    }
-}
-
 async function distinctOrEmpty(db: Pick<DbAdapter, 'queryAll'>, sql: string): Promise<string[]> {
     try {
         return (await db.queryAll<{ id: string }>(sql)).map((row) => row.id);

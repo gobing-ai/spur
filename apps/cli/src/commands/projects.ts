@@ -1,24 +1,14 @@
 import { basename, dirname, join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
-    type ConversionResult,
     FleetService,
     type FleetServiceContext,
     isPortLive,
-    type LegacyConflict,
-    LegacyMigrationService,
-    type MigrationPlan,
     type OrchestratorBinding,
     ProjectRegistry,
     startRegisteredProject,
 } from '@gobing-ai/spur-app';
-import {
-    createMigratedDb,
-    type DbAdapter,
-    type ProjectStrategy,
-    ProjectStrategyDao,
-    readAddressedSpecIds,
-} from '@gobing-ai/spur-domain';
+import { createMigratedDb, type DbAdapter, type ProjectStrategy, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toEnvelopeJson } from '../output';
@@ -418,132 +408,4 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
             }
         });
-
-    projectsCmd
-        .command('migrate')
-        .summary('preview or apply the legacy agent.team → fleet.json conversion')
-        .argument('[path]', 'Project root directory path (default: current directory)')
-        .option(...SHARED_OPTIONS.dryRunProjectsMigrate)
-        .option(
-            '--apply',
-            'Write the conversion: back up any prior fleet.json to .bak, then write the declaration (default is dry-run)',
-        )
-        .option(...SHARED_OPTIONS.json)
-        .option(...SHARED_OPTIONS.jsonEnvelope)
-        .action(async (pathArg, options) => {
-            try {
-                const projectPath = resolve(context.cwd, pathArg ?? '.');
-                if (!(await context.fs.exists(projectPath))) {
-                    throw new Error(`Directory does not exist: ${projectPath}`);
-                }
-                // Dry-run is the default; only --apply writes. An explicit --dry-run wins
-                // over --apply so an option-concatenating wrapper can never imply a write.
-                const applyMode = options.apply === true && options.dryRun !== true;
-
-                // Inspect the target's legacy schema as-is; opening a migrated adapter
-                // here would make even --dry-run write to the database (0846 R3).
-                const dbUrl = join(projectPath, '.spur', 'spur.db');
-                const service = new LegacyMigrationService({
-                    spurConfig: await context.loadAgentConfig(projectPath),
-                    fs: context.fs,
-                    listAddressedSpecIds: async () =>
-                        (await context.fs.exists(dbUrl)) ? readAddressedSpecIds(dbUrl) : [],
-                });
-
-                if (!applyMode) {
-                    const plan = await service.preview(projectPath);
-                    if (options.json) {
-                        context.output.write(toEnvelopeJson(plan, { enveloped: options.jsonEnvelope }));
-                    } else {
-                        writeMigratePreview(context, plan);
-                    }
-                    // A reported conflict is a refusal to proceed, not a crash (0846 R5):
-                    // exit 2 carries the verdict; the payload still carries the full plan.
-                    if (plan.blocked) context.setExitCode(2);
-                    return;
-                }
-
-                const result = await service.apply(projectPath);
-                if (options.json) {
-                    context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
-                } else {
-                    writeMigrateApplyResult(context, result);
-                }
-                if (result.outcome === 'blocked') context.setExitCode(2);
-            } catch (err) {
-                const message = err instanceof Error ? err.message : String(err);
-                if (options.json) {
-                    context.output.write(
-                        toEnvelopeJson(
-                            { ok: false, error: message },
-                            { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message } },
-                        ),
-                    );
-                } else {
-                    context.output.error(`Error: ${message}`);
-                }
-                context.setExitCode(1);
-            }
-        });
-}
-
-function writeMigratePreview(context: CliContext, plan: MigrationPlan): void {
-    context.output.write(`Migration preview for ${plan.inventory.projectPath} (dry-run — nothing written)`);
-    if (plan.steps.length === 0) {
-        context.output.write('Nothing to migrate — no legacy artifacts found.');
-        return;
-    }
-    context.output.write(`Steps (${plan.steps.length}):`);
-    for (const step of plan.steps) {
-        const keeps = step.preservesId !== null ? ` — preserves ${step.preservesId} verbatim` : '';
-        const from = step.from !== null ? ` from ${step.from}` : '';
-        context.output.write(`  - ${step.action} ${step.target}${from}${keeps}`);
-    }
-    if (plan.inventory.conflicts.length > 0) {
-        context.output.write(
-            `Conflicts (${plan.inventory.conflicts.length}) — nothing was written; resolve before converting:`,
-        );
-        writeConflicts(context, plan.inventory.conflicts);
-    }
-    if (plan.inventory.warnings.length > 0) {
-        context.output.write(
-            `Warnings (${plan.inventory.warnings.length}) — non-blocking here; the team-retirement task halts on these:`,
-        );
-        for (const warning of plan.inventory.warnings) {
-            context.output.write(`  - ${warning.kind}: ${warning.message}`);
-        }
-    }
-}
-
-function writeMigrateApplyResult(context: CliContext, result: ConversionResult): void {
-    switch (result.outcome) {
-        case 'converted':
-            context.output.write(
-                `Converted legacy roster to ${result.fleetPath}` +
-                    (result.preservedIds.length > 0
-                        ? ` (${result.preservedIds.length} member id(s) preserved verbatim)`
-                        : ''),
-            );
-            if (result.backupPath !== null) context.output.write(`Prior declaration backed up to ${result.backupPath}`);
-            break;
-        case 'unchanged':
-            context.output.write(
-                `Already converted — ${result.fleetPath} matches the current roster; nothing written.`,
-            );
-            break;
-        case 'nothing-to-convert':
-            context.output.write(`Nothing to migrate — no agent.team block resolves to ${result.projectPath}.`);
-            break;
-        case 'blocked':
-            context.output.write(`Migration blocked by ${result.conflicts.length} conflict(s) — nothing was written:`);
-            writeConflicts(context, result.conflicts);
-            break;
-    }
-}
-
-function writeConflicts(context: CliContext, conflicts: readonly LegacyConflict[]): void {
-    for (const conflict of conflicts) {
-        context.output.write(`  - ${conflict.kind}: ${conflict.message}`);
-        context.output.write(`      sources: ${conflict.sources.join(', ')}`);
-    }
 }
