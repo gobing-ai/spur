@@ -41,6 +41,8 @@ export interface ResolvedFleetMember {
 /** Wire shape of GET /api/project/fleet. `path` is null only off a project cwd (CF Worker). */
 export interface ProjectFleetSnapshot {
     path: string | null;
+    /** `agent.fleet.enabled` — the declared switch; false for an absent section too (0858 R5). */
+    enabled: boolean;
     strategy: ProjectStrategyInfo | null;
     orchestrator: OrchestratorBinding;
     members: ResolvedFleetMember[];

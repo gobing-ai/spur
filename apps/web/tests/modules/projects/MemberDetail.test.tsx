@@ -123,6 +123,7 @@ describe('MemberDetail pane (0842 R3)', () => {
     /** 0857: the pane reads its facts from the fleet snapshot, not a teams feed. */
     const snapshot: ProjectFleetSnapshot = {
         path: '/work/project',
+        enabled: true,
         strategy: null,
         orchestrator: { state: 'missing' },
         members: [],

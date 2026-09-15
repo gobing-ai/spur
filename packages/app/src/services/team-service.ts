@@ -755,7 +755,12 @@ export class TeamService {
      */
     async createAgentSpec(input: AgentSpecInput): Promise<AgentSpec> {
         validateAgentId(input.id);
-        const fleet = new FleetService({ fs: this.ctx.fs, openDb: this.ctx.getDb });
+        const fleet = new FleetService({
+            fs: this.ctx.fs,
+            ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+            ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
+            openDb: this.ctx.getDb,
+        });
         if ((await fleet.load(this.ctx.cwd)) !== null || input.tags?.some((tag) => tag.startsWith('fleet:'))) {
             await fleet.assertLaunchGroundTruth(input.workspace ?? this.ctx.cwd);
         }

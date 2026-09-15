@@ -89,7 +89,7 @@ export function buildRoster(snapshot: ProjectFleetSnapshot, processes: ProcessSt
     }
 
     // 5: processes matching no member are running-but-undeclared — appended so
-    // a hand-started agent (or a member removed from fleet.json while its
+    // a hand-started agent (or a member removed from agent.fleet while its
     // process survives) is never silently hidden. The operator mailbox
     // (`board-operator`) is an address, not a member, and is excluded here.
     for (const proc of processes) {

@@ -67,18 +67,15 @@ describe('spur agent list --specs', () => {
                     '    - name: capable-exec',
                     '      agent: claude',
                     '      tier: capable-1',
+                    // 0858: the roster is declared under the project's `agent.fleet`
+                    // section (the retired `.spur/fleet.json` now fails the load).
+                    '  fleet:',
+                    '    enabled: true',
+                    '    members:',
+                    '      - role: reviewer',
+                    '      - executor: cheap-exec',
                     '',
                 ].join('\n'),
-                'utf8',
-            );
-            // 0857: the roster is materialized from the project fleet declaration, so
-            // the fixture writes `.spur/fleet.json` instead of an `agent.team` block.
-            await writeFile(
-                join(cwd, '.spur', 'fleet.json'),
-                JSON.stringify({
-                    version: 1,
-                    members: [{ role: 'reviewer' }, { executor: 'cheap-exec' }],
-                }),
                 'utf8',
             );
             const fresh = createCliContext({ cwd, output: out, dbUrl: ':memory:' });

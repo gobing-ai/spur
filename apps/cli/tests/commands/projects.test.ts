@@ -8,6 +8,7 @@ import {
     setDetachedServeSpawnForTests,
     setPortProbeForTests,
 } from '@gobing-ai/spur-app';
+import { stringify } from 'yaml';
 import { main } from '../../src/index';
 
 describe('spur projects CLI command', () => {
@@ -84,18 +85,23 @@ describe('spur projects CLI command', () => {
             cwd: tempDir,
             output: createMockOutput().output,
         });
-        // Declaration with one enabled + one disabled member.
+        // 0858: the roster is declared under `agent.fleet` in the project config; the
+        // retired `.spur/fleet.json` would now fail the load instead of resolving.
         mkdirSync(join(projectPath, '.spur'), { recursive: true });
         writeFileSync(
-            join(projectPath, '.spur', 'fleet.json'),
-            JSON.stringify({
-                version: 1,
-                // Pinned executors (not in test agent config) resolve cleanly: R4
-                // missing-data-never-grants gives fsWrite=unknown write=false.
-                members: [
-                    { id: 'lead', executor: 'build' },
-                    { id: 'rev', executor: 'review', enabled: false },
-                ],
+            join(projectPath, '.spur', 'config.yaml'),
+            stringify({
+                agent: {
+                    fleet: {
+                        enabled: true,
+                        // Pinned executors (not in test agent config) resolve cleanly: R4
+                        // missing-data-never-grants gives fsWrite=unknown write=false.
+                        members: [
+                            { id: 'lead', executor: 'build' },
+                            { id: 'rev', executor: 'review', enabled: false },
+                        ],
+                    },
+                },
             }),
         );
         // A second registered project with NO declaration (R7 says-so path).
@@ -128,7 +134,7 @@ describe('spur projects CLI command', () => {
             expect(text).toContain('- fleetproj-lead role=- executor=build fsWrite=unknown write=false');
             expect(text).toContain('fleetproj-rev [disabled]');
             expect(text).toContain('bareproj');
-            expect(text).toContain('no declaration (.spur/fleet.json)');
+            expect(text).toContain('no declaration (agent.fleet)');
 
             const mockJson = createMockOutput();
             const jsonExit = await main(['projects', 'list', '--fleet', '--json'], {
@@ -170,17 +176,18 @@ describe('spur projects CLI command', () => {
             output: createMockOutput().output,
         });
         mkdirSync(join(projectPath, '.spur'), { recursive: true });
-        // Invalid declaration (member declares neither role nor executor) — resolution throws.
+        // 0858 R6/R8: an invalid section fails the project's config load, naming every
+        // issue with its `agent.fleet.*` path (member declares neither role nor executor).
         writeFileSync(
-            join(projectPath, '.spur', 'fleet.json'),
-            JSON.stringify({ version: 1, members: [{ purpose: 'ghost' }] }),
+            join(projectPath, '.spur', 'config.yaml'),
+            stringify({ agent: { fleet: { members: [{ purpose: 'ghost' }] } } }),
         );
 
         const mockList = createMockOutput();
         const listExit = await main(['projects', 'list', '--fleet'], { cwd: tempDir, output: mockList.output });
         expect(listExit).toBe(0);
         expect(mockList.getText()).toContain('fleet: unavailable');
-        expect(mockList.getText()).toContain('must declare a role or an executor');
+        expect(mockList.getText()).toContain('agent.fleet.members[0]');
 
         const mockJson = createMockOutput();
         await main(['projects', 'list', '--fleet', '--json'], { cwd: tempDir, output: mockJson.output });
@@ -189,7 +196,7 @@ describe('spur projects CLI command', () => {
         };
         const entry = parsed.projects.find((p) => p.name === 'brokenfleet');
         expect(entry?.fleet).toEqual(null);
-        expect(entry?.fleetError).toContain('must declare a role or an executor');
+        expect(entry?.fleetError).toContain('agent.fleet.members[0]');
     });
 
     it('should handle text formatting for add, list, and remove commands', async () => {
@@ -426,10 +433,18 @@ describe('spur projects CLI command', () => {
         const { ProjectClaimDao, createMigratedDb } = await import('@gobing-ai/spur-domain');
 
         const orchestratorCarrier = { id: 'lead', executor: 'build', role: 'planner', purpose: 'orchestrator' };
-        const seedFleetProject = async (name: string, declaration: object, corruptDb = false) => {
+        const seedFleetProject = async (
+            name: string,
+            fleet: { members: object[]; orchestrator?: string; enabled?: boolean },
+            corruptDb = false,
+        ) => {
             const dir = mkdtempSync(join(tmpdir(), `spur-${name}-`));
             mkdirSync(join(dir, '.spur'), { recursive: true });
-            writeFileSync(join(dir, '.spur', 'fleet.json'), JSON.stringify(declaration));
+            // 0858: written as the project's `agent.fleet` section, not the retired file.
+            writeFileSync(
+                join(dir, '.spur', 'config.yaml'),
+                stringify({ agent: { fleet: { enabled: fleet.enabled ?? true, ...fleet } } }),
+            );
             if (corruptDb) writeFileSync(join(dir, '.spur', 'spur.db'), 'definitely not a sqlite database');
             await main(['projects', 'add', dir, '--name', name], {
                 cwd: tempDir,
@@ -440,7 +455,6 @@ describe('spur projects CLI command', () => {
 
         // bound-online: declared binding + live claim row in the project's own db.
         const onlineDir = await seedFleetProject('orch-online', {
-            version: 1,
             members: [orchestratorCarrier],
             orchestrator: 'lead',
         });
@@ -451,27 +465,24 @@ describe('spur projects CLI command', () => {
 
         // bound-offline: declared binding, no live claim (R4 — start/heartbeat fixes it).
         const offlineDir = await seedFleetProject('orch-offline', {
-            version: 1,
             members: [orchestratorCarrier],
             orchestrator: 'lead',
         });
         // unresolvable: the pointer names no declared member id.
         const ghostDir = await seedFleetProject('orch-ghost', {
-            version: 1,
             members: [{ id: 'a', executor: 'build' }],
             orchestrator: 'ghost',
         });
         // Resolves cleanly with zero enabled members — `missing` names the fix (R7) —
         // and the strategy read reports the `rest` default (0838 R1).
         const disabledDir = await seedFleetProject('orch-disabled', {
-            version: 1,
             members: [{ id: 'rev', executor: 'review', enabled: false }],
         });
         // Unavailable reads: valid binding shape, corrupt project db — both the
         // orchestrator claim read and the strategy read fail per-project (0835 R6).
         const corruptDir = await seedFleetProject(
             'orch-corrupt',
-            { version: 1, members: [orchestratorCarrier], orchestrator: 'lead' },
+            { members: [orchestratorCarrier], orchestrator: 'lead' },
             true,
         );
 

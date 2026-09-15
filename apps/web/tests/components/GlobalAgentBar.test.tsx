@@ -49,6 +49,7 @@ function setPromptValue(textarea: Element, value: string): void {
 function fleet(overrides: { orchestrator?: Partial<ProjectFleetSnapshot['orchestrator']> } = {}): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'lead', ...overrides.orchestrator },
         members: [],

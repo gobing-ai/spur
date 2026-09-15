@@ -115,7 +115,12 @@ export default function ProjectsShell() {
                             {fleet.capacity.total === 0 ? (
                                 <span className="text-spur-text">
                                     no fleet declared — expected{' '}
-                                    <code className="font-mono">{`${project.path ?? 'this project'}/.spur/fleet.json`}</code>
+                                    <code className="font-mono">agent.fleet in .spur/config.yaml</code>
+                                </span>
+                            ) : fleet.enabled === false ? (
+                                <span className="text-spur-text">
+                                    disabled (<code className="font-mono">agent.fleet.enabled: false</code>) —{' '}
+                                    {fleet.capacity.total} member{fleet.capacity.total === 1 ? '' : 's'} declared
                                 </span>
                             ) : (
                                 <span className="text-spur-text">

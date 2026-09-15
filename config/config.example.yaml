@@ -180,24 +180,26 @@ agent:
   #   dev-run: omp
   #   dev-review: claude
 
-  # A project's agent roster is a **fleet** declared in the project's own tree,
-  # not in this file: `<projectPath>/.spur/fleet.json` (ADR-116, task 0835).
-  # Materialized at `spur serve` start; preview with `spur projects list --fleet`.
-  # Shape (version is pinned; a member declares role or executor):
-  #   {
-  #     "version": 1,
-  #     "members": [
-  #       { "role": "planner", "purpose": "orchestrator" },
-  #       { "role": "coder", "executor": "omp" },
-  #       { "role": "reviewer", "enabled": false }
-  #     ],
-  #     "orchestrator": "planner-1"
-  #   }
+  # A project's agent roster is a **fleet** declared in the project's own
+  # `.spur/config.yaml` under `agent.fleet` — never in this global file, and never
+  # in the retired `<projectPath>/.spur/fleet.json` (ADR-116 carrier moved by task
+  # 0858). Materialized and autostarted at `spur serve` start only when
+  # `agent.fleet.enabled` is true; preview with `spur projects list --fleet`.
+  # Shape (project layer; a member declares role or executor):
+  #   agent:
+  #     fleet:
+  #       enabled: true
+  #       strategy: gtd            # rest | gtd (default rest)
+  #       orchestrator: planner-1
+  #       members:
+  #         - { role: planner, purpose: orchestrator }
+  #         - { role: coder, executor: omp }
+  #         - { role: reviewer, enabled: false }
   # `enabled: false` keeps the member's derived `<role>-<n>` id index, so later
   # members never silently reallocate ids. The retired per-team config key is no
   # longer read — a leftover block fails the load and names `agent.fleet` as the
-  # replacement — and the roster is keyed on the worktree path now, not on a
-  # config-global team name.
+  # replacement — a leftover `fleet.json` fails the load too, and the roster is
+  # keyed on the worktree path now, not on a config-global team name.
 
 rules:
   paths:

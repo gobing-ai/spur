@@ -78,6 +78,7 @@ function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMemb
 function fleet(overrides: Partial<ProjectFleetSnapshot> = {}): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'orch' },
         members: [member({ instanceId: 'orch' }), member()],

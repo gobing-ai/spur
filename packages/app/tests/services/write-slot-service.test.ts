@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
@@ -47,7 +47,6 @@ function parseConfig(yaml: string): SpurConfig {
 }
 
 const FLEET = {
-    version: 1,
     members: [
         { id: 'orch', role: 'planner', purpose: 'orchestrator', executor: 'writer' },
         { id: 'coder', executor: 'writer' },
@@ -56,6 +55,16 @@ const FLEET = {
     ],
     orchestrator: 'orch',
 };
+
+/**
+ * The project's merged config carrying the fleet section — the 0858 carrier. A
+ * declared roster runs only when `enabled` is true, which is the state these
+ * claim rigs assert (an absent or disabled fleet starts nothing).
+ */
+function fleetConfig(): SpurConfig {
+    const base = parseConfig(EXECUTORS_YAML);
+    return spurConfigSchema.parse({ ...base, agent: { ...base.agent, fleet: { enabled: true, ...FLEET } } });
+}
 
 async function makeProject(): Promise<{ project: string; cleanup: () => Promise<void> }> {
     const base = await mkdtemp(join(tmpdir(), 'spur-write-slot-'));
@@ -83,12 +92,11 @@ interface Rig {
 /** Temp project + fleet declaration + migrated in-memory db + wired WriteSlotService. */
 async function makeRig(): Promise<Rig> {
     const { project, cleanup } = await makeProject();
-    await writeFile(join(project, '.spur', 'fleet.json'), JSON.stringify(FLEET));
     const db = await createMigratedDb();
     await new ProjectClaimDao(db).claim(project, 'orchestrator', 'proj-orch', 30_000);
     await new ProjectStrategyDao(db).set(project, 'gtd');
     const fleet = new FleetService({
-        spurConfig: parseConfig(EXECUTORS_YAML),
+        spurConfig: fleetConfig(),
         fs: createNodeFileSystem(project),
         registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
         openDb: async () => db,

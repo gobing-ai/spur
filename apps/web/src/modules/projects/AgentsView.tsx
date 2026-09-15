@@ -158,8 +158,9 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                 )}
                 {entries !== null && entries.length === 0 && (
                     <div className="p-4 text-sm text-spur-text-muted italic" data-roster-empty>
-                        No agents for this project — declare members in{' '}
-                        <code className="font-mono">{`${project.path ?? 'this project'}/.spur/fleet.json`}</code>.
+                        No agents for this project — declare members under{' '}
+                        <code className="font-mono">agent.fleet</code> in{' '}
+                        <code className="font-mono">{`${project.path ?? 'this project'}/.spur/config.yaml`}</code>.
                     </div>
                 )}
                 {entries !== null && entries.length > 0 && (

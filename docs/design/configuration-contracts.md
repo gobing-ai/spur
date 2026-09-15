@@ -28,7 +28,15 @@ Two top-level concerns:
   `tasks:`/`features:` blocks: `tasks.folders` (path → `{baseCounter, label?}`), `tasks.active`, `tasks.severity` (finding code → `error` | `warning` | `off`),
   `features.dir`. Under `agent`: `default` (default role), `executors` (tier → executor profiles), and
   `roles` (ADR-061 / 0572 — optional closed-vocabulary per-role tier/stage overrides merged per-field
-  over the `DEFAULT_AGENT_ROLES` constant; unknown role ids fail config load). Every finding emitted by task/feature check carries a stable machine code (e.g. `L3.plan-format`, `L4.feature-not-found`) registered in `packages/config/src/finding-codes.ts` (50 codes: L1×2, L2×5, L3×17; L4×26 — `L3.testing-coverage` retired by task 0688, `L3.status-claim-contradiction` retired by task 0691 / ADR-090). `tasks.severity` overrides finding severities or drops findings (`off`) before pass gate evaluation; unknown codes fail config validation. The dogfood `L4.anchor-subject-mismatch: error` override was removed by task 0688 / ADR-088 (residue after the matcher fix is frozen-legacy warnings, not a worked-down true-positive set). The folder fields tolerate a blank/`null` value (an empty YAML…
+  over the `DEFAULT_AGENT_ROLES` constant; unknown role ids fail config load). `agent.fleet`
+  (G65 / 0858) is the project fleet — the ONLY composition carrier and the project-layer-only
+  section: `enabled` (default `false`, the single switch `spur serve` gates materialization and
+  autostart on), `strategy` (`rest` | `gtd`, default `rest`; the `FLEET_STRATEGIES` tuple is the
+  vocabulary SSOT), `orchestrator` (member local id), `members` (each declaring a role or an
+  executor; `enabled: false` preserves its derived id index). It replaced `.spur/fleet.json` (0835)
+  and `agent.team` (0857) — a leftover of either fails the load and names `agent.fleet`, and a
+  global-layer `agent.fleet` is rejected because a fleet belongs to one project (ADR-116). An invalid
+  section lists every issue with its `agent.fleet.*` path. Every finding emitted by task/feature check carries a stable machine code (e.g. `L3.plan-format`, `L4.feature-not-found`) registered in `packages/config/src/finding-codes.ts` (50 codes: L1×2, L2×5, L3×17; L4×26 — `L3.testing-coverage` retired by task 0688, `L3.status-claim-contradiction` retired by task 0691 / ADR-090). `tasks.severity` overrides finding severities or drops findings (`off`) before pass gate evaluation; unknown codes fail config validation. The dogfood `L4.anchor-subject-mismatch: error` override was removed by task 0688 / ADR-088 (residue after the matcher fix is frozen-legacy warnings, not a worked-down true-positive set). The folder fields tolerate a blank/`null` value (an empty YAML…
   the canonical default. `@gobing-ai/spur-config` is the SSOT; `apps/cli/schemas/spur-config.schema.json`
   mirrors it for editor/CI validation.
 
@@ -186,7 +194,11 @@ dependency graph stays Workers-safe:
 | `@gobing-ai/spur-config/loader` (node) | `yaml`, `node:fs`, ts-runtime      | `loadSpurConfig(cwd)`, `resolveConfigFile(cwd)`, `resolvePlanningFolders(fs)`, embedded-schema resolution               | CLI, `packages/app` services (on Bun)                             |
 
 - `loadSpurConfig(cwd, opts?)` returns a fully-typed, validated `SpurConfig`. Missing file → schema
-  defaults; invalid YAML/schema → throws (fail fast). `validateJsonSchema` defaults on outside tests;
+  defaults; invalid YAML/schema → throws (fail fast). Retired config sources throw BEFORE the merge and
+  before either schema pass, so nothing is silently stripped or dual-read: a leftover `agent.team`
+  block (0857), an `agent.fleet` section in the GLOBAL layer, and a leftover
+  `<project>/.spur/fleet.json` (both 0858) each fail the load naming the offending file and the
+  `agent.fleet` replacement. `validateJsonSchema` defaults on outside tests;
   pass `embeddedSchemas` so the `$schema` ref resolves inside a `bun --compile` binary (the CLI passes
   `EMBEDDED_SPUR_SCHEMAS`). Layer resolution honors skip env vars alongside the explicit `cwd`
   (task 0817 R1): precedence is **explicit `cwd` > the skip env > `process.cwd()`**. With

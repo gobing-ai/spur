@@ -93,6 +93,12 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
         }
     };
 
+    // 0858 R2/R5: the fail-loud sibling. A read surface that reports a project's
+    // declared fleet state must surface a broken config (retired source, invalid
+    // section) instead of degrading it to "nothing declared".
+    const loadAgentConfigStrict = (projectRoot: string): Promise<SpurConfig> =>
+        loadSpurConfig(projectRoot, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS });
+
     try {
         if (configFile !== undefined) {
             // Bootstrap through runNodeApplication — standard path (R1).
@@ -121,6 +127,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                         db,
                         spurConfig,
                         loadAgentConfig,
+                        loadAgentConfigStrict,
                     });
                     exitCode = await runCommandDispatch(argv, context, output);
                 },
@@ -128,7 +135,15 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
             await app.stop('shutdown');
         } else {
             // No config file — direct path (pre-init, tests).
-            const context = createCliContext({ cwd, env, output, db, spurConfig, loadAgentConfig });
+            const context = createCliContext({
+                cwd,
+                env,
+                output,
+                db,
+                spurConfig,
+                loadAgentConfig,
+                loadAgentConfigStrict,
+            });
             exitCode = await runCommandDispatch(argv, context, output);
         }
     } finally {

@@ -16,7 +16,7 @@
  */
 import { existsSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem, loadStructuredConfig, validateDeclaredJsonSchema } from '@gobing-ai/ts-runtime';
@@ -260,6 +260,10 @@ function makeEmbeddedReader(embeddedSchemas: ReadonlyMap<string, string>) {
  */
 export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions): Promise<SpurConfig> {
     const layers = resolveConfigLayers(cwd);
+    const projectRoot = resolve(cwd ?? process.cwd());
+    // 0858 R2: checked before the layer short-circuit — a project that still carries
+    // the retired `.spur/fleet.json` must fail even when it declares no config at all.
+    assertNoLegacyFleetFile(projectRoot, layers.project);
     if (layers.global === undefined && layers.project === undefined) {
         return spurConfigSchema.parse({});
     }
@@ -316,7 +320,7 @@ export function invalidateSpurConfig(configPath?: string): void {
     }
 }
 
-// ---- Config-shape guards (0857 R2) ----
+// ---- Config-shape guards (0857 R2 / 0858 R2) ----
 
 /**
  * Fail the load when a layer still carries the retired team roster block.
@@ -337,6 +341,50 @@ function assertNoRetiredTeamKey(parsed: RawConfig, layerPath: string | undefined
         `agent.team is no longer supported (${layerPath ?? 'the merged config'}). ` +
             `Declare the project fleet under agent.fleet in ${replacementFile}.`,
     );
+}
+
+/**
+ * Fail the load when the GLOBAL layer declares `agent.fleet` (0858 R2).
+ *
+ * A fleet is one worktree's roster (ADR-116), so a machine-wide default has no
+ * meaning: the key is legal at the project layer only. Rejecting rather than
+ * merging keeps one declaration authoritative instead of layering a fleet the
+ * operator cannot see from the project.
+ *
+ * @param options.layerPath - Absolute path of the global layer being inspected.
+ * @param options.projectFile - The project config the section belongs in.
+ */
+function assertNoGlobalFleetSection(globalRaw: RawConfig, layerPath: string | undefined, projectFile: string): void {
+    const agent = globalRaw.agent;
+    if (!isPlainObject(agent) || !('fleet' in agent)) return;
+    throw new Error(
+        `agent.fleet is not supported in the global config (${layerPath ?? SPUR_CONFIG_FILE}). ` +
+            `Declare the project fleet under agent.fleet in ${projectFile} — the flock belongs to a project, not to the machine.`,
+    );
+}
+
+/**
+ * Fail the load when the retired `<project>/.spur/fleet.json` still exists
+ * (0858 R2). The file was the 0835/ADR-116 carrier; `agent.fleet` replaces it.
+ *
+ * Two candidate locations, because the project layer is only resolved when a
+ * `.spur/config.yaml` exists: the loaded layer's sibling (the normal case) and the
+ * project root being loaded (a project that declares a fleet file and no config at
+ * all would otherwise be silently ignored — exactly the silent strip R2 forbids).
+ *
+ * Checked before the merge rather than at the read that used to consume it, so the
+ * error names the file and the two-step fix (move, then delete).
+ */
+function assertNoLegacyFleetFile(projectRoot: string, projectConfigPath: string | undefined): void {
+    const candidates = new Set<string>([join(projectRoot, SPUR_CONFIG_DIR, 'fleet.json')]);
+    if (projectConfigPath !== undefined) candidates.add(join(dirname(projectConfigPath), 'fleet.json'));
+    for (const legacyFile of candidates) {
+        if (!existsSync(legacyFile)) continue;
+        throw new Error(
+            `The retired fleet declaration ${legacyFile} still exists. Move its members and orchestrator under ` +
+                'agent.fleet in the project config, then delete the file.',
+        );
+    }
 }
 
 /** The project config path named as the replacement target, with a generic fallback. */
@@ -641,11 +689,14 @@ async function loadMergedConfig(
     const globalRaw = layers.global !== undefined ? await readRawYamlLayer(layers.global, 'global') : {};
     const projectRaw = layers.project !== undefined ? await readRawYamlLayer(layers.project, 'project') : {};
 
-    // 0857 R2: the retired team roster key fails the load in the layer that carries
-    // it, BEFORE merge and BEFORE either schema (zod strips unknown keys silently;
-    // the JSON-schema pass would report the key generically).
+    // 0857 R2 / 0858 R2: the retired team roster key and both retired fleet
+    // carriers fail the load BEFORE merge and BEFORE either schema (zod strips
+    // unknown keys silently; the JSON-schema pass would report the key generically).
     const replacementFile = projectConfigReplacement(layers);
-    if (layers.global !== undefined) assertNoRetiredTeamKey(globalRaw, layers.global, replacementFile);
+    if (layers.global !== undefined) {
+        assertNoRetiredTeamKey(globalRaw, layers.global, replacementFile);
+        assertNoGlobalFleetSection(globalRaw, layers.global, replacementFile);
+    }
     if (layers.project !== undefined) assertNoRetiredTeamKey(projectRaw, layers.project, replacementFile);
 
     const merged = mergeSpurConfigLayers(globalRaw, projectRaw);

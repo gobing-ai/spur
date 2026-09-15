@@ -32,6 +32,7 @@ function fleet(
 ): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: overrides.strategyName ?? 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'lead', ...overrides.orchestrator },
         members: overrides.members ?? [

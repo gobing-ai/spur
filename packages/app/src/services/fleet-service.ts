@@ -1,10 +1,9 @@
 import { basename, dirname, join } from 'node:path';
 import {
     type AgentConfig,
+    type AgentFleet,
     type AgentRoleName,
     type ExecutionCapabilityState,
-    type FleetDeclaration,
-    FleetDeclarationSchema,
     memberLocalId,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
@@ -77,14 +76,21 @@ export interface ResolvedFleetMember {
 /** A resolved project fleet (0835). `missing` names what a caller must fix (R7 — a value, not an exception). */
 export interface ResolvedFleet {
     projectPath: string;
+    /**
+     * The declared fleet switch (`agent.fleet.enabled`, default `false`).
+     * Reported by the read surfaces so a disabled fleet is named as disabled
+     * rather than as an empty roster (0858 R3/R5); `false` when no section is
+     * declared at all.
+     */
+    enabled: boolean;
     members: ResolvedFleetMember[];
-    /** `'no-declaration'` | `'no-enabled-members'`. */
+    /** `'no-declaration'` | `'fleet-disabled'` | `'no-enabled-members'`. */
     missing: string[];
 }
 
 /**
  * 0836 R4: orchestrator availability. `missing` (nothing bound — declare one in
- * `.spur/fleet.json`) and `bound-offline` (bound, no live claim — start/heartbeat
+ * `agent.fleet`) and `bound-offline` (bound, no live claim — start/heartbeat
  * the instance) are DIFFERENT states with different next actions; never collapse
  * them, never represent either as "0 orchestrators".
  */
@@ -113,8 +119,9 @@ export interface OrchestratorBinding {
 // ---------------------------------------------------------------------------
 
 /**
- * Application-layer read/resolve/materialize for a project's fleet declaration
- * at `<projectPath>/.spur/fleet.json` (0835 R1/R2). The declaration is the ONLY
+ * Application-layer read/resolve/materialize for a project's fleet
+ * (`agent.fleet` in the project's `.spur/config.yaml`, 0835 carrier moved by
+ * 0858 R3). The declaration is the ONLY
  * authoring surface for a project fleet; the specs this service writes into
  * `.spur/agents/` are a projection of it, never a second editable roster, and
  * hand-authored specs are never touched. Ids derive through the shared
@@ -133,38 +140,23 @@ export class FleetService {
     }
 
     /**
-     * Load the project's fleet declaration, or `null` when there is none (R7).
-     * Invalid JSON/schema fails loudly naming the file. The path is normalized
-     * (`normalizeProjectPath`) first — the storage root this reads is the
-     * project's own, canonicalized through symlinks/`~`, which IS the read-side
-     * ground-truth check; the write-side cwd check lives in {@link materialize}.
+     * Read the project's merged `agent.fleet` section, or `null` when the
+     * project declares none (R7).
+     *
+     * 0858 R3: the section comes from the project's MERGED config through the
+     * config seam (`reloadAgentConfig` at launch boundaries, else the threaded
+     * `spurConfig`), not from a file — one carrier, one read path. An invalid
+     * section never reaches here: `loadSpurConfig` fails the load naming every
+     * issue with its `agent.fleet.*` path (R8), so "absent" and "invalid" are
+     * different outcomes rather than a silently empty fleet.
      */
-    async load(projectPath: string): Promise<FleetDeclaration | null> {
-        const file = this.declarationPath(projectPath);
-        let raw: string;
-        try {
-            raw = await this.fs.readFile(file);
-        } catch (error) {
-            // R7 resolves a MISSING declaration cleanly — but EACCES/EISDIR are
-            // environment failures, not absence; they must not masquerade as
-            // `no-declaration` and silently skip the fleet.
-            if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return null;
-            throw error;
-        }
-        let json: unknown;
-        try {
-            json = JSON.parse(raw);
-        } catch (error) {
-            throw new Error(
-                `Invalid fleet declaration at ${file}: not valid JSON — ${error instanceof Error ? error.message : String(error)}`,
-            );
-        }
-        const parsed = FleetDeclarationSchema.safeParse(json);
-        if (!parsed.success) {
-            const detail = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ');
-            throw new Error(`Invalid fleet declaration at ${file} — ${detail}`);
-        }
-        return parsed.data;
+    async load(projectPath: string): Promise<AgentFleet | null> {
+        // The path is still normalized for callers whose read follows with a
+        // project-scoped query; the section itself is config-scoped (one server
+        // serves one project, and the CLI resolves the merged config of `cwd`).
+        normalizeProjectPath(projectPath);
+        const config = await this.effectiveConfig();
+        return config?.agent?.fleet ?? null;
     }
 
     /**
@@ -180,8 +172,9 @@ export class FleetService {
         const normalized = normalizeProjectPath(projectPath);
         const declaration = await this.load(normalized);
         if (declaration === null) {
-            return { projectPath: normalized, members: [], missing: ['no-declaration'] };
+            return { projectPath: normalized, enabled: false, members: [], missing: ['no-declaration'] };
         }
+        const fleetEnabled = declaration.enabled;
 
         const config = await this.effectiveConfig();
         const agentConfig: AgentConfig | undefined = config?.agent;
@@ -232,8 +225,13 @@ export class FleetService {
             });
         }
 
-        const missing = members.some((m) => m.enabled !== false) ? [] : ['no-enabled-members'];
-        return { projectPath: normalized, members: resolvedMembers, missing };
+        const missing: string[] = [];
+        // 0858 R3/R5: a disabled fleet still RESOLVES its roster (the Board must be
+        // able to explain why nothing runs) but is named as disabled, which is a
+        // different state from an empty roster.
+        if (!fleetEnabled) missing.push('fleet-disabled');
+        if (!members.some((m) => m.enabled !== false)) missing.push('no-enabled-members');
+        return { projectPath: normalized, enabled: fleetEnabled, members: resolvedMembers, missing };
     }
 
     /**
@@ -315,6 +313,10 @@ export class FleetService {
      * fleet specs that are no longer desired. Hand-authored specs are never
      * touched (R2). When `check` is true, returns the diff and writes nothing.
      *
+     * 0858 R4: `spur serve` calls this only for an ENABLED fleet; the switch
+     * itself is the serve gate (this method keeps materializing a declared
+     * roster so `--check` previews and tests stay usable).
+     *
      * This is the launch boundary, so it validates its own ground truth (R6):
      * `process.cwd()` and the storage root (`.spur/` parent) must both resolve
      * to the project — `SPUR_*` env values are context, not proof.
@@ -326,7 +328,7 @@ export class FleetService {
         const declaration = await this.load(normalized);
         if (declaration === null) {
             throw new Error(
-                `No fleet declaration at ${this.declarationPath(normalized)} — nothing to materialize (FleetService.resolve reports this as missing: ['no-declaration'])`,
+                `No agent.fleet declaration for ${normalized} — nothing to materialize (FleetService.resolve reports this as missing: ['no-declaration'])`,
             );
         }
 
@@ -334,7 +336,7 @@ export class FleetService {
         const enabled = resolved.members.filter((m) => m.enabled);
         if (enabled.length === 0) {
             throw new Error(
-                `Fleet at ${normalized} has no enabled members — set enabled: true on at least one member of ${this.declarationPath(normalized)}`,
+                `Fleet at ${normalized} has no enabled members — set enabled: true on at least one agent.fleet member`,
             );
         }
         const slug = await this.projectSlug(normalized);
@@ -415,11 +417,6 @@ export class FleetService {
     // -------------------------------------------------------------------------
     // Internals
     // -------------------------------------------------------------------------
-
-    /** Path of the declaration file for a (normalized) project path. */
-    private declarationPath(projectPath: string): string {
-        return join(normalizeProjectPath(projectPath), '.spur', 'fleet.json');
-    }
 
     /** Effective merged config — fresh reload at launch boundaries (0799 R3 parity). */
     private async effectiveConfig(): Promise<SpurConfig | null> {

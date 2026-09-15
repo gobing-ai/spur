@@ -19,10 +19,12 @@
 # Only machine-wide keys belong in this file. Project-shaped keys — `name`,
 # `bootstrap`, `rules`, `redaction`, `tasks`, `features` — resolve against a
 # project's own folder structure and must stay in `.spur/config.yaml`. The agent
-# roster is not a config key at all any more: it is `<projectPath>/.spur/fleet.json`
-# (ADR-116, task 0835). The retired team roster key is gone: a leftover block fails
-# the load and names `agent.fleet` as the replacement (0857), and the `spur team`
-# noun was removed at the G64 cutover.
+# roster is not a config key at all any more: it is the project-layer `agent.fleet`
+# section of `.spur/config.yaml` (ADR-116 carrier moved by 0858; it replaced
+# `<projectPath>/.spur/fleet.json`). The retired team roster key is gone: a leftover
+# block fails the load and names `agent.fleet` as the replacement (0857), a leftover
+# `fleet.json` fails it too (0858), and the `spur team` noun was removed at the G64
+# cutover.
 
 $schema: "@gobing-ai/spur/schemas/spur-config.schema.json"
 

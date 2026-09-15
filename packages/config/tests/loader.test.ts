@@ -987,3 +987,113 @@ describe('SPUR_SKIP_PROJECT_CONFIG hermeticity (task 0817 R1)', () => {
         CLI_BOOT_TIMEOUT_MS,
     );
 });
+
+// ---- retired fleet carriers (0858 R2) ----
+
+describe('retired fleet carrier guard (0858 R2)', () => {
+    test('R2: agent.fleet in the GLOBAL layer fails the load, naming the global file and the project config', async () => {
+        // GLOBAL_CONFIG_FILE binds homedir() at module load, so the hermetic path is a
+        // subprocess with HOME pointed at a temp dir (same pattern as the agent.team
+        // global-layer case above).
+        const fakeHome = await mkdtemp(join(tmpdir(), 'spur-home-'));
+        const globalDir = join(fakeHome, '.config', 'spur');
+        await mkdir(globalDir, { recursive: true });
+        const globalPath = join(globalDir, 'config.yaml');
+        await writeFile(globalPath, 'agent:\n  fleet:\n    enabled: true\n    members:\n      - role: coder\n');
+
+        const projectDir = await mkdtemp(join(tmpdir(), 'spur-proj-'));
+        await mkdir(join(projectDir, '.spur'), { recursive: true });
+        const projectPath = join(projectDir, '.spur', 'config.yaml');
+        await writeFile(projectPath, 'version: "1"\nname: t\n');
+
+        const loaderPath = join(import.meta.dir, '..', 'src', 'loader.ts');
+        const script = `
+            import { loadSpurConfig } from '${loaderPath}';
+            try {
+                await loadSpurConfig('${projectDir}', { validateJsonSchema: false });
+                process.stdout.write('LOADED');
+            } catch (error) {
+                process.stdout.write(String(error.message));
+            }
+        `;
+        const proc = Bun.spawn(['bun', '-e', script], {
+            env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        const out = await new Response(proc.stdout).text();
+        const code = await proc.exited;
+        await rm(fakeHome, { recursive: true, force: true });
+        await rm(projectDir, { recursive: true, force: true });
+        expect(code).toBe(0);
+        expect(out).not.toBe('LOADED');
+        expect(out).toContain('agent.fleet is not supported in the global config');
+        expect(out).toContain(globalPath);
+        expect(out).toContain(projectPath);
+    });
+
+    test('R2: a leftover .spur/fleet.json fails the load, naming the file and the two-step fix', async () => {
+        await writeConfig(tmpCwd, CONFIG_YAML);
+        const legacyFile = join(tmpCwd, '.spur', 'fleet.json');
+        await writeFile(legacyFile, JSON.stringify({ version: 1, members: [{ executor: 'claude' }] }));
+        try {
+            const failure = loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+            await expect(failure).rejects.toThrow(/retired fleet declaration/);
+            await expect(failure).rejects.toThrow(new RegExp(legacyFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+            await expect(failure).rejects.toThrow(/agent\.fleet/);
+        } finally {
+            await rm(legacyFile, { force: true });
+        }
+    });
+
+    test('R2: a leftover .spur/fleet.json fails even when the project declares no config at all', async () => {
+        // The layer short-circuit (no config in either layer) must not swallow the
+        // retired carrier — a stray declaration is exactly what R2 forbids reading.
+        const legacyFile = join(tmpCwd, '.spur', 'fleet.json');
+        await mkdir(join(tmpCwd, '.spur'), { recursive: true });
+        await writeFile(legacyFile, JSON.stringify({ version: 1, members: [] }));
+        try {
+            await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow(
+                /retired fleet declaration/,
+            );
+        } finally {
+            await rm(legacyFile, { force: true });
+        }
+    });
+
+    test('R2: the guard precedes JSON Schema validation, so the message stays actionable', async () => {
+        const schemaPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'schemas', 'spur-config.schema.json');
+        await writeConfig(tmpCwd, `version: "1"\nname: t\n$schema: "${schemaPath}"\n`);
+        const legacyFile = join(tmpCwd, '.spur', 'fleet.json');
+        await writeFile(legacyFile, '{}');
+        try {
+            await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow(
+                /retired fleet declaration/,
+            );
+        } finally {
+            await rm(legacyFile, { force: true });
+        }
+    });
+
+    test('R1: agent.fleet at the project layer loads and resolves its defaults', async () => {
+        await writeConfig(
+            tmpCwd,
+            'version: "1"\nname: t\nagent:\n  fleet:\n    members:\n      - role: coder\n        executor: claude\n',
+        );
+        const config = await loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+        expect(config.agent?.fleet?.enabled).toBe(false);
+        expect(config.agent?.fleet?.strategy).toBe('rest');
+        expect(config.agent?.fleet?.members).toHaveLength(1);
+    });
+
+    test('R8: an invalid project-layer agent.fleet fails the load listing every issue with its path', async () => {
+        await writeConfig(
+            tmpCwd,
+            'version: "1"\nname: t\nagent:\n  fleet:\n    enabled: "yes"\n    strategy: round-robin\n    members:\n      - purpose: ghost\n',
+        );
+        const failure = loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+        await expect(failure).rejects.toThrow(/agent\.fleet\.enabled/);
+        await expect(failure).rejects.toThrow(/agent\.fleet\.strategy/);
+        await expect(failure).rejects.toThrow(/agent\.fleet\.members\[0\]/);
+    });
+});

@@ -684,28 +684,42 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 appRt.logger.warn('agent quota update consumer failed to start', { error: String(error) });
             }
 
-            // Fleet declarations replace `team up`: project specs must exist before
-            // autostart reads them. Resolve after the quota drain so disabled executors
-            // are honored on the first launch; retain the fleet's ground-truth guard.
-            if (await fs.exists(join(projectRoot, '.spur', 'fleet.json'))) {
+            // `agent.fleet` replaces `team up` and the retired `.spur/fleet.json`
+            // declaration: project specs must exist before autostart reads them.
+            // Resolve after the quota drain so disabled executors are honored on the
+            // first launch; retain the fleet's ground-truth guard.
+            //
+            // 0858 R4: `agent.fleet.enabled` is the single fleet switch — absent or
+            // disabled means neither materialization nor autostart. This load is
+            // deliberately NOT the tolerant one above: a retired source (`agent.team`,
+            // a global-layer `agent.fleet`, a leftover `.spur/fleet.json`) or an invalid
+            // `agent.fleet` must fail the START (design §3 step 1), not silently serve an
+            // empty fleet.
+            const fleetConfig = await loadSpurConfig(projectRoot);
+            const fleetSection = fleetConfig.agent?.fleet;
+            if (fleetSection?.enabled === true) {
                 try {
-                    const fleetConfig = await loadSpurConfig(projectRoot);
-                    await new FleetService({
+                    const materialized = await new FleetService({
                         fs,
                         spurConfig: fleetConfig,
                         roles: resolveAgentRoles(fleetConfig?.agent),
                         openDb: () => ctx.getDb(),
                     }).materialize(projectRoot);
+                    // Operator decision (2026-09-14): every materialized member starts;
+                    // `materialize` already skipped disabled members, so the upserted ids
+                    // are exactly the autostart set — no second resolution.
+                    await ctx.supervisor().startAutostart(materialized.upserted);
                 } catch (error) {
                     await quotaConsumer?.stop();
                     throw error;
                 }
+            } else {
+                appRt.logger.info(
+                    fleetSection === undefined
+                        ? 'agent.fleet is not declared — the project fleet is neither materialized nor autostarted'
+                        : 'agent.fleet.enabled is false — the project fleet is neither materialized nor autostarted',
+                );
             }
-
-            // 0857: the team process-autostart block (the roster's per-member flag and
-            // its env union) is retired with the roster runtime. Autostart returns on the
-            // fleet path (agent.fleet.enabled) in its own task; until then `spur serve`
-            // starts no supervised agents on its own.
 
             // System-event persistence tap (task 0189 wave A / 0198). Best-effort:
             // tap failures are isolated by registerSystemEventTap and never break

@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    AgentConfigSchema,
     AgentExecutorConfigSchema,
+    AgentFleetSchema,
+    FLEET_STRATEGIES,
+    FleetMemberSchema,
     featuresConfigSchema,
     HistoryConfigSchema,
     HistoryRefreshConfigSchema,
@@ -164,5 +168,64 @@ describe('AgentExecutorConfigSchema disabled (0796)', () => {
         for (const bad of ['yes', 'true', null, 1, {}]) {
             expect(AgentExecutorConfigSchema.safeParse({ name: 'a', agent: 'x', disabled: bad }).success).toBe(false);
         }
+    });
+});
+
+describe('AgentFleetSchema (0858 R1/R8)', () => {
+    test('R1: defaults — enabled false, strategy rest, members []', () => {
+        const fleet = AgentFleetSchema.parse({});
+        expect(fleet.enabled).toBe(false);
+        expect(fleet.strategy).toBe('rest');
+        expect(fleet.members).toEqual([]);
+    });
+
+    test('R1: a declared roster parses with its members and orchestrator pointer', () => {
+        const fleet = AgentFleetSchema.parse({
+            enabled: true,
+            strategy: 'gtd',
+            orchestrator: 'planner-1',
+            members: [
+                { role: 'planner', purpose: 'orchestrator' },
+                { role: 'coder', executor: 'claude' },
+            ],
+        });
+        expect(fleet.enabled).toBe(true);
+        expect(fleet.strategy).toBe('gtd');
+        expect(fleet.orchestrator).toBe('planner-1');
+        expect(fleet.members).toHaveLength(2);
+    });
+
+    test('R1: the strategy vocabulary is the config tuple, not a second union', () => {
+        expect(FLEET_STRATEGIES).toEqual(['rest', 'gtd']);
+        expect(AgentFleetSchema.safeParse({ strategy: 'round-robin' }).success).toBe(false);
+    });
+
+    test('R8: an unknown strategy, a role-less/executor-less member and a non-boolean enabled are ALL reported', () => {
+        const result = AgentConfigSchema.safeParse({
+            fleet: { enabled: 'yes', strategy: 'round-robin', members: [{ purpose: 'ghost' }] },
+        });
+        expect(result.success).toBe(false);
+        if (result.success) return;
+        const paths = result.error.issues.map((issue) => issue.path.join('.'));
+        // One load error names every issue with its agent.fleet.* path — the member
+        // check lives on the entry, so a sibling type error cannot hide it.
+        expect(paths).toContain('fleet.enabled');
+        expect(paths).toContain('fleet.strategy');
+        expect(paths).toContain('fleet.members.0');
+        expect(result.error.issues.some((issue) => /must declare a role or an executor/.test(issue.message))).toBe(
+            true,
+        );
+    });
+
+    test('R1: a member declaring neither role nor executor is rejected at any index', () => {
+        const result = AgentFleetSchema.safeParse({ members: [{ executor: 'claude' }, { purpose: 'ghost' }] });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.error.issues.map((issue) => issue.path.join('.'))).toContain('members.1');
+        }
+    });
+
+    test('FleetMemberSchema itself stays permissive — the rule lives on the entry (0858 R1)', () => {
+        expect(FleetMemberSchema.safeParse({ purpose: 'ghost' }).success).toBe(true);
     });
 });

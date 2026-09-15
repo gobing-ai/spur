@@ -36,14 +36,15 @@ exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
   defaults the display name to its basename. It upserts; it does not start a server. The current
   source does not enforce a `.spur/` marker or directory type.
 - `list` probes recorded ports and heals stale entries to `port: 0` before reporting `running`.
-- `list --fleet` (0835) additionally resolves each project's fleet declaration at
-  `<project>/.spur/fleet.json` under the existing verb (no new noun). Per project it prints one line
+- `list --fleet` (0835/0858) additionally resolves each project's `agent.fleet` section from that
+  project's `.spur/config.yaml` under the existing verb (no new noun). Per project it prints one line
   per member: instance id (the spec id / mailbox identity), `role`, resolved `executor`,
   `fsWrite` capability state, and derived `write` flag. A project with no declaration reports
-  `no declaration (.spur/fleet.json)`; an all-disabled roster reports `no enabled members`; a project
-  whose executors fail resolution reports the error without failing the listing. Under `--json` each
-  project gains `fleet` (the resolved fleet, `null` on resolution failure) and, on failure,
-  `fleetError`.
+  `no declaration (agent.fleet)`; a declared but switched-off fleet reports
+  `disabled (agent.fleet.enabled: false)` and still lists its roster; an all-disabled roster reports
+  `no enabled members`; a project whose config fails to load (a retired source, an invalid section)
+  reports the loader's message without failing the listing. Under `--json` each project gains `fleet`
+  (the resolved fleet, `null` on resolution failure) and, on failure, `fleetError`.
 - `list --fleet` (0836) also reports the project's orchestrator binding: one
   `orchestrator:` line per project with state `bound-online <id> (holder <spec-id>)`,
   `bound-offline <id> (no live claim)`, `missing (no-orchestrator-declared)`, or

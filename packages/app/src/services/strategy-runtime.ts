@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { FleetStrategy } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     type DbAdapter,
@@ -16,8 +17,12 @@ import { type DispatchDecision, WRITE_SLOT_TTL_MS, WriteSlotService } from './wr
 // Frozen vocabulary (0838, feature G62 — persisted rest/GTD strategy runtime)
 // ---------------------------------------------------------------------------
 
-/** The closed strategy set (R5): adding a name is a typed code change, not a plugin. */
-export type StrategyName = 'rest' | 'gtd';
+/**
+ * The closed strategy set (R5): adding a name is a typed code change, not a plugin.
+ * Derived from the config tuple (0858 R1) — `agent.fleet.strategy` validates against
+ * the same list, so the two surfaces cannot drift into different vocabularies.
+ */
+export type StrategyName = FleetStrategy;
 
 /** An unconfigured project starts NOTHING (Q&A — CLOSED): the default is `rest`. */
 export const DEFAULT_STRATEGY: StrategyName = 'rest';

@@ -101,7 +101,7 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.jsonProjectsArray)
         .option(
             '--fleet',
-            "Also resolve each project's .spur/fleet.json declaration and orchestrator binding (0835/0836)",
+            "Also resolve each project's agent.fleet declaration and orchestrator binding (0835/0836/0858)",
         )
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
@@ -116,8 +116,8 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                     })),
                 );
 
-                // --fleet (0835/0836): resolve each project's fleet declaration and
-                // orchestrator binding under the existing verb (no new noun —
+                // --fleet (0835/0836/0858): resolve each project's agent.fleet section
+                // and orchestrator binding under the existing verb (no new noun —
                 // public-surface rule). Per-project config is re-layered so
                 // executor/capability resolution reads THAT project's config, not the
                 // caller's; a project that fails resolution reports the error instead of
@@ -136,23 +136,28 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                 const fleets = options.fleet
                     ? await Promise.all(
                           projects.map(async (p) => {
-                              const fleetCtx: FleetServiceContext = {
-                                  spurConfig: await context.loadAgentConfig(p.path),
+                              // Built inside each try: the project's config load is the first
+                              // step, so a sibling project with an invalid (or retired-source)
+                              // config reports `fleet: unavailable` naming the loader's message
+                              // instead of aborting the whole listing (0858 R2/R5).
+                              const loadStrict = context.loadAgentConfigStrict ?? context.loadAgentConfig;
+                              const fleetCtx = async (): Promise<FleetServiceContext> => ({
+                                  spurConfig: (await loadStrict(p.path)) ?? undefined,
                                   roles: context.agentRoles,
                                   fs: context.fs,
                                   openDb: openProjectDb,
-                              };
+                              });
                               let fleet: Awaited<ReturnType<FleetService['resolve']>> | null = null;
                               let error: string | undefined;
                               try {
-                                  fleet = await new FleetService(fleetCtx).resolve(p.path);
+                                  fleet = await new FleetService(await fleetCtx()).resolve(p.path);
                               } catch (err) {
                                   error = err instanceof Error ? err.message : String(err);
                               }
                               let orchestrator: OrchestratorBinding | null = null;
                               let orchestratorError: string | undefined;
                               try {
-                                  orchestrator = await new FleetService(fleetCtx).resolveOrchestrator(p.path);
+                                  orchestrator = await new FleetService(await fleetCtx()).resolveOrchestrator(p.path);
                               } catch (err) {
                                   orchestratorError = err instanceof Error ? err.message : String(err);
                               }
@@ -221,8 +226,13 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
                             continue;
                         }
                         if (f.fleet.missing.includes('no-declaration')) {
-                            context.output.write('    fleet: no declaration (.spur/fleet.json)');
+                            context.output.write('    fleet: no declaration (agent.fleet)');
                             continue;
+                        }
+                        // 0858 R5: the off switch is named, not implied by an empty roster.
+                        // The roster still prints — a disabled fleet is a resolved state.
+                        if (f.fleet.missing.includes('fleet-disabled')) {
+                            context.output.write('    fleet: disabled (agent.fleet.enabled: false)');
                         }
                         for (const m of f.fleet.members) {
                             const flag = m.enabled ? '' : ' [disabled]';

@@ -425,17 +425,17 @@ export function memberLocalId(member: MemberIdentity, roster: readonly MemberIde
     return '';
 }
 
-// ---- Project fleet declaration (0835) ----
+// ---- Project fleet declaration (0835, moved under `agent.fleet` by 0858) ----
 
 /**
- * Schema for one member of a project-local fleet declaration
- * (`<projectPath>/.spur/fleet.json`, 0835 R1). Same member fields the team
- * roster carries that identity needs — `id`/`role`/`executor` feed the frozen
- * {@link memberLocalId} allocator unchanged — plus `enabled`: a member set to
- * `false` keeps its derived `<role>-<n>` index (deleting would free the index
- * and silently reallocate later members' ids) but is not materialized.
- * Deliberately minimal: no process/liveness fields ever (0835 R5 — desired
- * state only; liveness is read from occupant/supervisor surfaces).
+ * Schema for one member of a project fleet declaration
+ * (`agent.fleet.members` in `<projectPath>/.spur/config.yaml`). Same member
+ * fields the team roster carries that identity needs — `id`/`role`/`executor`
+ * feed the frozen {@link memberLocalId} allocator unchanged — plus `enabled`: a
+ * member set to `false` keeps its derived `<role>-<n>` index (deleting would
+ * free the index and silently reallocate later members' ids) but is not
+ * materialized. Deliberately minimal: no process/liveness fields ever (0835 R5
+ * — desired state only; liveness is read from occupant/supervisor surfaces).
  */
 export const FleetMemberSchema = z.object({
     /** Explicit stable id — wins outright in {@link memberLocalId} (0835 R3). */
@@ -457,40 +457,66 @@ export const FleetMemberSchema = z.object({
 export type FleetMember = z.infer<typeof FleetMemberSchema>;
 
 /**
- * Schema for a project fleet declaration at `<projectPath>/.spur/fleet.json`
- * (0835 R1). `version` is pinned to 1. `members` may be empty — a project with
- * no enabled members resolves to a fleet whose `missing` names the fix (R7),
- * it is not a schema error. Each member must declare a role or an executor —
- * the same "at least one" rule the team member contract enforces (0543 R4).
+ * The closed dispatch-strategy vocabulary (0858 R1). Config owns the tuple so
+ * the app can derive its `StrategyName` from it — `packages/app` may import
+ * `packages/config`, never the reverse, and a second hand-written union in the
+ * app would be a vocabulary fork.
  */
-export const FleetDeclarationSchema = z
-    .object({
-        version: z.literal(1),
-        members: z.array(FleetMemberSchema),
-        /**
-         * 0836 R1/R2: the orchestrator pointer — the `memberLocalId` of the one
-         * planner-role member carrying `purpose: 'orchestrator'` that may act as
-         * the project's orchestrator. Absent = no orchestrator declared (resolves
-         * `missing`, never inferred — Q&A: error, never search). The role
-         * vocabulary is closed; the binding carrier is this pointer plus the
-         * member's existing `purpose` field.
-         */
-        orchestrator: z.string().min(1).optional(),
-    })
-    .superRefine((decl, ctx) => {
-        for (const [index, member] of decl.members.entries()) {
-            if (member.role === undefined && member.executor === undefined) {
-                ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    path: ['members', index],
-                    message: `members[${index}] must declare a role or an executor — at least one is required`,
-                });
-            }
-        }
-    });
+export const FLEET_STRATEGIES = ['rest', 'gtd'] as const;
 
-/** Inferred type for {@link FleetDeclarationSchema}. */
-export type FleetDeclaration = z.infer<typeof FleetDeclarationSchema>;
+/** One dispatch strategy name (`rest` | `gtd`). */
+export type FleetStrategy = (typeof FLEET_STRATEGIES)[number];
+
+/**
+ * A fleet member entry: {@link FleetMemberSchema} plus the "at least one of
+ * role/executor" rule (0543 R4).
+ *
+ * The refinements sits on the ENTRY, not on `AgentFleetSchema`: R8 requires one
+ * load error to list EVERY issue, and a container-level `superRefine` never runs
+ * when a sibling field of the container fails to parse (a non-boolean `enabled`
+ * would hide the member issue). An item-level check is collected independently,
+ * so all three issues of an invalid section surface together with their full
+ * `agent.fleet.members.<n>` paths.
+ */
+const FleetMemberEntrySchema = FleetMemberSchema.superRefine((member, ctx) => {
+    if (member.role === undefined && member.executor === undefined) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'must declare a role or an executor — at least one is required',
+        });
+    }
+});
+
+/**
+ * Schema for the project fleet section `agent.fleet` (0858 R1) — project layer
+ * only, enforced by the loader (`loader.ts`), which rejects a global-layer
+ * `agent.fleet` rather than merging it. Replaces the `fleet.json` declaration
+ * (0835/ADR-116 carrier change) and the retired `agent.team` roster.
+ *
+ * - `enabled` — the single fleet switch; gates materialization and autostart at
+ *   `spur serve`. Default `false`: declaring a roster must not start processes
+ *   by accident.
+ * - `strategy` — the dispatch-strategy SSOT, reconciled into `project_strategy`
+ *   at serve start (0859).
+ * - `orchestrator` — 0836 R1/R2: the `memberLocalId` of the one planner-role
+ *   member carrying `purpose: 'orchestrator'` that may act as the project's
+ *   orchestrator. Absent = no orchestrator declared (resolves `missing`, never
+ *   inferred — Q&A: error, never search).
+ * - `members` — may be empty; a project with no enabled members resolves to a
+ *   fleet whose `missing` names the fix (R7), it is not a schema error.
+ *
+ * Zod paths stay `agent.fleet.<field>`, so an invalid section names every issue
+ * with its declaration path (R8).
+ */
+export const AgentFleetSchema = z.object({
+    enabled: z.boolean().default(false),
+    strategy: z.enum(FLEET_STRATEGIES).default('rest'),
+    orchestrator: z.string().min(1).optional(),
+    members: z.array(FleetMemberEntrySchema).default([]),
+});
+
+/** Inferred type for {@link AgentFleetSchema}. */
+export type AgentFleet = z.infer<typeof AgentFleetSchema>;
 
 /** A resolved executor: a canonical agent plus an optional model override. */
 export interface ResolvedExecutor {
@@ -573,9 +599,13 @@ export const AgentOutputConfigSchema = z.object({
  * - `roles` — optional per-role tier/stage values (0647/ADR-078); keys are the
  *   closed role vocabulary, values merge per-field over the fallback.
  * - `output` — per-run output-capture bounds for pipeline agent runs (task 0414).
+ * - `fleet` — the project's agent fleet (`agent.fleet`, 0858); the only carrier
+ *   of composition and the fleet's on/off switch.
  *
  * The retired team roster key is gone (0857): a leftover block fails the load in
- * `loader.ts` rather than being silently stripped by this schema.
+ * `loader.ts` rather than being silently stripped by this schema. The retired
+ * `fleet.json` file is gone too (0858): the loader fails the load when one still
+ * exists, naming `agent.fleet` as the replacement.
  */
 export const AgentConfigSchema = z
     .object({
@@ -588,6 +618,7 @@ export const AgentConfigSchema = z
         roles: z.record(z.string(), AgentRoleConfigSchema).optional(),
         output: AgentOutputConfigSchema.optional(),
         sessionAffinity: z.boolean().optional(),
+        fleet: AgentFleetSchema.optional(),
     })
     .superRefine((value, ctx) => {
         // agent.roles key closure (0572): the vocabulary is closed (0536) — an

@@ -35,6 +35,7 @@ afterEach(() => {
 function fleet(overrides: Partial<ProjectFleetSnapshot> = {}): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'lead' },
         members: [
@@ -123,7 +124,7 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.textContent).toContain('Fleet status unavailable');
     });
 
-    test('no-fleet state names the expected fleet.json path', async () => {
+    test('no-fleet state names the expected agent.fleet section', async () => {
         const { container } = await renderShell(
             ctx({
                 fleet: fleet({
@@ -135,7 +136,8 @@ describe('ProjectsShell header (0840 R5)', () => {
         );
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe('no-fleet');
         expect(container.textContent).toContain('no fleet declared');
-        expect(container.textContent).toContain('/repo/wt/.spur/fleet.json');
+        // 0858 R5: the Board hint names the config section, not the retired file.
+        expect(container.textContent).toContain('agent.fleet in .spur/config.yaml');
     });
 
     test('capacity-missing state lists unresolved members', async () => {

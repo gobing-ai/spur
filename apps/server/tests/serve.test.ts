@@ -266,19 +266,14 @@ describe('startServer', () => {
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        // 0858 R4/AC3: every upserted id reaches startAutostart — captured, not inferred.
+        const autostarted: string[] = [];
         try {
             process.chdir(project);
             await new ProjectRegistry().upsert({ path: project, name: 'legacy' });
             writeFileSync(
                 join(project, '.spur', 'config.yaml'),
-                'agent:\n  executors:\n    - name: worker\n      agent: claude\n      tier: standard\n',
-            );
-            writeFileSync(
-                join(project, '.spur', 'fleet.json'),
-                JSON.stringify({
-                    version: 1,
-                    members: [{ id: 'coder', role: 'coder' }],
-                }),
+                'agent:\n  executors:\n    - name: worker\n      agent: claude\n      tier: standard\n  fleet:\n    enabled: true\n    members:\n      - id: coder\n        role: coder\n',
             );
             const specPath = join(project, '.spur', 'agents', 'legacy-coder.yaml');
             const deps = makeDeps({
@@ -287,7 +282,12 @@ describe('startServer', () => {
                     cwd: project,
                     getDb: async () => db,
                     eventBus: () => bus,
-                    supervisor: () => ({ stopAll: async () => {} }),
+                    supervisor: () => ({
+                        stopAll: async () => {},
+                        startAutostart: async (ids: readonly string[]) => {
+                            autostarted.push(...ids);
+                        },
+                    }),
                 })) as unknown as StartServerDeps['createServerContext'],
                 createApp: (() => {
                     expect(existsSync(specPath)).toBe(true);
@@ -299,16 +299,75 @@ describe('startServer', () => {
                 deps,
             );
             expect(readFileSync(specPath, 'utf8')).toContain('legacy-coder');
+            expect(autostarted).toEqual(['legacy-coder']);
             expect((await new ProjectRegistry().getByPath(project))?.name).toBe('legacy');
             sigHandlers.SIGINT?.();
             await exitCalled;
-            writeFileSync(join(project, '.spur', 'fleet.json'), '{invalid');
+            writeFileSync(
+                join(project, '.spur', 'config.yaml'),
+                'agent:\n  fleet:\n    enabled: true\n    strategy: turbo\n',
+            );
             await expect(
                 startServer(
                     { port: 5009, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: project },
                     deps,
                 ),
-            ).rejects.toThrow('Invalid fleet declaration');
+            ).rejects.toThrow('agent.fleet.strategy');
+        } finally {
+            process.chdir(originalCwd);
+            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
+            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('0858 R4: agent.fleet.enabled false materializes and autostarts nothing', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const originalCwd = process.cwd();
+        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
+        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const root = mkdtempSync(join(tmpdir(), 'spur-fleet-disabled-'));
+        const project = join(root, 'project');
+        mkdirSync(join(project, '.spur'), { recursive: true });
+        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const autostarted: string[] = [];
+        try {
+            process.chdir(project);
+            await new ProjectRegistry().upsert({ path: project, name: 'legacy' });
+            // The roster is declared, but the switch is off — the declaration alone
+            // must never start processes (R4).
+            writeFileSync(
+                join(project, '.spur', 'config.yaml'),
+                'agent:\n  fleet:\n    members:\n      - id: coder\n        role: coder\n',
+            );
+            const deps = makeDeps({
+                createNodeFileSystem,
+                createServerContext: (() => ({
+                    cwd: project,
+                    getDb: async () => db,
+                    eventBus: () => new EventBus<Record<string, (event: unknown) => void>>(),
+                    supervisor: () => ({
+                        stopAll: async () => {},
+                        startAutostart: async (ids: readonly string[]) => {
+                            autostarted.push(...ids);
+                        },
+                    }),
+                })) as unknown as StartServerDeps['createServerContext'],
+            });
+            await startServer(
+                { port: 5010, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: project },
+                deps,
+            );
+            expect(existsSync(join(project, '.spur', 'agents', 'legacy-coder.yaml'))).toBe(false);
+            expect(autostarted).toEqual([]);
+            sigHandlers.SIGINT?.();
+            await exitCalled;
         } finally {
             process.chdir(originalCwd);
             if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
@@ -596,7 +655,7 @@ describe('startServer', () => {
                     eventBus: () => bus,
                     getDb: () => quotaDb,
                     cwd: projectRoot,
-                    supervisor: () => ({ stopAll: async () => {} }),
+                    supervisor: () => ({ stopAll: async () => {}, startAutostart: async () => {} }),
                 }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
             runNodeApplication: (async (opts: {
                 config: unknown;
