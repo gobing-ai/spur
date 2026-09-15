@@ -15,7 +15,15 @@ function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMemb
 }
 
 function proc(agentId: string, status = 'running', overrides: Partial<ProcessStatus> = {}): ProcessStatus {
-    return { agentId, pid: 42, status, startedAt: '2026-09-12T10:00:00.000Z', exitCode: null, ...overrides };
+    return {
+        agentId,
+        pid: 42,
+        status,
+        startedAt: '2026-09-12T10:00:00.000Z',
+        exitCode: null,
+        teamId: null,
+        ...overrides,
+    };
 }
 
 function snapshot(overrides: Partial<ProjectFleetSnapshot> = {}): ProjectFleetSnapshot {

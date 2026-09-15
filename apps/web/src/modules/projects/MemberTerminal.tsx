@@ -10,6 +10,8 @@ export interface ProcessStatus {
     status: string;
     startedAt: string;
     exitCode: number | null;
+    /** Owning team id — `null` when unassigned (0852: watch-list team filter). */
+    teamId: string | null;
 }
 
 /** Status poll interval (ms). */
@@ -33,12 +35,78 @@ export function parseProcessList(value: unknown): ProcessStatus[] | null {
         if (typeof r.pid !== 'number') return null;
         const exitCode = r.exitCode;
         if (exitCode !== null && typeof exitCode !== 'number') return null;
+        // teamId is additive enrichment for the watch list (0852): a missing or
+        // non-string value narrows to null instead of failing the poll, so the
+        // accept/reject behavior existing callers see is untouched.
+        const teamId = r.teamId;
         out.push({
             agentId: r.agentId,
             pid: r.pid,
             status: r.status,
             startedAt: r.startedAt,
             exitCode: exitCode as number | null,
+            teamId: typeof teamId === 'string' ? teamId : null,
+        });
+    }
+    return out;
+}
+
+/** ProcessRegistry execution row — the `executions` half of `GET /api/team/processes` (spur#0264). */
+export interface RegistryExecution {
+    id: string;
+    label: string;
+    command: string;
+    args: string[];
+    pid: number | null;
+    status: string;
+    startedAt: string;
+    exitedAt: string | null;
+    exitCode: number | null;
+    source: string;
+    teamId: string | null;
+    agentId: string | null;
+}
+
+/**
+ * Runtime-narrow the registry-execution half of `/api/team/processes` (0852 R4).
+ * Same contract as `parseProcessList`: returns `null` on malformed input so the
+ * caller can skip a bad poll. This is the single parse site for the wire —
+ * consumers import from here; no second copy exists under apps/web/src.
+ */
+export function parseExecutions(value: unknown): RegistryExecution[] | null {
+    if (value === null || typeof value !== 'object') return null;
+    const obj = value as Record<string, unknown>;
+    if (!Array.isArray(obj.executions)) return null;
+    const out: RegistryExecution[] = [];
+    for (const raw of obj.executions) {
+        if (raw === null || typeof raw !== 'object') return null;
+        const r = raw as Record<string, unknown>;
+        if (typeof r.id !== 'string') return null;
+        if (typeof r.label !== 'string') return null;
+        if (typeof r.command !== 'string') return null;
+        if (!Array.isArray(r.args)) return null;
+        if (!r.args.every((a) => typeof a === 'string')) return null;
+        if (r.pid !== null && typeof r.pid !== 'number') return null;
+        if (typeof r.status !== 'string') return null;
+        if (typeof r.startedAt !== 'string') return null;
+        if (r.exitedAt !== null && typeof r.exitedAt !== 'string') return null;
+        if (r.exitCode !== null && typeof r.exitCode !== 'number') return null;
+        if (typeof r.source !== 'string') return null;
+        if (r.teamId !== null && typeof r.teamId !== 'string') return null;
+        if (r.agentId !== null && typeof r.agentId !== 'string') return null;
+        out.push({
+            id: r.id,
+            label: r.label,
+            command: r.command,
+            args: r.args as string[],
+            pid: r.pid as number | null,
+            status: r.status,
+            startedAt: r.startedAt,
+            exitedAt: r.exitedAt as string | null,
+            exitCode: r.exitCode as number | null,
+            source: r.source,
+            teamId: r.teamId as string | null,
+            agentId: r.agentId as string | null,
         });
     }
     return out;

@@ -2,16 +2,18 @@ import { useState } from 'react';
 import FeaturesShell from '../features/FeaturesShell';
 import KanbanBoard from '../task-kanban/KanbanBoard';
 import { useConversationDraft } from './drafts';
+import ProcessesView from './ProcessesView';
 import { useProjectTab } from './useProjectTab';
 
-/** Which of Work's two embedded surfaces is showing (component state, not URL — the tab already lives in the URL). */
-export type WorkSectionId = 'tasks' | 'features';
+/** Which of Work's three embedded surfaces is showing (component state, not URL — the tab already lives in the URL). */
+export type WorkSectionId = 'tasks' | 'features' | 'processes';
 
 export const DEFAULT_WORK_SECTION: WorkSectionId = 'tasks';
 
 const WORK_SECTIONS: readonly { id: WorkSectionId; label: string }[] = [
     { id: 'tasks', label: 'Tasks' },
     { id: 'features', label: 'Features' },
+    { id: 'processes', label: 'Processes' },
 ];
 
 /**
@@ -30,6 +32,9 @@ const WORK_SECTIONS: readonly { id: WorkSectionId; label: string }[] = [
  * as the features module does; the shell exposes no selection seam, so a
  * feature reference reaches the draft through the same `addRef` contract
  * (`{kind:'feature', id}`) with no Work-side capture affordance (task Q&A).
+ * The Processes section (0852) mounts `ProcessesView` — the retired Teams
+ * watch list — which polls `/api/team/processes` through the shared
+ * MemberTerminal parse module and owns no navigation seam.
  */
 export default function WorkView() {
     const [section, setSection] = useState<WorkSectionId>(DEFAULT_WORK_SECTION);
@@ -67,9 +72,13 @@ export default function WorkView() {
                 <div className="flex-1 overflow-hidden" data-g6="use-task">
                     <KanbanBoard onSelectTask={referenceTask} />
                 </div>
-            ) : (
+            ) : section === 'features' ? (
                 <div className="flex-1 overflow-hidden">
                     <FeaturesShell />
+                </div>
+            ) : (
+                <div className="flex-1 overflow-hidden">
+                    <ProcessesView />
                 </div>
             )}
         </div>

@@ -327,13 +327,23 @@ path, no fork:
   no-filter invariant is asserted in tests (the embedded board issues the
   byte-for-byte identical task-list request the bare embed makes), not
   re-implemented as a filter that would guarantee nothing.
+- Processes section (0852): third `WORK_SECTIONS` entry — restores the retired
+  0262/0264/0267 watch list as an embedded surface. `ProcessesView` mounts
+  `GET /api/team/processes` rows (supervised + registry one-shots, dedup by
+  covered agentId/pid) behind the 0267 filter bar (running-only, source,
+  team/unassigned) with a no-matches empty state; the wire parse stays in
+  `MemberTerminal.tsx` (`parseProcessList`/`parseExecutions`), extended, not
+  duplicated. Component state only — the three-tab `ProjectTabId` contract and
+  the URL are untouched.
 - Draft placement: `ConversationDraftContext` is provided by `BoardLayout`
   (0841) because Work and Conversation are sibling panels — only the active
   panel mounts.
-- Test attributes: `data-work-section="<id>"` on the section switch,
-  `data-g6="use-task"` on the tasks section host, `data-g6="task-chip"` on
-  the conversation's task reference chip — the prototype's selectors, so
-  0845's ported assertions need no rename.
+- Test attributes: `data-work-section="<id>"` on the section switch (now
+  `tasks` / `features` / `processes`), `data-g6="use-task"` on the tasks
+  section host, `data-g6="task-chip"` on the conversation's task reference
+  chip — the prototype's selectors, so 0845's ported assertions need no
+  rename; `data-processes-filter-*` / `data-processes-filters` on the 0852
+  filter bar.
 - Owner: `apps/web/src/modules/projects/WorkView.tsx`; `tabs.tsx` mounts it as
   the frozen `work` tab. `task-kanban` / `features` are imported unmodified.
 
