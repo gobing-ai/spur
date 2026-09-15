@@ -108,6 +108,15 @@ CREATE INDEX IF NOT EXISTS queue_jobs_ready_idx ON queue_jobs (status, next_retr
 -- jobs that legitimately have multiple active rows concurrently, so a global
 -- (type, status) unique index would break them.
 CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_history_refresh_active_unique ON queue_jobs (type) WHERE type = 'history.refresh' AND status IN ('pending', 'processing');
+
+-- At most one ACTIVE configured-scheduler job per job NAME (task 0863): the tick
+-- reads findActiveSchedulerCustomJob and then inserts, which is not atomic across
+-- spur serve daemons sharing one project DB — every daemon's cron occurrence used
+-- to insert its own row (3-14 per tick on 2026-09-14/15). The name lives inside the
+-- JSON payload, so this is an expression index — scoped to scheduler.custom +
+-- active rows exactly like the 0716 history.refresh index, so terminal rows and
+-- other job types (task-action, feature-action, history.refresh) stay unaffected.
+CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_scheduler_custom_active_unique ON queue_jobs (json_extract(payload, '$.name')) WHERE type = 'scheduler.custom' AND status IN ('pending', 'processing');
 `;
 
 /**
@@ -919,6 +928,39 @@ CREATE INDEX IF NOT EXISTS idx_agent_instances_team ON agent_instances (team_id)
 `;
 
 /**
+ * Migration 0047 (task 0863): make the configured-scheduler single-flight durable.
+ * The tick's `findActiveSchedulerCustomJob` + insert sequence is check-then-act:
+ * every `spur serve` daemon sharing the project DB admits its own `scheduler.custom`
+ * row on the same cron occurrence, so N daemons produce N rows and the losers fail
+ * with "already running in this process" (402 such rows on 2026-09-08…15).
+ *
+ * Duplicate active rows from the pre-index era are retired first (the
+ * deterministically OLDEST active row per job name survives; the rest become
+ * terminal `failed` with an auditable `last_error`) so CREATE UNIQUE INDEX cannot
+ * fail. Nothing is deleted, matching the 0027 retirement shape.
+ */
+export const SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL = `
+UPDATE queue_jobs
+SET status = 'failed',
+    last_error = 'retired by migration 0047_spur_cli_scheduler_custom_active_unique: superseded duplicate active scheduler.custom job name',
+    processing_at = NULL,
+    updated_at = CAST(strftime('%s', 'now') AS INTEGER) * 1000
+WHERE type = 'scheduler.custom'
+  AND status IN ('pending', 'processing')
+  AND id NOT IN (
+      SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+              PARTITION BY json_extract(payload, '$.name') ORDER BY created_at ASC, id ASC
+          ) AS rank
+          FROM queue_jobs
+          WHERE type = 'scheduler.custom' AND status IN ('pending', 'processing')
+      ) WHERE rank = 1
+  );
+
+CREATE UNIQUE INDEX IF NOT EXISTS queue_jobs_scheduler_custom_active_unique ON queue_jobs (json_extract(payload, '$.name')) WHERE type = 'scheduler.custom' AND status IN ('pending', 'processing');
+`;
+
+/**
  * Migration 0027 (task 0716): retire duplicate active history.refresh rows, drop
  * the pending-only unique index, and create the active (pending/processing) one.
  * The survivor is the deterministically OLDEST active row (`created_at ASC, id ASC`);
@@ -1443,6 +1485,14 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         id: '0046_spur_cli_project_strategy',
         sql: PROJECT_STRATEGY_SCHEMA_SQL,
     },
+    {
+        // 0863: durable single-flight for configured scheduler jobs. Retires
+        // duplicate active `scheduler.custom` rows per job name, then creates the
+        // partial unique index the tick relies on (the 0027 shape; an expression
+        // index because the job name lives in the payload JSON).
+        id: '0047_spur_cli_scheduler_custom_active_unique',
+        sql: SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL,
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -1660,6 +1710,14 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !(await tableExists(adapter, 'queue_jobs'));
 
         // Migration 0041 ALTERs queue_jobs — same table-absence shape as 0027.
+        // Migration 0047 makes the configured-scheduler single-flight an index on
+        // queue_jobs — same table-absence shape as 0027/0041 (the loadSqlMigrations
+        // path may never have created the table; fresh DBs get the index from
+        // QUEUE_JOBS_SCHEMA_SQL).
+        const schedulerCustomActiveIndexSkip =
+            migration.id === '0047_spur_cli_scheduler_custom_active_unique' &&
+            !(await tableExists(adapter, 'queue_jobs'));
+
         const queueJobsDeadlineLeaseSkip =
             migration.id === '0041_spur_cli_queue_jobs_deadline_lease_columns' &&
             !(await tableExists(adapter, 'queue_jobs'));
@@ -1723,6 +1781,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !callIdSkip &&
             !tsNullableSkip &&
             !queueJobsActiveIndexSkip &&
+            !schedulerCustomActiveIndexSkip &&
             !queueJobsDeadlineLeaseSkip &&
             !inboxRequestKeySkip &&
             !coordinationReceiptColumnsSkip &&

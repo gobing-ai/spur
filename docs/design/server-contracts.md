@@ -122,13 +122,31 @@ one number per daemon.
 
 A tick is a normal non-coalesced enqueue of `scheduler.custom` with payload `{ name, command }` and
 `maxRetries: 1` (task 0803 R3): one attempt per enqueue, and a failed attempt goes terminal instead
-of re-pending — a `pending` row counts as active in the single-flight lookup, so queue-level
-retries would suppress later ticks for the whole backoff window. The next tick is the retry for an
-idempotent periodic command. The same tick sweeps a wedged row (task 0803 R4): a `processing` row
-whose `processing_at` (falling back to `updated_at`) is older than the resolved timeout is failed
-in place by `failStaleSchedulerCustomJob` (guarded `status = 'processing'` update, reported via a
-`swept: true` `scheduler.job.executed` event) and a fresh job is enqueued on that same tick — no
-daemon restart needed. Younger processing rows and any pending row keep the single-flight skip.
+of re-pending — an active row counts as taken, so queue-level retries would suppress later ticks for
+the whole backoff window. The next tick is the retry for an idempotent periodic command.
+
+**Single-flight is the database's job (task 0863).** At most one ACTIVE (`pending`/`processing`)
+`scheduler.custom` row per job **name** exists per project database — a partial unique index on
+`json_extract(payload, '$.name')` (migration `0047_spur_cli_scheduler_custom_active_unique`, the
+0716 `history.refresh` shape; terminal rows and other job types are invisible to it). The tick's
+enqueue IS the check: several `spur serve` daemons sharing one project database each run their own
+cron, so the read-then-insert guard that preceded it let every daemon admit its own row on the same
+occurrence (3–14 rows per tick on 2026-09-14/15). The loser's insert fails with
+`SQLITE_CONSTRAINT_UNIQUE` on that index, which the tick recognizes (`isSchedulerCustomActiveConflict`)
+as the expected "an active job already exists" outcome and reports as a `skipped: true`
+`scheduler.job.executed` event — never a failed job. The same tick still sweeps a wedged row (task
+0803 R4): on that conflict path a `processing` row whose `processing_at` (falling back to
+`updated_at`) is older than the resolved timeout is failed in place by `failStaleSchedulerCustomJob`
+(guarded `status = 'processing'` update, reported via a `swept: true` event) and a fresh job is
+enqueued on that same tick — no daemon restart needed. Younger processing rows, any pending row, and
+explicit-unlimited policies keep the skip.
+
+A claimed `scheduler.custom` row whose job name is already executing **in this process** is folded
+into that sibling run (task 0863 R3): the attempt settles as completed and audits itself with a
+`skipped: true` event rather than failing, since failing it raised an error-severity
+`queue.job.failed` for a non-error (402 rows between 2026-09-08 and 09-15) and buried real failures
+in the same alert stream. The cross-kind `exclusiveKey` guard keeps failing its own attempt — there a
+different job kind holds the shared history producer and the work genuinely did not happen.
 No new table, column, event name, API route, or UI component: the Jobs tab and System Events
 already render both families.
 

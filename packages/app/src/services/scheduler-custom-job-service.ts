@@ -30,6 +30,30 @@ export { CHILD_KILL_GRACE_MS, describeBoundedFailure, runBoundedChild };
 /** Queue job kind for a configured `bootstrap.scheduler.jobs` entry. */
 export const SCHEDULER_CUSTOM_JOB = 'scheduler.custom';
 
+/**
+ * The partial unique index enforcing at-most-one ACTIVE `scheduler.custom` row per
+ * job name in a project database (migration `0047_spur_cli_scheduler_custom_active_unique`,
+ * task 0863). Named here because the tick must recognize its conflict as the
+ * expected "an active job already exists" signal rather than an error.
+ */
+export const SCHEDULER_CUSTOM_ACTIVE_INDEX = 'queue_jobs_scheduler_custom_active_unique';
+
+/**
+ * True when `error` is the active-job constraint violation raised by
+ * {@link SCHEDULER_CUSTOM_ACTIVE_INDEX}. This is the durable single-flight signal
+ * (task 0863): a second `spur serve` daemon ticking the same occurrence loses the
+ * insert race and must treat the loss as a skipped tick, not a failure. The message
+ * check is what identifies the index — SQLite reports `UNIQUE constraint failed:
+ * index '<name>'` — and the code check keeps an unrelated constraint error from
+ * being mistaken for a single-flight outcome when the driver supplies one.
+ */
+export function isSchedulerCustomActiveConflict(error: unknown): boolean {
+    if (typeof error !== 'object' || error === null) return false;
+    const { code, message } = error as { code?: unknown; message?: unknown };
+    if (typeof message !== 'string' || !message.includes(SCHEDULER_CUSTOM_ACTIVE_INDEX)) return false;
+    return code === undefined || String(code).startsWith('SQLITE_CONSTRAINT');
+}
+
 /** Payload of a `scheduler.custom` queue job. */
 export interface SchedulerCustomJobPayload {
     /** Configured job name — the only command-identifying value safe to report. */
@@ -66,6 +90,13 @@ export interface SchedulerCustomJobDeps {
     resolveTimeoutMs?: (name: string) => TimeoutPolicyMs;
     /** SIGTERM→SIGKILL escalation grace; defaults to {@link CHILD_KILL_GRACE_MS}. */
     killGraceMs?: number;
+    /**
+     * Audit seam for a suppressed same-name duplicate (task 0863). The attempt is
+     * completed by the caller, so this is the only observable evidence that a
+     * claimed row was folded into an already-running sibling instead of executed.
+     * Omitted → no audit hook (tests, non-server consumers).
+     */
+    onDuplicate?: (name: string) => void;
 }
 
 /**
@@ -181,9 +212,14 @@ const activeJobs = new Set<string>();
 export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job: Job<unknown>): Promise<void> {
     const payload = validateSchedulerCustomJobPayload(job.payload);
     if (activeJobs.has(payload.name)) {
-        throw new Error(
-            `scheduler job "${payload.name}" is already running in this process; skipping duplicate execution`,
-        );
+        // Task 0863: the sibling attempt is doing THIS row's work, so the row is
+        // completed rather than failed. Throwing here raised an error-severity
+        // `queue.job.failed` for a non-error (402 rows between 2026-09-08 and 09-15)
+        // and buried real failures in the same alert stream. Durable single-flight
+        // moved to the queue_jobs unique index, so this is a defensive net for rows
+        // enqueued before the constraint existed — never silent, always audited.
+        deps.onDuplicate?.(payload.name);
+        return;
     }
     const exclusiveKey = payload.exclusiveKey;
     if (exclusiveKey !== undefined) {

@@ -12,6 +12,7 @@ import {
     handleSchedulerCustomJob,
     historyProducerExclusiveKeyFor,
     installSystemEventCatchAll,
+    isSchedulerCustomActiveConflict,
     JobHandlerRegistry,
     JobWorkerService,
     normalizeProjectPath,
@@ -276,64 +277,75 @@ export function registerSchedulerEntries(
         const sweepThresholdMs = jobPolicy === null ? null : jobPolicy + resolveKillGraceMs(env);
         register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
             const queue = await ctx.jobQueue();
-            // Single-flight: skip if an active job with the same name already exists.
-            // Without this guard, every cron tick enqueues a new row even when the
-            // previous run is still processing — causing concurrent child processes
-            // that compete for the SQLite write lock.
+            // Task 0863: single-flight is the DATABASE's job — the enqueue IS the
+            // check. Every `spur serve` daemon sharing this project database runs its
+            // own cron, so the previous read-then-insert guard
+            // (findActiveSchedulerCustomJob then enqueue) let each daemon admit its own
+            // row on the same occurrence (3-14 rows per tick, 2026-09-14/15). The
+            // partial unique index on the job name makes the loser's INSERT fail; that
+            // conflict is the expected "an active job already exists" outcome, not a
+            // failure.
+            // Task 0803 R3: one attempt per enqueue — the default 3-attempt policy
+            // re-pends a failed row, and the active-row index counts `pending` as
+            // active, so retries would suppress later ticks for the whole backoff
+            // window. The next tick is the natural retry for an idempotent periodic
+            // command.
+            const enqueueFresh = (): Promise<string> =>
+                queue.enqueue(
+                    SCHEDULER_CUSTOM_JOB,
+                    {
+                        name: job.name,
+                        command: job.command,
+                        // Task 0806 R6: history-producer commands join the shared
+                        // in-process exclusion with the completion-triggered refresh.
+                        ...(historyProducerExclusiveKeyFor(job.command) !== undefined && {
+                            exclusiveKey: historyProducerExclusiveKeyFor(job.command),
+                        }),
+                    },
+                    { maxRetries: 1 },
+                );
+            try {
+                await enqueueFresh();
+                return;
+            } catch (error) {
+                if (!isSchedulerCustomActiveConflict(error)) throw error;
+            }
+            // Lost the insert race: an active row exists. Task 0803 R4: a `processing`
+            // row older than the job's resolved deadline + grace means the child was
+            // killed but the row never resolved (kill-delivery failure, handler wedge).
+            // Sweep it and enqueue a fresh job on this same tick — no daemon restart
+            // needed. Younger processing rows, any pending row, and explicit-unlimited
+            // jobs keep the skip.
             const db = await ctx.getDb();
             const active = await findActiveSchedulerCustomJob(db, job.name);
-            if (active !== undefined) {
-                // Task 0803 R4: a `processing` row older than the job's resolved
-                // deadline + grace means the child was killed but the row never
-                // resolved (kill-delivery failure, handler wedge). Sweep it and enqueue a
-                // fresh job on this same tick — no daemon restart needed. Younger
-                // processing rows, any pending row, and explicit-unlimited jobs keep the
-                // single-flight skip.
-                const now = Date.now();
-                const stale =
-                    sweepThresholdMs !== null &&
-                    active.status === 'processing' &&
-                    now - (active.processingAt ?? active.updatedAt) > sweepThresholdMs;
-                if (stale) {
-                    const reason = `age-sweep: processing exceeded ${sweepThresholdMs}ms`;
-                    const swept = await failStaleSchedulerCustomJob(db, active.id, now, reason);
-                    if (swept) {
-                        ctx.eventBus().emit('scheduler.job.executed', {
-                            name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
-                            durationMs: 0,
-                            severity: 'info',
-                            swept: true,
-                            reason,
-                        });
-                    }
-                } else {
+            const now = Date.now();
+            const stale =
+                active !== undefined &&
+                sweepThresholdMs !== null &&
+                active.status === 'processing' &&
+                now - (active.processingAt ?? active.updatedAt) > sweepThresholdMs;
+            if (active !== undefined && stale && sweepThresholdMs !== null) {
+                const reason = `age-sweep: processing exceeded ${sweepThresholdMs}ms`;
+                const swept = await failStaleSchedulerCustomJob(db, active.id, now, reason);
+                if (swept) {
                     ctx.eventBus().emit('scheduler.job.executed', {
                         name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
                         durationMs: 0,
                         severity: 'info',
-                        skipped: true,
-                        reason: `active job ${active.id} already exists`,
+                        swept: true,
+                        reason,
                     });
+                    await enqueueFresh();
                     return;
                 }
             }
-            // Task 0803 R3: one attempt per enqueue — the default 3-attempt policy re-pends a
-            // failed row, and the single-flight lookup counts `pending` as active, so retries
-            // would suppress later ticks for the whole backoff window. The next tick is the
-            // natural retry for an idempotent periodic command.
-            await queue.enqueue(
-                SCHEDULER_CUSTOM_JOB,
-                {
-                    name: job.name,
-                    command: job.command,
-                    // Task 0806 R6: history-producer commands join the shared
-                    // in-process exclusion with the completion-triggered refresh.
-                    ...(historyProducerExclusiveKeyFor(job.command) !== undefined && {
-                        exclusiveKey: historyProducerExclusiveKeyFor(job.command),
-                    }),
-                },
-                { maxRetries: 1 },
-            );
+            ctx.eventBus().emit('scheduler.job.executed', {
+                name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
+                durationMs: 0,
+                severity: 'info',
+                skipped: true,
+                reason: `active job ${active?.id ?? 'unknown'} already exists`,
+            });
         });
         registrations.push({
             name: job.name,
@@ -858,6 +870,18 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                             // daemon-boot default.
                             resolveTimeoutMs: (name) =>
                                 resolveSchedulerJobTimeoutMs(name, env, schedulerCustomTimeoutMs),
+                            // Task 0863: a claimed duplicate of an already-running job name is
+                            // completed, not failed — audit it so the suppression is visible in
+                            // the ledger instead of only as a zero-duration completion.
+                            onDuplicate: (name) => {
+                                ctx.eventBus().emit('scheduler.job.executed', {
+                                    name: `${SCHEDULER_CUSTOM_JOB}:${name}`,
+                                    durationMs: 0,
+                                    severity: 'info',
+                                    skipped: true,
+                                    reason: `duplicate execution suppressed; ${name} is already running in this process`,
+                                });
+                            },
                         },
                         job,
                     );

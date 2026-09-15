@@ -18,7 +18,7 @@ import {
     SQLITE_BUSY_TIMEOUT_MS,
     updatePendingQueueJob,
 } from '../src/db';
-import { applyCliMigrations } from '../src/migrations';
+import { applyCliMigrations, SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL } from '../src/migrations';
 
 /**
  * Minimal mock that throws on queryFirst to exercise the dbHealthCheck catch path.
@@ -941,6 +941,111 @@ describe('failStaleSchedulerCustomJob (task 0803 R4)', () => {
             expect(await failStaleSchedulerCustomJob(db, 'queued-1', 9000, 'watchdog')).toBe(false);
             const row = await db.queryFirst<{ status: string }>("SELECT status FROM queue_jobs WHERE id = 'queued-1'");
             expect(row?.status).toBe('pending');
+        } finally {
+            db.close();
+        }
+    });
+});
+
+describe('scheduler.custom active-row single-flight (task 0863)', () => {
+    const insertCustomJob = (
+        db: DbAdapter,
+        id: string,
+        name: string,
+        status = 'pending',
+        createdAt = 1000,
+        type = 'scheduler.custom',
+    ) =>
+        db.run(
+            `INSERT INTO queue_jobs (id, type, payload, status, attempts, max_retries, created_at, updated_at, next_retry_at)
+             VALUES (?, ?, ?, ?, 0, 1, ?, ?, NULL)`,
+            id,
+            type,
+            JSON.stringify({ name, command: 'true' }),
+            status,
+            createdAt,
+            createdAt,
+        );
+
+    test('the migrated schema carries the active-name index', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            const indexes = await db.queryAll<{ name: string }>('PRAGMA index_list(queue_jobs)');
+            expect(indexes.map((i) => i.name)).toContain('queue_jobs_scheduler_custom_active_unique');
+        } finally {
+            db.close();
+        }
+    });
+
+    test('a second ACTIVE row for the same job name is rejected by the database', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertCustomJob(db, 'first', 'history-refresh', 'pending');
+            // This is the defect: two daemons ticking one occurrence. The index is what
+            // makes the loser's INSERT fail instead of admitting a duplicate row.
+            const conflict = await insertCustomJob(db, 'second', 'history-refresh', 'processing', 2000).catch(
+                (e: unknown) => e as Error,
+            );
+            expect(conflict).toBeInstanceOf(Error);
+            expect(String((conflict as Error).message)).toContain('queue_jobs_scheduler_custom_active_unique');
+            // The survivor is untouched and still resolvable as the active row.
+            expect(await findActiveSchedulerCustomJob(db, 'history-refresh')).toEqual({
+                id: 'first',
+                status: 'pending',
+                processingAt: null,
+                updatedAt: 1000,
+            });
+        } finally {
+            db.close();
+        }
+    });
+
+    test('terminal rows and other names or types are unaffected', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            await insertCustomJob(db, 'done-1', 'history-refresh', 'completed');
+            await insertCustomJob(db, 'failed-1', 'history-refresh', 'failed');
+            // Terminal rows are invisible to the partial index: the next occurrence enqueues.
+            await insertCustomJob(db, 'next-1', 'history-refresh', 'pending', 2000);
+            // A different job name, and the same name under another job type, stay legal.
+            await insertCustomJob(db, 'other-name', 'nightly-import', 'pending');
+            await insertCustomJob(db, 'other-type', 'history-refresh', 'pending', 3000, 'task-action');
+            const rows = await db.queryAll<{ id: string }>('SELECT id FROM queue_jobs ORDER BY id');
+            expect(rows.map((r) => r.id)).toEqual(['done-1', 'failed-1', 'next-1', 'other-name', 'other-type']);
+        } finally {
+            db.close();
+        }
+    });
+
+    test('migration 0047 retires pre-existing duplicate active rows instead of failing', async () => {
+        const db = await createMigratedDb({ url: ':memory:' });
+        try {
+            // Simulate a pre-index database: duplicates could only exist before the
+            // index, so drop it and restore that state.
+            await db.exec('DROP INDEX queue_jobs_scheduler_custom_active_unique');
+            await insertCustomJob(db, 'oldest', 'history-refresh', 'pending', 1000);
+            await insertCustomJob(db, 'dupe-pending', 'history-refresh', 'pending', 2000);
+            await insertCustomJob(db, 'dupe-processing', 'history-refresh', 'processing', 3000);
+
+            for (const statement of SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL.split(';')) {
+                if (statement.trim() !== '') await db.exec(statement);
+            }
+
+            const rows = await db.queryAll<{ id: string; status: string; last_error: string | null }>(
+                'SELECT id, status, last_error FROM queue_jobs ORDER BY created_at ASC, id ASC',
+            );
+            // Nothing is deleted; the oldest active row survives as the active one.
+            expect(rows.map((r) => r.id)).toEqual(['oldest', 'dupe-pending', 'dupe-processing']);
+            expect(rows[0]?.status).toBe('pending');
+            expect(rows[1]?.status).toBe('failed');
+            expect(rows[2]?.status).toBe('failed');
+            expect(rows[1]?.last_error).toContain('retired by migration 0047');
+            expect(rows[2]?.last_error).toContain('retired by migration 0047');
+            // The post-migration index now admits exactly the surviving active row.
+            const conflict = await insertCustomJob(db, 'later', 'history-refresh', 'pending', 4000).catch(
+                (e: unknown) => e as Error,
+            );
+            expect(conflict).toBeInstanceOf(Error);
         } finally {
             db.close();
         }

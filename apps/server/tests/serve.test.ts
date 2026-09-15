@@ -7,6 +7,7 @@ import {
     normalizeProjectPath,
     ProjectRegistry,
     registerSystemEventTap,
+    SCHEDULER_CUSTOM_ACTIVE_INDEX,
 } from '@gobing-ai/spur-app';
 import { AgentExecutorUpdateDao, applyCliMigrations, ProjectStrategyDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
@@ -21,6 +22,17 @@ const tickCtx: ExecutionContext = {
     deadlineMs: null,
     cancellationReason: undefined,
 };
+
+/**
+ * The active-job constraint violation the queue raises when another row already holds
+ * the job name (task 0863): the tick's single-flight signal, shaped exactly like
+ * bun:sqlite's `SQLiteError` (`code` + the index-naming message).
+ */
+function schedulerCustomActiveConflict(jobName: string): Error {
+    return Object.assign(new Error(`UNIQUE constraint failed: index '${SCHEDULER_CUSTOM_ACTIVE_INDEX}' (${jobName})`), {
+        code: 'SQLITE_CONSTRAINT_UNIQUE',
+    });
+}
 
 import type { CreateServerContextOptions, ServerContext, ServerScheduler } from '../src/context';
 import { createServerContext } from '../src/context';
@@ -1565,14 +1577,19 @@ describe('startServer', () => {
             start: async () => {},
             stop: async () => {},
         };
+        // Task 0863: the single-flight is the queue_jobs unique index, so the fake
+        // queue models the constraint — the active row makes the INSERT fail.
         const ctx = {
             jobQueue: async () => ({
                 enqueue: async (type: string, payload: unknown) => {
+                    if ((payload as { name?: string }).name === 'history-refresh') {
+                        throw schedulerCustomActiveConflict('history-refresh');
+                    }
                     enqueued.push({ type, payload });
                     return `${type}-id`;
                 },
             }),
-            // An active row exists for 'history-refresh' — the tick must skip.
+            // Only the conflict path reads the active row.
             getDb: async () => ({
                 queryFirst: async (sql: string, ...params: unknown[]) => {
                     if (sql.includes('scheduler.custom') && params[0] === 'history-refresh') {
@@ -1617,9 +1634,13 @@ describe('startServer', () => {
             start: async () => {},
             stop: async () => {},
         };
+        // The active row makes the tick's INSERT conflict; the sweep clears it so the
+        // same tick's retry can enqueue (task 0863 + 0803 R4).
+        let activeRow = true;
         const ctx = {
             jobQueue: async () => ({
                 enqueue: async (type: string, payload: unknown, options?: unknown) => {
+                    if (activeRow) throw schedulerCustomActiveConflict('history-refresh');
                     enqueued.push({ type, payload, options });
                     return `${type}-id`;
                 },
@@ -1635,6 +1656,7 @@ describe('startServer', () => {
                 },
                 run: async (sql: string, ...params: unknown[]) => {
                     updates.push({ sql, params });
+                    if (sql.includes('processing_at = NULL')) activeRow = false;
                 },
             }),
             eventBus: () => ({
@@ -1693,6 +1715,9 @@ describe('startServer', () => {
         const ctx = {
             jobQueue: async () => ({
                 enqueue: async (type: string, payload: unknown, options?: unknown) => {
+                    if ((payload as { name?: string }).name === 'slow-unlimited') {
+                        throw schedulerCustomActiveConflict('slow-unlimited');
+                    }
                     enqueued.push({ type, payload, options });
                     return `${type}-id`;
                 },
@@ -1749,8 +1774,11 @@ describe('startServer', () => {
         const now = Date.now();
         const ctx = {
             jobQueue: async () => ({
-                enqueue: async (type: string, payload: unknown) => {
-                    enqueued.push({ type, payload });
+                enqueue: async (type: string, payload: unknown, options?: unknown) => {
+                    if ((payload as { name?: string }).name === 'history-refresh') {
+                        throw schedulerCustomActiveConflict('history-refresh');
+                    }
+                    enqueued.push({ type, payload, options });
                     return `${type}-id`;
                 },
             }),
@@ -2309,6 +2337,67 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
             expect(retrying).toHaveLength(0);
         } finally {
             tap.unsubscribe();
+            db.close();
+            rmSync(cwd, { recursive: true, force: true });
+        }
+    });
+
+    test('two ticks of one occurrence admit ONE row, and the loser is skipped rather than failed (task 0863 R1/R2)', async () => {
+        const cwd = mkdtempSync(join(tmpdir(), 'spur-0863-'));
+        const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        const ctx = createServerContext((await import('./middleware/helpers')).mockRuntime(), {
+            cwd,
+            fs: createNodeFileSystem(cwd),
+            dbUrl: ':memory:',
+            jobQueueEnabled: true,
+            eventsBus: bus,
+        });
+        const db = await ctx.getDb();
+        const schedulerEvents: Array<Record<string, unknown>> = [];
+        bus.on('scheduler.job.executed', (payload: unknown) => {
+            schedulerEvents.push(payload as Record<string, unknown>);
+        });
+
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
+        const scheduler = {
+            register: (cron: string, action: ScheduledAction) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+
+        try {
+            // Two ticks model two `spur serve` daemons sharing this project database,
+            // each running the same cron over the same occurrence.
+            registerSchedulerEntries(scheduler, ctx, [{ name: 'ok-job', command: 'exit 0', intervalMinutes: 5 }]);
+            await registered[2]?.action(tickCtx);
+            await registered[2]?.action(tickCtx);
+
+            const active = await db.queryAll<{ id: string }>(
+                "SELECT id FROM queue_jobs WHERE type = ? AND status IN ('pending','processing')",
+                SCHEDULER_CUSTOM_JOB,
+            );
+            expect(active).toHaveLength(1);
+            const skipped = schedulerEvents.filter((e) => e.skipped === true);
+            expect(skipped).toHaveLength(1);
+            expect(String(skipped[0]?.reason)).toContain(active[0]?.id);
+
+            // The row runs; a later occurrence is admitted again (terminal rows are
+            // invisible to the active-name index).
+            const consumer = await ctx.queueConsumer();
+            consumer.register(SCHEDULER_CUSTOM_JOB, (job) =>
+                handleSchedulerCustomJob({ cwd, executor: new NodeProcessExecutor() }, job),
+            );
+            expect(await consumer.processOnce()).toBe(1);
+            await registered[2]?.action(tickCtx);
+
+            const statuses = await db.queryAll<{ status: string }>(
+                'SELECT status FROM queue_jobs WHERE type = ? ORDER BY created_at, id',
+                SCHEDULER_CUSTOM_JOB,
+            );
+            expect(statuses.map((r) => r.status)).toEqual(['completed', 'pending']);
+        } finally {
             db.close();
             rmSync(cwd, { recursive: true, force: true });
         }

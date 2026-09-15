@@ -448,8 +448,10 @@ export type {
 } from './services/scheduler-custom-job-service';
 export {
     handleSchedulerCustomJob,
+    isSchedulerCustomActiveConflict,
     resolveSchedulerCustomTimeoutMs,
     resolveSchedulerJobTimeoutMs,
+    SCHEDULER_CUSTOM_ACTIVE_INDEX,
     SCHEDULER_CUSTOM_JOB,
     SCHEDULER_CUSTOM_TIMEOUT_MS,
     schedulerJobTimeoutEnvName,

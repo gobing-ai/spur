@@ -4,8 +4,10 @@ import { NodeProcessExecutor, type ProcessExecutor, type ProcessResult } from '@
 import { HISTORY_PRODUCER_EXCLUSIVE_KEY, isExclusiveJobActive } from '../../src/services/job-exclusion-guard';
 import {
     handleSchedulerCustomJob,
+    isSchedulerCustomActiveConflict,
     resolveSchedulerCustomTimeoutMs,
     resolveSchedulerJobTimeoutMs,
+    SCHEDULER_CUSTOM_ACTIVE_INDEX,
     SCHEDULER_CUSTOM_JOB,
     SCHEDULER_CUSTOM_TIMEOUT_MS,
     validateSchedulerCustomJobPayload,
@@ -355,5 +357,74 @@ describe('handler-level exclusive-key wiring (task 0807 R2)', () => {
         await first;
         // The first run's finally released the key for the next producer.
         expect(isExclusiveJobActive(HISTORY_PRODUCER_EXCLUSIVE_KEY)).toBe(false);
+    });
+});
+
+describe('same-name duplicate suppression (task 0863 R3)', () => {
+    test('a second attempt for a running job name completes, spawns no child, and audits the suppression', async () => {
+        const gate = Promise.withResolvers<void>();
+        const runs: RecordedRun[] = [];
+        const duplicates: string[] = [];
+        const executor = {
+            run: async (options: RecordedRun) => {
+                runs.push(options);
+                await gate.promise;
+                return {
+                    command: options.command,
+                    args: options.args ?? [],
+                    exitCode: 0,
+                    stdout: '',
+                    stderr: '',
+                    durationMs: 1,
+                };
+            },
+        } as unknown as ProcessExecutor;
+
+        const first = handleSchedulerCustomJob(
+            { cwd: '/proj', executor },
+            jobOf({ name: 'history-refresh', command: 'bun run x history daily' }),
+        );
+        // The in-process guard is synchronous before the handler's first await, so the
+        // name is held when `first` returns — no yield needed.
+        // The suppressed attempt RESOLVES (the sibling is doing this row's work):
+        // throwing here raised error-severity queue.job.failed for a non-error.
+        await handleSchedulerCustomJob(
+            { cwd: '/proj', executor, onDuplicate: (name) => duplicates.push(name) },
+            jobOf({ name: 'history-refresh', command: 'bun run x history daily' }),
+        );
+
+        expect(runs).toHaveLength(1); // never a second concurrent child
+        expect(duplicates).toEqual(['history-refresh']); // observable, not silent
+        gate.resolve();
+        await first;
+    });
+});
+
+describe('isSchedulerCustomActiveConflict (task 0863 R1)', () => {
+    test('recognizes the active-job index violation', () => {
+        const conflict = Object.assign(
+            new Error(`UNIQUE constraint failed: index '${SCHEDULER_CUSTOM_ACTIVE_INDEX}'`),
+            { code: 'SQLITE_CONSTRAINT_UNIQUE' },
+        );
+        expect(isSchedulerCustomActiveConflict(conflict)).toBe(true);
+        // Drivers that report only the message still classify correctly.
+        expect(
+            isSchedulerCustomActiveConflict(
+                new Error(`UNIQUE constraint failed: index '${SCHEDULER_CUSTOM_ACTIVE_INDEX}'`),
+            ),
+        ).toBe(true);
+    });
+
+    test('does not classify unrelated failures as single-flight', () => {
+        expect(isSchedulerCustomActiveConflict(new Error('database is locked'))).toBe(false);
+        expect(isSchedulerCustomActiveConflict(undefined)).toBe(false);
+        // A different queue index conflict is not this outcome.
+        expect(
+            isSchedulerCustomActiveConflict(
+                Object.assign(new Error("UNIQUE constraint failed: index 'queue_jobs_history_refresh_active_unique'"), {
+                    code: 'SQLITE_CONSTRAINT_UNIQUE',
+                }),
+            ),
+        ).toBe(false);
     });
 });
