@@ -246,60 +246,6 @@ export const teamModule: ServerModule = {
             return c.json({ teams: enriched, count: enriched.length });
         });
 
-        // ── POST /api/team/:team/up — materialize + best-effort start (0256 R3/R5) ──
-        app.post('/api/team/:team/up', async (c) => {
-            if (!ctx.teamService) return c.json({ error: 'team API requires Bun server context' }, 503);
-            const teamId = c.req.param('team');
-            const check = c.req.query('check') === 'true';
-            const svc = ctx.teamService();
-            const materialized = await svc.materializeTeam(teamId, { check });
-            if (check) {
-                return c.json({ materialized, started: [] });
-            }
-            // Best-effort start of AUTOSTART members only (0256 R3/R5 + 0252 up-scope;
-            // consistent with the CLI `team up`). A materialized member with autoStart=false
-            // is created but NOT started here — start-all would ignore the per-member opt-out.
-            const supervisor = ctx.supervisor();
-            const autostartIds = new Set(
-                (await svc.listAgentSpecs()).filter((spec) => spec.autoStart === true).map((spec) => spec.id),
-            );
-            const started: Array<{ id: string; ok: boolean; pid?: number }> = [];
-            for (const id of materialized.upserted) {
-                if (!autostartIds.has(id)) continue;
-                try {
-                    const entry = await supervisor.start(id);
-                    started.push({ id, ok: true, ...(entry.pid !== null ? { pid: entry.pid } : {}) });
-                } catch {
-                    started.push({ id, ok: false });
-                }
-            }
-            return c.json({ materialized, started });
-        });
-
-        // ── POST /api/team/:team/down — stop + optional purge (0256 R3) ──
-        app.post('/api/team/:team/down', async (c) => {
-            if (!ctx.teamService) return c.json({ error: 'team API requires Bun server context' }, 503);
-            const teamId = c.req.param('team');
-            const purge = c.req.query('purge') === 'true';
-            const svc = ctx.teamService();
-            // Stop running members
-            const supervisor = ctx.supervisor();
-            const teams = await svc.listTeams();
-            const team = teams.find((t) => t.teamId === teamId);
-            const stopped: string[] = [];
-            if (team) {
-                for (const spec of team.specs) {
-                    const proc = supervisor.get(spec.id);
-                    if (proc?.status === 'running') {
-                        await supervisor.stop(spec.id);
-                        stopped.push(spec.id);
-                    }
-                }
-            }
-            const result = await svc.teardownTeam(teamId, { purge });
-            return c.json({ stopped, purged: result.purged });
-        });
-
         // ── GET /api/team/health — liveness probe (0256 R4) ──
         app.get('/api/team/health', (c) => {
             return c.json({ ok: true });
