@@ -36,3 +36,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-09-12-G62-closure-dogfood.md`
 - `2026-09-12-I21-cli-closure-dogfood.md`
 - `2026-09-15-g64-retirement-surface-dogfood.md`
+- `2026-09-15-g65-fleet-declaration-dogfood.md`
