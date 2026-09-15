@@ -4,7 +4,7 @@ name: Retire the agent.team roster runtime
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.217Z
-updated_at: "2026-09-15T05:33:07.315Z"
+updated_at: "2026-09-15T06:11:03.214Z"
 feature_id: G65
 priority: P1
 tags:
@@ -39,7 +39,7 @@ Removing the schema key alone would silently strip a leftover block, so a loader
 - **R4** — Server: delete `GET /api/team/teams`, the autostart block in `serve.ts`, `SPUR_TEAM_AUTOSTART`, `ServerBootConfig.teamAutostart` and the context option, and the `SPUR_TEAM_AUTOSTART` mention in the `scheduler-custom-job-service.ts` env-allowlist comment. Autostart returns on the fleet path in task 0858.
 - **R5** — Web: delete `lib/use-teams-data.ts`; `MemberDetail` takes the work dir from the fleet snapshot `path` and the model from the declared member, showing `Executor default` when none.
 - **R6** — Tests: delete or rewrite the roster cases (`apps/cli/tests/commands/agent-team.test.ts` including the 0544 case, `packages/config/tests/team-config.test.ts`, `packages/app/tests/services/team-service.test.ts` materialize/teardown/listTeams/autostart, server tests for `/api/team/teams` and autostart, config and loader tests). Add loader tests for the guard at both the project and the global layer. `apps/cli/schemas/spur-config.schema.json` drops `agent.team`.
-- **R7** — Same-commit docs for these surfaces: `docs/design/configuration-contracts.md`, `observability-contracts.md` (event and `/teams` rows), the `agent.team` role wording in `cli-contracts.md`, and the `config/config.global.yaml` / `config.example.yaml` comments.
+- **R7** — Same-commit docs for these surfaces: `docs/design/observability-contracts.md` (the `/api/team/teams` row, :352 — no `team.up`/`team.down` rows live there), `docs/design/event-tracking.md` (`team.up`/`team.down` catalog rows :73-74 and payload row :296), `docs/inventory/system-events-producer-audit.md` (rows :92-93, :98, :171, :200), the `agent.team` role wording in `cli-contracts.md` (:279), and the `config/config.global.yaml` / `config.example.yaml` comments. `docs/design/configuration-contracts.md` carries no team or fleet rows today — confirm only, nothing to sync.
 
 ### Acceptance Criteria
 
@@ -74,6 +74,41 @@ Removing the schema key alone would silently strip a leftover block, so a loader
 - Tests: `packages/config/tests/{team-config,loader,config-schemas}.test.ts`, `apps/cli/tests/commands/agent-team.test.ts`, `packages/app/tests/services/team-service.test.ts`, `apps/server/tests/{serve,context}.test.ts`, `apps/server/tests/modules/team/index.test.ts`, `apps/web/tests/modules/projects/MemberDetail.test.tsx`.
 
 **Dependencies:** 0856 (`LegacyMigrationService` reads `agent.team`).
+
+#### Q&A entry — 2026-09-15T06:11:03.214Z
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-15T05:32:33.800Z
+
+**Decisions**
+
+- **Loud failure over silent strip.** Zod would drop an unknown `agent.team` key, so the guard inspects each layer's parsed YAML before schema parse in `loader.ts` — the one path every CLI command and `spur serve` load through (design §2).
+- **No converter, no shim.** Nothing reads `agent.team` after this task; the error text names the replacement.
+- **Accepted interim gap.** Between this task and 0858, `spur serve` autostarts nothing: `agent.team` was the only autostart source and the fleet path lands in 0858. Both ship on the same feature branch.
+- **Roster helpers stay put here.** `materializeRoster` / `resolveMemberExecutor` remain in `team-service.ts` for `FleetService`; 0860 moves them.
+- **Supervisor `team:` tag reader stays until 0860.** Only `materializeTeam` wrote `team:` tags; once it is gone the reader is inert, and 0860 deletes it with the rest of the identity vocabulary.
+- **`memberLocalId` frozen.** Only its parameter type narrows; derived ids are byte-identical.
+
+**Premises (verified 2026-09-14)**
+
+- Config: `packages/config/src/index.ts:368` `TeamMemberConfigSchema`, `:408` `TeamConfigSchema`, `:442` `normalizeMember`, `:658` `team:` key, `:732` member normalization in the superRefine, `:979` `misplacedGlobalKeys` doc.
+- Loader: `packages/config/src/loader.ts:334-353` team tilde expansion, `:433` `agent.team.*.members` merge rule.
+- Server: `apps/server/src/serve.ts:19,709-715` `resolveAutostartSet` + `startAutostart`; `server-config.ts:16,24-25,48`; `context.ts:300,354`; `/teams` at `modules/team/index.ts:215`.
+- App: `team-service.ts:149-150` bus entries, `:991`/`:1021` `team.up`/`team.down` emits, `:1202` `resolveAutostartSet`; `scheduler-custom-job-service.ts:86` comment.
+- Web: `apps/web/src/modules/projects/MemberDetail.tsx:3,24` is the only `useTeamsData` consumer.
+- Tests: `packages/config/tests/{team-config,loader,config-schemas}.test.ts`, `apps/cli/tests/commands/agent-team.test.ts`, `packages/app/tests/services/team-service.test.ts`, `apps/server/tests/{serve,context}.test.ts`, `apps/server/tests/modules/team/index.test.ts`, `apps/web/tests/modules/projects/MemberDetail.test.tsx`.
+
+**Dependencies:** 0856 (`LegacyMigrationService` reads `agent.team`).
+
+#### Q&A entry — 2026-09-14 refineall ready-depth pass
+
+**Decisions**
+
+- **R7 doc surface corrected on re-verification:** `configuration-contracts.md` has zero team/fleet rows (confirm only); `observability-contracts.md` holds only the `/api/team/teams` row — the `team.up`/`team.down` catalog rows live in `docs/design/event-tracking.md` (:73-74, :296) and `docs/inventory/system-events-producer-audit.md` (:92-93, :98, :171, :200), both added to R7.
+- **R5 data source confirmed:** `GET /api/project/fleet` already exists (`apps/server/src/modules/health/index.ts:82`), so `MemberDetail` rewire has no hidden 0858 dependency. All other premises (file:line carriers, test files, schema key at `spur-config.schema.json:196`) re-verified against the tree unchanged.
 
 ### Design
 

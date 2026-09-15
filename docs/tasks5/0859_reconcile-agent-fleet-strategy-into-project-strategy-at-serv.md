@@ -4,7 +4,7 @@ name: Reconcile agent.fleet.strategy into project_strategy at serve start
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.219Z
-updated_at: "2026-09-15T05:33:07.776Z"
+updated_at: "2026-09-15T06:12:05.603Z"
 feature_id: G65
 priority: P2
 tags:
@@ -30,7 +30,7 @@ The dispatch strategy is DB-only today: `StrategyRuntime.getStrategy(path)` retu
 - **R2** — `spur serve` calls it after config load and fleet materialization whenever `agent.fleet` is present (enabled or not), with `agent.fleet.strategy`. A failure fails the start.
 - **R3** — An absent `agent.fleet` section does not touch `project_strategy`.
 - **R4** — Tests: a `rest` row plus `gtd` config → the row records `gtd`, `strategy_version` +1, exactly one `strategy.changed`; a second reconcile with `gtd` → no version change and no event; absent section → no call.
-- **R5** — Same-commit docs: the strategy paragraph in `docs/design/project-switcher.md` and the `strategy.changed` producer row in `docs/inventory/system-events-producer-audit.md` / `observability-contracts.md`.
+- **R5** — Same-commit docs: the strategy paragraph in `docs/design/project-switcher.md` (:188, :216-238) and the `strategy.changed` row in `docs/design/event-tracking.md` (:294 — note the serve-start reconcile as a producer path). `docs/inventory/system-events-producer-audit.md` and `observability-contracts.md` carry no `strategy.changed` row today — nothing to sync there (0861 owns any authority-level additions).
 
 ### Acceptance Criteria
 
@@ -61,6 +61,36 @@ The dispatch strategy is DB-only today: `StrategyRuntime.getStrategy(path)` retu
 - Tests: `packages/app/tests/services/strategy-runtime.test.ts`, `apps/server/tests/serve.test.ts`.
 
 **Dependencies:** 0858 (`agent.fleet.strategy` exists only after the schema lands).
+
+#### Q&A entry — 2026-09-15T06:12:05.602Z
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-15T05:32:34.778Z
+
+**Decisions**
+
+- **Compare on `StrategyRuntime`, not in `serve.ts`.** It owns the row and the event, so the no-bump-on-restart rule is unit-testable without booting a server.
+- **`setStrategy`'s always-bump contract is unchanged.** Its docstring pins "increments on EVERY set" for 0837's `stale-strategy` fence; `reconcileStrategy` simply skips the call when the name already matches, so the fence still moves only on a real change.
+- **Reconcile a disabled fleet too.** The strategy is declared config; `/api/project/fleet` should report it whether or not members run.
+- **Failure fails the start.** A silently stale strategy would dispatch under the wrong policy.
+- **No row + declared `rest`.** `getStrategy` already reports `rest` v1 for a missing row, so the compare matches and nothing is written; row creation stays with the R6 resume path.
+
+**Premises (verified 2026-09-14)**
+
+- `packages/app/src/services/strategy-runtime.ts:237` `getStrategy` returns `{ name, version }`, defaulting to `rest` v1 when no row exists.
+- `:250` `setStrategy` persists through `ProjectStrategyDao.set`, increments the version on every call, and `:259` inserts a `strategy.changed` system event.
+- Tests: `packages/app/tests/services/strategy-runtime.test.ts`, `apps/server/tests/serve.test.ts`.
+
+**Dependencies:** 0858 (`agent.fleet.strategy` exists only after the schema lands).
+
+#### Q&A entry — 2026-09-14 refineall ready-depth pass
+
+**Decisions**
+
+- **R5 doc surface corrected on re-verification:** the only live `strategy.changed` doc row is `docs/design/event-tracking.md:294`; `system-events-producer-audit.md` and `observability-contracts.md` have no such row, so R5 now names event-tracking and leaves authority-level additions to 0861. All other premises (`strategy-runtime.ts:237/:250/:259`, test files, project-switcher strategy paragraphs) re-verified against the tree unchanged.
 
 ### Design
 
