@@ -5,7 +5,8 @@ tiers and enforcement posture, and the four-surface script placement table with 
 operator-consent applications.
 **Status:** authority landed (ADR-069 amendment + promotion, ADR-051 amendment); advisory tooling is
 sibling tasks 0614/0615; consent record updated by task 0695 on 2026-08-27. The ADR-115 tiers in §1
-are accepted (feature I21; §4 consent of 2026-09-10).
+are accepted (feature I21; §4 consent of 2026-09-10). The §2 `plugins/sp/scripts` row records the
+ADR-065 `repo-only` sub-category of that surface (conflict-audit repair, 2026-09-15).
 **Authority:** derived; ADR-069 (composition measures), ADR-115 (composition budgets, enforcement
 posture), ADR-051 (surface boundary, consent gate), ADR-065 (plugin-script entrypoint contract,
 cross-referenced), ADR-043 (slash-command preference). On conflict, `00_ADR.md` wins (lower number
@@ -76,11 +77,11 @@ judges them from step profiles ([workflow composition](workflow-composition-cont
 | `apps/cli/src/commands` | public `spur` verbs | a Spur **end user** runs it on any Spur-managed project — each addition needs the consent gate |
 | `scripts/commands` | internal spur-dev commands | **Spur self-dev only** — packaging/release, building Spur, monorepo gates (one module per command, `bundle-*`-style naming, test sibling) |
 | `package.json` scripts | repo-wide developer entrypoints | a **repo developer** invokes it by name (`bun run …`); it composes existing binaries, adds no logic, and its name is the contract |
-| `plugins/sp/scripts` | plugin-shipped scripts | the action must run on **agent machines that only have the plugin** — entrypoint contract owned by ADR-065 (`.mjs` twins, declaration in `config/plugin-scripts.json`, no repo-relative paths), cross-referenced, not restated |
+| `plugins/sp/scripts` | plugin-shipped scripts and their repo-only gate siblings | the action must run on **agent machines that only have the plugin**, or validates that shipped surface as a repo-only gate — entrypoint contract owned by ADR-065 (`.mjs` twins, declaration in `config/plugin-scripts.json`, no repo-relative paths; `repo-only` entries stay on `bun` and are monorepo/gate-only, [configuration contracts §2.6](configuration-contracts.md#26-plugin-script-contract-manifest--gate-task-0600-adr-065)), cross-referenced, not restated |
 
 Decision procedure for a new script: identify the **audience** (end user / self-dev / repo
-developer / plugin-only agent machine); the audience selects the surface; only the first surface
-crosses the consent gate.
+developer / plugin-only agent machine / plugin-surface gate); the audience selects the surface; only
+the first surface crosses the consent gate.
 
 ## 3. Consent record (ADR-051 R5 amendment, feature A3)
 

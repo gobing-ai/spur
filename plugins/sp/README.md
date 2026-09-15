@@ -185,7 +185,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (34 skills)
+├── skills/                          # Domain knowledge + workflow docs (38 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -231,9 +231,10 @@ plugins/sp/
 │   ├── spur-doctor/                 # Read-only artifact evaluation → proposal table (backs spur-composer)
 │   ├── spur-dev/                    # Thin planning→execution orchestration spine
 │   │   └── references/  # ac-style-guide, cross-cutting, decision-brief, dev-operations,
-│   │                      execution-batch, execution-workflow, feature-link-helper,
-│   │                      flag-glossary, gate-checklists, glossary, planning-workflow,
-│   │                      product-planning  (12 files)
+│   │                      done-housekeeping, execution-batch, execution-workflow,
+│   │                      feature-link-helper, flag-glossary, gate-checklists, glossary,
+│   │                      idea-evaluation, inline-pipeline-driver, planning-workflow,
+│   │                      product-planning, section-batching  (16 files)
 │   ├── test-driven-development/                    # TDD workflow companion (SKILL.md only)
 │   ├── reverse-engineering/         # Codebase reverse engineering / HLD / audit
 │   │   ├── agents/openai.yaml
@@ -255,6 +256,10 @@ plugins/sp/
 │   │   └── references/decision-method.md
 │   ├── sys-debugging/               # Structured debugging protocol
 │   │   └── references/debugging-protocol.md
+│   ├── taste-refactoring-api/       # API contract design + refactor (checklists, examples, references)
+│   ├── taste-refactoring-architect/ # Minimum-sufficient architecture review + refactor
+│   ├── taste-refactoring-tests/     # Test-suite failure-sensitivity refactor
+│   ├── taste-refactoring-ui/        # UI hierarchy, layout, typography + interaction refactor
 │   └── wayfinder/                   # Multi-session investigation maps (SKILL.md only)
 ├── commands/                        # 39 slash-command wrappers — the SSOT (hand-editable thin wrappers; see Commands below)
 ├── agents/                          # 4 specialist subagents (expert-spur, super-coder, super-planner, super-reviewer)
@@ -323,7 +328,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `brainstorm`                | 1.0.0 | Structured ideation workflow — generate solution options with trade-offs and confidence scoring                                                                                                                                            |
 | `wayfinder`                 | 1.0.0 | Multi-session investigation maps — chart a spur feature as the map when the destination itself is foggy, then resolve one ticket per session until the route is clear                                                                      |
 | `daily-summary`             | 1.0.0 | Daily summary report generator — orchestrates ccusage CLI + git history into structured markdown summaries                                                                                                                                 |
-| `doc-evolve`                | 1.0   | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons                                                                          |
+| `doc-evolve`                | 1.1   | Key-document evolution per `docs/99_PROJECT_CONSTITUTION.md` — drift audits, same-commit sync checks, frontmatter-contract verification, machine-appended lessons                                                                          |
 | `reverse-engineering`       | 1.1   | Codebase analysis / HLD generation / audit — depth-driven reverse engineering with orthogonal mode, focus, and format controls; backs `/sp:dev-reverse`                                                                                    |
 | `issue-finding`             | 2.0   | Session-log forensics — multi-source discovery, bottleneck ranking, optional topic focus, CLI-gated fix task generation; **legacy path** — superseded by `history-anatomy` for indexed reporting; backs no current command; directly invocable as sp:issue-finding |
 | `conflict-finding`          | 1.0   | Authority-aware semantic audit — four-pillar (source/task/feature/authority) conflict discovery, claim-specific authority resolution, reproducible evidence, confirmed owner-routed remediation; backs `/sp:dev-find-conflict`             |
@@ -375,7 +380,7 @@ command is a user-facing entry point that bridges natural language to skill invo
 
 | Prefix       | Count | Delegates to                                                                                                                                                                                                                                                                                                        | Purpose                                                                                |
 | ------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `dev-*`      | 33    | `sp:spur-dev`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:code-simplification`, `sp:next-router`, `sp:brainstorm`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:sys-debugging`, `sp:daily-summary`, `sp:history-anatomy`, `sp:session-review`, `sp:conflict-finding`, `sp:reverse-engineering`, `sp:pr-reviewing`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
+| `dev-*`      | 33    | `sp:spur-dev`, `sp:spur-cli`, `sp:next-router`, `sp:next-feature`, `sp:brainstorm`, `sp:wayfinder`, `sp:sys-architecture`, `sp:code-implementation`, `sp:code-testing`, `sp:code-verification`, `sp:functional-review`, `sp:code-improvement`, `sp:code-simplification`, `sp:sys-debugging`, `sp:dogfood-testing`, `sp:parallel-execution`, `sp:history-anatomy`, `sp:session-review`, `sp:conflict-finding`, `sp:reverse-engineering`, `sp:pr-reviewing`, inline | The dev-workflow surface — planning, execution, batch, wrap-up, review/verify, hygiene |
 | `rule-*`     | 3     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The rule surface — `rule-add`, `rule-refine`, `rule-scan`                              |
 | `workflow-*` | 2     | `sp:spur-cli`                                                                                                                                                                                                                                                                                                       | The workflow surface — `workflow-add`, `workflow-refine`                               |
 | `spur-init`  | 1     | `sp:doc-evolve`                                                                                                                                                                                                                                                                                                     | Project bootstrap (`spur init`) with doc-evolve integration                            |
@@ -429,17 +434,18 @@ the pipeline's Phase 7 review step.
 
 | Agent            | Shape        | Delegates to                                                            | Color   | Trigger examples                                                                |
 | ---------------- | ------------ | ----------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------- |
-| `expert-spur`    | expert       | `sp:spur-cli`                                                           | green   | "create tasks", "feature lifecycle", "add a rule", "author a workflow"          |
+| `expert-spur`    | expert       | `sp:spur-cli` + `sp:spur-composer` + `sp:spur-doctor`                    | green   | "create tasks", "feature lifecycle", "add a rule", "author a workflow"          |
 | `super-coder`    | builder      | `sp:sys-architecture` + `sp:code-implementation` + `sp:code-testing` + `sp:sys-debugging` | blue    | "implement this", "write the code", "fix this bug", "design the architecture"   |
 | `super-planner`  | orchestrator | `sp:spur-dev` + `sp:parallel-execution` + `sp:dogfood-testing` + `sp:next-router` | green   | "run this task end to end", "run all tasks", "run the batch", "runall"          |
 | `super-reviewer` | reviewer     | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | crimson | "review this", "check the code", "SECUA review", "run task 0042 through review" |
 
 Each agent has:
 
-- `skills: [sp:<skill-name>]` - bound to one (`expert-spur`), four (`sp:sys-architecture`,
-  `sp:code-implementation`, `sp:code-testing`, `sp:sys-debugging` for `super-coder`; `sp:spur-dev`,
-  `sp:parallel-execution`, `sp:dogfood-testing`, `sp:next-router` for `super-planner`), or three
-  (`sp:code-verification`, `sp:functional-review`, `sp:code-improvement` for `super-reviewer`).
+- `skills: [sp:<skill-name>]` - each agent is bound to the skills it dispatches: three for
+  `expert-spur` (`sp:spur-cli`, `sp:spur-composer`, `sp:spur-doctor`) and `super-reviewer`
+  (`sp:code-verification`, `sp:functional-review`, `sp:code-improvement`); four for `super-coder`
+  (`sp:sys-architecture`, `sp:code-implementation`, `sp:code-testing`, `sp:sys-debugging`) and
+  `super-planner` (`sp:spur-dev`, `sp:parallel-execution`, `sp:dogfood-testing`, `sp:next-router`).
 - `model: inherit` — inherits the parent session's model.
 - `color` — roster display accent.
 - `tools` — allowed tool set (`Read`, `Grep`, `Glob`, `Bash`, `Skill`).

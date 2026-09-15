@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make scheduler.custom tick single-flight durable across serve daemons and stop failing suppressed duplicates
-status: backlog
+status: wip
 template: standard
 created_at: 2026-09-15T23:25:40.931Z
-updated_at: "2026-09-15T23:34:57.677Z"
+updated_at: "2026-09-15T23:47:05.582Z"
 
 ---
 
@@ -114,13 +114,16 @@ Impacted surfaces: `queue_jobs` (new index, migration 0047), `spur serve` schedu
 
 | Command (workspace) | Result |
 | ------------------- | ------ |
-| `bun test tests/db.test.ts tests/dao/migrations.test.ts` (`packages/domain`) | 102 pass / 0 fail — index admits one active row per name, terminal rows and other types unaffected, migration 0047 retires pre-existing duplicates, registry/governance counts updated |
-| `bun test tests/services/scheduler-custom-job-service.test.ts` (`packages/app`) | 36 pass / 0 fail — duplicate claim completes without a second child and audits itself; conflict classifier accepts only this index |
-| `bun test tests/serve.test.ts` (`apps/server`) | 53 pass / 0 fail — tick conflict → `skipped` with the active row id; stale-row sweep still re-enqueues; explicit-unlimited still unswept; real-queue round trip admits one row per occurrence |
+| `bun test tests/db.test.ts tests/dao/migrations.test.ts` (`packages/domain`) | 102 pass / 0 fail — the index admits one active row per name; terminal rows, other names, and other job types are unaffected; migration 0047 retires pre-existing duplicates without deleting rows; registry/governance counts updated |
+| `bun test tests/services/scheduler-custom-job-service.test.ts` (`packages/app`) | 36 pass / 0 fail — a duplicate claim completes without a second child and audits itself; the conflict classifier accepts only this index |
+| `bun test tests/serve.test.ts` (`apps/server`) | 53 pass / 0 fail — tick conflict → `skipped` naming the active row; stale-row sweep still re-enqueues; explicit-unlimited still unswept; real-queue round trip admits one row per occurrence and re-admits after completion |
+| `bun test` for `./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts` | 8363 pass / 0 fail across 472 files (lines 99.20%, functions 98.99%) |
 | `bun run typecheck` (root) | all 7 workspaces exit 0 |
 | `bunx biome check` on the touched files | clean |
+| Live database (project `.spur/spur.db`, 796 `scheduler.custom` rows) | migration applied: index present, no invalid-JSON payloads, 0 active duplicate rows, row count unchanged |
+| Live tick at 2026-09-15 16:40 with two `spur serve` daemons still on the pre-fix code | exactly ONE `scheduler.custom` row created for the occurrence (pre-fix: 2-5); the losing daemon reported `UNIQUE constraint failed: index 'queue_jobs_scheduler_custom_active_unique'` as an error because it predates `isSchedulerCustomActiveConflict` — a daemon restart converts it to the `skipped` outcome |
 
-Live-DB migration evidence (the project's own `.spur/spur.db`, 796 `scheduler.custom` rows): index created, no invalid-JSON payloads, 0 active duplicate rows, row count unchanged (nothing deleted).
+Adversarial reading of the duplicate family: on 2026-09-14 every one of the 15 `history_import_ledger.record_hash` failures (import exit 2, `pi` source) landed on a tick with 11-14 duplicate rows — concurrent importers, i.e. the same root cause. Those rows stop being creatable once the index is in force.
 
 ### Review
 
@@ -131,3 +134,6 @@ Live-DB migration evidence (the project's own `.spur/spur.db`, 796 `scheduler.cu
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-15T23:46:59.213Z backlog → wip (system)
+
