@@ -13,10 +13,10 @@ tags:
   - server
   - web
 
-dependencies: ["4856"]
+dependencies: ["0856"]
 ---
 
-## 4857. Retire the agent.team roster runtime
+## 0857. Retire the agent.team roster runtime
 
 ### Background
 
@@ -36,7 +36,7 @@ Removing the schema key alone would silently strip a leftover block, so a loader
 - **R1** — Delete `TeamConfigSchema`, `TeamMemberConfigSchema` (including the bare-string shorthand), the `agent.team` key and its composed-id superRefine, the `TeamConfig`/`TeamMemberConfig`/`NormalizedTeamMember` types and `normalizeMember`. Retype `memberLocalId`'s input to the member identity fields (`id`, `executor`, `role`) without changing its derivation.
 - **R2** — Loader: delete team tilde expansion and the `agent.team.*.members` merge rule. Add a guard that runs before schema parse and fails any layer carrying `agent.team`, naming that file and `agent.fleet` in `<project>/.spur/config.yaml` as the replacement. `misplacedGlobalKeys` drops its `agent.team` branch.
 - **R3** — Delete `TeamService.listTeams`, `materializeTeam`, `teardownTeam`, the team roster part of `getStatus`, `resolveAutostartSet`, `TeamLifecycleEventPayload`, and the `team.up`/`team.down` events (bus map, `event-names.ts` entries and payload schemas). Keep `materializeRoster` and `resolveMemberExecutor` — `FleetService` uses them.
-- **R4** — Server: delete `GET /api/team/teams`, the autostart block in `serve.ts`, `SPUR_TEAM_AUTOSTART`, `ServerBootConfig.teamAutostart` and the context option, and the `SPUR_TEAM_AUTOSTART` mention in the `scheduler-custom-job-service.ts` env-allowlist comment. Autostart returns on the fleet path in task 4858.
+- **R4** — Server: delete `GET /api/team/teams`, the autostart block in `serve.ts`, `SPUR_TEAM_AUTOSTART`, `ServerBootConfig.teamAutostart` and the context option, and the `SPUR_TEAM_AUTOSTART` mention in the `scheduler-custom-job-service.ts` env-allowlist comment. Autostart returns on the fleet path in task 0858.
 - **R5** — Web: delete `lib/use-teams-data.ts`; `MemberDetail` takes the work dir from the fleet snapshot `path` and the model from the declared member, showing `Executor default` when none.
 - **R6** — Tests: delete or rewrite the roster cases (`apps/cli/tests/commands/agent-team.test.ts` including the 0544 case, `packages/config/tests/team-config.test.ts`, `packages/app/tests/services/team-service.test.ts` materialize/teardown/listTeams/autostart, server tests for `/api/team/teams` and autostart, config and loader tests). Add loader tests for the guard at both the project and the global layer. `apps/cli/schemas/spur-config.schema.json` drops `agent.team`.
 - **R7** — Same-commit docs for these surfaces: `docs/design/configuration-contracts.md`, `observability-contracts.md` (event and `/teams` rows), the `agent.team` role wording in `cli-contracts.md`, and the `config/config.global.yaml` / `config.example.yaml` comments.
@@ -59,9 +59,9 @@ Removing the schema key alone would silently strip a leftover block, so a loader
 
 - **Loud failure over silent strip.** Zod would drop an unknown `agent.team` key, so the guard inspects each layer's parsed YAML before schema parse in `loader.ts` — the one path every CLI command and `spur serve` load through (design §2).
 - **No converter, no shim.** Nothing reads `agent.team` after this task; the error text names the replacement.
-- **Accepted interim gap.** Between this task and 4858, `spur serve` autostarts nothing: `agent.team` was the only autostart source and the fleet path lands in 4858. Both ship on the same feature branch.
-- **Roster helpers stay put here.** `materializeRoster` / `resolveMemberExecutor` remain in `team-service.ts` for `FleetService`; 4860 moves them.
-- **Supervisor `team:` tag reader stays until 4860.** Only `materializeTeam` wrote `team:` tags; once it is gone the reader is inert, and 4860 deletes it with the rest of the identity vocabulary.
+- **Accepted interim gap.** Between this task and 0858, `spur serve` autostarts nothing: `agent.team` was the only autostart source and the fleet path lands in 0858. Both ship on the same feature branch.
+- **Roster helpers stay put here.** `materializeRoster` / `resolveMemberExecutor` remain in `team-service.ts` for `FleetService`; 0860 moves them.
+- **Supervisor `team:` tag reader stays until 0860.** Only `materializeTeam` wrote `team:` tags; once it is gone the reader is inert, and 0860 deletes it with the rest of the identity vocabulary.
 - **`memberLocalId` frozen.** Only its parameter type narrows; derived ids are byte-identical.
 
 **Premises (verified 2026-09-14)**
@@ -73,7 +73,7 @@ Removing the schema key alone would silently strip a leftover block, so a loader
 - Web: `apps/web/src/modules/projects/MemberDetail.tsx:3,24` is the only `useTeamsData` consumer.
 - Tests: `packages/config/tests/{team-config,loader,config-schemas}.test.ts`, `apps/cli/tests/commands/agent-team.test.ts`, `packages/app/tests/services/team-service.test.ts`, `apps/server/tests/{serve,context}.test.ts`, `apps/server/tests/modules/team/index.test.ts`, `apps/web/tests/modules/projects/MemberDetail.test.tsx`.
 
-**Dependencies:** 4856 (`LegacyMigrationService` reads `agent.team`).
+**Dependencies:** 0856 (`LegacyMigrationService` reads `agent.team`).
 
 ### Design
 

@@ -13,10 +13,10 @@ tags:
   - strategy
   - server
 
-dependencies: ["4858"]
+dependencies: ["0858"]
 ---
 
-## 4859. Reconcile agent.fleet.strategy into project_strategy at serve start
+## 0859. Reconcile agent.fleet.strategy into project_strategy at serve start
 
 ### Background
 
@@ -60,7 +60,7 @@ The dispatch strategy is DB-only today: `StrategyRuntime.getStrategy(path)` retu
 - `:250` `setStrategy` persists through `ProjectStrategyDao.set`, increments the version on every call, and `:259` inserts a `strategy.changed` system event.
 - Tests: `packages/app/tests/services/strategy-runtime.test.ts`, `apps/server/tests/serve.test.ts`.
 
-**Dependencies:** 4858 (`agent.fleet.strategy` exists only after the schema lands).
+**Dependencies:** 0858 (`agent.fleet.strategy` exists only after the schema lands).
 
 ### Design
 

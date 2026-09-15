@@ -13,23 +13,23 @@ tags:
   - fleet
   - server
 
-dependencies: ["4857"]
+dependencies: ["0857"]
 ---
 
-## 4858. Declare the project fleet under agent.fleet and gate serve on enabled
+## 0858. Declare the project fleet under agent.fleet and gate serve on enabled
 
 ### Background
 
 Covers G65 scenarios R1, R2 (global-layer `agent.fleet` and `.spur/fleet.json`), R3 and R8 (design §2-§4).
 
-After task 4857, `.spur/fleet.json` (`FleetDeclarationSchema`, `packages/config/src/index.ts:537`) is the only fleet carrier: `FleetService.load` reads the file (`packages/app/src/services/fleet-service.ts:136-160`, path from `declarationPath` at `:416`), and `spur serve` materializes whenever the file exists (`apps/server/src/serve.ts:692-700`). There is no on/off switch, and no autostart after 4857. Read surfaces: `spur projects list --fleet` (`apps/cli/src/commands/projects.ts:114,234`), `GET /api/project/fleet` (`apps/server/src/modules/health/index.ts:77-124`), and Board hints naming `.spur/fleet.json` (`ProjectsShell.tsx:118`, `AgentsView.tsx:162`, plus the `roster.ts:92` comment).
+After task 0857, `.spur/fleet.json` (`FleetDeclarationSchema`, `packages/config/src/index.ts:537`) is the only fleet carrier: `FleetService.load` reads the file (`packages/app/src/services/fleet-service.ts:136-160`, path from `declarationPath` at `:416`), and `spur serve` materializes whenever the file exists (`apps/server/src/serve.ts:692-700`). There is no on/off switch, and no autostart after 0857. Read surfaces: `spur projects list --fleet` (`apps/cli/src/commands/projects.ts:114,234`), `GET /api/project/fleet` (`apps/server/src/modules/health/index.ts:77-124`), and Board hints naming `.spur/fleet.json` (`ProjectsShell.tsx:118`, `AgentsView.tsx:162`, plus the `roster.ts:92` comment).
 
 Operator decision (2026-09-14, design approval): an enabled fleet starts every enabled member at serve start; no per-member autostart flag.
 
 ### Requirements
 
 - **R1** — Add `AgentFleetSchema` as `agent.fleet`: `enabled` (boolean, default `false`), `strategy` (`rest` | `gtd`, default `rest`), `orchestrator` (optional member local id), `members` (default `[]`, `FleetMemberSchema` unchanged) with the role-or-executor superRefine moved from `FleetDeclarationSchema`. Put the strategy tuple `FLEET_STRATEGIES` in `@gobing-ai/spur-config` and derive `StrategyName` in `strategy-runtime.ts` from it. Delete `FleetDeclarationSchema` / `FleetDeclaration`.
-- **R2** — Extend the 4857 loader guard: `agent.fleet` in the global layer fails naming the global file and the project config; an existing `<project>/.spur/fleet.json` fails naming the file and telling the operator to move `members`/`orchestrator` under `agent.fleet` and delete it.
+- **R2** — Extend the 0857 loader guard: `agent.fleet` in the global layer fails naming the global file and the project config; an existing `<project>/.spur/fleet.json` fails naming the file and telling the operator to move `members`/`orchestrator` under `agent.fleet` and delete it.
 - **R3** — `FleetService.load(projectPath)` returns that project's merged `agent.fleet` (`null` when absent) instead of reading a file; `declarationPath` goes. `resolve()` keeps `missing: ['no-declaration']` for an absent section and adds `'fleet-disabled'` to `missing` when `enabled` is `false` (members are still resolved).
 - **R4** — Serve: replace the `fs.exists(.spur/fleet.json)` gate with `agent.fleet?.enabled === true` → `FleetService.materialize(projectRoot)` → `supervisor.startAutostart(result.upserted)`. Absent or disabled → neither; log the state once. Materialize or autostart failure fails the start, as today.
 - **R5** — Read surfaces: `projects list --fleet` help and text name `agent.fleet`, printing `fleet: disabled (agent.fleet.enabled: false)` and `fleet: no declaration (agent.fleet)`; `GET /api/project/fleet` adds `enabled: boolean` (the web snapshot type follows); the Board hints in `ProjectsShell.tsx` and `AgentsView.tsx` name `agent.fleet in .spur/config.yaml`, and the `roster.ts` comment follows.
@@ -71,7 +71,7 @@ Operator decision (2026-09-14, design approval): an enabled fleet starts every e
 - `packages/app/src/services/strategy-runtime.ts:20` `StrategyName = 'rest' | 'gtd'`.
 - Tests: `packages/app/tests/services/fleet-service.test.ts`, `packages/config/tests/{config-schemas,loader}.test.ts`, `apps/server/tests/{serve,modules/health}.test.ts`, `apps/cli/tests/commands/projects.test.ts`, `apps/web/tests/modules/projects/{ProjectsShell,AgentsView}.test.tsx`.
 
-**Dependencies:** 4857 (the loader guard and the removal of the `agent.team` autostart path).
+**Dependencies:** 0857 (the loader guard and the removal of the `agent.team` autostart path).
 
 ### Design
 

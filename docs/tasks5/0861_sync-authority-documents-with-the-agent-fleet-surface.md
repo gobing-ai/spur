@@ -11,16 +11,16 @@ tags:
   - g65
   - docs
 
-dependencies: ["4859", "4860"]
+dependencies: ["0859", "0860"]
 ---
 
-## 4861. Sync authority documents with the agent.fleet surface
+## 0861. Sync authority documents with the agent.fleet surface
 
 ### Background
 
 Covers G65 scenario R7 (design §8).
 
-Tasks 4856-4860 update the satellites their surfaces own in the same commit. This task records the architectural decision and sweeps cross-document residue:
+Tasks 0856-0860 update the satellites their surfaces own in the same commit. This task records the architectural decision and sweeps cross-document residue:
 
 - ADR-116 (`docs/00_ADR.md:1698`) still names `.spur/fleet.json` as the carrier and says the Projects module owns "Conversation, Agents, and Work" (`:1701-1703`), although the Work tab was dropped on 2026-09-14.
 - ADR-086's roster-layer amendment (`docs/00_ADR.md:1157-1174`) still describes `agent.team` autostart as live; its 2026-09-14 note defers the key removal to this feature.
@@ -48,7 +48,7 @@ Tasks 4856-4860 update the satellites their surfaces own in the same commit. Thi
 
 **Decisions**
 
-- **The ADR amendment lands last.** After 4858-4860 ship, so the decision record never describes an unshipped surface.
+- **The ADR amendment lands last.** After 0858-0860 ship, so the decision record never describes an unshipped surface.
 - **The Work-tab correction rides the ADR-116 amendment.** The decision body at `:1703` is history; amendments are the only legal edit.
 - **The roster note goes under ADR-086**, whose 2026-09-14 note (`:1173-1174`) explicitly defers the `agent.team` removal to this feature. (The batch draft pointed at ADR-042/052; the roster amendment is ADR-086's.)
 - **Survivors are listed, not hidden.** Any sweep hit kept on purpose is recorded with its reason in Solution; historical plans, reports and corpus are never edited.
@@ -60,7 +60,7 @@ Tasks 4856-4860 update the satellites their surfaces own in the same commit. Thi
 - `docs/03_ARCHITECTURE.md:560` (`fleet.json`), `:562` (`agent.team.<teamId>`); `docs/01_PRD.md:98` (`.spur/fleet.json` fleet).
 - `apps/cli/tests/adr-supersession.test.ts` pins ADR-042/052/116 supersession and amendment strings (e.g. `:98`), so additions must not alter existing lines.
 
-**Dependencies:** 4859 and 4860 (the amendment and sweep document both shipped surfaces).
+**Dependencies:** 0859 and 0860 (the amendment and sweep document both shipped surfaces).
 
 ### Design
 

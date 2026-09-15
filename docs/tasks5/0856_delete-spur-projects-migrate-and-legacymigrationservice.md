@@ -14,7 +14,7 @@ tags:
 
 ---
 
-## 4856. Delete spur projects migrate and LegacyMigrationService
+## 0856. Delete spur projects migrate and LegacyMigrationService
 
 ### Background
 
@@ -48,8 +48,8 @@ Removing a public verb needs a row in the surface-governance consent ledger; Rob
 **Decisions**
 
 - **Tombstone for `spur projects migrate`?** No. Commander's unknown-command error is the contract; no registered project carries an `agent.team` roster to convert (operator consent at G65 idea-eval, 2026-09-14).
-- **Consent receipt?** One dated row in `docs/design/harness-surface-governance.md` (rows only). ADR text is untouched here; task 4861 lands the ADR-116 amendment.
-- **Order.** First in the chain: `LegacyMigrationService` reads `agent.team`, which 4857 deletes, so removing it first keeps every commit compiling.
+- **Consent receipt?** One dated row in `docs/design/harness-surface-governance.md` (rows only). ADR text is untouched here; task 0861 lands the ADR-116 amendment.
+- **Order.** First in the chain: `LegacyMigrationService` reads `agent.team`, which 0857 deletes, so removing it first keeps every commit compiling.
 
 **Premises (verified 2026-09-14)**
 

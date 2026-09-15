@@ -14,10 +14,10 @@ tags:
   - events
   - refactor
 
-dependencies: ["4858"]
+dependencies: ["0858"]
 ---
 
-## 4860. Rename the remaining team runtime vocabulary and split TeamService
+## 0860. Rename the remaining team runtime vocabulary and split TeamService
 
 ### Background
 
@@ -63,7 +63,7 @@ After task 2 the live team-named surfaces are:
 
 **Premises (verified 2026-09-14)**
 
-- Routes: `apps/server/src/modules/team/index.ts:41` processes list, `:77`/`:88` agent start/stop, `:99` stdin, `:215` `/teams` (removed by 4857).
+- Routes: `apps/server/src/modules/team/index.ts:41` processes list, `:77`/`:88` agent start/stop, `:99` stdin, `:215` `/teams` (removed by 0857).
 - Callers: `apps/cli/src/commands/agent.ts:213,356`; CSRF note `apps/server/src/middleware/pipeline.ts:50-51`; `apps/web/src/lib/process-stream.ts:4`.
 - Events: `team-service.ts:151-153` bus map, `:778` assigned emit, `:1154` started bridge; `supervisor-service.ts:56-75` member payload/bus, `:136` stop guard; CLI producer comments `task.ts:476,1667`; web filter `activity-history.ts:23`.
 - Identity: `supervisor-service.ts:203-228` (`team:` tag, `SPUR_TEAM_ID`), `agent-instance-store.ts:12`, `team-service.ts:877,1130`.
@@ -71,7 +71,7 @@ After task 2 the live team-named surfaces are:
 - Roster helpers: `team-service.ts:264` `MaterializeResult`, `:323` `resolveMemberExecutor`, `:413` `materializeRoster`; imported by `fleet-service.ts:23`.
 - Tests: `apps/server/tests/modules/team/index.test.ts`, `middleware/pipeline.test.ts`, `modules/messages/index.test.ts`, `upstream-system-events-wiring.test.ts`; `packages/app/tests/services/{team-service,agent-service,write-slot-service}.test.ts`; `apps/cli/tests/commands/{agent,agent-server,agent-loop-wake,agent-spec-flag,message}.test.ts`; `apps/web/tests/modules/projects/{ProcessesView,AgentsView,MemberDetail,responsive}.test.tsx`.
 
-**Dependencies:** 4858 (the route and service moves build on the post-4857/4858 `team-service.ts` and `fleet-service.ts`).
+**Dependencies:** 0858 (the route and service moves build on the post-0857/0858 `team-service.ts` and `fleet-service.ts`).
 
 ### Design
 
