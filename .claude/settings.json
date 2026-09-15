@@ -12,6 +12,7 @@
       "allowWrite": [
         "~/xprojects/spur-new/.git/hooks",
         "~/xprojects/spur-new/.git/worktrees",
+        "~/xprojects/spur-new/.git/worktrees/worktree",
         "~/xprojects/spur-new/config/",
         "~/xprojects/ts-libs",
         "~/xprojects/spur-new-*",
