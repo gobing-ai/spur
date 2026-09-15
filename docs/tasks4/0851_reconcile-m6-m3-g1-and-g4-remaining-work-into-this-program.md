@@ -4,7 +4,7 @@ name: Reconcile M6, M3, G1, and G4 remaining work into this program
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.303Z
-updated_at: "2026-09-14T01:14:48.661Z"
+updated_at: "2026-09-15T01:23:17.319Z"
 feature_id: G64
 priority: P3
 tags:
@@ -191,16 +191,16 @@ Completed the non-cleanup reconciliation under Robin's explicit staged-release d
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:86` — operator-approved disposition maps cleanup to existing 0849/0850; `apps/web/tests/modules/projects/MemberDetail.test.tsx:119` — selected member model/workDir rendered and cleared for an unknown id; 16 focused web tests pass |
-| R2 | MET | `docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:160` — cancellation means superseded plan; 0269 implementation retained, final removal assigned to existing 0849; no future-merge claim |
-| R3 | MET | `docs/features/G1_inbox-ipc.md:74`; `docs/features/G4_inter-agent-control-plane.md:119` — retained authorities; current feature JSON confirms both still verifying |
-| R4 | MET | spur task list --feature G64 --json: exactly 0846–0851; current roster compared to frozen roster, no duplicate task |
-| R5 | MET | `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:229` — explicit per-item owners and staging decision, mirrored at M3/M6 through CLI writes |
+| R1 | MET | `docs/features/M6_workspace-overview-removal-and-inbox-teams-supervisor-label-split.md:86` — operator-approved disposition mapping cleanup to existing 0849/0850 (anchor re-read this run); `apps/web/tests/modules/projects/MemberDetail.test.tsx:119` (selected member model/workDir rendered, cleared for unknown id; anchor re-read) — green inside the fresh web batch: cd apps/web && bun test tests/modules/registry.test.ts tests/components/LeftSidebar.test.tsx tests/components/BoardLayout.test.tsx tests/modules/projects/ProcessesView.test.tsx tests/modules/projects/roster.test.ts tests/modules/projects/MemberTerminal.test.tsx tests/modules/projects/activity-history.test.ts tests/modules/projects/MemberDetail.test.tsx tests/modules/projects/conversation.test.ts tests/modules/projects/ConversationView.test.tsx — exit 0, 130 pass / 0 fail / 438 expect (fresh 2026-09-14) |
+| R2 | MET | `docs/features/M3_teams-board-continuous-ux-fine-tune-terminal-centric-controls.md:160` — cancellation/superseded-plan reconciliation recorded, final removal assigned to existing 0849 (anchor re-read this run); no future-merge claim |
+| R3 | MET | `docs/features/G1_inbox-ipc.md:74` and `docs/features/G4_inter-agent-control-plane.md:119` — retained-authority notes (anchors re-read this run); fresh `spur feature show G1 --json` / `G4 --json` this run → both status `verifying`, authority notes unchanged |
+| R4 | MET | Fresh `spur task list --feature G64 --json` this run: exactly ten tasks 0846–0855; the growth beyond the frozen six (0852–0855) is the recorded 0849/0853 follow-up lineage mirrored at `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:268-271` (re-read this run) — no duplicate ticket for work an existing feature owns |
+| R5 | MET | `docs/features/G64_retire-workspace-inbox-teams-and-spur-team.md:229` — explicit per-item owners and staging decision, mirrored at M3/M6 through CLI writes (anchor re-read this run) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Overlapping scope is resolved once | MET | command | Current owner notes and exact six-task roster checked through feature/task CLI; 0849/0850 own deferred cleanup; `apps/web/tests/modules/projects/MemberDetail.test.tsx:119` — selected member model/workDir rendered and cleared for an unknown id; 16 focused web tests pass |
-| Scenario: Existing owners are preserved | MET | command | spur feature show G1/G4 --json and comparison with frozen snapshots: authority Notes and statuses unchanged |
+| Scenario: Overlapping scope is resolved once | MET | command | Owner notes re-read this run (M6:86, M3:160, G64:229/:268-271); `apps/web/tests/modules/projects/MemberDetail.test.tsx:119` green inside the fresh 130-pass web batch |
+| Scenario: Existing owners are preserved | MET | command | Fresh `spur feature show G1` / `G4` this run — both `verifying` with retained-authority notes at G1:74 / G4:119 (re-read); no authority forked |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

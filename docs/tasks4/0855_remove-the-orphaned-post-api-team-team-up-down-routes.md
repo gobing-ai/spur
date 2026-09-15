@@ -4,7 +4,7 @@ name: Remove the orphaned POST /api/team/:team/up|down routes
 status: done
 template: feature-impl
 created_at: 2026-09-14T23:19:18.765Z
-updated_at: "2026-09-15T01:05:02.116Z"
+updated_at: "2026-09-15T01:23:18.440Z"
 feature_id: G64
 
 ---
@@ -195,18 +195,18 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `git diff apps/server/src/modules/team/index.ts` = 54 deleted lines, only the two handler blocks (up comment :249 + handler :250-277, down comment :279 + handler :280-301); route-def audit shows 7 surviving routes only (`apps/server/src/modules/team/index.ts:41,77,88,99,120,213,250`); live-mount check: `bun run .tmp-0855-404.ts` (apps/server, teamModule.mount + Hono fetch) -> `POST /api/team/devops/up -> 404`, `POST /api/team/devops/down -> 404` (Hono default 404, no handler), exit 0 |
-| R2 | MET | `git diff apps/server/tests/modules/team/index.test.ts` = 274 deleted lines removing `describe('POST /api/team/:team/up')` (was :802) and `describe('POST /api/team/:team/down')` (was :968); fresh `bun test tests/modules/team/index.test.ts` (apps/server) = 31 pass / 0 fail (95 expect, 2.29s); stub-trim conditional correctly unmet: fresh `bunx tsc --noEmit` (apps/server) exit 0, `bunx biome lint src/modules/team/index.ts tests/modules/team/index.test.ts` = Checked 2 files, no fixes |
-| R3 | MET | `git status --short packages/app/src apps/cli/src` = no entries (untouched); `packages/app/src/services/team-service.ts:939` `materializeTeam` and `:1014` `teardownTeam` intact; CLI verbs intact at `apps/cli/src/commands/team.ts:482` (`team up`) and `:527` (`team down`); fresh `bun test tests/services/team-service.test.ts tests/services/team-service-0258.test.ts` (packages/app) = 82 pass / 0 fail (233 expect, 949ms) |
-| R4 | MET | Diff of `apps/server/src/modules/team/index.ts` touches only the two removed blocks; surviving handlers present: GET /api/team/processes (:41), POST agents/:id/start (:77), POST agents/:id/stop (:88), POST processes/:id/stdin (:99), GET processes/:id/stream (:120), GET /api/team/teams (:213), GET /api/team/health (:250); fresh `bun test tests/modules/team/index.test.ts` (apps/server) 31 pass / 0 fail + fresh `bun test tests/middleware/pipeline.test.ts` (apps/server) 28 pass / 0 fail (47 expect, 223ms) |
-| R5 | MET | `git diff docs/design/observability-contracts.md` = exactly the 2 rows at :353-354 removed; table rhythm preserved (teams row followed directly by health row); `rg -n "team/:team/up |
+| R1 | MET | Committed removal: `git show 56b8dddfa --numstat` → 54 deleted lines in `apps/server/src/modules/team/index.ts`, only the two handler blocks (fresh this run); live route-def audit this run: exactly seven surviving routes at `apps/server/src/modules/team/index.ts:41` (GET processes), `:77` (POST agents/:id/start), `:88` (POST agents/:id/stop), `:99` (POST processes/:id/stdin), `:120` (GET processes/:id/stream), `:213` (GET teams), `:250` (GET health) — no up\|down handlers; `rg -n 'team/:team/(up\|down)' apps/server apps/web/src` → 0 hits (exit 1, fresh) |
+| R2 | MET | `git show 56b8dddfa --numstat` → 274 deleted test lines removing both route describe blocks (fresh this run); surviving suite green inside the fresh server batch: cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts tests/modules/team/index.test.ts tests/middleware/pipeline.test.ts — exit 0, 130 pass / 0 fail / 390 expect (fresh 2026-09-14); typecheck + biome green across the tree in the fresh spur-check |
+| R3 | MET | `git status --short packages/app/src apps/cli/src` → clean (untouched by the removal); `packages/app/src/services/team-service.ts:939` `materializeTeam` and `:1014` `teardownTeam` intact (anchors re-read this run); CLI verbs intact at `apps/cli/src/commands/team.ts:482` (`team up`) and `:527` (`team down`) — re-read this run; team-service suites green inside the fresh packages/app batch: cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts tests/services/team-service.test.ts tests/services/team-service-0258.test.ts — exit 0, 139 pass / 0 fail / 462 expect (fresh 2026-09-14) |
+| R4 | MET | Surviving handlers present per the fresh route audit (same seven-route listing, this run); `apps/server/src/modules/team/index.ts:41-72` processes handler re-read this run; surviving-surface suites green: team module + middleware pipeline inside the fresh 130-pass server batch |
+| R5 | MET | `git show 56b8dddfa --numstat` → exactly 2 rows removed from `docs/design/observability-contracts.md` (fresh this run); corpus grep fresh this run: `rg -n 'team/:team/(up\|down)' docs` → only historical/procedural mentions (the 0855 task file itself, 0849/0853 record docs, tasks2 historical receipts, 04_DESIGN's deprecation note) — no live contract or test references the removed routes |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| **AC1 — Orphaned routes are gone (R1, R2).** | MET | test | test: fresh `bun test tests/modules/team/index.test.ts` (apps/server) = 31 pass / 0 fail, suite runs without the two removed describes; command: live-mount `teamModule.mount` into Hono (apps/server) -> `POST /api/team/devops/up` -> 404, `POST /api/team/devops/down` -> 404 (Hono default, no handler, exit 0); static: `rg -n "team/up |
-| **AC2 — Capabilities survive (R3).** | MET | test | test: fresh `bun test tests/services/team-service.test.ts tests/services/team-service-0258.test.ts` (packages/app) = 82 pass / 0 fail, materialize/teardown describes pass unmodified; static-ref: `packages/app/src/services/team-service.ts:939,1014` intact, `apps/cli/src/commands/team.ts:482,527` CLI verbs intact, `git status` shows packages/app/src + apps/cli/src untouched |
-| **AC3 — Surviving team surfaces intact (R4).** | MET | test | test: fresh `bun test tests/modules/team/index.test.ts` (apps/server) 31 pass / 0 fail and `bun test tests/middleware/pipeline.test.ts` (apps/server) 28 pass / 0 fail; static-ref: diff shows only the two handler blocks removed, 7 surviving routes present at index.ts:41,77,88,99,120,213,250 |
-| **AC4 — Docs and corpus clean (R1, R5).** | MET | command | command: `rg -n "team/:team/up |
+| **AC1 — Orphaned routes are gone (R1, R2).** | MET | command | Seven-route audit with no up\|down handlers + 0-hit code grep (both fresh this run); committed numstat 54 + 274 deletions (fresh this run); surviving server suites green (130 pass / 0 fail, fresh) |
+| **AC2 — Capabilities survive (R3).** | MET | test | `team-service.ts:939`/`:1014` and `team.ts:482`/`:527` intact (anchors re-read); team-service suites green inside the fresh 139-pass packages/app batch |
+| **AC3 — Surviving team surfaces intact (R4).** | MET | test | Seven surviving handlers enumerated fresh this run; team module + pipeline suites green inside the fresh 130-pass server batch |
+| **AC4 — Docs and corpus clean (R1, R5).** | MET | command | observability-contracts.md exactly −2 rows (committed numstat, fresh); docs grep shows only historical/procedural mentions (fresh this run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

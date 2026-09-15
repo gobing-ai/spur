@@ -4,7 +4,7 @@ name: Migration inventory and dry-run preview with conflict reporting
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.298Z
-updated_at: "2026-09-14T01:14:46.967Z"
+updated_at: "2026-09-15T01:23:15.942Z"
 feature_id: G64
 priority: P2
 tags:
@@ -331,16 +331,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/legacy-migration.test.ts:426`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R2 | MET | `packages/app/tests/services/legacy-migration.test.ts:686`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R3 | MET | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
-| R4 | MET | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:603`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:630`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R5 | MET | `apps/cli/tests/commands/projects.test.ts:555`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
+| R1 | MET | `packages/app/tests/services/legacy-migration.test.ts:426` (classification test, anchor re-read this run); cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts tests/services/team-service.test.ts tests/services/team-service-0258.test.ts — exit 0, 139 pass / 0 fail / 462 expect (fresh 2026-09-14) |
+| R2 | MET | `packages/app/tests/services/legacy-migration.test.ts:686` (one write-fleet step per member, verbatim id; anchor re-read this run); same fresh packages/app run — exit 0, 139 pass |
+| R3 | MET | `packages/app/tests/services/legacy-migration.test.ts:789` (inventory + preview perform no writes; anchor re-read this run); same fresh packages/app run; `apps/cli/tests/commands/projects.test.ts:478` (preview leaves schema/bytes unchanged; anchor re-read this run); cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts tests/adr-supersession.test.ts tests/commands/agent-spec-flag.test.ts tests/commands/agent.test.ts — exit 0, 95 pass / 0 fail / 344 expect (fresh 2026-09-14) |
+| R4 | MET | `packages/app/tests/services/legacy-migration.test.ts:576` (two teams → one named conflict), `:603` (work-dir-mismatch), `:630` (derived-id-collision) — all anchors re-read this run; same fresh packages/app run — exit 0, 139 pass |
+| R5 | MET | `apps/cli/tests/commands/projects.test.ts:555` (machine-readable plan/result JSON with exit codes; anchor re-read this run); same fresh apps/cli run — exit 0, 95 pass |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Migration previews before it changes anything | MET | test | `packages/app/tests/services/legacy-migration.test.ts:789`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `apps/cli/tests/commands/projects.test.ts:478`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
-| Scenario: Conflicts are named, not summarized | MET | test | `packages/app/tests/services/legacy-migration.test.ts:576`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
+| Scenario: Migration previews before it changes anything | MET | test | `packages/app/tests/services/legacy-migration.test.ts:789` (no-write port assertion); `apps/cli/tests/commands/projects.test.ts:478` — both suites fresh this run (139 + 95 pass, 0 fail) |
+| Scenario: Conflicts are named, not summarized | MET | test | `packages/app/tests/services/legacy-migration.test.ts:576` (one conflict naming both config keys, no merge proposed); fresh packages/app run — exit 0, 139 pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

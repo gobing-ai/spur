@@ -4,7 +4,7 @@ name: Retire spur team after migrating its callers to owning nouns
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.302Z
-updated_at: "2026-09-14T01:14:48.097Z"
+updated_at: "2026-09-15T01:23:16.511Z"
 feature_id: G64
 priority: P2
 tags:
@@ -290,17 +290,17 @@ reproduced the empty role-only roster, then verified configured role tiers and f
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts — exit 0, 71 pass; `apps/server/tests/modules/health.test.ts:329` — real fleet API request; role-only member uses configured tier and refreshes when that tier changes; 71 focused server tests pass |
-| R2 | MET | `apps/cli/tests/commands/team-retirement.test.ts:192`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/cli/tests/commands/team-retirement.test.ts:356`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
-| R3 | MET | `docs/design/harness-surface-governance.md:117`; consent row read this run; `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
-| R4 | MET | rg scan of plugins/sp/scripts, config/workflows and scripts found no executable spur team callers; compatibility examples remain in the deprecated noun reference |
-| R5 | MET | `apps/cli/tests/commands/team-retirement.test.ts:128`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/cli/tests/commands/team-retirement.test.ts:432`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
-| R6 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts — exit 0, 71 pass; `apps/server/tests/modules/health.test.ts:329` — real fleet API request; role-only member uses configured tier and refreshes when that tier changes; 71 focused server tests pass |
+| R1 | MET | `apps/cli/tests/commands/team-retirement.test.ts:109` (six verbs retained, agent owns start/stop, task update owns --assignee; anchor re-read this run); cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts tests/adr-supersession.test.ts tests/commands/agent-spec-flag.test.ts tests/commands/agent.test.ts — exit 0, 95 pass / 0 fail / 344 expect (fresh 2026-09-14); `apps/server/tests/serve.test.ts:257` (fleet materialized before serving, mailbox prefix preserved) and `apps/server/tests/modules/health.test.ts:329` (role-only fleet member resolves on the Board) — anchors re-read this run; cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts tests/modules/team/index.test.ts tests/middleware/pipeline.test.ts — exit 0, 130 pass / 0 fail / 390 expect (fresh 2026-09-14) |
+| R2 | MET | `apps/cli/tests/commands/team-retirement.test.ts:192` (agent start posts to the same supervisor endpoint), `:356` (assignTask persists team.member.assigned) — anchors re-read this run; same fresh apps/cli run — exit 0, 95 pass |
+| R3 | MET | `docs/design/harness-surface-governance.md:117` (consent row naming the new verbs/flag; anchor re-read this run); `apps/cli/tests/commands/team-retirement.test.ts:109`; fresh apps/cli run — exit 0, 95 pass |
+| R4 | MET | Fresh rg scan this run: `rg -n 'spur team' plugins/sp/scripts config/workflows scripts` → no executable callers (only documentation/deprecation prose, exit 1 on filtered view); compatibility examples remain only in the deprecated noun reference (`plugins/sp/skills/spur-cli/references/team.md:3,8` — re-read this run) |
+| R5 | MET | `apps/cli/tests/commands/team-retirement.test.ts:128` (warns once per process, verb still works), `:432` (marker carried and manifest-baselined) — anchors re-read this run; fresh apps/cli run — exit 0, 95 pass; `bun run transition-shim-check` → "4 marker(s) observed, 4 manifest entries baselined, 0 new, 0 stale, 0 incomplete — PASS" (fresh 2026-09-14) |
+| R6 | MET | Same evidence as R1: coverage table old verb → owning noun asserted by `team-retirement.test.ts:109` (CLI) and the two server-side fleet tests (`serve.test.ts:257`, `health.test.ts:329`); both batches fresh this run — 95 + 130 pass, 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: spur team is retired only after its callers move | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:109`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run); `apps/server/tests/serve.test.ts:257`; cd apps/server && bun test tests/modules/health.test.ts tests/serve.test.ts — exit 0, 71 pass; `apps/server/tests/modules/health.test.ts:329` — real fleet API request; role-only member uses configured tier and refreshes when that tier changes; 71 focused server tests pass |
-| Scenario: Removal waits for the recorded window | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:128`; cd apps/cli && bun test tests/commands/team-retirement.test.ts — exit 0 (covered by the 38-test focused run) |
+| Scenario: spur team is retired only after its callers move | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:109`, `apps/server/tests/serve.test.ts:257`, `apps/server/tests/modules/health.test.ts:329` — anchors re-read this run; fresh CLI + server runs — 95 + 130 pass, 0 fail |
+| Scenario: Removal waits for the recorded window | MET | test | `apps/cli/tests/commands/team-retirement.test.ts:128` (warns once, verb works) — anchor re-read this run; fresh apps/cli run — exit 0, 95 pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Roster conversion with verbatim spec-ID preservation and rollback
 status: done
 template: feature-impl
 created_at: 2026-09-12T04:55:45.301Z
-updated_at: "2026-09-14T01:14:47.531Z"
+updated_at: "2026-09-15T01:23:16.238Z"
 feature_id: G64
 priority: P2
 tags:
@@ -299,19 +299,19 @@ alias table, or roster merge is introduced. The conversion remains additive and 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/services/legacy-migration.test.ts:185`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R2 | MET | `packages/app/tests/services/legacy-migration.test.ts:169`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:273`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:364`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R3 | MET | `packages/app/tests/services/legacy-migration.test.ts:217`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R4 | MET | `packages/app/tests/services/legacy-migration.test.ts:298`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R5 | MET | `packages/app/tests/services/legacy-migration.test.ts:318`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:340`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R6 | MET | `packages/app/tests/services/legacy-migration.test.ts:410`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| R7 | MET | `packages/app/tests/services/legacy-migration.test.ts:244`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `apps/cli/tests/commands/projects.test.ts:528`; cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts — exit 0, 38 pass |
+| R1 | MET | `packages/app/tests/services/legacy-migration.test.ts:185` (converted declaration carries explicit ids; preservedIds match on-disk specs verbatim; anchor re-read this run); cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts tests/services/team-service.test.ts tests/services/team-service-0258.test.ts — exit 0, 139 pass / 0 fail / 462 expect (fresh 2026-09-14) |
+| R2 | MET | `packages/app/tests/services/legacy-migration.test.ts:169` (registry name mismatch blocks conversion), `:273` (addressed-id-without-spec blocked), `:364` (no collateral writes) — anchors re-read this run; same fresh packages/app run — exit 0, 139 pass |
+| R3 | MET | `packages/app/tests/services/legacy-migration.test.ts:217` (reordering cannot reallocate member ids; anchor re-read this run); same fresh run — exit 0, 139 pass |
+| R4 | MET | `packages/app/tests/services/legacy-migration.test.ts:298` (key order/indentation do not force a rewrite; anchor re-read this run); same fresh run — exit 0, 139 pass |
+| R5 | MET | `packages/app/tests/services/legacy-migration.test.ts:318` (backup to .bak, rollback byte-for-byte), `:340` (rollback removes created file, reports nothing-to-roll-back) — anchors re-read this run; same fresh run — exit 0, 139 pass |
+| R6 | MET | `packages/app/tests/services/legacy-migration.test.ts:410` (module ships no alias construct and no transition-shim entry; anchor re-read this run); same fresh run — exit 0, 139 pass |
+| R7 | MET | `packages/app/tests/services/legacy-migration.test.ts:244` (blocked plan ⇒ nothing written, nothing backed up; anchor re-read this run); same fresh packages/app run; `apps/cli/tests/commands/projects.test.ts:528` (exit 2 on conflicts, --apply writes nothing; anchor re-read this run); cd apps/cli && bun test tests/commands/projects.test.ts tests/commands/team-retirement.test.ts tests/adr-supersession.test.ts tests/commands/agent-spec-flag.test.ts tests/commands/agent.test.ts — exit 0, 95 pass / 0 fail / 344 expect (fresh 2026-09-14) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: Mailbox identity survives conversion | MET | test | `packages/app/tests/services/legacy-migration.test.ts:169`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:364`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| Scenario: Conflicts halt rather than merge silently | MET | test | `packages/app/tests/services/legacy-migration.test.ts:244`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass; `packages/app/tests/services/legacy-migration.test.ts:318`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
-| Scenario: Re-running changes nothing | MET | test | `packages/app/tests/services/legacy-migration.test.ts:298`; cd packages/app && bun test tests/services/fleet-service.test.ts tests/services/legacy-migration.test.ts — exit 0, 57 pass |
+| Scenario: Mailbox identity survives conversion | MET | test | `packages/app/tests/services/legacy-migration.test.ts:169`, `:185`, `:273` — anchors re-read this run; fresh packages/app run — exit 0, 139 pass |
+| Scenario: Conflicts halt rather than merge silently | MET | test | `packages/app/tests/services/legacy-migration.test.ts:244`, `:318` — anchors re-read this run; fresh packages/app run — exit 0, 139 pass |
+| Scenario: Re-running changes nothing | MET | test | `packages/app/tests/services/legacy-migration.test.ts:298` — anchor re-read this run; fresh packages/app run — exit 0, 139 pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
