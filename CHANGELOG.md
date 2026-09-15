@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.3.82] - 2026-09-15
+
+### Added
+
+- sp: harden batch execution against the G65 failure modes (8733f1bb9)
+- web: add responsive brand favicons and webmanifest for Spur Board (a36ebdeae)
+- strategy: reconcile agent.fleet.strategy into project_strategy at serve start (6c0089fc7)
+- config: declare the project fleet under agent.fleet and gate serve on enabled (adde42d51)
+
+### Fixed
+
+- tasks: renumber tasks5 4856-4861 to 0856-0861 after baseCounter fix (e9f70f21b)
+
+### Changed
+
+- server: rename the remaining team runtime vocabulary and split TeamService (004beaf37)
+- cli: remove the spur team noun and agent create|edit|delete (d2bbaf597)
+- web: drop the Projects Work tab (9e506faaa)
+
+### Other
+
+- docs(tasks): update task status after refinement (10faa808a)
+- chore(tasks): file the G65 batch's harness defects as task 0862 (D6) (486368bc4)
+- docs: correct stale team-era references and record two leaner authoring rules (0afd1405f)
+- docs(dogfood): index the g65 fleet-declaration dogfood run (aaa805ba8)
+- docs(tasks): refresh fleet and team-retirement evidence rows (d9fbf0ed4)
+- chore(project): enhance sandbox permissions (7d03573fd)
+- chore: merge 'sp/runall-g65-ac87' into main (26d0df827)
+- chore(wrapup): record G65 batch learnings, metrics and feature state (af7becdb9)
+- docs(fleet): sync authority documents with the agent.fleet surface (d78ffdaf0)
+- docs(99_PROJECT_CONSTITUTION.md): update 99_PROJECT_CONSTITUTION.md (beaf96090)
+- chore(config): retire the agent.team roster runtime (9f9e1ee51)
+- chore(projects): delete spur projects migrate and LegacyMigrationService (7d4c98855)
+- chore(g64): close feature — all ten tasks done, check PASS (8a06c3ba1)
+- docs(tasks5): link the six G65 tasks to the feature scenarios they graduate (3ebbbba4e)
+- docs(tasks5): correct doc-surface claims in 0856-0860 and record refine decisions (1ced47825)
+- chore: merge 'feat/agent-fleet-cleanup' into main (35fc953ba)
+- docs(g65): decompose into ready tasks 4856-4861 (737583feb)
+- docs(g65): plan fleet declaration in spur config (ec06acae7)
+- docs: sync authority docs with the team-noun and Work-tab removal (af9b5490e)
+
 ## [0.3.81] - 2026-09-14
 
 ### Added
