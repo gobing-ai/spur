@@ -135,7 +135,9 @@ no `:` delimiter, so `verify-answer-lint` resolves no id and the verifier keys i
 whole bullet line instead. The feature done gate then finds no row matching a feature scenario and
 refuses the transition (G65, 2026-09-15). Declare the id explicitly (`**AC2: …**`, prose on the
 following lines) or use a checklist row, and keep at least one answer row keyed to the verbatim
-feature scenario title the task graduates.
+feature scenario title the task graduates. Requirement ids keep the corpus form they are checked
+against (`- **R1** — …`): `L3.requirements-format` matches `R\d+` followed by a space, so a colon
+after the bold span silently drops the whole section to a warning.
 
 ### The id is exactly the scenario title — no Gherkin body appended
 
