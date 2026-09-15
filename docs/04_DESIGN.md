@@ -59,6 +59,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | History Refresh Process Isolation and Single-Flight Execution | [history-refresh-process-isolation.md](design/history-refresh-process-isolation.md) |
 | History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving | [history-incremental-materialization.md](design/history-incremental-materialization.md) |
 | Project switcher — system design (feature K1) | [project-switcher.md](design/project-switcher.md) |
+| Fleet declaration in spur config — `agent.fleet` (feature G65, proposed) | [fleet-config-declaration.md](design/fleet-config-declaration.md) |
 | Inbox Board module — durable message plane — **superseded by ADR-116** (retired by 0849; message plane now in the Projects Conversation tab) | [inbox-board-module.md](design/inbox-board-module.md) |
 | Workflow run log (all-in-one per-run log) | [workflow-run-log.md](design/workflow-run-log.md) |
 | Brainstorm: Workflow observability, traceability, live output, and steering for `spur workflow run` | [brainstorm-workflow-observability-steering.md](design/brainstorm-workflow-observability-steering.md) |
