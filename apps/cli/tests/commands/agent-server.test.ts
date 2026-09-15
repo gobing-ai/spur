@@ -2,14 +2,14 @@
  * Supervisor-backed agent verbs and `task update --assignee` from the CLI boundary:
  * - `agent start|stop` POST to the `spur serve` supervisor and surface its errors.
  * - `agent list --specs` merges live run status from the server, falling back to stopped.
- * - `task update --assignee` writes frontmatter via TeamService.assignTask and persists
- *   `team.member.assigned` (0371 R6).
+ * - `task update --assignee` writes frontmatter via AgentCoordinationService.assignTask and persists
+ *   `task.assigned` (0371 R6; renamed by 0860 R2).
  */
 import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { TeamService } from '@gobing-ai/spur-app';
+import { AgentCoordinationService } from '@gobing-ai/spur-app';
 import { SystemEventDao, type SystemEventRow } from '@gobing-ai/spur-domain';
 import { main } from '../../src';
 import { resetAgentServerFetchForTesting, setAgentServerFetchForTesting } from '../../src/commands/agent';
@@ -42,7 +42,7 @@ async function makeCtx(): Promise<{ cwd: string; out: CapturedOutput; cleanup: (
 async function seedTaskAndSpec(cwd: string, taskId: string, specId: string): Promise<string> {
     const taskPath = join(cwd, 'docs', 'tasks', `${taskId}_demo.md`);
     await writeFile(taskPath, '---\nname: "Demo"\nstatus: Todo\n---\n\nbody\n');
-    await new TeamService(createCliContext({ cwd, output: createCapturedOutput() })).createAgentSpec({
+    await new AgentCoordinationService(createCliContext({ cwd, output: createCapturedOutput() })).createAgentSpec({
         id: specId,
         type: 'claude-code',
         purpose: 'plan it',
@@ -76,7 +76,7 @@ describe('spur agent start|stop', () => {
                         dbUrl: ':memory:',
                     });
                     expect(code).toBe(0);
-                    expect(calls).toEqual([{ url: 'http://x:1/api/team/agents/planner/start', method: 'POST' }]);
+                    expect(calls).toEqual([{ url: 'http://x:1/api/agents/planner/start', method: 'POST' }]);
                     expect(out.messages.at(-1)).toBe('started planner (pid=99, status=running)');
                 },
             );
@@ -121,9 +121,7 @@ describe('spur agent start|stop', () => {
                         dbUrl: ':memory:',
                     });
                     expect(code).toBe(0);
-                    expect(calls).toEqual([
-                        { url: 'http://localhost:3000/api/team/agents/planner/stop', method: 'POST' },
-                    ]);
+                    expect(calls).toEqual([{ url: 'http://localhost:3000/api/agents/planner/stop', method: 'POST' }]);
                     expect((JSON.parse(out.messages.at(-1) ?? '{}') as { ok?: boolean }).ok).toBe(true);
                 },
             );
@@ -195,7 +193,7 @@ describe('spur agent list --specs live run-status merge', () => {
             await seedTaskAndSpec(cwd, '0043', 'worker-1');
             await withMockedFetch(
                 async (url) => {
-                    expect(String(url)).toBe('http://localhost:3000/api/team/processes');
+                    expect(String(url)).toBe('http://localhost:3000/api/processes');
                     return jsonResponse(200, {
                         processes: [
                             { agentId: 'planner', pid: 4132, status: 'running' },
@@ -248,13 +246,13 @@ describe('spur agent list --specs live run-status merge', () => {
 });
 
 describe('spur task update --assignee', () => {
-    test('writes the frontmatter through TeamService.assignTask and persists team.member.assigned', async () => {
+    test('writes the frontmatter through AgentCoordinationService.assignTask and persists task.assigned', async () => {
         const { cwd, out, cleanup } = await makeCtx();
         try {
             const taskPath = await seedTaskAndSpec(cwd, '0042', 'planner');
             expect(await main(['task', 'update', '0042', '--assignee', 'planner'], { cwd, output: out })).toBe(0);
             expect(await readFile(taskPath, 'utf8')).toContain('assignee: planner');
-            const assigned = (await readSystemEvents(cwd)).find((r) => r.event_name === 'team.member.assigned');
+            const assigned = (await readSystemEvents(cwd)).find((r) => r.event_name === 'task.assigned');
             expect(assigned?.payload_json).toContain('0042');
             expect(assigned?.payload_json).toContain('planner');
         } finally {

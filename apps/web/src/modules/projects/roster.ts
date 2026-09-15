@@ -4,7 +4,7 @@
  * A roster entry joins two independent facts: the member DECLARED in the
  * project's fleet snapshot (`ProjectFleetSnapshot.members`, 0840 wire of
  * FleetService 0835) and the process OBSERVED through the existing
- * `GET /api/team/processes` read (`ProcessStatus`, teams module). The two
+ * `GET /api/processes` read (`ProcessStatus`, teams module). The two
  * facts come from different systems and disagree in both directions —
  * declared-but-not-running, and a live process with no declared member —
  * so they are never collapsed into one status (R2).
@@ -89,7 +89,7 @@ export function buildRoster(snapshot: ProjectFleetSnapshot, processes: ProcessSt
     }
 
     // 5: processes matching no member are running-but-undeclared — appended so
-    // a hand-started agent (or a member removed from fleet.json while its
+    // a hand-started agent (or a member removed from agent.fleet while its
     // process survives) is never silently hidden. The operator mailbox
     // (`board-operator`) is an address, not a member, and is excluded here.
     for (const proc of processes) {

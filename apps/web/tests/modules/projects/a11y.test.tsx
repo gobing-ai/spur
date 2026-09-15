@@ -78,6 +78,7 @@ function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMemb
 function fleet(overrides: Partial<ProjectFleetSnapshot> = {}): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'orch' },
         members: [member({ instanceId: 'orch' }), member()],
@@ -100,7 +101,7 @@ function stubFetch(): typeof fetch {
         if (url.includes('/project/fleet')) {
             return Promise.resolve(new Response(JSON.stringify(fleet()), { status: 200 }));
         }
-        if (url.includes('/team/processes')) {
+        if (url.includes('/processes')) {
             return Promise.resolve(
                 new Response(JSON.stringify({ processes: [procRow('orch'), procRow('a1')] }), { status: 200 }),
             );

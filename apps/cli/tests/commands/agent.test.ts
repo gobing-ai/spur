@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { _resetAgentServiceShimsForTest, type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
+import {
+    _resetAgentServiceShimsForTest,
+    type AgentConfig,
+    AgentCoordinationService,
+    type AgentRunDeps,
+} from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { runAgentLoop, runAgentRun, validateAgentSelector } from '../../src/commands/agent';
@@ -90,7 +95,7 @@ describe('agent command (main)', () => {
         try {
             const output = captureOutput();
             const ctx = createCliContext({ cwd: tempDir, output, db });
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'worker-1', type: 'claude-code' });
 
             const program = new (await import('@commander-js/extra-typings')).Command();
@@ -157,7 +162,7 @@ describe('agent list --specs', () => {
             db,
         });
 
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'test-agent-1', type: 'coder', purpose: 'test purpose' });
 
         const exitCode = await main(['agent', 'list', '--specs', '--json'], {
@@ -180,7 +185,7 @@ describe('agent list --specs', () => {
             db,
         });
 
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'agent-a', type: 'coder', purpose: 'coding purpose' });
 
         const exitCode = await main(['agent', 'list', '--specs'], {
@@ -274,7 +279,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
                 db,
             });
 
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'worker-1', type: 'pi' });
             await team.sendMessage(null, 'worker-1', 'Do step 1');
 
@@ -312,7 +317,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
                 db,
             });
 
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'worker-2', type: 'pi' });
             await team.sendMessage('operator', 'worker-2', 'Solo message');
 
@@ -361,7 +366,7 @@ describe('runAgentRun service wiring (0126 / 0370)', () => {
                 },
                 join(tempDir, '.spur', 'agents'),
             );
-            await new TeamService(ctx).sendMessage(null, 'demo-codex-sol', 'Do step 1');
+            await new AgentCoordinationService(ctx).sendMessage(null, 'demo-codex-sol', 'Do step 1');
 
             const run = mock((_prompt: string | undefined, flags: Record<string, unknown>) => {
                 // Regression: the selector is the executor name — resolveExecutor's
@@ -521,7 +526,7 @@ describe('runAgentLoop', () => {
     test('runAgentLoop drains inbox when messages exist and runs agent', async () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'loop-worker', type: 'claude-code' });
         await team.sendMessage('operator', 'loop-worker', 'Process task #100');
 
@@ -549,7 +554,7 @@ describe('runAgentLoop', () => {
     test('0834: loop startup reconciles in-flight work before its first drain', async () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'reconcile-worker', type: 'claude-code' });
         const inbox = new InboxMessageDao(db);
         // In-flight: consumed by a previous drain that never settled (no receipt).
@@ -582,7 +587,7 @@ describe('runAgentLoop', () => {
     test('0839: idle backstop wake drains nothing and never runs the agent', async () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'idle-worker-default-sleep', type: 'claude-code' });
 
         const run = mock(() => Promise.resolve(0));
@@ -603,7 +608,7 @@ describe('runAgentLoop', () => {
     test('runAgentLoop loopSleep abort listener clears timer', async () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'abort-worker', type: 'claude-code' });
 
         const run = mock(() => Promise.resolve(0));

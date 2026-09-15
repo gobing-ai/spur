@@ -48,7 +48,7 @@ See [feature records and current status](features/INDEX.md).
 
 See [feature records and current status](features/INDEX.md).
 
-## 7. Team Mode (`ts-ai-runner` team primitives + `TeamService`)
+## 7. Team Mode (`ts-ai-runner` team primitives + `TeamService`) — retired (G64 / G65)
 
 See [feature records and current status](features/INDEX.md).
 

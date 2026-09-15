@@ -276,10 +276,10 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
 
     test('the census reaches every flag-declaring verb, not a sample', () => {
         const advertising = collectVerbBlocks().filter((b) => b.body.includes('SHARED_OPTIONS.jsonEnvelope'));
-        // 0847: bump for each new verb advertising --json-envelope (70 → 71 for projects migrate).
-        // 0848: 71 → 73 for `agent start` / `agent stop`.
-        // G64 cutover: 73 → 67 (`spur team` noun + `agent create` removed).
-        expect(advertising.length).toBe(67);
+        // Verb-count history: 70 → 71 (0847, projects-noun conversion verb), 71 → 73 for
+        // `agent start` / `agent stop` (0848), 73 → 67 (G64 cutover: `spur team` noun +
+        // `agent create`), 67 → 66 (G65 0856: one retired projects-noun verb).
+        expect(advertising.length).toBe(66);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

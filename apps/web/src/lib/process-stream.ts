@@ -1,7 +1,7 @@
 import { resolveApiUrl } from './rpc-client';
 
 /**
- * Wire shape of one frame from `GET /api/team/processes/:id/stream` (SSE).
+ * Wire shape of one frame from `GET /api/processes/:id/stream` (SSE).
  *
  * `stream: 'meta'` is used by the server for the `--replay-done--` sync marker
  * and any future out-of-band metadata; `stdout`/`stderr` carry process output.
@@ -75,5 +75,5 @@ export function appendFrame(frames: Frame[], frame: Frame, lastSeq: number): { f
 /** SSE stream endpoint for a member's process, optionally resuming from `sinceSeq`. */
 export const streamUrl = (agentId: string, sinceSeq?: number) =>
     sinceSeq !== undefined
-        ? `${resolveApiUrl()}/team/processes/${encodeURIComponent(agentId)}/stream?sinceSeq=${sinceSeq}`
-        : `${resolveApiUrl()}/team/processes/${encodeURIComponent(agentId)}/stream`;
+        ? `${resolveApiUrl()}/processes/${encodeURIComponent(agentId)}/stream?sinceSeq=${sinceSeq}`
+        : `${resolveApiUrl()}/processes/${encodeURIComponent(agentId)}/stream`;

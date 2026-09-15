@@ -31,7 +31,7 @@ describe('toRow (0254 R7, 0269 R9/P4)', () => {
             null,
             'not-an-object',
             42,
-            { id: 123, eventName: 'team.member.started' }, // no occurredAt
+            { id: 123, eventName: 'agent.started' }, // no occurredAt
             { id: 'x', occurredAt: 't' }, // no eventName
             { id: 'x', eventName: 'queue.completed', occurredAt: 't' }, // out of scope
         ]) {
@@ -54,7 +54,7 @@ describe('parseHistory', () => {
             events: [
                 null,
                 'not-an-object',
-                { id: 123, eventName: 'team.member.started' },
+                { id: 123, eventName: 'agent.started' },
                 { id: 'good', eventName: 'agent.started', occurredAt: '2026-07-20T10:00:00Z', actor: 'planner' },
             ],
         });

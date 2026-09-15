@@ -29,6 +29,7 @@ function proc(agentId: string, status = 'running', overrides: Partial<ProcessSta
 function snapshot(overrides: Partial<ProjectFleetSnapshot> = {}): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'orch' },
         members: [],

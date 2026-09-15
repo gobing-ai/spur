@@ -49,10 +49,10 @@ interface CliContext {
   `agentRolesSource = agentConfig?.roles === undefined ? 'fallback' : 'config'`.
 - `AgentServiceContext` gains `rolesSource?: 'config' | 'fallback'`; the CLI passes
   `agentRolesSource` through `agentService()`.
-- `WorkflowAppServiceContext` and `TeamServiceContext` gain `spurConfig?: SpurConfig | null`
+- `WorkflowAppServiceContext` and `AgentCoordinationServiceContext` gain `spurConfig?: SpurConfig | null`
   (`null` = load failed / absent; services degrade to their current defaults). CLI construction is
-  free via structural typing (`new TeamService(context)`); `apps/server/src/context.ts` passes the
-  threaded value explicitly into its lazy `TeamService` / `AgentService` / `WorkflowAppService`
+  free via structural typing (`new AgentCoordinationService(context)`); `apps/server/src/context.ts` passes the
+  threaded value explicitly into its lazy `AgentCoordinationService` / `AgentService` / `WorkflowAppService`
   constructors.
 
 ## Consumer rewiring (R5)

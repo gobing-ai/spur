@@ -59,6 +59,16 @@ export interface CliContext {
      */
     loadAgentConfig: (projectRoot: string) => Promise<SpurConfig | null>;
     /**
+     * Fail-loud sibling of {@link loadAgentConfig} (0858 R2/R5): returns the merged
+     * project config or throws with the loader's message. The tolerant accessor
+     * above answers "is there a usable config", which is right for a re-load that
+     * keeps a working snapshot — but a read surface that reports a project's
+     * declared state must name a broken config instead of reporting it undeclared.
+     * Absent when the caller supplied no layer loader (then callers fall back to
+     * {@link loadAgentConfig}); the composition root always supplies it.
+     */
+    loadAgentConfigStrict?: (projectRoot: string) => Promise<SpurConfig>;
+    /**
      * Provenance of `agentRoles`: 'fallback' iff no config layer supplied an
      * `agent.roles` table at all (whole-table, not per-role). Computed at the
      * CLI root from the merged config; observability only (R3).
@@ -109,6 +119,8 @@ export function createCliContext(options: {
      * exact config it was dispatched with.
      */
     loadAgentConfig?: (projectRoot: string) => Promise<SpurConfig | null>;
+    /** Fail-loud companion of {@link loadAgentConfig} (0858 R2/R5); no default — see the context field. */
+    loadAgentConfigStrict?: (projectRoot: string) => Promise<SpurConfig>;
     /**
      * Layer-1 role → tier map (0536 R1 / 0572). Defaults to
      * `resolveAgentRoles(agentConfig)` — `DEFAULT_AGENT_ROLES` merged with the
@@ -144,6 +156,9 @@ export function createCliContext(options: {
         output: options.output,
         getDb,
         loadAgentConfig: (projectRoot: string) => loadAgentConfig(projectRoot),
+        ...(options.loadAgentConfigStrict !== undefined
+            ? { loadAgentConfigStrict: options.loadAgentConfigStrict }
+            : {}),
         ...(agentConfig !== undefined ? { agentConfig } : {}),
         ...(options.spurConfig !== undefined ? { spurConfig: options.spurConfig } : {}),
         agentRoles,
@@ -158,6 +173,9 @@ export function createCliContext(options: {
                 roles: agentRoles,
                 rolesSource: agentRolesSource,
                 getDb,
+                // 0858 R3: the fleet gate a spec-id dispatch runs reads agent.fleet from
+                // the project's merged config — the CLI owns that loader call (ADR-082).
+                reloadAgentConfig: () => loadAgentConfig(cwd),
                 ...(serviceOptions?.events !== undefined ? { events: serviceOptions.events } : {}),
                 ...(serviceOptions?.processRegistry !== undefined
                     ? { processRegistry: serviceOptions.processRegistry }

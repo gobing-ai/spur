@@ -65,6 +65,7 @@ function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMemb
 function fleet(): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'orch' },
         members: [member({ instanceId: 'orch' }), member()],
@@ -87,7 +88,7 @@ function installSilentApiFetch(): void {
         if (url.includes('/api/project')) {
             return Promise.resolve(new Response(JSON.stringify({ name: 'spur', path: '/repo/wt' }), { status: 200 }));
         }
-        if (url.includes('/api/team/processes')) {
+        if (url.includes('/api/processes')) {
             return Promise.resolve(
                 new Response(
                     JSON.stringify({

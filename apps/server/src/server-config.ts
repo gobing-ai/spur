@@ -13,7 +13,6 @@ export interface ServerBootConfig {
     };
     jobqueue: { enabled: boolean };
     scheduler: { enabled: boolean };
-    teamAutostart: string[];
 }
 
 /**
@@ -21,13 +20,6 @@ export interface ServerBootConfig {
  */
 export function serverBootstrapConfig(env: Record<string, string | undefined>): ServerBootConfig {
     const isTest = env.NODE_ENV === 'test';
-    const raw = env.SPUR_TEAM_AUTOSTART;
-    const teamAutostart = raw
-        ? raw
-              .split(',')
-              .map((s) => s.trim())
-              .filter((s) => s.length > 0)
-        : [];
     const diagnosticEvents = env.SPUR_DIAGNOSTIC_EVENTS === '1' || env.SPUR_DIAGNOSTIC_EVENTS === 'true';
     const retentionDefault = parseRetentionNumber(env.SPUR_EVENT_RETENTION_DEFAULT);
     const retentionPrefixes = parseRetentionPrefixes(env);
@@ -45,7 +37,6 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
         },
         jobqueue: { enabled: !isTest },
         scheduler: { enabled: !isTest },
-        teamAutostart,
     };
 }
 

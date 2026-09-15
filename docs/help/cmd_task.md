@@ -115,7 +115,7 @@ spur task update [options] <wbs> --assignee <spec-id>
 ```
 
 Sets the `assignee` frontmatter field to an agent spec id via
-`TeamService.assignTask` (emits `team.member.assigned`). The id must match the agent-id format and
+`AgentCoordinationService.assignTask` (emits `task.assigned`). The id must match the agent-id format and
 resolve to a spec under `.spur/agents/` — otherwise exit `2` naming the unknown id.
 
 | Argument | Description |

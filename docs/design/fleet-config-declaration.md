@@ -1,16 +1,16 @@
 # Fleet declaration in spur config — system design (feature G65)
 
-- **Status:** Proposed · **Date:** 2026-09-14 · **Feature:** G65 (parent G6)
-- **Amends:** ADR-116 (carrier of the fleet declaration) · **Supersedes:** [project-switcher.md §3.1](project-switcher.md#31-project-fleet-declaration--projectpathspurfleetjson-0835) once shipped
+- **Status:** Accepted (2026-09-15) · **Date:** 2026-09-14 · **Feature:** G65 (parent G6)
+- **Amends:** ADR-116 (carrier of the fleet declaration) · **Supersedes:** [project-switcher.md](project-switcher.md) §3.1 (shipped 2026-09-15, task 0858)
 - **Retains:** `FleetService` lifecycle, the frozen `memberLocalId` allocator, `StrategyRuntime`, ADR-057 control plane
 
 ## 1. Problem
 
-Three carriers describe one fleet today: `.spur/fleet.json` (composition, ADR-116), `agent.team.*`
-(still live for serve autostart), and the `project_strategy` row (strategy default, DB-only). No
-config switch turns the fleet off, and the runtime still speaks `team` (`/api/team/*`, `team.*`
-events, `TeamService`). G65 makes one validated project-config section the only declaration and
-removes or renames the team vocabulary.
+Before G65, three carriers described one fleet: `.spur/fleet.json` (composition, ADR-116), `agent.team.*`
+(serve autostart), and the `project_strategy` row (strategy default, DB-only). No config switch turned
+the fleet off, and the runtime still spoke `team` (`/api/team/*`, `team.*` events, `TeamService`). G65
+made one validated project-config section the only declaration and removed or renamed the team
+vocabulary; the shipped surface is stated in §2 and recorded in the ADR-116 amendment (§8).
 
 ## 2. Config contract — `agent.fleet`
 
@@ -143,15 +143,21 @@ exports (`packages/app/src/index.ts`), help doc and plugin `projects.md` rows. R
 
 Each task updates the satellite rows its surface owns (T3 rule); task 6 is the cross-document sweep.
 
-## 8. ADR-116 amendment (text lands with task 6)
+## 8. ADR-116 amendment
+
+Landed in [ADR-116](../00_ADR.md) on 2026-09-15 under the heading “Amendment (2026-09-15 · G65)”. The block
+below is the design-time draft the ADR text was cut from; where the two differ, the ADR is authoritative. The
+landed text adds the Projects-tab sentence (Conversation / Agents / Processes) and the runtime-vocabulary
+sentence (routes, events, and the service renamed or removed).
 
 > **Amendment (2026-09-14 · G65):** The fleet declaration moves from `.spur/fleet.json` into the project config
 > section `agent.fleet { enabled, strategy, orchestrator, members }`. `agent.team` is removed. `enabled` gates serve
 > materialization and autostart; `strategy` is reconciled into `project_strategy` at serve start. Retired carriers
 > fail loudly; none is read.
 
-## 9. Open question for approval
+## 9. Open question — resolved
 
-Autostart granularity: `enabled: true` starts **every** enabled member at serve start. The alternative — a
-per-member `autostart` flag — adds a third switch next to `agent.fleet.enabled` and `members[].enabled`.
-Recommended: no flag; start individual members from the Board or `spur agent start` when the fleet is off.
+**Autostart granularity.** Original question: does `enabled: true` need a per-member `autostart` flag next to
+`agent.fleet.enabled` and `members[].enabled`? **Resolved (2026-09-15, with the Accepted flip):** no per-member
+flag. `enabled: true` starts **every** enabled member at serve start; individual members start from the Board or
+`spur agent start` when the fleet is off. Shipped that way by 0858.

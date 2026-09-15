@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DeliveryReconciler, TeamService } from '@gobing-ai/spur-app';
+import { AgentCoordinationService, DeliveryReconciler, FleetService, ProjectRegistry } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { RequestKeyConflictError } from '@gobing-ai/ts-db';
@@ -29,7 +29,7 @@ describe('spur agent list --specs', () => {
     test('lists created specs', async () => {
         const { ctx, cwd, out, cleanup } = await makeCtx();
         try {
-            await new TeamService(ctx).createAgentSpec({ id: 'coder', type: 'codex', purpose: 'code' });
+            await new AgentCoordinationService(ctx).createAgentSpec({ id: 'coder', type: 'codex', purpose: 'code' });
             const code = await main(['agent', 'list', '--specs'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
             expect(out.messages.join('\n')).toContain('coder');
@@ -41,7 +41,7 @@ describe('spur agent list --specs', () => {
     test('--json includes spec paths', async () => {
         const { ctx, cwd, out, cleanup } = await makeCtx();
         try {
-            await new TeamService(ctx).createAgentSpec({ id: 'coder', type: 'codex' });
+            await new AgentCoordinationService(ctx).createAgentSpec({ id: 'coder', type: 'codex' });
             const code = await main(['agent', 'list', '--specs', '--json'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
             const payload = JSON.parse(out.messages.at(-1) ?? '{}');
@@ -67,23 +67,36 @@ describe('spur agent list --specs', () => {
                     '    - name: capable-exec',
                     '      agent: claude',
                     '      tier: capable-1',
-                    '  team:',
-                    '    alpha:',
-                    '      name: Alpha',
-                    '      work_dir: /tmp/alpha-ws',
-                    '      members:',
-                    '        - role: reviewer',
-                    '        - executor: cheap-exec',
+                    // 0858: the roster is declared under the project's `agent.fleet`
+                    // section (the retired `.spur/fleet.json` now fails the load).
+                    '  fleet:',
+                    '    enabled: true',
+                    '    members:',
+                    '      - role: reviewer',
+                    '      - executor: cheap-exec',
                     '',
                 ].join('\n'),
                 'utf8',
             );
             const fresh = createCliContext({ cwd, output: out, dbUrl: ':memory:' });
-            await new TeamService({
-                ...fresh,
-                roles: fresh.agentRoles,
-                reloadAgentConfig: () => loadSpurConfig(cwd),
-            }).materializeTeam('alpha');
+            // The instance id derives from the project's registry display name, so the
+            // fixture registers one explicitly (a temp-dir basename is not a valid
+            // agent-id prefix). FleetService.materialize also asserts launch ground
+            // truth: the process cwd must BE the project it materializes (0835 R6).
+            const registry = new ProjectRegistry(join(cwd, '.spur', 'registry.json'));
+            await registry.upsert({ name: 'alpha', path: cwd });
+            const previousCwd = process.cwd();
+            process.chdir(cwd);
+            try {
+                await new FleetService({
+                    ...fresh,
+                    roles: fresh.agentRoles,
+                    registry,
+                    reloadAgentConfig: () => loadSpurConfig(cwd),
+                }).materialize(cwd);
+            } finally {
+                process.chdir(previousCwd);
+            }
 
             // Human: distinct role and executor columns; undeclared role renders `unset`.
             out.messages.length = 0;
@@ -157,7 +170,7 @@ describe('spur agent run --drain', () => {
             // the one cached :memory: DB that `--drain` reads (driving the flow via
             // main() opens a fresh DB per call, so drain would never see the message —
             // the whole point of team-mode is that the drained message reaches the runner).
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'remember to drain me');
 
@@ -193,7 +206,7 @@ describe('spur agent run --drain', () => {
     test('R1 (0529) — drain keeps spec-id, persisting an occupant pin', async () => {
         const { ctx, cleanup } = await makeCtx();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'reviewer', type: 'claude' });
 
             const fakeRunner = {
@@ -242,7 +255,7 @@ describe('spur agent run --drain', () => {
         const { ctx, cleanup } = await makeCtx();
         const accepted = captureInvokeStart();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'loop message');
 
@@ -277,7 +290,7 @@ describe('spur agent run --drain', () => {
     test('0839: idle backstop wakes never run the agent and honor maxIterations', async () => {
         const { ctx, cleanup } = await makeCtx();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
 
             let runs = 0;
@@ -426,7 +439,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const { ctx, cleanup } = await makeCtx();
         const accepted = captureInvokeStart();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             const sent = await team.sendMessage('operator', 'planner', 'must reach the prompt');
             const deps = {
@@ -458,7 +471,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const { ctx, cleanup } = await makeCtx();
         const accepted = captureInvokeStart();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'characterize me');
             const db = await ctx.getDb();
@@ -502,7 +515,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         // step must release it for redelivery within the attempt budget.
         const { ctx, cleanup } = await makeCtx();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'bogus-exec' });
             await team.sendMessage('operator', 'planner', 'release me');
             const db = await ctx.getDb();
@@ -537,7 +550,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         // iteration is lost, and the message is not consumed-without-execution.
         const { ctx, out, cleanup } = await makeCtx();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'will crash');
             const db = await ctx.getDb();
@@ -585,7 +598,7 @@ describe('G61 delivery settle regressions (0831)', () => {
         const { ctx, cleanup } = await makeCtx();
         const captured = captureInvokeStart();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'start then fail');
             const db = await ctx.getDb();
@@ -623,13 +636,13 @@ describe('G61 delivery settle regressions (0831)', () => {
     });
 
     test('regression (was 0828 probe 3, flipped by 0832): a repeated request key suppresses duplicate rows and duplicate deliveries', async () => {
-        // Boundary: TeamService.sendMessage → InboxMessageDao.enqueueIdempotent
+        // Boundary: AgentCoordinationService.sendMessage → InboxMessageDao.enqueueIdempotent
         // (ts-db 0.4.65, partial unique index idx_inbox_messages_request_key).
         const { ctx, cleanup } = await makeCtx();
         try {
             const db = await ctx.getDb();
             const dao = new InboxMessageDao(db);
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
 
             const first = await team.sendMessage('operator', 'planner', 'same body', undefined, 'retry-key-1');
@@ -660,7 +673,7 @@ describe('G61 delivery settle regressions (0831)', () => {
     });
 
     test('probe competing consumers: the same queued row is claimed at most once on the shared adapter', async () => {
-        // Two TeamService instances share one SQLite connection/db (two configs of
+        // Two AgentCoordinationService instances share one SQLite connection/db (two configs of
         // the same consumer process). Boundary: InboxMessageDao.drainPending's
         // conditional UPDATE ... WHERE status='queued' ... RETURNING (ts-db 0.4.62).
         const db = await createMigratedDb({ url: ':memory:' });
@@ -668,14 +681,14 @@ describe('G61 delivery settle regressions (0831)', () => {
             const dao = new InboxMessageDao(db);
             await dao.enqueue('operator', 'planner', 'consumed once');
             await dao.enqueue('operator', 'planner', 'consumed twice');
-            const a = new TeamService({
+            const a = new AgentCoordinationService({
                 cwd: process.cwd(),
                 env: {},
                 output: { write: () => {}, error: () => {} },
                 getDb: async () => db,
                 fs: createNodeFileSystem(process.cwd()),
             });
-            const b = new TeamService({
+            const b = new AgentCoordinationService({
                 cwd: process.cwd(),
                 env: {},
                 output: { write: () => {}, error: () => {} },
@@ -752,7 +765,7 @@ describe('G61 completion receipt regressions (0833)', () => {
         const { ctx, cleanup } = await makeCtx();
         const accepted = captureInvokeStart();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             const sent = await team.sendMessage('operator', 'planner', 'complete and correlate me');
             const db = await ctx.getDb();
@@ -807,7 +820,7 @@ describe('G61 completion receipt regressions (0833)', () => {
         // invented association (the anti-pattern the spec forbids).
         const { ctx, cleanup } = await makeCtx();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             const db = await ctx.getDb();
             const dao = new CoordinationRunDao(db);
@@ -838,7 +851,7 @@ describe('G61 completion receipt regressions (0833)', () => {
     test('a run that exits nonzero records outcome errored, not run-exit-only (R4)', async () => {
         const { ctx, cleanup } = await makeCtx();
         try {
-            const team = new TeamService(ctx);
+            const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             const sent = await team.sendMessage('operator', 'planner', 'fail loudly');
             const db = await ctx.getDb();

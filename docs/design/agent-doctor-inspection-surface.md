@@ -48,7 +48,7 @@ clock buys a field the project has already declared untrustworthy.**
 
 > Dispatch resolves to one executor. Inspection renders the whole ladder.
 
-`resolveRole` and `TeamService.materializeTeam` keep their first-eligible semantics untouched. Every
+`resolveRole` and the retired roster materialization keep their first-eligible semantics untouched. Every
 change here is a projection over data those functions already compute, or a removal.
 
 ## 3. Output contract
@@ -186,7 +186,7 @@ enough that `doctor.probe`'s 1–2 calls per pipeline precheck hit warm.
 | Surface | Why untouched |
 | --- | --- |
 | `resolveRole` (`agent-service.ts:1783-1823`) | First-usable-wins is the correct dispatch semantic; this feature is projection only |
-| `TeamService.materializeTeam` (`team-service.ts:737`) | Config-time `[0]` selection, no liveness probe — a display change cannot reach it |
+| the retired roster materialization (fleet materialization owns this since 0857/0858) | Config-time `[0]` selection, no liveness probe — a display change cannot reach it |
 | Stage fallback / escalation ladder | Already correct (task 0482 R1); runtime concern, not inspection |
 | `DoctorResult.tier` (support tier) | Still backs the exit code and stays in `--json` |
 | CLI nouns and verbs | `--probe-health` and `--force-refresh` are flags on the existing `doctor` verb (ADR-051: expand via flags) |

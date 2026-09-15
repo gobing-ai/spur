@@ -5,7 +5,7 @@
  * Task files live at `<folder>/<wbs>_<slug>.md`, and the corpus may span several
  * folders (the active `tasksDir` plus every `spur.yaml` `tasks.folders` key). That
  * lookup was previously reimplemented in TaskService, TaskScaffoldService,
- * TaskCheckService and TeamService, and the copies had already drifted:
+ * TaskCheckService and AgentCoordinationService, and the copies had already drifted:
  * TaskCheckService searched only the checked file's own directory, so a dependency
  * living in a sibling folder was reported as missing while `spur task show` found
  * it. Centralizing the walk keeps the filename convention and the folder set in one

@@ -457,7 +457,7 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
     // ─────────────────────────────────────────────────────────────────────
     // ─────────────────────────────────────────────────────────────────────
     // Task 0237 R4 — TeamOrchestrator events on the server bus reach the tap.
-    // Server context wires TeamServiceContext.events → eventsBus; orchestrator
+    // Server context wires AgentCoordinationServiceContext.events → eventsBus; orchestrator
     // lifecycle emits agent.started/stopped/message.sent onto that bus.
     // ─────────────────────────────────────────────────────────────────────
     test('[0237 R4] TeamOrchestrator on server eventsBus produces agent lifecycle system_events', async () => {
@@ -478,7 +478,7 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
                 configDir,
             );
 
-            // Same bus identity the teamService() accessor injects as `events`.
+            // Same bus identity the coordination() accessor injects as `events`.
             // Casts: dual package instances (ts-infra/ts-db) at the type seam; runtime is identical.
             const orchestrator = new TeamOrchestrator(configDir, new InboxMessageDao(await ctx.getDb()) as never, {
                 events: bus as never,

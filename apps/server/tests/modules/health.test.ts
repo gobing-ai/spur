@@ -9,6 +9,7 @@ import {
     setPortProbeForTests,
 } from '@gobing-ai/spur-app';
 import { spurConfigSchema } from '@gobing-ai/spur-config';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { CoordinationRunDao, createMigratedDb, InboxMessageDao, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { Hono } from 'hono';
@@ -24,16 +25,36 @@ describe('healthModule', () => {
         tempDir = mkdtempSync(join(tmpdir(), 'spur-health-test-'));
         projectsFile = join(tempDir, 'projects.json');
         process.env.SPUR_PROJECTS_FILE = projectsFile;
+        // Hermetic config load: the fleet section now comes from `.spur/config.yaml`
+        // through the real loader, so the operator's global layer must not leak in.
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
     });
 
     afterEach(() => {
         setPortProbeForTests(undefined);
         ProjectRegistry.prototype.allocatePort = origAllocate;
         delete process.env.SPUR_PROJECTS_FILE;
+        delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
         if (existsSync(tempDir)) {
             rmSync(tempDir, { recursive: true, force: true });
         }
     });
+
+    /**
+     * 0858 R3: write the project's `agent.fleet` section. The declaration moved out
+     * of `<project>/.spur/fleet.json` into the project config, so every fleet fixture
+     * goes through the loader like production does. `body` is the YAML under
+     * `agent.fleet:` (already indented by four spaces).
+     */
+    async function writeFleetConfig(body: string): Promise<void> {
+        const { mkdirSync, writeFileSync } = await import('node:fs');
+        mkdirSync(join(tempDir, '.spur'), { recursive: true });
+        writeFileSync(join(tempDir, '.spur', 'config.yaml'), `agent:\n  fleet:\n${body}`);
+    }
+
+    /** The one-member planner fleet every fixture below declares. */
+    const LEAD_MEMBER =
+        '    members:\n      - id: lead\n        executor: build\n        role: planner\n        purpose: orchestrator\n';
 
     test('name is health', () => {
         expect(healthModule.name).toBe('health');
@@ -274,25 +295,15 @@ describe('healthModule', () => {
                 fs: createNodeFileSystem(tempDir),
                 getDb: () => Promise.resolve(db),
                 taskService: () => ({ list: async () => ({ data: [] }) }),
-                reloadAgentConfig: async () => null,
+                reloadAgentConfig: async () => loadSpurConfig(tempDir),
             } as unknown as ServerContext,
             close: () => db.close(),
         };
     }
 
     test('/api/project/fleet returns a full snapshot (members, binding, persisted strategy)', async () => {
-        const { writeFileSync } = await import('node:fs');
-        const { mkdirSync } = await import('node:fs');
         const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
-        mkdirSync(join(tempDir, '.spur'), { recursive: true });
-        writeFileSync(
-            join(tempDir, '.spur', 'fleet.json'),
-            JSON.stringify({
-                version: 1,
-                orchestrator: 'lead',
-                members: [{ id: 'lead', executor: 'build', role: 'planner', purpose: 'orchestrator' }],
-            }),
-        );
+        await writeFleetConfig(`    enabled: true\n    orchestrator: lead\n${LEAD_MEMBER}`);
         // Persist a non-default strategy so the endpoint provably reads
         // StrategyRuntime (not a hardcoded rest).
         await new ProjectStrategyDao(await createMigratedDb({ url: join(tempDir, '.spur', 'spur.db') })).set(
@@ -326,20 +337,48 @@ describe('healthModule', () => {
         }
     });
 
-    test('0848: role-only fleet members resolve through fresh configured role tiers on the Board', async () => {
-        const { writeFileSync } = await import('node:fs');
+    test("0857 R5: the fleet snapshot carries each member's resolved model", async () => {
         const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
-        writeFileSync(
-            join(tempDir, '.spur', 'fleet.json'),
-            JSON.stringify({
-                version: 1,
-                members: [{ id: 'coder', role: 'coder' }],
-            }),
-        );
+        // One profile declares a model, one does not — the pane renders the
+        // resolved model and falls back only when there is none to name (0857 R5).
+        ctx.reloadAgentConfig = async () =>
+            spurConfigSchema.parse({
+                agent: {
+                    fleet: {
+                        enabled: true,
+                        members: [
+                            { id: 'lead', executor: 'build' },
+                            { id: 'plain', executor: 'plain' },
+                        ],
+                    },
+                    executors: [
+                        { name: 'build', agent: 'claude', tier: 'standard', model: 'claude-sonnet-4' },
+                        { name: 'plain', agent: 'codex', tier: 'standard' },
+                    ],
+                },
+            });
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+        try {
+            const res = await app.request('/api/project/fleet');
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { members: Array<{ executor: string; model?: string }> };
+            expect(body.members.map((m) => m.executor)).toEqual(['build', 'plain']);
+            expect(body.members[0]?.model).toBe('claude-sonnet-4');
+            // Omitted from the wire, not '' — nothing to render means no key.
+            expect(body.members[1]?.model).toBeUndefined();
+        } finally {
+            close();
+        }
+    });
+
+    test('0848: role-only fleet members resolve through fresh configured role tiers on the Board', async () => {
+        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
         let tier = 'capable-1';
         ctx.reloadAgentConfig = async () =>
             spurConfigSchema.parse({
                 agent: {
+                    fleet: { enabled: true, members: [{ id: 'lead', role: 'coder' }] },
                     roles: { coder: { tier } },
                     executors: [
                         { name: 'standard', agent: 'codex', tier: 'standard' },
@@ -367,13 +406,12 @@ describe('healthModule', () => {
         }
     });
 
-    test('/api/project/fleet keeps FleetService detail for an invalid fleet.json (200, no 500)', async () => {
-        const { writeFileSync } = await import('node:fs');
+    test('/api/project/fleet names an invalid agent.fleet instead of an empty shell (200, no 500)', async () => {
         const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
-        // Garbage declaration: FleetService.load() throws with purpose-built
-        // detail (file + reason); the endpoint must surface that detail in
-        // capacity.missing rather than a placeholder, and still return 200.
-        writeFileSync(join(tempDir, '.spur', 'fleet.json'), '{ not json');
+        // 0858 R6/R8: an invalid section fails the LOAD naming every issue with its
+        // `agent.fleet.*` path; the endpoint surfaces that detail in capacity.missing
+        // rather than a placeholder, and still returns 200.
+        await writeFleetConfig('    enabled: "yes"\n    strategy: turbo\n    members:\n      - purpose: ghost\n');
 
         const app = new Hono();
         healthModule.mount(app, ctx);
@@ -382,19 +420,24 @@ describe('healthModule', () => {
             expect(res.status).toBe(200);
             const body = (await res.json()) as {
                 members: unknown[];
+                enabled: boolean;
                 capacity: { total: number; missing: string[] };
             };
             expect(body.members).toEqual([]);
             expect(body.capacity.total).toBe(0);
+            expect(body.enabled).toBe(false);
+            // Every issue is named with its `agent.fleet.*` path (R8), not the first one.
             expect(body.capacity.missing).toHaveLength(1);
-            expect(body.capacity.missing[0]).toContain('Invalid fleet declaration');
+            expect(body.capacity.missing[0]).toContain('agent.fleet.enabled');
+            expect(body.capacity.missing[0]).toContain('agent.fleet.strategy');
+            expect(body.capacity.missing[0]).toContain('agent.fleet.members[0]');
         } finally {
             close();
         }
     });
 
     test('/api/project/fleet names a zero-member fleet instead of an empty shell', async () => {
-        // No .spur/fleet.json at all — every fact resolves to its named absence.
+        // No agent.fleet section at all — every fact resolves to its named absence.
         const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
 
         const app = new Hono();
@@ -403,10 +446,12 @@ describe('healthModule', () => {
             const res = await app.request('/api/project/fleet');
             expect(res.status).toBe(200);
             const body = (await res.json()) as {
+                enabled: boolean;
                 strategy: { name: string; version: number } | null;
                 orchestrator: { state: string; reason?: string };
                 capacity: { total: number; enabled: number; writeCapable: number; missing: string[] };
             };
+            expect(body.enabled).toBe(false);
             expect(body.capacity.total).toBe(0);
             expect(body.capacity.missing).toEqual(['no-declaration']);
             expect(body.orchestrator.state).toBe('missing');
@@ -418,24 +463,14 @@ describe('healthModule', () => {
     });
 
     test('/api/project/fleet degrades to named states when services fail (never 500)', async () => {
-        const { writeFileSync } = await import('node:fs');
-        const { mkdirSync } = await import('node:fs');
-        mkdirSync(join(tempDir, '.spur'), { recursive: true });
-        writeFileSync(
-            join(tempDir, '.spur', 'fleet.json'),
-            JSON.stringify({
-                version: 1,
-                orchestrator: 'lead',
-                members: [{ id: 'lead', executor: 'build', role: 'planner', purpose: 'orchestrator' }],
-            }),
-        );
-        // The declaration resolves (fs-only) but every db-backed service is down.
+        await writeFleetConfig(`    enabled: true\n    orchestrator: lead\n${LEAD_MEMBER}`);
+        // The declaration resolves (config-only) but every db-backed service is down.
         const ctx = {
             cwd: tempDir,
             fs: createNodeFileSystem(tempDir),
             getDb: () => Promise.reject(new Error('db down')),
             taskService: () => ({ list: async () => ({ data: [] }) }),
-            reloadAgentConfig: async () => null,
+            reloadAgentConfig: async () => loadSpurConfig(tempDir),
         } as unknown as ServerContext;
 
         const app = new Hono();
@@ -457,19 +492,9 @@ describe('healthModule', () => {
     // ── 0844: /api/project/requests ──
 
     test('/api/project/requests joins operator rows with delivery + run facts, scoped to the mailbox', async () => {
-        const { writeFileSync } = await import('node:fs');
-        const { mkdirSync } = await import('node:fs');
         const dbUrl = join(tempDir, '.spur', 'spur.db');
         const { ctx, close } = await fullCtx(dbUrl);
-        mkdirSync(join(tempDir, '.spur'), { recursive: true });
-        writeFileSync(
-            join(tempDir, '.spur', 'fleet.json'),
-            JSON.stringify({
-                version: 1,
-                orchestrator: 'lead',
-                members: [{ id: 'lead', executor: 'build', role: 'planner', purpose: 'orchestrator' }],
-            }),
-        );
+        await writeFleetConfig(`    enabled: true\n    orchestrator: lead\n${LEAD_MEMBER}`);
 
         const app = new Hono();
         healthModule.mount(app, ctx);

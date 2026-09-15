@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { isatty } from 'node:tty';
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import {
     type CapabilityTier,
     type CoordinationArtifactRef,
@@ -342,6 +343,13 @@ export interface AgentServiceContext {
      * occupant, run still succeeds.
      */
     getDb?: () => Promise<DbAdapter>;
+    /**
+     * Fresh merged global+project config (0858 R3). The fleet gate a spec-id
+     * dispatch runs against reads `agent.fleet` from here — the 0835 carrier was
+     * a file, so without this seam the gate would silently find no fleet.
+     * Absent (tests) → no fleet declaration is seen.
+     */
+    reloadAgentConfig?: () => Promise<SpurConfig | null>;
 }
 
 /**
@@ -892,7 +900,11 @@ export class AgentService {
         const launchSpecId = stringFlag(flags, 'spec-id', '');
         if (launchSpecId !== '') {
             const fs = this.ctx.fs ?? createNodeFileSystem(this.ctx.cwd);
-            const fleet = new FleetService({ fs, openDb: this.ctx.getDb });
+            const fleet = new FleetService({
+                fs,
+                ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+                openDb: this.ctx.getDb,
+            });
             if ((await fleet.load(this.ctx.cwd)) !== null) {
                 await fleet.assertLaunchGroundTruth(this.ctx.cwd);
                 const spec = (await loadAgentSpecs(fs.resolve('.spur/agents'))).find((s) => s.id === launchSpecId);
@@ -2942,7 +2954,7 @@ export function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
  * The shared role → executor funnel (0543 R1): eligible executors (tier at or
  * above `minTier`) sorted by tier ascending — cheapest eligible first. One
  * selector, never two: `resolveRole` (`--agent <role>`) and
- * `TeamService.materializeTeam` (role-only members) both route through this, so
+ * `AgentCoordinationService.materializeTeam` (role-only members) both route through this, so
  * the two can never disagree. `resolveRole` doctor-walks the result; team
  * materialization takes the first entry (config-time, no liveness probe).
  */

@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test, vi } from 'bun:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
@@ -13,6 +13,7 @@ import {
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
+    DEFAULT_STRATEGY,
     FLEET_AUTO_TAG,
     FleetService,
     gtdStrategy,
@@ -55,7 +56,6 @@ function parseConfig(yaml: string): SpurConfig {
 }
 
 const FLEET = {
-    version: 1,
     members: [
         { id: 'orch', role: 'planner', purpose: 'orchestrator', executor: 'writer' },
         { id: 'coder', executor: 'writer' },
@@ -63,6 +63,16 @@ const FLEET = {
     ],
     orchestrator: 'orch',
 };
+
+/**
+ * The project's merged config carrying the fleet section — the 0858 carrier.
+ * A declared roster runs only when `enabled` is true, which is the state these
+ * dispatch rigs assert (an absent or disabled fleet starts nothing).
+ */
+function fleetConfig(): SpurConfig {
+    const base = parseConfig(EXECUTORS_YAML);
+    return spurConfigSchema.parse({ ...base, agent: { ...base.agent, fleet: { enabled: true, ...FLEET } } });
+}
 
 /** A todo candidate with frontmatter knobs; `tags`/`priority` opt it in or out. */
 function task(
@@ -104,10 +114,14 @@ interface Rig {
     cleanup: () => Promise<void>;
 }
 
-/** Temp project + fleet declaration + migrated in-memory db + wired StrategyRuntime. */
-async function makeRig(opts?: { strategy?: string }): Promise<Rig> {
+/**
+ * Temp project + fleet declaration + migrated in-memory db + wired StrategyRuntime.
+ *
+ * `noFleet` builds the rig WITHOUT the `agent.fleet` section — the 0858 carrier's
+ * "no declaration" state (the retired `.spur/fleet.json` file no longer models it).
+ */
+async function makeRig(opts?: { strategy?: string; noFleet?: boolean }): Promise<Rig> {
     const { project, cleanup } = await makeProject();
-    await writeFile(join(project, '.spur', 'fleet.json'), JSON.stringify(FLEET));
     const db = await createMigratedDb();
     if (opts?.strategy !== undefined) {
         await new ProjectStrategyDao(db).set(project, opts.strategy);
@@ -120,7 +134,7 @@ async function makeRig(opts?: { strategy?: string }): Promise<Rig> {
     ];
     const blocked: Record<string, string | null> = {};
     const fleet = new FleetService({
-        spurConfig: parseConfig(EXECUTORS_YAML),
+        spurConfig: opts?.noFleet === true ? parseConfig(EXECUTORS_YAML) : fleetConfig(),
         fs: createNodeFileSystem(project),
         registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
         openDb: async () => db,
@@ -415,6 +429,46 @@ describe('StrategyRuntime.selectNext wiring (0838 R3)', () => {
     });
 });
 
+describe('StrategyRuntime.reconcileStrategy (0859 R1)', () => {
+    test('a declared strategy that differs from the row writes once, bumps the version and emits one event', async () => {
+        const rig = await makeRig({ strategy: 'rest' });
+        try {
+            expect(await rig.runtime.reconcileStrategy(rig.project, 'gtd')).toBe(true);
+            expect(await rig.runtime.getStrategy(rig.project)).toEqual({ name: 'gtd', version: 2 }); // rest v1 → gtd v2
+            const rows = await new SystemEventDao(rig.db).query({ names: ['strategy.changed'], limit: 10 });
+            expect(rows).toHaveLength(1);
+            expect(JSON.parse(rows[0]?.payload_json ?? '{}')).toMatchObject({ strategy: 'gtd', version: 2 });
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('a second reconcile with the same strategy is silent: no version bump, no event', async () => {
+        const rig = await makeRig({ strategy: 'rest' });
+        try {
+            await rig.runtime.reconcileStrategy(rig.project, 'gtd');
+            expect(await rig.runtime.reconcileStrategy(rig.project, 'gtd')).toBe(false);
+            expect(await rig.runtime.getStrategy(rig.project)).toEqual({ name: 'gtd', version: 2 });
+            const rows = await new SystemEventDao(rig.db).query({ names: ['strategy.changed'], limit: 10 });
+            expect(rows).toHaveLength(1); // still the first reconcile's single row
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('the default matches an absent row without writing one (0859 R3 — a project with no declaration is untouched)', async () => {
+        const rig = await makeRig();
+        try {
+            expect(await rig.runtime.reconcileStrategy(rig.project, DEFAULT_STRATEGY)).toBe(false);
+            expect(await rig.dao.get(rig.project)).toBeNull();
+            const rows = await new SystemEventDao(rig.db).query({ names: ['strategy.changed'], limit: 10 });
+            expect(rows).toHaveLength(0);
+        } finally {
+            await rig.cleanup();
+        }
+    });
+});
+
 describe('StrategyRuntime.resume (0838 R6)', () => {
     test('strict order: persists the rest default when absent, restores a persisted strategy without resetting it', async () => {
         const rig = await makeRig({ strategy: 'gtd' });
@@ -453,11 +507,7 @@ describe('StrategyRuntime.resume (0838 R6)', () => {
     });
 
     test('orchestrator missing (no declaration) → reconciled: false, distinct state, never a throw', async () => {
-        const { project, db, runtime, cleanup } = await (async () => {
-            const rig = await makeRig();
-            await rm(join(rig.project, '.spur', 'fleet.json'));
-            return rig;
-        })();
+        const { project, db, runtime, cleanup } = await makeRig({ noFleet: true });
         try {
             const report = await runtime.resume(project);
             expect(report.orchestrator.state).toBe('missing');

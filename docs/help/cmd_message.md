@@ -1,7 +1,7 @@
 # spur message
 
-> Send, list, and reply to durable inter-agent messages. Backs team coordination. Messages
-> persist in the SQLite `inbox_messages` table (backed by `TeamService` →
+> Send, list, and reply to durable inter-agent messages. Backs fleet coordination. Messages
+> persist in the SQLite `inbox_messages` table (backed by `AgentCoordinationService` →
 > `ts-ai-runner` `MessageService` → `ts-db` `InboxMessageDao`).
 
 ## Subcommands
@@ -148,7 +148,7 @@ spur message watch [options]
 | `--json` | Emit one JSON object per new message (machine-consumable by agent wrappers) |
 
 Follows an agent's inbox and surfaces each new message exactly once as it arrives. Polls the
-store directly via `TeamService` — no server required (serverless is the contract; SSE-follow
+store directly via `AgentCoordinationService` — no server required (serverless is the contract; SSE-follow
 when `spur serve` is up is a future optimization). `Ctrl-C` exits cleanly.
 
 **Watch SURFACES, it never CONSUMES** — it does not mark messages read/delivered. Read-marking

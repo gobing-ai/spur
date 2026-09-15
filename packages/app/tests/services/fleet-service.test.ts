@@ -1,20 +1,19 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, ProjectClaimDao } from '@gobing-ai/spur-domain';
 import { type AgentSpec, loadAgentSpecs, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
+    AgentCoordinationService,
     type AgentRoleDefinition,
     FleetService,
     type FleetServiceContext,
     normalizeProjectPath,
     ProjectRegistry,
-    TeamService,
-    type TeamServiceContext,
 } from '../../src/index';
 
 // ---------------------------------------------------------------------------
@@ -78,9 +77,29 @@ async function makeProject(): Promise<{ project: string; slug: string; cleanup: 
     };
 }
 
+/**
+ * Per-project `agent.fleet` fixture sections. Since 0858 the fleet rides the
+ * project's merged config, so a fixture writes the SECTION and the service reads
+ * it through `reloadAgentConfig` — the same launch-boundary seam production uses.
+ * The retired `.spur/fleet.json` file is no longer a carrier, and a section
+ * written before or after service construction is visible either way.
+ */
+const fleetSections = new Map<string, Record<string, unknown>>();
+
+/** The project's effective config: the base config plus its fixture fleet section. */
+function configFor(spurConfig: SpurConfig | null, project: string): SpurConfig | null {
+    const section = fleetSections.get(project);
+    if (section === undefined) return spurConfig;
+    return spurConfigSchema.parse({
+        ...(spurConfig ?? {}),
+        agent: { ...(spurConfig?.agent ?? {}), fleet: section },
+    });
+}
+
 function makeService(spurConfig: SpurConfig | null, project: string): FleetService {
     const ctx: FleetServiceContext = {
-        spurConfig,
+        spurConfig: configFor(spurConfig, project),
+        reloadAgentConfig: async () => configFor(spurConfig, project),
         roles: ROLES,
         fs: createNodeFileSystem(project),
         registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
@@ -88,9 +107,14 @@ function makeService(spurConfig: SpurConfig | null, project: string): FleetServi
     return new FleetService(ctx);
 }
 
-/** Write `.spur/fleet.json` under the project. */
-async function writeFleet(project: string, body: unknown): Promise<void> {
-    await writeFile(join(project, '.spur', 'fleet.json'), JSON.stringify(body, null, 2));
+/**
+ * Declare the project's `agent.fleet` section (0858 carrier). Fixtures describe a
+ * RUNNING fleet (`enabled: true`) unless the body sets `enabled` itself: before
+ * 0858 a declaration always ran, and the disabled/default-false state has its own
+ * tests below.
+ */
+async function writeFleet(project: string, body: Record<string, unknown>): Promise<void> {
+    fleetSections.set(project, { enabled: true, ...body });
 }
 
 async function seedSpec(configDir: string, id: string, tags: string[], type = 'claude'): Promise<void> {
@@ -102,7 +126,7 @@ async function seedSpec(configDir: string, id: string, tags: string[], type = 'c
 // load / resolve (R1, R3, R4, R7)
 // ---------------------------------------------------------------------------
 
-describe('FleetService load (0835 R1/R7)', () => {
+describe('FleetService load (0835 R1/R7, 0858 R3)', () => {
     test('returns null when no declaration exists (R7)', async () => {
         const { project, cleanup } = await makeProject();
         try {
@@ -113,29 +137,36 @@ describe('FleetService load (0835 R1/R7)', () => {
         }
     });
 
-    test('parses a valid declaration and rejects an invalid one naming the file', async () => {
+    test('0858 R3: reads the section from the project config, with its schema defaults', async () => {
         const { project, cleanup } = await makeProject();
         try {
             const svc = makeService(null, project);
-            await writeFleet(project, { version: 1, members: [{ executor: 'writer' }] });
+            // Written as a raw section: the schema's defaults are what fill in the rest.
+            fleetSections.set(project, { members: [{ executor: 'writer' }] });
             const decl = await svc.load(project);
-            expect(decl?.version).toBe(1);
+            // Defaults come from the schema, not from the service: declaring a roster
+            // must not start processes by accident (0858 R1).
+            expect(decl?.enabled).toBe(false);
+            expect(decl?.strategy).toBe('rest');
             expect(decl?.members).toHaveLength(1);
 
-            await writeFleet(project, { version: 2, members: [] });
-            await expect(svc.load(project)).rejects.toThrow(/Invalid fleet declaration/);
-            await writeFile(join(project, '.spur', 'fleet.json'), '{ not json at all');
-            await expect(svc.load(project)).rejects.toThrow(/not valid JSON/);
+            // A later config read is observed through the launch-boundary seam.
+            await writeFleet(project, { members: [{ executor: 'readonly' }], orchestrator: 'readonly' });
+            const updated = await svc.load(project);
+            expect(updated?.orchestrator).toBe('readonly');
+            expect(updated?.enabled).toBe(true);
         } finally {
             await cleanup();
         }
     });
 
-    test('rejects a member declaring neither role nor executor', async () => {
+    test('0858 R8: an invalid section fails the config read, naming the issue', async () => {
         const { project, cleanup } = await makeProject();
         try {
             const svc = makeService(null, project);
-            await writeFleet(project, { version: 1, members: [{ purpose: 'ghost' }] });
+            // The section is raw here: the config read is what validates it, so the
+            // service can never silently serve a half-valid fleet.
+            fleetSections.set(project, { members: [{ purpose: 'ghost' }] });
             await expect(svc.load(project)).rejects.toThrow(/must declare a role or an executor/);
         } finally {
             await cleanup();
@@ -149,7 +180,6 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
         try {
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             await writeFleet(project, {
-                version: 1,
                 members: [
                     { id: 'lead', role: 'coder', executor: 'writer', purpose: 'orchestrator' },
                     { role: 'reviewer', executor: 'readonly' },
@@ -185,7 +215,6 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
         try {
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             await writeFleet(project, {
-                version: 1,
                 members: [
                     { id: 'lead', role: 'coder', executor: 'writer' },
                     { role: 'reviewer', executor: 'readonly' },
@@ -196,7 +225,6 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
 
             // Executor replaced + roster reordered.
             await writeFleet(project, {
-                version: 1,
                 members: [
                     { role: 'reviewer', executor: 'readonly' },
                     { id: 'lead', role: 'coder', executor: 'enforced-writer' },
@@ -217,7 +245,6 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
             // Two role-only coders: the allocator derives coder-1 / coder-2 over
             // the role-only peers, exactly as the config-load derivation would.
             await writeFleet(project, {
-                version: 1,
                 members: [{ role: 'coder' }, { role: 'coder' }, { role: 'reviewer' }],
             });
             const fleet = await svc.resolve(project);
@@ -236,7 +263,6 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
         try {
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             await writeFleet(project, {
-                version: 1,
                 members: [
                     // reviewer role but WRITE-capable: role is not evidence.
                     { role: 'reviewer', executor: 'writer' },
@@ -265,7 +291,117 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             const fleet = await svc.resolve(project);
             expect(fleet.members).toEqual([]);
+            expect(fleet.enabled).toBe(false);
             expect(fleet.missing).toEqual(['no-declaration']);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // 0858 R3/R5: the off switch is a NAMED state, not an empty roster. The declared
+    // roster still resolves so the Board can explain why nothing runs.
+    test('0858 R3: a disabled fleet still resolves its roster and names fleet-disabled', async () => {
+        const { project, slug, cleanup } = await makeProject();
+        try {
+            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
+            await writeFleet(project, { enabled: false, members: [{ role: 'coder', executor: 'writer' }] });
+            const fleet = await svc.resolve(project);
+            expect(fleet.enabled).toBe(false);
+            expect(fleet.missing).toEqual(['fleet-disabled']);
+            // Members are still resolved — a disabled fleet is not an empty one.
+            expect(fleet.members).toEqual([
+                {
+                    instanceId: `${slug}-writer`,
+                    role: 'coder',
+                    executor: 'writer',
+                    enabled: true,
+                    writeCapable: true,
+                    capabilityState: 'available',
+                },
+            ]);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('0858 R3: an enabled fleet resolves without a missing entry', async () => {
+        const { project, cleanup } = await makeProject();
+        try {
+            const svc = makeService(parseConfig(EXECUTORS_YAML), project);
+            await writeFleet(project, { enabled: true, members: [{ executor: 'writer' }] });
+            const fleet = await svc.resolve(project);
+            expect(fleet.enabled).toBe(true);
+            expect(fleet.missing).toEqual([]);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // 0857 R5: the resolved model the pane renders. Own fixture (pinned profiles and a
+    // role ladder whose only capable-1 rung is `rollout`) so the shared EXECUTORS_YAML
+    // ladder winners other tests assert are untouched.
+    test('R5: carries the resolved executor profile model, omits it when the profile declares none', async () => {
+        const { project, slug, cleanup } = await makeProject();
+        try {
+            const svc = makeService(
+                parseConfig(`agent:
+  executors:
+    - name: writer
+      agent: claude
+      tier: cheap
+      model: claude-sonnet-4
+      executionCapabilities:
+        version: 1
+        axes:
+          fsWrite:
+            state: available
+            provenance: native-known
+    - name: modelless
+      agent: codex
+      tier: cheap
+      executionCapabilities:
+        version: 1
+        axes:
+          fsWrite:
+            state: available
+            provenance: native-known
+    - name: rollout
+      agent: claude
+      tier: capable-1
+      model: claude-opus-4
+`),
+                project,
+            );
+            await writeFleet(project, {
+                members: [
+                    { executor: 'writer' },
+                    { executor: 'modelless' },
+                    { role: 'reviewer' },
+                    { executor: 'writer', enabled: false },
+                ],
+            });
+            const fleet = await svc.resolve(project);
+            // Pinned executor profile's model rides the member.
+            expect(fleet.members[0]).toMatchObject({
+                instanceId: `${slug}-writer`,
+                executor: 'writer',
+                model: 'claude-sonnet-4',
+            });
+            // Omitted, never '' — a profile declaring no model has nothing to render.
+            expect(fleet.members[1]?.executor).toBe('modelless');
+            expect(fleet.members[1]?.model).toBeUndefined();
+            // Role-only members carry the tier-ladder winner's model (`rollout` is the
+            // only profile at or above the reviewer role's capable-1 rung here).
+            expect(fleet.members[2]).toMatchObject({ executor: 'rollout', model: 'claude-opus-4' });
+            // A disabled member is never resolved against executors: no model, and
+            // its declared executor name rides through unresolved.
+            expect(fleet.members[3]?.model).toBeUndefined();
+            expect(fleet.members[3]).toMatchObject({
+                enabled: false,
+                executor: 'writer',
+                writeCapable: false,
+                capabilityState: 'unknown',
+            });
         } finally {
             await cleanup();
         }
@@ -276,15 +412,13 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
         try {
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             await writeFleet(project, {
-                version: 1,
                 members: [
                     { role: 'coder', enabled: false },
                     { executor: 'readonly', enabled: false },
                 ],
             });
             const fleet = await svc.resolve(project);
-            expect(fleet.missing).toEqual(['no-enabled-members']);
-            // Disabled members keep their id (index preservation) but resolve no executor.
+            expect(fleet.missing).toEqual(['no-enabled-members']); // Disabled members keep their id (index preservation) but resolve no executor.
             expect(fleet.members[0]).toMatchObject({
                 instanceId: `${slug}-coder-1`,
                 enabled: false,
@@ -308,7 +442,6 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         const prevCwd = process.cwd();
         try {
             await writeFleet(project, {
-                version: 1,
                 members: [
                     { id: 'lead', role: 'coder', executor: 'writer' },
                     { role: 'reviewer', executor: 'readonly', enabled: false },
@@ -337,7 +470,7 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
     test('R6: cwd/storage-root mismatch is a loud error naming both paths', async () => {
         const { project, cleanup } = await makeProject();
         try {
-            await writeFleet(project, { version: 1, members: [{ executor: 'writer' }] });
+            await writeFleet(project, { members: [{ executor: 'writer' }] });
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             // Test process stays in the repo — NOT the project.
             await expect(svc.materialize(project)).rejects.toThrow(/Ground-truth mismatch/);
@@ -353,7 +486,7 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         const { project, slug, cleanup } = await makeProject();
         const prevCwd = process.cwd();
         try {
-            await writeFleet(project, { version: 1, members: [{ executor: 'writer', purpose: 'authored' }] });
+            await writeFleet(project, { members: [{ executor: 'writer', purpose: 'authored' }] });
             const configDir = join(project, '.spur', 'agents');
             await mkdir(configDir, { recursive: true });
             await seedSpec(configDir, `${slug}-writer`, [], 'handwritten-kind');
@@ -376,14 +509,13 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         const { project, slug, cleanup } = await makeProject();
         const prevCwd = process.cwd();
         try {
-            await writeFleet(project, { version: 1, members: [{ executor: 'writer' }, { executor: 'readonly' }] });
+            await writeFleet(project, { members: [{ executor: 'writer' }, { executor: 'readonly' }] });
             process.chdir(project);
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             const first = await svc.materialize(project);
             expect(first.upserted.sort()).toEqual([`${slug}-readonly`, `${slug}-writer`].sort());
 
             await writeFleet(project, {
-                version: 1,
                 members: [{ executor: 'writer' }, { executor: 'readonly', enabled: false }],
             });
             const second = await svc.materialize(project);
@@ -401,7 +533,7 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         const { project, slug, cleanup } = await makeProject();
         const prevCwd = process.cwd();
         try {
-            await writeFleet(project, { version: 1, members: [{ executor: 'writer' }] });
+            await writeFleet(project, { members: [{ executor: 'writer' }] });
             process.chdir(project);
             const svc = makeService(parseConfig(EXECUTORS_YAML), project);
             const result = await svc.materialize(project, { check: true });
@@ -409,8 +541,8 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
             expect(result.upserted).toEqual([`${slug}-writer`]);
             expect(await loadAgentSpecs(join(project, '.spur', 'agents'))).toEqual([]);
 
-            await rm(join(project, '.spur', 'fleet.json'));
-            await expect(svc.materialize(project)).rejects.toThrow(/No fleet declaration/);
+            fleetSections.delete(project);
+            await expect(svc.materialize(project)).rejects.toThrow(/No agent\.fleet declaration/);
         } finally {
             process.chdir(prevCwd);
             await cleanup();
@@ -421,7 +553,7 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         const { project, slug, cleanup } = await makeProject();
         const prevCwd = process.cwd();
         try {
-            await writeFleet(project, { version: 1, members: [{ executor: 'writer' }] });
+            await writeFleet(project, { members: [{ executor: 'writer' }] });
             const configDir = join(project, '.spur', 'agents');
             await mkdir(configDir, { recursive: true });
             // A hand-authored spec id that will NOT be desired (different member).
@@ -443,7 +575,6 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         const prevCwd = process.cwd();
         try {
             await writeFleet(project, {
-                version: 1,
                 members: [
                     { id: 'lead', executor: 'writer' },
                     // Pins an executor that does not exist — but the member is
@@ -469,75 +600,51 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         }
     });
 
-    test('fleet and team materialization are namespace-disjoint when a registry name equals a config team id (review P2)', async () => {
+    test('0857: re-materializing the same fleet is idempotent and never orphans its own specs', async () => {
         const { project, cleanup } = await makeProject();
         const prevCwd = process.cwd();
-        let db: DbAdapter | undefined;
         try {
-            // Registry display name == a config team id: the collision case.
+            // Registry display name == the fleet slug: the derived instance id is what
+            // must stay stable across passes, never a second group's namespace.
             const slug = 'shared';
             await new ProjectRegistry(join(project, '.spur', 'registry.json')).upsert({
                 name: slug,
                 path: project,
             });
-            await writeFleet(project, { version: 1, members: [{ id: 'lead', executor: 'writer' }] });
-
-            const teamYaml = `${EXECUTORS_YAML}  team:\n    shared:\n      name: shared\n      work_dir: ${project}\n      members:\n        - id: dev\n          executor: writer\n`;
-            const spurConfig = parseConfig(teamYaml);
-            db = await createMigratedDb({ url: ':memory:' });
-            const teamCtx: TeamServiceContext = {
-                cwd: project,
-                env: {},
-                getDb: async () => db as DbAdapter,
-                fs: createNodeFileSystem(project),
-                roles: ROLES,
-                spurConfig,
-            };
-            const teamSvc = new TeamService(teamCtx);
+            await writeFleet(project, { members: [{ id: 'lead', executor: 'writer' }] });
             process.chdir(project);
-            const fleetSvc = makeService(spurConfig, project);
+            const fleetSvc = makeService(parseConfig(EXECUTORS_YAML), project);
 
-            // Both materializations run over the SAME spec dir.
-            const team1 = await teamSvc.materializeTeam(slug);
-            expect(team1.upserted).toEqual([`${slug}-dev`]);
             const fleet1 = await fleetSvc.materialize(project);
             expect(fleet1.upserted).toEqual([`${slug}-lead`]);
 
-            // Re-running either side must not delete the other's specs.
-            const team2 = await teamSvc.materializeTeam(slug);
-            expect(team2.orphaned).toEqual([]);
+            // A second pass over the same declaration must not retire what it wrote.
             const fleet2 = await fleetSvc.materialize(project);
             expect(fleet2.orphaned).toEqual([]);
             const specs = await loadAgentSpecs(join(project, '.spur', 'agents'));
-            expect(specs.map((s) => s.id).sort()).toEqual([`${slug}-dev`, `${slug}-lead`].sort());
+            expect(specs.map((s) => s.id).sort()).toEqual([`${slug}-lead`]);
         } finally {
             process.chdir(prevCwd);
-            db?.close();
             await cleanup();
         }
     });
 });
 
-describe('FleetService load error surfaces (0835 review)', () => {
-    test('a non-ENOENT read failure (EACCES) is not masqueraded as no-declaration (review P3)', async () => {
+describe('FleetService load error surfaces (0835 review, 0858 R3)', () => {
+    test('a config-read failure is not masqueraded as no-declaration (review P3)', async () => {
         const { project, cleanup } = await makeProject();
         try {
-            const eaccs: NodeJS.ErrnoException = new Error(
-                `EACCES: permission denied, open '${join(project, '.spur', 'fleet.json')}'`,
-            );
-            eaccs.code = 'EACCES';
-            const fs = {
-                ...createNodeFileSystem(project),
-                readFile: async () => {
-                    throw eaccs;
-                },
-            } as unknown as FileSystem;
             const svc = new FleetService({
                 spurConfig: null,
+                reloadAgentConfig: async () => {
+                    throw new Error('EACCES: permission denied, open the project config');
+                },
                 roles: ROLES,
-                fs,
+                fs: createNodeFileSystem(project),
                 registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
             });
+            // 0858: the declaration rides the config, so a failed config read must fail
+            // the load — never degrade to an empty fleet that silently skips autostart.
             await expect(svc.load(project)).rejects.toThrow(/EACCES/);
         } finally {
             await cleanup();
@@ -558,6 +665,8 @@ describe('FleetService resolveOrchestrator (0836)', () => {
             // no executor config is consulted (the pointer is asserted, not resolved
             // through the tier ladder).
             spurConfig: null,
+            // 0858: the declaration lives in the project config, read through this seam.
+            reloadAgentConfig: async () => configFor(null, project),
             roles: ROLES,
             fs: createNodeFileSystem(project),
             registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
@@ -568,7 +677,7 @@ describe('FleetService resolveOrchestrator (0836)', () => {
 
     /** Declaration with one planner member carrying purpose 'orchestrator' (id planner-1), plus extras. */
     async function writeOrchestratorFleet(project: string, members: unknown[], orchestrator: unknown): Promise<void> {
-        await writeFleet(project, { version: 1, members, orchestrator });
+        await writeFleet(project, { members, orchestrator });
     }
 
     const PLANNER = { id: 'planner-1', role: 'planner', purpose: 'orchestrator' };
@@ -590,7 +699,7 @@ describe('FleetService resolveOrchestrator (0836)', () => {
         const { project, cleanup } = await makeProject();
         try {
             const { svc, db } = await makeOrchestratorService(project);
-            await writeFleet(project, { version: 1, members: [] });
+            await writeFleet(project, { members: [] });
 
             const binding = await svc.resolveOrchestrator(project);
             expect(binding.state).toBe('missing');
@@ -745,7 +854,7 @@ describe('fleet registration and launch ground truth (G62)', () => {
         const db = await createMigratedDb({ url: ':memory:' });
         try {
             process.chdir(local.project);
-            const team = new TeamService({
+            const team = new AgentCoordinationService({
                 cwd: local.project,
                 fs: createNodeFileSystem(foreign.project),
                 env: { SPUR_SPEC_ID: 'proj-lead' },

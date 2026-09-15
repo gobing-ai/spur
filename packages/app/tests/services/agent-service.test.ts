@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentExecutorConfig } from '@gobing-ai/spur-config';
+import type { AgentExecutorConfig, SpurConfig } from '@gobing-ai/spur-config';
 import { applyCliMigrations, CoordinationRunDao, RunSessionDao } from '@gobing-ai/spur-domain';
 import type { AgentName, AgentRunResult, AuthState } from '@gobing-ai/ts-ai-runner';
 import { saveAgentSpec, TIER1_PRIORITY } from '@gobing-ai/ts-ai-runner';
@@ -4373,7 +4373,9 @@ test('fleet spec execution validates actual launch context and requires the mana
     await applyCliMigrations(db);
     try {
         mkdirSync(join(project, '.spur/agents'), { recursive: true });
-        writeFileSync(join(project, '.spur/fleet.json'), JSON.stringify({ version: 1, members: [] }));
+        // 0858: the declaration rides the project config, read through the same seam
+        // the CLI wires (`reloadAgentConfig`) — the fleet.json file is retired.
+        const fleetConfig: SpurConfig = { agent: { fleet: { enabled: true, strategy: 'rest', members: [] } } };
         await saveAgentSpec(
             {
                 id: 'fleet-worker',
@@ -4386,7 +4388,13 @@ test('fleet spec execution validates actual launch context and requires the mana
             },
             join(project, '.spur/agents'),
         );
-        const service = new AgentService({ cwd: project, env: {}, output: nullOutput(), getDb: async () => db });
+        const service = new AgentService({
+            cwd: project,
+            env: {},
+            output: nullOutput(),
+            getDb: async () => db,
+            reloadAgentConfig: async () => fleetConfig,
+        });
         const flags = { agent: 'pi', 'spec-id': 'fleet-worker' };
         await expect(service.runTraced('work', flags, deps)).rejects.toThrow('Ground-truth mismatch');
         process.chdir(project);

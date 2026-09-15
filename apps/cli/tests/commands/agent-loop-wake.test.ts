@@ -12,8 +12,9 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { _resetAgentServiceShimsForTest, type SystemEventBus, TeamService } from '@gobing-ai/spur-app';
+import { _resetAgentServiceShimsForTest, AgentCoordinationService, type SystemEventBus } from '@gobing-ai/spur-app';
 import { spurConfigSchema } from '@gobing-ai/spur-config';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
     CoordinationRunDao,
     createMigratedDb,
@@ -62,8 +63,15 @@ async function makeRig(opts?: { corpus?: boolean }): Promise<WakeRig> {
     const tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-wake-'));
     const db = await createMigratedDb({ url: ':memory:' });
     const output = captureOutput();
-    const ctx = createCliContext({ cwd: tempDir, output, db });
-    const team = new TeamService(ctx);
+    // 0858: the fleet lives in the project config, so the rig resolves on-disk
+    // configs the way the CLI composition root does.
+    const ctx = createCliContext({
+        cwd: tempDir,
+        output,
+        db,
+        loadAgentConfig: (root: string) => loadSpurConfig(root),
+    });
+    const team = new AgentCoordinationService(ctx);
     await team.createAgentSpec({ id: 'wake-worker', type: 'claude-code' });
     if (opts?.corpus === true) {
         // Minimal planning corpus so `recordIdleHold` can produce REAL holds
@@ -153,14 +161,14 @@ beforeEach(() => {
 
 describe('agent loop wake sources (0839 R1)', () => {
     test('message.sent wakes the loop: the queued request drains and runs once', async () => {
-        // The organic human-request path: a ledger-attached TeamService send
+        // The organic human-request path: a ledger-attached AgentCoordinationService send
         // persists the `message.sent` fact, the wake drains the inbox, and the
         // agent runs with the body — no polling tick in between.
         const rig = await makeRig();
         try {
             const bus = new EventBus() as SystemEventBus;
             await attachSystemEventLedger(bus, rig.ctx);
-            const team = new TeamService({ ...rig.ctx, eventBus: bus } as unknown as CliContext);
+            const team = new AgentCoordinationService({ ...rig.ctx, eventBus: bus } as unknown as CliContext);
 
             const elapsed = await runOneWokenIteration(rig, async () => {
                 await team.sendMessage('operator', 'wake-worker', 'wake up and process task #7');
@@ -202,7 +210,7 @@ describe('agent loop wake sources (0839 R1)', () => {
     test('a plain CLI sender persists the wake without an injected event bus', async () => {
         const rig = await makeRig();
         try {
-            const team = new TeamService(rig.ctx);
+            const team = new AgentCoordinationService(rig.ctx);
             expect(
                 await runOneWokenIteration(rig, async () => {
                     await team.sendMessage('operator', 'wake-worker', 'CLI request');
@@ -254,7 +262,7 @@ describe('agent loop backstop and idle holds (0839 R3/R5)', () => {
     test('a declared fleet in rest keeps queued assignments unstarted (0838 R2)', async () => {
         const rig = await makeRig({ corpus: true });
         try {
-            writeFileSync(join(rig.tempDir, '.spur', 'fleet.json'), JSON.stringify({ version: 1, members: [] }));
+            writeFileSync(join(rig.tempDir, '.spur', 'config.yaml'), 'agent:\n  fleet:\n    members: []\n');
             await new ProjectStrategyDao(rig.db).set(realpathSync(rig.tempDir), 'rest');
             await rig.inbox.enqueue('operator', 'wake-worker', 'queued assignment');
             await runAgentLoop(rig.customCtx, { spec: 'wake-worker', poll: '10' }, { maxIterations: 1 });
@@ -349,7 +357,7 @@ describe('agent loop backstop and idle holds (0839 R3/R5)', () => {
 test('G62 GTD without an orchestrator never drains arbitrary queued work', async () => {
     const rig = await makeRig({ corpus: true });
     try {
-        writeFileSync(join(rig.tempDir, '.spur', 'fleet.json'), JSON.stringify({ version: 1, members: [] }));
+        writeFileSync(join(rig.tempDir, '.spur', 'config.yaml'), 'agent:\n  fleet:\n    members: []\n');
         await new ProjectStrategyDao(rig.db).set(realpathSync(rig.tempDir), 'gtd');
         await rig.inbox.enqueue('operator', 'wake-worker', 'unapproved queued work');
         await runAgentLoop(rig.customCtx, { spec: 'wake-worker', poll: '1' }, { maxIterations: 1 });
@@ -372,6 +380,15 @@ test('G62 production loop claims ownership, dispatches gated tasks, reconciles a
     const output = captureOutput();
     const config = spurConfigSchema.parse({
         agent: {
+            // 0858: the roster is part of the project config the ctx threads.
+            fleet: {
+                enabled: true,
+                orchestrator: 'lead',
+                members: [
+                    { id: 'lead', role: 'planner', purpose: 'orchestrator', executor: 'writer' },
+                    { id: 'coder', role: 'coder', executor: 'writer' },
+                ],
+            },
             executors: [
                 {
                     name: 'writer',
@@ -391,20 +408,9 @@ test('G62 production loop claims ownership, dispatches gated tasks, reconciles a
     try {
         process.chdir(project);
         const path = realpathSync(project);
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'proj-lead', type: 'pi' });
         await team.createAgentSpec({ id: 'proj-coder', type: 'pi' });
-        writeFileSync(
-            join(project, '.spur', 'fleet.json'),
-            JSON.stringify({
-                version: 1,
-                orchestrator: 'lead',
-                members: [
-                    { id: 'lead', role: 'planner', purpose: 'orchestrator', executor: 'writer' },
-                    { id: 'coder', role: 'coder', executor: 'writer' },
-                ],
-            }),
-        );
         for (const [wbs, tags, body, dependencies] of [
             ['0841', '[fleet:auto]', '### Plan\n\n- [ ] Inspect the supplied fixture and record its result.', '[]'],
             ['0842', '[]', '### Plan\n\n- [ ] Inspect the supplied fixture and record its result.', '[]'],

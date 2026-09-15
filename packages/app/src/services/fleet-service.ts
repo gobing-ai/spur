@@ -1,16 +1,19 @@
 import { basename, dirname, join } from 'node:path';
 import {
     type AgentConfig,
+    type AgentFleet,
     type AgentRoleName,
     type ExecutionCapabilityState,
-    type FleetDeclaration,
-    FleetDeclarationSchema,
+    ExecutorDisabledError,
+    type MemberIdentity,
     memberLocalId,
-    type NormalizedTeamMember,
+    type ResolvedExecutor,
+    resolveExecutor,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
-import { type DbAdapter, type ProjectClaim, ProjectClaimDao } from '@gobing-ai/spur-domain';
+import { type DbAdapter, isTierEligible, type ProjectClaim, ProjectClaimDao } from '@gobing-ai/spur-domain';
 import {
+    type AgentSpec,
     deleteAgentSpec as deleteAgentSpecFile,
     loadAgentSpecs,
     saveAgentSpec,
@@ -18,15 +21,14 @@ import {
 } from '@gobing-ai/ts-ai-runner';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolveAgentRoles } from './agent-roles';
-import type { AgentRoleDefinition } from './agent-service';
+import { type AgentRoleDefinition, cheapestEligibleExecutors, getExecutorTier } from './agent-service';
 import { normalizeProjectPath, ProjectRegistry } from './project-registry';
-import { type MaterializeResult, materializeRoster, resolveMemberExecutor } from './team-service';
 
 // ---------------------------------------------------------------------------
 // Public types (0835)
 // ---------------------------------------------------------------------------
 
-/** Context injected into FleetService — the config/role slice of TeamServiceContext. */
+/** Context injected into FleetService — the config/role slice of the coordination service context. */
 export interface FleetServiceContext {
     /**
      * Merged global+project config threaded from the composition root (A5 /
@@ -61,6 +63,13 @@ export interface ResolvedFleetMember {
     role?: AgentRoleName;
     /** Declared executor, or the tier-ladder winner for a role-only member. `''` = not resolved (disabled member). */
     executor: string;
+    /**
+     * The resolved executor profile's `model`, when it declares one — the SAME
+     * value `materializeRoster` writes to the generated spec's `config.model`,
+     * so a reader names the model this member will actually run. Omitted when
+     * the profile declares none, and for a disabled member (never resolved).
+     */
+    model?: string;
     enabled: boolean;
     /** True iff the resolved executor's `fsWrite` attestation is `enforced`/`available` (R4). */
     writeCapable: boolean;
@@ -71,14 +80,21 @@ export interface ResolvedFleetMember {
 /** A resolved project fleet (0835). `missing` names what a caller must fix (R7 — a value, not an exception). */
 export interface ResolvedFleet {
     projectPath: string;
+    /**
+     * The declared fleet switch (`agent.fleet.enabled`, default `false`).
+     * Reported by the read surfaces so a disabled fleet is named as disabled
+     * rather than as an empty roster (0858 R3/R5); `false` when no section is
+     * declared at all.
+     */
+    enabled: boolean;
     members: ResolvedFleetMember[];
-    /** `'no-declaration'` | `'no-enabled-members'`. */
+    /** `'no-declaration'` | `'fleet-disabled'` | `'no-enabled-members'`. */
     missing: string[];
 }
 
 /**
  * 0836 R4: orchestrator availability. `missing` (nothing bound — declare one in
- * `.spur/fleet.json`) and `bound-offline` (bound, no live claim — start/heartbeat
+ * `agent.fleet`) and `bound-offline` (bound, no live claim — start/heartbeat
  * the instance) are DIFFERENT states with different next actions; never collapse
  * them, never represent either as "0 orchestrators".
  */
@@ -103,12 +119,229 @@ export interface OrchestratorBinding {
 }
 
 // ---------------------------------------------------------------------------
+// Shared roster projection (0835) — moved from the retired team service (0860 R3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The member shape the shared roster projection consumes: the identity fields
+ * {@link memberLocalId} derives from, plus the optional per-spec overrides the
+ * projection carries onto the generated spec. The project fleet declaration's
+ * `FleetMember` (config) is structurally assignable. (0857: the retired team
+ * roster union that previously supplied these fields is gone; the fleet
+ * declaration is the only member source.)
+ */
+export interface RosterMember extends MemberIdentity {
+    purpose?: string;
+    workspace?: string;
+    systemPrompt?: string;
+    command?: string[];
+    autonomy?: string;
+    autostart?: boolean;
+    /** Fleet-only (0835): `false` keeps the derived id but skips materialization. */
+    enabled?: boolean;
+}
+
+/** Result of materializing a roster: the project fleet's generated spec set (R2). */
+export interface MaterializeResult {
+    upserted: string[];
+    orphaned: string[];
+    written: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Shared roster projection (0835)
+// ---------------------------------------------------------------------------
+
+/** Result of the shared roster projection: specs to upsert + the desired id set. */
+export interface RosterProjection {
+    toUpsert: AgentSpec[];
+    desiredIds: Set<string>;
+}
+
+/** Parameters for {@link resolveMemberExecutor}. */
+export interface ResolveMemberExecutorParams {
+    member: MemberIdentity;
+    /** Roster position — error messages only. */
+    index: number;
+    /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
+    label: string;
+    agentConfig: AgentConfig | undefined;
+    /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
+    roles?: ReadonlyMap<string, AgentRoleDefinition>;
+    /** Full roster, so error texts name the member by its frozen-index local id. */
+    roster?: readonly MemberIdentity[];
+}
+
+/**
+ * Resolve one roster member's executor — the SAME funnel `--agent <role>` uses
+ * (0835, extracted verbatim from the pre-0835 materializeTeam loop). An
+ * executor pin is authoritative (0543 R2, 111 R4: a pin to a disabled profile
+ * fails loudly here, before spawn); a role-only member resolves the cheapest
+ * tier-eligible executor, or fails naming the fix. Returns both the resolved
+ * kind/model (for the spec `type`/`config.model`) and the executor NAME (for
+ * the spec `executor` binding, 0537 R1).
+ */
+export function resolveMemberExecutor(params: ResolveMemberExecutorParams): {
+    resolved: ResolvedExecutor;
+    executorName: string;
+} {
+    const { member, index, label, agentConfig, roles, roster } = params;
+    if (member.executor !== undefined) {
+        let resolved: ResolvedExecutor;
+        try {
+            resolved = resolveExecutor(member.executor, agentConfig);
+        } catch (error) {
+            if (error instanceof ExecutorDisabledError) {
+                // Verbatim pre-0835-extraction wording: the member names itself
+                // by its frozen-index local id (0835 review P4).
+                const localId =
+                    roster !== undefined ? memberLocalId(member, roster, index) : (member.id ?? member.executor);
+                throw new Error(
+                    `${label} member "${localId}" pins disabled executor "${member.executor}" — ${error.message}; enable the profile or repin the member`,
+                );
+            }
+            throw error;
+        }
+        return { resolved, executorName: member.executor };
+    }
+    const role = member.role;
+    // R4 validation rejects neither-role-nor-executor at config load; this is a
+    // defensive loud error for unvalidated callers.
+    if (role === undefined) {
+        throw new Error(
+            `${label} member at index ${index} declares neither role nor executor — at least one is required`,
+        );
+    }
+    const roleTier = roles?.get(role)?.tier;
+    if (roleTier === undefined) {
+        throw new Error(
+            `${label} member at index ${index} declares role "${role}" but no Layer-1 role table is available (the role table is threaded only at the CLI / serve boundary)`,
+        );
+    }
+    const eligible = cheapestEligibleExecutors(agentConfig?.executors ?? [], roleTier);
+    const winner = eligible[0];
+    if (winner === undefined) {
+        // 111 R3: distinguish "nothing at that tier" from "all tier-eligible
+        // profiles are disabled" so the fix is actionable in one read.
+        const disabledEligible = (agentConfig?.executors ?? [])
+            .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleTier))
+            .map((e) => e.name);
+        if (disabledEligible.length > 0) {
+            throw new Error(
+                `${label} member at index ${index}: every tier-eligible executor for role "${role}" (tier ${roleTier}) is disabled (${disabledEligible.join(', ')}) — enable one via agent.executors.<name>.disabled: false`,
+            );
+        }
+        throw new Error(
+            `${label} member at index ${index}: no executor configured to serve role "${role}" (tier ${roleTier}) — define executors under agent.executors`,
+        );
+    }
+    return { resolved: { agent: winner.agent, model: winner.model }, executorName: winner.name };
+}
+
+/** Parameters for {@link materializeRoster}. */
+export interface MaterializeRosterParams {
+    /** Spec id prefix AND group tag suffix — the generated id is `<slug>-<localId>`. */
+    slug: string;
+    /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
+    label: string;
+    /** Full roster, in declaration order — ids derive over it (frozen index, 0835 R3). */
+    members: readonly RosterMember[];
+    /** Default workspace for members without their own `workspace`. */
+    defaultWorkspace: string;
+    agentConfig: AgentConfig | undefined;
+    /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
+    roles?: ReadonlyMap<string, AgentRoleDefinition>;
+    /** Existing specs on disk — hand-authored ones are never overwritten (R2). */
+    specs: readonly AgentSpec[];
+    /**
+     * The full roster, for error texts that name a member by its frozen-index
+     * local id (0835 review P4). Optional: without it, executor-pinned error
+     * texts fall back to `member.id ?? member.executor`.
+     */
+    roster?: readonly RosterMember[];
+}
+
+/**
+ * Project one roster into the `spur:generated` agent specs materialization
+ * would write — WITHOUT writing (0835). Extracted verbatim from the
+ * pre-0835 materializeTeam loop so config teams and project fleets share one
+ * implementation: id derivation delegates to `memberLocalId` (0543 R3 / 0835
+ * R3 — the frozen-index allocator config-load uses, so a converted roster
+ * produces byte-identical ids), executor resolution delegates to
+ * {@link resolveMemberExecutor}, and a pre-existing hand-authored spec under a
+ * desired id is skipped untouched (the existing skip contract).
+ */
+export function materializeRoster(params: MaterializeRosterParams): RosterProjection {
+    const { slug, label, members, defaultWorkspace, agentConfig, roles, specs } = params;
+    const desiredIds = new Set<string>();
+    const toUpsert: AgentSpec[] = [];
+
+    for (const [index, member] of members.entries()) {
+        // 0543 R3 / 0835 R3: ids derive over the FULL roster (frozen index) via
+        // the shared allocator — never re-derived per consumer.
+        const localId = memberLocalId(member, members, index);
+        const composedId = `${slug}-${localId}`;
+        desiredIds.add(composedId);
+
+        // 0835 review P3: a disabled member (fleet declarations) keeps its id
+        // in the desired set but is NOT resolved against executors — an
+        // unresolvable executor on a disabled member must not block launch.
+        // (The id stays desired here; FleetService narrows desiredIds to the
+        // enabled subset so a disabled member's stale spec is still pruned.)
+        if (member.enabled === false) continue;
+
+        // Skip hand-authored specs — they are not generated (R2)
+        const existing = specs.find((s) => s.id === composedId);
+        if (existing && !existing.tags?.includes('spur:generated')) continue;
+
+        const { resolved, executorName } = resolveMemberExecutor({
+            member,
+            index,
+            label,
+            agentConfig,
+            roles,
+            roster: members,
+        });
+        const spec: AgentSpec = {
+            id: composedId,
+            name: member.purpose ?? composedId,
+            type: resolved.agent,
+            // Executor binding (0537 R1): carry the configured executor name
+            // beside the coding-agent kind so drain can resolve back through
+            // `resolveExecutor`'s executor-first lookup. For a role-only member
+            // this is the RESOLVED executor entry (0543 R1). `type` stays:
+            // AiRunner resolves the runner from it, and pre-existing specs
+            // carry only `type` (drain falls back to it).
+            executor: executorName,
+            workspace: member.workspace ?? defaultWorkspace,
+            purpose: member.purpose && member.purpose.length > 0 ? member.purpose : `${resolved.agent} agent`,
+            tags: [`fleet:${slug}`, 'spur:generated'],
+            config: {
+                ...(resolved.model !== undefined ? { model: resolved.model } : {}),
+                // Layer-1 role (0538 R3): carried beside the executor binding so
+                // routing reads it off the spec (0543 R1 — the role and the
+                // resolved executor name are BOTH recorded).
+                ...(member.role !== undefined ? { role: member.role } : {}),
+                ...(member.systemPrompt !== undefined ? { systemPrompt: member.systemPrompt } : {}),
+                ...(member.command !== undefined ? { command: member.command } : {}),
+                ...(member.autonomy !== undefined ? { autonomy: member.autonomy } : {}),
+            },
+            ...(member.autostart !== undefined ? { autoStart: member.autostart } : {}),
+        };
+        toUpsert.push(spec);
+    }
+
+    return { toUpsert, desiredIds };
+}
+
+// ---------------------------------------------------------------------------
 // FleetService
 // ---------------------------------------------------------------------------
 
 /**
- * Application-layer read/resolve/materialize for a project's fleet declaration
- * at `<projectPath>/.spur/fleet.json` (0835 R1/R2). The declaration is the ONLY
+ * Application-layer read/resolve/materialize for a project's fleet
+ * (`agent.fleet` in the project's `.spur/config.yaml`, 0835 carrier moved by
+ * 0858 R3). The declaration is the ONLY
  * authoring surface for a project fleet; the specs this service writes into
  * `.spur/agents/` are a projection of it, never a second editable roster, and
  * hand-authored specs are never touched. Ids derive through the shared
@@ -127,45 +360,30 @@ export class FleetService {
     }
 
     /**
-     * Load the project's fleet declaration, or `null` when there is none (R7).
-     * Invalid JSON/schema fails loudly naming the file. The path is normalized
-     * (`normalizeProjectPath`) first — the storage root this reads is the
-     * project's own, canonicalized through symlinks/`~`, which IS the read-side
-     * ground-truth check; the write-side cwd check lives in {@link materialize}.
+     * Read the project's merged `agent.fleet` section, or `null` when the
+     * project declares none (R7).
+     *
+     * 0858 R3: the section comes from the project's MERGED config through the
+     * config seam (`reloadAgentConfig` at launch boundaries, else the threaded
+     * `spurConfig`), not from a file — one carrier, one read path. An invalid
+     * section never reaches here: `loadSpurConfig` fails the load naming every
+     * issue with its `agent.fleet.*` path (R8), so "absent" and "invalid" are
+     * different outcomes rather than a silently empty fleet.
      */
-    async load(projectPath: string): Promise<FleetDeclaration | null> {
-        const file = this.declarationPath(projectPath);
-        let raw: string;
-        try {
-            raw = await this.fs.readFile(file);
-        } catch (error) {
-            // R7 resolves a MISSING declaration cleanly — but EACCES/EISDIR are
-            // environment failures, not absence; they must not masquerade as
-            // `no-declaration` and silently skip the fleet.
-            if ((error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') return null;
-            throw error;
-        }
-        let json: unknown;
-        try {
-            json = JSON.parse(raw);
-        } catch (error) {
-            throw new Error(
-                `Invalid fleet declaration at ${file}: not valid JSON — ${error instanceof Error ? error.message : String(error)}`,
-            );
-        }
-        const parsed = FleetDeclarationSchema.safeParse(json);
-        if (!parsed.success) {
-            const detail = parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ');
-            throw new Error(`Invalid fleet declaration at ${file} — ${detail}`);
-        }
-        return parsed.data;
+    async load(projectPath: string): Promise<AgentFleet | null> {
+        // The path is still normalized for callers whose read follows with a
+        // project-scoped query; the section itself is config-scoped (one server
+        // serves one project, and the CLI resolves the merged config of `cwd`).
+        normalizeProjectPath(projectPath);
+        const config = await this.effectiveConfig();
+        return config?.agent?.fleet ?? null;
     }
 
     /**
      * Resolve the declaration against config: stable instance ids (R3, via the
      * shared `memberLocalId` allocator), executor resolution through the same
-     * pinned-or-tier-ladder funnel teams use, and `fsWrite`-attested write
-     * capability (R4). A missing declaration or an all-disabled roster resolves
+     * pinned-or-tier-ladder funnel teams use, the resolved model that funnel
+     * yields (0857 R5), and `fsWrite`-attested write capability (R4). A missing declaration or an all-disabled roster resolves
      * cleanly with `missing` naming the fix (R7) — it does not throw. Disabled
      * members keep their derived id (index preservation) but are not resolved
      * against executors.
@@ -174,8 +392,9 @@ export class FleetService {
         const normalized = normalizeProjectPath(projectPath);
         const declaration = await this.load(normalized);
         if (declaration === null) {
-            return { projectPath: normalized, members: [], missing: ['no-declaration'] };
+            return { projectPath: normalized, enabled: false, members: [], missing: ['no-declaration'] };
         }
+        const fleetEnabled = declaration.enabled;
 
         const config = await this.effectiveConfig();
         const agentConfig: AgentConfig | undefined = config?.agent;
@@ -187,7 +406,7 @@ export class FleetService {
         for (const [index, member] of members.entries()) {
             // R3: ids derive over the FULL roster (disabled members preserve
             // their index) via the shared allocator — never re-derived here.
-            const instanceId = `${slug}-${memberLocalId(member as NormalizedTeamMember, members as NormalizedTeamMember[], index)}`;
+            const instanceId = `${slug}-${memberLocalId(member, members, index)}`;
             if (!enabledIndexes.has(index)) {
                 resolvedMembers.push({
                     instanceId,
@@ -199,9 +418,9 @@ export class FleetService {
                 });
                 continue;
             }
-            const { executorName } = resolveMemberExecutor({
-                roster: declaration.members as NormalizedTeamMember[],
-                member: member as NormalizedTeamMember,
+            const { executorName, resolved: resolvedExecutor } = resolveMemberExecutor({
+                roster: declaration.members,
+                member,
                 index,
                 label: `Fleet "${slug}"`,
                 agentConfig,
@@ -219,14 +438,20 @@ export class FleetService {
                 instanceId,
                 ...(member.role !== undefined ? { role: member.role } : {}),
                 executor: executorName,
+                ...(resolvedExecutor.model !== undefined ? { model: resolvedExecutor.model } : {}),
                 enabled: true,
                 writeCapable: capabilityState === 'enforced' || capabilityState === 'available',
                 capabilityState,
             });
         }
 
-        const missing = members.some((m) => m.enabled !== false) ? [] : ['no-enabled-members'];
-        return { projectPath: normalized, members: resolvedMembers, missing };
+        const missing: string[] = [];
+        // 0858 R3/R5: a disabled fleet still RESOLVES its roster (the Board must be
+        // able to explain why nothing runs) but is named as disabled, which is a
+        // different state from an empty roster.
+        if (!fleetEnabled) missing.push('fleet-disabled');
+        if (!members.some((m) => m.enabled !== false)) missing.push('no-enabled-members');
+        return { projectPath: normalized, enabled: fleetEnabled, members: resolvedMembers, missing };
     }
 
     /**
@@ -255,9 +480,7 @@ export class FleetService {
             return { state: 'missing', reason: 'no-orchestrator-declared' };
         }
         const members = declaration.members;
-        const localIds = members.map((m, i) =>
-            memberLocalId(m as NormalizedTeamMember, members as NormalizedTeamMember[], i),
-        );
+        const localIds = members.map((m, i) => memberLocalId(m, members, i));
         const index = localIds.indexOf(pointer);
         if (index === -1) {
             return {
@@ -310,6 +533,10 @@ export class FleetService {
      * fleet specs that are no longer desired. Hand-authored specs are never
      * touched (R2). When `check` is true, returns the diff and writes nothing.
      *
+     * 0858 R4: `spur serve` calls this only for an ENABLED fleet; the switch
+     * itself is the serve gate (this method keeps materializing a declared
+     * roster so `--check` previews and tests stay usable).
+     *
      * This is the launch boundary, so it validates its own ground truth (R6):
      * `process.cwd()` and the storage root (`.spur/` parent) must both resolve
      * to the project — `SPUR_*` env values are context, not proof.
@@ -321,7 +548,7 @@ export class FleetService {
         const declaration = await this.load(normalized);
         if (declaration === null) {
             throw new Error(
-                `No fleet declaration at ${this.declarationPath(normalized)} — nothing to materialize (FleetService.resolve reports this as missing: ['no-declaration'])`,
+                `No agent.fleet declaration for ${normalized} — nothing to materialize (FleetService.resolve reports this as missing: ['no-declaration'])`,
             );
         }
 
@@ -329,7 +556,7 @@ export class FleetService {
         const enabled = resolved.members.filter((m) => m.enabled);
         if (enabled.length === 0) {
             throw new Error(
-                `Fleet at ${normalized} has no enabled members — set enabled: true on at least one member of ${this.declarationPath(normalized)}`,
+                `Fleet at ${normalized} has no enabled members — set enabled: true on at least one agent.fleet member`,
             );
         }
         const slug = await this.projectSlug(normalized);
@@ -344,17 +571,16 @@ export class FleetService {
         const projection = materializeRoster({
             slug,
             label: `Fleet "${slug}"`,
-            members: declaration.members as NormalizedTeamMember[],
+            members: declaration.members,
             defaultWorkspace: normalized,
             agentConfig: config?.agent,
             roles: this.ctx.roles ?? resolveAgentRoles(config?.agent),
             specs,
         });
-        // Namespace isolation (0835 review P2): fleet specs carry the
-        // `fleet:generated` marker and a `fleet:<slug>` group tag — never the
-        // `team:<slug>` group tag — so team materialization's prune
-        // (`team:<id>` + `spur:generated`) can never match a fleet spec, even
-        // when a registry name equals a config team id.
+        // Generated-spec namespace (0835 review P2; 0860 R3): fleet specs carry
+        // the `fleet:generated` marker plus a `fleet:<slug>` group tag, and the
+        // projection emits the same namespace. No other roster materializer
+        // exists any more, so a generated spec is unambiguously a fleet spec.
         for (const spec of projection.toUpsert) {
             spec.tags = [`fleet:${slug}`, 'spur:generated', 'fleet:generated'];
         }
@@ -375,17 +601,15 @@ export class FleetService {
         }
 
         // Prune orphaned generated specs: ONLY fleet-generated specs (both
-        // `spur:generated` + `fleet:generated`) not in the desired set — the
-        // predicate never consults `team:<slug>`, keeping the namespaces
-        // disjoint (0835 review P2). Hand-authored specs (no generator tag)
-        // are never deleted (R2).
+        // `spur:generated` + `fleet:generated`) not in the desired set (0835
+        // review P2). Hand-authored specs (no generator tag) are never deleted
+        // (R2).
         const orphaned = specs.filter(
             (s) => s.tags?.includes('spur:generated') && s.tags?.includes('fleet:generated') && !desiredIds.has(s.id),
         );
 
         if (opts?.check) {
             return {
-                teamId: slug,
                 upserted: toUpsert.map((s) => s.id),
                 orphaned: orphaned.map((s) => s.id),
                 written: false,
@@ -400,7 +624,6 @@ export class FleetService {
         }
 
         return {
-            teamId: slug,
             upserted: toUpsert.map((s) => s.id),
             orphaned: orphaned.map((s) => s.id),
             written: true,
@@ -410,11 +633,6 @@ export class FleetService {
     // -------------------------------------------------------------------------
     // Internals
     // -------------------------------------------------------------------------
-
-    /** Path of the declaration file for a (normalized) project path. */
-    private declarationPath(projectPath: string): string {
-        return join(normalizeProjectPath(projectPath), '.spur', 'fleet.json');
-    }
 
     /** Effective merged config — fresh reload at launch boundaries (0799 R3 parity). */
     private async effectiveConfig(): Promise<SpurConfig | null> {
@@ -437,7 +655,7 @@ export class FleetService {
      * R6 ground truth: the process cwd AND the storage root (the `.spur/`
      * parent the process resolves) must both normalize to the project. A
      * mismatch is a loud error naming both paths; `SPUR_SPEC_ID` /
-     * `SPUR_TEAM_ID` / `SPUR_RUN_ID` env values are never consulted as proof.
+     * `SPUR_RUN_ID` env values are never consulted as proof.
      */
     async assertLaunchGroundTruth(projectPath: string): Promise<void> {
         const expected = normalizeProjectPath(projectPath);

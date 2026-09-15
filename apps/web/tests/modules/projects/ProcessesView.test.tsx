@@ -23,11 +23,11 @@ afterEach(() => {
 // ── R5: the three supervised-row cases (0262 AC + 0264), ported from the retired teams suite ──
 
 describe('ProcessesView supervised rows (0852 R5)', () => {
-    test('renders supervised process rows from /api/team/processes (0262 AC)', async () => {
+    test('renders supervised process rows from /api/processes (0262 AC)', async () => {
         const processCalls: string[] = [];
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/processes')) {
+            if (url.includes('/processes')) {
                 processCalls.push(url);
                 return jsonResponse({
                     processes: [
@@ -69,7 +69,7 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
         expect(root?.textContent).toContain('Process watch list');
         expect(root?.textContent).toContain('ProcessExecutor registry');
         // Polled the team processes endpoint, not the observability tree.
-        expect(processCalls.some((u) => u.includes('/team/processes'))).toBe(true);
+        expect(processCalls.some((u) => u.includes('/processes'))).toBe(true);
         expect(processCalls.some((u) => u.includes('/observability/processes'))).toBe(false);
         // Rows are read-only — no control buttons on supervised rows.
         expect(container.querySelectorAll('[data-processes-attach-btn]').length).toBe(0);
@@ -79,7 +79,7 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
     test('shows registry one-shots alongside supervised rows and dedups the covered agent (0264)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/processes')) {
+            if (url.includes('/processes')) {
                 return jsonResponse({
                     processes: [
                         {
@@ -145,7 +145,7 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
     test('shows empty state when no processes exist (0262 edge)', async () => {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/processes')) {
+            if (url.includes('/processes')) {
                 return jsonResponse({ processes: [], count: 0, executions: [], executionsCount: 0 });
             }
             return jsonResponse({ ok: true });
@@ -158,6 +158,48 @@ describe('ProcessesView supervised rows (0852 R5)', () => {
         expect(getByText(/spur agent start/)).toBeDefined();
         expect(container.querySelector('[data-processes-tab-empty]')).not.toBeNull();
         expect(container.querySelector('[data-processes-tab-loading]')).toBeNull();
+    });
+
+    // 0860 R1: the moved route dropped the grouping id from the registry half and the strict
+    // field check rejected the whole response, so the watch list never left its loading state
+    // (the writer-side fix is pinned by the server key-shape test). The parser narrows a missing
+    // grouping id to null instead, the tolerance `parseProcessList` already documents.
+    test('tolerates a registry row without the grouping key (0860 R1)', async () => {
+        setFetchForTesting((async (input: RequestInfo | URL) => {
+            const url = input instanceof Request ? input.url : String(input);
+            if (url.includes('/processes')) {
+                return jsonResponse({
+                    processes: [],
+                    count: 0,
+                    executions: [
+                        {
+                            id: 'pe_9',
+                            label: 'git.status',
+                            command: 'git',
+                            args: ['status'],
+                            pid: 98,
+                            status: 'exited',
+                            startedAt: '2026-07-15T12:01:00.000Z',
+                            exitedAt: '2026-07-15T12:01:01.000Z',
+                            exitCode: 0,
+                            source: 'one-shot',
+                            agentId: null,
+                        },
+                    ],
+                    executionsCount: 1,
+                });
+            }
+            return jsonResponse({ ok: true });
+        }) as unknown as typeof fetch);
+
+        const { getByText, container } = render(<ProcessesView />);
+
+        await waitFor(() => expect(getByText('git.status')).toBeDefined());
+        expect(container.querySelector('[data-processes-tab-loading]')).toBeNull();
+        const keys = [...container.querySelectorAll('[data-processes-row]')].map((r) =>
+            r.getAttribute('data-processes-row'),
+        );
+        expect(keys).toEqual(['reg:pe_9']);
     });
 });
 
@@ -287,7 +329,7 @@ describe('ProcessesView filter bar (0852 R3 / 0267)', () => {
     function stubProcesses(body: unknown): void {
         setFetchForTesting((async (input: RequestInfo | URL) => {
             const url = input instanceof Request ? input.url : String(input);
-            if (url.includes('/team/processes')) return jsonResponse(body);
+            if (url.includes('/processes')) return jsonResponse(body);
             return jsonResponse({ ok: true });
         }) as unknown as typeof fetch);
     }

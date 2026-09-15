@@ -21,7 +21,7 @@ interface WatchRow {
     teamId: string | null;
 }
 
-const processesUrl = () => `${resolveApiUrl()}/team/processes`;
+const processesUrl = () => `${resolveApiUrl()}/processes`;
 
 /**
  * Build a unified watch list: supervisor rows first, then registry executions
@@ -179,7 +179,7 @@ function ProcessFilterControls({
  * (0262/0264/0267) retired with its module in 0849, restored here so the
  * capability stays reachable (feature G64 R5).
  *
- * Polls GET /api/team/processes every STATUS_POLL_MS and renders supervised
+ * Polls GET /api/processes every STATUS_POLL_MS and renders supervised
  * members plus ProcessExecutor registry one-shots through the single parse
  * module in `./MemberTerminal` (R4). Filters are ephemeral component state
  * (0267 R3); rows are read-only.

@@ -77,7 +77,7 @@ spur self serve --json                # dry probe: print { port, url, pid, runni
 ```
 
 Starts the Hono/Cloudflare-Worker server that serves the web Task Kanban and exposes the team
-supervisor API (`/api/team/*`). It is the local fallback when no remote server is configured.
+supervisor API (`/api/processes/*` + `/api/agents/*`). It is the local fallback when no remote server is configured.
 Flags: `--port <n>`, `--host <addr>`, `--no-open`, `--cwd <path>`, `--json` (a dry probe — reports
 the resolved port/url without starting the server). Full flag semantics: **[serve.md](serve.md)**.
 
@@ -95,7 +95,7 @@ directory. Only flag is `--json`.
 
 ## What this skill is NOT
 
-- **Not the team supervisor.** `self serve` hosts the supervisor API; `spur agent start` / `stop` /
+- **Not the agent supervisor.** `self serve` hosts the supervisor API; `spur agent start` / `stop` /
   `agent list --specs` are the verbs that drive and inspect it (0848). See
   **[agent.md](agent.md)**.
 - **Not a production server.** This is the local fallback. Production deployment uses the Cloudflare

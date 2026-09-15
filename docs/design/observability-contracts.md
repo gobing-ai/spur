@@ -8,7 +8,7 @@ Original section numbers remain stable; unqualified section references resolve t
 ### 7.8a Process inventory (Observability → Processes)
 
 Task **0243**. The Processes tab is a **read-only** serve-rooted runtime inventory — not the
-team control plane (`/api/team/*`).
+team control plane (`/api/processes/* + /api/agents/*`).
 
 | Surface                            | Contract                                                                                                                                                                                   |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -16,7 +16,7 @@ team control plane (`/api/team/*`).
 | Success body                       | `{ processes: ProcessInventoryRow[], rootPid: number, capturedAt: string }`                                                                                                                |
 | Row fields                         | `pid`, `ppid`, `depth`, `source` (`serve` \| `supervisor` \| `descendant`), `label`, optional `agentId`, `command` (may be truncated), `status`, `rssBytes`, `elapsedSeconds`, `startedAt` |
 | Unsupported OS                     | `501` + `{ error, code: "UNSUPPORTED_PLATFORM" }` (macOS + Linux only in v1)                                                                                                               |
-| Team APIs                          | Unchanged — `GET /api/team/processes` remains supervised-agents-only for control clients                                                                                                   |
+| Team APIs                          | Unchanged — `GET /api/processes` remains supervised-agents-only for control clients                                                                                                   |
 
 **Mechanism:** `ProcessInventoryService` (`packages/app`) walks OS processes via a
 `ProcessInspector` port (default: `ps -axo pid=,ppid=,rss=,etime=,command=`), filters to
@@ -344,13 +344,11 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 
 | Method | Path                             | Body / Query            | Response                                                                     | Notes                                                         |
 | ------ | -------------------------------- | ----------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| GET    | `/api/team/processes`            | —                       | `{ processes: [{agentId, pid, status, startedAt, exitCode}], count }`        | List supervised processes (0243).                             |
-| POST   | `/api/team/agents/:id/start`     | —                       | `{ ok, pid, status }` (201) or `{ error }` (400)                             | Spawn a supervised agent.                                     |
-| POST   | `/api/team/agents/:id/stop`      | —                       | `{ ok }` or `{ error }` (400)                                                | Stop a supervised agent.                                      |
-| POST   | `/api/team/processes/:id/stdin`  | `{ line: string }`      | `{ ok }` or `{ error }` (400)                                                | Forward a line to the process stdin.                          |
-| GET    | `/api/team/processes/:id/stream` | —                       | SSE stream of `{stream, ts, line, seq}` frames                               | Ring-buffer replay + live tail. Heartbeat every 15s.          |
-| GET    | `/api/team/teams`                | —                       | `{ teams: [{teamId, name, members: [{id, type, status, pid?, role?, executor?}]}], count }` | Teams grouped by `team:<id>` tag + config (0256 R2); member payload carries the declared role + resolved executor, omitted when unset (0544 R3/R4). |
-| GET    | `/api/team/health`               | —                       | `{ ok: true }`                                                               | Liveness probe (0256 R4). |
+| GET    | `/api/processes`            | —                       | `{ processes: [{agentId, pid, status, startedAt, exitCode}], count }`        | List supervised processes (0243).                             |
+| POST   | `/api/agents/:id/start`     | —                       | `{ ok, pid, status }` (201) or `{ error }` (400)                             | Spawn a supervised agent.                                     |
+| POST   | `/api/agents/:id/stop`      | —                       | `{ ok }` or `{ error }` (400)                                                | Stop a supervised agent.                                      |
+| POST   | `/api/processes/:id/stdin`  | `{ line: string }`      | `{ ok }` or `{ error }` (400)                                                | Forward a line to the process stdin.                          |
+| GET    | `/api/processes/:id/stream` | —                       | SSE stream of `{stream, ts, line, seq}` frames                               | Ring-buffer replay + live tail. Heartbeat every 15s.          |
 
 <a id="message-routes-appsserversrcmodulesmessagesindexts"></a>
 

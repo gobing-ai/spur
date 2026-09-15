@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Command } from '@commander-js/extra-typings';
 import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
+    AgentCoordinationService,
     type AgentRunDeps,
     AgentService,
     DeliveryReconciler,
@@ -15,7 +16,6 @@ import {
     resolvePlanningFolders,
     StrategyRuntime,
     type SystemEventBus,
-    TeamService,
     type TeamStatusEntry,
     WaitError,
     type WaitUntil,
@@ -174,7 +174,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             let targetId = specId;
             if (options.role !== undefined) {
                 const resolution = await resolveAgentSelector(
-                    () => new TeamService(context).listAgentSpecs(),
+                    () => new AgentCoordinationService(context).listAgentSpecs(),
                     context.agentConfig,
                     options.role,
                 );
@@ -210,7 +210,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         });
 
     // Per-spec process lifecycle through the `spur serve` supervisor
-    // (POST /api/team/agents/:id/{start,stop}).
+    // (POST /api/agents/:id/{start,stop}).
     agent
         .command('start')
         .description('Start a supervised agent process (requires spur serve).')
@@ -292,7 +292,7 @@ async function runAgentList(
     if (!opts.specs) {
         return svc.list({ json: opts.json ?? false, enveloped: opts.jsonEnvelope });
     }
-    const specs = await new TeamService(context).listAgentSpecs();
+    const specs = await new AgentCoordinationService(context).listAgentSpecs();
     // The CLI process never owns the supervisor — specs are spawned by `spur serve` —
     // so the local listing is only the desired state until the server's process table
     // overrides it. Unreachable server ⇒ every spec `stopped` plus a stderr warning,
@@ -353,7 +353,7 @@ async function runAgentList(
 }
 
 /**
- * Fetch live run status from the server supervisor (`GET /api/team/processes`).
+ * Fetch live run status from the server supervisor (`GET /api/processes`).
  * Returns a `Map<agentId, { status, pid }>`, or `null` when the server is
  * unreachable / returns a non-OK response — callers fall back to local specs.
  */
@@ -361,7 +361,7 @@ async function fetchServerProcesses(
     server: string,
 ): Promise<Map<string, { status: TeamStatusEntry['status']; pid: number | null }> | null> {
     try {
-        const res = await (_testFetch ?? fetch)(`${server}/team/processes`, { method: 'GET' });
+        const res = await (_testFetch ?? fetch)(`${server}/processes`, { method: 'GET' });
         if (!res.ok) return null;
         const body = (await res.json()) as {
             processes?: Array<{ agentId: string; pid: number | null; status: string }>;
@@ -414,7 +414,7 @@ async function runAgentLifecycle(
     let res: Response;
     let body: { ok?: boolean; error?: unknown; pid?: number; status?: string };
     try {
-        const url = `${options.server}/team/agents/${encodeURIComponent(agentId)}/${action}`;
+        const url = `${options.server}/agents/${encodeURIComponent(agentId)}/${action}`;
         res = await (_testFetch ?? fetch)(url, { method: 'POST' });
         body = (await res.json()) as typeof body;
     } catch (err) {
@@ -477,7 +477,7 @@ export async function settleClaimedMessages(
     outcome: 'accepted' | 'not-started',
 ): Promise<void> {
     if (claimed.length === 0) return;
-    const team = new TeamService(context);
+    const team = new AgentCoordinationService(context);
     if (outcome === 'accepted') {
         await team.settleDelivered(claimed);
         return;
@@ -623,7 +623,7 @@ async function drainIntoPrompt(
         return { prompt, flags, claimed: [] };
     }
 
-    const team = new TeamService(context);
+    const team = new AgentCoordinationService(context);
     const spec = (await team.listAgentSpecs()).find((entry) => entry.id === recipient);
     const flagsOut =
         spec === undefined ? flags : { ...flags, 'spec-id': spec.id, agent: drainAgentSelector(spec, context) };
@@ -1125,7 +1125,7 @@ async function runAgentWait(
     }
 
     const agentService = context.agentService();
-    const teamService = new TeamService(context);
+    const teamService = new AgentCoordinationService(context);
     const eventDao = new SystemEventDao(await context.getDb());
 
     const controller = new AbortController();

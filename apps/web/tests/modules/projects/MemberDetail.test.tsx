@@ -2,9 +2,11 @@ registerHappyDom();
 
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { act, cleanup, render } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
 import MemberDetail from '../../../src/modules/projects/MemberDetail';
 import type { MemberIssue, RosterEntry } from '../../../src/modules/projects/roster';
+import { ProjectContext, type ProjectFleetSnapshot } from '../../../src/modules/projects/useProjectContext';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterAll(teardownHappyDom);
@@ -30,6 +32,7 @@ process.on?.('exit', () => {
 function entry(
     issues: readonly MemberIssue[] = [],
     status: RosterEntry['observed']['status'] = 'not-started',
+    model?: string,
 ): RosterEntry {
     return {
         instanceId: 'a1',
@@ -37,6 +40,7 @@ function entry(
             instanceId: 'a1',
             role: 'planner',
             executor: 'claude',
+            ...(model !== undefined ? { model } : {}),
             enabled: true,
             writeCapable: true,
             capabilityState: 'active',
@@ -116,36 +120,59 @@ afterEach(() => {
 });
 
 describe('MemberDetail pane (0842 R3)', () => {
-    test('0851: shows the selected member model and workDir, then clears them for an unknown member', async () => {
-        const fallback = stubFetch();
-        setFetchForTesting(((input: RequestInfo | URL) => {
-            if (new URL((input as Request).url).pathname === '/api/team/teams') {
-                return Promise.resolve(
-                    Response.json({
-                        teams: [
-                            {
-                                teamId: 'project',
-                                name: 'project',
-                                workDir: '/work/project',
-                                members: [
-                                    { id: 'other', type: 'codex', status: 'unknown', model: 'wrong-model' },
-                                    { id: 'a1', type: 'claude', status: 'unknown', model: 'configured-model' },
-                                ],
-                            },
-                        ],
-                    }),
-                );
-            }
-            return fallback(input);
-        }) as typeof fetch);
-        const view = render(<MemberDetail entry={entry()} onClose={() => {}} />);
+    /** 0857: the pane reads its facts from the fleet snapshot, not a teams feed. */
+    const snapshot: ProjectFleetSnapshot = {
+        path: '/work/project',
+        enabled: true,
+        strategy: null,
+        orchestrator: { state: 'missing' },
+        members: [],
+        capacity: { total: 1, enabled: 1, writeCapable: 1, missing: [] },
+    };
+    const withFleet = (node: ReactElement) =>
+        render(
+            <ProjectContext.Provider
+                value={{ path: '/work/project', name: 'project', fleet: snapshot, state: 'ready' }}
+            >
+                {node}
+            </ProjectContext.Provider>,
+        );
+
+    test('0857: the work dir is the fleet snapshot path; the model names the declared member', async () => {
+        setFetchForTesting(stubFetch());
+        const view = withFleet(<MemberDetail entry={entry()} onClose={() => {}} />);
         await act(async () => {});
         expect(view.container.querySelector('[data-member-workdir]')?.textContent).toBe('/work/project');
-        expect(view.container.querySelector('[data-member-model]')?.textContent).toBe('configured-model');
-        view.rerender(<MemberDetail entry={{ ...entry(), instanceId: 'unknown' }} onClose={() => {}} />);
+        expect(view.container.querySelector('[data-member-model]')?.textContent).toBe('Executor default');
+        // An undeclared live process has no member to name — the pane says so instead
+        // of carrying a stale value (0851 regression, re-pointed at the new source).
+        view.rerender(
+            <ProjectContext.Provider
+                value={{ path: '/work/project', name: 'project', fleet: snapshot, state: 'ready' }}
+            >
+                <MemberDetail entry={{ ...entry(['undeclared']), declared: null }} onClose={() => {}} />
+            </ProjectContext.Provider>,
+        );
+        await act(async () => {});
+        expect(view.container.querySelector('[data-member-model]')?.textContent).toBe('Unavailable');
+    });
+
+    test("0857 R5: the model renders the declared member's resolved model", async () => {
+        setFetchForTesting(stubFetch());
+        const view = withFleet(<MemberDetail entry={entry([], 'not-started', 'claude-sonnet-4')} onClose={() => {}} />);
+        await act(async () => {});
+        // The resolved model comes from the fleet snapshot's member (0857 R5) — the
+        // pane names the model the member will actually run, not a constant.
+        expect(view.container.querySelector('[data-member-model]')?.textContent).toBe('claude-sonnet-4');
+        view.unmount();
+    });
+
+    test('an unresolvable project renders the work dir as unavailable', async () => {
+        setFetchForTesting(stubFetch());
+        const view = render(<MemberDetail entry={entry()} onClose={() => {}} />);
         await act(async () => {});
         expect(view.container.querySelector('[data-member-workdir]')?.textContent).toBe('Unavailable');
-        expect(view.container.querySelector('[data-member-model]')?.textContent).toBe('Unavailable');
+        view.unmount();
     });
 
     test('mounts terminal + member inbox read + activity read; no new transport, no POST on open', async () => {
@@ -200,7 +227,7 @@ describe('lifecycle controls (0842 R6)', () => {
         await act(async () => {
             stop.click();
         });
-        expect(calls).toContainEqual({ url: '/api/team/agents/a1/stop', method: 'POST' });
+        expect(calls).toContainEqual({ url: '/api/agents/a1/stop', method: 'POST' });
         view.unmount();
     });
 
@@ -215,7 +242,7 @@ describe('lifecycle controls (0842 R6)', () => {
         await act(async () => {
             start.click();
         });
-        expect(calls).toContainEqual({ url: '/api/team/agents/a1/start', method: 'POST' });
+        expect(calls).toContainEqual({ url: '/api/agents/a1/start', method: 'POST' });
         view.unmount();
     });
 });

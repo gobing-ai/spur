@@ -173,6 +173,62 @@
                         }
                     }
                 },
+                "fleet": {
+                    "type": "object",
+                    "description": "The project's agent fleet (G65 / 0858): the single declaration of composition, the on/off switch, and the dispatch strategy. PROJECT LAYER ONLY — a global-layer agent.fleet fails the load. Replaces the retired .spur/fleet.json (0835) and agent.team (0857). Mirrors @gobing-ai/spur-config AgentFleetSchema (Zod is SSOT).",
+                    "properties": {
+                        "enabled": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "The single fleet switch. `spur serve` materializes and autostarts the roster only when true; an absent or disabled fleet starts nothing."
+                        },
+                        "strategy": {
+                            "type": "string",
+                            "enum": ["rest", "gtd"],
+                            "default": "rest",
+                            "description": "Dispatch strategy, reconciled into project_strategy at serve start (0859). One name is added by a typed code change, not by config."
+                        },
+                        "orchestrator": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "memberLocalId of the one planner-role member carrying purpose: orchestrator. Absent = no orchestrator declared (never inferred)."
+                        },
+                        "members": {
+                            "type": "array",
+                            "default": [],
+                            "description": "The roster. Each member declares a role or an executor. `enabled: false` keeps the member's derived <role>-<n> id index but does not materialize it.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Explicit stable id; wins over the derived <role>-<n> form."
+                                    },
+                                    "role": {
+                                        "type": "string",
+                                        "enum": ["scribe", "coder", "reviewer", "planner"],
+                                        "description": "Layer-1 role id (closed vocabulary)."
+                                    },
+                                    "executor": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                        "description": "Executor profile name or a raw canonical agent type."
+                                    },
+                                    "purpose": {
+                                        "type": "string",
+                                        "description": "Free-form member purpose; `orchestrator` is the value the orchestrator pointer binds to."
+                                    },
+                                    "enabled": {
+                                        "type": "boolean",
+                                        "description": "Default true. False preserves the member's derived id index without materializing it."
+                                    }
+                                },
+                                "anyOf": [{ "required": ["role"] }, { "required": ["executor"] }]
+                            }
+                        }
+                    }
+                },
                 "roles": {
                     "type": "object",
                     "description": "Per-role tier/stage overrides over DEFAULT_AGENT_ROLES (0572 / ADR-061). Keys are the closed role vocabulary (scribe, coder, reviewer, planner); a present field replaces the default for that role, an omitted field keeps it. Mirrors @gobing-ai/spur-config AgentRoleConfigSchema (Zod is SSOT).",
@@ -189,91 +245,6 @@
                                 "minItems": 1,
                                 "items": { "type": "string", "minLength": 1 },
                                 "description": "Replacement folded-stage list for the role. Ids must come from the canonical stage registry (validated at the CLI boundary). Omit the field to keep the default — an empty array is rejected."
-                            }
-                        }
-                    }
-                },
-                "team": {
-                    "type": "object",
-                    "description": "Declarative agent teams keyed by team id (the map key is the teamId). Each team materializes a roster of agent specs (feature M). Mirrors @gobing-ai/spur-config TeamConfigSchema (Zod is SSOT).",
-                    "additionalProperties": {
-                        "type": "object",
-                        "required": ["name", "work_dir", "members"],
-                        "properties": {
-                            "name": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "Human-readable team label."
-                            },
-                            "work_dir": {
-                                "type": "string",
-                                "minLength": 1,
-                                "description": "Default member workspace. A leading `~` is tilde-expanded at load."
-                            },
-                            "autostart": {
-                                "type": "boolean",
-                                "description": "Team-wide autostart default; per-member autostart overrides (effective = member.autostart ?? team.autostart ?? false)."
-                            },
-                            "members": {
-                                "type": "array",
-                                "minItems": 1,
-                                "description": "Roster of member references (>= 1). A bare string is shorthand for { executor: <string> }; the composed agent id is <teamId>-<id ?? executor>.",
-                                "items": {
-                                    "oneOf": [
-                                        {
-                                            "type": "string",
-                                            "minLength": 1
-                                        },
-                                        {
-                                            "type": "object",
-                                            "properties": {
-                                                "executor": {
-                                                    "type": "string",
-                                                    "minLength": 1,
-                                                    "description": "Executor name \u2014 resolved against agent.executors first, else a raw canonical agent type. Optional since 0543: a role-only member (no executor) resolves one through the tier ladder at materialization; at least one of role or executor is required."
-                                                },
-                                                "id": {
-                                                    "type": "string",
-                                                    "minLength": 1,
-                                                    "description": "Local member id; composed id is <teamId>-<id ?? executor> (must match ^[a-z][a-z0-9_-]{1,63}$)."
-                                                },
-                                                "purpose": {
-                                                    "type": "string"
-                                                },
-                                                "role": {
-                                                    "type": "string",
-                                                    "enum": ["scribe", "coder", "reviewer", "planner"],
-                                                    "description": "Layer-1 role id (0538 R3): typed routing field carried onto the materialized spec; purpose stays prose."
-                                                },
-                                                "workspace": {
-                                                    "type": "string",
-                                                    "minLength": 1,
-                                                    "description": "Per-member workspace override. A leading `~` is tilde-expanded at load."
-                                                },
-                                                "model": {
-                                                    "type": "string",
-                                                    "minLength": 1
-                                                },
-                                                "autonomy": {
-                                                    "type": "string"
-                                                },
-                                                "systemPrompt": {
-                                                    "type": "string"
-                                                },
-                                                "command": {
-                                                    "type": "array",
-                                                    "items": {
-                                                        "type": "string",
-                                                        "minLength": 1
-                                                    }
-                                                },
-                                                "autostart": {
-                                                    "type": "boolean"
-                                                }
-                                            }
-                                        }
-                                    ]
-                                }
                             }
                         }
                     }

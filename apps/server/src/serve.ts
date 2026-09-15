@@ -14,9 +14,9 @@ import {
     installSystemEventCatchAll,
     JobHandlerRegistry,
     JobWorkerService,
+    normalizeProjectPath,
     ProjectRegistry,
     resolveAgentRoles,
-    resolveAutostartSet,
     resolveHistoryRefreshTimeoutMs,
     resolveKillGraceMs,
     resolvePlanningFolders,
@@ -24,6 +24,7 @@ import {
     resolveSchedulerCustomTimeoutMs,
     resolveSchedulerJobTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
+    StrategyRuntime,
     startAgentQuotaUpdateConsumer,
     type TaskActionJob,
     terminateJobChildren,
@@ -629,7 +630,6 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 webDistPath,
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
-                teamAutostart: bootConfig.teamAutostart,
                 bootConfig,
                 ...(spurConfig !== undefined ? { spurConfig } : {}),
             });
@@ -686,41 +686,69 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 appRt.logger.warn('agent quota update consumer failed to start', { error: String(error) });
             }
 
-            // Fleet declarations replace `team up`: project specs must exist before
-            // autostart reads them. Resolve after the quota drain so disabled executors
-            // are honored on the first launch; retain the fleet's ground-truth guard.
-            if (await fs.exists(join(projectRoot, '.spur', 'fleet.json'))) {
+            // `agent.fleet` replaces `team up` and the retired `.spur/fleet.json`
+            // declaration: project specs must exist before autostart reads them.
+            // Resolve after the quota drain so disabled executors are honored on the
+            // first launch; retain the fleet's ground-truth guard.
+            //
+            // 0858 R4: `agent.fleet.enabled` is the single fleet switch — absent or
+            // disabled means neither materialization nor autostart. This load is
+            // deliberately NOT the tolerant one above: a retired source (`agent.team`,
+            // a global-layer `agent.fleet`, a leftover `.spur/fleet.json`) or an invalid
+            // `agent.fleet` must fail the START (design §3 step 1), not silently serve an
+            // empty fleet.
+            const fleetConfig = await loadSpurConfig(projectRoot);
+            const fleetSection = fleetConfig.agent?.fleet;
+            const fleetService = new FleetService({
+                fs,
+                spurConfig: fleetConfig,
+                roles: resolveAgentRoles(fleetConfig?.agent),
+                openDb: () => ctx.getDb(),
+            });
+            if (fleetSection?.enabled === true) {
                 try {
-                    const fleetConfig = await loadSpurConfig(projectRoot);
-                    await new FleetService({
-                        fs,
-                        spurConfig: fleetConfig,
-                        roles: resolveAgentRoles(fleetConfig?.agent),
-                        openDb: () => ctx.getDb(),
-                    }).materialize(projectRoot);
+                    const materialized = await fleetService.materialize(projectRoot);
+                    // Operator decision (2026-09-14): every materialized member starts;
+                    // `materialize` already skipped disabled members, so the upserted ids
+                    // are exactly the autostart set — no second resolution.
+                    await ctx.supervisor().startAutostart(materialized.upserted);
                 } catch (error) {
                     await quotaConsumer?.stop();
                     throw error;
                 }
+            } else {
+                appRt.logger.info(
+                    fleetSection === undefined
+                        ? 'agent.fleet is not declared — the project fleet is neither materialized nor autostarted'
+                        : 'agent.fleet.enabled is false — the project fleet is neither materialized nor autostarted',
+                );
             }
 
-            // Team process autostart (0195/0207 + 0258 R8): members whose effective
-            // autostart is true across `agent.team.*`, unioned with the SPUR_TEAM_AUTOSTART
-            // env. `resolveAutostartSet` handles both; a load failure degrades to env-only.
-            // The same loaded config threads `agent` into the history-refresh job (J8 R2).
-            const autostartIds = resolveAutostartSet(spurConfig, env.SPUR_TEAM_AUTOSTART);
-            if (autostartIds.length > 0) {
+            // 0859 R2: the declared strategy reaches the runtime AFTER config load and fleet
+            // materialization, and only when the section exists — a project without
+            // `agent.fleet` must not have `project_strategy` written (R3). The reconcile is
+            // idempotent, so a restart with the same declaration neither bumps
+            // `strategy_version` nor emits `strategy.changed`. A failure fails the start
+            // rather than serving under a strategy the config did not declare.
+            if (fleetSection !== undefined) {
+                const strategyRuntime = new StrategyRuntime({
+                    openDb: () => ctx.getDb(),
+                    tasks: ctx.taskService(),
+                    fleet: fleetService,
+                    dependencyBlocked: async () => null,
+                });
                 try {
-                    const supervisor = ctx.supervisor();
-                    await supervisor.startAutostart(autostartIds);
-                    appRt.logger.info('Autostart agents spawned', { ids: autostartIds });
-                } catch (error) {
-                    appRt.logger.error(
-                        'Autostart failed — server will continue but supervised agents are not running',
-                        {
-                            error: String(error),
-                        },
+                    const changed = await strategyRuntime.reconcileStrategy(
+                        normalizeProjectPath(projectRoot),
+                        fleetSection.strategy,
                     );
+                    appRt.logger.info(
+                        changed
+                            ? `agent.fleet.strategy reconciled to ${fleetSection.strategy}`
+                            : `agent.fleet.strategy ${fleetSection.strategy} already active — nothing to reconcile`,
+                    );
+                } catch (error) {
+                    await quotaConsumer?.stop();
                     throw error;
                 }
             }

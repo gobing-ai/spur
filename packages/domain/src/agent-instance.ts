@@ -13,9 +13,9 @@
  * sentinels; the DB-backed reader makes those runtime fields authoritative.
  */
 export interface AgentInstance {
-    /** Deterministic full spec id: `<teamId>-<memberKey>` (0685 R4 composition). */
+    /** Deterministic full spec id (0685 R4 composition). */
     specId: string;
-    /** Owning team id parsed from the `team:<id>` tag; null when untethered. */
+    /** Retired grouping id (0860) — the `team:<id>` tag is neither parsed nor written, so this stays null. */
     teamId: string | null;
     /** Stable roster-local identity; the spec id for an untethered instance. */
     memberKey: string;
@@ -25,7 +25,7 @@ export interface AgentInstance {
     executor: string | null;
     /** Workspace path the instance runs in. */
     workspace: string;
-    /** Identity tags, e.g. `team:<id>`, `spur:generated`. */
+    /** Identity tags, e.g. `spur:generated`. */
     tags: string[];
     /** Spec config carry-through (model, role, systemPrompt, autonomy, …). */
     config: Record<string, unknown>;

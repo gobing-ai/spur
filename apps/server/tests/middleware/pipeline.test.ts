@@ -157,8 +157,8 @@ describe('csrf middleware', () => {
     function appWithMutatingRoute(): Hono {
         const app = new Hono();
         mountMiddleware(app);
-        app.post('/api/team/agents/a1/start', (c) => c.json({ ok: true }));
-        app.get('/api/team/agents', (c) => c.json({ ok: true }));
+        app.post('/api/agents/a1/start', (c) => c.json({ ok: true }));
+        app.get('/api/agents', (c) => c.json({ ok: true }));
         return app;
     }
 
@@ -179,7 +179,7 @@ describe('csrf middleware', () => {
         // request reaches the handler and its side effect fires, even though the
         // attacker cannot read the response. CORS does not prevent this.
         await withCorsEnv(undefined, async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents/a1/start', {
                 method: 'POST',
                 headers: { origin: 'https://evil.example.com' },
             });
@@ -191,7 +191,7 @@ describe('csrf middleware', () => {
         // c.req.json() is text().then(JSON.parse) — it never checks Content-Type — so
         // text/plain keeps the request "simple" while still parsing as JSON server-side.
         await withCorsEnv(undefined, async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents/a1/start', {
                 method: 'POST',
                 headers: { origin: 'https://evil.example.com', 'content-type': 'text/plain' },
                 body: JSON.stringify({ line: 'rm -rf /\n' }),
@@ -202,7 +202,7 @@ describe('csrf middleware', () => {
 
     test('allows a same-origin POST', async () => {
         await withCorsEnv(undefined, async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents/a1/start', {
                 method: 'POST',
                 headers: { origin: 'http://localhost' },
             });
@@ -212,7 +212,7 @@ describe('csrf middleware', () => {
 
     test('allows a same-origin POST identified by Sec-Fetch-Site', async () => {
         await withCorsEnv(undefined, async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents/a1/start', {
                 method: 'POST',
                 headers: { 'sec-fetch-site': 'same-origin' },
             });
@@ -224,7 +224,7 @@ describe('csrf middleware', () => {
         // The csrf origin check mirrors the CORS allowlist, so opting an origin in
         // does not leave it able to read responses but unable to send requests.
         await withCorsEnv('https://board.example.com', async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents/a1/start', {
                 method: 'POST',
                 headers: { origin: 'https://board.example.com' },
             });
@@ -237,7 +237,7 @@ describe('csrf middleware', () => {
         // guards the form-element content types. Guarding JSON too would be redundant
         // and would break non-browser clients that send no Origin.
         await withCorsEnv(undefined, async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents/a1/start', {
                 method: 'POST',
                 headers: { origin: 'https://evil.example.com', 'content-type': 'application/json' },
                 body: '{}',
@@ -248,7 +248,7 @@ describe('csrf middleware', () => {
 
     test('leaves safe methods alone', async () => {
         await withCorsEnv(undefined, async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents', {
                 headers: { origin: 'https://evil.example.com' },
             });
             expect(res.status).toBe(200);
@@ -259,7 +259,7 @@ describe('csrf middleware', () => {
         // csrf sits after cors precisely so preflight OPTIONS short-circuits in cors
         // (which returns 204 without calling next()) and never hits the csrf guard.
         await withCorsEnv('https://board.example.com', async () => {
-            const res = await appWithMutatingRoute().request('http://localhost/api/team/agents/a1/start', {
+            const res = await appWithMutatingRoute().request('http://localhost/api/agents/a1/start', {
                 method: 'OPTIONS',
                 headers: {
                     origin: 'https://board.example.com',

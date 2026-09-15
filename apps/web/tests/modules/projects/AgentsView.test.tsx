@@ -53,6 +53,7 @@ function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMemb
 function fleet(overrides: Partial<ProjectFleetSnapshot> = {}): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'orch' },
         members: [member({ instanceId: 'orch' }), member({ instanceId: 'a1' })],
@@ -119,7 +120,7 @@ describe('AgentsView roster (0842 R1)', () => {
         view.unmount();
     });
 
-    test('empty fleet explains the expected fleet.json path, tabs still mounted', async () => {
+    test('empty fleet explains the expected agent.fleet section, tabs still mounted', async () => {
         setFetchForTesting(
             stubFetch(fleet({ members: [], capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] } }), {
                 processes: [],
@@ -127,7 +128,9 @@ describe('AgentsView roster (0842 R1)', () => {
         );
         const view = harness(ctx());
         await act(async () => {});
-        expect(view.container.querySelector('[data-roster-empty]')?.textContent).toContain('.spur/fleet.json');
+        // 0858 R5: the empty-roster hint names `agent.fleet` in the project config.
+        expect(view.container.querySelector('[data-roster-empty]')?.textContent).toContain('agent.fleet');
+        expect(view.container.querySelector('[data-roster-empty]')?.textContent).toContain('.spur/config.yaml');
         expect(view.container.querySelector('[data-projects-tab="agents"]')).not.toBeNull();
         view.unmount();
     });

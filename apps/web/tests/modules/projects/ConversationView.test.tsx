@@ -26,6 +26,7 @@ afterEach(() => {
 function fleet(orchestrator: Partial<ProjectFleetSnapshot['orchestrator']> = {}): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'lead', ...orchestrator },
         members: [],

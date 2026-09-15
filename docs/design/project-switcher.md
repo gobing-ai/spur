@@ -61,15 +61,18 @@ interface ProjectEntry {
 Path matching: expand `~`, resolve realpath when the directory exists; identity key is normalized
 absolute path (name is display-only, unique by convention).
 
-### 3.1 Project fleet declaration — `<projectPath>/.spur/fleet.json` (0835)
+### 3.1 Project fleet declaration — `agent.fleet` in `<projectPath>/.spur/config.yaml` (0858)
 
 The **project** is the composition unit (ADR-116). Its agent roster is a fleet declared in the
-project's own tree, schema owned by `packages/config/src/index.ts` (`FleetDeclarationSchema`):
+project's own config, schema owned by `packages/config/src/index.ts` (`AgentFleetSchema`). The
+carrier moved from `<projectPath>/.spur/fleet.json` (0835) to the project-layer `agent.fleet`
+section in 0858; the retired file now fails the load, naming `agent.fleet` as the replacement.
 
 ```typescript
-interface FleetDeclaration {
-    version: 1;
-    members: FleetMember[];
+interface AgentFleet {
+    enabled: boolean; // default false — the single fleet switch (serve materializes/autostarts only when true)
+    strategy: 'rest' | 'gtd'; // default rest; FLEET_STRATEGIES owns the tuple, the app derives StrategyName from it
+    members: FleetMember[]; // default []
     /** memberLocalId of the planner-role member carrying purpose: 'orchestrator'; absent = none declared. */
     orchestrator?: string;
 }
@@ -83,14 +86,17 @@ interface FleetMember {
 }
 ```
 
-Invariants: a member declares `role` or `executor` (at least one); the declaration is **desired state
+Invariants: the section is **project layer only** (a global-layer `agent.fleet` fails the load); a
+member declares `role` or `executor` (at least one); the declaration is **desired state
 only** — no process or liveness fields, which are read from the occupant and supervisor surfaces;
 `enabled: false` preserves the member's derived id index so later members never silently reallocate.
 A declaration with no enabled members is valid and resolves to a fleet whose `missing` names the fix.
 
 **Resolution.** `FleetService` (`packages/app/src/services/fleet-service.ts`) owns the lifecycle:
-`load(projectPath)` reads and validates the declaration, `resolve(projectPath)` produces the
-resolved fleet plus `capacity.missing`, `resolveOrchestrator(projectPath)` returns the bound
+`load(projectPath)` reads the project's merged `agent.fleet` section, `resolve(projectPath)` produces
+the
+resolved fleet plus `capacity.missing` (`no-declaration` | `fleet-disabled` | `no-enabled-members`),
+`resolveOrchestrator(projectPath)` returns the bound
 orchestrator (absent ⇒ `missing`, never inferred by search), `materialize(projectPath, { check })`
 reconciles specs (the `spur projects list --fleet` preview is the `check` path), and
 `assertLaunchGroundTruth(projectPath)` is the serve-start gate. Delivery and capacity receipts are
@@ -134,9 +140,11 @@ Extend `startServer` / `registerServeCommand` (no new server process type):
    add registry deregister in the same teardown so intentional and crash-adjacent exits clear the port.
 5. SIGKILL: cannot run handlers; next `list`/`/api/projects` stale-heal clears the port.
 
-When `.spur/fleet.json` exists, startup materializes its enabled members after the quota-update drain
-and before autostart or HTTP admission. CLI and server share `resolveAgentRoles`, including configured
-role overrides and stage-floor validation. Invalid declarations or ground-truth mismatches stop startup.
+When `agent.fleet.enabled` is `true` in the project config, startup materializes its enabled members
+after the quota-update drain and before autostart or HTTP admission; an absent or disabled fleet
+starts nothing and logs the state once. CLI and server share `resolveAgentRoles`, including configured
+role overrides and stage-floor validation. Invalid declarations, retired sources and ground-truth
+mismatches stop startup.
 Registration preserves an existing project name because fleet mailbox IDs use that name as their prefix.
 
 **Port assignment**
@@ -153,19 +161,12 @@ Registration preserves an existing project name because fleet mailbox IDs use th
 | --- | --- |
 | `add <path> [--name]` | Upsert entry with `port: 0`; require valid Spur project root (`.spur/` or monorepo signal) |
 | `remove <name\|path>` | Drop entry (does not kill a running process — warn if port > 0) |
-| `list [--json] [--fleet]` | Table / JSON of name, path, port, running; `--fleet` (0835/0836) also resolves each project's `.spur/fleet.json` declaration, orchestrator binding and capacity under the same verb |
+| `list [--json] [--fleet]` | Table / JSON of name, path, port, running; `--fleet` (0835/0836/0858) also resolves each project's `agent.fleet` declaration, orchestrator binding and capacity under the same verb |
 | `start <name\|path> [--port]` | Spawn `spur serve` in project path (detached child); wait until health OK; update registry |
 | `stop <name\|path>` | SIGTERM process listening on registered port (or recorded pid if we add it later); set port 0 |
-| `migrate [path] [--dry-run\|--apply] [--json]` | Preview legacy team conversion by default; explicit `--apply` backs up a differing fleet declaration and writes the conversion. Conflicts exit 2. |
 
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
 resource; keep `spur serve` as the low-level launcher.
-
-Migration reads existing inbox and coordination addresses through a read-only SQLite connection,
-without schema migrations; a missing database or table contributes no addresses. It refuses conversion
-when the target registry name differs from the legacy team ID (`project-name-mismatch`): fleet spec
-IDs use the registry name as their prefix, so the names must agree to preserve mailbox identity.
-The operator resolves that conflict explicitly; migration never renames the project or merges teams.
 
 **Future launchd:** `start`/`stop` become thin clients of a daemon; `ProjectRegistry` file contract
 unchanged.
@@ -185,9 +186,10 @@ body: { "name"?: string, "path"?: string }
 → { "name", "path", "port", "running": true, "url": "http://localhost:<port>" }
 
 GET /api/project/fleet   (0840)
-→ { "path": string|null, "strategy": { "name": "rest"|"gtd", "version": number }|null,
+→ { "path": string|null, "enabled": boolean,
+    "strategy": { "name": "rest"|"gtd", "version": number }|null,
     "orchestrator": { "state": "bound-online"|"bound-offline"|"missing"|"unresolvable", "instanceId"?, "holderId"?, "reason"? },
-    "members": [{ "instanceId", "role"?, "executor", "enabled", "writeCapable", "capabilityState" }],
+    "members": [{ "instanceId", "role"?, "executor", "model"?, "enabled", "writeCapable", "capabilityState" }],
     "capacity": { "total", "enabled", "writeCapable", "missing": string[] } }
 ```
 
@@ -195,15 +197,17 @@ GET /api/project/fleet   (0840)
 - `current` marks the board’s own project.
 - Start is idempotent if already running (return existing port/url).
 - CF Worker: list may return empty / not configured; start returns 501 — registry is local-disk only.
-- `/api/project/fleet` (0840) reads the served project's own migrated db and `.spur/fleet.json`
+- `/api/project/fleet` (0840) reads the served project's own migrated db and `agent.fleet`
   through `FleetService` + `StrategyRuntime`; every fact degrades to a named state
-  (`missing`/`unresolvable`/`null`) instead of a 500.
+  (`missing`/`unresolvable`/`null`) instead of a 500. `enabled` is the declared switch (0858 R5),
+  so a disabled fleet is named rather than rendered as an empty roster.
   Role-only members use the shared role resolver against fresh merged config, including configured
   role tiers and stage-floor validation, even when the caller supplies no role table.
 - Wire contract (0840 review F1): `orchestrator` is a **claim projection** —
   `{ state, instanceId?, holderId?, reason? }`. `holderId` is intentionally included on
   `bound-online`; the raw `project_claims` row is never echoed. 0841-0843 freeze on this shape.
-- An invalid/unreadable `.spur/fleet.json` keeps FleetService's purpose-built detail (file +
+- An invalid or unreadable `agent.fleet` — including a leftover `.spur/fleet.json`, which fails the
+  load naming the file (0858) — keeps FleetService's purpose-built detail (file +
   reason) in `capacity.missing` (0840 review F3) — never a placeholder, never a 500.
 
 Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
@@ -216,6 +220,12 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
 - The managed orchestrator loop restores persisted strategy and reconciles prior deliveries
   before selection. Unconfigured projects default to `rest`; Board reads never reset strategy.
   `rest` leaves queued input unstarted and permits running work to finish and reconcile.
+- The declared strategy is the source of truth at **serve start** (0859): when `agent.fleet` is
+  present — enabled or not — `spur serve` reconciles `agent.fleet.strategy` into the
+  `project_strategy` row after config load and fleet materialization. The reconcile reads first and
+  writes only on a real difference, so a restart with an unchanged declaration neither bumps
+  `strategy_version` nor emits `strategy.changed`, and a project without the section is never
+  written to. A reconcile failure fails the start rather than serving under an undeclared strategy.
 - GTD selects `fleet:auto` tasks through the existing task checker and dependency gate, in
   priority/WBS order. Existing assignees constrain member selection; otherwise coder or
   role-unspecified members are eligible. Running instance generations consume capacity.
@@ -272,8 +282,9 @@ The Agents tab renders the served project's fleet as cards that join two
 independent facts, never collapsed into one indicator:
 
 - DECLARED — the member from `GET /api/project/fleet` (`members`, the 0840
-  wire of FleetService 0835): role, executor, `enabled`, `capabilityState`.
-- OBSERVED — the process from the existing `GET /api/team/processes` read:
+  wire of FleetService 0835): role, executor, `model` (the resolved executor
+  profile's model, omitted when it declares none), `enabled`, `capabilityState`.
+- OBSERVED — the process from the existing `GET /api/processes` read:
   `running` / `exited` / `not-started`, pid, startedAt, exitCode.
 
 They disagree in both directions (declared-but-not-running; a live process
@@ -295,12 +306,14 @@ Issue labels are frozen and shared with the global input receipts (0844):
 - Member detail: a pane (not a route, no focus trap) mounting the existing
   process/terminal (`MemberTerminal`), messages (non-consuming
   `GET /api/messages/inbox`), activity (`GET /api/events/history`), and the
-  lifecycle verbs `/api/team/*` already exposes — start, stop, stdin. Escape
+  lifecycle verbs the owning-noun routes already expose (`POST /api/agents/:id/start|stop`,
+  `POST /api/processes/:id/stdin`) — start, stop, stdin. Escape
   restores focus to the opener card.
-- Member details reuse the shared `GET /api/team/teams` feed for the selected spec's model and
-  common working directory. A missing model reports `Executor default`; an unresolved member,
-  unavailable feed, or unknown directory reports `Unavailable`. Values are matched by instance id,
-  so selecting another member cannot retain the previous member's details.
+- Member details read the fleet snapshot (`GET /api/project/fleet`, already in board context) for the
+  selected member's `model` and the project's common working directory. A declared member whose
+  resolved executor profile names no model reports `Executor default`; an undeclared live process
+  reports `Unavailable`. Values are matched by instance id, so selecting another member cannot retain
+  the previous member's details.
 - Test attributes: `data-roster-entry`, `data-roster-declared`,
   `data-roster-observed`, `data-roster-issue`, `data-member-detail`,
   `data-g6="open-member"` (the prototype selector, reused by 0845).
@@ -316,7 +329,7 @@ reference capture (`addRef({kind:'task', wbs})`) left with it. The draft's ref
 contract (`ConversationRef`, chips, submission) is unchanged.
 
 - `ProcessesView` restores the retired 0262/0264/0267 watch list. It polls
-  `GET /api/team/processes` for rows: supervised processes plus registry
+  `GET /api/processes` for rows: supervised processes plus registry
   one-shots, deduplicated by covered agentId/pid. The rows sit behind the 0267
   filter bar (running-only, source, team/unassigned), with an empty state when
   nothing matches. The wire parse stays in `MemberTerminal.tsx`

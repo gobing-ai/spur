@@ -55,8 +55,8 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 15 | `message.sent` | `team-service.ts:177` (`emitMessageEvent` → `:371`) | `ctx.teamService()` → `eventBus: eventsBus` | ✅ reachable |
-| 16 | `message.replied` | `team-service.ts:177` (`emitMessageEvent` → `:371`) | same | ✅ reachable |
+| 15 | `message.sent` | `agent-coordination-service.ts:177` (`emitMessageEvent` → `:371`) | `ctx.coordination()` → `eventBus: eventsBus` | ✅ reachable |
+| 16 | `message.replied` | `agent-coordination-service.ts:177` (`emitMessageEvent` → `:371`) | same | ✅ reachable |
 
 > Payload is metadata-only (`MessageEventPayload`); body is never included.
 
@@ -75,11 +75,11 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 | --- | --- | --- | --- | --- |
 | 21 | `agent.invoke.start` | `ai-runner.ts:138` | **Board:** `ctx.agentService()` → `events: bridgeAgentEvents(eventsBus)` → `AiRunner`. **CLI:** `spur agent run` → `agentService({ events })` → `attachSystemEventLedger` → `SystemEventDao` (task 0370) | ✅ Board **and** CLI reachable (parent-level; child-of-child is ⚠️) |
 | 22 | `agent.invoke.exit` | `ai-runner.ts:156` | same | ✅ Board **and** CLI reachable (parent-level; child-of-child is ⚠️) |
-| 23 | `agent.started` | `team-orchestrator.ts:73` | `ctx.teamService()` → `events: eventsBus` → `TeamOrchestrator({ events })` (task 0237) | ✅ reachable |
+| 23 | `agent.started` | `team-orchestrator.ts:73` | `ctx.coordination()` → `events: eventsBus` → `TeamOrchestrator({ events })` (task 0237) | ✅ reachable |
 | 24 | `agent.stopped` | `team-orchestrator.ts:86` | same | ✅ reachable |
 | 25 | `agent.message.sent` | `team-orchestrator.ts:98` | same | ✅ reachable |
 
-> **Task 0237 wiring.** `TeamServiceContext` now carries `events?: EventBus<AgentEvents>`; the server passes `events: eventsBus` in the `teamService()` accessor (`context.ts:349–353`). `TeamService.orchestrator()` forwards `{ events: this.ctx.events }` to the `TeamOrchestrator` constructor (`team-service.ts:379–384`). All three `agent.*` lifecycle events now reach the tap.
+> **Task 0237 wiring.** `AgentCoordinationServiceContext` now carries `events?: EventBus<AgentEvents>`; the server passes `events: eventsBus` in the `coordination()` accessor (`context.ts:349–353`). `AgentCoordinationService.orchestrator()` forwards `{ events: this.ctx.events }` to the `TeamOrchestrator` constructor (`agent-coordination-service.ts:379–384`). All three `agent.*` lifecycle events now reach the tap.
 >
 > **Task 0370 — CLI agent durability.** Direct `spur agent run` attaches a CLI-local EventBus and `registerSystemEventTap` (same DAO path as task 0249's `SystemEventEmitter`) so cataloged `agent.invoke.*` rows land in the shared ledger. Workflow-dispatched `agent.run` does **not** wire `AgentService.events` — its lifecycle is the single `workflow.agent` series (0365 R9 / 0370 R4 no double-count).
 >
@@ -89,15 +89,13 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 26 | `team.up` | `team-service.ts` (`materializeTeam`, written path only) | **Board:** `ctx.teamService()` → `eventBus: eventsBus`. **CLI:** none — `spur team up` was removed at the G64 cutover (2026-09-14) | ✅ Board reachable |
-| 27 | `team.down` | `team-service.ts` (`teardownTeam`) | same (no CLI path since the G64 cutover) | ✅ Board reachable |
-| 28 | `team.member.assigned` | `team-service.ts` (`assignTask`) | **Board:** same bus. **CLI:** `spur task update --assignee` → ledger attach | ✅ Board **and** CLI reachable |
-| 29 | `team.member.started` | `supervisor-service.ts` (`start`); also TeamService bridge from `agent.started` (TeamOrchestrator path) | **Board:** `ctx.supervisor()` → `eventBus: eventsBus`; orchestrator path via `teamService().events` + re-emit on `eventBus`. Member start via serve/API only on Board for supervisor | ✅ reachable (supervisor Board; orchestrator bridge when wired) |
-| 30 | `team.member.stopped` | `supervisor-service.ts` (`stop` + natural exit); TeamService bridge from `agent.stopped` | same | ✅ reachable |
+| 28 | `task.assigned` | `agent-coordination-service.ts` (`assignTask`) | **Board:** same bus. **CLI:** `spur task update --assignee` → ledger attach | ✅ Board **and** CLI reachable |
+| 29 | `agent.started` | `supervisor-service.ts` (`start`) alongside `process.spawned`; ts-ai-runner `TeamOrchestrator` on the CLI path | **Board:** `ctx.supervisor()` → `eventBus: eventsBus`; CLI path via `coordination().events` | ✅ reachable (0817/0857 rows 26-27; 0860 R2 folded the retired member-scoped pair into these names) |
+| 30 | `agent.stopped` | `supervisor-service.ts` (`stop` + natural exit, one row) | same | ✅ reachable |
 
-> **Task 0371 wiring.** Catalog entries use source/renderer `team`, default tier, `metadata-only` payloads (`teamId`, `memberId`/`memberCount`, `agentType`, `outcome` — no bodies or argv). `extractSystemEventActor` falls back to `memberId` after `actor`/`agentId` (R4). Unknown roster members persist with null unresolved fields (R5). Dry-run `materializeTeam({ check: true })` does **not** emit `team.up`.
+> **Task 0371 wiring.** Catalog entries carry their owning noun's source/renderer (`agent`, `process`, `planning`), the default tier, and `metadata-only` payloads (`memberId`, `agentType`, `taskId`, `outcome` — no bodies or argv; the retired `teamId` is gone with its producer, 0860 R2). `extractSystemEventActor` falls back to `memberId` after `actor`/`agentId` (R4). Unknown members persist with null unresolved fields (R5). 0857 removed the up/down pair with the `agent.team` roster runtime; 0860 then deleted the member-scoped started/stopped pair (it duplicated `agent.started|stopped`) and renamed assignment to `task.assigned`. The `team.member.*` family no longer exists in the catalog.
 >
-> **CLI durability.** `spur task update --assignee` (`apps/cli/src/commands/task.ts`) attaches `attachSystemEventLedger` so `team.member.assigned` rows land in the shared SQLite ledger without `spur serve` (R6). Supervisor-driven `team.member.started|stopped` remain Board-path (same as `process.*` — see Gap 1 residual).
+> **CLI durability.** `spur task update --assignee` (`apps/cli/src/commands/task.ts`) attaches `attachSystemEventLedger` so `task.assigned` rows land in the shared SQLite ledger without `spur serve` (R6). Supervisor-driven `agent.started|stopped` remain Board-path (same as `process.*` — see Gap 1 residual).
 
 ### Rule (rule.\*)
 
@@ -168,7 +166,7 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 | ⚠️ child-of-child deferred | 0 catalog rows (residual scope — see Gap 4) | Nested agent-inside-agent without surviving the 0370 bridge |
 | ❌ unwired | **0** | — |
 
-**All default-tier catalog entries now have a confirmed production emit path to the server bus and/or the shared CLI ledger**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur serve` does not perform) and the `bus.*` family (diagnostic-only by design — separate internal bus). `workflow.agent` is diagnostic-tier but reachable via `observabilityBus` (Board + CLI when the diagnostic toggle is on). Task 0370 closed the CLI gap for `workflow.*` and direct `agent.invoke.*`. Task 0371 closed the team lifecycle family (`team.up|down`, `team.member.*`) on Board + CLI mutation paths.
+**All default-tier catalog entries now have a confirmed production emit path to the server bus and/or the shared CLI ledger**, except `queue.stats` (conditional — requires scheduler-registry wiring that `spur serve` does not perform) and the `bus.*` family (diagnostic-only by design — separate internal bus). `workflow.agent` is diagnostic-tier but reachable via `observabilityBus` (Board + CLI when the diagnostic toggle is on). Task 0370 closed the CLI gap for `workflow.*` and direct `agent.invoke.*`. Task 0371 closed the agent lifecycle family on Board + CLI mutation paths; 0857 retired `team.up|down` with the `agent.team` roster runtime and 0860 deleted the member-scoped duplicate, leaving `task.assigned` + `agent.started|stopped`.
 
 ## Systemic Observability Gaps
 
@@ -183,11 +181,11 @@ The server `system_events` persistence tap (`registerSystemEventTap`) is registe
 **Task 0370 — Workflow/agent CLI durability.** `spur workflow run` / `continue` always build a CLI-local EventBus and attach `registerSystemEventTap` via `attachSystemEventLedger` (`apps/cli/src/system-event-ledger.ts`). Direct `spur agent run` does the same for `agent.invoke.*`. Same canonical serialization as the server tap; R5 failure isolation; diagnostic-tier gating (R6). Workflow-dispatched `agent.run` emits only the `workflow.agent` series (no `AgentService.events` on that path — R4).
 
 **Task 0371 — Team CLI durability.** `spur task update --assignee` attaches the same ledger bridge so
-`team.member.assigned` persists without serve (the `spur team up` / `down` / `assign` paths were
+`task.assigned` persists without serve (the `spur team up` / `down` / `assign` paths were
 removed at the G64 cutover, 2026-09-14).
-Supervisor-driven `team.member.started|stopped` remain Board-path (alongside `process.*`).
+Supervisor-driven `agent.started|stopped` remain Board-path (alongside `process.*`).
 
-**Still CLI-invisible (parent-process CLI only):** `rule.*`, `message.*`, `process.spawned/exited/stopped` (and supervisor `team.member.started|stopped`) when driven from the shell without a server bus. Those families remain Board-driven for durability.
+**Still CLI-invisible (parent-process CLI only):** `rule.*`, `message.*`, `process.spawned/exited/stopped` (and supervisor `agent.started|stopped`) when driven from the shell without a server bus. Those families remain Board-driven for durability.
 
 **Observability path classification:**
 
@@ -196,9 +194,9 @@ Supervisor-driven `team.member.started|stopped` remain Board-path (alongside `pr
 | `task.*`, `feature.*` | **Board:** server API → `planningBus` → tap. **CLI:** `SystemEventEmitter` → `SystemEventDao` (task 0249) | ✅ Board **and** CLI reachable |
 | `rule.*` | server API → `RuleService.events` → tap | ✅ when Board-driven; ❌ when CLI-driven |
 | `workflow.*` | **Board:** engine bridge + `observabilityBus` → tap. **CLI:** local bus + `attachSystemEventLedger` (task 0370) | ✅ Board **and** CLI reachable |
-| `message.*` | server API → `TeamService.eventBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
-| `team.up|down`, `team.member.assigned` | **Board:** `TeamService.eventBus` → tap. **CLI:** ledger attach (task 0371) | ✅ Board **and** CLI reachable |
-| `team.member.started|stopped` | supervisor / orchestrator bridge → tap | ✅ when Board-driven; ❌ when CLI-driven (no serve) |
+| `message.*` | server API → `AgentCoordinationService.eventBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
+| `task.assigned` | **Board:** `AgentCoordinationService.eventBus` → tap. **CLI:** ledger attach (task 0371) | ✅ Board **and** CLI reachable |
+| `agent.started|stopped` | supervisor → tap (serve path); ts-ai-runner orchestrator → tap (CLI path) | ✅ when Board-driven; ❌ when CLI-driven (no serve) |
 | `agent.*` | **Board:** `TeamOrchestrator` / `AiRunner` → tap. **CLI:** `spur agent run` → ledger (task 0370); workflow path uses `workflow.agent` only | ✅ Board **and** CLI reachable (direct agent + workflow) |
 | `process.spawned/exited/stopped` | server API → `SupervisorService.eventBus` → tap | ✅ when Board-driven; ❌ when CLI-driven |
 | `process.started` | agent-run side-channel → `NodeProcessExecutor.processEvents` → tap | ◐ only during agent runs (see Gap 3) |

@@ -32,6 +32,7 @@ afterEach(() => {
 function fleet(): ProjectFleetSnapshot {
     return {
         path: '/repo/wt',
+        enabled: true,
         strategy: { name: 'gtd', version: 1 },
         orchestrator: { state: 'bound-online', instanceId: 'lead' },
         members: [],

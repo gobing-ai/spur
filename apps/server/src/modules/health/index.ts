@@ -83,6 +83,7 @@ export const healthModule: ServerModule = {
             if (!ctx) {
                 return c.json({
                     path: null,
+                    enabled: false,
                     strategy: null,
                     orchestrator: { state: 'unresolvable', reason: 'no-project-context' },
                     members: [],
@@ -113,12 +114,17 @@ export const healthModule: ServerModule = {
 
             let members: ResolvedFleetMember[] = [];
             let missing: string[] = [];
+            // 0858 R5: the declared switch rides the snapshot so the Board can name a
+            // disabled fleet instead of rendering an empty roster. `false` is also the
+            // truth for an absent section and for an unresolvable one (degraded).
+            let fleetEnabled = false;
             let orchestrator: OrchestratorBinding = { state: 'unresolvable', reason: 'unavailable' };
             let strategy: { name: StrategyName; version: number } | null = null;
             try {
                 const resolved = await fleet.resolve(path);
                 members = resolved.members;
                 missing = resolved.missing;
+                fleetEnabled = resolved.enabled;
             } catch (err) {
                 // Unreadable/invalid declaration is an environment fact, not a
                 // 500 — keep FleetService's purpose-built detail (its load()
@@ -144,6 +150,7 @@ export const healthModule: ServerModule = {
 
             return c.json({
                 path,
+                enabled: fleetEnabled,
                 strategy,
                 orchestrator,
                 members,

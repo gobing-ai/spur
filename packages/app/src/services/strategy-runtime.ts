@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { FleetStrategy } from '@gobing-ai/spur-config';
 import {
     CoordinationRunDao,
     type DbAdapter,
@@ -16,8 +17,12 @@ import { type DispatchDecision, WRITE_SLOT_TTL_MS, WriteSlotService } from './wr
 // Frozen vocabulary (0838, feature G62 — persisted rest/GTD strategy runtime)
 // ---------------------------------------------------------------------------
 
-/** The closed strategy set (R5): adding a name is a typed code change, not a plugin. */
-export type StrategyName = 'rest' | 'gtd';
+/**
+ * The closed strategy set (R5): adding a name is a typed code change, not a plugin.
+ * Derived from the config tuple (0858 R1) — `agent.fleet.strategy` validates against
+ * the same list, so the two surfaces cannot drift into different vocabularies.
+ */
+export type StrategyName = FleetStrategy;
 
 /** An unconfigured project starts NOTHING (Q&A — CLOSED): the default is `rest`. */
 export const DEFAULT_STRATEGY: StrategyName = 'rest';
@@ -262,6 +267,24 @@ export class StrategyRuntime {
             payload_json: JSON.stringify({ projectPath: normalized, strategy: name, version: row.strategyVersion }),
         });
         return row.strategyVersion;
+    }
+
+    /**
+     * Reconcile the DECLARED strategy (0859 R1) into the persisted row: read first, write only
+     * on a real difference, and report whether the row changed.
+     *
+     * `setStrategy` bumps the version on EVERY call, so calling it unconditionally at each
+     * start would advance 0837's `stale-strategy` fence and emit a `strategy.changed` wake fact
+     * on every restart of an unchanged project. The comparison therefore belongs here, next to
+     * the row and the event, rather than at the caller.
+     */
+    async reconcileStrategy(projectPath: string, name: StrategyName): Promise<boolean> {
+        const current = await this.getStrategy(projectPath);
+        if (current.name === name) {
+            return false;
+        }
+        await this.setStrategy(projectPath, name);
+        return true;
     }
 
     /**

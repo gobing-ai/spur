@@ -10,7 +10,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type AgentConfig, TeamService } from '@gobing-ai/spur-app';
+import { type AgentConfig, AgentCoordinationService } from '@gobing-ai/spur-app';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { runAgentRun } from '../../src/commands/agent';
@@ -75,7 +75,7 @@ describe('runAgentRun --spec occupant addressing (0542 R1)', () => {
         const { tempDir, output, customCtx, run } = await setupSpecCtx();
         try {
             const ctx = customCtx as ReturnType<typeof createCliContext>;
-            await new TeamService(ctx).sendMessage(null, 'demo-spec', 'Do step 1');
+            await new AgentCoordinationService(ctx).sendMessage(null, 'demo-spec', 'Do step 1');
             const code = await runAgentRun('Main task prompt', customCtx, { drain: true, spec: 'demo-spec' });
             expect(code).toBe(0);
             expect(run).toHaveBeenCalledTimes(1);

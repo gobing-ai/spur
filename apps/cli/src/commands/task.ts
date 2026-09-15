@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    AgentCoordinationService,
     type AgentQuotaEventBus,
     aggregateBatchVerdicts,
     anchorQualify,
     type CheckFindings,
+    type CoordinationEventBus,
     CorpusMigrator,
     DependencyMutationError,
     DuplicateFollowUpError,
@@ -34,8 +36,6 @@ import {
     TaskPreparationError,
     TaskService,
     type TaskSummary,
-    TeamService,
-    type TeamServiceEventBus,
     type VerdictAggregate,
     WbsCollisionError,
 } from '@gobing-ai/spur-app';
@@ -472,8 +472,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .action(async (wbs, status, options) => {
             const svc = await makeService(context, options.folder, options.lifecycle === false);
             try {
-                // `--assignee` runs TeamService.assignTask (frontmatter write +
-                // team.member.assigned ledger event), validated at this boundary
+                // `--assignee` runs AgentCoordinationService.assignTask (frontmatter write +
+                // task.assigned ledger event), validated at this boundary
                 // against the agent-id format and the on-disk spec set.
                 if (options.assignee !== undefined) {
                     if (options.section !== undefined) {
@@ -496,7 +496,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.setExitCode(2);
                         return;
                     }
-                    const specs = await new TeamService(context).listAgentSpecs();
+                    const specs = await new AgentCoordinationService(context).listAgentSpecs();
                     if (!specs.some((spec) => spec.id === options.assignee)) {
                         writeJsonError(
                             context.output,
@@ -1664,15 +1664,15 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         });
 }
 
-/** `task update --assignee`: assign through a CLI ledger so team.member.assigned reaches system_events without serve (0371 R6). */
+/** `task update --assignee`: assign through a CLI ledger so `task.assigned` reaches system_events without serve (0371 R6; renamed by 0860 R2). */
 async function assignTaskWithLedger(wbs: string, agentId: string, context: CliContext): Promise<void> {
     const bus = new EventBus() as SystemEventBus;
     const ledger = await attachSystemEventLedger(bus, context);
     // SAFETY: one structural ts-infra EventBus behind the nominal names (ADR-044).
     const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
-    const svc = new TeamService({
+    const svc = new AgentCoordinationService({
         ...context,
-        eventBus: bus as unknown as TeamServiceEventBus,
+        eventBus: bus as unknown as CoordinationEventBus,
         roles: context.agentRoles,
         reloadAgentConfig: () => context.loadAgentConfig(context.cwd),
     });

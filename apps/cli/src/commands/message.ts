@@ -1,5 +1,6 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
+    AgentCoordinationService,
     type AgentService,
     DEFAULT_STALL_MS,
     DeliveryReconciler,
@@ -7,7 +8,6 @@ import {
     type InboxEntry,
     resolveAgentSelector,
     type SendWaitUntil,
-    TeamService,
     type UnresolvedDelivery,
     WaitError,
     waitForOccupant,
@@ -46,7 +46,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (body, options) => {
-            const svc = new TeamService(context);
+            const svc = new AgentCoordinationService(context);
             // 0685 R6: resolve --role to exactly one materialized instance spec id
             // before anything else; the rest of the flow stays identity-pinned.
             let toId = options.to;
@@ -118,7 +118,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
-            const svc = new TeamService(context);
+            const svc = new AgentCoordinationService(context);
             const code = await runMessageInbox(svc, context, options);
             context.setExitCode(code);
         });
@@ -130,7 +130,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (msgId, body, options) => {
-            const svc = new TeamService(context);
+            const svc = new AgentCoordinationService(context);
             const code = await runMessageReply(svc, context, msgId, body, options);
             context.setExitCode(code);
         });
@@ -142,7 +142,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.jsonMessageStream)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
-            const svc = new TeamService(context);
+            const svc = new AgentCoordinationService(context);
             const intervalMs = parseInterval(options.interval);
             if (intervalMs === null) {
                 writeJsonError(
@@ -178,7 +178,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
 
 /** `spur message send (--to <agent-id>|--role <name>) <body> [--from <agent-id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` */
 async function runMessageSend(
-    svc: TeamService,
+    svc: AgentCoordinationService,
     context: CliContext,
     body: string,
     options: {
@@ -364,7 +364,7 @@ async function runMessageSend(
  * Plain-text output without `--unresolved` is untouched.
  */
 async function runMessageInbox(
-    svc: TeamService,
+    svc: AgentCoordinationService,
     context: CliContext,
     options: { agent: string; json?: boolean; jsonEnvelope?: boolean; unresolved?: boolean },
 ): Promise<number> {
@@ -424,7 +424,7 @@ function widenInboxRow(
 
 /** `spur message reply <msg-id> <body> [--json]` */
 async function runMessageReply(
-    svc: TeamService,
+    svc: AgentCoordinationService,
     context: CliContext,
     msgId: string,
     body: string,
@@ -484,7 +484,7 @@ export interface WatchOutput {
  * row. Exits cleanly on signal abort or after `maxIterations` (test cap).
  */
 export async function runMessageWatch(
-    svc: TeamService,
+    svc: AgentCoordinationService,
     output: WatchOutput,
     options: WatchOptions,
     runtime: WatchRuntime = {},
@@ -627,7 +627,7 @@ async function readLatestInvokeEvent(
  */
 async function waitForPendingDrain(
     agentService: AgentService,
-    teamService: TeamService,
+    teamService: AgentCoordinationService,
     pin: { specId: string; runId: string; generation: number },
     timeoutMs: number | undefined,
     signal?: AbortSignal,

@@ -2,8 +2,13 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { handleSchedulerCustomJob, ProjectRegistry, registerSystemEventTap } from '@gobing-ai/spur-app';
-import { AgentExecutorUpdateDao, applyCliMigrations, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    handleSchedulerCustomJob,
+    normalizeProjectPath,
+    ProjectRegistry,
+    registerSystemEventTap,
+} from '@gobing-ai/spur-app';
+import { AgentExecutorUpdateDao, applyCliMigrations, ProjectStrategyDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus, type ExecutionContext, type ScheduledAction } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
@@ -143,7 +148,6 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
             events: { enabled: true, diagnostic: false },
             jobqueue: { enabled: false },
             scheduler: { enabled: false },
-            teamAutostart: [],
         }),
         runNodeApplication: (async (opts: {
             config: unknown;
@@ -267,19 +271,14 @@ describe('startServer', () => {
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
+        // 0858 R4/AC3: every upserted id reaches startAutostart — captured, not inferred.
+        const autostarted: string[] = [];
         try {
             process.chdir(project);
             await new ProjectRegistry().upsert({ path: project, name: 'legacy' });
             writeFileSync(
                 join(project, '.spur', 'config.yaml'),
-                'agent:\n  executors:\n    - name: worker\n      agent: claude\n      tier: standard\n',
-            );
-            writeFileSync(
-                join(project, '.spur', 'fleet.json'),
-                JSON.stringify({
-                    version: 1,
-                    members: [{ id: 'coder', role: 'coder' }],
-                }),
+                'agent:\n  executors:\n    - name: worker\n      agent: claude\n      tier: standard\n  fleet:\n    enabled: true\n    members:\n      - id: coder\n        role: coder\n',
             );
             const specPath = join(project, '.spur', 'agents', 'legacy-coder.yaml');
             const deps = makeDeps({
@@ -288,7 +287,15 @@ describe('startServer', () => {
                     cwd: project,
                     getDb: async () => db,
                     eventBus: () => bus,
-                    supervisor: () => ({ stopAll: async () => {} }),
+                    // 0859 R2: the boot-time strategy reconcile reads the task seam
+                    // through the same StrategyRuntime the board routes build.
+                    taskService: () => ({ list: async () => [] }),
+                    supervisor: () => ({
+                        stopAll: async () => {},
+                        startAutostart: async (ids: readonly string[]) => {
+                            autostarted.push(...ids);
+                        },
+                    }),
                 })) as unknown as StartServerDeps['createServerContext'],
                 createApp: (() => {
                     expect(existsSync(specPath)).toBe(true);
@@ -300,16 +307,162 @@ describe('startServer', () => {
                 deps,
             );
             expect(readFileSync(specPath, 'utf8')).toContain('legacy-coder');
+            expect(autostarted).toEqual(['legacy-coder']);
             expect((await new ProjectRegistry().getByPath(project))?.name).toBe('legacy');
             sigHandlers.SIGINT?.();
             await exitCalled;
-            writeFileSync(join(project, '.spur', 'fleet.json'), '{invalid');
+            writeFileSync(
+                join(project, '.spur', 'config.yaml'),
+                'agent:\n  fleet:\n    enabled: true\n    strategy: turbo\n',
+            );
             await expect(
                 startServer(
                     { port: 5009, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: project },
                     deps,
                 ),
-            ).rejects.toThrow('Invalid fleet declaration');
+            ).rejects.toThrow('agent.fleet.strategy');
+        } finally {
+            process.chdir(originalCwd);
+            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
+            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('0858 R4: agent.fleet.enabled false materializes and autostarts nothing', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const originalCwd = process.cwd();
+        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
+        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const root = mkdtempSync(join(tmpdir(), 'spur-fleet-disabled-'));
+        const project = join(root, 'project');
+        mkdirSync(join(project, '.spur'), { recursive: true });
+        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const autostarted: string[] = [];
+        try {
+            process.chdir(project);
+            await new ProjectRegistry().upsert({ path: project, name: 'legacy' });
+            // The roster is declared, but the switch is off — the declaration alone
+            // must never start processes (R4).
+            writeFileSync(
+                join(project, '.spur', 'config.yaml'),
+                'agent:\n  fleet:\n    members:\n      - id: coder\n        role: coder\n',
+            );
+            const deps = makeDeps({
+                createNodeFileSystem,
+                createServerContext: (() => ({
+                    cwd: project,
+                    getDb: async () => db,
+                    eventBus: () => new EventBus<Record<string, (event: unknown) => void>>(),
+                    // 0859 R2: the boot-time strategy reconcile reads the task seam
+                    // through the same StrategyRuntime the board routes build.
+                    taskService: () => ({ list: async () => [] }),
+                    supervisor: () => ({
+                        stopAll: async () => {},
+                        startAutostart: async (ids: readonly string[]) => {
+                            autostarted.push(...ids);
+                        },
+                    }),
+                })) as unknown as StartServerDeps['createServerContext'],
+            });
+            await startServer(
+                { port: 5010, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: project },
+                deps,
+            );
+            expect(existsSync(join(project, '.spur', 'agents', 'legacy-coder.yaml'))).toBe(false);
+            expect(autostarted).toEqual([]);
+            sigHandlers.SIGINT?.();
+            await exitCalled;
+        } finally {
+            process.chdir(originalCwd);
+            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
+            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('0859 R2/R3: the declared agent.fleet.strategy reconciles into project_strategy once, silently on restart', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const originalCwd = process.cwd();
+        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
+        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const root = mkdtempSync(join(tmpdir(), 'spur-strategy-reconcile-'));
+        // The projects must exist BEFORE normalization: `normalizeProjectPath` realpaths an
+        // existing directory, and the runtime keys its rows by that normalized path.
+        for (const project of [join(root, 'declared'), join(root, 'undeclared')]) {
+            mkdirSync(join(project, '.spur'), { recursive: true });
+        }
+        const declared = normalizeProjectPath(join(root, 'declared'));
+        const undeclared = normalizeProjectPath(join(root, 'undeclared'));
+        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const strategies = new ProjectStrategyDao(db);
+        const changed = () => new SystemEventDao(db).query({ names: ['strategy.changed'], limit: 10 });
+        const config = 'agent:\n  fleet:\n    strategy: gtd\n    members:\n      - id: coder\n        role: coder\n';
+        const bootLogs: { msg: string; data?: Record<string, unknown> }[] = [];
+        const deps = makeDeps({
+            createNodeFileSystem,
+            runNodeApplication: runNodeApplicationWith(() => capturingRuntime(bootLogs)),
+            createServerContext: (() => ({
+                getDb: async () => db,
+                eventBus: () => new EventBus<Record<string, (event: unknown) => void>>(),
+                taskService: () => ({ list: async () => [] }),
+                supervisor: () => ({ stopAll: async () => {}, startAutostart: async () => {} }),
+            })) as unknown as StartServerDeps['createServerContext'],
+        });
+        try {
+            for (const project of [declared, undeclared]) {
+                await new ProjectRegistry().upsert({ path: project, name: basename(project) });
+            }
+            writeFileSync(join(declared, '.spur', 'config.yaml'), config);
+
+            // AC1: the row starts at rest; the declared gtd reconciles into it once.
+            await strategies.set(declared, 'rest');
+            process.chdir(declared);
+            await startServer(
+                { port: 5011, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: declared },
+                deps,
+            );
+            expect(bootLogs.some((l) => l.msg === 'agent.fleet.strategy reconciled to gtd')).toBe(true);
+            const reconciled = await strategies.get(declared);
+            expect(reconciled?.strategy).toBe('gtd');
+            expect(reconciled?.strategyVersion).toBe(2); // rest v1 → gtd v2, exactly one bump
+            expect(await changed()).toHaveLength(1);
+            sigHandlers.SIGINT?.();
+            await exitCalled;
+
+            // AC2: the same declaration on restart changes neither the version nor the ledger.
+            await startServer(
+                { port: 5012, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: declared },
+                deps,
+            );
+            expect(
+                bootLogs.some((l) => l.msg === 'agent.fleet.strategy gtd already active — nothing to reconcile'),
+            ).toBe(true);
+            const restarted = await strategies.get(declared);
+            expect(restarted?.strategy).toBe('gtd');
+            expect(restarted?.strategyVersion).toBe(2);
+            expect(await changed()).toHaveLength(1);
+
+            // AC3: a project with no agent.fleet is never written to.
+            process.chdir(undeclared);
+            await startServer(
+                { port: 5013, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: undeclared },
+                deps,
+            );
+            expect(await strategies.get(undeclared)).toBeNull();
+            sigHandlers.SIGINT?.();
         } finally {
             process.chdir(originalCwd);
             if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
@@ -530,7 +683,6 @@ describe('startServer', () => {
                 events: { enabled: true, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: true },
-                teamAutostart: [],
             }),
             runNodeApplication: runNodeApplicationWith(() => {
                 const rt = fakeRuntime(logMessages, { enabled: true, adapter });
@@ -592,14 +744,13 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
                     eventBus: () => bus,
                     getDb: () => quotaDb,
                     cwd: projectRoot,
-                    supervisor: () => ({ stopAll: async () => {} }),
+                    supervisor: () => ({ stopAll: async () => {}, startAutostart: async () => {} }),
                 }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
             runNodeApplication: (async (opts: {
                 config: unknown;
@@ -680,7 +831,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createNodeFileSystem: (root: string) => {
                 captured.fsRoot = root;
@@ -754,7 +904,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: () => ctx,
             runNodeApplication: (async (opts: {
@@ -833,7 +982,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: () => ctx,
             runNodeApplication: (async (opts: {
@@ -911,7 +1059,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: () => ctx,
             runNodeApplication: (async (opts: {
@@ -961,7 +1108,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1121,7 +1267,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: true },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1209,7 +1354,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1675,7 +1819,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: true },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1964,54 +2107,6 @@ describe('startServer', () => {
             output: { write: () => {}, error: () => {} },
         });
         expect(typeof service.run).toBe('function');
-    });
-
-    test('handles autostart when autostartIds are present and logs error on failure', async () => {
-        installProcessMocks();
-        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
-
-        const prevAutostart = process.env.SPUR_TEAM_AUTOSTART;
-        process.env.SPUR_TEAM_AUTOSTART = 'agent-1,agent-2';
-
-        let startedIds: string[] = [];
-        try {
-            // Happy path
-            await startServer(
-                { port: 4400, host: '127.0.0.1', openBrowser: false, keepAlive: false },
-                makeDeps({
-                    createServerContext: (() => ({
-                        supervisor: () => ({
-                            startAutostart: async (ids: string[]) => {
-                                startedIds = ids;
-                            },
-                        }),
-                    })) as unknown as StartServerDeps['createServerContext'],
-                }),
-            );
-            expect(startedIds).toEqual(['agent-1', 'agent-2']);
-
-            // Failure path
-            await expect(
-                startServer(
-                    { port: 4401, host: '127.0.0.1', openBrowser: false, keepAlive: false },
-                    makeDeps({
-                        createServerContext: (() => ({
-                            supervisor: () => ({
-                                startAutostart: async () => {
-                                    throw new Error('Autostart supervisor error');
-                                },
-                            }),
-                        })) as unknown as StartServerDeps['createServerContext'],
-                    }),
-                ),
-            ).rejects.toThrow('Autostart supervisor error');
-        } finally {
-            if (prevAutostart !== undefined) {
-                process.env.SPUR_TEAM_AUTOSTART = prevAutostart;
-            } else {
-                delete process.env.SPUR_TEAM_AUTOSTART;
-            }
-        }
     });
 
     test('handles ProjectRegistry.upsert and setPort failures gracefully without throwing', async () => {
