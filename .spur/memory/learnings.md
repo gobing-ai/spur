@@ -1718,3 +1718,89 @@ Wrapup doc-evolve repairs (this run, 2026-09-14)
 - 04 frontmatter was last bumped at `e23efdaa` before the task's uncommitted surface edit; per §4.3 bumped version 1.74.0 → 1.75.0 (`updated_at` already 2026-09-14, today locally).
 - Parity check backing the clean report: 7 code routes (`index.ts:41,77,88,99,120,213,250`) exactly match the 7 contract table rows in observability-contracts.md; the only extra string is the prose wildcard `/api/team/*` in the intro sentence, not a row.
 - Clean (no repair): `docs/00_ADR.md` (ADR-116/ADR-052 supersession already recorded in `a1c647eae`/`7db3fb9ba`; execution work is placement-guarded out of ADRs), `docs/03_ARCHITECTURE.md` (only surviving routes named), `docs/design/cli-contracts.md` (deprecation banner at `:523`; up/down bullets accurate — CLI materializes locally via TeamService, best-effort start/stop via the surviving `/api/team/agents/:id/*` routes).
+## 2026-09-15 — G65 batch (tasks 0856–0861), feature `G65` "Fleet declaration in spur config"
+
+### 0856 — deleting a service can red the gate through coverage, not tests
+
+- Bun's `coverageThreshold` in `bunfig.toml` is enforced **per file** (0.9 functions / 0.9 lines).
+  Deleting code that was the *only* coverer of a surviving file drops that file below the floor, and
+  `bun test` then exits 1 while printing `0 fail` and **no diagnostic**. The only signal is the
+  coverage table in the log (`.spur/run/<wbs>-test-gate.log`); `--findings` stays empty, so the fix
+  hop gets a log, not a finding.
+- Here the orphaned coverer was `readAddressedSpecIds` in `packages/domain/src/dao/addressed-spec-ids.ts`
+  (its only caller was the deleted CLI wiring; its only test was the deleted `legacy-migration.test.ts`).
+  The right repair was deleting the now-consumerless export, not adding a test for dead code.
+- `spur task record` copies the verdict's evidence strings verbatim into `## Testing`, so bare
+  basenames (`loader.ts:337`, `serve.ts:620`) become `L4 Testing: Stale line anchor` warnings. Cite
+  repo-relative paths (`packages/config/src/loader.ts:337`) all the way through the answer artifact.
+
+### 0857 — a requirement can be "met" by a placeholder
+
+- R5 said `MemberDetail` renders "the work dir and model from the fleet snapshot". The work dir was
+  wired; the model rendered the constant `Executor default`, because `ResolvedFleetMember` carried no
+  model while the *retired* feed had surfaced `spec.config.model`. Tests were green and the gate was
+  green. Only an independent review found it, and an independent verify confirmed it.
+- Lesson: when a requirement names a data surface, verify the data *source* end to end — a rendering
+  fallback can make an unimplemented requirement look implemented.
+
+### 0858 — the size precheck cannot see this corpus's requirements
+
+- `task-size-precheck.ts` reported `PASS — 0 R-items, 0 Plan items` for a task with seven requirements
+  written as `- **R1** — …` bullets and a five-item `### Plan`. The heuristic that should have forced
+  a reviewer-tier executor ("> 6 requirements or ≥ 9 plan items → reviewer, or split") never fires, so
+  an oversized task enters implement and dies at the 30-minute host limit — twice, across 42 files and
+  six workspaces.
+
+### 0858 / 0860 — the 30-minute dispatch ceiling is a real budget, not a formality
+
+- Multi-workspace implementation (`packages/config` + `packages/app` + `apps/server` + `apps/cli` +
+  `apps/web` + docs) does not fit one dispatched implement pass on this platform.
+- Observed sequence ×2: dispatch → timeout with a half-migrated tree → resume (same budget) → timeout
+  again at the next workstream. The runbook's remedy (stop and record rather than raise the budget
+  without sign-off) is correct; the cheapest *recovery* once the tree typechecks is host completion of
+  the remainder, because the gate plus the independent review/verify stages still certify the result.
+- Practical guidance for the next batch: order the pass so code workstreams land before docs, run the
+  gate once at the end, and instruct the implementer to stop at a coherent boundary and report rather
+  than be killed mid-file.
+
+### 0860 — a module move can break a consumer that every test covers
+
+- Moving `/api/team/processes` to `/api/processes` dropped the `teamId` key from the payload. The web
+  `parseExecutions` requires the key to be present (`null` or string); absent → the whole response is
+  rejected and the Processes tab never leaves its loading state. **All tests stayed green** because
+  the web fixtures still carried `teamId: null`.
+- Lesson: when a route moves, pin the response **key shape** in a server test and feed the *real*
+  payload into the *real* client parser. Fixture drift hides wire-contract breaks.
+
+### 0860 / 0861 — two independent stages catch what a green gate cannot
+
+- Both the review and the verify stages independently reproduced the `teamId` break by driving the
+  real parser with the real route output; the gate was green throughout.
+- Both flagged the help-diagram `TeamSvc` phantom node, which no checker parses (the `help-doc-parity`
+  test compares flag sets; nothing renders mermaid). Derived/rendered surfaces are gate-invisible —
+  and a name-based sweep lens cannot see a stale label that isn't itself a retired name.
+
+### Corpus — the AC format decides whether coverage is machine-checkable
+
+- The feature-scoped strict preflight (`spur feature check <id> --strict`) is the only place
+  `L4.uncovered-feature-scenario` fires, and it aborts a `--feature` batch. It fired for all eight G65
+  scenarios because every task stated criteria as prose (`**ACn — …**`) with no `Scenario:` block.
+- Fix shape: each task carries the feature's own Gherkin scenarios (titles byte-identical) above its
+  task-local rows. Assignment came from each task's existing Background claim plus its requirement
+  text — 0856←R5, 0857←R2, 0858←R1/R2/R3/R8, 0859←R4, 0860←R6, 0861←R7.
+- A single-line `- **ACn — …** Given …` bullet is **not** machine-declarable: `verify-answer-lint`
+  warns that the id matches no task AC label. The parseable forms are a whole-line bold paragraph
+  (`**ACn — title**` with the prose on the next line) or a checklist row; the remediation hop's
+  answers had to cite either the verbatim scenario title or a short `**ACn` token.
+
+### Harness — engine-only action kinds on the inline path
+
+- `proof.fingerprint` and `run.artifact` are engine built-ins with no CLI surface (ADR-051). The
+  faithful inline implementation is a **repo-only scratch script** that imports the app's own
+  `computeProofInputFingerprint` and passes the same option set (`cwd`, `taskContent`, `featureContent`)
+  — no digest logic reimplemented — plus the documented registration-equivalent check for
+  `run.artifact` before `spur task record`.
+- The inline run identity comes from `plugins/sp/scripts/inline-run-setup.ts`
+  (`<runtime> <mainModule>` form of `spurBin`, i.e. `bun <tree>/apps/cli/src/index.ts`), which also
+  gives the `__definitionDigest` that the record-time proof block must match.
+

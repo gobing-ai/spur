@@ -82,7 +82,7 @@
         ├── [done] **G62**: Project fleet, orchestrator binding, and rest/GTD strategy runtime ([G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md](./G62_project-fleet-orchestrator-binding-and-rest-gtd-strategy-runtime.md))
         ├── [done] **G63**: Projects board module and global input wiring ([G63_projects-board-module-and-global-input-wiring.md](./G63_projects-board-module-and-global-input-wiring.md))
         ├── [verifying] **G64**: Retire Workspace, Inbox, Teams, and spur team ([G64_retire-workspace-inbox-teams-and-spur-team.md](./G64_retire-workspace-inbox-teams-and-spur-team.md))
-        └── [active] **G65**: Fleet declaration in spur config ([G65_fleet-declaration-in-spur-config.md](./G65_fleet-declaration-in-spur-config.md))
+        └── [verifying] **G65**: Fleet declaration in spur config ([G65_fleet-declaration-in-spur-config.md](./G65_fleet-declaration-in-spur-config.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
     ├── [active] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
         ├── [verifying] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))
