@@ -128,10 +128,6 @@ See [contract detail](design/cli-contracts.md#spur-agent-list---json---specs).
 
 See [contract detail](design/cli-contracts.md#spur-agent-doctor-agent---json---probe-health---force-refresh).
 
-#### `spur agent create <id> --type <agent-type> [--json] [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`
-
-See [contract detail](design/cli-contracts.md#spur-agent-create-id---type-agent-type---json-flags--spur-agent-edit-id--spur-agent-delete-id---force).
-
 #### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json).
@@ -140,24 +136,9 @@ See [contract detail](design/cli-contracts.md#spur-agent-wait-specid---role-name
 
 See [contract detail](design/cli-contracts.md#spur-message-send---to-id-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json--spur-message-inbox---agent-id---json--spur-message-reply-msg-id-body---json--spur-message-watch---agent-id---interval-ms---json).
 
-#### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team] [--server <url>]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
+#### `spur agent start <spec-id> [--server <url>] [--json]` · `spur agent stop <spec-id> [--server <url>] [--json]`
 
-**Deprecated (0848, feature G64).** All six verbs still run with a one-time stderr warning; the
-replacements below are the owning nouns, and `up` has no replacement verb at all:
-
-| `spur team …` | Replacement |
-| --- | --- |
-| `assign <task-id> <agent-id>` | `spur task update <wbs> --assignee <spec-id>` |
-| `status` | `spur agent list --specs` (live run-status merged) |
-| `up <team>` | no verb — fleet materialization happens at serve start; `spur projects list --fleet` is the `--check` preview |
-| `down <team>` | `spur agent stop <spec-id>` (plus the existing `spur agent delete`) |
-| `start <agent-id>` / `stop <agent-id>` | `spur agent start <spec-id>` / `spur agent stop <spec-id>` |
-
-`--by-team` is dropped with the noun: one project has one fleet, so the group key ceases to exist.
-The noun itself is removed once no caller remains (the `team-noun-retired` transition shim in
-`config/transition-shims.json` tracks that condition).
-
-See [contract detail](design/cli-contracts.md#spur-team-assign-task-id-agent-id--spur-team-status---json---by-team---server-url--spur-team-up-team---check---server-url---json--spur-team-down-team---purge---server-url---json--spur-team-start-agent-id---server-url---json--spur-team-stop-agent-id---server-url---json).
+See [contract detail](design/cli-contracts.md#spur-agent-start-spec-id---server-url---json--spur-agent-stop-spec-id---server-url---json).
 
 #### `spur rule run [--preset <name>] [--file <path>] [--rule <id>] [--fail-on <severity>] [--stop-on-first [<severity>]] [--fix-mode <mode>] [--dry-run] [--verbose] [--json]`
 
@@ -417,15 +398,13 @@ routes and their contract rows are removed by 0855).
 
 See [contract detail](design/project-switcher.md#agents-roster-two-fact-card-0842).
 
-## Work view embed and reference capture (0843)
+## Processes tab (0852)
 
-The Projects Work tab embeds the existing `KanbanBoard` / `FeaturesShell`
-unchanged — no third task-rendering path and no project filter (one server
-instance serves one project). Card selection captures a structured task
-reference into the shared draft and switches to Conversation; it never
-navigates out of the module.
+Projects tabs are Conversation | Agents | Processes. The 0843 Work wrapper was
+removed (2026-09-14): Tasks and Features are reached only through their own
+modules, and `/board/projects/work` falls back to the default tab.
 
-See [contract detail](design/project-switcher.md#work-view-embed-and-reference-capture-0843).
+See [contract detail](design/project-switcher.md#processes-tab-0852).
 
 ## Board request envelope `SPUR-REQUEST/1` (0841)
 

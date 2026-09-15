@@ -1170,6 +1170,9 @@ accepted (`misplacedGlobalKeys` reports rather than rejects it) and the `spur te
 with every verb moved to its owning noun (0848, shim `team-noun-retired`). Removing the key and the
 noun is the cutover commit's work, not this amendment's.
 
+**Note (2026-09-14):** the G64 cutover removed the `spur team` noun and its `team-noun-retired` shim;
+removing the `agent.team` key follows with the fleet-in-config feature.
+
 **Amendment (2026-08-26 · Task 0685 verification correction):** The capability catalog
 (`agent.roles`, `agent.executors`, `agent.default`) stays machine-global in
 `~/.config/spur/config.yaml`; `.spur/config.yaml` owns the project roster and optional project

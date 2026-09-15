@@ -344,8 +344,8 @@ project-relative files, never stdout/stderr bodies. A bare `spur agent run --age
 (no spec) creates no occupant and emits neither key. Slash commands like
 `/plugin:command` are translated per-agent (claude pass-through, codex `$`, pi/omp `/skill:…`,
 others including grok/hermes/opencode → `/plugin-command`).
-Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (`agent create`
-flags below), not from `run` flags. `--drain` resolves the addressed `--spec <id>` (or the legacy
+Team identity (purpose, tags, system prompt) is sourced from the agent **spec** (materialized from
+the fleet declaration, below), not from `run` flags. `--drain` resolves the addressed `--spec <id>` (or the legacy
 `--agent <spec-id>` fallback, whose warn-once notice was retired by task 0849) as an **agent
 spec id** (a different namespace from the coding-agent type), folds that spec's pending inbox
 messages into the prompt, and rewrites `--agent` to the spec's **executor name** before dispatch
@@ -445,19 +445,16 @@ ADR/0127). For **grok**, liveness is tri-state from `XAI_API_KEY` and/or non-emp
 (no CLI auth-status verb). Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
 Selector precedence inside the arg: exact executor/agent name first, role id second.
 
-<a id="spur-agent-create-id---type-agent-type---json-flags--spur-agent-edit-id--spur-agent-delete-id---force"></a>
+<a id="agent-specs"></a>
 
-#### `spur agent create <id> --type <agent-type> [--json] [flags]` · `spur agent edit <id>` · `spur agent delete <id> [--force]`
+#### Agent specs (`.spur/agents/<id>.yaml`)
 
-Manage team agent specs under `.spur/agents/<id>.yaml` (backed by `ts-ai-runner` agent-spec helpers
-and the app-layer `TeamService`).
+Agent specs are backed by `ts-ai-runner` agent-spec helpers and the app-layer `TeamService` /
+`FleetService`. There is no CLI authoring verb (`agent create|edit|delete` were removed at the G64
+cutover, 2026-09-14): specs are materialized from the fleet declaration at `spur serve` start and read
+through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63}`).
 
-- `create` — write a spec. `--type` is a canonical coding-agent id (e.g. `claude`, `codex`, `omp`,
-  `grok`, … — same set as list/doctor). Flags: `--name`, `--workspace`, `--purpose`, `--tags <a,b>`,
-  `--model`, `--autonomy`, `--system-prompt`, `--no-identity-preamble`, `--auto-start`. The id is
-  validated (`[a-z][a-z0-9_-]{1,63}`); a duplicate id is refused. An empty `--purpose` falls back to
-  `"<type> agent"` so the written YAML round-trips. `--json` emits `{ ok, spec }`.
-- **Team-materialized specs record the executor binding (0537).** `spur team up <teamId>` writes
+- **Materialized specs record the executor binding (0537).** Materialization writes
   `.spur/agents/<teamId>-<localId>.yaml` with the coding-agent kind (`type`, required for the
   runner) **and** the configured executor name (`executor: <name>` beside `type`, e.g. `codex-sol`),
   so `--drain --spec <specId>` can resolve back to the operator's model + tier. `executor` is
@@ -474,8 +471,6 @@ and the app-layer `TeamService`).
   accepted set (R5). Local id stays `id ?? executor` (0251); a role-only member derives
   `<role>-<n>` by declaration order among same-role role-only members (frozen index — a shifting
   id would break inbox addressing, 0543 R3).
-- `edit` — open the spec in `$EDITOR`, or print its path when `$EDITOR` is unset. Errors if missing.
-- `delete` — remove the spec; refuses (exit 2) without `--force`; errors (exit 1) if missing.
 
 <a id="spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json"></a>
 
@@ -516,28 +511,16 @@ Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by 
 - `reply` — look up the original message, address the reply back to its `from_id`, and thread it via
   `in_reply_to`. Rejects an unknown id, or an operator-originated message (null sender) with no peer.
 
-<a id="spur-team-assign-task-id-agent-id--spur-team-status---json---by-team---server-url--spur-team-up-team---check---server-url---json--spur-team-down-team---purge---server-url---json--spur-team-start-agent-id---server-url---json--spur-team-stop-agent-id---server-url---json"></a>
+<a id="spur-agent-start-spec-id---server-url---json--spur-agent-stop-spec-id---server-url---json"></a>
 
-#### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team] [--server <url>]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
+#### `spur agent start <spec-id> [--server <url>] [--json]` · `spur agent stop <spec-id> [--server <url>] [--json]`
 
-> **Deprecated (0848, feature G64).** Every verb keeps working with a one-time stderr warning; the
-> per-verb replacements live in [04_DESIGN](../04_DESIGN.md) § `spur team` and
-> [spur-cli team.md](../../plugins/sp/skills/spur-cli/references/team.md). The noun and this section
-> are removed once no caller remains (the `team-noun-retired` transition shim tracks that).
+Supervised process lifecycle (backed by `SupervisorService` via `spur serve`). The `spur team` noun was
+removed at the G64 cutover (2026-09-14): `assign` → `spur task update --assignee`, `status` →
+`spur agent list --specs`, `up` → fleet materialization at serve start. There is no attach verb:
+attach is `GET /api/team/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
-Team coordination (backed by `TeamService` + `SupervisorService` via `spur serve`). There is no
-`spur team attach` verb: attach is `GET /api/team/processes/:id/stream` (SSE) plus Board/HTTP clients.
-
-- `assign` — set `assignee: <agent-id>` in the YAML frontmatter of `docs/tasks/<task-id>_*.md`
-  (replacing any existing assignee). Errors if no matching task file is found.
-- `status` — list every spec under `.spur/agents/` with its run status; `--by-team` groups by
-  `agent.team.<id>`; `--json` emits `{ agents: [...] }`. Each row carries the declared `role`
-  (rendered `unset` when undeclared, 0544 R1/R4) and the spec's `executor`. When `--server` is
-  reachable, rows enrich from the supervisor; otherwise they fall back to local spec metadata.
-- `up` / `down` — materialize or tear down the roster for `<team>`. `up --check` is a dry-run.
-  `down --purge` deletes `spur:generated` specs only. When serve is reachable, `up` best-effort
-  starts autostart members and `down` stops members.
-- `start` / `stop` — POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), `SPUR_TEAM_ID` when the spec has a `team:` tag, and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/team/processes/:id/stdin`) is operator attach, not durable inbox delivery.
+- POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), `SPUR_TEAM_ID` when the spec has a `team:` tag, and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/team/processes/:id/stdin`) is operator attach, not durable inbox delivery.
 
 <a id="spur-rule-run---preset-name---file-path---rule-id---fail-on-severity---stop-on-first-severity---fix-mode-mode---dry-run---verbose---json"></a>
 

@@ -115,7 +115,7 @@ Row-level deltas from the default rule:
   without `--json` the message stays stderr prose.
 - **Class-3 top-level-`ok` payloads** move under `data` unchanged; the envelope `ok` is
   recomputed as command success (task migrate, migrate-anchors, check --corpus, noop,
-  agent create, init fresh run, projects/builder success payloads).
+  init fresh run, projects/builder success payloads).
 - **Kept raw (5 sites, not adopted):** `task verdict` (writes the `.spur/run` verdict
   artifact consumed by pipeline code, not CLI stdout), the two workflow internal event
   fingerprints (dedup keys, not CLI output), and the two `workflow show` `toJson` sites
@@ -207,16 +207,10 @@ Row-level deltas from the default rule:
 | history | analyze | 162 | flat-object (HistoryArtifact) | unwrapped |
 | history | report | 198 | flat-object (HistoryArtifact) | unwrapped |
 | history | daily | 217, 347, 356 | errors `{status:'error', message}` / `{error: detail}`; success flat-object | mixed failure conventions, none the envelope |
-| team (6) | status | 150, 329 | flat-object status doc; `--by-team` `{teams}` | unwrapped |
-| team | start | 261 | flat-object (`result.body`) | unwrapped |
-| team | stop | 307 | flat-object (`result.body`) | unwrapped |
-| team | up | 399 | flat-object `{…result, started}` | unwrapped |
-| team | down | 438 | flat-object `{…result, stopped}` | unwrapped |
-| agent (6) | list | 243 (`--specs`); plain path emits service-side (`agent-service.ts` `AgentService.list`) | flat-object `{specs:[…]}` / `{agents}` | unwrapped; plain path adopted 0697 — honors flag/env via threaded `enveloped` |
+| agent (5) | list | 243 (`--specs`); plain path emits service-side (`agent-service.ts` `AgentService.list`) | flat-object `{specs:[…]}` / `{agents}` | unwrapped; plain path adopted 0697 — honors flag/env via threaded `enveloped` |
 | agent | doctor | service-side (`agent-service.ts` `AgentService.doctor` / `renderDoctor`; errors were pseudo-envelopes `{error:{code:'agent-resolution', message}}`) | flat-object `{agents, rolesSource, cache…}`; errors pseudo-envelope | adopted 0697 — success honors flag/env; enveloped errors normalize to `INTERNAL_ERROR` with `details.cliCode: 'agent-resolution'`; raw bytes unchanged |
 | agent | run | service-side (`agent-service.ts` `handleRunOutput`); failure pseudo-envelope `{error:{code:'agent-resolution', message}}` | flat-object `{exitCode, stdout, stderr, durationMs, …}` | adopted 0697 — honors flag/env via tri-state `jsonEnvelopeFlag(flags)` (absent → `SPUR_JSON_ENVELOPE`); raw bytes unchanged |
 | agent | wait | 137, 775, 792, 802 | errors pseudo-envelope `{error:{code:'usage'\|'wait_stalled'\|…, message}}`; success flat-object `{satisfied, pin}` | near-miss error shape (no `ok`), CLI-local codes |
-| agent | create | 308 | flat-object-with-ok `{ok:true, spec}` | top-level-`ok` conflict |
 | builder (4) | bump-ver | 38, 44 | `{ok:true, verb, target, version}` / `{ok:false, verb, error:"…"}` | top-level-`ok` conflict; string error |
 | builder | drop-tags | 74, 80 | same pattern | same |
 | rule (3) | run | service-side (`packages/app/src/services/rule-service.ts` `RuleService.evaluate`, JSON branch) | flat-object `{preset, ruleCount, …engine result}` | unwrapped; adopted 0697 — honors flag/env via threaded `enveloped` |
@@ -228,12 +222,13 @@ Row-level deltas from the default rule:
 | serve (1) | serve | 37 | flat-object `{port, url, pid:null, running:false}` (dry probe) | unwrapped |
 | migrate (1) | migrate | 23 | flat-object | unwrapped |
 
-Sweep parity: 104 raw sites = 102 verb emit sites + 2 workflow internal fingerprints
+Sweep parity: 97 raw sites = 95 verb emit sites + 2 workflow internal fingerprints
 (1121/1128, footnoted above); per-module counts in the Noun column match the live sweep
-(task 26, workflow 14, feature 11, projects 10, message 10, history 9, team 6,
-agent 6, builder 4, rule 3, init 2, status/serve/migrate 1 each). The 0693 sweep recorded
+(task 26, workflow 14, feature 11, projects 10, message 10, history 9,
+agent 5, builder 4, rule 3, init 2, status/serve/migrate 1 each). The 0693 sweep recorded
 102 sites / workflow 12; task 0695 added `workflow show --format todo|mermaid` (855/864),
-re-swept 2026-08-28 during the 0693 `--force` re-verify.
+re-swept 2026-08-28 during the 0693 `--force` re-verify. The G64 cutover (2026-09-14) removed
+the six `team` sites and `agent create`.
 
 Cross-cutting deviation classes (every row is an instance of one of these):
 
