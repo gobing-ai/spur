@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { ProcessEntry, ProcessFrame } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
-import { enqueueFrame, sendHeartbeat, teamModule } from '../../../src/modules/team';
+import { enqueueFrame, processesModule, sendHeartbeat } from '../../../src/modules/processes';
 
 /**
  * Build a stub ServerContext whose supervisor returns canned process data and
@@ -73,14 +73,14 @@ function ctxWithStubs(opts: {
     return { ctx, stdinCalls, startCalls, stopCalls };
 }
 
-describe('team module', () => {
-    describe('GET /api/team/processes', () => {
+describe('processes module', () => {
+    describe('GET /api/processes', () => {
         test('returns empty list when no processes are supervised', async () => {
             const { ctx } = ctxWithStubs({});
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(new Request('http://localhost/api/team/processes'));
+            const res = await app.fetch(new Request('http://localhost/api/processes'));
             expect(res.status).toBe(200);
             const body = (await res.json()) as {
                 processes: unknown[];
@@ -105,9 +105,9 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ list: [entry] });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(new Request('http://localhost/api/team/processes'));
+            const res = await app.fetch(new Request('http://localhost/api/processes'));
             expect(res.status).toBe(200);
             const body = (await res.json()) as { processes: Array<Record<string, unknown>>; count: number };
             expect(body.count).toBe(1);
@@ -151,9 +151,9 @@ describe('team module', () => {
                 clear: () => {},
             });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(new Request('http://localhost/api/team/processes'));
+            const res = await app.fetch(new Request('http://localhost/api/processes'));
             expect(res.status).toBe(200);
             const body = (await res.json()) as {
                 processes: unknown[];
@@ -167,16 +167,65 @@ describe('team module', () => {
             expect(body.executions[0]?.source).toBe('one-shot');
             expect(body.executions[0]?.command).toBe('git');
         });
+
+        // 0860 R1: the moved route must keep the predecessor's KEY SHAPE. The Board's
+        // `parseExecutions` reads `teamId`, and an absent key rejected the whole response,
+        // wedging the Processes watch list. Asserting presence (not only the values) is what
+        // makes the client-side tolerance a backstop rather than the contract.
+        test('keeps teamId on both row families of the moved /api/processes route (0860)', async () => {
+            const entry: ProcessEntry = {
+                agentId: 'planner',
+                pid: 12345,
+                status: 'running',
+                startedAt: '2026-07-05T00:00:00.000Z',
+                exitCode: null,
+                ringBuffer: [],
+            };
+            const { ctx } = ctxWithStubs({ list: [entry] });
+            (ctx as { processRegistry: () => unknown }).processRegistry = () => ({
+                listExecutions: () => [
+                    {
+                        id: 'pe_1',
+                        command: 'git',
+                        args: ['status'],
+                        pid: 99,
+                        startedAt: '2026-07-05T01:00:00.000Z',
+                        exitCode: 0,
+                        source: 'one-shot' as const,
+                        status: 'exited' as const,
+                    },
+                ],
+                getExecution: () => undefined,
+                subscribe: () => () => {},
+                begin: () => '',
+                update: () => {},
+                complete: () => {},
+                clear: () => {},
+            });
+            const app = new Hono();
+            processesModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/processes'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                processes: Array<Record<string, unknown>>;
+                executions: Array<Record<string, unknown>>;
+            };
+            expect(Object.hasOwn(body.processes[0] ?? {}, 'teamId')).toBe(true);
+            expect(body.processes[0]?.teamId).toBeNull();
+            expect(Object.hasOwn(body.executions[0] ?? {}, 'teamId')).toBe(true);
+            expect(body.executions[0]?.teamId).toBeNull();
+        });
     });
 
-    describe('POST /api/team/processes/:id/stdin', () => {
+    describe('POST /api/processes/:id/stdin', () => {
         test('forwards a line to the supervised process stdin', async () => {
             const { ctx, stdinCalls } = ctxWithStubs({});
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
             const res = await app.fetch(
-                new Request('http://localhost/api/team/processes/planner/stdin', {
+                new Request('http://localhost/api/processes/planner/stdin', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: JSON.stringify({ line: 'hello agent' }),
@@ -191,10 +240,10 @@ describe('team module', () => {
         test('rejects 400 when "line" is missing', async () => {
             const { ctx } = ctxWithStubs({});
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
             const res = await app.fetch(
-                new Request('http://localhost/api/team/processes/planner/stdin', {
+                new Request('http://localhost/api/processes/planner/stdin', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: JSON.stringify({}),
@@ -206,10 +255,10 @@ describe('team module', () => {
         test('surfaces supervisor errors as 400', async () => {
             const { ctx } = ctxWithStubs({ writeStdinThrows: new Error('Agent "x" is not running') });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
             const res = await app.fetch(
-                new Request('http://localhost/api/team/processes/x/stdin', {
+                new Request('http://localhost/api/processes/x/stdin', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: JSON.stringify({ line: 'hi' }),
@@ -222,10 +271,10 @@ describe('team module', () => {
         test('rejects 400 when the body is not valid JSON', async () => {
             const { ctx } = ctxWithStubs({});
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
             const res = await app.fetch(
-                new Request('http://localhost/api/team/processes/planner/stdin', {
+                new Request('http://localhost/api/processes/planner/stdin', {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: '{not json',
@@ -237,13 +286,13 @@ describe('team module', () => {
         });
     });
 
-    describe('GET /api/team/processes/:id/stream', () => {
+    describe('GET /api/processes/:id/stream', () => {
         test('returns 404 when agent is not found', async () => {
             const { ctx } = ctxWithStubs({ get: undefined });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(new Request('http://localhost/api/team/processes/ghost/stream'));
+            const res = await app.fetch(new Request('http://localhost/api/processes/ghost/stream'));
             expect(res.status).toBe(404);
         });
 
@@ -262,9 +311,9 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ get: entry, getRingBuffer: frames });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(new Request('http://localhost/api/team/processes/planner/stream'));
+            const res = await app.fetch(new Request('http://localhost/api/processes/planner/stream'));
             expect(res.status).toBe(200);
             expect(res.headers.get('content-type')).toBe('text/event-stream');
 
@@ -296,12 +345,12 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ get: entry, getRingBuffer: [] });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
             const controller = new AbortController();
             controller.abort();
             const res = await app.fetch(
-                new Request('http://localhost/api/team/processes/planner/stream', { signal: controller.signal }),
+                new Request('http://localhost/api/processes/planner/stream', { signal: controller.signal }),
             );
             expect(res.status).toBe(200);
             // Drain the body so the controller teardown path runs end-to-end.
@@ -326,9 +375,9 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ get: entry, getRingBuffer: [] });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(new Request('http://localhost/api/team/processes/planner/stream'));
+            const res = await app.fetch(new Request('http://localhost/api/processes/planner/stream'));
             expect(res.status).toBe(200);
             await res.body?.cancel();
             expect(true).toBe(true);
@@ -350,8 +399,8 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ get: entry, getRingBufferFn: () => liveBuffer });
             const app = new Hono();
-            teamModule.mount(app, ctx);
-            const res = await app.fetch(new Request('http://localhost/api/team/processes/planner/stream'));
+            processesModule.mount(app, ctx);
+            const res = await app.fetch(new Request('http://localhost/api/processes/planner/stream'));
             expect(res.status).toBe(200);
             const reader = res.body?.getReader();
             expect(reader).toBeDefined();
@@ -413,8 +462,8 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ get: entry, getRingBufferFn: () => liveBuffer });
             const app = new Hono();
-            teamModule.mount(app, ctx);
-            const res = await app.fetch(new Request('http://localhost/api/team/processes/planner/stream'));
+            processesModule.mount(app, ctx);
+            const res = await app.fetch(new Request('http://localhost/api/processes/planner/stream'));
             const reader = res.body?.getReader();
             expect(reader).toBeDefined();
             if (reader) {
@@ -465,8 +514,8 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ get: entry, getRingBufferFn: () => liveBuffer });
             const app = new Hono();
-            teamModule.mount(app, ctx);
-            const res = await app.fetch(new Request('http://localhost/api/team/processes/planner/stream'));
+            processesModule.mount(app, ctx);
+            const res = await app.fetch(new Request('http://localhost/api/processes/planner/stream'));
             const reader = res.body?.getReader();
             expect(reader).toBeDefined();
             if (!reader) throw new Error('expected body reader');
@@ -512,11 +561,11 @@ describe('team module', () => {
             };
             const { ctx } = ctxWithStubs({ get: entry, getRingBuffer: [] });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
             const ac = new AbortController();
             const res = await app.fetch(
-                new Request('http://localhost/api/team/processes/planner/stream', { signal: ac.signal }),
+                new Request('http://localhost/api/processes/planner/stream', { signal: ac.signal }),
             );
             expect(res.status).toBe(200);
             const reader = res.body?.getReader();
@@ -549,15 +598,13 @@ describe('team module', () => {
         });
     });
 
-    describe('POST /api/team/agents/:id/start', () => {
+    describe('POST /api/agents/:id/start', () => {
         test('spawns the agent and returns 201 with pid and status', async () => {
             const { ctx, startCalls } = ctxWithStubs({});
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(
-                new Request('http://localhost/api/team/agents/planner/start', { method: 'POST' }),
-            );
+            const res = await app.fetch(new Request('http://localhost/api/agents/planner/start', { method: 'POST' }));
             expect(res.status).toBe(201);
             const body = (await res.json()) as { ok: boolean; pid: number; status: string };
             expect(body.ok).toBe(true);
@@ -573,26 +620,22 @@ describe('team module', () => {
                 },
             });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(
-                new Request('http://localhost/api/team/agents/planner/start', { method: 'POST' }),
-            );
+            const res = await app.fetch(new Request('http://localhost/api/agents/planner/start', { method: 'POST' }));
             expect(res.status).toBe(400);
             const body = (await res.json()) as { error: string };
             expect(body.error).toContain('spawn failed');
         });
     });
 
-    describe('POST /api/team/agents/:id/stop', () => {
+    describe('POST /api/agents/:id/stop', () => {
         test('stops the agent and returns 200 ok', async () => {
             const { ctx, stopCalls } = ctxWithStubs({});
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(
-                new Request('http://localhost/api/team/agents/planner/stop', { method: 'POST' }),
-            );
+            const res = await app.fetch(new Request('http://localhost/api/agents/planner/stop', { method: 'POST' }));
             expect(res.status).toBe(200);
             const body = (await res.json()) as { ok: boolean };
             expect(body.ok).toBe(true);
@@ -606,33 +649,29 @@ describe('team module', () => {
                 },
             });
             const app = new Hono();
-            teamModule.mount(app, ctx);
+            processesModule.mount(app, ctx);
 
-            const res = await app.fetch(
-                new Request('http://localhost/api/team/agents/planner/stop', { method: 'POST' }),
-            );
+            const res = await app.fetch(new Request('http://localhost/api/agents/planner/stop', { method: 'POST' }));
             expect(res.status).toBe(400);
             const body = (await res.json()) as { error: string };
             expect(body.error).toContain('not running');
         });
     });
 
-    describe('GET /api/team/health', () => {
-        test('returns 200 ok liveness probe', async () => {
-            const { ctx } = ctxWithStubs({});
-            const app = new Hono();
-            teamModule.mount(app, ctx);
+    // 0860 R1: the module mounts no health probe at all — the former team-scoped
+    // route was deleted rather than moved, and nothing replaced it.
+    test('mounts no health probe', async () => {
+        const { ctx } = ctxWithStubs({});
+        const app = new Hono();
+        processesModule.mount(app, ctx);
 
-            const res = await app.fetch(new Request('http://localhost/api/team/health'));
-            expect(res.status).toBe(200);
-            const body = (await res.json()) as { ok: boolean };
-            expect(body.ok).toBe(true);
-        });
+        const unowned = await app.fetch(new Request('http://localhost/api/health'));
+        expect(unowned.status).toBe(404);
     });
 
     test('module is a no-op when ctx is undefined (Cloudflare Workers gate)', () => {
         const app = new Hono();
-        teamModule.mount(app, undefined);
+        processesModule.mount(app, undefined);
         // Should not throw and should register no routes.
     });
 });

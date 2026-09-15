@@ -20,7 +20,7 @@ beforeEach(() => {
         if (url.includes('/project/requests')) {
             return Promise.resolve(new Response(JSON.stringify({ requests: [] }), { status: 200 }));
         }
-        if (url.includes('/team/processes')) {
+        if (url.includes('/processes')) {
             return Promise.resolve(new Response(JSON.stringify({ processes: [] }), { status: 200 }));
         }
         return Promise.resolve(new Response(JSON.stringify({ messages: [], count: 0 }), { status: 200 }));

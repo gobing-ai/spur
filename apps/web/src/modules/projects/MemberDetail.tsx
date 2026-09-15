@@ -8,7 +8,7 @@ import { useProjectContext } from './useProjectContext';
 
 const inboxUrl = (agent: string) => `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;
 const lifecycleUrl = (id: string, verb: 'start' | 'stop') =>
-    `${resolveApiUrl()}/team/agents/${encodeURIComponent(id)}/${verb}`;
+    `${resolveApiUrl()}/agents/${encodeURIComponent(id)}/${verb}`;
 
 /**
  * Member detail pane (0842 R3/R4/R6): mounts the EXISTING transports only —
@@ -81,7 +81,7 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
         };
     }, [entry.instanceId]);
 
-    // R6: start / stop — the verbs POST /api/team/agents/:id/{start,stop} expose,
+    // R6: start / stop — the verbs POST /api/agents/:id/{start,stop} expose,
     // disabled with the reason NAMED while the entry carries executor-unavailable
     // or unresolved. stdin rides the terminal's own input line.
     const blocked = entry.issues.includes('executor-unavailable') || entry.issues.includes('unresolved');

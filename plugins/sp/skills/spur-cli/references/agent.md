@@ -173,7 +173,7 @@ spur agent start worker-1 --json
 ```
 
 Posts to the `spur serve` supervisor API
-(`POST /api/team/agents/:id/start`) and prints `started <id> (pid=<n>, status=<s>)`. Requires a
+(`POST /api/agents/:id/start`) and prints `started <id> (pid=<n>, status=<s>)`. Requires a
 reachable `spur serve`; `--server <url>` (default `http://localhost:3000/api`) targets it. Exit `1`
 when the server is unreachable or the start fails.
 
@@ -185,7 +185,7 @@ spur agent stop worker-1 --json
 ```
 
 Posts to the supervisor API
-(`POST /api/team/agents/:id/stop`) and prints `stopped <id>`. Same server requirement and flags as
+(`POST /api/agents/:id/stop`) and prints `stopped <id>`. Same server requirement and flags as
 `start`.
 
 ## What this skill is NOT

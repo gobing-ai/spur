@@ -18,25 +18,28 @@ export const MAX_ACTIVITY_ROWS = 100;
 /** History endpoint for the activity timeline, capped at {@link MAX_ACTIVITY_ROWS}. */
 export const historyUrl = () => `${resolveApiUrl()}/events/history?limit=${MAX_ACTIVITY_ROWS}`;
 
-/** Event-name prefixes that belong on a team activity timeline (0254 R7):
- * agent lifecycle, inter-agent messages, team + supervisor process events. */
-const TEAM_EVENT_PREFIXES = ['agent.', 'message.', 'team.', 'supervisor.', 'process.'];
+/** Event-name prefixes that belong on the Board activity timeline (0254 R7; the
+ * retired `team.` prefix was dropped by 0860 R2): agent lifecycle, inter-agent
+ * messages, task assignment, supervisor process events. */
+const COORDINATION_EVENT_PREFIXES = ['agent.', 'message.', 'task.', 'supervisor.', 'process.'];
 
-function isTeamEvent(name: string): boolean {
-    return TEAM_EVENT_PREFIXES.some((prefix) => name.startsWith(prefix));
+function isCoordinationEvent(name: string): boolean {
+    return COORDINATION_EVENT_PREFIXES.some((prefix) => name.startsWith(prefix));
 }
 
 /** Runtime-narrow one raw event into an `ActivityRow`, or `null` when the shape
  * is wrong or the event is out of scope. Network input is untrusted.
  *
- * Identity resolution (0269 R9/P4): payload `teamId` / `memberLabel` / `agentType`
- * / `agentId` win; `agentId` doubles as memberLabel when memberLabel is absent.
+ * Identity resolution (0269 R9/P4): payload `memberLabel` / `agentType` / `agentId`
+ * win; `agentId` doubles as memberLabel when memberLabel is absent. Rows persisted
+ * before 0860 still carry a `teamId`, so the reader tolerates it (R2: no data
+ * migration, readers stay generic).
  */
 export function toRow(value: unknown): ActivityRow | null {
     if (value === null || typeof value !== 'object') return null;
     const obj = value as Record<string, unknown>;
     if (typeof obj.eventName !== 'string' || typeof obj.occurredAt !== 'string') return null;
-    if (!isTeamEvent(obj.eventName)) return null;
+    if (!isCoordinationEvent(obj.eventName)) return null;
     const payload =
         obj.payload !== null && typeof obj.payload === 'object' ? (obj.payload as Record<string, unknown>) : null;
     const teamId =

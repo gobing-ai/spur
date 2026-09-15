@@ -19,7 +19,7 @@ Shapes + Wave-1/2 implementation notes. Rationale: `00` ADR-057 and `03` §17. W
 | --- | --- | --- |
 | `spur message send\|inbox\|reply\|watch` | Durable command plane (`queued → injected`) | Live TUI prompt |
 | `spur agent run` / `spur agent loop` | Occupant invoke; loop drains inbox | Peer socket |
-| `POST /api/team/processes/:id/stdin` + process SSE | Operator attach / process pipe | Agent-to-agent command bus |
+| `POST /api/processes/:id/stdin` + process SSE | Operator attach / process pipe | Agent-to-agent command bus |
 | `system_events` + EventBus | Wait follow-set after a snapshot sequence | A second EventHub ring |
 | Board Inbox `mergeTimeline` | Retired by 0849 with the Inbox module (ADR-116 supersedes ADR-052); its two inputs survive as separate Projects panes | Wait or send authority |
 
@@ -70,7 +70,6 @@ Every `spur agent loop` / supervised `agent run` process receives, in addition t
 | Variable | Value |
 | --- | --- |
 | `SPUR_SPEC_ID` | Occupant `specId` |
-| `SPUR_TEAM_ID` | `team:<id>` tag when present; unset otherwise |
 | `SPUR_RUN_ID` | Current `runId` (updated each loop iteration before invoke) |
 | `SPUR_SERVE_URL` | Supervisor API base when `spur serve` launched the process |
 
@@ -165,7 +164,7 @@ spur message send <body> (--to <specId>|--role <name>) [--from <id>] --wait --un
 > `followSystemEventsAfter` helper (see §8); the identity + stall/timeout contract above is
 > unchanged (0530's wait tests still pass verbatim).
 
-Long waits stay on the CLI/connection side. `TeamService` / `AgentService` methods remain short.
+Long waits stay on the CLI/connection side. `AgentCoordinationService` / `AgentService` methods remain short.
 
 `timeout_ms` has no default on standalone wait (may wait until signal). `send --wait` from a non-working occupant uses a 5s stall budget unless `--timeout` is ≤ 5s (then the caller timeout wins).
 
@@ -213,7 +212,7 @@ Board SSE (roadmap S6/W6) is **not** a prerequisite. CLI wait may poll the ledge
 ## 10. Files likely to change (implementers)
 
 - `packages/app/src/services/agent-service.ts` — mint/retain occupant; emit invoke events with pin
-- `packages/app/src/services/team-service.ts` — send-wait snapshot; do not add a third store
+- `packages/app/src/services/agent-coordination-service.ts` — send-wait snapshot; do not add a third store
 - `packages/app/src/services/supervisor-service.ts` — env injection; generation bump on replace
 - `apps/cli/src/commands/agent.ts` — drain rewrite; wait verb (Wave 2)
 - `apps/cli/src/commands/message.ts` — `--wait` (Wave 2)

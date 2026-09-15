@@ -4,11 +4,16 @@ import {
     type AgentFleet,
     type AgentRoleName,
     type ExecutionCapabilityState,
+    ExecutorDisabledError,
+    type MemberIdentity,
     memberLocalId,
+    type ResolvedExecutor,
+    resolveExecutor,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
-import { type DbAdapter, type ProjectClaim, ProjectClaimDao } from '@gobing-ai/spur-domain';
+import { type DbAdapter, isTierEligible, type ProjectClaim, ProjectClaimDao } from '@gobing-ai/spur-domain';
 import {
+    type AgentSpec,
     deleteAgentSpec as deleteAgentSpecFile,
     loadAgentSpecs,
     saveAgentSpec,
@@ -16,15 +21,14 @@ import {
 } from '@gobing-ai/ts-ai-runner';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolveAgentRoles } from './agent-roles';
-import type { AgentRoleDefinition } from './agent-service';
+import { type AgentRoleDefinition, cheapestEligibleExecutors, getExecutorTier } from './agent-service';
 import { normalizeProjectPath, ProjectRegistry } from './project-registry';
-import { type MaterializeResult, materializeRoster, resolveMemberExecutor } from './team-service';
 
 // ---------------------------------------------------------------------------
 // Public types (0835)
 // ---------------------------------------------------------------------------
 
-/** Context injected into FleetService — the config/role slice of TeamServiceContext. */
+/** Context injected into FleetService — the config/role slice of the coordination service context. */
 export interface FleetServiceContext {
     /**
      * Merged global+project config threaded from the composition root (A5 /
@@ -112,6 +116,222 @@ export interface OrchestratorBinding {
      * inference).
      */
     reason?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Shared roster projection (0835) — moved from the retired team service (0860 R3)
+// ---------------------------------------------------------------------------
+
+/**
+ * The member shape the shared roster projection consumes: the identity fields
+ * {@link memberLocalId} derives from, plus the optional per-spec overrides the
+ * projection carries onto the generated spec. The project fleet declaration's
+ * `FleetMember` (config) is structurally assignable. (0857: the retired team
+ * roster union that previously supplied these fields is gone; the fleet
+ * declaration is the only member source.)
+ */
+export interface RosterMember extends MemberIdentity {
+    purpose?: string;
+    workspace?: string;
+    systemPrompt?: string;
+    command?: string[];
+    autonomy?: string;
+    autostart?: boolean;
+    /** Fleet-only (0835): `false` keeps the derived id but skips materialization. */
+    enabled?: boolean;
+}
+
+/** Result of materializing a roster: the project fleet's generated spec set (R2). */
+export interface MaterializeResult {
+    upserted: string[];
+    orphaned: string[];
+    written: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Shared roster projection (0835)
+// ---------------------------------------------------------------------------
+
+/** Result of the shared roster projection: specs to upsert + the desired id set. */
+export interface RosterProjection {
+    toUpsert: AgentSpec[];
+    desiredIds: Set<string>;
+}
+
+/** Parameters for {@link resolveMemberExecutor}. */
+export interface ResolveMemberExecutorParams {
+    member: MemberIdentity;
+    /** Roster position — error messages only. */
+    index: number;
+    /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
+    label: string;
+    agentConfig: AgentConfig | undefined;
+    /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
+    roles?: ReadonlyMap<string, AgentRoleDefinition>;
+    /** Full roster, so error texts name the member by its frozen-index local id. */
+    roster?: readonly MemberIdentity[];
+}
+
+/**
+ * Resolve one roster member's executor — the SAME funnel `--agent <role>` uses
+ * (0835, extracted verbatim from the pre-0835 materializeTeam loop). An
+ * executor pin is authoritative (0543 R2, 111 R4: a pin to a disabled profile
+ * fails loudly here, before spawn); a role-only member resolves the cheapest
+ * tier-eligible executor, or fails naming the fix. Returns both the resolved
+ * kind/model (for the spec `type`/`config.model`) and the executor NAME (for
+ * the spec `executor` binding, 0537 R1).
+ */
+export function resolveMemberExecutor(params: ResolveMemberExecutorParams): {
+    resolved: ResolvedExecutor;
+    executorName: string;
+} {
+    const { member, index, label, agentConfig, roles, roster } = params;
+    if (member.executor !== undefined) {
+        let resolved: ResolvedExecutor;
+        try {
+            resolved = resolveExecutor(member.executor, agentConfig);
+        } catch (error) {
+            if (error instanceof ExecutorDisabledError) {
+                // Verbatim pre-0835-extraction wording: the member names itself
+                // by its frozen-index local id (0835 review P4).
+                const localId =
+                    roster !== undefined ? memberLocalId(member, roster, index) : (member.id ?? member.executor);
+                throw new Error(
+                    `${label} member "${localId}" pins disabled executor "${member.executor}" — ${error.message}; enable the profile or repin the member`,
+                );
+            }
+            throw error;
+        }
+        return { resolved, executorName: member.executor };
+    }
+    const role = member.role;
+    // R4 validation rejects neither-role-nor-executor at config load; this is a
+    // defensive loud error for unvalidated callers.
+    if (role === undefined) {
+        throw new Error(
+            `${label} member at index ${index} declares neither role nor executor — at least one is required`,
+        );
+    }
+    const roleTier = roles?.get(role)?.tier;
+    if (roleTier === undefined) {
+        throw new Error(
+            `${label} member at index ${index} declares role "${role}" but no Layer-1 role table is available (the role table is threaded only at the CLI / serve boundary)`,
+        );
+    }
+    const eligible = cheapestEligibleExecutors(agentConfig?.executors ?? [], roleTier);
+    const winner = eligible[0];
+    if (winner === undefined) {
+        // 111 R3: distinguish "nothing at that tier" from "all tier-eligible
+        // profiles are disabled" so the fix is actionable in one read.
+        const disabledEligible = (agentConfig?.executors ?? [])
+            .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleTier))
+            .map((e) => e.name);
+        if (disabledEligible.length > 0) {
+            throw new Error(
+                `${label} member at index ${index}: every tier-eligible executor for role "${role}" (tier ${roleTier}) is disabled (${disabledEligible.join(', ')}) — enable one via agent.executors.<name>.disabled: false`,
+            );
+        }
+        throw new Error(
+            `${label} member at index ${index}: no executor configured to serve role "${role}" (tier ${roleTier}) — define executors under agent.executors`,
+        );
+    }
+    return { resolved: { agent: winner.agent, model: winner.model }, executorName: winner.name };
+}
+
+/** Parameters for {@link materializeRoster}. */
+export interface MaterializeRosterParams {
+    /** Spec id prefix AND group tag suffix — the generated id is `<slug>-<localId>`. */
+    slug: string;
+    /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
+    label: string;
+    /** Full roster, in declaration order — ids derive over it (frozen index, 0835 R3). */
+    members: readonly RosterMember[];
+    /** Default workspace for members without their own `workspace`. */
+    defaultWorkspace: string;
+    agentConfig: AgentConfig | undefined;
+    /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
+    roles?: ReadonlyMap<string, AgentRoleDefinition>;
+    /** Existing specs on disk — hand-authored ones are never overwritten (R2). */
+    specs: readonly AgentSpec[];
+    /**
+     * The full roster, for error texts that name a member by its frozen-index
+     * local id (0835 review P4). Optional: without it, executor-pinned error
+     * texts fall back to `member.id ?? member.executor`.
+     */
+    roster?: readonly RosterMember[];
+}
+
+/**
+ * Project one roster into the `spur:generated` agent specs materialization
+ * would write — WITHOUT writing (0835). Extracted verbatim from the
+ * pre-0835 materializeTeam loop so config teams and project fleets share one
+ * implementation: id derivation delegates to `memberLocalId` (0543 R3 / 0835
+ * R3 — the frozen-index allocator config-load uses, so a converted roster
+ * produces byte-identical ids), executor resolution delegates to
+ * {@link resolveMemberExecutor}, and a pre-existing hand-authored spec under a
+ * desired id is skipped untouched (the existing skip contract).
+ */
+export function materializeRoster(params: MaterializeRosterParams): RosterProjection {
+    const { slug, label, members, defaultWorkspace, agentConfig, roles, specs } = params;
+    const desiredIds = new Set<string>();
+    const toUpsert: AgentSpec[] = [];
+
+    for (const [index, member] of members.entries()) {
+        // 0543 R3 / 0835 R3: ids derive over the FULL roster (frozen index) via
+        // the shared allocator — never re-derived per consumer.
+        const localId = memberLocalId(member, members, index);
+        const composedId = `${slug}-${localId}`;
+        desiredIds.add(composedId);
+
+        // 0835 review P3: a disabled member (fleet declarations) keeps its id
+        // in the desired set but is NOT resolved against executors — an
+        // unresolvable executor on a disabled member must not block launch.
+        // (The id stays desired here; FleetService narrows desiredIds to the
+        // enabled subset so a disabled member's stale spec is still pruned.)
+        if (member.enabled === false) continue;
+
+        // Skip hand-authored specs — they are not generated (R2)
+        const existing = specs.find((s) => s.id === composedId);
+        if (existing && !existing.tags?.includes('spur:generated')) continue;
+
+        const { resolved, executorName } = resolveMemberExecutor({
+            member,
+            index,
+            label,
+            agentConfig,
+            roles,
+            roster: members,
+        });
+        const spec: AgentSpec = {
+            id: composedId,
+            name: member.purpose ?? composedId,
+            type: resolved.agent,
+            // Executor binding (0537 R1): carry the configured executor name
+            // beside the coding-agent kind so drain can resolve back through
+            // `resolveExecutor`'s executor-first lookup. For a role-only member
+            // this is the RESOLVED executor entry (0543 R1). `type` stays:
+            // AiRunner resolves the runner from it, and pre-existing specs
+            // carry only `type` (drain falls back to it).
+            executor: executorName,
+            workspace: member.workspace ?? defaultWorkspace,
+            purpose: member.purpose && member.purpose.length > 0 ? member.purpose : `${resolved.agent} agent`,
+            tags: [`fleet:${slug}`, 'spur:generated'],
+            config: {
+                ...(resolved.model !== undefined ? { model: resolved.model } : {}),
+                // Layer-1 role (0538 R3): carried beside the executor binding so
+                // routing reads it off the spec (0543 R1 — the role and the
+                // resolved executor name are BOTH recorded).
+                ...(member.role !== undefined ? { role: member.role } : {}),
+                ...(member.systemPrompt !== undefined ? { systemPrompt: member.systemPrompt } : {}),
+                ...(member.command !== undefined ? { command: member.command } : {}),
+                ...(member.autonomy !== undefined ? { autonomy: member.autonomy } : {}),
+            },
+            ...(member.autostart !== undefined ? { autoStart: member.autostart } : {}),
+        };
+        toUpsert.push(spec);
+    }
+
+    return { toUpsert, desiredIds };
 }
 
 // ---------------------------------------------------------------------------
@@ -357,11 +577,10 @@ export class FleetService {
             roles: this.ctx.roles ?? resolveAgentRoles(config?.agent),
             specs,
         });
-        // Namespace isolation (0835 review P2): fleet specs carry the
-        // `fleet:generated` marker and a `fleet:<slug>` group tag — never the
-        // `team:<slug>` group tag — so team materialization's prune
-        // (`team:<id>` + `spur:generated`) can never match a fleet spec, even
-        // when a registry name equals a config team id.
+        // Generated-spec namespace (0835 review P2; 0860 R3): fleet specs carry
+        // the `fleet:generated` marker plus a `fleet:<slug>` group tag, and the
+        // projection emits the same namespace. No other roster materializer
+        // exists any more, so a generated spec is unambiguously a fleet spec.
         for (const spec of projection.toUpsert) {
             spec.tags = [`fleet:${slug}`, 'spur:generated', 'fleet:generated'];
         }
@@ -382,17 +601,15 @@ export class FleetService {
         }
 
         // Prune orphaned generated specs: ONLY fleet-generated specs (both
-        // `spur:generated` + `fleet:generated`) not in the desired set — the
-        // predicate never consults `team:<slug>`, keeping the namespaces
-        // disjoint (0835 review P2). Hand-authored specs (no generator tag)
-        // are never deleted (R2).
+        // `spur:generated` + `fleet:generated`) not in the desired set (0835
+        // review P2). Hand-authored specs (no generator tag) are never deleted
+        // (R2).
         const orphaned = specs.filter(
             (s) => s.tags?.includes('spur:generated') && s.tags?.includes('fleet:generated') && !desiredIds.has(s.id),
         );
 
         if (opts?.check) {
             return {
-                teamId: slug,
                 upserted: toUpsert.map((s) => s.id),
                 orphaned: orphaned.map((s) => s.id),
                 written: false,
@@ -407,7 +624,6 @@ export class FleetService {
         }
 
         return {
-            teamId: slug,
             upserted: toUpsert.map((s) => s.id),
             orphaned: orphaned.map((s) => s.id),
             written: true,
@@ -439,7 +655,7 @@ export class FleetService {
      * R6 ground truth: the process cwd AND the storage root (the `.spur/`
      * parent the process resolves) must both normalize to the project. A
      * mismatch is a loud error naming both paths; `SPUR_SPEC_ID` /
-     * `SPUR_TEAM_ID` / `SPUR_RUN_ID` env values are never consulted as proof.
+     * `SPUR_RUN_ID` env values are never consulted as proof.
      */
     async assertLaunchGroundTruth(projectPath: string): Promise<void> {
         const expected = normalizeProjectPath(projectPath);

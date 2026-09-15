@@ -8,12 +8,12 @@ import { type AgentSpec, loadAgentSpecs, saveAgentSpec } from '@gobing-ai/ts-ai-
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
+    AgentCoordinationService,
     type AgentRoleDefinition,
     FleetService,
     type FleetServiceContext,
     normalizeProjectPath,
     ProjectRegistry,
-    TeamService,
 } from '../../src/index';
 
 // ---------------------------------------------------------------------------
@@ -854,7 +854,7 @@ describe('fleet registration and launch ground truth (G62)', () => {
         const db = await createMigratedDb({ url: ':memory:' });
         try {
             process.chdir(local.project);
-            const team = new TeamService({
+            const team = new AgentCoordinationService({
                 cwd: local.project,
                 fs: createNodeFileSystem(foreign.project),
                 env: { SPUR_SPEC_ID: 'proj-lead' },

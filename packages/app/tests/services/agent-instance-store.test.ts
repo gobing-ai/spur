@@ -12,14 +12,14 @@ const SPECS: AgentSpec[] = [
         id: 'demo-coder',
         executor: 'omp',
         workspace: '/tmp',
-        tags: ['team:demo', 'spur:generated'],
+        tags: ['fleet:demo', 'spur:generated'],
         config: { role: 'coder' },
     }),
     spec({
         id: 'demo-reviewer',
         executor: 'claude',
         workspace: '/tmp',
-        tags: ['team:demo'],
+        tags: ['fleet:demo'],
         config: { role: 'reviewer' },
     }),
     spec({ id: 'demo-scribe-a', executor: 'omp', workspace: '/w2', tags: ['team:demo'], config: { role: 'scribe' } }),
@@ -36,11 +36,13 @@ function store() {
 
 describe('createFileAgentInstanceStore (0685 R2)', () => {
     test('projects specs onto the frozen AgentInstance shape', async () => {
+        // 0860 R4: no grouping id is resolved any more — the column stays on the
+        // frozen domain shape (nullable, unwritten) and the spec id IS the key.
         const coder = await store().bySpecId('demo-coder');
         expect(coder).toMatchObject({
             specId: 'demo-coder',
-            teamId: 'demo',
-            memberKey: 'coder',
+            teamId: null,
+            memberKey: 'demo-coder',
             role: 'coder',
             executor: 'omp',
             workspace: '/tmp',
@@ -53,7 +55,7 @@ describe('createFileAgentInstanceStore (0685 R2)', () => {
         });
     });
 
-    test('untethered spec has teamId null; unassigned role is null', async () => {
+    test('untethered spec has an unwritten grouping id; unassigned role is null', async () => {
         const solo = await store().bySpecId('solo');
         expect(solo?.teamId).toBeNull();
         expect(solo?.memberKey).toBe('solo');

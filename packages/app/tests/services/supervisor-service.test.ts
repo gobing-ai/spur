@@ -119,18 +119,13 @@ describe('SupervisorService', () => {
             const spawned = emits.find((e) => e.event === 'process.spawned');
             expect(spawned).toBeDefined();
             expect(spawned?.payload.agentId).toBe('alpha');
-            // task 0371: team.member.started accompanies process.spawned
-            const memberStarted = emits.find((e) => e.event === 'team.member.started');
-            expect(memberStarted).toBeDefined();
-            expect(memberStarted?.payload).toMatchObject({
-                memberId: 'alpha',
-                teamId: null,
-                agentType: 'pi',
-                outcome: 'started',
-            });
+            // task 0371 / 0860 R2: agent.started accompanies process.spawned.
+            const agentStarted = emits.find((e) => e.event === 'agent.started');
+            expect(agentStarted).toBeDefined();
+            expect(agentStarted?.payload).toMatchObject({ agentId: 'alpha', pid: 10000, agentType: 'pi' });
         });
 
-        test('resolves teamId from spec.tags (team:<id>) and tags the process entry (spur#0267 R1)', async () => {
+        test('0860 R4: the retired spec-tag grouping id is neither resolved nor stamped', async () => {
             const { executor, calls } = createMockExecutor();
             const { bus, emits } = createMockBus();
             const svc = new SupervisorService({
@@ -141,7 +136,7 @@ describe('SupervisorService', () => {
                     makeSpec({
                         id: 'team-alpha',
                         command: ['echo'],
-                        tags: ['team:red-squad', 'role:worker'],
+                        tags: ['group:red-squad', 'role:worker'],
                         type: 'claude',
                     }),
                 ],
@@ -149,40 +144,18 @@ describe('SupervisorService', () => {
 
             const entry = await svc.start('team-alpha');
 
-            // teamId resolved from the first `team:` tag.
-            expect(entry.teamId).toBe('red-squad');
+            // No grouping id on the entry, none threaded into the registry row,
+            // none injected into the child env — the tags are inert data now.
+            expect('teamId' in entry).toBe(false);
+            expect('teamId' in (calls[0] ?? {})).toBe(false);
+            const env = calls[0]?.env as Record<string, string> | undefined;
+            expect(Object.keys(env ?? {}).filter((k) => k.includes('TEAM'))).toEqual([]);
+            // Identity that still exists: the agent type, on both surfaces.
             expect(entry.agentType).toBe('claude');
-            // Threaded into PipeProcessOptions so the registry row carries it too.
-            expect(calls[0]?.teamId).toBe('red-squad');
-            // 0269: process lifecycle events stamp identity for Activity.
             const spawned = emits.find((e) => e.event === 'process.spawned');
-            expect(spawned?.payload.teamId).toBe('red-squad');
-            expect(spawned?.payload.agentType).toBe('claude');
-            expect(spawned?.payload.agentId).toBe('team-alpha');
-            // 0371 R16: team.member.started is attributable to team + agent type.
-            const memberStarted = emits.find((e) => e.event === 'team.member.started');
-            expect(memberStarted?.payload).toMatchObject({
-                teamId: 'red-squad',
-                memberId: 'team-alpha',
-                agentType: 'claude',
-                outcome: 'started',
-            });
-        });
-
-        test('leaves teamId null when spec has no team tag (spur#0267 R1)', async () => {
-            const { executor, calls } = createMockExecutor();
-            const { bus } = createMockBus();
-            const svc = new SupervisorService({
-                processExecutor: executor,
-                eventBus: bus,
-                configDir: '/tmp',
-                agentSpecs: [makeSpec({ id: 'solo', command: ['echo'], tags: ['role:worker'] })],
-            });
-
-            const entry = await svc.start('solo');
-
-            expect(entry.teamId).toBeNull();
-            expect(calls[0]?.teamId).toBeUndefined();
+            expect(spawned?.payload).toMatchObject({ agentId: 'team-alpha', agentType: 'claude' });
+            const agentStarted = emits.find((e) => e.event === 'agent.started');
+            expect(agentStarted?.payload).toMatchObject({ agentId: 'team-alpha', agentType: 'claude' });
         });
 
         test('returns existing entry when already running', async () => {
@@ -274,13 +247,10 @@ describe('SupervisorService', () => {
             const stopped = emits.find((e) => e.event === 'process.stopped');
             expect(stopped).toBeDefined();
             expect(stopped?.payload.agentId).toBe('alpha');
-            // task 0371: exactly one team.member.stopped on explicit stop (no double with exit)
-            const memberStopped = emits.filter((e) => e.event === 'team.member.stopped');
-            expect(memberStopped).toHaveLength(1);
-            expect(memberStopped[0]?.payload).toMatchObject({
-                memberId: 'alpha',
-                outcome: 'stopped',
-            });
+            // task 0371 / 0860 R2: exactly one agent.stopped on explicit stop (no double with exit)
+            const agentStopped = emits.filter((e) => e.event === 'agent.stopped');
+            expect(agentStopped).toHaveLength(1);
+            expect(agentStopped[0]?.payload).toMatchObject({ agentId: 'alpha' });
         });
 
         test('is a no-op when process is not running', async () => {
@@ -753,22 +723,22 @@ describe('SupervisorService', () => {
             expect(env?.SPUR_RUN_ID).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
         });
 
-        test('injects SPUR_TEAM_ID when a team: tag is present', async () => {
+        test('0860 R4: never injects a retired spec-grouping env, whatever the tags say', async () => {
             const { executor, calls } = createMockExecutor();
             const { bus } = createMockBus();
             const svc = new SupervisorService({
                 processExecutor: executor,
                 eventBus: bus,
                 configDir: '/tmp',
-                agentSpecs: [makeSpec({ id: 'reviewer', command: ['echo'], tags: ['team:red-squad'] })],
+                agentSpecs: [makeSpec({ id: 'reviewer', command: ['echo'], tags: ['group:red-squad'] })],
             });
 
             await svc.start('reviewer');
             const env = calls[0]?.env as Record<string, string>;
-            expect(env.SPUR_TEAM_ID).toBe('red-squad');
+            expect(Object.keys(env).filter((k) => k.includes('TEAM'))).toEqual([]);
         });
 
-        test('omits SPUR_TEAM_ID when no team: tag and passes SPUR_SERVE_URL from constructor', async () => {
+        test('passes SPUR_SERVE_URL from constructor', async () => {
             const { executor, calls } = createMockExecutor();
             const { bus } = createMockBus();
             const svc = new SupervisorService({
@@ -781,7 +751,6 @@ describe('SupervisorService', () => {
 
             await svc.start('reviewer');
             const env = calls[0]?.env as Record<string, string>;
-            expect(env.SPUR_TEAM_ID).toBeUndefined();
             expect(env.SPUR_SERVE_URL).toBe('http://localhost:8787');
         });
 

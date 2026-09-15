@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import type { InboxResult, RecentMessagesResult, SendResult, TeamService } from '@gobing-ai/spur-app';
+import type { AgentCoordinationService, InboxResult, RecentMessagesResult, SendResult } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { messagesModule } from '../../../src/modules/messages';
 
 /**
- * Build a stub ServerContext whose teamService returns canned inbox + recent results
+ * Build a stub ServerContext whose coordination() returns canned inbox + recent results
  * and records the args it was called with. Unchecked cast — the module only touches
- * `teamService()`, so a partial object is sufficient and avoids dragging in every
+ * `coordination()`, so a partial object is sufficient and avoids dragging in every
  * ServerContext member.
  */
 function ctxWithStubs(
@@ -36,7 +36,7 @@ function ctxWithStubs(
         send: [] as Array<{ from: string | null; to: string; body: string; requestKey?: string }>,
         reply: [] as Array<{ id: string; body: string }>,
     };
-    const teamService = {
+    const coordination = {
         getInbox: async (agent: string, limit?: number, offset?: number) => {
             calls.inbox.push({ agent, limit, offset });
             return opts.inbox ?? { messages: [], count: 0 };
@@ -61,8 +61,8 @@ function ctxWithStubs(
             if (opts.replyThrows) throw opts.replyThrows;
             return { msgId: `reply-${calls.reply.length}`, toId: 'sender', status: 'queued', injected: false };
         },
-    } as unknown as TeamService;
-    const ctx = { cwd: opts.cwd ?? '/repo/wt', teamService: () => teamService } as unknown as ServerContext;
+    } as unknown as AgentCoordinationService;
+    const ctx = { cwd: opts.cwd ?? '/repo/wt', coordination: () => coordination } as unknown as ServerContext;
     return { ctx, calls };
 }
 
@@ -94,7 +94,7 @@ describe('messages module', () => {
             expect(body.error).toContain('agent');
         });
 
-        test('forwards agent + limit + offset to teamService.getInbox and returns its result', async () => {
+        test('forwards agent + limit + offset to coordination().getInbox and returns its result', async () => {
             const inbox: InboxResult = {
                 messages: [
                     {
@@ -183,7 +183,7 @@ describe('messages module', () => {
     });
 
     describe('POST /api/messages', () => {
-        test('forwards from/to/body to teamService.sendMessage and returns 201', async () => {
+        test('forwards from/to/body to coordination().sendMessage and returns 201', async () => {
             const { ctx, calls } = ctxWithStubs();
             const app = new Hono();
             messagesModule.mount(app, ctx);
@@ -199,7 +199,7 @@ describe('messages module', () => {
             const body = (await res.json()) as SendResult;
             expect(body.toId).toBe('planner');
             expect(body.status).toBe('queued');
-            // The server POST path uses the same TeamService method as the CLI — events fire identically.
+            // The server POST path uses the same AgentCoordinationService method as the CLI — events fire identically.
             expect(calls.send).toEqual([{ from: 'coder', to: 'planner', body: 'hello' }]);
         });
 
@@ -251,7 +251,7 @@ describe('messages module', () => {
             expect(body.error).toContain('JSON');
         });
 
-        test('surfaces TeamService validation errors as 400', async () => {
+        test('surfaces AgentCoordinationService validation errors as 400', async () => {
             const { ctx } = ctxWithStubs({ sendThrows: new Error('Invalid agent id') });
             const app = new Hono();
             messagesModule.mount(app, ctx);
@@ -270,7 +270,7 @@ describe('messages module', () => {
     });
 
     describe('POST /api/messages/:id/reply', () => {
-        test('forwards id + body to teamService.replyToMessage and returns 201', async () => {
+        test('forwards id + body to coordination().replyToMessage and returns 201', async () => {
             const { ctx, calls } = ctxWithStubs();
             const app = new Hono();
             messagesModule.mount(app, ctx);
@@ -321,7 +321,7 @@ describe('POST /api/messages projectPath guard (0844 R4)', () => {
         return hono;
     }
 
-    test('matching projectPath is accepted and forwarded to TeamService', async () => {
+    test('matching projectPath is accepted and forwarded to AgentCoordinationService', async () => {
         const { ctx, calls } = ctxWithStubs({ cwd: '/repo/wt' });
         const res = await app(ctx).request('/api/messages', {
             method: 'POST',
@@ -356,7 +356,7 @@ describe('POST /api/messages projectPath guard (0844 R4)', () => {
         const payload = (await res.json()) as { error?: string };
         expect(payload.error).toContain('project mismatch');
         expect(payload.error).toContain('/other/project');
-        expect(calls.send).toHaveLength(0); // no row, no TeamService traffic
+        expect(calls.send).toHaveLength(0); // no row, no AgentCoordinationService traffic
     });
 
     test('absent projectPath keeps working (CLI + Inbox module parity)', async () => {

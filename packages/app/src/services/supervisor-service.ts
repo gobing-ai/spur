@@ -33,8 +33,6 @@ export interface ProcessEntry {
     exitCode?: number | null;
     /** Ring buffer of recent output frames (bounded, oldest-first). */
     ringBuffer: ProcessFrame[];
-    /** Team the agent belongs to, resolved from spec.tags (`team:<id>`) at start (spur#0267). */
-    teamId?: string | null;
     /** Coding-agent type from the agent spec at start (0269 process event identity). */
     agentType?: string;
 }
@@ -44,8 +42,6 @@ export interface ProcessEventPayload {
     agentId: string;
     pid: number | null;
     exitCode?: number | null;
-    /** Team id from `team:<id>` tag when known (0269 Activity identity). */
-    teamId?: string | null;
     /** Coding-agent type from the agent spec when known. */
     agentType?: string;
     /** Producer-owned observability severity. */
@@ -53,26 +49,26 @@ export interface ProcessEventPayload {
 }
 
 /**
- * Metadata-only payload for supervisor-emitted `team.member.started|stopped`
- * (task 0371 R2). Mirrors {@link ProcessEventPayload} identity fields so the
- * team.* family is attributable without reading process.* rows.
+ * Metadata-only payload for supervisor-emitted `agent.started|stopped` (0860 R2).
+ * The retired member-scoped pair duplicated these names, so the supervisor now
+ * emits the catalog's existing agent lifecycle events directly.
  */
-export interface SupervisorTeamMemberEventPayload {
-    teamId: string | null;
-    memberId: string | null;
-    agentType: string | null;
-    outcome: string;
+export interface AgentLifecycleEventPayload {
+    agentId: string;
+    pid?: number | null;
+    /** Coding-agent type from the agent spec when known. */
+    agentType?: string;
     /** Producer-owned observability severity. */
     severity?: 'info' | 'warning' | 'error';
 }
 
-/** Bus shape for process + team.member lifecycle events from SupervisorService. */
+/** Bus shape for process + agent lifecycle events from SupervisorService. */
 export type ProcessEventBus = EventBus<{
     'process.spawned': (event: ProcessEventPayload) => void;
     'process.exited': (event: ProcessEventPayload) => void;
     'process.stopped': (event: ProcessEventPayload) => void;
-    'team.member.started': (event: SupervisorTeamMemberEventPayload) => void;
-    'team.member.stopped': (event: SupervisorTeamMemberEventPayload) => void;
+    'agent.started': (event: AgentLifecycleEventPayload) => void;
+    'agent.stopped': (event: AgentLifecycleEventPayload) => void;
 }>;
 
 /** Construction options for {@link SupervisorService}. */
@@ -133,8 +129,8 @@ export class SupervisorService {
     private readonly configDir: string;
     /** `spur serve` API base for `SPUR_SERVE_URL` injection (R3). */
     private readonly serveUrl?: string;
-    /** Agent ids that already emitted `team.member.stopped` via explicit stop(). */
-    private readonly teamMemberStopEmitted = new Set<string>();
+    /** Agent ids that already emitted `agent.stopped` via explicit stop(). */
+    private readonly stopEmitted = new Set<string>();
     private readonly ringBufferSize: number;
     private readonly processes = new Map<string, { handle: PipeProcess; entry: ProcessEntry }>();
     private readonly ringBuffers = new Map<string, ProcessFrame[]>();
@@ -169,7 +165,7 @@ export class SupervisorService {
         return this.ringBuffers.get(agentId) ?? [];
     }
 
-    /** Write a line to the supervised process's stdin (for POST /api/team/processes/:id/stdin). */
+    /** Write a line to the supervised process's stdin (for POST /api/processes/:id/stdin). */
     writeStdin(agentId: string, line: string): void {
         const proc = this.processes.get(agentId);
         if (proc?.entry.status !== 'running') {
@@ -200,10 +196,6 @@ export class SupervisorService {
             }).assertLaunchGroundTruth(spec.workspace);
         }
         const { command, args } = this.resolveCommand(spec);
-        // Resolve teamId from spec.tags (`team:<id>`) for registry grouping (spur#0267 R1).
-        // If the agent belongs to multiple teams, the first `team:` tag wins.
-        const teamTag = spec.tags.find((t) => t.startsWith('team:'));
-        const teamId = teamTag ? teamTag.slice('team:'.length) : null;
         const frames: ProcessFrame[] = [];
         this.ringBuffers.set(agentId, frames);
 
@@ -215,8 +207,6 @@ export class SupervisorService {
             // Tag for ProcessRegistry watch list (ts-runtime 0.4.10 / spur#0264).
             source: 'supervisor',
             agentId,
-            // Thread teamId into ProcessRegistry execution row (spur#0267 R1).
-            ...(teamId ? { teamId } : {}),
             env: {
                 ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)),
                 // Caller identity env (ADR-057 wave 1 R3): inject the spec id so the
@@ -225,7 +215,6 @@ export class SupervisorService {
                 // separately by AgentService. SPUR_SERVE_URL is passed through only
                 // when the supervisor itself was launched with it.
                 SPUR_SPEC_ID: agentId,
-                ...(teamId !== null ? { SPUR_TEAM_ID: teamId } : {}),
                 SPUR_RUN_ID: crypto.randomUUID(),
                 ...((this.serveUrl ?? process.env.SPUR_SERVE_URL) !== undefined
                     ? { SPUR_SERVE_URL: (this.serveUrl ?? process.env.SPUR_SERVE_URL) as string }
@@ -242,7 +231,6 @@ export class SupervisorService {
             status: 'running',
             startedAt: new Date().toISOString(),
             ringBuffer: frames,
-            teamId,
             agentType: spec.type,
         };
 
@@ -253,21 +241,18 @@ export class SupervisorService {
         this.pipeStream(handle.stdout, 'stdout', agentId, frames);
         this.pipeStream(handle.stderr, 'stderr', agentId, frames);
 
-        // Spawn event — stamp team/agent identity for Activity board (0269 P4).
+        // Spawn event — stamp agent identity for the Activity board (0269 P4).
         this.emit('process.spawned', {
             agentId,
             pid,
-            teamId,
             agentType: spec.type,
         });
-        // Team member state (task 0371 R2/R3): cataloged team.member.started so
-        // the Activity tab's `team.` filter has a real producer. Unknown team
-        // tags yield null teamId — event still fires (R5).
-        this.emitTeamMember('team.member.started', {
-            teamId,
-            memberId: agentId,
-            agentType: spec.type ?? null,
-            outcome: 'started',
+        // Agent lifecycle (task 0371 R2/R3; 0860 R2): the catalog's own
+        // `agent.started` name, emitted by the supervisor on the serve path.
+        this.emit('agent.started', {
+            agentId,
+            pid,
+            ...(spec.type.length > 0 ? { agentType: spec.type } : {}),
         });
 
         // Watch for exit — restart on abnormal exit (0253 R3)
@@ -277,20 +262,18 @@ export class SupervisorService {
                 agentId,
                 pid,
                 exitCode: code,
-                teamId: entry.teamId ?? null,
                 ...(entry.agentType ? { agentType: entry.agentType } : {}),
             });
-            // Member state on natural exit/crash only. Explicit stop() already
-            // emitted `team.member.stopped` — avoid double rows (task 0371).
-            if (!this.teamMemberStopEmitted.has(agentId)) {
-                this.emitTeamMember('team.member.stopped', {
-                    teamId: entry.teamId ?? null,
-                    memberId: agentId,
-                    agentType: entry.agentType ?? null,
-                    outcome: code === 0 ? 'exited' : 'errored',
+            // Agent lifecycle on natural exit/crash only. Explicit stop() already
+            // emitted `agent.stopped` — avoid double rows (task 0371; 0860 R2).
+            if (!this.stopEmitted.has(agentId)) {
+                this.emit('agent.stopped', {
+                    agentId,
+                    pid,
+                    ...(entry.agentType ? { agentType: entry.agentType } : {}),
                 });
             } else {
-                this.teamMemberStopEmitted.delete(agentId);
+                this.stopEmitted.delete(agentId);
             }
 
             // Normal exit (code 0) or stop-initiated: record and clean up.
@@ -334,10 +317,10 @@ export class SupervisorService {
         const proc = this.processes.get(agentId);
         if (proc?.entry.status !== 'running') return;
 
-        // Claim team.member.stopped before kill so the exit handler does not
+        // Claim `agent.stopped` before kill so the exit handler does not
         // double-emit when the process exits (task 0371). Status stays `running`
         // until after the wait so final status semantics match prior behavior.
-        this.teamMemberStopEmitted.add(agentId);
+        this.stopEmitted.add(agentId);
         proc.handle.kill('SIGTERM');
 
         // Bounded graceful wait (3 s)
@@ -366,14 +349,12 @@ export class SupervisorService {
         this.emit('process.stopped', {
             agentId,
             pid: proc.entry.pid,
-            teamId: proc.entry.teamId ?? null,
             ...(proc.entry.agentType ? { agentType: proc.entry.agentType } : {}),
         });
-        this.emitTeamMember('team.member.stopped', {
-            teamId: proc.entry.teamId ?? null,
-            memberId: agentId,
-            agentType: proc.entry.agentType ?? null,
-            outcome: 'stopped',
+        this.emit('agent.stopped', {
+            agentId,
+            pid: proc.entry.pid,
+            ...(proc.entry.agentType ? { agentType: proc.entry.agentType } : {}),
         });
     }
 
@@ -385,7 +366,9 @@ export class SupervisorService {
         const specIds = new Set(specs.map((s) => s.id));
         for (const id of ids) {
             if (!specIds.has(id)) {
-                throw new Error(`Autostart agent "${id}" not found — check .spur/agents/ and team.autostart config`);
+                throw new Error(
+                    `Autostart agent "${id}" not found — check .spur/agents/ and the agent.fleet declaration`,
+                );
             }
         }
         for (const id of ids) {
@@ -475,25 +458,27 @@ export class SupervisorService {
         }
     }
 
-    private emit(name: 'process.spawned' | 'process.exited' | 'process.stopped', payload: ProcessEventPayload): void {
+    /**
+     * Publish a process or agent lifecycle row. 0860 R2 folded the retired
+     * member-scoped pair into the catalog's own `agent.started|stopped`, so both
+     * families go through this one emitter (payloads carry no grouping id).
+     */
+    private emit(
+        name: 'process.spawned' | 'process.exited' | 'process.stopped' | 'agent.started' | 'agent.stopped',
+        payload: ProcessEventPayload | AgentLifecycleEventPayload,
+    ): void {
         try {
-            const exitCode = payload.exitCode;
+            const exitCode = 'exitCode' in payload ? payload.exitCode : undefined;
             const severity =
                 name === 'process.exited' && exitCode !== undefined && exitCode !== null && exitCode !== 0
                     ? 'warning'
                     : 'info';
-            this.eventBus.emit(name, { ...payload, severity });
-        } catch {
-            // Bus failure must not break process management.
-        }
-    }
-
-    private emitTeamMember(
-        name: 'team.member.started' | 'team.member.stopped',
-        payload: SupervisorTeamMemberEventPayload,
-    ): void {
-        try {
-            this.eventBus.emit(name, { ...payload, severity: 'info' });
+            const next = { ...payload, severity };
+            if (name === 'agent.started' || name === 'agent.stopped') {
+                this.eventBus.emit(name, next as AgentLifecycleEventPayload);
+                return;
+            }
+            this.eventBus.emit(name, next as ProcessEventPayload);
         } catch {
             // Bus failure must not break process management.
         }

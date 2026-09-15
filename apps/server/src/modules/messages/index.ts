@@ -33,7 +33,7 @@ export const messagesModule: ServerModule = {
             const limit = parseLimit(c.req.query('limit'), 50);
             const offsetParam = c.req.query('offset');
             const offset = offsetParam === undefined ? undefined : parseLimit(offsetParam, 0);
-            const svc = ctx.teamService();
+            const svc = ctx.coordination();
             const result = await svc.getInbox(agent, limit, offset);
             return c.json(result);
         });
@@ -42,13 +42,13 @@ export const messagesModule: ServerModule = {
         // Query: ?limit=<int, default 50, max 500>
         app.get('/api/messages', async (c) => {
             const limit = parseLimit(c.req.query('limit'), 50);
-            const svc = ctx.teamService();
+            const svc = ctx.coordination();
             const result = await svc.listRecent(limit);
             return c.json(result);
         });
 
         // POST /api/messages — send a message. Body: { to, body, from? }.
-        // Fires the same TeamService path the CLI uses, so message.sent emits identically.
+        // Fires the same AgentCoordinationService path the CLI uses, so message.sent emits identically.
         app.post('/api/messages', async (c) => {
             const parsed = await parseJsonBody(c);
             if ('error' in parsed) return c.json({ error: parsed.error }, 400);
@@ -80,7 +80,7 @@ export const messagesModule: ServerModule = {
                     );
                 }
             }
-            const svc = ctx.teamService();
+            const svc = ctx.coordination();
             try {
                 const result = await svc.sendMessage(from ?? null, to, body, undefined, requestKey);
                 return c.json(result, 201);
@@ -98,7 +98,7 @@ export const messagesModule: ServerModule = {
             const { body } = parsed;
             if (typeof body !== 'string' || body.length === 0)
                 return c.json({ error: 'field "body" is required' }, 400);
-            const svc = ctx.teamService();
+            const svc = ctx.coordination();
             try {
                 const result = await svc.replyToMessage(id, body);
                 return c.json(result, 201);

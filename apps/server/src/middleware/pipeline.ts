@@ -47,8 +47,8 @@ export const trimOrigins = (origins: string): string[] =>
  * or none at all) is a "simple request": no preflight, so it reaches the handler and its
  * side effect happens even though the attacker cannot read the reply. That matters here
  * because the API is unauthenticated by design (single local operator) and exposes
- * process control — `POST /api/team/agents/:id/{start,stop}` and, since `c.req.json()`
- * parses the body without checking Content-Type, `POST /api/team/processes/:id/stdin`,
+ * process control — `POST /api/agents/:id/{start,stop}` and, since `c.req.json()`
+ * parses the body without checking Content-Type, `POST /api/processes/:id/stdin`,
  * which writes a line into a running agent's stdin. Binding to localhost does not help:
  * the operator's own browser can reach it. `csrf()` closes this by requiring a same-origin
  * `Origin` / `Sec-Fetch-Site` on exactly those request shapes; JSON-typed API calls are

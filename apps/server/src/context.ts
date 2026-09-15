@@ -1,5 +1,6 @@
 import { dirname, join } from 'node:path';
 import type {
+    AgentCoordinationService,
     AgentService,
     FeatureService,
     HistoryBoardService,
@@ -11,7 +12,6 @@ import type {
     SectionMatrix,
     SupervisorService,
     TaskService,
-    TeamService,
     TokenLedgerService,
     WorkflowAppService,
 } from '@gobing-ai/spur-app';
@@ -19,6 +19,7 @@ import {
     AgentService as AgentServiceImpl,
     BusPlanningEventEmitter,
     bridgeEventBus,
+    AgentCoordinationService as CoordinationServiceImpl,
     configuredSecretValues,
     createPsProcessInspector,
     type EventEmitter,
@@ -35,7 +36,6 @@ import {
     SupervisorService as SupervisorServiceImpl,
     type SystemEventProjectContext,
     TaskService as TaskServiceImpl,
-    TeamService as TeamServiceImpl,
     TokenLedgerService as TokenLedgerServiceImpl,
     WorkflowAppService as WorkflowAppServiceImpl,
 } from '@gobing-ai/spur-app';
@@ -154,8 +154,8 @@ export interface ServerContext {
     /** Lazy, cached HistoryBoardService (history analytics layer). */
     historyBoardService(): HistoryBoardService;
 
-    /** Lazy, cached TeamService (messaging + team status). */
-    teamService(): TeamService;
+    /** Lazy, cached AgentCoordinationService (messaging + task assignment). */
+    coordination(): AgentCoordinationService;
 
     /** Lazy, cached SupervisorService (process supervision, task 0195/0207). */
     supervisor(): SupervisorService;
@@ -268,7 +268,7 @@ export interface ServerContext {
 /** Options for `createServerContext`. */
 export interface CreateServerContextOptions {
     cwd: string;
-    /** Environment map for subprocess-aware services (TeamService). Defaults to {}. */
+    /** Environment map for subprocess-aware services (AgentCoordinationService). Defaults to {}. */
     env?: Record<string, string | undefined>;
     fs: FileSystem;
     webDistPath?: string;
@@ -351,7 +351,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     let taskSvc: TaskService | undefined;
     let featureSvc: FeatureService | undefined;
     let historyBoardSvc: HistoryBoardService | undefined;
-    let teamSvc: TeamService | undefined;
+    let coordinationSvc: AgentCoordinationService | undefined;
     let supervisorSvc: SupervisorService | undefined;
     let processInventorySvc: ProcessInventoryService | undefined;
     let processRegistrySvc: ProcessRegistry | undefined;
@@ -457,9 +457,9 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             return historyBoardSvc;
         },
 
-        teamService(): TeamService {
-            if (!teamSvc) {
-                teamSvc = new TeamServiceImpl({
+        coordination(): AgentCoordinationService {
+            if (!coordinationSvc) {
+                coordinationSvc = new CoordinationServiceImpl({
                     cwd,
                     env: options.env ?? {},
                     fs,
@@ -472,7 +472,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     // 0799 R3: launch boundaries reload the merged config so a quota
                     // event applied by the updater gates the next materialization
                     // without a server restart. Reload failure degrades to the boot
-                    // snapshot rather than failing the team operation.
+                    // snapshot rather than failing the coordination operation.
                     reloadAgentConfig: async () => {
                         try {
                             return await loadSpurConfig(cwd);
@@ -482,7 +482,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                     },
                 });
             }
-            return teamSvc;
+            return coordinationSvc;
         },
 
         reloadAgentConfig: async () => {

@@ -57,8 +57,8 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 13 | `queue.job.retrying` | `context.ts:411` → ts-infra `JobQueue` | – | ~ | P | ~ | P | P |
 | 14 | `queue.stats` | `context.ts:411` → ts-infra `QueueConsumer` | – | ~ | P | ~ | – | ~ |
 | 15 | `scheduler.job.executed` | `context.ts:411` → ts-infra scheduler | – | ~ | P | ~ | – | P |
-| 16 | `message.sent` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
-| 17 | `message.replied` | `team-service.ts:314` | ~ | ~ | P | ~ | – | – |
+| 16 | `message.sent` | `agent-coordination-service.ts:314` | ~ | ~ | P | ~ | – | – |
+| 17 | `message.replied` | `agent-coordination-service.ts:314` | ~ | ~ | P | ~ | – | – |
 | 18 | `process.spawned` | `supervisor-service.ts:244` | ~ | ~ | ~ | – | – | ~ |
 | 19 | `process.exited` | `supervisor-service.ts:263` | ~ | ~ | ~ | – | P | P |
 | 20 | `process.stopped` | `supervisor-service.ts:353` | ~ | ~ | ~ | – | P | P |
@@ -70,9 +70,7 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 26 | `agent.started` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
 | 27 | `agent.stopped` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
 | 28 | `agent.message.sent` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
-| 31 | `team.member.assigned` | `team-service.ts:521` | ~ | ~ | P | ~ | – | ~ |
-| 32 | `team.member.started` | `team-service.ts:959` / `supervisor-service.ts:253` | ~ | ~ | P | ~ | – | ~ |
-| 33 | `team.member.stopped` | `team-service.ts:969` / `supervisor-service.ts:273` | ~ | ~ | P | ~ | – | ~ |
+| 31 | `task.assigned` | `agent-coordination-service.ts:509` | ~ | ~ | P | ~ | – | ~ |
 | 34 | `history.import.completed` | `apps/cli/src/commands/history.ts:364` | – | ~ | P | ~ | ~ | P |
 | 35 | `history.analyze.completed` | `apps/cli/src/commands/history.ts:378` | – | ~ | P | ~ | ~ | P |
 | 36 | `history.daily.failed` | `apps/cli/src/commands/history.ts:336` / `:390` | – | ~ | P | ~ | P | P |
@@ -278,7 +276,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `scheduler.job.executed` | `name`, `durationMs`, `error` | `[scheduler] {name}` | `error` when present; otherwise `completed` |
 | `message.sent` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} -> {toId}` | — |
 | `message.replied` | `msgId`, `fromId`, `toId`, `threadId`, `createdAt` | `[message] {fromId} replied in {threadId}` | — |
-| `process.spawned` | `label`, `pid`, `teamId`, `agentId` | `[process] {label | pid} spawned` | — |
+| `process.spawned` | `label`, `pid`, `agentId` | `[process] {label | pid} spawned` | — |
 | `process.exited` | `label`, `pid`, `exitCode`, `signal`, `durationMs`, `reason`, `error` | `[process] {label | pid} exited` | `exitCode` / `signal` / `reason` |
 | `process.stopped` | `label`, `pid`, `signal`, `reason` | `[process] {label | pid} stopped` | `reason` |
 | `process.started` | `label`, `pid`, `timestamp` | `[process] {label | pid} started` | — |
@@ -291,9 +289,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `agent.message.sent` | `agentId`, `ok` | `[agent] message -> {agentId}` | `ok` |
 | `strategy.changed` | `projectPath`, `strategy`, `version` | `[strategy] {strategy} (v{version})` | — |
 | `fleet.capacity.changed` | `projectPath`, `change`, `holderId` | `[fleet] write slot {change} — {holderId}` | — |
-| `team.member.assigned` | team/member/type/task, `outcome` | `[team] {teamId} · {memberId} assigned` | `outcome` |
-| `team.member.started` | team/member/type, `outcome` | `[team] {teamId} · {memberId} started` | `outcome` |
-| `team.member.stopped` | team/member/type, `outcome` | `[team] {teamId} · {memberId} stopped` | `outcome` |
+| `task.assigned` | member/type/task, `outcome` | `[task] {taskId} assigned to {memberId}` | `outcome` |
 | `history.import.completed` | source(s), files/messages, duration, exit code, artifact, `coverage`; + `trigger`/window/`importMode` when a refresh context is present | `[history] import · {source | sources}` | `exitCode` |
 | `history.analyze.completed` | source(s), duration, exit code, artifact; + `trigger`/window/`importMode` when a refresh context is present | `[history] analyze · {source | sources}` | `exitCode` |
 | `history.daily.failed` | source(s), `detail`, `reason`, `exitCode`; + `trigger`/window/`importMode` when a refresh context is present | `[history] daily failed` | `reason` / `exitCode` |

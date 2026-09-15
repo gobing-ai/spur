@@ -97,20 +97,20 @@ describe('createServerContext', () => {
         expect(svc1).toBe(svc2);
     });
 
-    test('teamService() builds a TeamService', () => {
+    test('coordination() builds a AgentCoordinationService', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
 
-        const svc = ctx.teamService();
+        const svc = ctx.coordination();
         expect(svc).toBeDefined();
     });
 
-    test('teamService() caches the instance', () => {
+    test('coordination() caches the instance', () => {
         const appRt = makeAppRt();
         const ctx = createServerContext(appRt, { cwd: '/tmp/test', fs: testFs });
 
-        const svc1 = ctx.teamService();
-        const svc2 = ctx.teamService();
+        const svc1 = ctx.coordination();
+        const svc2 = ctx.coordination();
         expect(svc1).toBe(svc2);
     });
 

@@ -1,19 +1,10 @@
 import { join } from 'node:path';
-import {
-    type AgentConfig,
-    ExecutorDisabledError,
-    type MemberIdentity,
-    memberLocalId,
-    type ResolvedExecutor,
-    resolveExecutor,
-    type SpurConfig,
-} from '@gobing-ai/spur-config';
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import {
     atomicWriteAsync,
     type DbAdapter,
     InboxMessageDao,
     InboxRecentDao,
-    isTierEligible,
     MarkdownDocument,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
@@ -29,7 +20,7 @@ import {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolvePlanningFolders } from '../config/planning-folders';
-import { type AgentRoleDefinition, cheapestEligibleExecutors, getExecutorTier } from './agent-service';
+import type { AgentRoleDefinition } from './agent-service';
 import { FleetService } from './fleet-service';
 import { TaskLocator } from './task-locator';
 
@@ -37,14 +28,14 @@ import { TaskLocator } from './task-locator';
 // Public types
 // ---------------------------------------------------------------------------
 
-/** Output sink injected into TeamService. */
-export interface TeamServiceOutput {
+/** Output sink injected into AgentCoordinationService. */
+export interface AgentCoordinationServiceOutput {
     write(message: string): void;
     error(message: string): void;
 }
 
-/** Context injected into TeamService. */
-export interface TeamServiceContext {
+/** Context injected into AgentCoordinationService. */
+export interface AgentCoordinationServiceContext {
     cwd: string;
     env: Record<string, string | undefined>;
     /**
@@ -55,31 +46,30 @@ export interface TeamServiceContext {
     spurConfig?: SpurConfig | null;
     /** 0799 R3: launch boundaries reload merged config so quota-driven executor disables apply without a server restart. */
     reloadAgentConfig?: () => Promise<SpurConfig | null>;
-    /** Optional output sink; TeamService does not read it (kept for CLI stdout coupling). */
-    output?: TeamServiceOutput;
+    /** Optional output sink; the service does not read it (kept for CLI stdout coupling). */
+    output?: AgentCoordinationServiceOutput;
     getDb(): Promise<DbAdapter>;
     /** Filesystem port for reading/writing task files. */
     fs: FileSystem;
     /**
      * Optional EventBus for message lifecycle events (`message.sent|replied`)
-     * and member events (`team.member.*`). When absent (CLI default without a
-     * ledger attach), those operations still succeed — they just don't publish.
-     * The server injects its bus so the tap persists and SSE streams the events.
+     * and task assignment events (`task.assigned`). When absent (CLI default
+     * without a ledger attach), those operations still succeed — they just
+     * don't publish. The server injects its bus so the tap persists and SSE
+     * streams the events.
      */
-    eventBus?: TeamServiceEventBus;
+    eventBus?: CoordinationEventBus;
     /**
      * Optional EventBus for agent lifecycle events (`agent.started`,
      * `agent.stopped`, `agent.invoke.*`, `agent.message.sent`). When absent,
      * TeamOrchestrator runs without publishing — the server injects its bus
      * so the system_events tap persists and SSE streams agent lifecycle.
-     * TeamService also bridges `agent.started|stopped` → `team.member.*` on
-     * {@link eventBus} when both are present (task 0371 R2).
      */
     events?: EventBus<AgentEvents>;
     /**
      * Layer-1 role → tier map resolved at the CLI boundary (0543 R1) from the
      * `DEFAULT_AGENT_ROLES` SSOT (0572 / ADR-061) — the same map AgentService
-     * receives, so a role-only team member resolves through the SAME ladder as
+     * receives, so a role-only member resolves through the SAME ladder as
      * `--agent <role>`. Absent → a role-only member fails materialization loudly
      * (the CLI threads it from `agentRoles`; the server path does not resolve roles).
      */
@@ -102,12 +92,10 @@ export interface MessageEventPayload {
 }
 
 /**
- * Metadata-only payload for member-scoped team events
- * (`team.member.assigned|started|stopped`). Unresolved roster fields stay
- * null rather than dropping the event (task 0371 R5 / J3 R17).
+ * Metadata-only payload for the `task.assigned` event. Unresolved roster fields
+ * stay null rather than dropping the event (task 0371 R5 / J3 R17).
  */
-export interface TeamMemberEventPayload {
-    teamId: string | null;
+export interface TaskAssignedEventPayload {
     memberId: string | null;
     agentType: string | null;
     /** Operation outcome label (`ok`, `assigned`, `started`, `stopped`, …). */
@@ -118,18 +106,16 @@ export interface TeamMemberEventPayload {
     severity?: 'info' | 'warning' | 'error';
 }
 
-/** Bus shape for message lifecycle events (legacy alias of {@link TeamServiceEventBus}). */
+/** Bus shape for message lifecycle events (legacy alias of {@link CoordinationEventBus}). */
 export type MessageEventBus = EventBus<
     Record<'message.sent' | 'message.replied', (event: MessageEventPayload) => void>
 >;
 
-/** Bus shape consumed by TeamService — message + member event names. */
-export type TeamServiceEventBus = EventBus<{
+/** Bus shape consumed by AgentCoordinationService — message + assignment event names. */
+export type CoordinationEventBus = EventBus<{
     'message.sent': (event: MessageEventPayload) => void;
     'message.replied': (event: MessageEventPayload) => void;
-    'team.member.assigned': (event: TeamMemberEventPayload) => void;
-    'team.member.started': (event: TeamMemberEventPayload) => void;
-    'team.member.stopped': (event: TeamMemberEventPayload) => void;
+    'task.assigned': (event: TaskAssignedEventPayload) => void;
 }>;
 
 /** Result of enqueuing or threading a message. */
@@ -151,7 +137,7 @@ export interface InboxEntry {
     status: string;
     createdAt: string;
     inReplyTo: string | null;
-    /** Delivery attempt count (0834 R6); populated by {@link TeamService.getInbox}. */
+    /** Delivery attempt count (0834 R6); populated by {@link AgentCoordinationService.getInbox}. */
     injectAttempts?: number;
     /** Last delivery error, when the drain recorded one (0834 R6). */
     injectError?: string | null;
@@ -165,15 +151,13 @@ export interface InboxResult {
 
 /**
  * Resolved identity for a message endpoint (from/to). `agentId` is the raw
- * `teamId-memberId` composed id; the remaining fields are best-effort joins
+ * composed agent id; the remaining fields are best-effort joins
  * from the team roster. All identity fields are optional — when unresolved
  * (untethered agent, operator-originated, or stale row) the UI falls back to
  * the raw id (R8/R11).
  */
 export interface MessageEndpointIdentity {
     agentId: string;
-    teamId?: string;
-    teamName?: string;
     memberLabel?: string;
     agentType?: string;
 }
@@ -221,32 +205,9 @@ export interface TeamStatusResult {
     agents: TeamStatusEntry[];
 }
 
-/**
- * The member shape the shared roster projection consumes: the identity fields
- * {@link memberLocalId} derives from, plus the optional per-spec overrides the
- * projection carries onto the generated spec. The project fleet declaration's
- * `FleetMember` (config) is structurally assignable. (0857: the retired team
- * roster union that previously supplied these fields is gone; the fleet
- * declaration is the only member source.)
- */
-export interface RosterMember extends MemberIdentity {
-    purpose?: string;
-    workspace?: string;
-    systemPrompt?: string;
-    command?: string[];
-    autonomy?: string;
-    autostart?: boolean;
-    /** Fleet-only (0835): `false` keeps the derived id but skips materialization. */
-    enabled?: boolean;
-}
-
-/** Result of materializing a roster: the project fleet's generated spec set (R2). */
-export interface MaterializeResult {
-    teamId: string;
-    upserted: string[];
-    orphaned: string[];
-    written: boolean;
-}
+// ---------------------------------------------------------------------------
+// AgentCoordinationService
+// ---------------------------------------------------------------------------
 
 /** Input shape for creating an agent spec. */
 export interface AgentSpecInput {
@@ -260,198 +221,8 @@ export interface AgentSpecInput {
     autoStart?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Shared roster projection (0835)
-// ---------------------------------------------------------------------------
-
-/** Result of the shared roster projection: specs to upsert + the desired id set. */
-export interface RosterProjection {
-    toUpsert: AgentSpec[];
-    desiredIds: Set<string>;
-}
-
-/** Parameters for {@link resolveMemberExecutor}. */
-export interface ResolveMemberExecutorParams {
-    member: MemberIdentity;
-    /** Roster position — error messages only. */
-    index: number;
-    /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
-    label: string;
-    agentConfig: AgentConfig | undefined;
-    /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
-    roles?: ReadonlyMap<string, AgentRoleDefinition>;
-    /** Full roster, so error texts name the member by its frozen-index local id. */
-    roster?: readonly MemberIdentity[];
-}
-
 /**
- * Resolve one roster member's executor — the SAME funnel `--agent <role>` uses
- * (0835, extracted verbatim from the pre-0835 materializeTeam loop). An
- * executor pin is authoritative (0543 R2, 111 R4: a pin to a disabled profile
- * fails loudly here, before spawn); a role-only member resolves the cheapest
- * tier-eligible executor, or fails naming the fix. Returns both the resolved
- * kind/model (for the spec `type`/`config.model`) and the executor NAME (for
- * the spec `executor` binding, 0537 R1).
- */
-export function resolveMemberExecutor(params: ResolveMemberExecutorParams): {
-    resolved: ResolvedExecutor;
-    executorName: string;
-} {
-    const { member, index, label, agentConfig, roles, roster } = params;
-    if (member.executor !== undefined) {
-        let resolved: ResolvedExecutor;
-        try {
-            resolved = resolveExecutor(member.executor, agentConfig);
-        } catch (error) {
-            if (error instanceof ExecutorDisabledError) {
-                // Verbatim pre-0835-extraction wording: the member names itself
-                // by its frozen-index local id (0835 review P4).
-                const localId =
-                    roster !== undefined ? memberLocalId(member, roster, index) : (member.id ?? member.executor);
-                throw new Error(
-                    `${label} member "${localId}" pins disabled executor "${member.executor}" — ${error.message}; enable the profile or repin the member`,
-                );
-            }
-            throw error;
-        }
-        return { resolved, executorName: member.executor };
-    }
-    const role = member.role;
-    // R4 validation rejects neither-role-nor-executor at config load; this is a
-    // defensive loud error for unvalidated callers.
-    if (role === undefined) {
-        throw new Error(
-            `${label} member at index ${index} declares neither role nor executor — at least one is required`,
-        );
-    }
-    const roleTier = roles?.get(role)?.tier;
-    if (roleTier === undefined) {
-        throw new Error(
-            `${label} member at index ${index} declares role "${role}" but no Layer-1 role table is available (the role table is threaded only at the CLI / serve boundary)`,
-        );
-    }
-    const eligible = cheapestEligibleExecutors(agentConfig?.executors ?? [], roleTier);
-    const winner = eligible[0];
-    if (winner === undefined) {
-        // 111 R3: distinguish "nothing at that tier" from "all tier-eligible
-        // profiles are disabled" so the fix is actionable in one read.
-        const disabledEligible = (agentConfig?.executors ?? [])
-            .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleTier))
-            .map((e) => e.name);
-        if (disabledEligible.length > 0) {
-            throw new Error(
-                `${label} member at index ${index}: every tier-eligible executor for role "${role}" (tier ${roleTier}) is disabled (${disabledEligible.join(', ')}) — enable one via agent.executors.<name>.disabled: false`,
-            );
-        }
-        throw new Error(
-            `${label} member at index ${index}: no executor configured to serve role "${role}" (tier ${roleTier}) — define executors under agent.executors`,
-        );
-    }
-    return { resolved: { agent: winner.agent, model: winner.model }, executorName: winner.name };
-}
-
-/** Parameters for {@link materializeRoster}. */
-export interface MaterializeRosterParams {
-    /** Spec id prefix AND group tag suffix — the generated id is `<slug>-<localId>`. */
-    slug: string;
-    /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
-    label: string;
-    /** Full roster, in declaration order — ids derive over it (frozen index, 0835 R3). */
-    members: readonly RosterMember[];
-    /** Default workspace for members without their own `workspace`. */
-    defaultWorkspace: string;
-    agentConfig: AgentConfig | undefined;
-    /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
-    roles?: ReadonlyMap<string, AgentRoleDefinition>;
-    /** Existing specs on disk — hand-authored ones are never overwritten (R2). */
-    specs: readonly AgentSpec[];
-    /**
-     * The full roster, for error texts that name a member by its frozen-index
-     * local id (0835 review P4). Optional: without it, executor-pinned error
-     * texts fall back to `member.id ?? member.executor`.
-     */
-    roster?: readonly RosterMember[];
-}
-
-/**
- * Project one roster into the `spur:generated` agent specs materialization
- * would write — WITHOUT writing (0835). Extracted verbatim from the
- * pre-0835 materializeTeam loop so config teams and project fleets share one
- * implementation: id derivation delegates to `memberLocalId` (0543 R3 / 0835
- * R3 — the frozen-index allocator config-load uses, so a converted roster
- * produces byte-identical ids), executor resolution delegates to
- * {@link resolveMemberExecutor}, and a pre-existing hand-authored spec under a
- * desired id is skipped untouched (the existing skip contract).
- */
-export function materializeRoster(params: MaterializeRosterParams): RosterProjection {
-    const { slug, label, members, defaultWorkspace, agentConfig, roles, specs } = params;
-    const desiredIds = new Set<string>();
-    const toUpsert: AgentSpec[] = [];
-
-    for (const [index, member] of members.entries()) {
-        // 0543 R3 / 0835 R3: ids derive over the FULL roster (frozen index) via
-        // the shared allocator — never re-derived per consumer.
-        const localId = memberLocalId(member, members, index);
-        const composedId = `${slug}-${localId}`;
-        desiredIds.add(composedId);
-
-        // 0835 review P3: a disabled member (fleet declarations) keeps its id
-        // in the desired set but is NOT resolved against executors — an
-        // unresolvable executor on a disabled member must not block launch.
-        // (The id stays desired here; FleetService narrows desiredIds to the
-        // enabled subset so a disabled member's stale spec is still pruned.)
-        if (member.enabled === false) continue;
-
-        // Skip hand-authored specs — they are not generated (R2)
-        const existing = specs.find((s) => s.id === composedId);
-        if (existing && !existing.tags?.includes('spur:generated')) continue;
-
-        const { resolved, executorName } = resolveMemberExecutor({
-            member,
-            index,
-            label,
-            agentConfig,
-            roles,
-            roster: members,
-        });
-        const spec: AgentSpec = {
-            id: composedId,
-            name: member.purpose ?? composedId,
-            type: resolved.agent,
-            // Executor binding (0537 R1): carry the configured executor name
-            // beside the coding-agent kind so drain can resolve back through
-            // `resolveExecutor`'s executor-first lookup. For a role-only member
-            // this is the RESOLVED executor entry (0543 R1). `type` stays:
-            // AiRunner resolves the runner from it, and pre-existing specs
-            // carry only `type` (drain falls back to it).
-            executor: executorName,
-            workspace: member.workspace ?? defaultWorkspace,
-            purpose: member.purpose && member.purpose.length > 0 ? member.purpose : `${resolved.agent} agent`,
-            tags: [`team:${slug}`, 'spur:generated'],
-            config: {
-                ...(resolved.model !== undefined ? { model: resolved.model } : {}),
-                // Layer-1 role (0538 R3): carried beside the executor binding so
-                // routing reads it off the spec (0543 R1 — the role and the
-                // resolved executor name are BOTH recorded).
-                ...(member.role !== undefined ? { role: member.role } : {}),
-                ...(member.systemPrompt !== undefined ? { systemPrompt: member.systemPrompt } : {}),
-                ...(member.command !== undefined ? { command: member.command } : {}),
-                ...(member.autonomy !== undefined ? { autonomy: member.autonomy } : {}),
-            },
-            ...(member.autostart !== undefined ? { autoStart: member.autostart } : {}),
-        };
-        toUpsert.push(spec);
-    }
-
-    return { toUpsert, desiredIds };
-}
-
-// ---------------------------------------------------------------------------
-// TeamService
-// ---------------------------------------------------------------------------
-
-/**
- * Application-layer orchestration for `spur message`, `spur task update --assignee`, and
+ * Application-layer coordination for `spur message`, `spur task update --assignee`, and
  * fleet-aware `spur agent` commands. Wraps `TeamOrchestrator` from `@gobing-ai/ts-ai-runner`
  * over the CLI's SQLite adapter. Agent specs are read from and written to
  * `.spur/agents/` via the package's spec helpers.
@@ -460,12 +231,12 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
  * lazily on first use so that purely spec-oriented operations (`createAgentSpec`)
  * never open a database.
  */
-export class TeamService {
-    private readonly ctx: TeamServiceContext;
+export class AgentCoordinationService {
+    private readonly ctx: AgentCoordinationServiceContext;
     private readonly configDir: string;
     private orchestratorPromise?: Promise<TeamOrchestrator>;
 
-    constructor(ctx: TeamServiceContext) {
+    constructor(ctx: AgentCoordinationServiceContext) {
         this.ctx = ctx;
         this.configDir = join(ctx.cwd, '.spur', 'agents');
     }
@@ -622,14 +393,12 @@ export class TeamService {
             return { messages: [], count: 0 };
         }
 
-        // Build the identity index once: agentId → { teamId, memberLabel, agentType }.
+        // Build the identity index once: agentId → { memberLabel, agentType }.
         const specs = await this.listAgentSpecs();
         const identityById = new Map<string, MessageEndpointIdentity>();
         for (const spec of specs) {
-            const teamTag = spec.tags?.find((t) => t.startsWith('team:'));
             identityById.set(spec.id, {
                 agentId: spec.id,
-                ...(teamTag !== undefined ? { teamId: teamTag.slice('team:'.length) } : {}),
                 memberLabel: spec.name,
                 agentType: spec.type,
             });
@@ -733,13 +502,13 @@ export class TeamService {
         // Atomic temp+rename: a raw writeFile can leave a torn SSOT task file on crash.
         await atomicWriteAsync(path, doc.serialize(), taskId, fs);
 
-        // Member assignment event (task 0371 R1/R2). Roster lookup is best-effort:
-        // an unknown member still emits with null unresolved fields (R5 / R17).
-        const identity = await this.resolveMemberIdentity(agentId);
-        this.emitTeamMemberEvent('team.member.assigned', {
-            teamId: identity.teamId,
+        // Task assignment event (task 0371 R1/R2; renamed by 0860 R2 — the subject
+        // is the task). Spec lookup is best-effort: an unknown member still emits
+        // with a null agentType (R5 / R17).
+        const agentType = await this.resolveAgentType(agentId);
+        this.emitTaskAssignedEvent({
             memberId: agentId,
-            agentType: identity.agentType,
+            agentType,
             outcome: 'assigned',
             taskId,
         });
@@ -838,38 +607,31 @@ export class TeamService {
         }
     }
     /**
-     * Publish a member-scoped team event when a bus is wired. Payload fields
-     * may be null (unknown roster) — the event is never dropped (R5).
+     * Publish the `task.assigned` event when a bus is wired. Payload fields may be
+     * null (unknown spec) — the event is never dropped (R5).
      */
-    private emitTeamMemberEvent(
-        name: 'team.member.assigned' | 'team.member.started' | 'team.member.stopped',
-        payload: TeamMemberEventPayload,
-    ): void {
+    private emitTaskAssignedEvent(payload: TaskAssignedEventPayload): void {
         const bus = this.ctx.eventBus;
         if (!bus) return;
         try {
-            bus.emit(name, { ...payload, severity: 'info' });
+            bus.emit('task.assigned', { ...payload, severity: 'info' });
         } catch {
             // Swallow — event is observable metadata only.
         }
     }
 
     /**
-     * Best-effort roster join for a composed agent id (`teamId-memberId`).
-     * Missing roster rows yield null fields — never throws (R5 / R17).
+     * Best-effort spec join for an agent id — the agent type off the spec.
+     * A missing spec yields null — never throws (R5 / R17).
      */
-    private async resolveMemberIdentity(agentId: string): Promise<{ teamId: string | null; agentType: string | null }> {
+    private async resolveAgentType(agentId: string): Promise<string | null> {
         try {
             const specs = await loadAgentSpecs(this.configDir);
             const spec = specs.find((s) => s.id === agentId);
-            if (!spec) return { teamId: null, agentType: null };
-            const teamTag = spec.tags?.find((t) => t.startsWith('team:'));
-            return {
-                teamId: teamTag ? teamTag.slice('team:'.length) : null,
-                agentType: typeof spec.type === 'string' && spec.type.length > 0 ? spec.type : null,
-            };
+            if (!spec) return null;
+            return typeof spec.type === 'string' && spec.type.length > 0 ? spec.type : null;
         } catch {
-            return { teamId: null, agentType: null };
+            return null;
         }
     }
 
@@ -881,30 +643,10 @@ export class TeamService {
     private orchestrator(): Promise<TeamOrchestrator> {
         this.orchestratorPromise ??= this.inboxDao().then((dao) => {
             const orch = new TeamOrchestrator(this.configDir, dao, { events: this.ctx.events });
-            // Bridge TeamOrchestrator agent lifecycle → team.member.* so the
-            // team family reaches the ledger from the orchestrator path
-            // (task 0371 R2). SupervisorService emits the same names on the
-            // serve/process path; both are cataloged and idempotent as rows.
-            orch.on('agent.started', (event) => {
-                void this.resolveMemberIdentity(event.agentId).then((identity) => {
-                    this.emitTeamMemberEvent('team.member.started', {
-                        teamId: identity.teamId,
-                        memberId: event.agentId,
-                        agentType: event.agentType ?? identity.agentType,
-                        outcome: 'started',
-                    });
-                });
-            });
-            orch.on('agent.stopped', (event) => {
-                void this.resolveMemberIdentity(event.agentId).then((identity) => {
-                    this.emitTeamMemberEvent('team.member.stopped', {
-                        teamId: identity.teamId,
-                        memberId: event.agentId,
-                        agentType: identity.agentType,
-                        outcome: 'stopped',
-                    });
-                });
-            });
+            // 0860 R2: the retired member-scoped lifecycle bridge is gone — the
+            // orchestrator's own `agent.started|stopped` events are the cataloged
+            // lifecycle fact, and SupervisorService emits them on the serve path.
+            // Nothing re-publishes agent lifecycle under a second name.
             return orch;
         });
         return this.orchestratorPromise;

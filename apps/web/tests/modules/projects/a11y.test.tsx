@@ -101,7 +101,7 @@ function stubFetch(): typeof fetch {
         if (url.includes('/project/fleet')) {
             return Promise.resolve(new Response(JSON.stringify(fleet()), { status: 200 }));
         }
-        if (url.includes('/team/processes')) {
+        if (url.includes('/processes')) {
             return Promise.resolve(
                 new Response(JSON.stringify({ processes: [procRow('orch'), procRow('a1')] }), { status: 200 }),
             );

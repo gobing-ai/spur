@@ -386,7 +386,7 @@ See [contract detail](design/project-switcher.md#7-http-api).
 Declared fleet member and observed process are rendered as two labeled facts,
 joined by `instanceId` — never one status; issue labels are frozen and shared
 with 0844's receipt states. Roster + member detail read and control only the
-existing `/api/project/fleet` + `/api/team/*` transports.
+existing `/api/project/fleet` + `/api/processes/* + /api/agents/*` transports.
 
 0853 adds one derived line to the same card: uptime rendered by `formatUptime`
 under `data-roster-uptime`, shown only while the observed process is `running`

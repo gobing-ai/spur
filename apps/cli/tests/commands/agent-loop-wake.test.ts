@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { _resetAgentServiceShimsForTest, type SystemEventBus, TeamService } from '@gobing-ai/spur-app';
+import { _resetAgentServiceShimsForTest, AgentCoordinationService, type SystemEventBus } from '@gobing-ai/spur-app';
 import { spurConfigSchema } from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import {
@@ -71,7 +71,7 @@ async function makeRig(opts?: { corpus?: boolean }): Promise<WakeRig> {
         db,
         loadAgentConfig: (root: string) => loadSpurConfig(root),
     });
-    const team = new TeamService(ctx);
+    const team = new AgentCoordinationService(ctx);
     await team.createAgentSpec({ id: 'wake-worker', type: 'claude-code' });
     if (opts?.corpus === true) {
         // Minimal planning corpus so `recordIdleHold` can produce REAL holds
@@ -161,14 +161,14 @@ beforeEach(() => {
 
 describe('agent loop wake sources (0839 R1)', () => {
     test('message.sent wakes the loop: the queued request drains and runs once', async () => {
-        // The organic human-request path: a ledger-attached TeamService send
+        // The organic human-request path: a ledger-attached AgentCoordinationService send
         // persists the `message.sent` fact, the wake drains the inbox, and the
         // agent runs with the body — no polling tick in between.
         const rig = await makeRig();
         try {
             const bus = new EventBus() as SystemEventBus;
             await attachSystemEventLedger(bus, rig.ctx);
-            const team = new TeamService({ ...rig.ctx, eventBus: bus } as unknown as CliContext);
+            const team = new AgentCoordinationService({ ...rig.ctx, eventBus: bus } as unknown as CliContext);
 
             const elapsed = await runOneWokenIteration(rig, async () => {
                 await team.sendMessage('operator', 'wake-worker', 'wake up and process task #7');
@@ -210,7 +210,7 @@ describe('agent loop wake sources (0839 R1)', () => {
     test('a plain CLI sender persists the wake without an injected event bus', async () => {
         const rig = await makeRig();
         try {
-            const team = new TeamService(rig.ctx);
+            const team = new AgentCoordinationService(rig.ctx);
             expect(
                 await runOneWokenIteration(rig, async () => {
                     await team.sendMessage('operator', 'wake-worker', 'CLI request');
@@ -408,7 +408,7 @@ test('G62 production loop claims ownership, dispatches gated tasks, reconciles a
     try {
         process.chdir(project);
         const path = realpathSync(project);
-        const team = new TeamService(ctx);
+        const team = new AgentCoordinationService(ctx);
         await team.createAgentSpec({ id: 'proj-lead', type: 'pi' });
         await team.createAgentSpec({ id: 'proj-coder', type: 'pi' });
         for (const [wbs, tags, body, dependencies] of [

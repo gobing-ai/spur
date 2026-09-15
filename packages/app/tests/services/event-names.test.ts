@@ -193,19 +193,20 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain('workflow.steering');
     });
 
-    test('registers the team member catalog entries (task 0371 R1)', () => {
-        // 0857: the team up/down pair was removed with the `agent.team` roster runtime;
-        // the member family is what remains of the task 0371 catalog.
-        const names = ['team.member.assigned', 'team.member.started', 'team.member.stopped'] as const;
-        for (const name of names) {
-            const entry = requireEntry(name);
-            expect(entry.source).toBe('team');
-            expect(entry.renderer).toBe('team');
-            expect(entry.payloadPolicy).toBe('metadata-only');
-            expect(entry.tier).toBe('default');
-            expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain(name);
-            expect(SYSTEM_EVENT_PREFIXES).toContain('team');
-        }
+    test('registers the task.assigned catalog entry (task 0371 R1; 0860 R2)', () => {
+        // 0857 removed the up/down pair with the `agent.team` roster runtime; 0860
+        // renamed assignment to the task noun and DELETED the member-scoped
+        // lifecycle pair (it duplicated agent.started|stopped) — so the retired
+        // names must be absent from the catalog, not merely unreferenced.
+        const entry = requireEntry('task.assigned');
+        expect(entry.source).toBe('planning');
+        expect(entry.renderer).toBe('planning');
+        expect(entry.payloadPolicy).toBe('metadata-only');
+        expect(entry.tier).toBe('default');
+        expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain('task.assigned');
+        // No name under the retired family prefix survives in the catalog.
+        expect(SYSTEM_EVENT_NAMES.filter((name) => name.startsWith('team.'))).toEqual([]);
+        expect(SYSTEM_EVENT_PREFIXES as readonly string[]).not.toContain('team');
     });
 
     test('classifies lifecycle stop as info and reserves warning for degraded names', () => {
@@ -217,8 +218,6 @@ describe('SYSTEM_EVENT_CATALOG', () => {
             'process.exited',
             'agent.started',
             'agent.stopped',
-            'team.member.started',
-            'team.member.stopped',
         ]) {
             expect(requireEntry(name).severity).toBe('info');
         }

@@ -3,26 +3,12 @@ import type { AgentInstance, AgentInstanceStore } from '@gobing-ai/spur-domain';
 import { specRole } from '@gobing-ai/spur-domain';
 import type { AgentSpec } from '@gobing-ai/ts-ai-runner';
 
-/** Minimal read seam — satisfied by {@link TeamService.listAgentSpecs}. */
+/** Minimal read seam — satisfied by {@link AgentCoordinationService.listAgentSpecs}. */
 export type AgentSpecLister = () => Promise<AgentSpec[]>;
-
-/** Parse the `team:<id>` identity tag off a spec, or null. */
-function teamTagOf(spec: Pick<AgentSpec, 'tags'>): string | null {
-    for (const tag of spec.tags ?? []) {
-        if (tag.startsWith('team:')) return tag.slice('team:'.length);
-    }
-    return null;
-}
-
-/** Recover the roster-local member key from its exact `team:<id>` prefix. */
-function memberKeyOf(specId: string, teamId: string | null): string {
-    const prefix = teamId === null ? null : `${teamId}-`;
-    return prefix !== null && specId.startsWith(prefix) ? specId.slice(prefix.length) : specId;
-}
 
 /**
  * File-backed instance reader (0685 R2): projects spec files (via
- * `TeamService.listAgentSpecs()`) onto the frozen {@link AgentInstance} shape.
+ * `AgentCoordinationService.listAgentSpecs()`) onto the frozen {@link AgentInstance} shape.
  * Runtime fields use stopped/epoch sentinels here — occupancy lives with the
  * agent service until the DB cutover (`0026_spur_cli_agent_instances`, ADR-086).
  */
@@ -30,11 +16,14 @@ export function createFileAgentInstanceStore(listAgentSpecs: AgentSpecLister): A
     async function all(): Promise<AgentInstance[]> {
         const specs = await listAgentSpecs();
         return specs.map((spec) => {
-            const teamId = teamTagOf(spec);
             return {
                 specId: spec.id,
-                teamId,
-                memberKey: memberKeyOf(spec.id, teamId),
+                // 0860 R4: no producer stamps a grouping id any more. The
+                // `agent_instances.team_id` column is deliberately retained
+                // (nullable, unwritten) — renaming it is a schema migration.
+                teamId: null,
+                // Without a grouping id, the whole spec id IS the member key.
+                memberKey: spec.id,
                 role: specRole(spec),
                 executor: spec.executor ?? null,
                 workspace: spec.workspace,

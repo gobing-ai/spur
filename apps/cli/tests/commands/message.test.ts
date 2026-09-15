@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { TeamService } from '@gobing-ai/spur-app';
+import { AgentCoordinationService } from '@gobing-ai/spur-app';
 import { CoordinationRunDao, createMigratedDb, InboxMessageDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { defaultSleep, parseInterval, runMessageWatch } from '../../src/commands/message';
@@ -341,14 +341,14 @@ describe('spur message dispatch', () => {
 // Tests exercise the runMessageWatch core directly with an injected sleep (no real waits)
 // and a maxIterations cap so the loop terminates deterministically.
 
-/** Build a TeamService over a temp project dir + in-memory DB for watch tests. */
+/** Build a AgentCoordinationService over a temp project dir + in-memory DB for watch tests. */
 async function makeWatchService(): Promise<{
-    svc: TeamService;
+    svc: AgentCoordinationService;
     cleanup: () => Promise<void>;
 }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-watch-'));
     const db = await createMigratedDb({ url: ':memory:' });
-    const svc = new TeamService({
+    const svc = new AgentCoordinationService({
         cwd,
         env: {},
         getDb: async () => db,

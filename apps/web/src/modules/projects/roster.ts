@@ -4,7 +4,7 @@
  * A roster entry joins two independent facts: the member DECLARED in the
  * project's fleet snapshot (`ProjectFleetSnapshot.members`, 0840 wire of
  * FleetService 0835) and the process OBSERVED through the existing
- * `GET /api/team/processes` read (`ProcessStatus`, teams module). The two
+ * `GET /api/processes` read (`ProcessStatus`, teams module). The two
  * facts come from different systems and disagree in both directions —
  * declared-but-not-running, and a live process with no declared member —
  * so they are never collapsed into one status (R2).

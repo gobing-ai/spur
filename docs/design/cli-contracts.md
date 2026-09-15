@@ -352,7 +352,7 @@ spec id** (a different namespace from the coding-agent type), folds that spec's 
 messages into the prompt, and rewrites `--agent` to the spec's **executor name** before dispatch
 (Phase 1-3 has no live stdin, so prepending is how deferred messages reach the agent). A
 team-materialized spec records the executor name beside the coding-agent kind (task 0537):
-`.spur/agents/<teamId>-<localId>.yaml` carries `type: <kind>` **and** `executor: <name>`, so the
+`.spur/agents/<slug>-<localId>.yaml` carries `type: <kind>` **and** `executor: <name>`, so the
 rewrite resolves back through `resolveExecutor`'s executor-first lookup and restores the
 operator's `{ agent, model }` with the executor's declared tier — a spec bound to `codex-sol`
 runs on `gpt-5.6-sol` at `capable-3`, not bare `codex` on the default model. For a **role-only**
@@ -450,13 +450,13 @@ Selector precedence inside the arg: exact executor/agent name first, role id sec
 
 #### Agent specs (`.spur/agents/<id>.yaml`)
 
-Agent specs are backed by `ts-ai-runner` agent-spec helpers and the app-layer `TeamService` /
+Agent specs are backed by `ts-ai-runner` agent-spec helpers and the app-layer `AgentCoordinationService` /
 `FleetService`. There is no CLI authoring verb (`agent create|edit|delete` were removed at the G64
 cutover, 2026-09-14): specs are materialized from the fleet declaration at `spur serve` start and read
 through `spur agent list --specs`. Spec ids are validated (`[a-z][a-z0-9_-]{1,63}`).
 
 - **Materialized specs record the executor binding (0537).** Materialization writes
-  `.spur/agents/<teamId>-<localId>.yaml` with the coding-agent kind (`type`, required for the
+  `.spur/agents/<slug>-<localId>.yaml` with the coding-agent kind (`type`, required for the
   runner) **and** the configured executor name (`executor: <name>` beside `type`, e.g. `codex-sol`),
   so `--drain --spec <specId>` can resolve back to the operator's model + tier. `executor` is
   optional on disk — pre-existing specs carrying only `type` still load and drain via the fallback
@@ -502,7 +502,7 @@ No oRPC wait path in this wave.
 
 #### `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 
-Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by `TeamService` →
+Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by `AgentCoordinationService` →
 `ts-ai-runner` `MessageService` → `ts-db` `InboxMessageDao`).
 
 - `send` — enqueue a message; `--from` defaults to `operator`. Prints `queued <id> → <to>`.
@@ -519,9 +519,9 @@ Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by 
 Supervised process lifecycle (backed by `SupervisorService` via `spur serve`). The `spur team` noun was
 removed at the G64 cutover (2026-09-14): `assign` → `spur task update --assignee`, `status` →
 `spur agent list --specs`, `up` → fleet materialization at serve start. There is no attach verb:
-attach is `GET /api/team/processes/:id/stream` (SSE) plus Board/HTTP clients.
+attach is `GET /api/processes/:id/stream` (SSE) plus Board/HTTP clients.
 
-- POST to `<server>/team/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), `SPUR_TEAM_ID` when the spec has a `team:` tag, and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/team/processes/:id/stdin`) is operator attach, not durable inbox delivery.
+- POST to `<server>/agents/<id>/(start|stop)` (default server `http://localhost:3000/api`; `--server` overrides). `--json` returns the raw server payload; otherwise `start` prints `started <id> (pid=<pid>, status=<status>)`, `stop` prints `stopped <id>`. Exit 1 on transport failure or server-side error. `start` launches `spur agent loop` under the supervisor and injects caller-identity env into that process: `SPUR_SPEC_ID` (spec id), `SPUR_RUN_ID` (process-generation UUID), and `SPUR_SERVE_URL` from the supervisor constructor or env (ADR-057 wave 1). `SPUR_AGENT` remains the host coding-agent hint, not a spec id. Process-pipe stdin (`POST /api/processes/:id/stdin`) is operator attach, not durable inbox delivery.
 
 <a id="spur-rule-run---preset-name---file-path---rule-id---fail-on-severity---stop-on-first-severity---fix-mode-mode---dry-run---verbose---json"></a>
 

@@ -88,13 +88,13 @@ describe('nextBackoff', () => {
 describe('streamUrl', () => {
     test('includes sinceSeq for resume on reconnect', () => {
         const url = streamUrl('alpha-claude', 42);
-        expect(url).toContain('/team/processes/alpha-claude/stream');
+        expect(url).toContain('/processes/alpha-claude/stream');
         expect(url).toContain('sinceSeq=42');
     });
 
     test('omits sinceSeq for initial attach', () => {
         const url = streamUrl('alpha-claude');
-        expect(url).toContain('/team/processes/alpha-claude/stream');
+        expect(url).toContain('/processes/alpha-claude/stream');
         expect(url).not.toContain('sinceSeq');
     });
 });

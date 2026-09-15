@@ -88,7 +88,7 @@ function installSilentApiFetch(): void {
         if (url.includes('/api/project')) {
             return Promise.resolve(new Response(JSON.stringify({ name: 'spur', path: '/repo/wt' }), { status: 200 }));
         }
-        if (url.includes('/api/team/processes')) {
+        if (url.includes('/api/processes')) {
             return Promise.resolve(
                 new Response(
                     JSON.stringify({

@@ -20,7 +20,6 @@ export type SystemEventSource =
     | 'workflow'
     | 'rule'
     | 'agent'
-    | 'team'
     | 'history'
     | 'bus'
     | 'api';
@@ -78,7 +77,7 @@ const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
     planning: { producerPackage: 'spur', subsystem: 'planning', remediationKind: 'prefix-filter' },
     queue: { producerPackage: '@gobing-ai/ts-infra', subsystem: 'job-queue', remediationKind: 'prefix-filter' },
     scheduler: { producerPackage: '@gobing-ai/ts-infra', subsystem: 'scheduler', remediationKind: 'prefix-filter' },
-    message: { producerPackage: 'spur', subsystem: 'team-messaging', remediationKind: 'prefix-filter' },
+    message: { producerPackage: 'spur', subsystem: 'coordination-messaging', remediationKind: 'prefix-filter' },
     process: {
         producerPackage: '@gobing-ai/ts-runtime',
         subsystem: 'process-executor',
@@ -91,7 +90,6 @@ const SOURCE_PROFILES: Record<SystemEventSource, SourceProfile> = {
     },
     rule: { producerPackage: '@gobing-ai/ts-rule-engine', subsystem: 'rule-engine', remediationKind: 'rule-trace' },
     agent: { producerPackage: '@gobing-ai/ts-ai-runner', subsystem: 'agent-runner', remediationKind: 'prefix-filter' },
-    team: { producerPackage: 'spur', subsystem: 'team', remediationKind: 'prefix-filter' },
     history: { producerPackage: 'spur', subsystem: 'history', remediationKind: 'prefix-filter' },
     bus: { producerPackage: '@gobing-ai/ts-infra', subsystem: 'event-bus', remediationKind: 'prefix-filter' },
     api: { producerPackage: 'spur', subsystem: 'http-api', remediationKind: 'prefix-filter' },
@@ -312,10 +310,10 @@ const BASE_CATALOG = [
         subsystem: 'write-slot',
     }),
 
-    // ── team.* (task 0371 R1) ─────────────────────────────────────────────
-    baseEvent('team.member.assigned', 'team', 'team'),
-    baseEvent('team.member.started', 'team', 'team'),
-    baseEvent('team.member.stopped', 'team', 'team'),
+    // 0860 R2: assignment is a task fact, so it lives under the task noun. The
+    // retired member-scoped started/stopped pair duplicated agent.started|stopped
+    // and was deleted rather than renamed.
+    baseEvent('task.assigned', 'planning', 'planning'),
 
     // ── history.* (task 0471 R1) ─────────────────────────────────────────
     baseEvent('history.import.completed', 'history', 'history-import'),
@@ -648,7 +646,7 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
     // ── process ───────────────────────────────────────────────────────────
     'process.spawned': {
         description: 'A supervised process was spawned with a new pid.',
-        fields: [field('label', 'Label'), field('pid', 'PID'), field('teamId', 'Team'), field('agentId', 'Agent')],
+        fields: [field('label', 'Label'), field('pid', 'PID'), field('agentId', 'Agent')],
         summary: ({ data }) => {
             const label = s(data, 'label') ?? n(data, 'pid');
             return label !== undefined ? `[process] ${label} spawned` : '[process] spawned';
@@ -844,56 +842,21 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
         outcome: derivedFromValue('ok'),
     },
 
-    // ── team.member.* (the team up/down pair was retired with the roster runtime, 0857) ──
-    'team.member.assigned': {
-        description: 'A member was assigned to a team, naming the task when present.',
+    // ── task.assigned (0860 R2; renamed from the member-scoped assignment event) ──
+    'task.assigned': {
+        description: 'A task was assigned to an agent, naming the agent when resolved.',
         fields: [
-            field('teamId', 'Team'),
             field('memberId', 'Member'),
             field('agentType', 'Agent type'),
             field('taskId', 'Task'),
             field('outcome', 'Outcome'),
         ],
         summary: ({ data }) => {
-            const team = s(data, 'teamId');
             const member = s(data, 'memberId');
-            return team !== undefined && member !== undefined
-                ? `[team] ${team} · ${member} assigned`
-                : '[team] member assigned';
-        },
-        outcome: derivedFrom('outcome'),
-    },
-    'team.member.started': {
-        description: 'A team member began working on the team.',
-        fields: [
-            field('teamId', 'Team'),
-            field('memberId', 'Member'),
-            field('agentType', 'Agent type'),
-            field('outcome', 'Outcome'),
-        ],
-        summary: ({ data }) => {
-            const team = s(data, 'teamId');
-            const member = s(data, 'memberId');
-            return team !== undefined && member !== undefined
-                ? `[team] ${team} · ${member} started`
-                : '[team] member started';
-        },
-        outcome: derivedFrom('outcome'),
-    },
-    'team.member.stopped': {
-        description: 'A team member stopped working on the team.',
-        fields: [
-            field('teamId', 'Team'),
-            field('memberId', 'Member'),
-            field('agentType', 'Agent type'),
-            field('outcome', 'Outcome'),
-        ],
-        summary: ({ data }) => {
-            const team = s(data, 'teamId');
-            const member = s(data, 'memberId');
-            return team !== undefined && member !== undefined
-                ? `[team] ${team} · ${member} stopped`
-                : '[team] member stopped';
+            const task = s(data, 'taskId');
+            return task !== undefined && member !== undefined
+                ? `[task] ${task} assigned to ${member}`
+                : '[task] assignment recorded';
         },
         outcome: derivedFrom('outcome'),
     },

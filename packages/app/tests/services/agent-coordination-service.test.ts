@@ -16,15 +16,15 @@ import {
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
+    AgentCoordinationService,
+    type AgentCoordinationServiceContext,
     type AgentRoleDefinition,
+    type CoordinationEventBus,
     type MessageEventBus,
     type MessageEventPayload,
-    type TeamMemberEventPayload,
-    TeamService,
-    type TeamServiceContext,
-    type TeamServiceEventBus,
+    type TaskAssignedEventPayload,
 } from '../../src/index';
-import { resolveMemberExecutor } from '../../src/services/team-service';
+import { resolveMemberExecutor } from '../../src/services/fleet-service';
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -34,16 +34,16 @@ function nullOutput() {
     return { write: () => {}, error: () => {} };
 }
 
-/** Build a TeamService over a temp project dir + a shared in-memory database. */
+/** Build a AgentCoordinationService over a temp project dir + a shared in-memory database. */
 async function makeService(
-    bus?: MessageEventBus | TeamServiceEventBus,
+    bus?: MessageEventBus | CoordinationEventBus,
     events?: EventBus<AgentEvents>,
     roles?: ReadonlyMap<string, AgentRoleDefinition>,
     spurConfig?: SpurConfig | null,
-): Promise<{ svc: TeamService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
+): Promise<{ svc: AgentCoordinationService; cwd: string; db: DbAdapter; cleanup: () => Promise<void> }> {
     const cwd = await mkdtemp(join(tmpdir(), 'spur-team-'));
     const db = await createMigratedDb({ url: ':memory:' });
-    const ctx: TeamServiceContext = {
+    const ctx: AgentCoordinationServiceContext = {
         cwd,
         env: {},
         output: nullOutput(),
@@ -55,7 +55,7 @@ async function makeService(
         ...(spurConfig !== undefined ? { spurConfig } : {}),
     };
     return {
-        svc: new TeamService(ctx),
+        svc: new AgentCoordinationService(ctx),
         cwd,
         db,
         cleanup: async () => {
@@ -114,7 +114,7 @@ function makeCapturingBus(): { bus: MessageEventBus; events: Map<string, Message
 // Messaging
 // ---------------------------------------------------------------------------
 
-describe('TeamService messaging', () => {
+describe('AgentCoordinationService messaging', () => {
     test('sendMessage enqueues and returns a queued result', async () => {
         const { svc, cleanup } = await makeService();
         try {
@@ -288,8 +288,8 @@ describe('TeamService messaging', () => {
             expect(broadcast?.from).toBeUndefined();
             const nonBroadcast = recent.messages.find((m) => m.fromId !== null);
             expect(nonBroadcast?.from?.agentId).toBe(nonBroadcast?.fromId ?? undefined);
-            // Unresolved agent ids (no team config) fall back to raw agentId only.
-            expect(nonBroadcast?.from?.teamName).toBeUndefined();
+            // Unresolved agent ids fall back to the raw agentId only.
+            expect(nonBroadcast?.from?.agentType).toBeUndefined();
         } finally {
             await cleanup();
         }
@@ -372,7 +372,7 @@ describe('TeamService messaging', () => {
 // Agent specs
 // ---------------------------------------------------------------------------
 
-describe('TeamService agent specs', () => {
+describe('AgentCoordinationService agent specs', () => {
     test('createAgentSpec writes a spec and applies defaults', async () => {
         const { svc, cwd, cleanup } = await makeService();
         try {
@@ -447,7 +447,7 @@ describe('TeamService agent specs', () => {
 // Status & task assignment
 // ---------------------------------------------------------------------------
 
-describe('TeamService status & assignment', () => {
+describe('AgentCoordinationService status & assignment', () => {
     test('getStatus reports stopped for non-running specs', async () => {
         const { svc, cleanup } = await makeService();
         try {
@@ -605,9 +605,9 @@ describe('TeamService status & assignment', () => {
 // Task 0237 — TeamOrchestrator events bus wiring
 // ---------------------------------------------------------------------------
 
-describe('TeamService agent lifecycle bus (task 0237)', () => {
+describe('AgentCoordinationService agent lifecycle bus (task 0237)', () => {
     test('R5: message.sent still fires when both eventBus and events are wired', async () => {
-        // Two independent bus fields must not interfere: TeamService messaging uses
+        // Two independent bus fields must not interfere: AgentCoordinationService messaging uses
         // eventBus; TeamOrchestrator lifecycle uses events.
         const { bus, events: msgEvents } = makeCapturingBus();
         const agentBus = new EventBus<AgentEvents>();
@@ -628,8 +628,8 @@ describe('TeamService agent lifecycle bus (task 0237)', () => {
     });
 
     test('R4: TeamOrchestrator with events bus emits agent.started/stopped/message.sent', async () => {
-        // Mirrors TeamService.orchestrator(): `new TeamOrchestrator(configDir, dao, { events })`.
-        // processFactory is test-only (TeamService does not inject it) so we never spawn a real agent.
+        // Mirrors AgentCoordinationService.orchestrator(): `new TeamOrchestrator(configDir, dao, { events })`.
+        // processFactory is test-only (AgentCoordinationService does not inject it) so we never spawn a real agent.
         const cwd = await mkdtemp(join(tmpdir(), 'spur-team-orch-'));
         const db = await createMigratedDb({ url: ':memory:' });
         const configDir = join(cwd, '.spur', 'agents');
@@ -673,7 +673,7 @@ describe('TeamService agent lifecycle bus (task 0237)', () => {
         }
     });
 
-    test('R6: TeamServiceContext without events still constructs (optional field)', async () => {
+    test('R6: AgentCoordinationServiceContext without events still constructs (optional field)', async () => {
         const { svc, cleanup } = await makeService();
         try {
             // getStatus touches orchestrator(); CLI path omits events → throwaway bus.
@@ -706,7 +706,7 @@ async function seedSpec(configDir: string, id: string, tags: string[], type = 'c
     );
 }
 
-describe('TeamService buildIdentity', () => {
+describe('AgentCoordinationService buildIdentity', () => {
     test('builds a preamble listing workspace peers (excluding self)', async () => {
         const { svc, cwd, cleanup } = await makeService();
         try {
@@ -734,7 +734,7 @@ describe('TeamService buildIdentity', () => {
 // Drain loop (0253 R5/AC3): drainPending + countPending
 // ---------------------------------------------------------------------------
 
-describe('TeamService drain loop (0253)', () => {
+describe('AgentCoordinationService drain loop (0253)', () => {
     test('drainPending consumes queued messages and marks them injected', async () => {
         const { svc, cleanup } = await makeService();
         try {
@@ -792,73 +792,66 @@ describe('TeamService drain loop (0253)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Team.* event family (task 0371 / J3 R15–R17)
+// ---------------------------------------------------------------------------
+// task.assigned event (task 0371; renamed by 0860 R2)
 // ---------------------------------------------------------------------------
 
-function makeTeamCapturingBus(): {
-    bus: TeamServiceEventBus;
-    members: Map<string, TeamMemberEventPayload[]>;
+function makeAssignmentCapturingBus(): {
+    bus: CoordinationEventBus;
+    assigned: TaskAssignedEventPayload[];
 } {
-    const bus = new EventBus() as unknown as TeamServiceEventBus;
-    const members = new Map<string, TeamMemberEventPayload[]>([
-        ['team.member.assigned', []],
-        ['team.member.started', []],
-        ['team.member.stopped', []],
-    ]);
-    bus.on('team.member.assigned', (e) => members.get('team.member.assigned')?.push(e));
-    bus.on('team.member.started', (e) => members.get('team.member.started')?.push(e));
-    bus.on('team.member.stopped', (e) => members.get('team.member.stopped')?.push(e));
-    return { bus, members };
+    const bus = new EventBus() as unknown as CoordinationEventBus;
+    const assigned: TaskAssignedEventPayload[] = [];
+    bus.on('task.assigned', (e) => assigned.push(e));
+    return { bus, assigned };
 }
 
-describe('TeamService team.* events (task 0371)', () => {
-    test('R16: assignTask emits team.member.assigned with teamId/memberId/agentType', async () => {
-        const { bus, members } = makeTeamCapturingBus();
+describe('AgentCoordinationService task.assigned event (task 0371; 0860 R2)', () => {
+    test('R16: assignTask emits task.assigned with memberId/agentType/outcome/taskId', async () => {
+        const { bus, assigned } = makeAssignmentCapturingBus();
         const { svc, cwd, cleanup } = await makeService(bus);
         try {
-            // 0857: the `team:<id>` tag on the spec is the roster identity now that the
-            // `agent.team` config block is gone — seed the generated spec directly.
-            await seedSpec(join(cwd, '.spur', 'agents'), 'devops-claude', ['team:devops', 'spur:generated']);
+            await seedSpec(join(cwd, '.spur', 'agents'), 'devops-claude', ['spur:generated']);
             const tasksDir = join(cwd, 'docs', 'tasks');
             await mkdir(tasksDir, { recursive: true });
             await writeFile(join(tasksDir, '0042_demo_task.md'), '---\nname: Demo\nstatus: Todo\n---\n\nbody\n');
 
             await svc.assignTask('0042', 'devops-claude');
-            const assigned = members.get('team.member.assigned');
-            expect(assigned?.length).toBe(1);
-            expect(assigned?.[0]?.teamId).toBe('devops');
-            expect(assigned?.[0]?.memberId).toBe('devops-claude');
-            expect(assigned?.[0]?.agentType).toBe('claude');
-            expect(assigned?.[0]?.outcome).toBe('assigned');
-            expect(assigned?.[0]?.taskId).toBe('0042');
+            expect(assigned.length).toBe(1);
+            expect(assigned[0]?.memberId).toBe('devops-claude');
+            expect(assigned[0]?.agentType).toBe('claude');
+            expect(assigned[0]?.outcome).toBe('assigned');
+            expect(assigned[0]?.taskId).toBe('0042');
         } finally {
             await cleanup();
         }
     });
 
     test('R17: assignTask for unknown member still emits with null unresolved fields', async () => {
-        const { bus, members } = makeTeamCapturingBus();
+        const { bus, assigned } = makeAssignmentCapturingBus();
         const { svc, cwd, cleanup } = await makeService(bus);
         try {
             const tasksDir = join(cwd, 'docs', 'tasks');
             await mkdir(tasksDir, { recursive: true });
             await writeFile(join(tasksDir, '0042_demo_task.md'), '---\nname: Demo\nstatus: Todo\n---\n\nbody\n');
 
-            // Agent id is syntactically valid but has no roster/spec entry.
+            // Agent id is syntactically valid but has no spec entry.
             await svc.assignTask('0042', 'ghost-member');
-            const assigned = members.get('team.member.assigned');
-            expect(assigned?.length).toBe(1);
-            expect(assigned?.[0]?.memberId).toBe('ghost-member');
-            expect(assigned?.[0]?.teamId).toBeNull();
-            expect(assigned?.[0]?.agentType).toBeNull();
-            expect(assigned?.[0]?.outcome).toBe('assigned');
+            expect(assigned.length).toBe(1);
+            expect(assigned[0]?.memberId).toBe('ghost-member');
+            expect(assigned[0]?.agentType).toBeNull();
+            expect(assigned[0]?.outcome).toBe('assigned');
         } finally {
             await cleanup();
         }
     });
 
-    test('R2: TeamOrchestrator agent.started bridges to team.member.started', async () => {
-        const { bus, members } = makeTeamCapturingBus();
+    // 0860 R2: the retired member-scoped lifecycle bridge has no replacement —
+    // `agent.started|stopped` on the orchestrator bus is the cataloged lifecycle
+    // fact (SupervisorService emits the same names on the serve path), so a
+    // second name for it is asserted ABSENT rather than renamed.
+    test('0860 R2: agent lifecycle is not re-published under a second event name', async () => {
+        const { bus, assigned } = makeAssignmentCapturingBus();
         const agentBus = new EventBus<AgentEvents>();
         const { svc, cwd, cleanup } = await makeService(bus, agentBus);
         try {
@@ -871,71 +864,22 @@ describe('TeamService team.* events (task 0371)', () => {
                     type: 'codex',
                     workspace: cwd,
                     purpose: 'Implement',
-                    tags: ['team:devops', 'spur:generated'],
+                    tags: ['spur:generated'],
                     config: {},
                 },
                 configDir,
             );
 
-            // Touch orchestrator() so the agent.* → team.member.* bridge is wired.
             await svc.getStatus();
-
-            // Drive the agent bus the way TeamOrchestrator would.
             agentBus.emit('agent.started', {
                 agentId: 'devops-coder',
                 agentType: 'codex',
                 pid: 99,
                 severity: 'info',
             });
-            // Allow the async identity resolve to settle.
             await new Promise((r) => setTimeout(r, 20));
 
-            const started = members.get('team.member.started');
-            expect(started?.length).toBe(1);
-            expect(started?.[0]?.memberId).toBe('devops-coder');
-            expect(started?.[0]?.teamId).toBe('devops');
-            expect(started?.[0]?.agentType).toBe('codex');
-            expect(started?.[0]?.outcome).toBe('started');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('R2: TeamOrchestrator agent.stopped bridges to team.member.stopped', async () => {
-        const { bus, members } = makeTeamCapturingBus();
-        const agentBus = new EventBus<AgentEvents>();
-        const { svc, cwd, cleanup } = await makeService(bus, agentBus);
-        try {
-            const configDir = join(cwd, '.spur', 'agents');
-            await createNodeFileSystem(cwd).ensureDir(configDir);
-            await saveAgentSpec(
-                {
-                    id: 'devops-coder',
-                    name: 'coder',
-                    type: 'codex',
-                    workspace: cwd,
-                    purpose: 'Implement',
-                    tags: ['team:devops', 'spur:generated'],
-                    config: {},
-                },
-                configDir,
-            );
-
-            await svc.getStatus();
-
-            agentBus.emit('agent.stopped', {
-                agentId: 'devops-coder',
-                exitCode: 0,
-                severity: 'info',
-            });
-            await new Promise((r) => setTimeout(r, 20));
-
-            const stopped = members.get('team.member.stopped');
-            expect(stopped?.length).toBe(1);
-            expect(stopped?.[0]?.memberId).toBe('devops-coder');
-            expect(stopped?.[0]?.teamId).toBe('devops');
-            expect(stopped?.[0]?.agentType).toBe('codex');
-            expect(stopped?.[0]?.outcome).toBe('stopped');
+            expect(assigned.length).toBe(0);
         } finally {
             await cleanup();
         }

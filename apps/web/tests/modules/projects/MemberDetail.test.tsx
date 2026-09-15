@@ -227,7 +227,7 @@ describe('lifecycle controls (0842 R6)', () => {
         await act(async () => {
             stop.click();
         });
-        expect(calls).toContainEqual({ url: '/api/team/agents/a1/stop', method: 'POST' });
+        expect(calls).toContainEqual({ url: '/api/agents/a1/stop', method: 'POST' });
         view.unmount();
     });
 
@@ -242,7 +242,7 @@ describe('lifecycle controls (0842 R6)', () => {
         await act(async () => {
             start.click();
         });
-        expect(calls).toContainEqual({ url: '/api/team/agents/a1/start', method: 'POST' });
+        expect(calls).toContainEqual({ url: '/api/agents/a1/start', method: 'POST' });
         view.unmount();
     });
 });

@@ -2954,7 +2954,7 @@ export function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
  * The shared role → executor funnel (0543 R1): eligible executors (tier at or
  * above `minTier`) sorted by tier ascending — cheapest eligible first. One
  * selector, never two: `resolveRole` (`--agent <role>`) and
- * `TeamService.materializeTeam` (role-only members) both route through this, so
+ * `AgentCoordinationService.materializeTeam` (role-only members) both route through this, so
  * the two can never disagree. `resolveRole` doctor-walks the result; team
  * materialization takes the first entry (config-time, no liveness probe).
  */

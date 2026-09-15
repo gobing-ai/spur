@@ -94,7 +94,7 @@ The merged `loadSpurConfig` result is loaded **once per process at the compositi
 `main()`, server startup — and threaded through the dispatch/service context as the only
 app-config source. ts-infra's `runNodeApplication` keeps only the project-shaped `bootstrap`
 section (`configFile` + `bootstrapSection`; no `appConfig` validator, `appRt.appConfig` unread).
-Per-slice loads in `packages/app` services (workflow-service ×4, team-service) and CLI call sites
+Per-slice loads in `packages/app` services (workflow-service ×4, coordination service) and CLI call sites
 (history-refresh, workflow.ts) are replaced by the threaded object; services degrade to current
 defaults when the threaded config is absent/null.
 
@@ -513,8 +513,8 @@ frames in the Agents tab's member terminal.
 
 | | Durable message queue | Process pipe |
 | --- | --- | --- |
-| Write path | `TeamService.sendMessage` → DAO `enqueue` | `POST /api/team/processes/:id/stdin` |
-| Read path | `TeamService.getInbox` / `listRecent` / `drainPending` | `GET /api/team/processes/:id/stream` (SSE) |
+| Write path | `AgentCoordinationService.sendMessage` → DAO `enqueue` | `POST /api/processes/:id/stdin` |
+| Read path | `AgentCoordinationService.getInbox` / `listRecent` / `drainPending` | `GET /api/processes/:id/stream` (SSE) |
 | Delivery to agent | Undeclared projects use `agent loop` → `drainPending`; fleets use the dispatch gate below | written straight to `PipeProcess` stdin |
 | Storage | SQLite (`inbox_messages`), durable, `queued → injected` lifecycle | in-memory ring buffer, bounded (default 500), lost on restart |
 | Ordering cursor | `createdAt` | `seq` (monotonic) + `ts` |
@@ -557,10 +557,12 @@ logic exists.
 ### 14.3 Accepted boundary (ADR-116)
 
 ADR-116 replaces ADR-052's team-scoped composition: **a project — one worktree path — is the
-composition unit.** Its agent roster is a **fleet** declared in `<projectPath>/.spur/fleet.json`
-(task 0835) and resolved by `FleetService`; the Projects Board module owns Conversation, Agents, and
-Processes (the three-tab contract, `apps/web/src/modules/projects/tabs.tsx`); `agent.team.<teamId>`, the
-three retired Board modules, and their routes are gone (0849). Spec ids stay the mailbox identity and
+composition unit.** Its agent roster is a **fleet** declared as `agent.fleet` in the project's
+`.spur/config.yaml` (0835 carrier, moved off `.spur/fleet.json` by 0858) and resolved by
+`FleetService`; the Projects Board module owns Conversation, Agents, and Processes (the three-tab
+contract, `apps/web/src/modules/projects/tabs.tsx`); `agent.fleet` is the only declaration — the
+retired `agent.team` block, the three retired Board modules, and their routes are gone
+(0849/0857). Spec ids stay the mailbox identity and
 occupant address, preserved verbatim across conversion. Fleet shape, resolution, and the dispatch
 boundaries: [project switcher § fleet](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
 Nothing in this section introduces new persistence, service, HTTP route, or CLI noun.
@@ -671,7 +673,7 @@ Wave 1 (task 0529) persists an `OccupantRef` + `coordination_runs` row when a ru
 spec id (`flags['spec-id']` is set before `--drain` rewrites `--agent` to the spec's **executor
 name** when the spec records one — falling back to the coding-agent type only via the
 `spec-without-executor-field` shim, task 0537; `--spec <id>` is the canonical carrier since 0542)
-and injects `SPUR_SPEC_ID` / `SPUR_TEAM_ID` / `SPUR_RUN_ID` / `SPUR_SERVE_URL` on supervised spawn.
+and injects `SPUR_SPEC_ID` / `SPUR_RUN_ID` / `SPUR_SERVE_URL` on supervised spawn.
 Wave 2 (task 0530) ships the identity-pinned wait surface: `spur agent wait <specId>` (pins
 `specId+runId+generation`, typed errors `occupant_gone|run_replaced|wait_stalled|timeout`)
 and atomic `spur message send --wait` (snapshots the occupant before enqueue, waits on that
@@ -713,11 +715,11 @@ The process pipe stays the operator attach path. It is not the agent-to-agent co
    to decide agent lifecycle or to return “the other agent's output.”
 3. No production module may write synthetic keystrokes to another agent's stdin as a substitute
    for `spur message send`.
-4. `POST /api/team/processes/:id/stdin` remains operator/process-pipe only; `agent loop` delivery
+4. `POST /api/processes/:id/stdin` remains operator/process-pipe only; `agent loop` delivery
    stays `drainPending` → prepend until a later accepted design replaces it.
 5. Wait and send-wait pin `specId` + `runId` + `generation`. A replacement occupant cannot
    satisfy an in-flight wait.
-6. `TeamService` / `AgentService` mutation methods return without blocking on wait. Waits live
+6. `AgentCoordinationService` / `AgentService` mutation methods return without blocking on wait. Waits live
    on the CLI or connection side and follow `system_events` / EventBus after a snapshot sequence.
 7. New coordination verbs land on `agent` or `message` only (ADR-051). A new noun is a new ADR.
 8. Semantic wait targets (`idle`, `working`, `blocked`) are derived only from cataloged events

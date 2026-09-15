@@ -3,7 +3,7 @@ import { Badge } from '@/ui';
 import { appendFrame, type Frame, nextBackoff, parseFrame, streamUrl } from '../../lib/process-stream';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 
-/** Member process status row from `GET /api/team/processes`. */
+/** Member process status row from `GET /api/processes`. */
 export interface ProcessStatus {
     agentId: string;
     pid: number;
@@ -18,7 +18,7 @@ export interface ProcessStatus {
 export const STATUS_POLL_MS = 3000;
 
 /**
- * Runtime-narrow the `/api/team/processes` response into a status map.
+ * Runtime-narrow the `/api/processes` response into a status map.
  * Returns `null` on malformed input so the caller can skip a bad poll.
  */
 export function parseProcessList(value: unknown): ProcessStatus[] | null {
@@ -51,7 +51,7 @@ export function parseProcessList(value: unknown): ProcessStatus[] | null {
     return out;
 }
 
-/** ProcessRegistry execution row — the `executions` half of `GET /api/team/processes` (spur#0264). */
+/** ProcessRegistry execution row — the `executions` half of `GET /api/processes` (spur#0264). */
 export interface RegistryExecution {
     id: string;
     label: string;
@@ -68,7 +68,7 @@ export interface RegistryExecution {
 }
 
 /**
- * Runtime-narrow the registry-execution half of `/api/team/processes` (0852 R4).
+ * Runtime-narrow the registry-execution half of `/api/processes` (0852 R4).
  * Same contract as `parseProcessList`: returns `null` on malformed input so the
  * caller can skip a bad poll. This is the single parse site for the wire —
  * consumers import from here; no second copy exists under apps/web/src.
@@ -92,8 +92,12 @@ export function parseExecutions(value: unknown): RegistryExecution[] | null {
         if (r.exitedAt !== null && typeof r.exitedAt !== 'string') return null;
         if (r.exitCode !== null && typeof r.exitCode !== 'number') return null;
         if (typeof r.source !== 'string') return null;
-        if (r.teamId !== null && typeof r.teamId !== 'string') return null;
         if (r.agentId !== null && typeof r.agentId !== 'string') return null;
+        // teamId is additive enrichment (0852) and the producer no longer writes the
+        // grouping id (0860), so any missing or non-string value narrows to null instead
+        // of failing the poll — the same tolerance `parseProcessList` documents. A strict
+        // check here rejected the whole response and wedged the watch list.
+        const teamId = r.teamId;
         out.push({
             id: r.id,
             label: r.label,
@@ -105,19 +109,19 @@ export function parseExecutions(value: unknown): RegistryExecution[] | null {
             exitedAt: r.exitedAt as string | null,
             exitCode: r.exitCode as number | null,
             source: r.source,
-            teamId: r.teamId as string | null,
+            teamId: typeof teamId === 'string' ? teamId : null,
             agentId: r.agentId as string | null,
         });
     }
     return out;
 }
 
-export const stdinUrl = (agentId: string) => `${resolveApiUrl()}/team/processes/${encodeURIComponent(agentId)}/stdin`;
+export const stdinUrl = (agentId: string) => `${resolveApiUrl()}/processes/${encodeURIComponent(agentId)}/stdin`;
 
 /** POST /api/messages — enqueue a message for the agent loop to drain (0261 R2). */
 export const messagesUrl = () => `${resolveApiUrl()}/messages`;
 
-const processesUrl = () => `${resolveApiUrl()}/team/processes`;
+const processesUrl = () => `${resolveApiUrl()}/processes`;
 
 /**
  * Member terminal — a minimal, no-dependency terminal view rendering ring-buffer
@@ -146,7 +150,7 @@ export default function MemberTerminal({ agentId }: { agentId: string }) {
     const mountedRef = useRef<boolean>(true);
     const preRef = useRef<HTMLPreElement | null>(null);
 
-    // ── Status poll: fetch /api/team/processes every STATUS_POLL_MS ──
+    // ── Status poll: fetch /api/processes every STATUS_POLL_MS ──
     const loadStatus = useCallback(
         async (signal: AbortSignal): Promise<void> => {
             try {

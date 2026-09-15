@@ -47,6 +47,24 @@ export {
     toEnvelopeJson,
     writeJsonError,
 } from './output/envelope';
+export type {
+    AgentCoordinationServiceContext,
+    AgentCoordinationServiceOutput,
+    AgentSpecInput,
+    CoordinationEventBus,
+    InboxEntry,
+    InboxResult,
+    MessageEndpointIdentity,
+    MessageEventBus,
+    MessageEventPayload,
+    RecentMessageRow,
+    RecentMessagesResult,
+    SendResult,
+    TaskAssignedEventPayload,
+    TeamStatusEntry,
+    TeamStatusResult,
+} from './services/agent-coordination-service';
+export { AgentCoordinationService } from './services/agent-coordination-service';
 export {
     createFileAgentInstanceStore,
     type RoleTargetResolution,
@@ -203,13 +221,18 @@ export {
 } from './services/finding-codes';
 export type {
     FleetServiceContext,
+    MaterializeResult,
+    MaterializeRosterParams,
     OrchestratorBinding,
     OrchestratorState,
     ResolvedFleet,
     ResolvedFleetMember,
+    ResolveMemberExecutorParams,
+    RosterMember,
+    RosterProjection,
 } from './services/fleet-service';
 // Project fleet declaration (0835) + orchestrator binding (0836)
-export { FleetService } from './services/fleet-service';
+export { FleetService, materializeRoster, resolveMemberExecutor } from './services/fleet-service';
 export {
     type HistoryRollupRefreshResult,
     refreshHistoryRollups,
@@ -450,12 +473,12 @@ export {
     type StrategyRuntimeContext,
 } from './services/strategy-runtime';
 export type {
+    AgentLifecycleEventPayload,
     ProcessEntry,
     ProcessEventBus,
     ProcessEventPayload,
     ProcessFrame,
     SupervisorOptions,
-    SupervisorTeamMemberEventPayload,
 } from './services/supervisor-service';
 export { SupervisorService } from './services/supervisor-service';
 export type {
@@ -578,25 +601,6 @@ export {
 } from './services/task-service';
 export type { BatchAggregation, BatchTaskOutcome, BatchTaskResult } from './services/task-verdict';
 export { aggregateBatchVerdicts, classifyTaskOutcome, deriveVerdict } from './services/task-verdict';
-export type {
-    AgentSpecInput,
-    InboxEntry,
-    InboxResult,
-    MessageEndpointIdentity,
-    MessageEventBus,
-    MessageEventPayload,
-    RecentMessageRow,
-    RecentMessagesResult,
-    RosterProjection,
-    SendResult,
-    TeamMemberEventPayload,
-    TeamServiceContext,
-    TeamServiceEventBus,
-    TeamServiceOutput,
-    TeamStatusEntry,
-    TeamStatusResult,
-} from './services/team-service';
-export { TeamService } from './services/team-service';
 export type {
     TokenLedgerServiceOptions,
     ToolUseEvent,

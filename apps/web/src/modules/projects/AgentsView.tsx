@@ -7,7 +7,7 @@ import type { ProjectFleetSnapshot } from './useProjectContext';
 import { useProjectContext } from './useProjectContext';
 
 const fleetUrl = () => `${resolveApiUrl()}/project/fleet`;
-const processesUrl = () => `${resolveApiUrl()}/team/processes`;
+const processesUrl = () => `${resolveApiUrl()}/processes`;
 
 /**
  * Runtime-gate the fleet payload before the join trusts it (ADR-021: network
@@ -83,7 +83,7 @@ function observedFact(entry: RosterEntry, orchestratorOffline: boolean): { label
 /**
  * Agents tab (0842 R1/R2, feature G63): the served project's fleet as a roster
  * of cards, each joining the DECLARED member (`/api/project/fleet`) with the
- * OBSERVED process (`GET /api/team/processes`) as two labeled facts — never
+ * OBSERVED process (`GET /api/processes`) as two labeled facts — never
  * one dot. Both reads ride one poll tick so the two facts in a card are never
  * more than one tick apart. Detail is a pane (MemberDetail), not a route.
  */

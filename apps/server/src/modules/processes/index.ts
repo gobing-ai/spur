@@ -3,7 +3,7 @@ import type { ServerContext } from '../../context';
 import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
 import type { ServerModule } from '../types';
 
-/** Team SSE heartbeat — delegates to the shared SSE helper (task 0241 R8). */
+/** Supervised-process SSE heartbeat — delegates to the shared SSE helper (task 0241 R8). */
 export function sendHeartbeat(
     closed: { current: boolean },
     controller: ReadableStreamDefaultController,
@@ -12,7 +12,7 @@ export function sendHeartbeat(
     sendSseKeepalive(closed, controller, encoder);
 }
 
-/** Team SSE data frame — delegates to the shared SSE helper (task 0241 R8). */
+/** Supervised-process SSE data frame — delegates to the shared SSE helper (task 0241 R8). */
 export function enqueueFrame(
     closed: { current: boolean },
     controller: ReadableStreamDefaultController,
@@ -23,30 +23,35 @@ export function enqueueFrame(
 }
 
 /**
- * Team process supervision module.
+ * Supervised process + agent lifecycle module.
  *
- * Mounts the `/v1/team` routes: start/stop agents, assign tasks, stream heartbeats
- * via SSE, forward messages to the agent inbox, and replay buffered frames on
- * reconnect.
+ * Mounts the supervised-process and agent-lifecycle routes under their owning
+ * nouns (0860 R1): `GET /api/processes` and its stream/stdin children, plus
+ * `POST /api/agents/:id/start|stop`. Streams heartbeats via SSE and replays
+ * buffered frames on reconnect. The former team-scoped health probe is removed.
  */
-export const teamModule: ServerModule = {
-    name: 'team',
+export const processesModule: ServerModule = {
+    name: 'processes',
 
     mount(app: Hono, ctx: ServerContext | undefined): void {
         if (!ctx) return;
 
-        // ── GET /api/team/processes — supervised list + ProcessRegistry snapshot ──
+        // ── GET /api/processes — supervised list + ProcessRegistry snapshot ──
         // `processes` remains the supervisor-controlled list (start/stop/attach).
         // `executions` is the full ts-runtime ProcessRegistry watch list (spur#0264).
-        app.get('/api/team/processes', (c) => {
+        app.get('/api/processes', (c) => {
             const supervisor = ctx.supervisor();
+            // `teamId` stays on the wire with the predecessor's `null` shape (0860):
+            // the grouping id is no longer written anywhere, but the Board's watch-list
+            // parsers and rows still read the key — omitting it broke the poll entirely.
+            // It is deliberately NOT written: the retired spec-tag group stays retired.
             const processes = supervisor.list().map((p) => ({
                 agentId: p.agentId,
                 pid: p.pid,
                 status: p.status,
                 startedAt: p.startedAt,
                 exitCode: p.exitCode ?? null,
-                teamId: p.teamId ?? null,
+                teamId: null,
             }));
             const executions = ctx
                 .processRegistry()
@@ -73,8 +78,8 @@ export const teamModule: ServerModule = {
             });
         });
 
-        // ── POST /api/team/agents/:id/start — spawn a supervised agent ──
-        app.post('/api/team/agents/:id/start', async (c) => {
+        // ── POST /api/agents/:id/start — spawn a supervised agent ──
+        app.post('/api/agents/:id/start', async (c) => {
             const id = c.req.param('id');
             try {
                 const entry = await ctx.supervisor().start(id);
@@ -84,8 +89,8 @@ export const teamModule: ServerModule = {
             }
         });
 
-        // ── POST /api/team/agents/:id/stop — stop a supervised agent ──
-        app.post('/api/team/agents/:id/stop', async (c) => {
+        // ── POST /api/agents/:id/stop — stop a supervised agent ──
+        app.post('/api/agents/:id/stop', async (c) => {
             const id = c.req.param('id');
             try {
                 await ctx.supervisor().stop(id);
@@ -95,8 +100,8 @@ export const teamModule: ServerModule = {
             }
         });
 
-        // ── POST /api/team/processes/:id/stdin — forward line to child stdin ──
-        app.post('/api/team/processes/:id/stdin', async (c) => {
+        // ── POST /api/processes/:id/stdin — forward line to child stdin ──
+        app.post('/api/processes/:id/stdin', async (c) => {
             const id = c.req.param('id');
             let json: unknown;
             try {
@@ -116,8 +121,8 @@ export const teamModule: ServerModule = {
             }
         });
 
-        // ── GET /api/team/processes/:id/stream — SSE attach ──
-        app.get('/api/team/processes/:id/stream', (c) => {
+        // ── GET /api/processes/:id/stream — SSE attach ──
+        app.get('/api/processes/:id/stream', (c) => {
             const id = c.req.param('id');
             const supervisor = ctx.supervisor();
             const proc = supervisor.get(id);
@@ -207,11 +212,6 @@ export const teamModule: ServerModule = {
                 'Content-Type': 'text/event-stream',
                 'Cache-Control': 'no-cache',
             });
-        });
-
-        // ── GET /api/team/health — liveness probe (0256 R4) ──
-        app.get('/api/team/health', (c) => {
-            return c.json({ ok: true });
         });
     },
 };

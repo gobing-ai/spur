@@ -4,7 +4,7 @@
  * A Board request is an `inbox_messages` row addressed to the orchestrator
  * instance; an orchestrator response is a row addressed back to the operator
  * mailbox. Both arrive through `GET /api/messages/inbox` (non-consuming
- * `TeamService.getInbox`) — no new endpoint, no client-side message store (R6).
+ * `AgentCoordinationService.getInbox`) — no new endpoint, no client-side message store (R6).
  * References travel INSIDE the body as a `SPUR-REQUEST/1` envelope line so
  * they survive wherever the body travels (R3); they are never parsed out of
  * prose. Submission itself is 0844's.

@@ -116,7 +116,7 @@ describe('parseProcessList', () => {
 describe('stdinUrl', () => {
     test('AC2: stdin endpoint is correctly constructed for POST', () => {
         const url = stdinUrl('alpha-claude');
-        expect(url).toContain('/team/processes/alpha-claude/stdin');
+        expect(url).toContain('/processes/alpha-claude/stdin');
     });
 });
 
@@ -138,7 +138,7 @@ describe('MemberTerminal (component)', () => {
 
         await waitFor(() => expect(mockSources.length).toBe(1));
         const es = mockSources[0] as MockEventSource;
-        expect(es.url).toContain('/team/processes/alpha-claude/stream');
+        expect(es.url).toContain('/processes/alpha-claude/stream');
 
         act(() => {
             es._push({ stream: 'stdout', ts: '2026-01-01T00:00:00Z', line: 'hello world', seq: 1 });
@@ -328,7 +328,7 @@ describe('MemberTerminal (component)', () => {
         );
 
         const secondEs = mockSources[1] as MockEventSource;
-        expect(secondEs.url).toContain('/team/processes/reconnect-test/stream');
+        expect(secondEs.url).toContain('/processes/reconnect-test/stream');
 
         resetFetchForTesting();
         restoreEventSource();
@@ -386,7 +386,7 @@ describe('MemberTerminal (component)', () => {
         // Stdin POST.
         const stdinPost = posted.find((p) => p.url.includes('/stdin'));
         expect(stdinPost?.method).toBe('POST');
-        expect(stdinPost?.url).toContain('/team/processes/send-agent/stdin');
+        expect(stdinPost?.url).toContain('/processes/send-agent/stdin');
         expect(JSON.parse(stdinPost?.body ?? '{}')).toEqual({ line: 'ls -la' });
 
         // Message POST (0261 R2).

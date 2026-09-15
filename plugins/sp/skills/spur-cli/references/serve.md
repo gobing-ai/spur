@@ -1,6 +1,6 @@
 ---
 name: spur-cli-serve
-description: "spur-cli noun reference: operate `spur serve` as the local web-server fallback - start the Hono/Cloudflare-Worker server that backs the web Task Kanban and the team supervisor API. Single verb, five flags."
+description: "spur-cli noun reference: operate `spur serve` as the local web-server fallback - start the Hono/Cloudflare-Worker server that backs the web Task Kanban and the supervisor API. Single verb, five flags."
 see_also:
   - spur-cli
 ---
@@ -8,7 +8,7 @@ see_also:
 # spur serve - local web server
 
 `spur serve` starts the **Spur web server** - a local Hono / Cloudflare-Worker server that serves
-the web Task Kanban and exposes the team supervisor API (`/api/team/*`). It is the local fallback
+the web Task Kanban and exposes the supervisor API (`/api/processes/*` + `/api/agents/*`). It is the local fallback
 when no remote server is configured.
 
 ## Verb map
@@ -29,7 +29,7 @@ spur serve --json                   # dry probe: print { port, url, pid, running
 ```
 
 Starts the server with the Hono app backed by the local SQLite database. The web Task Kanban and
-the team supervisor API become available at `http://<host>:<port>`.
+the supervisor API become available at `http://<host>:<port>`.
 
 ### Flags
 
@@ -46,7 +46,7 @@ the team supervisor API become available at `http://<host>:<port>`.
 
 ## What this skill is NOT
 
-- **Not the team supervisor.** `spur serve` hosts the supervisor API; `spur agent start` / `stop` /
+- **Not the agent supervisor.** `spur serve` hosts the supervisor API; `spur agent start` / `stop` /
   `agent list --specs` are the verbs that drive and inspect it (0848). See
   **[agent.md](agent.md)**.
 - **Not a production server.** This is the local fallback. Production deployment uses the Cloudflare

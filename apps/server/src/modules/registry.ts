@@ -7,9 +7,9 @@ import { historyModule } from './history';
 import { jobsModule } from './jobs';
 import { messagesModule } from './messages';
 import { observabilityModule } from './observability';
+import { processesModule } from './processes';
 import { runsModule } from './runs';
 import { taskModule } from './task';
-import { teamModule } from './team';
 import type { ServerModule } from './types';
 
 /**
@@ -30,7 +30,7 @@ const builtins: ServerModule[] = [
     eventsModule,
     messagesModule,
     jobsModule,
-    teamModule,
+    processesModule,
     observabilityModule,
     runsModule,
     historyModule,
