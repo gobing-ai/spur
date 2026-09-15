@@ -4,7 +4,7 @@ name: Sync authority documents with the agent.fleet surface
 status: done
 template: feature-impl
 created_at: 2026-09-15T05:26:45.220Z
-updated_at: "2026-09-15T18:23:12.003Z"
+updated_at: "2026-09-15T20:35:38.867Z"
 feature_id: G65
 priority: P2
 tags:
@@ -122,7 +122,7 @@ Lens: `rg -n "fleet\.json|agent\.team|/api/team|TeamService|SPUR_TEAM_"` over `d
 `docs/features/`. `plugins/sp` returns **zero** hits (0856/0857 swept the plugin references). Every
 remaining hit is a dated historical note or is listed here. `docs/help/index.md` is not a survivor: its
 last retired-name hit (the diagram node label, the lens's only hit in the file) is gone with the rename and
-the edge fix below. Total after this change: **68** hits across 14 files.
+the edge fix below. Total after this change: **68** hits across 15 files.
 
 | Survivor | Hits | Reason |
 | --- | --- | --- |

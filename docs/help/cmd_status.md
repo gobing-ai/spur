@@ -25,7 +25,7 @@ spur status [options] [path]
 
 - **Project** — `package.json` and `.spur/config.yaml` presence.
 - **Git** — root, current branch, dirty/clean state.
-- **Team** — agent spec ids found under `.spur/agents/`.
+- **Agents** — agent spec ids found under `.spur/agents/`.
 - **Path** (when given) — size, `isFile`, `isDirectory` for the named target.
 
 ## Example

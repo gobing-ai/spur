@@ -267,6 +267,11 @@ boundary, and a delegate left to re-derive them re-derives them against its own 
 Nothing else: no task/session transcripts, no machine-specific session paths. The WBS/path already
 carried by the slash command remains the task handoff.
 
+**Delegate hygiene.** A dispatched stage cleans up after itself: temporary artifacts stay inside the
+execution tree, and an ad-hoc git worktree created for a comparison is removed before the stage
+reports. The G65 batch's implement dispatches left an 867 MB worktree plus a trail of `/tmp` scratch
+files that outlived the run (2026-09-15).
+
 **Verify-stage artifact contract.** A verify handoff names
 [`code-verification/references/verdict-schema.md`](../../code-verification/references/verdict-schema.md)
 as the canonical answer schema and carries this compact form verbatim:

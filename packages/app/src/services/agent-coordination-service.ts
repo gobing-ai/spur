@@ -376,11 +376,10 @@ export class AgentCoordinationService {
      * Returns an empty list when the table is absent.
      *
      * Identity join (R11): `fromId`/`toId` are composed ids. We resolve them
-     * against the agent specs on disk — `team:<id>` tag (when tethered), spec
-     * name as the member label, spec type as the agent type. Unresolved ids
-     * (operator-originated, stale) leave the identity optional fields unset —
-     * the UI falls back to the raw id. (0857: the team roster config block is gone,
-     * so the team *display name* is no longer resolved; the tag id stands.)
+     * against the agent specs on disk — the spec's name as the member label and
+     * its type as the agent type. Unresolved ids (operator-originated, stale)
+     * leave the identity optional fields unset — the UI falls back to the raw id.
+     * (0857/0860: the retired `team:<id>` tag is neither written nor read.)
      *
      * Reply signals (R11): parent rows are the newest `limit` messages;
      * `countReplies` then counts **all** children of those parent ids in the

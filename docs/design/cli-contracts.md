@@ -504,7 +504,7 @@ No oRPC wait path in this wave.
 #### `spur message send --to <id> <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]` · `spur message inbox --agent <id> [--json]` · `spur message reply <msg-id> <body> [--json]` · `spur message watch --agent <id> [--interval <ms>] [--json]`
 
 Durable inter-agent messaging over the SQLite `inbox_messages` table (backed by `AgentCoordinationService` →
-`ts-ai-runner` `MessageService` → `ts-db` `InboxMessageDao`).
+`ts-db` `InboxMessageDao`).
 
 - `send` — enqueue a message; `--from` defaults to `operator`. Prints `queued <id> → <to>`.
   `--wait` / `--until` / `--timeout` are documented with `agent wait` above.

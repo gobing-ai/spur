@@ -2,7 +2,7 @@
 
 > Send, list, and reply to durable inter-agent messages. Backs fleet coordination. Messages
 > persist in the SQLite `inbox_messages` table (backed by `AgentCoordinationService` →
-> `ts-ai-runner` `MessageService` → `ts-db` `InboxMessageDao`).
+> `ts-db` `InboxMessageDao`).
 
 ## Subcommands
 

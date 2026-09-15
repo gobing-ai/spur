@@ -127,6 +127,16 @@ unmatchable):
 | AC-0817-HERM-SKIP | MET | test | `tests/loader.test.ts:962` |        ← declared
 ```
 
+### A single-line criterion bullet declares no id
+
+A criterion written as one line — `- **AC2 — The roster runtime is gone (R3, R4, R5).** Given …, when …, then …`
+— declares nothing machine-readable: the bold span is not a whole-line paragraph and carries
+no `:` delimiter, so `verify-answer-lint` resolves no id and the verifier keys its answer rows by the
+whole bullet line instead. The feature done gate then finds no row matching a feature scenario and
+refuses the transition (G65, 2026-09-15). Declare the id explicitly (`**AC2: …**`, prose on the
+following lines) or use a checklist row, and keep at least one answer row keyed to the verbatim
+feature scenario title the task graduates.
+
 ### The id is exactly the scenario title — no Gherkin body appended
 
 An AC row id must be **exactly** the scenario title (plus any of the four forms above), with the

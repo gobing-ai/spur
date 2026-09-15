@@ -337,7 +337,7 @@ resolved catalog entry has non-generated description text, an explicit field lis
 outcome support branch. It does not generate TypeScript or Markdown from the other side.
 
 `strategy.changed` has two producer paths, both through `StrategyRuntime.setStrategy`
-(`packages/app/src/services/strategy-runtime.ts:255`): an explicit strategy change, and the
+(`packages/app/src/services/strategy-runtime.ts:262`): an explicit strategy change, and the
 serve-start reconcile of the declared `agent.fleet.strategy` (`apps/server/src/serve.ts:741`). The second
 path is why the reconcile reads before it writes — a restart with an unchanged declaration must not
 mint a version or a wake fact (0859).

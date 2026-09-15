@@ -404,8 +404,8 @@ export class SupervisorService {
 
     private resolveCommand(spec: AgentSpec): { command: string; args: string[] } {
         if (spec.tags.some((tag) => tag.startsWith('fleet:'))) return defaultWrapperArgv(spec.id);
-        // Prefer `config.command` — the field materializeTeam writes and that
-        // saveAgentSpec/loadAgentSpecs round-trip (0258 R9). Fall back to a top-level
+        // Prefer `config.command` — the field the fleet roster projection writes
+        // and that saveAgentSpec/loadAgentSpecs round-trip (0258 R9). Fall back to a top-level
         // `command` for in-memory / legacy specs (serializeAgentSpec drops top-level).
         const configCommand = Array.isArray(spec.config?.command) ? (spec.config.command as string[]) : undefined;
         const topLevel = (spec as AgentSpec & { command?: string[] }).command;
