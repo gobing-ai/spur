@@ -6,7 +6,7 @@ export { default as ProjectsShell } from './ProjectsShell';
 /**
  * Projects board module (0840, feature G63).
  *
- * Opens the SERVED project directly with Conversation, Agents, and Work tabs.
+ * Opens the SERVED project directly with Conversation, Agents, and Processes tabs.
  * Auto-discovered by `apps/web/src/modules/discover.ts` — no wiring file
  * changes. `order: 45` was set above Workspace (50), Inbox (60), and Teams (70)
  * without renumbering them (0840 R6); those three modules were deleted by 0849
@@ -20,6 +20,6 @@ export const module: WebModule = {
     route: 'projects',
     component: ProjectsShell,
     sidebarLabel: 'Projects',
-    description: 'Conversation, agents, and work for this project',
+    description: 'Conversation, agents, and processes for this project',
     order: 45,
 };

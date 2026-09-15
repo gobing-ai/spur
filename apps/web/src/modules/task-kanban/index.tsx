@@ -17,7 +17,7 @@ export function transition(wbs: string, toStatus: string): void {
 /** Headerless board container: binds URL filters + card-click selection to the
  * board. Kept exported as the embeddable, header-free current-project Kanban
  * (task 0197 R6) — the Workspace module that first embedded it was retired by
- * 0849, and `WorkView` reaches the board through its own scoped wrapper. */
+ * 0849. */
 export function TaskKanbanView() {
     const { filters, selectTask } = useTaskParams();
     return (

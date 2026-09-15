@@ -45,11 +45,11 @@ describe('useProjectTab (0840 R3)', () => {
         render(
             createElement(
                 MemoryRouter,
-                { initialEntries: ['/board/projects/work?feature=G63'] },
+                { initialEntries: ['/board/projects/processes?feature=G63'] },
                 createElement(Routes, null, createElement(Route, { path: '*', element: createElement(TabProbe) })),
             ),
         );
-        expect(tabHook?.activeTab).toBe('work');
+        expect(tabHook?.activeTab).toBe('processes');
         act(() => tabHook?.selectTab('agents'));
         expect(tabHook?.activeTab).toBe('agents');
         expect(loc?.pathname).toBe('/board/projects/agents');
