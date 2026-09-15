@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G64"
 name: "Retire Workspace, Inbox, Teams, and spur team"
-status: verifying
+status: done
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-15T05:05:19.959Z"
+updated_at: "2026-09-15T06:34:48.115Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -304,4 +304,5 @@ follow-up feature "Fleet declaration in spur config".
 
 - 2026-09-13T00:12:11.441Z backlog → active (system)
 - 2026-09-15T01:05:03.022Z active → verifying (system)
+- 2026-09-15T06:34:48.115Z verifying → done (system)
 
