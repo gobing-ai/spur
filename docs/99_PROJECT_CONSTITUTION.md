@@ -3,9 +3,9 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.6.0
+version: 1.7.0
 created_at: 2026-05-31T17:30:43.643Z
-updated_at: 2026-09-09
+updated_at: 2026-09-15
 edit_rules: 99 §6.8
 sync: [T7]
 read_before: editing key project documents
@@ -35,10 +35,12 @@ Within project documentation, authority is scoped to the question:
 | Visual and interaction design | Root `DESIGN.md`, when present |
 | Delivery sequence, current mechanisms, non-UI contracts, feature state | `02`–`05`, derived within their respective responsibilities |
 
-Lower numbers win content conflicts within the same subject; `99` governs maintenance across
-all key files. Neither an ADR nor a task can silently change the constitution. An ADR is not
-a universal override for unrelated scope or UI facts. Fix the authoritative statement first,
-then affected projections; never average conflicting statements. Keep document numbers stable.
+The designated subject owner governs; document numbers do not confer authority over another
+owner's subject. `99` governs maintenance across all key files. Neither an ADR nor a task can
+silently change the constitution. Identify the governing statement first; correct it only if
+defective, otherwise repair the conflicting projection. If authoritative statements conflict and
+existing authorization does not resolve them, report the conflict rather than invent a decision.
+Never average conflicting statements. Keep document numbers stable.
 
 ## 3. Shared tools
 
@@ -118,7 +120,7 @@ it does not require touching every key file for each feature or task.
 | T1 | New architectural choice passing §6.1, or reversal | Record `00` before divergence; update affected `03`/`04`; `01` only if scope changes |
 | T2 | Implementation would contradict an existing ADR | Record the decision amendment or superseding ADR before implementing the contradiction |
 | T3 | CLI/API/config/schema/DTO or non-UI behavior changes | Update the owning `04` satellite; index and `AGENTS.md` only if their own facts change |
-| T4 | Feature lifecycle or acceptance changes | Update through the feature tool and refresh its generated projection; `01` only for scope changes |
+| T4 | Feature hierarchy, scope, lifecycle or acceptance changes | Apply §6.6 authorization; update through the feature tool and refresh its generated projection; `01` only for product scope changes |
 | T5 | Phase goal, order, dependency, or exit changes | Update `02`; task completion alone does not trigger a roadmap entry |
 | T6 | Product scope added, removed, or deferred | Update `01`; `02` if sequencing changes |
 | T7 | Authorized change to document responsibilities, authority, or maintenance rules | Update `99`, affected entry/routing instructions, and in-scope init templates |
@@ -141,10 +143,14 @@ Do not append to a key file merely to prove work happened.
 
 ### 6.1 `docs/00_ADR.md`
 
-Admit a decision only if it selects among meaningful alternatives and establishes or changes
+Every entry and amendment MUST select among meaningful alternatives and establish or change
 a lasting architecture boundary or invariant across features/modules: dependency direction,
 persistence ownership, trust model, protocol, runtime or shared execution model. Record the
 choice, context/reason, material tradeoff/consequence, status/date, and a detail pointer.
+
+Entries and amendments MUST remain precise and concise. State the decision and its rationale
+once; link detailed contracts and implementation guidance to their owners. Naming a feature,
+task, technology or technical concern alone does not establish architectural significance.
 
 Single-feature design, public-surface consent, task progress, test results and implementation
 receipts go to their design/task records. Bug fixes that restore an existing contract need no ADR.
@@ -152,7 +158,8 @@ Doc-map and maintenance changes belong in `99`, not an ADR certifying a constitu
 
 - One architectural decision per entry. New choices append; reversals name the superseded ADR.
 - Never renumber, reuse or delete an ADR ID. Preserve original titles/anchors and dates.
-- Corrections to the decision use dated amendments; amendments record a decision delta only.
+- Corrections to the decision use dated amendments stating only what changed and why. Amendments
+  must pass the same admission test; editorial corrections update wording in place without an addendum.
 - Editorial condensation may remove repetition and misplaced detail while preserving the choice,
   rationale, material alternatives, consequences and amendment history. It must not silently
   reverse a decision or present a historical choice as current.
@@ -195,6 +202,26 @@ parallel hand-written status table. Requirements, acceptance and decomposition l
 records; execution evidence lives in task records. Verify status and acceptance against evidence
 before relying on them. Never raw-edit satellites or generated regions.
 
+The project is the logical tree root; its direct children are top-level features, without requiring
+an extra persisted project node. Each top-level feature MUST represent a durable project module,
+product capability or project-wide concern. Its scope and top-level placement MUST be supported
+by an explicit requirement or approval from the operator or designated product owner.
+
+Record the supporting requirement or approval reference in the feature record through its tool.
+Existing explicit authorization is sufficient. Implementation, silence, task approval or an agent's
+recommendation does not establish approval for top-level placement.
+
+Prefer an existing owner. Children decompose their parent's approved scope; sibling boundaries
+must be clear and avoid duplicate ownership. A task, delivery wave, incident, technical detail or
+child-count limit alone does not justify a new top-level feature.
+
+Creating or promoting a top-level feature, materially redefining its scope, or merging or removing
+top-level boundaries requires explicit authorization covering that change. Routine decomposition
+within approved scope needs no repeated approval.
+
+For legacy roots without recorded provenance, report the gap without inventing approval or
+automatically restructuring the tree. Preserve history and references during authorized migration.
+
 ### 6.7 `AGENTS.md`
 
 Keep essential orientation, commands, boundaries and document routing. Verify facts from the
@@ -213,20 +240,54 @@ is not a reason to edit this file or bump its metadata. Keep implementation-spec
 and tool bindings in their owners. Do not automatically promote lessons into constitutional rules.
 Update authorized templates/copies; do not mutate unrelated repositories without authorization.
 
+### 6.9 `DESIGN.md` (root, when present)
+
+Keep shared visual and interaction rules, including accessibility and responsive behavior. Link
+detailed UI references; distinguish current conventions from proposed changes. Preserve required
+accessibility behavior when simplifying. Non-UI contracts belong in `04`; delivery status stays
+in feature/task records. Update this owner when shared UI rules change, not for every screen edit.
+
 ## 7. Drift control
 
-Audit the affected owners, using source/help, manifests, Git diffs, generated indexes and links:
+### 7.1 Detection
+
+During relevant document edits and task wrap-up, check affected owners and their references using
+source/help, manifests, Git diffs, generated indexes and links. A comprehensive audit is a separate
+scope; routine work does not require a repository-wide sweep.
 
 - Responsibility: content belongs to the file's §4.1 row; no competing ledger or rule owner.
 - Reality: current contracts/mechanisms match source; proposed/historical content is labeled.
 - Scope/status: `01` covers capabilities; phase/feature claims have current evidence.
+- Feature structure: top-level boundaries have §6.6 provenance; decomposition stays within approved scope.
 - References: IDs, heading anchors, index pointers and aliases still resolve.
 - Synchronization: apply §5 to changed facts; unchanged owners need no edit.
 - Metadata/templates: contracts and dates match actual edits; portable guidance agrees.
 
-Repair authority first, then affected detail/index/entry files. Record findings and verification
-in the task or a dated report, including unverified claims. Do not claim a repository-wide audit
-from focused checks. An ADR content reversal follows §6.1; editorial cleanup preserves history.
+### 7.2 Automatic repair
+
+Automatically repair confirmed documentation defects when authoritative evidence supports the
+correction, approved meaning is preserved, and the repair falls within authorized work. Examples
+include broken references with a verified destination, duplicate prose, misplaced detail, stale
+factual descriptions, and generated projections refreshed through their owning tools.
+
+Identify the governing owner first. Correct it only if its statement is defective; otherwise repair
+the conflicting projection. Observed implementation is evidence of current behavior, not authorization
+to change accepted scope, decisions or contracts.
+
+Auto-healing MUST NOT invent requirements or approvals, reverse architectural decisions, weaken
+acceptance criteria or gates, fabricate completion evidence, or amend this constitution outside §6.8
+authorization. Apply an already-authorized change without requesting approval again; otherwise report
+the conflict and proposed resolution. An authorized ADR reversal follows §6.1.
+
+Preserve decision history, stable references and unrelated edits. Regenerate tool-owned content
+through its tool. Synchronize affected detail/index/entry files and in-scope templates under §5.
+
+### 7.3 Verification and unresolved findings
+
+After repair, verify affected contracts, links, metadata and template parity with the applicable
+checks. Record findings, verification and unresolved or unverified claims in the task or a dated
+report. Do not claim a repository-wide audit from focused checks. If evidence remains ambiguous
+or a repair fails verification, stop that repair and report the cause; do not declare it healed.
 
 ## 8. Lessons learned per file
 
@@ -243,6 +304,7 @@ this routing rule, not an instruction to append lessons here.
 Seed `00`–`05`, this constitution and `AGENTS.md` through the project initializer. Fill project
 facts from actual requirements and manifests; leave unknowns explicit. Do not pre-accept an
 ADR, invent a completed phase, or create fictitious feature/status rows in a fresh project.
-Use the feature tool for its index. Keep `DESIGN.md` optional; author it when UI work needs a
+Start feature decomposition from approved requirements and apply §6.6 before creating top-level
+features. Use the feature tool for its index. Keep `DESIGN.md` optional; author it when UI work needs a
 shared design language. Preserve existing customized docs and supported entry symlinks.
 Read `AGENTS.md` first, then the owners relevant to the work.
