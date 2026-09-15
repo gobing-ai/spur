@@ -2,11 +2,11 @@
 schema_version: 1
 id: "G64"
 name: "Retire Workspace, Inbox, Teams, and spur team"
-status: active
+status: verifying
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-14T15:01:13.491Z"
+updated_at: "2026-09-15T01:05:03.022Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -124,8 +124,10 @@ Feature: Retire Workspace, Inbox, Teams, and spur team
 | 0849 | Retire Workspace, Inbox, and Teams board routes with redirects | done |
 | 0850 | Reconcile superseded authority across ADRs, architecture, and templates | done |
 | 0851 | Reconcile M6, M3, G1, and G4 remaining work into this program | done |
-| 0852 | Restore Board reachability for the retired process watch list (executions + filters) | backlog |
-| 0853 | Record ownership for the retired Teams supervisor facets (uptime, live activity, team up/down) | backlog |
+| 0852 | Restore Board reachability for the retired process watch list (executions + filters) | done |
+| 0853 | Record ownership for the retired Teams supervisor facets (uptime, live activity, team up/down) | done |
+| 0854 | Retire the team-scoped ADRs the fleet model replaced | done |
+| 0855 | Remove the orphaned POST /api/team/:team/up\|down routes | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -289,4 +291,5 @@ half is delivered and verified — resolved path, landing tab, deep links, and t
 ## History
 
 - 2026-09-13T00:12:11.441Z backlog → active (system)
+- 2026-09-15T01:05:03.022Z active → verifying (system)
 
