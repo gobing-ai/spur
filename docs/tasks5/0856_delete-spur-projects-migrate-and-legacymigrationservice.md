@@ -4,7 +4,7 @@ name: Delete spur projects migrate and LegacyMigrationService
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.214Z
-updated_at: "2026-09-15T06:09:53.041Z"
+updated_at: "2026-09-15T06:20:35.576Z"
 feature_id: G65
 priority: P1
 tags:
@@ -33,6 +33,21 @@ Removing a public verb needs a row in the surface-governance consent ledger; Rob
 - **R5** — Historical records stay untouched: `docs/plans/**`, `docs/reports/**`, task/feature corpus, existing ADR text.
 
 ### Acceptance Criteria
+
+Graduates G65 feature scenario R5 — the Gherkin
+below carries its exact feature titles, and the rows under it are the
+task-local verify lens.
+
+```gherkin
+Feature: Fleet declaration in spur config
+
+    @core
+    Scenario: R5 — The legacy team migration path is gone
+      Given spur projects migrate and LegacyMigrationService existed only to convert agent.team
+      When this feature completes
+      Then spur projects migrate is not a registered verb
+      And no source, test, help doc, or plugin reference to the conversion remains
+```
 
 - **AC1 — The verb and service are gone (R1, R2).** Given the CLI, when `spur projects --help` runs, then `migrate` is not listed and `spur projects migrate` exits non-zero as an unknown command; `legacy-migration.ts` and its test do not exist and `@gobing-ai/spur-app` exports no LegacyMigration symbol.
 - **AC2 — No live reference remains (R3, R4, R5).** Given the repo, when `rg -n "projects migrate|LegacyMigration|legacy-migration"` runs excluding `docs/plans`, `docs/reports`, `docs/tasks*`, `docs/features`, `docs/00_ADR.md` and the generated `apps/cli/{plugins,web,config}` trees, then the only hits are the rows-only governance ledger `docs/design/harness-surface-governance.md` (the kept 2026-09-12 addition row plus the new removal row) and the feature design doc `docs/design/fleet-config-declaration.md` (plan of record — 0861 owns its authority sync), and `bun run spur-check` passes.

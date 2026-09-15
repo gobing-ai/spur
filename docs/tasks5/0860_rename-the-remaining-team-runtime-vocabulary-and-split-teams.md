@@ -4,7 +4,7 @@ name: Rename the remaining team runtime vocabulary and split TeamService
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.219Z
-updated_at: "2026-09-15T06:13:09.147Z"
+updated_at: "2026-09-15T06:20:36.840Z"
 feature_id: G65
 priority: P2
 tags:
@@ -39,6 +39,21 @@ After task 2 the live team-named surfaces are:
 - **R5** — Same-commit docs: `docs/design/observability-contracts.md` route rows (:347-353) and event catalog, `docs/design/inter-agent-control-plane.md` env table (:73) and route row (:22), `docs/design/cli-contracts.md` agent start/stop text (:452, :504, :521, :523), `docs/03_ARCHITECTURE.md` supervisor env line (:674) and messaging table (:516-517), `docs/inventory/system-events-producer-audit.md`, plugin `spur-cli/references/agent.md`, `self.md` **and `serve.md`** (all three carry `/api/team` mentions). `docs/04_DESIGN.md` is an index with no route rows — confirm only.
 
 ### Acceptance Criteria
+
+Graduates G65 feature scenario R6 — the Gherkin
+below carries its exact feature titles, and the rows under it are the
+task-local verify lens.
+
+```gherkin
+Feature: Fleet declaration in spur config
+
+    @core
+    Scenario: R6 — Fleet runtime surfaces carry fleet names
+      Given the /api/team routes, team.* events, and TeamService used by web, CLI, and supervisor
+      When the rename lands
+      Then every live route, event, and service is reachable under a fleet or owning-noun name with its callers moved in the same change
+      And team.up and team.down are removed rather than renamed
+```
 
 - **AC1 — Routes live under owning nouns (R1).** Given `spur serve`, when clients call `GET /api/processes`, the process stream, stdin, and `POST /api/agents/:id/start|stop`, then they behave as the former `/api/team/*` routes did, every `/api/team/*` path returns 404, and the web and CLI callers use the new paths (covered by their tests).
 - **AC2 — Events carry non-team names (R2).** Given `spur task update --assignee` and a supervised start/stop, when events are recorded, then they are `task.assigned` and `agent.started|stopped`, and the event catalog contains no `team.` name.

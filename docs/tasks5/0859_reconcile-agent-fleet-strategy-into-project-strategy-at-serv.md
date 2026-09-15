@@ -4,7 +4,7 @@ name: Reconcile agent.fleet.strategy into project_strategy at serve start
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.219Z
-updated_at: "2026-09-15T06:12:05.603Z"
+updated_at: "2026-09-15T06:20:36.562Z"
 feature_id: G65
 priority: P2
 tags:
@@ -33,6 +33,21 @@ The dispatch strategy is DB-only today: `StrategyRuntime.getStrategy(path)` retu
 - **R5** — Same-commit docs: the strategy paragraph in `docs/design/project-switcher.md` (:188, :216-238) and the `strategy.changed` row in `docs/design/event-tracking.md` (:294 — note the serve-start reconcile as a producer path). `docs/inventory/system-events-producer-audit.md` and `observability-contracts.md` carry no `strategy.changed` row today — nothing to sync there (0861 owns any authority-level additions).
 
 ### Acceptance Criteria
+
+Graduates G65 feature scenario R4 — the Gherkin
+below carries its exact feature titles, and the rows under it are the
+task-local verify lens.
+
+```gherkin
+Feature: Fleet declaration in spur config
+
+    @core
+    Scenario: R4 — Configured strategy reconciles into the strategy runtime
+      Given a project_strategy row recording rest
+      When spur serve starts with agent.fleet.strategy gtd
+      Then the row records gtd with a bumped strategy_version and one strategy.changed event
+      And a restart with the same strategy changes neither the version nor emits an event
+```
 
 - **AC1 — A changed strategy reconciles once (R1, R2, R4).** Given a `project_strategy` row recording `rest`, when `spur serve` starts with `agent.fleet.strategy: gtd`, then the row records `gtd` with `strategy_version` incremented by one and exactly one `strategy.changed` event.
 - **AC2 — Restarts are silent (R1, R4).** Given that reconciled row, when `spur serve` starts again with the same strategy, then `strategy_version` is unchanged and no `strategy.changed` event is emitted.

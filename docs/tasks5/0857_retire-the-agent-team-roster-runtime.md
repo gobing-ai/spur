@@ -4,7 +4,7 @@ name: Retire the agent.team roster runtime
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.217Z
-updated_at: "2026-09-15T06:11:03.214Z"
+updated_at: "2026-09-15T06:20:36.040Z"
 feature_id: G65
 priority: P1
 tags:
@@ -42,6 +42,21 @@ Removing the schema key alone would silently strip a leftover block, so a loader
 - **R7** — Same-commit docs for these surfaces: `docs/design/observability-contracts.md` (the `/api/team/teams` row, :352 — no `team.up`/`team.down` rows live there), `docs/design/event-tracking.md` (`team.up`/`team.down` catalog rows :73-74 and payload row :296), `docs/inventory/system-events-producer-audit.md` (rows :92-93, :98, :171, :200), the `agent.team` role wording in `cli-contracts.md` (:279), and the `config/config.global.yaml` / `config.example.yaml` comments. `docs/design/configuration-contracts.md` carries no team or fleet rows today — confirm only, nothing to sync.
 
 ### Acceptance Criteria
+
+Graduates G65 feature scenario R2 — the Gherkin
+below carries its exact feature titles, and the rows under it are the
+task-local verify lens.
+
+```gherkin
+Feature: Fleet declaration in spur config
+
+    @core
+    Scenario: R2 — Retired fleet declarations fail loudly with their replacement
+      Given a config that still carries agent.team, a global-layer agent.fleet, or a project with .spur/fleet.json
+      When the config loads or spur serve starts
+      Then the load fails with an error naming the offending key or file and the agent.fleet replacement
+      And nothing is silently stripped, merged, or read from the retired source
+```
 
 - **AC1 — A leftover agent.team fails loudly (R1, R2).** Given a `.spur/config.yaml` or `~/.config/spur/config.yaml` containing an `agent.team` block, when any config load runs (a CLI command or `spur serve`), then it fails with an error naming that file and `agent.fleet` as the replacement, and no command proceeds on a stripped config.
 - **AC2 — The roster runtime is gone (R3, R4, R5).** Given the source tree, when `rg -n "agent\.team|TeamConfigSchema|resolveAutostartSet|SPUR_TEAM_AUTOSTART|team\.(up|down)\b|/team/teams|use-teams-data"` runs over `apps/`, `packages/` and `config/` (excluding generated bundles and the guard's own error text and tests), then there are zero hits; `GET /api/team/teams` returns 404; `MemberDetail` renders the work dir and model from the fleet snapshot.

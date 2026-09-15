@@ -4,7 +4,7 @@ name: Declare the project fleet under agent.fleet and gate serve on enabled
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.218Z
-updated_at: "2026-09-15T05:33:07.551Z"
+updated_at: "2026-09-15T06:20:36.286Z"
 feature_id: G65
 priority: P1
 tags:
@@ -37,6 +37,41 @@ Operator decision (2026-09-14, design approval): an enabled fleet starts every e
 - **R7** — `apps/cli/schemas/spur-config.schema.json` adds `agent.fleet`; `config/config.example.yaml` carries the demo roster as an `agent.fleet` block (and the `spur init` project template if it has a fleet example); fleet tests move from `fleet.json` fixtures to config fixtures; `docs/design/project-switcher.md` §3.1 and `configuration-contracts.md` describe `agent.fleet` in the same commit.
 
 ### Acceptance Criteria
+
+Graduates G65 feature scenarios R1, R2, R3, R8 — the Gherkin
+below carries their exact feature titles, and the rows under it are the
+task-local verify lens.
+
+```gherkin
+Feature: Fleet declaration in spur config
+
+    @core
+    Scenario: R1 — agent.fleet declares the project fleet in project config
+      Given a project .spur/config.yaml with agent.fleet members, an orchestrator pointer, and no enabled or strategy key
+      When the layered config loads
+      Then agent.fleet resolves with enabled false and strategy rest
+      And FleetService resolves the same member ids, executors, and orchestrator binding a fleet.json declaration produced
+
+    @core
+    Scenario: R2 — Retired fleet declarations fail loudly with their replacement
+      Given a config that still carries agent.team, a global-layer agent.fleet, or a project with .spur/fleet.json
+      When the config loads or spur serve starts
+      Then the load fails with an error naming the offending key or file and the agent.fleet replacement
+      And nothing is silently stripped, merged, or read from the retired source
+
+    @core
+    Scenario: R3 — Serve materializes only an enabled fleet
+      Given a project whose agent.fleet declares members
+      When spur serve starts with agent.fleet.enabled false and again with it true
+      Then specs are materialized and autostarted only on the enabled start
+      And projects list --fleet and /api/project/fleet report the disabled fleet by name
+
+    @edge
+    Scenario: R8 — Invalid agent.fleet values name every issue
+      Given an agent.fleet with an unknown strategy, a member declaring neither role nor executor, or a non-boolean enabled
+      When the config loads
+      Then the error lists each issue with its agent.fleet path
+```
 
 - **AC1 — agent.fleet declares the fleet (R1, R3).** Given a `.spur/config.yaml` with `agent.fleet.members` and `orchestrator` but no `enabled` or `strategy`, when the config loads, then `enabled` is `false` and `strategy` is `rest`, and `FleetService.resolve` returns the same member ids, executors and orchestrator binding the equivalent former `fleet.json` fixture produced.
 - **AC2 — Retired sources fail loudly (R2).** Given `agent.fleet` in `~/.config/spur/config.yaml`, or a project containing `.spur/fleet.json`, when the config loads, then the load fails naming the offending file and the `agent.fleet` replacement, and nothing is read from it.

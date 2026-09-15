@@ -4,7 +4,7 @@ name: Sync authority documents with the agent.fleet surface
 status: todo
 template: feature-impl
 created_at: 2026-09-15T05:26:45.220Z
-updated_at: "2026-09-15T05:33:08.224Z"
+updated_at: "2026-09-15T06:20:37.116Z"
 feature_id: G65
 priority: P2
 tags:
@@ -34,6 +34,21 @@ Tasks 0856-0860 update the satellites their surfaces own in the same commit. Thi
 - **R4** — Residual sweep: `rg -n "fleet\.json|agent\.team|/api/team|TeamService|SPUR_TEAM_"` over `docs/` (excluding `plans/`, `reports/`, `tasks*/`, `features/`), `plugins/sp`, `config/` and `AGENTS.md` leaves only dated historical notes; record any intentional survivor with its reason in this task's Solution.
 
 ### Acceptance Criteria
+
+Graduates G65 feature scenario R7 — the Gherkin
+below carries its exact feature titles, and the rows under it are the
+task-local verify lens.
+
+```gherkin
+Feature: Fleet declaration in spur config
+
+    @core
+    Scenario: R7 — Authority documents match the shipped fleet surface
+      Given ADR-116, the architecture, design satellites, config templates, the JSON schema, and plugin references describe fleet.json and agent.team
+      When this feature completes
+      Then a dated ADR-116 amendment records agent.fleet without rewriting history
+      And every owner document, template, and reference names agent.fleet as the only declaration
+```
 
 - **AC1 — The decision is recorded without rewriting history (R1).** Given `docs/00_ADR.md`, when this task's diff is inspected, then it only adds the dated ADR-116 amendment and the dated roster note, and prior ADR text is unchanged.
 - **AC2 — Owner documents name only agent.fleet (R2, R3, R4).** Given the repo, when the R4 sweep runs, then every remaining hit is a dated historical note or a survivor listed with its reason in Solution, the design satellite is Accepted, and `bun run spur-check` passes.
