@@ -724,7 +724,7 @@ export const AgentConfigSchema = z
         // which BOTH parts may contain, so it is not injective: team `web-01` member
         // `claude` and team `web` member `01-claude` both yield `web-01-claude`. 0251
         // assumed cross-team uniqueness "by construction"; enforce it here so a collision
-        // fails at config-load with a clear message, not later at `spur team up` (where
+        // fails at config-load with a clear message, not later at materialization (where
         // loadAgentSpecs throws a duplicate-id error far from the config).
         const seenComposed = new Set<string>();
         for (const [teamId, teamConfig] of Object.entries(team)) {

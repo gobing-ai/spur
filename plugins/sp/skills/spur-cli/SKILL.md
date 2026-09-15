@@ -1,6 +1,6 @@
 ---
 name: spur-cli
-description: "Reference and operate the complete `spur` CLI surface: task, feature, rule, workflow, builder, agent, message, team, self, history, and projects. Use for verb or flag lookup, machine-readable output and exit contracts, or CLI-gated corpus writes. Triggers: \"spur task\", \"spur history\", \"spur projects\", \"create a task\", \"task check\", and any Spur CLI convention. Not for planning or execution lifecycle orchestration (`sp:spur-dev`)."
+description: "Reference and operate the complete `spur` CLI surface: task, feature, rule, workflow, builder, agent, message, self, history, and projects. Use for verb or flag lookup, machine-readable output and exit contracts, or CLI-gated corpus writes. Triggers: \"spur task\", \"spur history\", \"spur projects\", \"create a task\", \"task check\", and any Spur CLI convention. Not for planning or execution lifecycle orchestration (`sp:spur-dev`)."
 license: Apache-2.0
 metadata:
   author: spur
@@ -17,7 +17,6 @@ metadata:
     - builder
     - agent
     - message
-    - team
     - self
     - history
     - projects
@@ -45,9 +44,8 @@ Pick the noun, read its reference. Each Tier A and Tier B reference owns that no
 | **Tier A** | **rule** | Constraint quality gate: run presets, author rules, fine-tune, validate rule files/presets, extend engine | [references/rules.md](references/rules.md) |
 | **Tier A** | **workflow** | Dual-mode workflow runtime: author state-machine / transition-flow workflows, validate, run, read traces | [references/workflows.md](references/workflows.md) |
 | **Tier A** | **builder** | Release plumbing: bump a package (or the `workspace:`-pinned set) with `bump-ver`, delete release tags with `drop-tags`, commit + tag + optional push | [references/builder.md](references/builder.md) |
-| **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, manage team agent specs, persistent self-draining loop, readiness check | [references/agent.md](references/agent.md) |
+| **Tier B** | **agent** | Coding-agent execution surface: run prompts via detected/named agents, list agent specs, start/stop supervised processes, readiness check | [references/agent.md](references/agent.md) |
 | **Tier B** | **message** | Durable inter-agent messaging: send, inbox, reply, watch | [references/message.md](references/message.md) |
-| **Tier B** | **team** | Team coordination and supervision: assign, status, up/down rosters, start/stop supervised processes | [references/team.md](references/team.md) |
 | **Tier B** | **self** | Self-management verbs: scaffold (`init`), schema migrations (`migrate`), local web server (`serve`), status overview (`status`); `self init` runs post-scaffold validation probes & layout classification | [references/self.md](references/self.md) |
 | **Tier B** | **history** | Import agent histories, aggregate forensic artifacts, render reports, and run the checkpoint-resumed daily pipeline | [references/history.md](references/history.md) |
 | **Tier B** | **projects** | Manage the local multi-project registry and start/stop project servers | [references/projects.md](references/projects.md) |
@@ -138,13 +136,11 @@ and spreading it; full contract in `docs/04_DESIGN.md` §1.0.1.
 
 ## See also
 
-- **[references/agent.md](references/agent.md)** - coding-agent execution surface (`run`, `loop`,
-  spec management). Cross-references the
+- **[references/agent.md](references/agent.md)** - coding-agent execution surface (`run`, `wait`,
+  `list --specs`, `start`/`stop`). Cross-references the
   [dispatch-surface rule](../parallel-execution/references/dispatch-surface.md).
 - **[references/message.md](references/message.md)** - durable inter-agent messaging (`send`,
   `inbox`, `reply`, `watch`).
-- **[references/team.md](references/team.md)** - team coordination and supervision (`assign`,
-  `status`, `up`/`down`, `start`/`stop`).
 - **[references/self.md](references/self.md)** - `spur self init|migrate|serve|status` CLI verbs
   (the four legacy top-level nouns remain hidden aliases). `self init` runs post-scaffold init
   validation (Phase 1.5/1.6 probes).

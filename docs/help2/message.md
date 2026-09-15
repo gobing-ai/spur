@@ -66,7 +66,6 @@ spur message watch --agent reviewer
 
 ## See also
 
-- [team](./team.md) — rosters, assignment, supervised processes
 - [agent](./agent.md) — `agent run --spec --drain` consumes the inbox
 
 <!-- Provenance (invisible)

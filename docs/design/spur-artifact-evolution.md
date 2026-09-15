@@ -40,12 +40,12 @@ their owners: [CLI contracts](cli-contracts.md) (`workflow list` and `show`) and
 | `sp:spur-dev` | The planning → execution lifecycle | Composition or evaluation method |
 | `sp:spur-composer` | Select, compose, tune and promote artifacts; apply accepted proposals | Judge its own output; run recurring loops |
 | `sp:spur-doctor` | Evaluate artifacts from CLI evidence; reflect over history findings; propose changes | Any task, feature, rule or workflow write |
-| `sp:expert-spur` | One bounded corpus campaign per dispatch, over the three skills above | Lifecycle, batches, recurring loops, coordination dispatch, `spur team`, `spur agent loop` |
+| `sp:expert-spur` | One bounded corpus campaign per dispatch, over the three skills above | Lifecycle, batches, recurring loops, coordination dispatch, `spur agent loop` |
 | `sp:super-planner` | Batches, recurring evolution loops, multi-agent coordination | Corpus method |
 
 Composer and doctor link the `sp:spur-cli` references for verbs and existing per-noun procedures;
 they never restate a verb or flag catalog. They cover tasks, features, rules, workflows and agent
-specs; doctor also reads history. The `sp:spur-cli` team reference carries a retiring banner.
+specs; doctor also reads history.
 
 ## 3. Doctor evidence per noun
 
@@ -55,7 +55,7 @@ specs; doctor also reads history. The `sp:spur-cli` team reference carries a ret
 | feature | `spur feature check <id> --json` |
 | rule | `spur rule trace --json`, `spur rule validate` |
 | workflow | `spur workflow list --json`, `spur workflow validate --json`, `spur workflow trace --json`, the step profile (§10) |
-| agent spec | `spur agent list --specs --json`, read and written through `spur agent`, never `spur team` (§9) |
+| agent spec | `spur agent list --specs --json` (§9) |
 | history | A `sp:history-anatomy` report, never raw history records |
 
 ## 4. Reflection map
@@ -130,8 +130,8 @@ trace evidence, never from a guess.
 Agent specs (`.spur/agents/<id>.yaml`) stay in scope. They are the occupant identity of the
 inter-agent control plane (`OccupantRef.specId`, [inter-agent control plane](inter-agent-control-plane.md)
 §2), addressed by `spur agent run --spec`, `spur agent wait` and `spur message`, so they outlive the
-`team` noun. Composer and doctor reach them only through `spur agent create|edit|delete|list --specs`.
-If team retirement moves or renames those verbs, the §3 evidence row follows the replacement.
+`team` noun (removed at the G64 cutover, 2026-09-14). Specs are materialized from the fleet declaration
+at serve start; composer and doctor read them only through `spur agent list --specs`.
 
 ## 10. Composition budgets and step evidence (ADR-115)
 

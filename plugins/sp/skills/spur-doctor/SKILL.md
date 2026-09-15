@@ -42,7 +42,7 @@ record saves the returned table under `docs/reports/`; the doctor creates no art
   of scope and are never re-interpreted here; history-anatomy is the only history interpreter.
 - **Recurring reflection loops and coordination go to `sp:super-planner`** or a workflow — one
   bounded evaluation pass per invocation.
-- **Forbidden surfaces: `spur team` and `spur agent loop`.** Agent specs are read only through
+- **Forbidden surface: `spur agent loop`** (supervisor-internal). Agent specs are read only through
   `spur agent list --specs --json`.
 
 ## Evidence per noun
@@ -53,7 +53,7 @@ record saves the returned table under `docs/reports/`; the doctor creates no art
 | feature | `spur feature check <id> --json` |
 | rule | `spur rule trace --json`, `spur rule validate` |
 | workflow | `spur workflow validate --json` (findings by `level`), `node "$(superskill script path sp workflow-step-profile.mjs)" <workflow> --json` |
-| agent spec | `spur agent list --specs --json`, read and written through `spur agent` with `--specs`, never `spur team` |
+| agent spec | `spur agent list --specs --json` |
 | history | A `sp:history-anatomy` report ([../history-anatomy/SKILL.md](../history-anatomy/SKILL.md)), never raw history records |
 
 Every row of a proposal cites the evidence it rests on. No anchor, no proposal.

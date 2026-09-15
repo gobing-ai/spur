@@ -166,11 +166,10 @@ spur message send "Plan ready for review" --to planner
 
 ## Team Mode
 
-Team mode (Phase 1–3) uses **prepend-on-drain**: `task update --assignee` (0848: the moved home of
-`team assign`) + `message send` +
+Team mode (Phase 1–3) uses **prepend-on-drain**: `task update --assignee` + `message send` +
 `agent run --drain <spec-id>` folds the spec's inbox into the prompt and maps spec-id →
 coding-agent type. There are no live daemons; `--drain` is the coordination mechanism. See
-[spur task](./cmd_task.md) and [spur team](./cmd_team.md).
+[spur task](./cmd_task.md) and [spur agent](./cmd_agent.md).
 
 ## See Also
 

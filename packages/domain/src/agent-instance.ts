@@ -2,7 +2,7 @@
  * Agent instance shapes (0685 R2) — the storage contract for materialized agent
  * instances, frozen ahead of the instance→DB cutover. Today instances are the
  * spec files under `.spur/agents/` (ADR-075); after 0026 lands they are DB
- * rows written by the composition root (`team up`), not committed files
+ * rows written by the composition root (fleet materialization at `spur serve` start), not committed files
  * (ADR-086). These types are the seam both homes must satisfy.
  */
 
@@ -45,7 +45,7 @@ export interface AgentInstance {
 
 /**
  * Read-side store over agent instances (0685 R2). Narrow and deliberately
- * read-only: writes stay in `team up` (spec files today, DB rows after 0026),
+ * read-only: writes stay in fleet materialization (spec files today, DB rows after 0026),
  * so the store never becomes a second write path.
  */
 export interface AgentInstanceStore {

@@ -235,7 +235,6 @@ export function nounOfReference(file: string): string | null {
         workflows: 'workflow',
         agent: 'agent',
         message: 'message',
-        team: 'team',
         init: 'init',
         serve: 'serve',
     };
@@ -641,7 +640,6 @@ const JSON_PROBES: string[][] = [
     ['workflow', 'list', '--json'],
     ['workflow', 'validate', 'basic.yaml', '--json'],
     ['status', '--json'],
-    ['team', 'status', '--json'],
     ['projects', 'list', '--json'],
 ];
 

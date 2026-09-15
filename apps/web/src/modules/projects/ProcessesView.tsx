@@ -175,9 +175,9 @@ function ProcessFilterControls({
 }
 
 /**
- * Processes section (Projects Work tab, 0852) — the Teams process watch list
- * (0262/0264/0267) retired with its module in 0849, restored here as an
- * embedded Work section so the capability stays reachable (feature G64 R5).
+ * Processes tab (Projects, 0852) — the Teams process watch list
+ * (0262/0264/0267) retired with its module in 0849, restored here so the
+ * capability stays reachable (feature G64 R5).
  *
  * Polls GET /api/team/processes every STATUS_POLL_MS and renders supervised
  * members plus ProcessExecutor registry one-shots through the single parse

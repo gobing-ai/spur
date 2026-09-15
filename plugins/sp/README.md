@@ -536,7 +536,7 @@ graph TB
     end
 
     subgraph "Execution layer"
-        CLI["spur CLI<br/>task · feature · rule · workflow<br/>· agent · history · team · message"]
+        CLI["spur CLI<br/>task · feature · rule · workflow<br/>· agent · history · message"]
         SCRIPT["hooks/task-write-guard.ts"]
     end
 

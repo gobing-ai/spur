@@ -89,15 +89,15 @@ Source of truth: `SYSTEM_EVENT_CATALOG` in `packages/app/src/services/event-name
 
 | # | Catalog entry | Emit site | Bus path to tap | Status |
 | --- | --- | --- | --- | --- |
-| 26 | `team.up` | `team-service.ts` (`materializeTeam`, written path only) | **Board:** `ctx.teamService()` → `eventBus: eventsBus`. **CLI:** `spur team up` → `attachSystemEventLedger` + `TeamService.eventBus` (task 0371 R6) | ✅ Board **and** CLI reachable |
-| 27 | `team.down` | `team-service.ts` (`teardownTeam`) | same | ✅ Board **and** CLI reachable |
-| 28 | `team.member.assigned` | `team-service.ts` (`assignTask`) | **Board:** same bus. **CLI:** `spur team assign` (deprecated alias, 0848) or `spur task update --assignee` → ledger attach | ✅ Board **and** CLI reachable |
+| 26 | `team.up` | `team-service.ts` (`materializeTeam`, written path only) | **Board:** `ctx.teamService()` → `eventBus: eventsBus`. **CLI:** none — `spur team up` was removed at the G64 cutover (2026-09-14) | ✅ Board reachable |
+| 27 | `team.down` | `team-service.ts` (`teardownTeam`) | same (no CLI path since the G64 cutover) | ✅ Board reachable |
+| 28 | `team.member.assigned` | `team-service.ts` (`assignTask`) | **Board:** same bus. **CLI:** `spur task update --assignee` → ledger attach | ✅ Board **and** CLI reachable |
 | 29 | `team.member.started` | `supervisor-service.ts` (`start`); also TeamService bridge from `agent.started` (TeamOrchestrator path) | **Board:** `ctx.supervisor()` → `eventBus: eventsBus`; orchestrator path via `teamService().events` + re-emit on `eventBus`. Member start via serve/API only on Board for supervisor | ✅ reachable (supervisor Board; orchestrator bridge when wired) |
 | 30 | `team.member.stopped` | `supervisor-service.ts` (`stop` + natural exit); TeamService bridge from `agent.stopped` | same | ✅ reachable |
 
 > **Task 0371 wiring.** Catalog entries use source/renderer `team`, default tier, `metadata-only` payloads (`teamId`, `memberId`/`memberCount`, `agentType`, `outcome` — no bodies or argv). `extractSystemEventActor` falls back to `memberId` after `actor`/`agentId` (R4). Unknown roster members persist with null unresolved fields (R5). Dry-run `materializeTeam({ check: true })` does **not** emit `team.up`.
 >
-> **CLI durability.** `apps/cli/src/commands/team.ts` attaches `attachSystemEventLedger` for `team up` / `down` / `assign` so rows land in the shared SQLite ledger without `spur serve` (R6). Supervisor-driven `team.member.started|stopped` remain Board-path (same as `process.*` — see Gap 1 residual).
+> **CLI durability.** `spur task update --assignee` (`apps/cli/src/commands/task.ts`) attaches `attachSystemEventLedger` so `team.member.assigned` rows land in the shared SQLite ledger without `spur serve` (R6). Supervisor-driven `team.member.started|stopped` remain Board-path (same as `process.*` — see Gap 1 residual).
 
 ### Rule (rule.\*)
 
@@ -182,9 +182,9 @@ The server `system_events` persistence tap (`registerSystemEventTap`) is registe
 
 **Task 0370 — Workflow/agent CLI durability.** `spur workflow run` / `continue` always build a CLI-local EventBus and attach `registerSystemEventTap` via `attachSystemEventLedger` (`apps/cli/src/system-event-ledger.ts`). Direct `spur agent run` does the same for `agent.invoke.*`. Same canonical serialization as the server tap; R5 failure isolation; diagnostic-tier gating (R6). Workflow-dispatched `agent.run` emits only the `workflow.agent` series (no `AgentService.events` on that path — R4).
 
-**Task 0371 — Team CLI durability.** `spur team up` / `down` / `assign` (and, from 0848, the moved
-homes `spur task update --assignee` / `spur agent start|stop` / `agent list --specs`) attach the
-same ledger bridge so `team.up|down` and `team.member.assigned` persist without serve.
+**Task 0371 — Team CLI durability.** `spur task update --assignee` attaches the same ledger bridge so
+`team.member.assigned` persists without serve (the `spur team up` / `down` / `assign` paths were
+removed at the G64 cutover, 2026-09-14).
 Supervisor-driven `team.member.started|stopped` remain Board-path (alongside `process.*`).
 
 **Still CLI-invisible (parent-process CLI only):** `rule.*`, `message.*`, `process.spawned/exited/stopped` (and supervisor `team.member.started|stopped`) when driven from the shell without a server bus. Those families remain Board-driven for durability.

@@ -559,7 +559,7 @@ logic exists.
 ADR-116 replaces ADR-052's team-scoped composition: **a project — one worktree path — is the
 composition unit.** Its agent roster is a **fleet** declared in `<projectPath>/.spur/fleet.json`
 (task 0835) and resolved by `FleetService`; the Projects Board module owns Conversation, Agents, and
-Work (0840's three-tab contract, `apps/web/src/modules/projects/tabs.tsx`); `agent.team.<teamId>`, the
+Processes (the three-tab contract, `apps/web/src/modules/projects/tabs.tsx`); `agent.team.<teamId>`, the
 three retired Board modules, and their routes are gone (0849). Spec ids stay the mailbox identity and
 occupant address, preserved verbatim across conversion. Fleet shape, resolution, and the dispatch
 boundaries: [project switcher § fleet](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).

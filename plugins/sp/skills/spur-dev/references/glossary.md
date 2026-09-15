@@ -55,7 +55,7 @@ Avoid: *result* (too generic — a verdict has a fixed three-value contract), *r
 for narrative output like the dogfood report or batch report).
 
 **noun/verb** — the two-part CLI grammar: a noun names the domain object (`task`, `feature`,
-`rule`, `workflow`, `agent`, `message`, `team`), a verb names the operation on it (`create`,
+`rule`, `workflow`, `agent`, `message`), a verb names the operation on it (`create`,
 `update`, `check`, `run`, `list`). The `sp:spur-cli` facade organizes its references one file
 per noun.
 Avoid: *command* alone (ambiguous with a `/sp:dev-*` slash command, which is a different

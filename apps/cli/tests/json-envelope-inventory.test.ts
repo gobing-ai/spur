@@ -198,9 +198,7 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
             // registrations live inside the module's register* function, so that brace
             // closes the span. Without this, the LAST advertising block's to-EOF span
             // swallows the whole file tail: unrelated helpers count as "called by an
-            // advertising block" and their failure sites get attributed to the wrong verb
-            // (0848: registering `agent stop` late flagged `runAgentEdit`, which belongs
-            // to the non-advertising `agent edit` verb).
+            // advertising block" and their failure sites get attributed to the wrong verb.
             for (const block of blocks) {
                 const close = lines.findIndex((l, idx) => idx > block.start && l === '}');
                 if (close > block.start) block.end = Math.min(block.end, close);
@@ -238,9 +236,7 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
                 // Attribution: a helper an ADVERTISING block calls is in scope (its verb
                 // declared the flag); otherwise a site only counts when it lexically sits
                 // inside the verb's own registration block. Without this guard, the LAST
-                // advertising block's to-EOF span swallows unrelated helpers' failure
-                // sites (0848: registering `agent stop` late flagged `runAgentEdit`, which
-                // belongs to the non-advertising `agent edit` verb).
+                // advertising block's to-EOF span swallows unrelated helpers' failure sites.
                 const helper = helpers.find((fn) => ln >= fn.start && ln <= fn.end);
                 let verb: string | undefined;
                 if (helper !== undefined) {
@@ -282,7 +278,8 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         const advertising = collectVerbBlocks().filter((b) => b.body.includes('SHARED_OPTIONS.jsonEnvelope'));
         // 0847: bump for each new verb advertising --json-envelope (70 → 71 for projects migrate).
         // 0848: 71 → 73 for `agent start` / `agent stop`.
-        expect(advertising.length).toBe(73);
+        // G64 cutover: 73 → 67 (`spur team` noun + `agent create` removed).
+        expect(advertising.length).toBe(67);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

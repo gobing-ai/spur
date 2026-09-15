@@ -97,7 +97,7 @@ reconciles specs (the `spur projects list --fleet` preview is the `check` path),
 [§7 fleet ownership and dispatch boundaries](#fleet-ownership-and-dispatch-boundaries-g62).
 
 **Board surface.** The Projects module (`apps/web/src/modules/projects/`) renders the fleet as the
-Agents tab's declared-vs-observed roster, with Conversation and Work as its sibling tabs (0840's
+Agents tab's declared-vs-observed roster, with Conversation and Processes as its sibling tabs (the
 three-tab contract); the roster reads `/api/project/fleet` rather than the retired
 `GET /api/team/teams` roster shape.
 
@@ -305,47 +305,27 @@ Issue labels are frozen and shared with the global input receipts (0844):
   `data-roster-observed`, `data-roster-issue`, `data-member-detail`,
   `data-g6="open-member"` (the prototype selector, reused by 0845).
 
-### Work view embed and reference capture (0843)
+### Processes tab (0852)
 
-The Work tab renders the EXISTING board surfaces — no third task-rendering
-path, no fork:
+`ProjectTabId` is `conversation | agents | processes`. The 0843 Work tab, which
+embedded `KanbanBoard` / `FeaturesShell` / `ProcessesView` as sections, was
+removed on 2026-09-14: Tasks and Features are their own Board modules, so
+Projects no longer duplicates them. `/board/projects/work` resolves to the
+default tab through the `useProjectTab` unknown-segment rule. The Work-side task
+reference capture (`addRef({kind:'task', wbs})`) left with it. The draft's ref
+contract (`ConversationRef`, chips, submission) is unchanged.
 
-- Tasks section mounts `KanbanBoard` (the embed seam one level below
-  `TaskKanbanView`, whose `useTaskParams().selectTask` would navigate out of
-  the module to `/board/tasks/<wbs>`) with a project-local `onSelectTask`:
-  selecting a card captures a structured reference into the shared draft
-  (`addRef({kind:'task', wbs})`, deduplicated) and switches to the
-  Conversation tab. It never navigates to `/board/tasks/<wbs>` and never
-  opens a second detail surface.
-- Features section mounts `FeaturesShell` exactly as the features module does
-  — no props, no headless variant; the shell exposes no selection seam, so a
-  feature reference reaches the draft through the same `addRef` contract
-  (`{kind:'feature', id}`) without a Work-side capture affordance.
-- No project filter (R3): one server instance serves one project (0840), so
-  the embedded views' fetches ARE the served project's corpus.
-  `ProjectContext.path` is never narrowed into a query parameter; the
-  no-filter invariant is asserted in tests (the embedded board issues the
-  byte-for-byte identical task-list request the bare embed makes), not
-  re-implemented as a filter that would guarantee nothing.
-- Processes section (0852): third `WORK_SECTIONS` entry — restores the retired
-  0262/0264/0267 watch list as an embedded surface. `ProcessesView` mounts
-  `GET /api/team/processes` rows (supervised + registry one-shots, dedup by
-  covered agentId/pid) behind the 0267 filter bar (running-only, source,
-  team/unassigned) with a no-matches empty state; the wire parse stays in
-  `MemberTerminal.tsx` (`parseProcessList`/`parseExecutions`), extended, not
-  duplicated. Component state only — the three-tab `ProjectTabId` contract and
-  the URL are untouched.
-- Draft placement: `ConversationDraftContext` is provided by `BoardLayout`
-  (0841) because Work and Conversation are sibling panels — only the active
-  panel mounts.
-- Test attributes: `data-work-section="<id>"` on the section switch (now
-  `tasks` / `features` / `processes`), `data-g6="use-task"` on the tasks
-  section host, `data-g6="task-chip"` on the conversation's task reference
-  chip — the prototype's selectors, so 0845's ported assertions need no
-  rename; `data-processes-filter-*` / `data-processes-filters` on the 0852
-  filter bar.
-- Owner: `apps/web/src/modules/projects/WorkView.tsx`; `tabs.tsx` mounts it as
-  the frozen `work` tab. `task-kanban` / `features` are imported unmodified.
+- `ProcessesView` restores the retired 0262/0264/0267 watch list. It polls
+  `GET /api/team/processes` for rows: supervised processes plus registry
+  one-shots, deduplicated by covered agentId/pid. The rows sit behind the 0267
+  filter bar (running-only, source, team/unassigned), with an empty state when
+  nothing matches. The wire parse stays in `MemberTerminal.tsx`
+  (`parseProcessList`/`parseExecutions`).
+- Draft placement: `BoardLayout` provides `ConversationDraftContext` (0841),
+  because `GlobalAgentBar` mounts outside the module.
+- Test attributes: `data-g6="task-chip"` on the conversation's task reference
+  chip; `data-processes-filter-*` / `data-processes-filters` on the filter bar.
+- Owner: `apps/web/src/modules/projects/tabs.tsx`.
 
 ## 8. Web UI
 

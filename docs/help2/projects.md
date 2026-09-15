@@ -35,12 +35,12 @@ spur projects stop other-repo
 
 > **Relationship to `spur serve`:** `projects start/stop` drive *registered* projects through
 > the registry; `spur serve` runs the local server for the current project. The supervised
-> team verbs ([team](./team.md) `start/stop`) are a third, agent-process surface.
+> agent verbs ([agent](./agent.md) `start/stop`) are a third, agent-process surface.
 
 ## See also
 
 - [serve](./serve.md) — the local web server
-- [team](./team.md) — supervised agent processes
+- [agent](./agent.md) — supervised agent processes
 
 <!-- Provenance (invisible)
 Generated: 2026-09-11 via the kk-itc-generating three-reference merge.

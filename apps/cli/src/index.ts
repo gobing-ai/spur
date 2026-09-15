@@ -32,7 +32,6 @@ import { registerRuleCommand } from './commands/rule';
 import { registerServeCommand } from './commands/serve';
 import { registerStatusCommand } from './commands/status';
 import { registerTaskCommand } from './commands/task';
-import { registerTeamCommand } from './commands/team';
 import { registerWorkflowCommand } from './commands/workflow';
 import { CLI_CONFIG } from './config';
 import { EMBEDDED_SPUR_SCHEMAS } from './config/embedded-schemas';
@@ -184,7 +183,6 @@ export function buildProgram(context: ReturnType<typeof createCliContext>, outpu
     registerServeCommand(program, context, { hidden: true });
     registerStatusCommand(program, context, { hidden: true });
 
-    registerTeamCommand(program, context);
     registerTaskCommand(program, context);
     registerWorkflowCommand(program, context);
 

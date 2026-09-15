@@ -36,8 +36,8 @@ its own output and never runs a recurring loop — evaluation is the doctor's jo
   or flag catalog: [../spur-cli/SKILL.md](../spur-cli/SKILL.md).
 - **Recurring loops and coordination go to `sp:super-planner`** or a workflow — not here. This skill
   runs one bounded composition or tuning pass per invocation.
-- **Forbidden surfaces: `spur team` and `spur agent loop`.** Agent specs are reached only through
-  `spur agent create|edit|delete|list --specs`.
+- **Forbidden surface: `spur agent loop`** (supervisor-internal). Agent specs are read through
+  `spur agent list --specs`; they are declared in the fleet config, not authored by a CLI verb.
 - **Writes land only through `spur` verbs** and the ladder's gated file steps (§ below). The shared
   step additionally needs recorded operator consent plus `build:bundle` parity.
 
@@ -49,7 +49,7 @@ its own output and never runs a recurring loop — evaluation is the doctor's jo
 | feature | Apply accepted rows through `spur feature update --section --from-file`; keep acceptance criteria in Gherkin | [../spur-cli/references/features.md](../spur-cli/references/features.md) |
 | rule | The trace-driven tuning loop (§ Rule tuning loop) | [../spur-cli/references/rules.md](../spur-cli/references/rules.md) · [fine-tuning](../spur-cli/references/rules/fine-tuning.md) |
 | workflow | Catalog selection, the composition ladder, and the ADR-115 budgets (§ below) | [../spur-cli/references/workflows.md](../spur-cli/references/workflows.md) · [operations](../spur-cli/references/workflows/operations.md) |
-| agent spec | Compose and edit `.spur/agents/<id>.yaml` only through `spur agent create|edit|delete|list --specs` | [../spur-cli/references/agent.md](../spur-cli/references/agent.md) |
+| agent spec | Read through `spur agent list --specs`; specs are materialized from the fleet declaration at serve start | [../spur-cli/references/agent.md](../spur-cli/references/agent.md) |
 
 Do not drive the planning→execution lifecycle from here — that is `sp:spur-dev`.
 

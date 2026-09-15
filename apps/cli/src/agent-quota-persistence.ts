@@ -2,7 +2,7 @@
  * CLI EventBus → `agent_executor_updates` persistence bridge (task 0799 R1).
  *
  * The dual of `system-event-ledger.ts`: quota events emitted during `spur
- * agent run` / `spur workflow run` / `spur team` executions persist into the
+ * agent run` / `spur workflow run` / `spur task update --assignee` executions persist into the
  * project SQLite delivery table, so the server can apply them even when it
  * was offline while the CLI run produced them. Same failure-isolation
  * contract as the ledger tap — persistence or validation failures surface on

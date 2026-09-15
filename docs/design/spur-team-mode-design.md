@@ -2,7 +2,7 @@
 
 > **Superseded (ADR-116).** This proposal's composition unit is retired: a project — one worktree
 > path — is the unit, its roster is a **fleet** in `<projectPath>/.spur/fleet.json`, and the `spur team`
-> noun is deprecated (0848) with its verbs moved to `spur agent` / `spur task update --assignee` /
+> noun was removed at the G64 cutover (2026-09-14) after its verbs moved to `spur agent` / `spur task update --assignee` /
 > `spur projects list --fleet`. Current surface: [project switcher](project-switcher.md) § fleet.
 > Kept as the historical record of the team-mode proposal.
 

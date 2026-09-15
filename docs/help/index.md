@@ -44,14 +44,13 @@ once rather than repeated per command: `--help` prints any command's usage, and
 | --------------- | ----------------------------------------------------------------- |
 | `spur self`     | Self-management verbs: `init` / `migrate` / `serve` / `status` (the legacy top-level nouns remain hidden aliases) |
 | `spur builder`  | Release plumbing: `bump-ver` / `drop-tags` (promoted from `spur-dev`) |
-| `spur agent`    | Run and inspect supported coding agents + team agent specs        |
+| `spur agent`    | Run and inspect coding agents, agent specs, supervised processes  |
 | `spur rule`     | Manage constraint rules and presets                               |
 | `spur workflow` | Validate, run, continue (`--answer`), trace, cancel, clean workflow YAML |
 | `spur task`     | Manage tasks (WBS-numbered, markdown-backed) — 18 verbs           |
 | `spur feature`  | Manage features (hierarchical IDs) — 9 verbs (incl. `sync`)       |
 | `spur history`  | Import and analyze coding-agent history                           |
 | `spur message`  | Send and inspect durable inter-agent messages                     |
-| `spur team`     | Team assign / status / up / down / start / stop (needs serve)     |
 | `spur projects` | Manage the multi-project registry                                 |
 
 ### Architecture Diagram
@@ -141,7 +140,6 @@ mechanics; the CLI guide points here for the 26-step view.
 | `spur builder`  | [cmd_builder.md](./cmd_builder.md)   |
 | `spur feature`  | [cmd_feature.md](./cmd_feature.md)   |
 | `spur message`  | [cmd_message.md](./cmd_message.md)   |
-| `spur team`     | [cmd_team.md](./cmd_team.md)         |
 | `spur status`   | [cmd_status.md](./cmd_status.md)     |
 | `spur migrate`  | [cmd_migrate.md](./cmd_migrate.md)   |
 | `spur serve`    | [cmd_serve.md](./cmd_serve.md)       |

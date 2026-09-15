@@ -146,7 +146,7 @@ piping to other tools; the human-readable default stays the same.
 - [Slash commands](./dev-slash-commands.md) — one command per step of this loop, from inside
   your coding agent.
 - Command pages: [task](./task.md), [feature](./feature.md), [agent](./agent.md),
-  [workflow](./workflow.md), [rule](./rule.md), [history](./history.md), [team](./team.md).
+  [workflow](./workflow.md), [rule](./rule.md), [history](./history.md).
 
 <!-- Provenance (invisible)
 Generated: 2026-09-11 via the kk-itc-generating three-reference merge.

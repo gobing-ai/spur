@@ -1,14 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DeliveryReconciler, TeamService } from '@gobing-ai/spur-app';
+import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { RequestKeyConflictError } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
-import { type AgentRunDeps, runAgentLoop, runAgentRun, splitEditorCommand } from '../../src/commands/agent';
+import { type AgentRunDeps, runAgentLoop, runAgentRun } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import { createCapturedOutput } from '../helpers';
 
@@ -24,220 +25,11 @@ async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     return { ctx, cwd, out, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
 }
 
-describe('spur agent create', () => {
-    test('writes a spec yaml with type and purpose', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const code = await main(
-                ['agent', 'create', 'planner', '--type', 'claude-code', '--purpose', 'plan things', '--tags', 'a,b'],
-                { cwd, output: out, dbUrl: ':memory:' },
-            );
-            expect(code).toBe(0);
-            const yaml = await readFile(join(cwd, '.spur', 'agents', 'planner.yaml'), 'utf8');
-            expect(yaml).toContain('id: planner');
-            expect(yaml).toContain('type: claude-code');
-            expect(yaml).toContain('plan things');
-            expect(out.messages.join('\n')).toMatch(/created .spur\/agents\/planner.yaml/);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('--json returns the spec', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const code = await main(['agent', 'create', 'coder', '--type', 'codex', '--json'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-            });
-            expect(code).toBe(0);
-            const payload = JSON.parse(out.messages.at(-1) ?? '{}');
-            expect(payload.ok).toBe(true);
-            expect(payload.spec.id).toBe('coder');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('rejects a duplicate id', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await main(['agent', 'create', 'coder', '--type', 'codex'], { cwd, output: out, dbUrl: ':memory:' });
-            const code = await main(['agent', 'create', 'coder', '--type', 'codex'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-            });
-            expect(code).toBe(1);
-            expect(out.errors.join('\n')).toMatch(/already exists/);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('rejects an invalid id', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const code = await main(['agent', 'create', 'Bad Id', '--type', 'codex'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-            });
-            expect(code).toBe(1);
-            expect(out.errors.length).toBeGreaterThan(0);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('requires --type', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const code = await main(['agent', 'create', 'coder'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(2);
-            expect(out.errors.join('\n')).toMatch(/requires --type/);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('requires an id', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const code = await main(['agent', 'create', '--type', 'codex'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(1);
-            expect(out.errors.join('\n')).toMatch(/missing required argument/);
-        } finally {
-            await cleanup();
-        }
-    });
-});
-
-describe('spur agent delete', () => {
-    test('removes a spec with --force', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await main(['agent', 'create', 'coder', '--type', 'codex'], { cwd, output: out, dbUrl: ':memory:' });
-            const code = await main(['agent', 'delete', 'coder', '--force'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(0);
-            const fs = createNodeFileSystem();
-            expect(await fs.exists(join(cwd, '.spur', 'agents', 'coder.yaml'))).toBe(false);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('refuses without --force', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await main(['agent', 'create', 'coder', '--type', 'codex'], { cwd, output: out, dbUrl: ':memory:' });
-            const code = await main(['agent', 'delete', 'coder'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(2);
-            expect(out.errors.join('\n')).toMatch(/without --force/);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('errors on a missing spec', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const code = await main(['agent', 'delete', 'ghost', '--force'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(1);
-            expect(out.errors.join('\n')).toMatch(/No agent spec found/);
-        } finally {
-            await cleanup();
-        }
-    });
-});
-
-describe('spur agent edit', () => {
-    test('prints the spec path when $EDITOR is unset', async () => {
-        const { cwd, out, cleanup } = await makeCtx({ EDITOR: undefined });
-        try {
-            await main(['agent', 'create', 'coder', '--type', 'codex'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-                env: { EDITOR: undefined },
-            });
-            const code = await main(['agent', 'edit', 'coder'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-                env: { EDITOR: undefined },
-            });
-            expect(code).toBe(0);
-            expect(out.messages.at(-1)).toContain(join(cwd, '.spur', 'agents', 'coder.yaml'));
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('errors on a missing spec', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            const code = await main(['agent', 'edit', 'ghost'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(code).toBe(1);
-            expect(out.errors.join('\n')).toMatch(/No agent spec found/);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('prints the spec path when $EDITOR is whitespace-only (empty-argv fallback, no spawn)', async () => {
-        // WHY: a set-but-whitespace $EDITOR is neither undefined nor '' (so it
-        // passes the first guard), yet splitEditorCommand trims/splits it to [] —
-        // runAgentEdit then prints the path and returns instead of spawning.
-        const { cwd, out, cleanup } = await makeCtx();
-        try {
-            await main(['agent', 'create', 'coder', '--type', 'codex'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-                env: { EDITOR: '   ' },
-            });
-            out.messages.length = 0;
-            const code = await main(['agent', 'edit', 'coder'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-                env: { EDITOR: '   ' },
-            });
-            expect(code).toBe(0);
-            expect(out.messages.at(-1)).toContain(join(cwd, '.spur', 'agents', 'coder.yaml'));
-        } finally {
-            await cleanup();
-        }
-    });
-});
-
-describe('splitEditorCommand (R6 multi-word $EDITOR)', () => {
-    test('code -w splits into three argv tokens when path is appended', () => {
-        // WHY: Bun.spawn([ "code -w", path ]) looks for a binary named "code -w".
-        expect(splitEditorCommand('code -w')).toEqual(['code', '-w']);
-        expect([...splitEditorCommand('code -w'), '/tmp/x.yaml']).toEqual(['code', '-w', '/tmp/x.yaml']);
-    });
-
-    test('single-word EDITOR is unchanged', () => {
-        expect(splitEditorCommand('vim')).toEqual(['vim']);
-    });
-
-    test('whitespace-only EDITOR yields empty argv', () => {
-        expect(splitEditorCommand('   ')).toEqual([]);
-    });
-});
-
 describe('spur agent list --specs', () => {
     test('lists created specs', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
+        const { ctx, cwd, out, cleanup } = await makeCtx();
         try {
-            await main(['agent', 'create', 'coder', '--type', 'codex', '--purpose', 'code'], {
-                cwd,
-                output: out,
-                dbUrl: ':memory:',
-            });
+            await new TeamService(ctx).createAgentSpec({ id: 'coder', type: 'codex', purpose: 'code' });
             const code = await main(['agent', 'list', '--specs'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
             expect(out.messages.join('\n')).toContain('coder');
@@ -247,9 +39,9 @@ describe('spur agent list --specs', () => {
     });
 
     test('--json includes spec paths', async () => {
-        const { cwd, out, cleanup } = await makeCtx();
+        const { ctx, cwd, out, cleanup } = await makeCtx();
         try {
-            await main(['agent', 'create', 'coder', '--type', 'codex'], { cwd, output: out, dbUrl: ':memory:' });
+            await new TeamService(ctx).createAgentSpec({ id: 'coder', type: 'codex' });
             const code = await main(['agent', 'list', '--specs', '--json'], { cwd, output: out, dbUrl: ':memory:' });
             expect(code).toBe(0);
             const payload = JSON.parse(out.messages.at(-1) ?? '{}');
@@ -286,8 +78,12 @@ describe('spur agent list --specs', () => {
                 ].join('\n'),
                 'utf8',
             );
-            const up = await main(['team', 'up', 'alpha'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(up).toBe(0);
+            const fresh = createCliContext({ cwd, output: out, dbUrl: ':memory:' });
+            await new TeamService({
+                ...fresh,
+                roles: fresh.agentRoles,
+                reloadAgentConfig: () => loadSpurConfig(cwd),
+            }).materializeTeam('alpha');
 
             // Human: distinct role and executor columns; undeclared role renders `unset`.
             out.messages.length = 0;
@@ -463,7 +259,7 @@ describe('spur agent run --drain', () => {
                 doctorRunner: fakeDoctor() as MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 1 }, deps);
+            const code = await runAgentLoop(ctx, { spec: 'planner', poll: '10' }, { maxIterations: 1 }, deps);
             expect(code).toBe(0);
             expect(receivedInput).toContain('loop message');
 
@@ -496,7 +292,7 @@ describe('spur agent run --drain', () => {
                 doctorRunner: fakeDoctor() as MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 3 }, deps);
+            const code = await runAgentLoop(ctx, { spec: 'planner', poll: '10' }, { maxIterations: 3 }, deps);
             expect(code).toBe(0);
             expect(runs).toBe(0); // nothing to drain → never ran the agent
         } finally {
@@ -504,10 +300,10 @@ describe('spur agent run --drain', () => {
         }
     });
 
-    test('loop requires an explicit --agent (rejects auto)', async () => {
+    test('loop requires an explicit --spec (rejects auto)', async () => {
         const { ctx, cleanup } = await makeCtx();
         try {
-            const code = await runAgentLoop(ctx, { agent: 'auto' }, { maxIterations: 1 });
+            const code = await runAgentLoop(ctx, { spec: 'auto' }, { maxIterations: 1 });
             expect(code).toBe(2);
         } finally {
             await cleanup();
@@ -519,7 +315,7 @@ describe('spur agent run --drain', () => {
         // parseLoopPoll's finite-positive branch and bounds the first wait.
         const { ctx, cleanup } = await makeCtx();
         try {
-            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 1 });
+            const code = await runAgentLoop(ctx, { spec: 'planner', poll: '10' }, { maxIterations: 1 });
             expect(code).toBe(0);
         } finally {
             await cleanup();
@@ -531,7 +327,7 @@ describe('spur agent run --drain', () => {
         // exits after one iteration.
         const { ctx, cleanup } = await makeCtx();
         try {
-            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '1' }, { maxIterations: 1 });
+            const code = await runAgentLoop(ctx, { spec: 'planner', poll: '1' }, { maxIterations: 1 });
             expect(code).toBe(0);
         } finally {
             await cleanup();
@@ -547,7 +343,7 @@ describe('spur agent run --drain', () => {
             const ac = new AbortController();
             const timer = setTimeout(() => ac.abort(), 10);
             try {
-                const code = await runAgentLoop(ctx, { agent: 'planner', poll: '5000' }, { signal: ac.signal });
+                const code = await runAgentLoop(ctx, { spec: 'planner', poll: '5000' }, { signal: ac.signal });
                 expect(code).toBe(0);
             } finally {
                 clearTimeout(timer);
@@ -644,7 +440,7 @@ describe('G61 delivery settle regressions (0831)', () => {
                 doctorRunner: g6Doctor() as G6MockDoctor,
             } as unknown as AgentRunDeps;
             if (mode === 'run') await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
-            else await runAgentLoop(ctx, { agent: 'planner', poll: '1' }, { maxIterations: 1 }, deps);
+            else await runAgentLoop(ctx, { spec: 'planner', poll: '1' }, { maxIterations: 1 }, deps);
             expect(await new InboxMessageDao(await ctx.getDb()).getById(sent.msgId)).toMatchObject({
                 status: 'queued',
                 injectAttempts: 1,
@@ -758,7 +554,7 @@ describe('G61 delivery settle regressions (0831)', () => {
                 doctorRunner: g6Doctor() as G6MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentLoop(ctx, { agent: 'planner', poll: '10' }, { maxIterations: 3 }, deps);
+            const code = await runAgentLoop(ctx, { spec: 'planner', poll: '10' }, { maxIterations: 3 }, deps);
             expect(code).toBe(0);
             expect(calls).toBe(3);
             expect(out.errors.join('\n')).toContain('injected invocation failure');

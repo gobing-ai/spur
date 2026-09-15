@@ -44,9 +44,6 @@ export const SHARED_OPTIONS = {
     // ── same flag string, different semantics per module (split preserves help text) ──
     folderTasks: ['--folder <path>', 'Custom tasks folder'] as const,
     folderFeatures: ['--folder <path>', 'Custom features folder'] as const,
-    agentIdMessage: ['--agent <id>', 'Agent id'] as const,
-    agentIdWatch: ['--agent <id>', 'Agent id to watch'] as const,
-    agentIdLegacyRecipient: ['--agent <id>', 'Agent spec id / message recipient (legacy — prefer --spec)'] as const,
     cwdServe: [
         '--cwd <path>',
         'Project root for server config, DB defaults and project-scoped work (resolved against the invocation directory)',
@@ -54,7 +51,6 @@ export const SHARED_OPTIONS = {
     cwdAgent: ['--cwd <path>', 'Working directory for agent execution'] as const,
     modeAgent: ['--mode <mode>', 'Agent output mode: text|json'] as const,
     modeHistory: ['--mode <mode>', 'full|incremental|force-file'] as const,
-    nameAgent: ['--name <name>', 'Agent name'] as const,
     nameProjectDisplay: ['--name <name>', 'Display name for the project'] as const,
     nameProjectInit: ['--name <name>', 'Project name (default: current directory name)'] as const,
     pollWorkflow: ['--poll <ms>', 'Follow polling interval in milliseconds'] as const,
@@ -122,7 +118,6 @@ export const SHARED_OPTIONS = {
     fileRuleAdhocPath: ['--file <path>', 'Ad-hoc rule file path'] as const,
     fileTaskBatch: ['--file <path>', 'Path to the batch JSON file validated against task-batch.schema.json'] as const,
     fileTaskTest: ['--file <path>', 'Custom target test file path'] as const,
-    forceAgentDelete: ['--force', 'Required for delete'] as const,
     forceFeatureReopen: ['--force', 'Force applying reopen proposals without confirmation'] as const,
     forceInitRecreate: ['--force', 'Recreate files that already exist'] as const,
     forceWorkflowClean: ['--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)'] as const,

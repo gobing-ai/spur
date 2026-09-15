@@ -6,7 +6,7 @@ status: verifying
 priority: P2
 tags: ["g6-program"]
 created_at: "2026-09-12T04:42:44.350Z"
-updated_at: "2026-09-15T01:05:03.022Z"
+updated_at: "2026-09-15T05:05:19.959Z"
 ---
 
 # G64: Retire Workspace, Inbox, Teams, and spur team
@@ -287,6 +287,18 @@ groups), **Robin accepted the reduction on 2026-09-14** rather than restoring th
 backlog owners for any future reinstatement, and the amended R2 reads "no Board capability becomes
 unreachable without a recorded, operator-accepted reduction that names its owning task". The redirect
 half is delivered and verified — resolved path, landing tab, deep links, and the shadow guard.
+
+### Noun removal — 2026-09-14 (dev-idea direct cleanup)
+
+The deprecated `spur team` noun is removed outright: `apps/cli/src/commands/team.ts`, its tests, the
+`team-noun-retired` transition shim, `docs/help/cmd_team.md`, `docs/help2/team.md` and the
+`sp:spur-cli` team reference are deleted. Every capability already had an owning-noun home (0848):
+`task update --assignee`, `agent start|stop`, `agent list --specs`. `spur agent create|edit|delete`
+are removed — specs are materialized from the fleet declaration at serve start, so CLI authoring was a
+second, unvalidated write path. `spur agent loop` stays as a hidden supervisor-internal surface with
+`--spec <id>` only. Consent row: `docs/design/harness-surface-governance.md` (2026-09-14). The
+`agent.team` config key, `.spur/fleet.json` → `agent.fleet`, and `/api/team` routes move under the
+follow-up feature "Fleet declaration in spur config".
 
 ## History
 

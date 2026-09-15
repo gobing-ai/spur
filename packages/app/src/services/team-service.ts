@@ -354,7 +354,7 @@ export function resolveMemberExecutor(params: ResolveMemberExecutorParams): {
     const roleTier = roles?.get(role)?.tier;
     if (roleTier === undefined) {
         throw new Error(
-            `${label} member at index ${index} declares role "${role}" but no Layer-1 role table is available — run spur team up from the CLI (the role table is threaded only at the CLI boundary)`,
+            `${label} member at index ${index} declares role "${role}" but no Layer-1 role table is available (the role table is threaded only at the CLI / serve boundary)`,
         );
     }
     const eligible = cheapestEligibleExecutors(agentConfig?.executors ?? [], roleTier);
@@ -479,14 +479,14 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
 // ---------------------------------------------------------------------------
 
 /**
- * Application-layer orchestration for `spur message`, `spur team`, and team-aware
- * `spur agent` commands. Wraps `TeamOrchestrator` from `@gobing-ai/ts-ai-runner`
+ * Application-layer orchestration for `spur message`, `spur task update --assignee`, and
+ * fleet-aware `spur agent` commands. Wraps `TeamOrchestrator` from `@gobing-ai/ts-ai-runner`
  * over the CLI's SQLite adapter. Agent specs are read from and written to
  * `.spur/agents/` via the package's spec helpers.
  *
  * The constructor is synchronous and cheap; the DB-backed dependencies are built
- * lazily on first use so that purely spec-oriented operations (`createAgentSpec`,
- * `deleteAgentSpec`) never open a database.
+ * lazily on first use so that purely spec-oriented operations (`createAgentSpec`)
+ * never open a database.
  */
 export class TeamService {
     private readonly ctx: TeamServiceContext;
@@ -816,16 +816,6 @@ export class TeamService {
         };
         await saveAgentSpec(spec, this.configDir);
         return spec;
-    }
-
-    /** Remove an agent spec file. */
-    async deleteAgentSpec(id: string): Promise<void> {
-        validateAgentId(id);
-        const existing = (await loadAgentSpecs(this.configDir)).find((spec) => spec.id === id);
-        if (existing === undefined) {
-            throw new Error(`No agent spec found: ${id}`);
-        }
-        await deleteAgentSpecFile(id, this.configDir);
     }
 
     /** List the agent specs currently defined under `.spur/agents/`. */

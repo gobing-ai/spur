@@ -5,8 +5,8 @@ registerHappyDom();
  * scrollWidth/clientWidth pass vacuously here, so geometry is asserted by the
  * untracked browser runner (.spur/run/g63-projects/browser-check.mjs). This
  * suite pins the structural invariants that MAKE both widths hold: no element
- * declares a min-width wider than 390 px; the horizontal-scroll surfaces
- * (kanban track, terminal pane) own their overflow-x container; roster rows
+ * declares a min-width wider than 390 px; the terminal pane owns its
+ * overflow-x container; roster rows
  * wrap on breakpoint-qualified tracks instead of a fixed track count.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
@@ -116,7 +116,7 @@ function installSilentApiFetch(): void {
     }) as typeof fetch);
 }
 
-function renderView(tab: 'conversation' | 'agents' | 'work') {
+function renderView(tab: 'conversation' | 'agents' | 'processes') {
     return render(
         <MemoryRouter initialEntries={[`/board/projects/${tab}`]}>
             <ProjectContext.Provider
@@ -142,7 +142,7 @@ function assertNoWideMinWidth(html: string): void {
 describe('LB-1 structural invariants (0845 R4)', () => {
     test('no rendered element in any view declares a min-width above 390 px', async () => {
         installSilentApiFetch();
-        for (const tab of ['conversation', 'agents', 'work'] as const) {
+        for (const tab of ['conversation', 'agents', 'processes'] as const) {
             const { container, unmount } = renderView(tab);
             await act(async () => {});
             expect(container.querySelector('[data-projects-shell]'), tab).not.toBeNull();
@@ -151,15 +151,8 @@ describe('LB-1 structural invariants (0845 R4)', () => {
         }
     });
 
-    test('the kanban task track and the terminal pane own their overflow-x container', async () => {
+    test('the terminal pane owns its overflow-x container', async () => {
         installSilentApiFetch();
-        // Work view: the board track scrolls inside its own container.
-        const work = renderView('work');
-        await act(async () => {});
-        const track = work.container.querySelector('[data-work-view] .overflow-x-auto');
-        expect(track, 'kanban overflow-x track').not.toBeNull();
-        work.unmount();
-
         // Agents view: open a member — the terminal <pre> scrolls horizontally itself.
         const agents = renderView('agents');
         await act(async () => {});

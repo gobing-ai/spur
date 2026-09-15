@@ -110,7 +110,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
 
     noun.command('inbox')
         .description('List messages addressed to an agent.')
-        .requiredOption(...SHARED_OPTIONS.agentIdMessage)
+        .requiredOption('--agent <id>', 'Agent id')
         .option(
             '--unresolved',
             'Only messages the 0834 reconciler holds (delivery-failed | attempts-exhausted | outcome-unknown | run-exit-only)',
@@ -137,7 +137,7 @@ export function registerMessageCommand(program: Command, context: CliContext): v
 
     noun.command('watch')
         .description('Follow an agent inbox — surface new messages as they arrive (Ctrl-C to exit).')
-        .requiredOption(...SHARED_OPTIONS.agentIdWatch)
+        .requiredOption('--agent <id>', 'Agent id to watch')
         .option('--interval <ms>', 'Poll interval in milliseconds', String(DEFAULT_WATCH_INTERVAL_MS))
         .option(...SHARED_OPTIONS.jsonMessageStream)
         .option(...SHARED_OPTIONS.jsonEnvelope)

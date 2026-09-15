@@ -9,9 +9,9 @@
  * empty draft (prototype ST-1) — never an error state, never a toast.
  *
  * `ConversationDraftContext` is provided by `BoardLayout` (beside
- * `ProjectProvider`) because the Work tab (0843) is a sibling panel and
- * `GlobalAgentBar` (0844) mounts outside the module; a context owned by
- * `ConversationView` would unmount exactly when they need it.
+ * `ProjectProvider`) because `GlobalAgentBar` (0844) mounts outside the
+ * module; a context owned by `ConversationView` would unmount exactly when it
+ * needs it.
  */
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from 'react';
 import type { ConversationRef } from './conversation';

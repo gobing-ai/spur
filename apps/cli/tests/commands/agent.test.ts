@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { _resetAgentServiceShimsForTest, type AgentConfig, type AgentRunDeps, TeamService } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { runAgentLoop, runAgentRun, splitEditorCommand, validateAgentSelector } from '../../src/commands/agent';
+import { runAgentLoop, runAgentRun, validateAgentSelector } from '../../src/commands/agent';
 import { type CliContext, createCliContext, resolveAgentRoles } from '../../src/context';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -111,7 +111,7 @@ describe('agent command (main)', () => {
                 'test',
                 'agent',
                 'loop',
-                '--agent',
+                '--spec',
                 'worker-1',
                 '--poll',
                 '1',
@@ -122,18 +122,6 @@ describe('agent command (main)', () => {
         } finally {
             rmSync(tempDir, { recursive: true, force: true });
         }
-    });
-});
-
-describe('splitEditorCommand', () => {
-    test('splits multi-word editor command into array', () => {
-        expect(splitEditorCommand('code -w')).toEqual(['code', '-w']);
-        expect(splitEditorCommand('  vim   -f  ')).toEqual(['vim', '-f']);
-    });
-
-    test('returns empty array for empty or whitespace-only input', () => {
-        expect(splitEditorCommand('')).toEqual([]);
-        expect(splitEditorCommand('   \t\n ')).toEqual([]);
     });
 });
 
@@ -225,271 +213,6 @@ describe('agent doctor', () => {
         const output = captureOutput();
         const exitCode = await main(['agent', 'doctor', ...flags, '--json'], { output });
         expect(typeof exitCode).toBe('number');
-    });
-});
-
-describe('agent create', () => {
-    let tempDir: string;
-    let db: DbAdapter;
-
-    beforeEach(async () => {
-        tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-create-test-'));
-        db = await createMigratedDb({ url: ':memory:' });
-    });
-
-    afterEach(() => {
-        rmSync(tempDir, { recursive: true, force: true });
-    });
-
-    test('agent create without id fails with exit code 1', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'create'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(1);
-    });
-
-    test('agent create without --type fails with code 2', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'create', 'my-agent'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(2);
-        expect(output.stderr.join('\n')).toContain('agent create requires --type <agent-type>');
-    });
-
-    test('agent create with full options and text output', async () => {
-        const output = captureOutput();
-        const exitCode = await main(
-            [
-                'agent',
-                'create',
-                'new-spec',
-                '--type',
-                'coder',
-                '--tags',
-                'tag1, tag2',
-                '--system-prompt',
-                'Be helpful',
-                '--name',
-                'New Spec',
-                '--workspace',
-                tempDir,
-                '--purpose',
-                'Custom purpose',
-                '--auto-start',
-                '--model',
-                'claude-3-5-sonnet',
-                '--autonomy',
-                'full',
-                '--no-identity-preamble',
-            ],
-            {
-                cwd: tempDir,
-                output,
-                db,
-            },
-        );
-        expect(exitCode).toBe(0);
-        expect(output.stdout.join('\n')).toContain('created .spur/agents/new-spec.yaml');
-    });
-
-    test('agent create with --json flag', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'create', 'json-spec', '--type', 'coder', '--json'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(0);
-        const parsed = JSON.parse(output.stdout.join('\n'));
-        expect(parsed.ok).toBe(true);
-        expect(parsed.spec.id).toBe('json-spec');
-    });
-
-    test('agent create duplicate id returns exit code 1', async () => {
-        const output = captureOutput();
-        const exitCode1 = await main(['agent', 'create', 'dup-spec', '--type', 'coder'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode1).toBe(0);
-
-        const output2 = captureOutput();
-        const exitCode2 = await main(['agent', 'create', 'dup-spec', '--type', 'coder'], {
-            cwd: tempDir,
-            output: output2,
-            db,
-        });
-        expect(exitCode2).toBe(1);
-        expect(output2.stderr.join('\n')).toContain('Agent spec already exists');
-    });
-});
-
-describe('agent edit', () => {
-    let tempDir: string;
-    let db: DbAdapter;
-
-    beforeEach(async () => {
-        tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-edit-test-'));
-        db = await createMigratedDb({ url: ':memory:' });
-    });
-
-    afterEach(() => {
-        rmSync(tempDir, { recursive: true, force: true });
-    });
-
-    test('agent edit without id fails', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'edit'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(1);
-    });
-
-    test('agent edit non-existent spec returns exit 1', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'edit', 'missing-spec'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(1);
-        expect(output.stderr.join('\n')).toContain('No agent spec found: missing-spec');
-    });
-
-    test('agent edit when spec exists and EDITOR is empty prints path', async () => {
-        const output = captureOutput();
-        const ctx = createCliContext({
-            cwd: tempDir,
-            output,
-            db,
-            env: { EDITOR: '' },
-        });
-        const team = new TeamService(ctx);
-        await team.createAgentSpec({ id: 'edit-spec', type: 'coder' });
-
-        const exitCode = await main(['agent', 'edit', 'edit-spec'], {
-            cwd: tempDir,
-            output,
-            db,
-            env: { EDITOR: '' },
-        });
-        expect(exitCode).toBe(0);
-        expect(output.stdout.join('\n')).toContain('.spur/agents/edit-spec.yaml');
-    });
-
-    test('agent edit when spec exists and EDITOR is whitespace-only prints path', async () => {
-        const output = captureOutput();
-        const ctx = createCliContext({
-            cwd: tempDir,
-            output,
-            db,
-            env: { EDITOR: '   ' },
-        });
-        const team = new TeamService(ctx);
-        await team.createAgentSpec({ id: 'ws-spec', type: 'coder' });
-
-        const exitCode = await main(['agent', 'edit', 'ws-spec'], {
-            cwd: tempDir,
-            output,
-            db,
-            env: { EDITOR: '   ' },
-        });
-        expect(exitCode).toBe(0);
-        expect(output.stdout.join('\n')).toContain('.spur/agents/ws-spec.yaml');
-    });
-
-    test('agent edit when EDITOR is an executable runs editor process', async () => {
-        const output = captureOutput();
-        const ctx = createCliContext({
-            cwd: tempDir,
-            output,
-            db,
-            env: { EDITOR: 'true' },
-        });
-        const team = new TeamService(ctx);
-        await team.createAgentSpec({ id: 'exec-spec', type: 'coder' });
-
-        const exitCode = await main(['agent', 'edit', 'exec-spec'], {
-            cwd: tempDir,
-            output,
-            db,
-            env: { EDITOR: 'true' },
-        });
-        expect(exitCode).toBe(0);
-    });
-});
-
-describe('agent delete', () => {
-    let tempDir: string;
-    let db: DbAdapter;
-
-    beforeEach(async () => {
-        tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-del-test-'));
-        db = await createMigratedDb({ url: ':memory:' });
-    });
-
-    afterEach(() => {
-        rmSync(tempDir, { recursive: true, force: true });
-    });
-
-    test('agent delete without id fails', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'delete'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(1);
-    });
-
-    test('agent delete without --force fails with code 2', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'delete', 'some-spec'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(2);
-        expect(output.stderr.join('\n')).toContain('Refusing to delete some-spec without --force');
-    });
-
-    test('agent delete non-existent spec with --force returns code 1', async () => {
-        const output = captureOutput();
-        const exitCode = await main(['agent', 'delete', 'ghost-spec', '--force'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(1);
-        expect(output.stderr.join('\n')).toContain('No agent spec found: ghost-spec');
-    });
-
-    test('agent delete with --force succeeds', async () => {
-        const output = captureOutput();
-        const ctx = createCliContext({
-            cwd: tempDir,
-            output,
-            db,
-        });
-        const team = new TeamService(ctx);
-        await team.createAgentSpec({ id: 'del-me', type: 'coder' });
-
-        const exitCode = await main(['agent', 'delete', 'del-me', '--force'], {
-            cwd: tempDir,
-            output,
-            db,
-        });
-        expect(exitCode).toBe(0);
-        expect(output.stdout.join('\n')).toContain('deleted .spur/agents/del-me.yaml');
     });
 });
 
@@ -776,19 +499,19 @@ describe('runAgentLoop', () => {
         expect(exitCode).toBe(2);
     });
 
-    test('runAgentLoop errors when agent flag is missing or auto', async () => {
+    test('runAgentLoop errors when --spec is missing or auto', async () => {
         const output = captureOutput();
         const ctx = createCliContext({ cwd: tempDir, output, db });
         const code1 = await runAgentLoop(ctx, {});
         expect(code1).toBe(2);
-        // 0542 R3: the loop addresses the occupant via --spec <id> (legacy --agent still read).
+        // 0542 R3: the loop addresses the occupant via --spec <id>.
         expect(output.stderr.join('\n')).toContain(
             'agent loop requires an explicit --spec <id> matching a team agent spec',
         );
 
         const output2 = captureOutput();
         const ctx2 = createCliContext({ cwd: tempDir, output: output2, db });
-        const code2 = await runAgentLoop(ctx2, { agent: 'auto' });
+        const code2 = await runAgentLoop(ctx2, { spec: 'auto' });
         expect(code2).toBe(2);
         expect(output2.stderr.join('\n')).toContain(
             'agent loop requires an explicit --spec <id> matching a team agent spec',
@@ -814,7 +537,7 @@ describe('runAgentLoop', () => {
 
         // 0839: no sleep seam — the pre-queued message is drained on the `--poll`
         // backstop wake (no ledger event precedes it; R5 keeps the drain bounded).
-        const code = await runAgentLoop(customCtx, { agent: 'loop-worker', poll: '100' }, { maxIterations: 1 });
+        const code = await runAgentLoop(customCtx, { spec: 'loop-worker', poll: '100' }, { maxIterations: 1 });
         expect(code).toBe(0);
         expect(run).toHaveBeenCalledTimes(1);
     });
@@ -870,7 +593,7 @@ describe('runAgentLoop', () => {
 
         const code = await runAgentLoop(
             customCtx,
-            { agent: 'idle-worker-default-sleep', poll: '1' },
+            { spec: 'idle-worker-default-sleep', poll: '1' },
             { maxIterations: 1 },
         );
         expect(code).toBe(0);
@@ -893,7 +616,7 @@ describe('runAgentLoop', () => {
         const controller = new AbortController();
         const loopPromise = runAgentLoop(
             customCtx,
-            { agent: 'abort-worker', poll: '5000' },
+            { spec: 'abort-worker', poll: '5000' },
             { signal: controller.signal },
         );
         setTimeout(() => controller.abort(), 10);
@@ -907,7 +630,7 @@ describe('runAgentLoop', () => {
         const controller = new AbortController();
         controller.abort();
 
-        const code = await runAgentLoop(ctx, { agent: 'worker-1' }, { signal: controller.signal });
+        const code = await runAgentLoop(ctx, { spec: 'worker-1' }, { signal: controller.signal });
         expect(code).toBe(0);
     });
 });

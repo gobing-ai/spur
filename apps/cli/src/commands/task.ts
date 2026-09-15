@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
 import {
+    type AgentQuotaEventBus,
     aggregateBatchVerdicts,
     anchorQualify,
     type CheckFindings,
@@ -25,6 +26,7 @@ import {
     runCorpusCheck,
     type SectionMatrix,
     SectionMutationError,
+    type SystemEventBus,
     TASK_LIFECYCLE_PROFILE,
     TaskCandidateInvalidError,
     TaskCheckService,
@@ -33,6 +35,7 @@ import {
     TaskService,
     type TaskSummary,
     TeamService,
+    type TeamServiceEventBus,
     type VerdictAggregate,
     WbsCollisionError,
 } from '@gobing-ai/spur-app';
@@ -47,16 +50,18 @@ import {
     taskStatusIcon,
     UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import { type Colorize, makeColorize, shouldColor } from '../colors';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
 import type { CliContext } from '../context';
 import { maybeTriggerHistoryRefresh } from '../history-refresh';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
+import { attachSystemEventLedger } from '../system-event-ledger';
 import { makeLifecycleAdapter } from '../workflow/make-lifecycle-adapter';
 import { SHARED_OPTIONS } from './shared-options';
-import { runTeamAssign } from './team';
 
 /** Per-status column title for the human-readable board. */
 const STATUS_TITLE: Record<(typeof TASK_STATUSES)[number], string> = {
@@ -451,10 +456,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             '--no-lifecycle',
             'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
         )
-        .option(
-            '--assignee <spec-id>',
-            'Set the assignee frontmatter field to an agent spec id (0848: the moved home of `spur team assign`)',
-        )
+        .option('--assignee <spec-id>', 'Set the assignee frontmatter field to an agent spec id')
         .option(
             '--force-done',
             'Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292). Waives the verdict only — the FSM path still applies, so from an earlier status walk the hops first: `todo` → `wip` → `testing` → `done` (each hop runs the structural `spur task check`)',
@@ -470,8 +472,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .action(async (wbs, status, options) => {
             const svc = await makeService(context, options.folder, options.lifecycle === false);
             try {
-                // 0848: `--assignee` is the moved home of `spur team assign` — same
-                // TeamService.assignTask implementation (frontmatter write +
+                // `--assignee` runs TeamService.assignTask (frontmatter write +
                 // team.member.assigned ledger event), validated at this boundary
                 // against the agent-id format and the on-disk spec set.
                 if (options.assignee !== undefined) {
@@ -506,8 +507,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         context.setExitCode(2);
                         return;
                     }
-                    const code = await runTeamAssign(wbs, options.assignee, context);
-                    context.setExitCode(code);
+                    await assignTaskWithLedger(wbs, options.assignee, context);
                     return;
                 }
                 if (options.section !== undefined) {
@@ -1662,6 +1662,29 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 context.setExitCode(1);
             }
         });
+}
+
+/** `task update --assignee`: assign through a CLI ledger so team.member.assigned reaches system_events without serve (0371 R6). */
+async function assignTaskWithLedger(wbs: string, agentId: string, context: CliContext): Promise<void> {
+    const bus = new EventBus() as SystemEventBus;
+    const ledger = await attachSystemEventLedger(bus, context);
+    // SAFETY: one structural ts-infra EventBus behind the nominal names (ADR-044).
+    const quotaPersistence = attachAgentQuotaPersistence(bus as unknown as AgentQuotaEventBus, context);
+    const svc = new TeamService({
+        ...context,
+        eventBus: bus as unknown as TeamServiceEventBus,
+        roles: context.agentRoles,
+        reloadAgentConfig: () => context.loadAgentConfig(context.cwd),
+    });
+    try {
+        await svc.assignTask(wbs, agentId);
+        context.output.write(`assigned ${wbs} → ${agentId}`);
+    } finally {
+        await ledger.flush();
+        ledger.unsubscribe();
+        await quotaPersistence.flush();
+        quotaPersistence.unsubscribe();
+    }
 }
 
 /**

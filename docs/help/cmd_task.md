@@ -114,7 +114,7 @@ spur task update [options] <wbs> --priority <P0..P3>
 spur task update [options] <wbs> --assignee <spec-id>
 ```
 
-The moved home of `spur team assign`. Sets the `assignee` frontmatter field to an agent spec id via
+Sets the `assignee` frontmatter field to an agent spec id via
 `TeamService.assignTask` (emits `team.member.assigned`). The id must match the agent-id format and
 resolve to a spec under `.spur/agents/` — otherwise exit `2` naming the unknown id.
 
@@ -132,7 +132,7 @@ resolve to a spec under `.spur/agents/` — otherwise exit `2` naming the unknow
 | `--ac-numbering <mode>` | Set the `ac_numbering` frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check |
 | `--ac-altitude <mode>` | Set the `ac_altitude` frontmatter field: `graduating` (default; DD-09 feature-AC subset rule enforced) or `task-local` (skip it — task scenarios are intentionally not feature ship criteria) |
 | `--no-lifecycle` | Suppress lifecycle workflow run creation (used by `task-pipeline.yaml` to avoid orphaned lifecycle runs) |
-| `--assignee <spec-id>` | Set the `assignee` frontmatter field to an agent spec id (0848: moved home of `spur team assign`; validated against the id format and `.spur/agents/`) |
+| `--assignee <spec-id>` | Set the `assignee` frontmatter field to an agent spec id (validated against the id format and `.spur/agents/`) |
 | `--force-done` | Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292) |
 | `--reason <text>` | Rationale for a forced-done override (paired with `--force-done`; persisted as `done_reason`) |
 | `--verdict-dir <path>` | Directory holding `<wbs>-verdict.json` artifacts |

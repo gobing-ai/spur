@@ -10,15 +10,12 @@
 | Subcommand | Description |
 |---|---|
 | `run <prompt>` | Execute a prompt or slash command via a coding agent |
-| `list` | List detected coding agents; with `--specs`, list team agent specs |
+| `list` | List detected coding agents; with `--specs`, list agent specs |
 | `doctor [agent]` | Check agent readiness (usable, authenticated, version) |
-| `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2) |
-| `loop` | Persistent self-draining inbox loop for a team member (supervisor-managed) |
-| `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` |
-| `edit <id>` | Open an agent spec in `$EDITOR` (or print its path) |
-| `delete <id>` | Remove an agent spec (requires `--force`) |
-| `start <spec-id>` | Start a supervised agent process (requires `spur serve`; 0848 moved home of `spur team start`) |
-| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`; 0848 moved home of `spur team stop`) |
+| `wait <specId>` | Identity-pinned wait for an occupant run to reach a lifecycle state |
+| `loop` | Supervisor-internal self-draining loop for an agent spec (hidden from `--help`) |
+| `start <spec-id>` | Start a supervised agent process (requires `spur serve`) |
+| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`) |
 
 ## spur agent run
 
@@ -109,12 +106,11 @@ spur agent list [options]
 
 | Flag | Description |
 |---|---|
-| `--specs` | List team specs under `.spur/agents/` instead of detected agents |
+| `--specs` | List agent specs under `.spur/agents/` instead of detected agents |
 | `--server <url>` | With `--specs`: supervisor API for live run status (default `http://localhost:3000/api`) |
 | `--json` | Output machine-readable JSON |
 
-With `--specs`, each row carries live run status merged from the server's supervisor (0848; the
-moved home of `spur team status`): trailing `status` column plus `pid=<n>` where a process exists.
+With `--specs`, each row carries live run status merged from the server's supervisor: trailing `status` column plus `pid=<n>` where a process exists.
 When `spur serve` is unreachable, the listing falls back to all `stopped` with a stderr warning.
 
 Detected agents (canonical ids from `ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): `claude`, `codex`,
@@ -214,73 +210,17 @@ spur agent loop [options]
 
 | Flag | Description |
 |---|---|
-| `--spec <id>` | Team agent spec id / message recipient (canonical occupant addressing) |
-| `--agent <id>` | Agent spec id / message recipient (legacy alias — prefer `--spec`) |
+| `--spec <id>` | Agent spec id / message recipient (required) |
 | `--poll <ms>` | Wakeup backstop timeout in milliseconds (default `2000`) |
 
-Persistent self-draining inbox loop used by the team supervisor (`spur team up` / `start`).
+Supervisor-internal: `spur serve` spawns one loop per started spec (`spur agent start`); not run by hand.
 Each iteration: check the agent inbox → drain pending messages into a prompt → run the agent
 → wakes on ledger events (message sent, strategy/capacity change, completion receipt); `--poll` is the no-event backstop. Runs until `SIGINT` / `SIGTERM`.
 
 ```bash
-spur agent loop --agent worker-1
-spur agent loop --agent worker-1 --poll 1000
+spur agent loop --spec worker-1
+spur agent loop --spec worker-1 --poll 1000
 ```
-
-## spur agent create
-
-```
-spur agent create [options] <id>
-```
-
-| Argument | Description |
-|---|---|
-| `id` | Agent spec id (validated: `[a-z][a-z0-9_-]{1,63}`; duplicates refused) |
-
-| Flag | Description |
-|---|---|
-| `--type <agent-type>` | Agent spec type (required — any canonical coding-agent id: `claude`/`codex`/`gemini`/`pi`/`omp`/`opencode`/`antigravity-cli`/`openclaw`/`hermes`/`grok`/…) |
-| `--name <name>` | Agent name |
-| `--workspace <path>` | Workspace path |
-| `--purpose <text>` | Team identity purpose (defaults to `"<type> agent"` if empty) |
-| `--tags <a,b>` | Comma-separated team identity tags |
-| `--model <name>` | Agent model argument |
-| `--autonomy <level>` | Autonomy level |
-| `--system-prompt <text>` | Team identity system prompt |
-| `--no-identity-preamble` | Disable identity preamble |
-| `--auto-start` | Auto-start flag |
-| `--json` | Output machine-readable JSON |
-
-Writes the spec to `.spur/agents/<id>.yaml`. The id is validated
-(`[a-z][a-z0-9_-]{1,63}`); a duplicate id is refused. An empty `--purpose` falls back to
-`"<type> agent"` so the written YAML round-trips. `--json` emits `{ ok, spec }`.
-
-### Example
-
-```bash
-spur agent create reviewer --type codex --purpose "Code review specialist" --tags review,quality
-spur agent create builder --type grok --purpose "Implementation agent"
-```
-
-## spur agent edit
-
-```
-spur agent edit <id>
-```
-
-Opens the spec in `$EDITOR`, or prints its path when `$EDITOR` is unset. Errors if missing.
-
-## spur agent delete
-
-```
-spur agent delete [options] <id>
-```
-
-| Flag | Description |
-|---|---|
-| `--force` | Required for delete; the verb refuses (exit 2) without it |
-
-Removes the spec. Errors (exit 1) if missing.
 
 ## spur agent start
 
@@ -288,7 +228,7 @@ Removes the spec. Errors (exit 1) if missing.
 spur agent start [options] <spec-id>
 ```
 
-Starts a supervised agent process via `spur serve` (0848: the moved home of `spur team start`).
+Starts a supervised agent process via `spur serve`.
 
 | Flag | Description |
 |---|---|
@@ -303,7 +243,7 @@ Exit `1` when the server is unreachable or the start fails.
 spur agent stop [options] <spec-id>
 ```
 
-Stops a supervised agent process via `spur serve` (0848: the moved home of `spur team stop`).
+Stops a supervised agent process via `spur serve`.
 
 | Flag | Description |
 |---|---|
@@ -313,5 +253,5 @@ Stops a supervised agent process via `spur serve` (0848: the moved home of `spur
 ## See Also
 
 - [Daily Development Guide](./how_to_use_spur_for_daily_software_development.md) — §5.2 Implementing
-- [spur team](./cmd_team.md) — `--drain` integrates with the team coordination
+- [spur message](./cmd_message.md) — `--drain` folds pending messages into the prompt
 - `docs/04_DESIGN.md` — §1.1 `spur agent` family (canonical surface)

@@ -104,7 +104,7 @@ tasks:
       baseCounter: 488
       label: Phase 4
     docs/tasks5:
-      baseCounter: 4855
+      baseCounter: 855
       label: Phase 5
 
 features:

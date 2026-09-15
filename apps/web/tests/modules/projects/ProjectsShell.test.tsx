@@ -175,11 +175,11 @@ describe('ProjectsShell tabs (0840 R3/R5)', () => {
     test('tab click swaps the active panel and aria-selected', async () => {
         const { container } = await renderShell(ctx());
         expect(container.querySelector('#projects-tab-panel-conversation')).not.toBeNull();
-        act(() => (container.querySelector('[data-projects-tab="work"]') as HTMLButtonElement).click());
-        await settleInAct(); // the lazily imported workspace module fetches on mount
-        expect(container.querySelector('#projects-tab-panel-work')).not.toBeNull();
+        act(() => (container.querySelector('[data-projects-tab="processes"]') as HTMLButtonElement).click());
+        await settleInAct(); // ProcessesView fetches the process list on mount
+        expect(container.querySelector('#projects-tab-panel-processes')).not.toBeNull();
         expect(container.querySelector('#projects-tab-panel-conversation')).toBeNull();
-        expect(container.querySelector('#projects-tab-work')?.getAttribute('aria-selected')).toBe('true');
+        expect(container.querySelector('#projects-tab-processes')?.getAttribute('aria-selected')).toBe('true');
         expect(container.querySelector('#projects-tab-conversation')?.getAttribute('aria-selected')).toBe('false');
     });
 });
