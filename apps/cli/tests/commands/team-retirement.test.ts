@@ -140,17 +140,25 @@ describe('0848 R5 — one-time noun retirement warning', () => {
             expect(updated).toContain('assignee: planner');
 
             // Same process, different verb: the one-time flag suppresses the second warning.
-            const before = out.errors.length;
-            const second = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(second).toBe(0);
-            expect(out.errors.length).toBe(before);
+            // Mock the server fetch: `team status` against an unreachable default server
+            // adds its own stderr fallback line, so the error-count assertions would depend
+            // on whether something happens to listen on localhost:3000 (CI: nothing does).
+            await withMockedFetch(
+                async () => jsonResponse(200, { processes: [] }),
+                async () => {
+                    const before = out.errors.length;
+                    const second = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(second).toBe(0);
+                    expect(out.errors.length).toBe(before);
 
-            // After the reset seam, the warning returns and names THIS verb's replacement.
-            resetTeamNounRetiredWarningForTesting();
-            const third = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
-            expect(third).toBe(0);
-            expect(out.errors.length).toBe(before + 1);
-            expect(out.errors.at(-1)).toContain('spur agent list --specs');
+                    // After the reset seam, the warning returns and names THIS verb's replacement.
+                    resetTeamNounRetiredWarningForTesting();
+                    const third = await main(['team', 'status'], { cwd, output: out, dbUrl: ':memory:' });
+                    expect(third).toBe(0);
+                    expect(out.errors.length).toBe(before + 1);
+                    expect(out.errors.at(-1)).toContain('spur agent list --specs');
+                },
+            );
         } finally {
             resetTeamNounRetiredWarningForTesting();
             await cleanup();

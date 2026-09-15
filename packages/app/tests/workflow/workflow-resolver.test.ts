@@ -494,6 +494,13 @@ terminalStates:
         const projectFile = join(projectDir, 'custom.yaml');
         const sharedFile = join(bundledConfigRoot() as string, 'workflows', 'basic.yaml');
         await writeFile(registeredFile, MINIMAL('basic'));
+        // basic.yaml declares `$schema: "@gobing-ai/spur/schemas/..."`; production always
+        // resolves that ref through embeddedSchemas (the CLI's EMBEDDED_SPUR_SCHEMAS), never
+        // node_modules — a fresh install links nothing under `@gobing-ai/spur` (the repo root
+        // package owns the name), so resolving from node_modules is install-layout-dependent.
+        const embeddedSchemas = new Map([
+            ['schemas/state-machine-workflow.schema.json', JSON.stringify({ type: 'object' })],
+        ]);
         try {
             expect((await resolveWorkflowDefinition(dir, 'basic', { registered: [registeredDir] })).path).toBe(
                 registeredFile,
@@ -502,9 +509,10 @@ terminalStates:
             expect((await resolveWorkflowDefinition(dir, 'basic', { registered: [registeredDir] })).path).toBe(
                 projectFile,
             );
-            expect((await resolveWorkflowDefinition(dir, sharedFile, { registered: [registeredDir] })).path).toBe(
-                sharedFile,
-            );
+            expect(
+                (await resolveWorkflowDefinition(dir, sharedFile, { registered: [registeredDir], embeddedSchemas }))
+                    .path,
+            ).toBe(sharedFile);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
