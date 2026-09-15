@@ -1608,3 +1608,113 @@ Verification: `bun test apps/cli/tests/adr-supersession.test.ts` → 7 pass / 0 
 - Doc-evolve wrapup detection found `03`, `04`, and the retired-module satellites already reconciled; residual drift hides in *live* satellites: a non-goals row still saying `mergeTimeline` is "display only until G3", a wave table labeling a landed-via-retirement item `(feature G3 / ADR-052)`, and `project-switcher.md` naming the deleted Inbox module as the plain-message consumer. Repair is one line each, naming current authority (0849/ADR-116, Projects Conversation tab).
 - `spur team up` still materializes through the shared `materializeRoster` under its deprecation shim, so `cli-contracts.md`'s description stays accurate — check code before "repairing" a true sentence about a deprecated-but-working verb.
 - Wrapup verification: `bun test apps/cli/tests/adr-supersession.test.ts` → 7 pass / 0 fail / 69 expect after the satellite edits (the suite pins `docs/00_ADR.md` only; satellite edits cannot stale it).
+Wrapup complete. Drift report:
+
+- **`docs/04_DESIGN.md`** — 1 finding, repaired: "Agents roster two-fact card (0842)" didn't reflect 0853's shipped uptime line; added one paragraph (uptime via `formatUptime`/`data-roster-uptime`, running + derivable `startedAt` only; non-reinstated facets with successors; 0855 owns route+row removal). T3/§6.5; `updated_at` already 2026-09-14.
+- **`docs/00_ADR.md`** — clean. Display-facet reinstatement is not a §6.1 architectural choice; ADR-116's 2026-09-14 amendments already own the fleet/successor mechanisms. No T1 entry.
+- **`docs/03_ARCHITECTURE.md`** — clean (`rg` for team up/down/SupervisorTab/uptime: zero hits; §14.3's no-new-route invariant holds — uptime derives from poll data already carried).
+- **`docs/design/*`** — `board-module-boundaries.md` stale-by-design (ADR-116 supersession banner, pinned at 04:75 — frozen history, untouched); `observability-contracts.md:353-355` rows match the still-present routes (`team/index.ts:250`) — accurate until 0855 removes routes + rows together; `project-switcher.md` and `inter-agent-control-plane.md` carry other tasks' uncommitted edits — collision-guarded, untouched (04 now carries the authoritative fact). Frontmatter contract-verify passed for 00/03/04.
+
+Artifact written to `.spur/run/05e7544a-d3a3-4f79-8ed4-1130510722f3-wrapup-learnings.md`. Learnings follow.
+
+## 2026-09-14
+
+### 0853 — Record ownership for the retired Teams supervisor facets (uptime, live activity, team up/down) [G64, done, verify PASS]
+
+**Pattern — derive display facets from data the existing poll already carries.** Reinstating a
+retired roster facet cost one pure helper (`formatUptime` in `apps/web/src/modules/projects/roster.ts:125-145`)
+plus one render line (`AgentsView.tsx:239-243`), because `RosterEntry.observed.startedAt` already
+rides AgentsView's own `setInterval` tick — zero new fetch, zero new subscription, zero new state.
+Before proposing any new fetch/poll for a UI fact, name the real carrier first.
+
+**Gotcha — premise-check the requirement's named mechanism (Q4).** The drafted R3 credited
+`useProjectContext` with the roster's live poll; verified against the tree it is a one-shot mount
+fetch — the real tick is AgentsView's own interval (`AgentsView.tsx:126`). Auto-refine rewrote R3
+to name the actual carrier. Requirements naming a mechanism should be verified against the tree,
+not trusted.
+
+**Convention — retirement needs an owner, not silence (0849 R2).** Each facet deleted with the
+Teams supervisor tab got an explicit frozen decision with its successor: uptime → REINSTATE on the
+Agents roster card (data already reaches the Board); live last-activity → REMOVAL recorded
+(MemberDetail read-on-open history is the successor, `ponytail:` sseUrl tailing named as upgrade
+path); team up/down controls → REMOVAL recorded (fleet materialization at serve start +
+`spur agent stop` are the designed CLI successors, 0848). "Unreachable with no owner" is the
+finding shape; "removed with reason + successor" is the fix shape.
+
+**Convention — orphaned surfaces get routed, never silently kept or deleted in a record-only task.**
+`POST /api/team/:team/up|down` (`apps/server/src/modules/team/index.ts:250,280`) has no non-test
+caller repo-wide; the routes + their server tests + the `docs/design/observability-contracts.md`
+rows must be removed together, and that bundle is owned by follow-up task 0855 (created via
+`spur task create`, linked from References). Deletion is never smuggled into a decision-recording task.
+
+**Gotcha — make the null case type-honest.** Design sketched `formatUptime(startedAt: string)`;
+shipped as `string | null` to mirror `RosterEntry.observed.startedAt`, so AC1's no-uptime case is
+encoded in the signature instead of a runtime surprise. The only sanctioned deviation from the
+frozen design, recorded in the Solution.
+
+**Gotcha — clock skew in age math.** `formatUptime` returns null for a future `startedAt` (negative
+age) — otherwise clock skew renders as negative uptime. Largest two units, never seconds
+(`up 4m`, `up 2h 13m`, `up 3d 1h`); injectable `now` parameter keeps tests deterministic.
+
+**Convention — collision guard on shared docs.** `docs/design/inter-agent-control-plane.md` carries
+another task's uncommitted changes — never edited here. Same rule held in this wrapup:
+`docs/design/project-switcher.md` (0852's in-flight edit) was left to its owner; the authoritative
+surface fact was repaired in `docs/04_DESIGN.md` (roster-card section now records the 0853 uptime
+line, the non-reinstated facets with successors, and 0855's route-removal ownership) per T3.
+
+**Convention — stale feature corpus conflicts route via tooling.** M2's feature file still demands
+"Surface team Up/Down bulk controls in the Teams UI", superseded by G64; flagged via `spur feature`
+tooling / operator — never a raw edit, never silently honored.
+
+**Verification receipts.** Five new `formatUptime` cases in `apps/web/tests/modules/projects/roster.test.ts:177-199`
+(20 pass / 0 fail); `bun run spur-check` PASS; rg-guards held: no new fetch/subscription in the
+roster path, Projects still exactly three tabs (`tabs.tsx` absent from the diff).
+
+**Wrapup doc repair (this run).** `docs/04_DESIGN.md` "Agents roster two-fact card (0842)" was
+stale against the shipped uptime line — repaired with one paragraph (T3, §6.5). Clean findings:
+`00_ADR.md` needs no entry (display-facet reinstatement is not a §6.1 architectural choice; ADR-116
+amendments already own the successor mechanisms); `03_ARCHITECTURE.md` has zero stale up/down /
+SupervisorTab references and §14.3's no-new-route invariant still holds; `board-module-boundaries.md`
+is stale-by-design under its ADR-116 supersession banner; `observability-contracts.md` rows still
+match the live routes until 0855 removes routes + rows in one commit.
+Drift audit complete (detection-backed). Task batch = 0855 only.
+
+**Findings & repairs**
+
+| Doc | Finding | Repair |
+|---|---|---|
+| `docs/04_DESIGN.md:147` | "`up` has no CLI verb at all" — literal contradiction: `spur team up` still registered (deprecated+running, `apps/cli/src/commands/team.ts:106`) | Reworded → "no replacement verb at all" |
+| `docs/04_DESIGN.md` frontmatter | v1.74.0 set at `e23efdaa` *before* the task's uncommitted surface edit (§4.3) | Bumped → 1.75.0 |
+| `docs/design/observability-contracts.md` | Route rows vs code: 7 = 7 exact match (only prose wildcard `/api/team/*`) | Clean — task already removed the 2 rows |
+| `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md` | ADR-116/052 supersession recorded (`a1c647eae`/`7db3fb9ba`); 03 names only surviving routes | Clean — no edit (placement guard: task work stays out of ADRs) |
+| `docs/design/cli-contracts.md` | Deprecation banner present (`:523`); up/down bullets accurate (CLI materializes via TeamService, best-effort via surviving routes) | Clean |
+
+No task/feature corpus writes. Artifact written to `.spur/run/6c11f7e9-4f2b-4d57-b00f-11b01ead1faf-wrapup-learnings.md`. Note: working tree still holds 0852 in-flight files (untouched, out of this wrapup's scope).
+
+# Working Learnings — wrapup run 6c11f7e9 (tasks: 0855)
+
+## 2026-09-14 → 2026-09-15
+
+### 0855 — Remove the orphaned POST /api/team/:team/up|down routes (feature G64, done)
+
+Conventions & patterns
+
+- Dead-surface removal contract: plain removal → Hono default 404. No 410 tombstone, no alias, no shim when zero callers exist (0853 R4 repo-wide audit); shims require an objectively checkable removal condition (0849 precedent, reaffirmed in 0855 Q3).
+- Capability ≠ surface: `TeamService.materializeTeam` / `teardownTeam` stayed while their HTTP routes died — the deprecated `spur team up|down` CLI verbs call them directly (`apps/cli/src/commands/team.ts:492,537`). G64 R4: a capability must stay reachable until the noun itself retires at the recorded cutover; the shim-removal condition owns that sequencing, not the route cleanup.
+- Test removals re-anchor by describe header text, never line number; stub fields used only by removed tests are trimmed only when typecheck/lint flags them (conditional trim, not preemptive).
+- T3 same-commit discipline held: the two `docs/design/observability-contracts.md` rows (`:353-354`) were deleted in the same changeset as the route handlers; table rhythm preserved (teams row flows into health row).
+- Executable evidence where no standing test exists: live-mount check (`teamModule.mount` + Hono `fetch`, `.tmp-0855-404.ts`) proving both removed paths 404 — a one-off probe script as verify evidence.
+- Grep-audit carve-outs are part of the AC: `rg "team/:team/up|team/:team/down"` excluding `docs/tasks*`, `docs/features*`, and ADR/history receipts; remaining hits must be disposition-aware, not silent.
+
+Errors fixed & gotchas
+
+- AC4's literal "zero hits" is carve-out-scoped: `CHANGELOG.md:2069` (immutable historical release note) and `docs/04_DESIGN.md:415` (explicitly records the removal) legitimately remain — both P4 advisories, neither implies live surface. Don't "fix" historical records when sweeping for stale references; sweep with the receipts excluded.
+- No standing negative test covers the 404 fall-through after the route describes were removed (review P4). Add one only if the corpus later demands executable coverage for removed paths.
+- Pure-deletion diffs still need the conditional-trim check: `tsc --noEmit` + `biome lint` on the touched files proved no orphaned imports/stubs (54 deleted lines in the module, 274 in tests, 0 insertions anywhere).
+
+Wrapup doc-evolve repairs (this run, 2026-09-14)
+
+- `docs/04_DESIGN.md:147` said "`up` has no CLI verb at all" while `spur team up` is still registered (`apps/cli/src/commands/team.ts:106`) — deprecated but running. Literal drift against code and against the same sentence's "all six verbs still run"; reworded to "no replacement verb at all".
+- 04 frontmatter was last bumped at `e23efdaa` before the task's uncommitted surface edit; per §4.3 bumped version 1.74.0 → 1.75.0 (`updated_at` already 2026-09-14, today locally).
+- Parity check backing the clean report: 7 code routes (`index.ts:41,77,88,99,120,213,250`) exactly match the 7 contract table rows in observability-contracts.md; the only extra string is the prose wildcard `/api/team/*` in the intro sentence, not a row.
+- Clean (no repair): `docs/00_ADR.md` (ADR-116/ADR-052 supersession already recorded in `a1c647eae`/`7db3fb9ba`; execution work is placement-guarded out of ADRs), `docs/03_ARCHITECTURE.md` (only surviving routes named), `docs/design/cli-contracts.md` (deprecation banner at `:523`; up/down bullets accurate — CLI materializes locally via TeamService, best-effort start/stop via the surviving `/api/team/agents/:id/*` routes).

@@ -843,3 +843,13 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - `spur workflow show` prefers the REGISTERED layer (`node_modules/@gobing-ai/spur/config/workflows/`) over the repo's `config/workflows/` — same semantics, different formatting and digest. An inline driver must read the resolved file, not the repo copy it finds first.
 - Gate flake class 2: `apps/cli/tests/config-layering.test.ts` spawn-heavy cases (real CLI + doctor probe) exceed the 5000ms per-test timeout under full-gate parallel load — exit 143, both cases. Isolated: 7 pass / 0 fail, slowest 2.9s. One full re-run before diagnosing; the digest is identical across both runs, which is what proves no code change.
 - `--next` on a done task chains to the workflow-backed wrap (`wrapup-pipeline`), which runs headless: `--agent auto` tier-resolved a pi executor that was out of weekly quota (429 code 1310), and the substituted `antigravity-cli` executor returned exit 0 having produced NO output (unsandboxed permission auto-denied headlessly). The wrap reached `done` with an empty learnings file — a green terminal is not evidence the wrap's substance ran. Pin a known-good executor and verify `-wrapup-learnings.md` is non-empty.
+
+## 0852 pipeline run (2026-09-14)
+
+- Verify answers: AC table is 4-column (`| AC | Status | Evidence Type | Evidence |`); Evidence Type from `test|command|static-ref|manual-review|llm-judge|n/a` (+`+` compounds); no raw `|` in cells. Child agents must self-run `bun plugins/sp/scripts/verify-answer-lint.ts <wbs> --answer <f> --spur-bin spur` before returning.
+- `verify-answer-lint` AC-id grammar: task bullets must use checklist form `- [ ] AC1 — title: …` (bold-trajectory `- **AC1 (…)**:` labels are undeclarable — `**` survives normalization and never matches).
+- `spur task verdict` deriver (0721 rule): behavior-bearing AC (no `[advisory]`/`[non-behavior]` tags) with `static-ref`-only evidence downgrades MET→PARTIAL. Give tab/parse contracts a fresh test-run citation.
+- Deriver junk-ingests every ≥3-cell pipe row after any `| Check | Status |`-shaped header (`inChecks` never resets) — put the real checks table LAST in the answer file; findings tables elsewhere are inert but noisy.
+- `spur task record` rewrites the task file (Solution/Testing/Review) and is not byte-idempotent → capture the binding digest AFTER record; bind stable post-record capture (twice-captured equality).
+- DD-09 subset rule blocks `--as done` when task AC scenarios aren't feature AC titles; `spur task update --ac-altitude task-local` is the designed escape for task-slice scenarios of a feature clause (G64 R5 here).
+- T3: Board Work-section changes sync `docs/design/project-switcher.md` (Work embed + test-attributes bullets).
