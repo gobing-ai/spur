@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.74.0
+version: 1.75.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-14
@@ -143,7 +143,7 @@ See [contract detail](design/cli-contracts.md#spur-message-send---to-id-body---f
 #### `spur team assign <task-id> <agent-id>` · `spur team status [--json] [--by-team] [--server <url>]` · `spur team up <team> [--check] [--server <url>] [--json]` · `spur team down <team> [--purge] [--server <url>] [--json]` · `spur team start <agent-id> [--server <url>] [--json]` · `spur team stop <agent-id> [--server <url>] [--json]`
 
 **Deprecated (0848, feature G64).** All six verbs still run with a one-time stderr warning; the
-replacements below are the owning nouns, and `up` has no CLI verb at all:
+replacements below are the owning nouns, and `up` has no replacement verb at all:
 
 | `spur team …` | Replacement |
 | --- | --- |
@@ -405,6 +405,15 @@ Declared fleet member and observed process are rendered as two labeled facts,
 joined by `instanceId` — never one status; issue labels are frozen and shared
 with 0844's receipt states. Roster + member detail read and control only the
 existing `/api/project/fleet` + `/api/team/*` transports.
+
+0853 adds one derived line to the same card: uptime rendered by `formatUptime`
+under `data-roster-uptime`, shown only while the observed process is `running`
+with a derivable `startedAt` (null for exited/not-started, unparseable, or
+future timestamps); it is presentation, not a third fact. Retired Teams facets
+not reinstated: live last-activity (successor — MemberDetail history,
+read-on-open) and team up/down controls (successor — serve-start fleet
+materialization + `spur agent stop`; the orphaned `/api/team/:team/up|down`
+routes and their contract rows are removed by 0855).
 
 See [contract detail](design/project-switcher.md#agents-roster-two-fact-card-0842).
 

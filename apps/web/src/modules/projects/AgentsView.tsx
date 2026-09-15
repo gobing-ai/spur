@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import MemberDetail from './MemberDetail';
 import { parseProcessList, STATUS_POLL_MS } from './MemberTerminal';
-import { buildRoster, type MemberIssue, type RosterEntry } from './roster';
+import { buildRoster, formatUptime, type MemberIssue, type RosterEntry } from './roster';
 import type { ProjectFleetSnapshot } from './useProjectContext';
 import { useProjectContext } from './useProjectContext';
 
@@ -190,6 +190,8 @@ function RosterCard({
     onOpen: (entry: RosterEntry, opener: HTMLButtonElement) => void;
 }) {
     const observed = observedFact(entry, orchestratorOffline);
+    // AC1: running + derivable start time only; null for exited/not-started/null startedAt.
+    const uptime = entry.observed.status === 'running' ? formatUptime(entry.observed.startedAt) : null;
     return (
         <button
             type="button"
@@ -234,6 +236,11 @@ function RosterCard({
                     </span>
                 </span>
             </div>
+            {uptime !== null && (
+                <div data-roster-uptime className="mt-1 text-xs text-spur-text-muted">
+                    {uptime}
+                </div>
+            )}
             {entry.issues.length > 0 && (
                 <div className="mt-1 space-y-0.5">
                     {entry.issues.map((issue) => (

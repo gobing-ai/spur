@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ProcessStatus } from '../../../src/modules/projects/MemberTerminal';
-import { buildRoster, isOrchestratorEntry } from '../../../src/modules/projects/roster';
+import { buildRoster, formatUptime, isOrchestratorEntry } from '../../../src/modules/projects/roster';
 import type { ProjectFleetSnapshot, ResolvedFleetMember } from '../../../src/modules/projects/useProjectContext';
 
 function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMember {
@@ -169,5 +169,31 @@ describe('issue resolver (0842 R5)', () => {
         const second = buildRoster(snap, []);
         expect(first.map((e) => e.instanceId)).toEqual(['a1', 'b2', 'c3']);
         expect(second).toEqual(first);
+    });
+});
+
+// ── formatUptime (0853 R1/AC1: reinstated supervisor uptime) ──
+
+describe('formatUptime (0853: uptime from the process poll, no new fetch)', () => {
+    const start = '2026-09-12T10:00:00.000Z';
+
+    test('running 4 minutes → up 4m (no seconds unit)', () => {
+        expect(formatUptime(start, Date.parse(start) + 4 * 60_000)).toBe('up 4m');
+    });
+
+    test('hours + minutes → up 2h 13m', () => {
+        expect(formatUptime(start, Date.parse(start) + (2 * 60 + 13) * 60_000)).toBe('up 2h 13m');
+    });
+
+    test('days → up 3d 1h (largest two units)', () => {
+        expect(formatUptime(start, Date.parse(start) + (3 * 24 + 1) * 3_600_000)).toBe('up 3d 1h');
+    });
+
+    test('null startedAt → null (a member that never started shows no uptime)', () => {
+        expect(formatUptime(null)).toBeNull();
+    });
+
+    test('non-running edge: a future start time (negative age, clock skew) → null, never a negative uptime', () => {
+        expect(formatUptime(start, Date.parse(start) - 1)).toBeNull();
     });
 });

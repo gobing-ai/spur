@@ -121,3 +121,27 @@ function observedState(proc: ProcessStatus | undefined): MemberObservedState {
     if (proc === undefined) return 'not-started';
     return proc.status === 'running' ? 'running' : 'exited';
 }
+
+const UPTIME_MINUTE = 60_000;
+const UPTIME_HOUR = 60 * UPTIME_MINUTE;
+const UPTIME_DAY = 24 * UPTIME_HOUR;
+
+/**
+ * Supervisor uptime for the roster card (0853: reinstated retired Teams
+ * facet), derived at render from the startedAt the process poll already
+ * carries — no new fetch or subscription (AC4). Largest two units, never
+ * seconds (`up 4m`, `up 2h 13m`, `up 3d 1h`). Null for an absent start, an
+ * unparseable timestamp, or a future one (clock skew would read as negative).
+ */
+export function formatUptime(startedAt: string | null, now?: number): string | null {
+    if (startedAt === null) return null;
+    const started = new Date(startedAt).getTime();
+    const age = (now ?? Date.now()) - started;
+    if (Number.isNaN(started) || age < 0) return null;
+    const days = Math.floor(age / UPTIME_DAY);
+    const hours = Math.floor((age % UPTIME_DAY) / UPTIME_HOUR);
+    const minutes = Math.floor((age % UPTIME_HOUR) / UPTIME_MINUTE);
+    if (days > 0) return `up ${days}d ${hours}h`;
+    if (hours > 0) return `up ${hours}h ${minutes}m`;
+    return `up ${minutes}m`;
+}
