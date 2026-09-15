@@ -634,4 +634,19 @@ describe('single-line criterion bullet declares its bold head (0862 R4)', () => 
         expect(r.code).not.toBe(0);
         expect(r.stderr).toContain('matches no task AC checklist label or scenario title');
     });
+
+    test('the bold title resolves without its sentence-final period', () => {
+        const sb = makeSandbox(SINGLE_LINE_AC_TASK);
+        const answer = completeAnswer().replace(
+            '| AC2 | MET | command | `bun test` |',
+            `| ${BOLD_AC_TITLE.replace(/\.$/, '')} | MET | test | \`tests/a.test.ts:9\` |`,
+        );
+        expect(sb.exec(answer).code).toBe(0);
+    });
+
+    test('the refusal hint names the bold-head form', () => {
+        const sb = makeSandbox(SINGLE_LINE_AC_TASK);
+        const r = sb.exec(completeAnswer().replace('| AC2 | MET |', '| AC9 | MET |'));
+        expect(r.stderr).toContain("a criterion bullet's bold head or full bold span");
+    });
 });

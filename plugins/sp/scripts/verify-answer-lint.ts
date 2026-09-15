@@ -298,6 +298,11 @@ function normalizeAcTitle(title: string): string {
             // U+02BC stays a meaningful character, never removable punctuation.
             .replace(/[\u0027\u2018\u2019\u201c\u201d]/g, '')
             .replace(/\s+/g, ' ')
+            // A declared bold head keeps its sentence-final period (`- **AC1: … form.**`) while an
+            // answer row normally cites it without one. Both the declared spelling and the queried
+            // row normalize through here, so dropping it is symmetric — it can only merge titles
+            // that already differ by nothing but trailing periods.
+            .replace(/\s*\.+$/, '')
             .trim()
     );
 }
@@ -502,7 +507,8 @@ function main(): void {
             else
                 add(
                     `line ${row.line}: AC ID "${row.id.slice(0, 60)}" matches no task AC checklist label or scenario title ` +
-                        '(accepted forms: exact title, bare title, `Scenario:` prefix, bracket tags, declared AC-N alias)',
+                        "(accepted forms: exact title, bare title, a criterion bullet's bold head or full bold span, " +
+                        '`Scenario:` prefix, bracket tags, declared AC-N alias)',
                 );
         } else if (canonicalKey !== null && seenAc.has(canonicalKey)) {
             const first = seenAc.get(canonicalKey) ?? '';
