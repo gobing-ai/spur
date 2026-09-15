@@ -270,6 +270,24 @@ export class StrategyRuntime {
     }
 
     /**
+     * Reconcile the DECLARED strategy (0859 R1) into the persisted row: read first, write only
+     * on a real difference, and report whether the row changed.
+     *
+     * `setStrategy` bumps the version on EVERY call, so calling it unconditionally at each
+     * start would advance 0837's `stale-strategy` fence and emit a `strategy.changed` wake fact
+     * on every restart of an unchanged project. The comparison therefore belongs here, next to
+     * the row and the event, rather than at the caller.
+     */
+    async reconcileStrategy(projectPath: string, name: StrategyName): Promise<boolean> {
+        const current = await this.getStrategy(projectPath);
+        if (current.name === name) {
+            return false;
+        }
+        await this.setStrategy(projectPath, name);
+        return true;
+    }
+
+    /**
      * R6 resume, strict order — nothing dispatches until it finishes:
      * (1) read the persisted strategy, persisting `rest` at version 1 when
      * absent (R1); (2) resolve the orchestrator — any non-`bound-online` state

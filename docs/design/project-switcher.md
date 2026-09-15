@@ -226,6 +226,12 @@ Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
 - The managed orchestrator loop restores persisted strategy and reconciles prior deliveries
   before selection. Unconfigured projects default to `rest`; Board reads never reset strategy.
   `rest` leaves queued input unstarted and permits running work to finish and reconcile.
+- The declared strategy is the source of truth at **serve start** (0859): when `agent.fleet` is
+  present — enabled or not — `spur serve` reconciles `agent.fleet.strategy` into the
+  `project_strategy` row after config load and fleet materialization. The reconcile reads first and
+  writes only on a real difference, so a restart with an unchanged declaration neither bumps
+  `strategy_version` nor emits `strategy.changed`, and a project without the section is never
+  written to. A reconcile failure fails the start rather than serving under an undeclared strategy.
 - GTD selects `fleet:auto` tasks through the existing task checker and dependency gate, in
   priority/WBS order. Existing assignees constrain member selection; otherwise coder or
   role-unspecified members are eligible. Running instance generations consume capacity.

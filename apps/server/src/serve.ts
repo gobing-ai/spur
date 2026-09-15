@@ -14,6 +14,7 @@ import {
     installSystemEventCatchAll,
     JobHandlerRegistry,
     JobWorkerService,
+    normalizeProjectPath,
     ProjectRegistry,
     resolveAgentRoles,
     resolveHistoryRefreshTimeoutMs,
@@ -23,6 +24,7 @@ import {
     resolveSchedulerCustomTimeoutMs,
     resolveSchedulerJobTimeoutMs,
     SCHEDULER_CUSTOM_JOB,
+    StrategyRuntime,
     startAgentQuotaUpdateConsumer,
     type TaskActionJob,
     terminateJobChildren,
@@ -697,14 +699,15 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // empty fleet.
             const fleetConfig = await loadSpurConfig(projectRoot);
             const fleetSection = fleetConfig.agent?.fleet;
+            const fleetService = new FleetService({
+                fs,
+                spurConfig: fleetConfig,
+                roles: resolveAgentRoles(fleetConfig?.agent),
+                openDb: () => ctx.getDb(),
+            });
             if (fleetSection?.enabled === true) {
                 try {
-                    const materialized = await new FleetService({
-                        fs,
-                        spurConfig: fleetConfig,
-                        roles: resolveAgentRoles(fleetConfig?.agent),
-                        openDb: () => ctx.getDb(),
-                    }).materialize(projectRoot);
+                    const materialized = await fleetService.materialize(projectRoot);
                     // Operator decision (2026-09-14): every materialized member starts;
                     // `materialize` already skipped disabled members, so the upserted ids
                     // are exactly the autostart set — no second resolution.
@@ -719,6 +722,35 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                         ? 'agent.fleet is not declared — the project fleet is neither materialized nor autostarted'
                         : 'agent.fleet.enabled is false — the project fleet is neither materialized nor autostarted',
                 );
+            }
+
+            // 0859 R2: the declared strategy reaches the runtime AFTER config load and fleet
+            // materialization, and only when the section exists — a project without
+            // `agent.fleet` must not have `project_strategy` written (R3). The reconcile is
+            // idempotent, so a restart with the same declaration neither bumps
+            // `strategy_version` nor emits `strategy.changed`. A failure fails the start
+            // rather than serving under a strategy the config did not declare.
+            if (fleetSection !== undefined) {
+                const strategyRuntime = new StrategyRuntime({
+                    openDb: () => ctx.getDb(),
+                    tasks: ctx.taskService(),
+                    fleet: fleetService,
+                    dependencyBlocked: async () => null,
+                });
+                try {
+                    const changed = await strategyRuntime.reconcileStrategy(
+                        normalizeProjectPath(projectRoot),
+                        fleetSection.strategy,
+                    );
+                    appRt.logger.info(
+                        changed
+                            ? `agent.fleet.strategy reconciled to ${fleetSection.strategy}`
+                            : `agent.fleet.strategy ${fleetSection.strategy} already active — nothing to reconcile`,
+                    );
+                } catch (error) {
+                    await quotaConsumer?.stop();
+                    throw error;
+                }
             }
 
             // System-event persistence tap (task 0189 wave A / 0198). Best-effort:

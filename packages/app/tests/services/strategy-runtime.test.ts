@@ -13,6 +13,7 @@ import {
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
 import {
+    DEFAULT_STRATEGY,
     FLEET_AUTO_TAG,
     FleetService,
     gtdStrategy,
@@ -422,6 +423,46 @@ describe('StrategyRuntime.selectNext wiring (0838 R3)', () => {
             const after = await rig.claims.get(rig.project, 'write');
             expect(after?.holderId).toBe('proj-coder');
             expect(after?.ownerEpoch).toBe(held?.ownerEpoch);
+        } finally {
+            await rig.cleanup();
+        }
+    });
+});
+
+describe('StrategyRuntime.reconcileStrategy (0859 R1)', () => {
+    test('a declared strategy that differs from the row writes once, bumps the version and emits one event', async () => {
+        const rig = await makeRig({ strategy: 'rest' });
+        try {
+            expect(await rig.runtime.reconcileStrategy(rig.project, 'gtd')).toBe(true);
+            expect(await rig.runtime.getStrategy(rig.project)).toEqual({ name: 'gtd', version: 2 }); // rest v1 → gtd v2
+            const rows = await new SystemEventDao(rig.db).query({ names: ['strategy.changed'], limit: 10 });
+            expect(rows).toHaveLength(1);
+            expect(JSON.parse(rows[0]?.payload_json ?? '{}')).toMatchObject({ strategy: 'gtd', version: 2 });
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('a second reconcile with the same strategy is silent: no version bump, no event', async () => {
+        const rig = await makeRig({ strategy: 'rest' });
+        try {
+            await rig.runtime.reconcileStrategy(rig.project, 'gtd');
+            expect(await rig.runtime.reconcileStrategy(rig.project, 'gtd')).toBe(false);
+            expect(await rig.runtime.getStrategy(rig.project)).toEqual({ name: 'gtd', version: 2 });
+            const rows = await new SystemEventDao(rig.db).query({ names: ['strategy.changed'], limit: 10 });
+            expect(rows).toHaveLength(1); // still the first reconcile's single row
+        } finally {
+            await rig.cleanup();
+        }
+    });
+
+    test('the default matches an absent row without writing one (0859 R3 — a project with no declaration is untouched)', async () => {
+        const rig = await makeRig();
+        try {
+            expect(await rig.runtime.reconcileStrategy(rig.project, DEFAULT_STRATEGY)).toBe(false);
+            expect(await rig.dao.get(rig.project)).toBeNull();
+            const rows = await new SystemEventDao(rig.db).query({ names: ['strategy.changed'], limit: 10 });
+            expect(rows).toHaveLength(0);
         } finally {
             await rig.cleanup();
         }

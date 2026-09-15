@@ -2,8 +2,13 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { handleSchedulerCustomJob, ProjectRegistry, registerSystemEventTap } from '@gobing-ai/spur-app';
-import { AgentExecutorUpdateDao, applyCliMigrations, SystemEventDao } from '@gobing-ai/spur-domain';
+import {
+    handleSchedulerCustomJob,
+    normalizeProjectPath,
+    ProjectRegistry,
+    registerSystemEventTap,
+} from '@gobing-ai/spur-app';
+import { AgentExecutorUpdateDao, applyCliMigrations, ProjectStrategyDao, SystemEventDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { EventBus, type ExecutionContext, type ScheduledAction } from '@gobing-ai/ts-infra';
 import type { ApplicationRuntime, ApplicationStopReason, SchedulerJobConfig } from '@gobing-ai/ts-infra/application';
@@ -282,6 +287,9 @@ describe('startServer', () => {
                     cwd: project,
                     getDb: async () => db,
                     eventBus: () => bus,
+                    // 0859 R2: the boot-time strategy reconcile reads the task seam
+                    // through the same StrategyRuntime the board routes build.
+                    taskService: () => ({ list: async () => [] }),
                     supervisor: () => ({
                         stopAll: async () => {},
                         startAutostart: async (ids: readonly string[]) => {
@@ -352,6 +360,9 @@ describe('startServer', () => {
                     cwd: project,
                     getDb: async () => db,
                     eventBus: () => new EventBus<Record<string, (event: unknown) => void>>(),
+                    // 0859 R2: the boot-time strategy reconcile reads the task seam
+                    // through the same StrategyRuntime the board routes build.
+                    taskService: () => ({ list: async () => [] }),
                     supervisor: () => ({
                         stopAll: async () => {},
                         startAutostart: async (ids: readonly string[]) => {
@@ -368,6 +379,90 @@ describe('startServer', () => {
             expect(autostarted).toEqual([]);
             sigHandlers.SIGINT?.();
             await exitCalled;
+        } finally {
+            process.chdir(originalCwd);
+            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
+            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
+            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('0859 R2/R3: the declared agent.fleet.strategy reconciles into project_strategy once, silently on restart', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        const originalCwd = process.cwd();
+        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
+        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const root = mkdtempSync(join(tmpdir(), 'spur-strategy-reconcile-'));
+        // The projects must exist BEFORE normalization: `normalizeProjectPath` realpaths an
+        // existing directory, and the runtime keys its rows by that normalized path.
+        for (const project of [join(root, 'declared'), join(root, 'undeclared')]) {
+            mkdirSync(join(project, '.spur'), { recursive: true });
+        }
+        const declared = normalizeProjectPath(join(root, 'declared'));
+        const undeclared = normalizeProjectPath(join(root, 'undeclared'));
+        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
+        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const strategies = new ProjectStrategyDao(db);
+        const changed = () => new SystemEventDao(db).query({ names: ['strategy.changed'], limit: 10 });
+        const config = 'agent:\n  fleet:\n    strategy: gtd\n    members:\n      - id: coder\n        role: coder\n';
+        const bootLogs: { msg: string; data?: Record<string, unknown> }[] = [];
+        const deps = makeDeps({
+            createNodeFileSystem,
+            runNodeApplication: runNodeApplicationWith(() => capturingRuntime(bootLogs)),
+            createServerContext: (() => ({
+                getDb: async () => db,
+                eventBus: () => new EventBus<Record<string, (event: unknown) => void>>(),
+                taskService: () => ({ list: async () => [] }),
+                supervisor: () => ({ stopAll: async () => {}, startAutostart: async () => {} }),
+            })) as unknown as StartServerDeps['createServerContext'],
+        });
+        try {
+            for (const project of [declared, undeclared]) {
+                await new ProjectRegistry().upsert({ path: project, name: basename(project) });
+            }
+            writeFileSync(join(declared, '.spur', 'config.yaml'), config);
+
+            // AC1: the row starts at rest; the declared gtd reconciles into it once.
+            await strategies.set(declared, 'rest');
+            process.chdir(declared);
+            await startServer(
+                { port: 5011, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: declared },
+                deps,
+            );
+            expect(bootLogs.some((l) => l.msg === 'agent.fleet.strategy reconciled to gtd')).toBe(true);
+            const reconciled = await strategies.get(declared);
+            expect(reconciled?.strategy).toBe('gtd');
+            expect(reconciled?.strategyVersion).toBe(2); // rest v1 → gtd v2, exactly one bump
+            expect(await changed()).toHaveLength(1);
+            sigHandlers.SIGINT?.();
+            await exitCalled;
+
+            // AC2: the same declaration on restart changes neither the version nor the ledger.
+            await startServer(
+                { port: 5012, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: declared },
+                deps,
+            );
+            expect(
+                bootLogs.some((l) => l.msg === 'agent.fleet.strategy gtd already active — nothing to reconcile'),
+            ).toBe(true);
+            const restarted = await strategies.get(declared);
+            expect(restarted?.strategy).toBe('gtd');
+            expect(restarted?.strategyVersion).toBe(2);
+            expect(await changed()).toHaveLength(1);
+
+            // AC3: a project with no agent.fleet is never written to.
+            process.chdir(undeclared);
+            await startServer(
+                { port: 5013, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: undeclared },
+                deps,
+            );
+            expect(await strategies.get(undeclared)).toBeNull();
+            sigHandlers.SIGINT?.();
         } finally {
             process.chdir(originalCwd);
             if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
