@@ -4,7 +4,7 @@ name: Sync authority documents with the agent.fleet surface
 status: done
 template: feature-impl
 created_at: 2026-09-15T05:26:45.220Z
-updated_at: "2026-09-15T17:59:49.606Z"
+updated_at: "2026-09-15T18:23:12.003Z"
 feature_id: G65
 priority: P2
 tags:
@@ -163,16 +163,16 @@ the edge fix below. Total after this change: **68** hits across 14 files.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `git diff -U0 HEAD -- docs/00_ADR.md` returns exactly two husks-free addition hunks and zero deleted lines: `@@ -1175,0 +1176,8 @@` (dated `2026-09-15 · G65 / task 0861` note under ADR-086's roster-layer amendment stating the `agent.team` key is removed and a leftover block fails the load) and `@@ -1712,0 +1721,12 @@` (dated `2026-09-15 · G65 / tasks 0856–0861` ADR-116 amendment recording `agent.fleet`, the retired carriers, and the sentence that the Projects tabs are Conversation / Agents / Processes since the Work tab was dropped on 2026-09-14). `cd apps/cli && bun test tests/adr-supersession.test.ts` → 7 pass / 0 fail, including "(e) a working diff of 00_ADR.md deletes only the amended ADRs' status lines". |
-| R2 | MET | Each R2-named owner now carries the shipped surface: `docs/03_ARCHITECTURE.md:560-564` §14.3 "Accepted boundary (ADR-116)" — "`agent.fleet` is the only declaration — the retired `agent.team` block and `.spur/fleet.json` carrier, the three retired Board modules, and their routes are gone"; `docs/01_PRD.md:96` names `AgentCoordinationService`, `:98` names the `agent.fleet` declaration plus the Conversation / Agents / Processes tabs; `docs/design/project-switcher.md` (11 `agent.fleet` mentions; `:108` contrasts the live `/api/project/fleet` read with the retired `GET /api/team/teams`; `:209` states the leftover `fleet.json` load failure); supersession banners at `docs/design/spur-team-mode-design.md:4` and `docs/design/workspace-design.md:9` name `agent.fleet` as the replacement; `docs/help/cmd_projects.md:55` names the declaration; `rg -n "fleet\.json |
-| R3 | MET | `docs/design/fleet-config-declaration.md:3` reads `**Status:** Accepted (2026-09-15)` and its Supersedes line now points at the shipped `project-switcher.md §3.1 (shipped 2026-09-15, task 0858)`; the index row `docs/04_DESIGN.md:62` reads `Fleet declaration in spur config — \`agent.fleet\` (feature G65, accepted)`. |
-| R4 | MET | Re-ran the lens myself over `docs/` (minus `plans/`, `reports/`, `tasks*/`, `features/`), `plugins/sp`, `config/` and `AGENTS.md`: 68 hits, and every per-file count matches the Solution survivor table row for row — `fleet-config-declaration.md` 22, `00_ADR.md` 18, `workspace-design.md` 5 + `board-module-boundaries.md` 3, `config.global.yaml` + `config.example.yaml` 4, `configuration-contracts.md` 4 + `project-switcher.md` 3 + `03_ARCHITECTURE.md` 1 + `cli-contracts.md` 1, `system-events-producer-audit.md` 2, `harness-surface-governance.md` 2, `04_DESIGN.md` 1, `05_FEATURES.md` 1, `prototypes/g6-projects/index.html` 1. I inspected every non-ADR, non-satellite hit: each is a dated/explanatory note (0857/0858/0860 task references, the shipped guard's own error text, the dated consent-ledger rows, the `retired (G64 / G65)` feature-index heading, the prototype fixture string) and each survivor is listed with its reason in Solution. `plugins/sp` returns zero hits. |
+| R1 | MET | `docs/00_ADR.md:1722-1732` — dated ADR-116 amendment (2026-09-15 · G65 / tasks 0856–0861) recording `agent.fleet` and the Conversation/Agents/Processes tabs; `:1176-1179` — dated ADR-086 roster note that `agent.team` is removed. Commit `d78ffdaf0` touches `docs/00_ADR.md` with 20 insertions, **0 deletions** (append-only, history not rewritten). `apps/cli/tests/adr-supersession.test.ts` → 7 pass, 0 fail (fresh). |
+| R2 | MET | R4 sweep (fresh) over docs/plugins/config/AGENTS.md: `plugins/sp` zero retired-name hits; every docs hit is a dated historical note or a survivor listed in the task Solution's R4 table (`docs/00_ADR.md` history, the Accepted migration record, superseded design records, replacement-narration config comments, the 0855 removal row, the retired feature heading, the static G6 prototype). |
+| R3 | MET | `docs/design/fleet-config-declaration.md:3` — `Status: Accepted (2026-09-15)`; `docs/04_DESIGN.md:62` index row reads "feature G65, accepted". |
+| R4 | MET | Fresh sweep: remaining hits match the prior Solution's survivor accounting (`config/config.example.yaml:185,201` replacement/error-text narration; `docs/dogfood/2026-09-15-g64-*` dated dogfood report; the survivors above). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R7 — Authority documents match the shipped fleet surface | MET | command | `git diff -U0 HEAD -- docs/00_ADR.md` → two addition-only hunks (dated ADR-116 amendment + ADR-086 roster note, 0 deletions); no owner document still presents a retired carrier as live (R4 lens: 68 hits, all dated/explanatory or Solution-listed); `docs/design/fleet-config-declaration.md:3` Accepted; `bun run spur-check` PASS at this revision — `.spur/run/0861-test-gate.status` = PASS, log mtime 10:46:40 ≥ every changed file (max 10:38:15), tail `Ran 8331 tests across 472 files` + `0 fail` + post-check `All 2 rules passed`, digest `sha256:6df3dc8b7de40bcc4e179936df6870bc924a4f202f820adba7a4cb6d7e7f81ea`. |
-| **AC1 — The decision is recorded without rewriting history (R1).** Given `docs/00_ADR.md`, when this task's diff is inspected, then it only adds the dated ADR-116 amendment and the dated roster note, and prior ADR text is unchanged. | MET | command | `git diff -U0 HEAD -- docs/00_ADR.md` — both hunks are pure insertions (`@@ -1175,0 +1176,8 @@`, `@@ -1712,0 +1721,12 @@`); no pre-existing ADR line modified or deleted. `cd apps/cli && bun test tests/adr-supersession.test.ts` → 7 pass / 0 fail, including `(e) a working diff of 00_ADR.md deletes only the amended ADRs' status lines`. |
-| **AC2 — Owner documents name only agent.fleet (R2, R3, R4).** Given the repo, when the R4 sweep runs, then every remaining hit is a dated historical note or a survivor listed with its reason in Solution, the design satellite is Accepted, and `bun run spur-check` passes. | MET | command | R4 lens re-run as above (68 hits; each dated-historical or a Solution-listed survivor with its reason; `plugins/sp` = 0 hits); design satellite Accepted (`docs/design/fleet-config-declaration.md:3`, index row `docs/04_DESIGN.md:62`); `bun run spur-check` PASS (`.spur/run/0861-test-gate.status` = PASS, 8331 pass / 0 fail). |
+| Scenario: R7 — Authority documents match the shipped fleet surface | MET | command | ADR-116 amendment dated and appended (00_ADR.md:1722, 20+/0- in `d78ffdaf0`); owner documents/templates/references name `agent.fleet` as the only declaration (fresh R4 sweep + survivor table); adr-supersession suite 7 pass / 0 fail (fresh). |
+| AC1 — The decision is recorded without rewriting history (R1) | MET | command | `git show d78ffdaf0 -- docs/00_ADR.md` → 20 insertions, 0 deletions. |
+| AC2 — Owner documents name only agent.fleet (R2, R3, R4) | MET | command | Fresh R4 sweep classified against the Solution survivor table — every hit is dated history or listed with reason; satellite Accepted at `fleet-config-declaration.md:3` + index row `docs/04_DESIGN.md:62`; full `bun run spur-check` evidence captured once batch-wide (see verifyall batch report). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -184,13 +184,7 @@ the edge fix below. Total after this change: **68** hits across 14 files.
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | gate-pass | — | `.spur/run/0861-test-gate.status` = PASS; log tail `8331 pass` / `0 fail` / post-check rules passed; mtime 10:46:40 ≥ every changed file's mtime (max 10:38:15) |
-| P4 | docs-only-diff | — | `git diff --name-only HEAD` = 17 paths, all `docs/**/*.md` — no code, config, schema or plugin path in this change set |
-| P4 | predecessor-0858-not-regressed | — | `cd packages/config && bun test tests/loader.test.ts tests/config-schemas.test.ts` → 101 pass / 0 fail (retired-key guard, global-layer `agent.fleet`, `agent.fleet` defaults/validation) |
-| P4 | predecessor-0860-not-regressed | — | `cd apps/server && bun test tests/modules/processes tests/registry.test.ts` → 28 pass / 0 fail; `cd apps/web && bun test tests/modules/projects/ProcessesView.test.tsx tests/modules/projects/roster.test.ts` → 39 pass / 0 fail (the remediation's restored executions `teamId` key holds) |
-| P4 | mermaid-graph-consistent | — | `docs/help/index.md:71` + `:94` — node declared and wired, no `TeamSvc` and no dangling node reference; `rg -n "TeamSvc" docs/help/index.md` → 0 |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:6df3dc8b7de40bcc4e179936df6870bc924a4f202f820adba7a4cb6d7e7f81ea |
 
 ### References
 

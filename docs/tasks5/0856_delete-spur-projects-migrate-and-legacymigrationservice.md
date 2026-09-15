@@ -4,7 +4,7 @@ name: Delete spur projects migrate and LegacyMigrationService
 status: done
 template: feature-impl
 created_at: 2026-09-15T05:26:45.214Z
-updated_at: "2026-09-15T07:06:20.163Z"
+updated_at: "2026-09-15T18:17:46.317Z"
 feature_id: G65
 priority: P1
 tags:
@@ -178,17 +178,17 @@ reference text until `bun run build` regenerates them; they are excluded from th
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | command: `bun apps/cli/src/index.ts projects --help` lists only `add`/`remove`/`list`/`start`/`stop` + `help`; `bun apps/cli/src/index.ts projects migrate` → exit 1, `error: unknown command 'migrate'`. Source: the noun registration `apps/cli/src/commands/projects.ts:21` plus its five surviving `.command(...)` registrations at `:24`, `:64`, `:100`, `:291`, `:342` — no shim, no alias. |
-| R2 | MET | `git status --porcelain` reports `D packages/app/src/services/legacy-migration.ts` and `D packages/app/tests/services/legacy-migration.test.ts` (both gone); `packages/app/src/index.ts` loses 22 export lines and a runtime import probe of the barrel reports `LegacyMigrationService present: false` (no `LegacyMigration*` symbol). The re-exports removed with it (`assertConfigBlockRemovalSafe`, `ConfigBlockRemovalBlockedError`) have zero remaining references outside the task file's own prose. |
-| R3 | MET | `docs/help/cmd_projects.md:9-13` — subcommand table lists add/remove/list/start/stop only; `rg -c migrate docs/help/cmd_projects.md` → no match. `plugins/sp/skills/spur-cli/references/projects.md:20-24` — verb table lists the same five verbs; `rg -c migrate` → no match. `apps/cli/tests/json-envelope-inventory.test.ts:281-282` — census comment `67 → 66 (G65 0856: one retired projects-noun verb)` with `expect(advertising.length).toBe(66)`. Tests: apps/cli projects+json-envelope+help-doc-parity+spur-cli-parity+shared-option-parity → 38 pass / 0 fail; `plugins/sp/tests/surface-drift-inventory.test.ts` → 75 pass / 0 fail. |
-| R4 | MET | `docs/design/harness-surface-governance.md:119` — appended row ` |
-| R5 | MET | command: `git diff --name-only HEAD -- docs/tasks* docs/features docs/plans docs/reports docs/00_ADR.md` → one entry, `docs/tasks5/0856_delete-spur-projects-migrate-and-legacymigrationservice.md` (this task's own pipeline record). No `docs/plans/**`, `docs/reports/**`, feature corpus or ADR text appears in the change set. |
+| R1 | MET | command: `bun apps/cli/src/index.ts projects --help` lists only add/remove/list/start/stop + help (fresh this run); `bun apps/cli/src/index.ts projects migrate` → exit 1, `error: unknown command 'migrate'` — no shim, no alias. |
+| R2 | MET | `ls packages/app/src/services/legacy-migration.ts packages/app/tests/services/legacy-migration.test.ts` → No such file (both); barrel probe `Object.keys(await import('./packages/app/src/index.ts')).filter(/LegacyMigration |
+| R3 | MET | rg lens over repo excluding historical docs and generated `apps/cli/{plugins,web,config}` → hits only `docs/design/fleet-config-declaration.md:129,137` (feature plan of record, 0861 owns sync) and `docs/design/harness-surface-governance.md:116,119` (allowed ledger rows). Tests: apps/cli projects+json-envelope+help-doc-parity+spur-cli-parity+shared-option-parity → 38 pass / 0 fail (fresh). |
+| R4 | MET | `docs/design/harness-surface-governance.md:119` — dated 2026-09-15 removal row for `spur projects migrate` recording the 2026-09-14 G65 idea-eval consent; the 2026-09-12 grant row at `:116` kept as history. |
+| R5 | MET | rg lens finds no hits under `docs/plans/**`, `docs/reports/**`, task/feature corpus or `docs/00_ADR.md` outside the allowed rows; historical records untouched. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R5 — The legacy team migration path is gone | MET | command | `spur projects migrate` exits 1 as an unknown command with no registered verb; the service and its test are absent from the tree and `@gobing-ai/spur-app` exports no `LegacyMigration*` symbol (import probe); the rg lens finds no source, test, help-doc or plugin reference outside the two allowed doc files. |
-| **AC1 | MET | test | `cd apps/cli && bun test tests/commands/projects.test.ts tests/json-envelope-inventory.test.ts tests/help-doc-parity.test.ts tests/spur-cli-parity.test.ts tests/shared-option-parity.test.ts` → 38 pass, 0 fail (1360.00ms); plus CLI probes `projects --help` (no `migrate`) and `projects migrate` → exit 1 `error: unknown command 'migrate'`. |
-| **AC2 | MET | command | rg lens `rg -n "projects migrate\|LegacyMigration\|legacy-migration"` excluding `docs/plans`, `docs/reports`, `docs/tasks*`, `docs/features`, `docs/00_ADR.md`, `apps/cli/{plugins,web,config}`, `node_modules` → hits only `docs/design/harness-surface-governance.md:116,:119` (kept grant row + new removal row) and `docs/design/fleet-config-declaration.md:129,:137` (feature plan of record, 0861 owns its sync) — exactly the two allowed sets. Full project gate green: `bun run spur-check` → PASS (`.spur/run/0856-test-gate.status` = PASS, log 42662 bytes, captured after the coverage remediation at the pipeline's `test-recheck`). |
+| Scenario: R5 — The legacy team migration path is gone | MET | command | `spur projects migrate` exits 1 as unknown command (fresh); service + test absent from tree; barrel exports no `LegacyMigration*` symbol (probe, fresh); rg lens shows no source/test/help/plugin reference outside the two allowed doc files. |
+| AC1 — The verb and service are gone (R1, R2) | MET | test | `cd apps/cli && bun test tests/commands/projects.test.ts tests/json-envelope-inventory.test.ts tests/help-doc-parity.test.ts tests/spur-cli-parity.test.ts tests/shared-option-parity.test.ts` → 38 pass, 0 fail (fresh); plus CLI probes above. |
+| AC2 — No live reference remains (R3, R4, R5) | MET | command | rg lens (fresh) → exactly the two allowed sets: governance ledger rows `:116`/`:119` and feature design doc `:129`/`:137`; no other hits. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -200,12 +200,7 @@ reference text until `bun run build` regenerates them; they are excluded from th
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | tests-pass | — | gate artifact PASS; targeted suites 38 + 75 pass, 0 fail |
-| P4 | lint-clean | — | `bun run spur-check` chain includes `biome check . --error-on-warnings` + typecheck, green at recheck |
-| P4 | ac-anchors-resolve | — | every `file:line` above was re-read this run and names its subject |
-| P4 | design-conformance | — | task `### Design` prescribes "Pure deletion … commander's unknown-command error is the contract — a tombstone would be unobservable surface"; the shipped change is exactly that, with no shim or alias added |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:bede546c6fbb3d31c720981a12d94a3d7c1fdf8f631c1a75b9a5c395850909a8 |
 
 ### References
 
