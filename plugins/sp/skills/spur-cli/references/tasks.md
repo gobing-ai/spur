@@ -40,7 +40,7 @@ re-reading or re-tokenizing the task.
 | ---- | ------- | --------- |
 | `create <title>` | Allocate a new task (race-safe WBS) | `--feature <id>` `--parent <wbs>` `--template <variant>` `--dedupe-within <s>` `--allow-duplicate-name` `--folder` `--json` |
 | `show <wbs>` | Print one task's frontmatter + body | `--folder` `--json` |
-| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (moved home of `spur team assign`; exclusive with `--section`) `--feature <id>` `--priority <p>` `--no-lifecycle` `--force-done` `--reason <text>` `--verdict-dir <path>` `--folder` `--json` |
+| `update <wbs> [status]` | Lifecycle transition, section replace, **or** frontmatter set | `--section <name> --from-file <path>` `--assignee <spec-id>` (exclusive with `--section`) `--feature <id>` `--priority <p>` `--no-lifecycle` `--force-done` `--reason <text>` `--verdict-dir <path>` `--folder` `--json` |
 | `deps <wbs> <op> [values...]` | Mutate `dependencies[]` frontmatter array (ops: `set`, `add`, `remove`, `clear`) | `--folder` `--json` |
 | `sections <wbs> <op> [name]` | Initialize, add, or list canonical task sections (ops: `init`, `add`, `list`) | `--folder` `--json` |
 | `list` | List tasks, filtered | `--status <s>` `--phase <p>` `--parent <wbs>` `--feature <id>` `--folder` `--json` |

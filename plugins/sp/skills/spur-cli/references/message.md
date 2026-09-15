@@ -134,7 +134,7 @@ lines.
 
 - **`spur agent` (see [agent.md](agent.md))** - `run --drain` and `loop` consume the inbox.
 - **`spur task` (see [tasks.md](tasks.md))** - `task update --assignee` wires an agent spec to a
-  task (0848 moved home of `spur team assign`).
+  task.
 - **`sp:spur-cli`** SKILL.md - the facade that routes to this reference.
 
 > **Shared option declarations (0618):** options shared across command modules resolve from

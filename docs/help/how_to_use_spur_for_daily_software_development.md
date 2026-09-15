@@ -868,7 +868,6 @@ features:
   `--top <n>` narrow the already-loaded artifact.
 - **`spur agent start|stop`** manage supervised agent processes and require a reachable
   `spur serve`; without it, use `agent run --spec <id> --drain` for store-and-forward runs.
-  (`spur team start|stop` still work but warn — deprecated by 0848; removal waits for the G64 cutover window)
 - **`spur task migrate`** now runs the one-time **A17** task-corpus normalization pass
   (`--dry-run` previews, `--folder` scopes, `--json` for machine output). Run it once when
   adopting the A17 layout on an older corpus; it is not part of the daily loop.

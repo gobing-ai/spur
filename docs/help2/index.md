@@ -42,9 +42,8 @@ spur task create "Investigate flaky login test" --skip-ready
 | `spur feature` | [feature](./feature.md) | `spur serve` | [serve](./serve.md) |
 | `spur history` | [history](./history.md) | `spur status` | [status](./status.md) |
 | `spur init` | [init](./init.md) | `spur task` | [task](./task.md) |
-| `spur maintain` | [maintain](./maintain.md) | `spur team` (deprecated 0848) | [team](./team.md) |
-| `spur message` | [message](./message.md) | `spur workflow` | [workflow](./workflow.md) |
-| `spur migrate` | [migrate](./migrate.md) | | |
+| `spur maintain` | [maintain](./maintain.md) | `spur workflow` | [workflow](./workflow.md) |
+| `spur message` | [message](./message.md) | `spur migrate` | [migrate](./migrate.md) |
 
 ## Global conventions
 
@@ -52,8 +51,8 @@ spur task create "Investigate flaky login test" --skip-ready
   authoritative usage for that command; `spur help [command]` is a shortcut for the same output.
 - **Top-level flags:** `-V, --version`, `-v, --cli-verbose` (internal diagnostics),
   `--no-logo` (suppress the startup banner).
-- **Machine-readable output:** most commands support `--json` (exceptions: `agent delete`,
-  `agent edit`, `agent loop`, `team assign`); `--json-envelope` additionally
+- **Machine-readable output:** most commands support `--json` (exception: the
+  supervisor-internal `agent loop`); `--json-envelope` additionally
   wraps the output in the standard `{ok, data|error}` envelope for scripting.
 - **CLI-gated entities:** tasks, features, agent specs, and workflow runs are files and database
   rows — always edit them through the CLI, never by hand.

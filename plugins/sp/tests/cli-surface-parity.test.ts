@@ -174,7 +174,6 @@ const REFERENCE_LAYOUT: Record<string, { file: string; heading: string; format: 
     builder: { file: 'builder.md', heading: '## Verb map', format: 'table' },
     agent: { file: 'agent.md', heading: '## Verb map', format: 'table' },
     message: { file: 'message.md', heading: '## Verb map', format: 'table' },
-    team: { file: 'team.md', heading: '## Verb map', format: 'table' },
     // `self` is the consolidated home for the four self-management verbs (init/migrate/serve/status).
     self: { file: 'self.md', heading: '## Verb map', format: 'table' },
     history: { file: 'history.md', heading: '## Verb map', format: 'table' },
@@ -433,7 +432,7 @@ describe('cli-surface-parity — R4 (0705): AGENTS.md compact-guide ownership', 
         // the facade reference is the only noun/verb authority. F95 briefly restored the table;
         // this pins its removal instead of re-parsing the catalog against live help.
         expect(cliSection).not.toMatch(
-            /^\| `?(?:agent|builder|feature|history|message|projects|rule|self|task|team|workflow)`?\s*\|/m,
+            /^\| `?(?:agent|builder|feature|history|message|projects|rule|self|task|workflow)`?\s*\|/m,
         );
     });
 });

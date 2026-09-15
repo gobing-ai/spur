@@ -195,8 +195,7 @@ agent:
   #   }
   # `enabled: false` keeps the member's derived `<role>-<n>` id index, so later
   # members never silently reallocate ids. The legacy `agent.team.<teamId>`
-  # config key still parses — the `spur team` noun is deprecated, not removed —
-  # but the roster is keyed on the worktree path now, not on a config-global
+  # config key still parses, but the roster is keyed on the worktree path now, not on a config-global
   # team name.
 
 rules:

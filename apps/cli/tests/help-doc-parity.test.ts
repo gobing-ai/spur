@@ -54,7 +54,7 @@ function collectCliFlags(): Map<string, Set<string>> {
  * Parse the documented flag rows per command path. Three documented shapes:
  *   `# spur <noun>`          single-verb file — every flag row belongs to `spur <noun>`
  *   `## spur <noun> <verb>`  per-verb section
- *   `## spur team start | stop`  combined section — rows attribute to each named path
+ *   `## spur agent start | stop`  combined section — rows attribute to each named path
  * A row cell may carry an escaped pipe inside backticks (`<yes\|no\|cancel>`), so the
  * split must not cut at `\|`.
  */

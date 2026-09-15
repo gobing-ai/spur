@@ -224,7 +224,6 @@ describe('nounOfReference — reference path to CLI noun', () => {
 
     test('already-singular nouns map to themselves', () => {
         expect(nounOfReference('plugins/sp/skills/spur-cli/references/agent.md')).toBe('agent');
-        expect(nounOfReference('plugins/sp/skills/spur-cli/references/team.md')).toBe('team');
     });
 
     test('returns null for a file outside the noun-mapped references', () => {
@@ -688,7 +687,7 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
                     : { exit: 1, out: '', err: 'task list blew up' };
             }
             if (key === 'rule list --json') return { exit: 0, out: 'not json at all', err: '' };
-            if (key === 'team status --json') return { exit: 3, out: '', err: 'no team configured' };
+            if (key === 'projects list --json') return { exit: 3, out: '', err: 'no registry configured' };
             if (key === 'status --json') {
                 const wide = Object.fromEntries(Array.from({ length: 15 }, (_, i) => [`k${i}`, i]));
                 return { exit: 0, out: JSON.stringify(wide), err: '' };
@@ -706,10 +705,10 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
         expect(unparseable?.status).toBe('unverified');
         expect(unparseable?.actual).toContain('no parseable JSON');
         // A failing probe carries its exit code and stderr, never a silent pass.
-        const failed = rowFor('team status --json (envelope)');
+        const failed = rowFor('projects list --json (envelope)');
         expect(failed?.status).toBe('unverified');
         expect(failed?.actual).toContain('exit 3');
-        expect(failed?.actual).toContain('no team configured');
+        expect(failed?.actual).toContain('no registry configured');
         // Wide envelopes are truncated in the report rather than flooding the row.
         expect(rowFor('status --json (envelope)')?.actual).toContain('…');
     });

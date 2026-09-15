@@ -41,7 +41,6 @@ describe('CLI dispatch and status', () => {
 
         // Commander shows noun names + summaries in top-level help.
         expect(helpOutput).toContain('message');
-        expect(helpOutput).toContain('team');
         expect(helpOutput).toContain('agent');
     });
 
@@ -65,7 +64,7 @@ describe('CLI dispatch and status', () => {
     test('renders command-scoped help for every existing command', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
-        const commands = ['init', 'status', 'migrate', 'agent', 'message', 'team', 'rule', 'history', 'workflow'];
+        const commands = ['init', 'status', 'migrate', 'agent', 'message', 'rule', 'history', 'workflow'];
 
         for (const command of commands) {
             // --help flag
@@ -80,7 +79,7 @@ describe('CLI dispatch and status', () => {
         }
     });
 
-    test('dispatches message and team command groups', async () => {
+    test('dispatches message and agent command groups', async () => {
         const cwd = await createTempProject();
         const output = createCapturedOutput();
 
@@ -90,8 +89,8 @@ describe('CLI dispatch and status', () => {
         ).toBe(0);
         expect(JSON.parse(output.messages.at(-1) ?? '{}').toId).toBe('planner');
 
-        // team status on a specless project routes through dispatch and exits 0.
-        expect(await main(['team', 'status'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
+        // agent list --specs on a specless project routes through dispatch and exits 0.
+        expect(await main(['agent', 'list', '--specs'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         expect(output.messages.at(-1)).toMatch(/No agent specs found/);
     });
 

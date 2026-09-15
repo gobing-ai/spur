@@ -9,13 +9,11 @@ model call in Spur (skills, workflow `agent.run` actions, team-mode runs) routes
 | Subcommand | Description |
 | --- | --- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent |
-| `list` | List detected coding agents (team agent specs with `--specs`) |
+| `list` | List detected coding agents (agent specs with `--specs`) |
 | `doctor [agent]` | Check agent readiness |
 | `wait [specId]` | Wait for a pinned occupant run to reach a lifecycle state |
-| `loop` | Persistent self-draining loop for a team member (supervisor-managed) |
-| `create <id>` | Write a team agent spec to `.spur/agents/<id>.yaml` |
-| `edit <id>` | Open an agent spec in `$EDITOR`, or print its path |
-| `delete <id>` | Remove an agent spec |
+| `start <spec-id>` | Start a supervised agent process (requires `spur serve`) |
+| `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`) |
 
 ## spur agent run
 
@@ -81,42 +79,16 @@ Block until a pinned occupant run reaches a lifecycle state. Address the occupan
 latest run is used. `--until` is repeatable (OR semantics) and `--timeout` bounds the wait in
 milliseconds.
 
-## spur agent loop
+## Agent specs
 
-```bash
-spur agent loop [--spec <id>] [--agent <id>] [--poll <ms>]
-```
-
-The persistent self-draining inbox loop for a team member: poll for pending messages
-(`--poll <ms>`, default 2000), dispatch each through `agent run`, repeat. `--spec <id>` names
-the occupant; `--agent <id>` is the legacy spelling of the same thing. You rarely run this by
-hand — the supervisor (`spur serve` + `spur agent start`) manages loop processes for started
-members.
-
-## spur agent create / edit / delete
-
-```bash
-spur agent create <id> --type <agent-type> [--name <name>] [--workspace <path>] [--purpose <text>]
-spur agent create <id> [--tags <a,b>] [--model <name>] [--autonomy <level>] [--system-prompt <text>]
-spur agent create <id> [--auto-start] [--no-identity-preamble] [--json]
-spur agent edit <id>
-spur agent delete <id> --force
-```
-
-`create` writes `.spur/agents/<id>.yaml` — the team identity card (executor type, purpose, tags,
-model, autonomy). `edit` opens it in `$EDITOR` (prints the path when no editor is set). `delete`
-**requires** `--force` — no unforced removal.
-
-```bash
-spur agent create reviewer --type codex --purpose "Code review specialist" --tags review,quality
-spur agent edit reviewer
-spur agent delete reviewer --force
-```
+`.spur/agents/<id>.yaml` specs are materialized from the fleet declaration when `spur serve`
+starts; there is no CLI verb to hand-author them. `spur agent loop` is supervisor-internal
+(hidden from `--help`): the supervisor spawns one per started spec.
 
 ## See also
 
 - [Daily development workflow](./daily-development-workflow.md) — where agent execution fits
-- [team](./team.md) and [message](./message.md) — multi-agent coordination around specs
+- [message](./message.md) — multi-agent coordination around specs
 
 <!-- Provenance (invisible)
 Generated: 2026-09-11 via the kk-itc-generating three-reference merge.

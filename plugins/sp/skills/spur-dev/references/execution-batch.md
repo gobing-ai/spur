@@ -885,7 +885,7 @@ command doc so it does not read as a bug.
 ## Still out of scope
 
 - **Interactive within-step Q&A** — a headless subprocess `agent.run` agent asking the operator a
-  real question. This waits for the workspace module + inbox module + `spur agent` team mode.
+  real question. This waits for the workspace module + inbox module + the agent fleet.
   `sp:super-planner` surfaces blockers/HITL only at the **batch boundary** (between task runs), not
   from inside a pipeline step.
 

@@ -87,8 +87,8 @@ their runbook here.
 - Drive a task batch through execution, chain campaigns into a recurring loop, or dispatch and
   coordinate multiple agents — no batch driving, no recurring loops, no coordination dispatch here;
   they hand off to `sp:super-planner` or a workflow.
-- Use `spur team` or `spur agent loop` — both are forbidden surfaces. Agent specs are reached only
-  through `spur agent create|edit|delete|list --specs`.
+- Use `spur agent loop` — a supervisor-internal, forbidden surface. Agent specs are read through
+  `spur agent list --specs`.
 
 ## Output Format
 
@@ -124,4 +124,4 @@ recurring evolution loops, and multi-agent coordination are not dispatch duties 
 to `sp:super-planner` or a workflow definition. If the operator explicitly asks for a follow-up
 corpus dispatch, its surface contract is
 [dispatch-surface.md](../skills/parallel-execution/references/dispatch-surface.md): native subagent
-by default, `spur agent run` only on a named trigger — never `spur team` or `spur agent loop`.
+by default, `spur agent run` only on a named trigger — never `spur agent loop`.

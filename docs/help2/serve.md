@@ -44,7 +44,7 @@ spur serve --json                   # machine-readable { port, url, pid }, then 
 
 ## See also
 
-- [team](./team.md) — supervised processes that need the server
+- [agent](./agent.md) — `agent start|stop` supervised processes that need the server
 - [projects](./projects.md) — the multi-project registry
 
 <!-- Provenance (invisible)

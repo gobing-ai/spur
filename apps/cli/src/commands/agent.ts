@@ -4,7 +4,6 @@ import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
     type AgentRunDeps,
     AgentService,
-    type AgentSpecInput,
     DeliveryReconciler,
     FINDING_CODES,
     FleetService,
@@ -17,6 +16,7 @@ import {
     StrategyRuntime,
     type SystemEventBus,
     TeamService,
+    type TeamStatusEntry,
     WaitError,
     type WaitUntil,
     waitForOccupant,
@@ -31,16 +31,30 @@ import {
 } from '@gobing-ai/spur-domain';
 import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
 import { makeCheckService, makeService } from './task';
-import { DEFAULT_TEAM_SERVER, fetchServerProcesses, runTeamStart, runTeamStop } from './team';
 
 export type { AgentRunDeps };
+
+// ── Injectable fetch seam for the `spur serve` supervisor calls ───────
+let _testFetch: typeof fetch | undefined;
+
+/** Replace the server fetch for the current test. Call resetAgentServerFetchForTesting in cleanup. */
+export function setAgentServerFetchForTesting(fn: typeof fetch): void {
+    _testFetch = fn;
+}
+
+/** Restore the platform fetch after a test. */
+export function resetAgentServerFetchForTesting(): void {
+    _testFetch = undefined;
+}
+
+/** Default server API URL for agent start/stop and live `list --specs` status (requires spur serve). */
+const DEFAULT_SERVER = 'http://localhost:3000/api';
 
 /** Register `spur agent` commands on the CLI program. */
 export function registerAgentCommand(program: Command, context: CliContext): void {
@@ -48,11 +62,11 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
 
     agent
         .command('list')
-        .description('List detected coding agents, or team agent specs with --specs.')
+        .description('List detected coding agents, or agent specs with --specs.')
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
-        .option('--specs', 'List team specs instead of detected agents')
-        .option('--server <url>', 'Server API URL for live run status (with --specs)', DEFAULT_TEAM_SERVER)
+        .option('--specs', 'List agent specs instead of detected agents')
+        .option('--server <url>', 'Server API URL for live run status (with --specs)', DEFAULT_SERVER)
         .action(async (options) => {
             const svc = new AgentService({ cwd: context.cwd, env: context.env, output: context.output });
             const code = await runAgentList(svc, context, {
@@ -94,7 +108,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             '--agent <name>',
             'Role, executor, agent binary, auto, or inline (host-session-only; errors on headless surfaces)',
         )
-        .option('--spec <id>', 'Team agent spec id (occupant addressing; pairs with --drain)')
+        .option('--spec <id>', 'Agent spec id (occupant addressing; pairs with --drain)')
         .option('--continue', 'Resume the previous agent session')
         .option('--model <name>', 'Agent model argument')
         .option(...SHARED_OPTIONS.modeAgent)
@@ -114,11 +128,11 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             context.setExitCode(code);
         });
 
+    // Supervisor-internal (`supervisor-service.ts` spawns `agent loop --spec <id>`): hidden from help.
     agent
-        .command('loop')
-        .description('Run the persistent self-draining loop for a team member (used by the supervisor).')
+        .command('loop', { hidden: true })
+        .description('Run the persistent self-draining loop for a supervised agent spec.')
         .option('--spec <id>', 'Agent spec id / message recipient')
-        .option(...SHARED_OPTIONS.agentIdLegacyRecipient)
         .option(...SHARED_OPTIONS.pollAgent, String(DEFAULT_LOOP_POLL_MS))
         .action(async (options) => {
             const controller = new AbortController();
@@ -137,9 +151,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
 
     agent
         .command('wait')
-        .description(
-            'Wait for a pinned occupant run to reach a lifecycle state (G4 wave 2). Address by spec id or --role.',
-        )
+        .description('Wait for a pinned occupant run to reach a lifecycle state. Address by spec id or --role.')
         .argument('[specId]', 'Agent spec id whose occupant to wait on (mutually exclusive with --role)')
         .option(
             '--role <name>',
@@ -197,63 +209,19 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
             context.setExitCode(code);
         });
 
-    agent
-        .command('create')
-        .description('Write a team agent spec to .spur/agents/<id>.yaml.')
-        .option('--type <agent-type>', 'Agent spec type for create')
-        .option('--tags <a,b>', 'Team identity tags')
-        .option('--system-prompt <text>', 'Team identity system prompt')
-        .option(...SHARED_OPTIONS.nameAgent)
-        .option('--workspace <path>', 'Workspace path')
-        .option('--purpose <text>', 'Team identity purpose')
-        .option('--auto-start', 'Auto-start flag')
-        .option('--model <name>', 'Agent model argument')
-        .option('--autonomy <level>', 'Autonomy level')
-        .option('--no-identity-preamble', 'Disable identity preamble')
-        .option(...SHARED_OPTIONS.json)
-        .option(...SHARED_OPTIONS.jsonEnvelope)
-        .argument('<id>', 'Agent spec id')
-        .action(async (id, options) => {
-            const flags = commanderOptionsToFlags(options);
-            const code = await runAgentCreate(id, context, flags);
-            context.setExitCode(code);
-        });
-
-    agent
-        .command('edit')
-        .description('Open an agent spec in $EDITOR, or print its path.')
-        .argument('<id>', 'Agent spec id')
-        .action(async (id) => {
-            const code = await runAgentEdit(id, context);
-            context.setExitCode(code);
-        });
-
-    agent
-        .command('delete')
-        .description('Remove an agent spec.')
-        .option(...SHARED_OPTIONS.forceAgentDelete)
-        .argument('<id>', 'Agent spec id')
-        .action(async (id, options) => {
-            const flags = commanderOptionsToFlags(options);
-            const code = await runAgentDelete(id, context, flags);
-            context.setExitCode(code);
-        });
-
-    // 0848: per-spec process lifecycle moved here from `spur team start|stop` (R1).
-    // Both delegate to the team.ts runners — same POST /api/team/agents/:id/{start,stop}
-    // endpoints, same response translation, same unreachable-server error text.
+    // Per-spec process lifecycle through the `spur serve` supervisor
+    // (POST /api/team/agents/:id/{start,stop}).
     agent
         .command('start')
         .description('Start a supervised agent process (requires spur serve).')
         .argument('<spec-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
+        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
-            // 0697 AC4: the advertised flag's decision rides visibly on the delegated
-            // options — the implementation envelopes when `json` is set and `jsonEnvelope`
-            // picks the envelope form (runTeamStart, the moved team.ts implementation).
-            const code = await runTeamStart(
+            // 0697 AC4: the advertised flag's decision rides visibly on the delegated options.
+            const code = await runAgentLifecycle(
+                'start',
                 specId,
                 { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
                 context,
@@ -265,12 +233,13 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .command('stop')
         .description('Stop a supervised agent process (requires spur serve).')
         .argument('<spec-id>', 'Agent spec id')
-        .option('--server <url>', 'Server API URL', DEFAULT_TEAM_SERVER)
+        .option('--server <url>', 'Server API URL', DEFAULT_SERVER)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (specId, options) => {
             // Same threading contract as `agent start` (0697 AC4).
-            const code = await runTeamStop(
+            const code = await runAgentLifecycle(
+                'stop',
                 specId,
                 { server: options.server, json: options.json, jsonEnvelope: options.jsonEnvelope },
                 context,
@@ -324,12 +293,11 @@ async function runAgentList(
         return svc.list({ json: opts.json ?? false, enveloped: opts.jsonEnvelope });
     }
     const specs = await new TeamService(context).listAgentSpecs();
-    // 0848: `agent list --specs` inherited `team status`'s live-run merge. The CLI
-    // process never owns the supervisor — specs are spawned by `spur serve` — so the
-    // local listing is only the desired state until the server's process table
-    // overrides it. Unreachable server ⇒ same fallback (all `stopped`) and same
-    // stderr warning as `team status`, so offline listing still works.
-    const server = opts.server ?? DEFAULT_TEAM_SERVER;
+    // The CLI process never owns the supervisor — specs are spawned by `spur serve` —
+    // so the local listing is only the desired state until the server's process table
+    // overrides it. Unreachable server ⇒ every spec `stopped` plus a stderr warning,
+    // so offline listing still works.
+    const server = opts.server ?? DEFAULT_SERVER;
     const live = await fetchServerProcesses(server);
     if (live === null) {
         context.output.error(
@@ -368,8 +336,7 @@ async function runAgentList(
         return 0;
     }
     // 0544 R2/R4: role and executor are distinct columns; undeclared renders `unset`.
-    // 0848: live run status is the trailing column (`stopped` + pid suffix), mirroring
-    // `team status`'s `pid=<n>` rendering.
+    // Live run status is the trailing column (`running pid=<n>` / `stopped`).
     context.output.write(
         specs
             .map((spec) => {
@@ -385,147 +352,106 @@ async function runAgentList(
     return 0;
 }
 
-/** `spur agent create <id> --type <agent-type> [flags]` */
-async function runAgentCreate(
-    id: string | undefined,
-    context: CliContext,
-    flags: Record<string, string | boolean>,
-): Promise<number> {
-    if (id === undefined) {
-        writeJsonError(context.output, jsonFlags(flags), 'agent create requires <id>', 'VALIDATION_FAILED');
-        return 2;
+/**
+ * Fetch live run status from the server supervisor (`GET /api/team/processes`).
+ * Returns a `Map<agentId, { status, pid }>`, or `null` when the server is
+ * unreachable / returns a non-OK response — callers fall back to local specs.
+ */
+async function fetchServerProcesses(
+    server: string,
+): Promise<Map<string, { status: TeamStatusEntry['status']; pid: number | null }> | null> {
+    try {
+        const res = await (_testFetch ?? fetch)(`${server}/team/processes`, { method: 'GET' });
+        if (!res.ok) return null;
+        const body = (await res.json()) as {
+            processes?: Array<{ agentId: string; pid: number | null; status: string }>;
+        };
+        const map = new Map<string, { status: TeamStatusEntry['status']; pid: number | null }>();
+        for (const proc of body.processes ?? []) {
+            map.set(proc.agentId, { status: mapServerStatus(proc.status), pid: proc.pid ?? null });
+        }
+        return map;
+    } catch {
+        return null;
     }
-    const type = typeof flags.type === 'string' ? flags.type : '';
-    if (type === '') {
+}
+
+/** Map a `SupervisorService` process status onto the `TeamStatusEntry` status union. */
+function mapServerStatus(status: string): TeamStatusEntry['status'] {
+    switch (status) {
+        case 'running':
+            return 'running';
+        case 'errored':
+            return 'errored';
+        case 'stopped':
+        case 'exited':
+            return 'stopped';
+        default:
+            return 'unknown';
+    }
+}
+
+/** Narrow an untrusted server `error` field to a single human line (0699 R1). */
+function errorText(raw: unknown): string | undefined {
+    if (typeof raw === 'string') return raw;
+    if (raw !== null && typeof raw === 'object' && 'message' in raw) {
+        const message = (raw as { message?: unknown }).message;
+        if (typeof message === 'string' && message !== '') return message;
+        if ('code' in raw && typeof (raw as { code?: unknown }).code === 'string') {
+            return (raw as { code: string }).code;
+        }
+    }
+    return raw === undefined ? undefined : JSON.stringify(raw);
+}
+
+/** `spur agent start|stop <spec-id> [--server <url>] [--json]` — POST to the serve supervisor. */
+async function runAgentLifecycle(
+    action: 'start' | 'stop',
+    agentId: string,
+    options: { server: string; json?: boolean; jsonEnvelope?: boolean },
+    context: CliContext,
+): Promise<number> {
+    let res: Response;
+    let body: { ok?: boolean; error?: unknown; pid?: number; status?: string };
+    try {
+        const url = `${options.server}/team/agents/${encodeURIComponent(agentId)}/${action}`;
+        res = await (_testFetch ?? fetch)(url, { method: 'POST' });
+        body = (await res.json()) as typeof body;
+    } catch (err) {
         writeJsonError(
             context.output,
-            jsonFlags(flags),
-            'agent create requires --type <agent-type>',
-            'VALIDATION_FAILED',
+            options,
+            `Cannot reach server at ${options.server} — is spur serve running? (${err instanceof Error ? err.message : String(err)})`,
+            'INTERNAL_ERROR',
         );
-        return 2;
-    }
-    const tags = typeof flags.tags === 'string' ? flags.tags : '';
-    const systemPrompt = typeof flags.systemPrompt === 'string' ? flags.systemPrompt : '';
-    const input: AgentSpecInput = {
-        id,
-        type,
-        ...(typeof flags.name === 'string' ? { name: flags.name } : {}),
-        ...(typeof flags.workspace === 'string' ? { workspace: flags.workspace } : {}),
-        ...(typeof flags.purpose === 'string' ? { purpose: flags.purpose } : {}),
-        ...(tags === '' ? {} : { tags: parseTags(tags) }),
-        ...(flags.autoStart === true ? { autoStart: true } : {}),
-        config: buildAgentConfig(flags, systemPrompt),
-    };
-
-    try {
-        const spec = await new TeamService(context).createAgentSpec(input);
-        if (flags.json === true) {
-            context.output.write(toEnvelopeJson({ ok: true, spec }, { enveloped: flags.jsonEnvelope === true }));
-        } else {
-            context.output.write(`created .spur/agents/${spec.id}.yaml`);
-        }
-        return 0;
-    } catch (error) {
-        writeJsonError(context.output, flags, error instanceof Error ? error.message : String(error));
         return 1;
     }
-}
-
-/** Split a comma-separated `--tags` value into trimmed, non-empty tags. */
-function parseTags(raw: string): string[] {
-    return raw
-        .split(',')
-        .map((tag) => tag.trim())
-        .filter(Boolean);
-}
-
-/** Collect spec-level config from create flags (model, autonomy, system prompt, preamble toggle). */
-function buildAgentConfig(flags: Record<string, string | boolean>, systemPrompt: string): Record<string, unknown> {
-    const config: Record<string, unknown> = {};
-    if (typeof flags.model === 'string') config.model = flags.model;
-    if (typeof flags.autonomy === 'string') config.autonomy = flags.autonomy;
-    if (systemPrompt !== '') config.systemPrompt = systemPrompt;
-    if (flags['no-identity-preamble'] === true) config.identityPreamble = false;
-    return config;
-}
-
-/**
- * Split `$EDITOR` into argv tokens so multi-word values (`code -w`, `vim -f`)
- * spawn correctly. Whitespace-only input yields `[]`.
- */
-export function splitEditorCommand(editor: string): string[] {
-    return editor.trim().split(/\s+/).filter(Boolean);
-}
-
-/** `spur agent edit <id>` — open the spec in $EDITOR or print its path. */
-async function runAgentEdit(id: string | undefined, context: CliContext): Promise<number> {
-    if (id === undefined) {
-        context.output.error('agent edit requires <id>');
-        return 2;
-    }
-    const spec = (await new TeamService(context).listAgentSpecs()).find((entry) => entry.id === id);
-    if (spec === undefined) {
-        context.output.error(`No agent spec found: ${id}`);
+    if (!res.ok) {
+        // The server's JSON `error` is untrusted input (0699 R1): take an envelope's
+        // message rather than serializing it — the server attaches a stack with
+        // absolute paths, which has no business on the CLI's stdout.
+        writeJsonError(
+            context.output,
+            options,
+            errorText(body.error) ?? `${action} failed: ${res.status}`,
+            'INTERNAL_ERROR',
+        );
         return 1;
     }
-    // Use the spec's canonical (already-validated) id to build the path.
-    const path = `${context.cwd}/.spur/agents/${spec.id}.yaml`;
-    const editor = context.env.EDITOR;
-    if (editor === undefined || editor === '') {
-        context.output.write(path);
-        return 0;
+    if (options.json) {
+        context.output.write(toEnvelopeJson(body, { enveloped: options.jsonEnvelope }));
+    } else if (action === 'start') {
+        context.output.write(`started ${agentId} (pid=${body.pid}, status=${body.status ?? '?'})`);
+    } else {
+        context.output.write(`stopped ${agentId}`);
     }
-    const editorArgv = splitEditorCommand(editor);
-    if (editorArgv.length === 0) {
-        context.output.write(path);
-        return 0;
-    }
-    // Interactive $EDITOR via ProcessExecutor (stream/TTY). See no-direct-process-spawn.
-    const [editorCmd, ...editorArgs] = editorArgv;
-    if (editorCmd === undefined) {
-        context.output.write(path);
-        return 0;
-    }
-    const result = await new NodeProcessExecutor({
-        output: { mode: 'stream', isTTY: true },
-    }).run({
-        command: editorCmd,
-        args: [...editorArgs, path],
-        forceBuffered: false,
-        rejectOnError: false,
-    });
-    return result.exitCode ?? 1;
-}
-
-/** `spur agent delete <id> [--force]` */
-async function runAgentDelete(
-    id: string | undefined,
-    context: CliContext,
-    flags: Record<string, string | boolean>,
-): Promise<number> {
-    if (id === undefined) {
-        context.output.error('agent delete requires <id>');
-        return 2;
-    }
-    if (flags.force !== true) {
-        context.output.error(`Refusing to delete ${id} without --force`);
-        return 2;
-    }
-    try {
-        await new TeamService(context).deleteAgentSpec(id);
-        context.output.write(`deleted .spur/agents/${id}.yaml`);
-        return 0;
-    } catch (error) {
-        writeJsonError(context.output, flags, error instanceof Error ? error.message : String(error));
-        return 1;
-    }
+    return 0;
 }
 
 /**
  * The `--json` / `--json-envelope` pair, read out of the kebab-cased flags record the
- * agent verbs pass around (0699 R1). `runAgentRun`/`runAgentCreate` never see the raw
- * commander `options`, so their failure paths need this to reach `writeJsonError`.
+ * agent verbs pass around (0699 R1). `runAgentRun` never sees the raw commander
+ * `options`, so its failure paths need this to reach `writeJsonError`.
  * `jsonEnvelope` stays tri-state: absent defers to `SPUR_JSON_ENVELOPE`.
  */
 function jsonFlags(flags: Record<string, string | boolean>): { json?: boolean; jsonEnvelope?: boolean } {
@@ -985,9 +911,7 @@ async function recordIdleHold(
  * Idle wakes cost no model call and no dispatch (R2). This is the long-lived,
  * attachable process — the member no longer dies after one successful drain.
  * Exits cleanly on abort (SIGINT/SIGTERM); crash-restart is the supervisor's
- * job. Legacy `--agent <id>` addressing still works for the transition — the
- * warn-once deprecation was retired by 0849 once the flag-spec-id scan proved no
- * caller remained.
+ * job.
  */
 export async function runAgentLoop(
     context: CliContext,
@@ -995,12 +919,7 @@ export async function runAgentLoop(
     runtime: AgentLoopRuntime = {},
     deps?: AgentRunDeps,
 ): Promise<number> {
-    const recipient =
-        typeof flags.spec === 'string' && flags.spec !== ''
-            ? flags.spec
-            : typeof flags.agent === 'string'
-              ? flags.agent
-              : '';
+    const recipient = typeof flags.spec === 'string' ? flags.spec : '';
     if (recipient === '' || recipient === 'auto') {
         context.output.error('agent loop requires an explicit --spec <id> matching a team agent spec');
         return 2;

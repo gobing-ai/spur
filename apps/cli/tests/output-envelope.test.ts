@@ -321,13 +321,8 @@ describe('jsonEnvelope registration sweep (0697 AC4)', () => {
     /** Verbs whose action delegates to a helper/service that emits through the seam. */
     const DELEGATED_EMITTERS: Record<string, { helper: string; file: string }> = {
         'agent.ts:run': { helper: 'handleRunOutput', file: 'packages/app/src/services/agent-service.ts' },
-        'agent.ts:create': { helper: 'runAgentCreate', file: 'apps/cli/src/commands/agent.ts' },
         'message.ts:inbox': { helper: 'runMessageInbox', file: 'apps/cli/src/commands/message.ts' },
         'message.ts:reply': { helper: 'runMessageReply', file: 'apps/cli/src/commands/message.ts' },
-        'team.ts:status': { helper: 'runTeamStatus', file: 'apps/cli/src/commands/team.ts' },
-        'team.ts:start': { helper: 'runTeamStart', file: 'apps/cli/src/commands/team.ts' },
-        'team.ts:up': { helper: 'runTeamUp', file: 'apps/cli/src/commands/team.ts' },
-        'team.ts:down': { helper: 'runTeamDown', file: 'apps/cli/src/commands/team.ts' },
     };
 
     const EMITTER_RE = /toEnvelopeJson|toEnvelopeError|writeJsonError/;

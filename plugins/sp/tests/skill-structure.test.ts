@@ -1729,11 +1729,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // 0821 / feature I21: expert-spur binds the spur-* skills and stays a corpus agent. The
         // charter widens (composer + doctor); the boundary does not: no batch driving, recurring
         // loop, or coordination dispatch duty; loops and coordination hand off to sp:super-planner
-        // or a workflow; `spur team` / `spur agent loop` are forbidden surfaces across all three
-        // artifact-composition surfaces, and the team reference carries a retiring banner.
+        // or a workflow; `spur agent loop` is a forbidden surface across all three
+        // artifact-composition surfaces (the `spur team` noun was removed at the G64 cutover).
         const composer = readFileSync(join(SKILLS_DIR, 'spur-composer', 'SKILL.md'), 'utf8');
         const doctor = readFileSync(join(SKILLS_DIR, 'spur-doctor', 'SKILL.md'), 'utf8');
-        const teamRef = readFileSync(join(SKILLS_DIR, 'spur-cli', 'references', 'team.md'), 'utf8');
 
         // The frontmatter binds exactly the three spur-* skills.
         expect(fm(spur)).toContain('skills: [sp:spur-cli, sp:spur-composer, sp:spur-doctor]');
@@ -1755,11 +1754,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             expect(text, `${label} must name sp:super-planner as the loop/coordination owner`).toContain(
                 'sp:super-planner',
             );
-            expect(text, `${label} must forbid \`spur team\``).toContain('`spur team`');
             expect(text, `${label} must forbid \`spur agent loop\``).toContain('`spur agent loop`');
         }
-        // The spur-cli team reference carries the retiring banner.
-        expect(teamRef).toContain('> **Retiring:** `spur team`');
     });
 });
 
@@ -2052,9 +2048,8 @@ describe('task 0820 — spur-composer and spur-doctor skills compose, evaluate a
         // Loops route to super-planner; the forbidden surfaces are named as forbidden; agent
         // specs are reached only through the --specs verbs.
         expect(composer).toContain('sp:super-planner');
-        expect(composer).toContain('`spur team`');
         expect(composer).toContain('`spur agent loop`');
-        expect(composer).toContain('spur agent create|edit|delete|list --specs');
+        expect(composer).toContain('spur agent list --specs');
     });
 
     test('R6 — the composition ladder gates every step on validate + dry-run; shared needs recorded consent', () => {
@@ -2096,7 +2091,6 @@ describe('task 0820 — spur-composer and spur-doctor skills compose, evaluate a
         // Read-only invariant + loop routing + forbidden surfaces.
         expect(doctor).toContain('writes nothing');
         expect(doctor).toContain('sp:super-planner');
-        expect(doctor).toContain('`spur team`');
         expect(doctor).toContain('`spur agent loop`');
     });
 

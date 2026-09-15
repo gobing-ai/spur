@@ -44,9 +44,8 @@ const CRITICAL_TASK_VERBS = ['deps', 'sections', 'run-link'];
 // Hardcoded verb floor for Tier B nouns — verbs asserted regardless of the
 // reference table's content (task 0623 Q&A keeps the vocabulary pinned).
 const TIER_B_VERB_FLOOR: Record<string, string[]> = {
-    agent: ['run', 'loop', 'wait', 'list', 'doctor', 'create', 'edit', 'delete'],
+    agent: ['run', 'loop', 'wait', 'list', 'doctor', 'start', 'stop'],
     message: ['send', 'inbox', 'reply', 'watch'],
-    team: ['assign', 'status', 'up', 'down', 'start', 'stop'],
     self: ['init', 'migrate', 'serve', 'status'],
     history: ['import', 'analyze', 'report', 'daily'],
     projects: ['add', 'remove', 'list', 'start', 'stop'],

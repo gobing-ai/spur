@@ -338,7 +338,7 @@ export function registerInitCommand(program: Command, context: CliContext, optio
             result.created.push(configPath);
 
             // Team-mode agent specs live under .spur/agents/; seed the directory with a
-            // .gitkeep so it is tracked before any `spur agent create` writes a spec.
+            // .gitkeep so it is tracked before fleet materialization writes a spec.
             const agentsDir = join(context.cwd, CLI_CONFIG.configDir, 'agents');
             await context.fs.ensureDir(agentsDir);
             await writeIfNew(context, join(agentsDir, '.gitkeep'), '', force, result);

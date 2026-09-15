@@ -202,7 +202,7 @@ entrypoints compose existing binaries in `package.json`; plugin-only scripts fol
 **Long-tail:** `/sp:dev-*` commands are indexed in `plugins/sp/README.md`.
 
 **Outside spur-cli:** For nouns without a reference file, use only `spur <noun> --help` and
-`docs/04_DESIGN.md`; never guess flags. Agent/message/team/serve/init references live under
+`docs/04_DESIGN.md`; never guess flags. Agent/message/self/projects references live under
 `plugins/sp/skills/spur-cli/references/`.
 
 ---

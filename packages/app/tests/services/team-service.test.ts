@@ -412,28 +412,6 @@ describe('TeamService agent specs', () => {
         }
     });
 
-    test('deleteAgentSpec removes the spec file', async () => {
-        const { svc, cwd, cleanup } = await makeService();
-        try {
-            await svc.createAgentSpec({ id: 'planner', type: 'claude-code' });
-            await svc.deleteAgentSpec('planner');
-            expect(await svc.listAgentSpecs()).toHaveLength(0);
-            const fs = createNodeFileSystem();
-            expect(await fs.exists(join(cwd, '.spur', 'agents', 'planner.yaml'))).toBe(false);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('deleteAgentSpec rejects an unknown id', async () => {
-        const { svc, cleanup } = await makeService();
-        try {
-            await expect(svc.deleteAgentSpec('ghost')).rejects.toThrow(/No agent spec found/);
-        } finally {
-            await cleanup();
-        }
-    });
-
     test('listAgentSpecs returns created specs', async () => {
         const { svc, cleanup } = await makeService();
         try {
