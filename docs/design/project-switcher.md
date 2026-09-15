@@ -187,7 +187,7 @@ body: { "name"?: string, "path"?: string }
 GET /api/project/fleet   (0840)
 → { "path": string|null, "strategy": { "name": "rest"|"gtd", "version": number }|null,
     "orchestrator": { "state": "bound-online"|"bound-offline"|"missing"|"unresolvable", "instanceId"?, "holderId"?, "reason"? },
-    "members": [{ "instanceId", "role"?, "executor", "enabled", "writeCapable", "capabilityState" }],
+    "members": [{ "instanceId", "role"?, "executor", "model"?, "enabled", "writeCapable", "capabilityState" }],
     "capacity": { "total", "enabled", "writeCapable", "missing": string[] } }
 ```
 
@@ -272,7 +272,8 @@ The Agents tab renders the served project's fleet as cards that join two
 independent facts, never collapsed into one indicator:
 
 - DECLARED — the member from `GET /api/project/fleet` (`members`, the 0840
-  wire of FleetService 0835): role, executor, `enabled`, `capabilityState`.
+  wire of FleetService 0835): role, executor, `model` (the resolved executor
+  profile's model, omitted when it declares none), `enabled`, `capabilityState`.
 - OBSERVED — the process from the existing `GET /api/team/processes` read:
   `running` / `exited` / `not-started`, pid, startedAt, exitCode.
 
@@ -297,10 +298,11 @@ Issue labels are frozen and shared with the global input receipts (0844):
   `GET /api/messages/inbox`), activity (`GET /api/events/history`), and the
   lifecycle verbs `/api/team/*` already exposes — start, stop, stdin. Escape
   restores focus to the opener card.
-- Member details reuse the shared `GET /api/team/teams` feed for the selected spec's model and
-  common working directory. A missing model reports `Executor default`; an unresolved member,
-  unavailable feed, or unknown directory reports `Unavailable`. Values are matched by instance id,
-  so selecting another member cannot retain the previous member's details.
+- Member details read the fleet snapshot (`GET /api/project/fleet`, already in board context) for the
+  selected member's `model` and the project's common working directory. A declared member whose
+  resolved executor profile names no model reports `Executor default`; an undeclared live process
+  reports `Unavailable`. Values are matched by instance id, so selecting another member cannot retain
+  the previous member's details.
 - Test attributes: `data-roster-entry`, `data-roster-declared`,
   `data-roster-observed`, `data-roster-issue`, `data-member-detail`,
   `data-g6="open-member"` (the prototype selector, reused by 0845).

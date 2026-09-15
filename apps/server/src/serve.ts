@@ -16,7 +16,6 @@ import {
     JobWorkerService,
     ProjectRegistry,
     resolveAgentRoles,
-    resolveAutostartSet,
     resolveHistoryRefreshTimeoutMs,
     resolveKillGraceMs,
     resolvePlanningFolders,
@@ -629,7 +628,6 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 webDistPath,
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
-                teamAutostart: bootConfig.teamAutostart,
                 bootConfig,
                 ...(spurConfig !== undefined ? { spurConfig } : {}),
             });
@@ -704,26 +702,10 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 }
             }
 
-            // Team process autostart (0195/0207 + 0258 R8): members whose effective
-            // autostart is true across `agent.team.*`, unioned with the SPUR_TEAM_AUTOSTART
-            // env. `resolveAutostartSet` handles both; a load failure degrades to env-only.
-            // The same loaded config threads `agent` into the history-refresh job (J8 R2).
-            const autostartIds = resolveAutostartSet(spurConfig, env.SPUR_TEAM_AUTOSTART);
-            if (autostartIds.length > 0) {
-                try {
-                    const supervisor = ctx.supervisor();
-                    await supervisor.startAutostart(autostartIds);
-                    appRt.logger.info('Autostart agents spawned', { ids: autostartIds });
-                } catch (error) {
-                    appRt.logger.error(
-                        'Autostart failed — server will continue but supervised agents are not running',
-                        {
-                            error: String(error),
-                        },
-                    );
-                    throw error;
-                }
-            }
+            // 0857: the team process-autostart block (the roster's per-member flag and
+            // its env union) is retired with the roster runtime. Autostart returns on the
+            // fleet path (agent.fleet.enabled) in its own task; until then `spur serve`
+            // starts no supervised agents on its own.
 
             // System-event persistence tap (task 0189 wave A / 0198). Best-effort:
             // tap failures are isolated by registerSystemEventTap and never break

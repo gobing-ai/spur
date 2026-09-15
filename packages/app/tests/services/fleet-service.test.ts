@@ -14,7 +14,6 @@ import {
     normalizeProjectPath,
     ProjectRegistry,
     TeamService,
-    type TeamServiceContext,
 } from '../../src/index';
 
 // ---------------------------------------------------------------------------
@@ -271,6 +270,77 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
         }
     });
 
+    // 0857 R5: the resolved model the pane renders. Own fixture (pinned profiles and a
+    // role ladder whose only capable-1 rung is `rollout`) so the shared EXECUTORS_YAML
+    // ladder winners other tests assert are untouched.
+    test('R5: carries the resolved executor profile model, omits it when the profile declares none', async () => {
+        const { project, slug, cleanup } = await makeProject();
+        try {
+            const svc = makeService(
+                parseConfig(`agent:
+  executors:
+    - name: writer
+      agent: claude
+      tier: cheap
+      model: claude-sonnet-4
+      executionCapabilities:
+        version: 1
+        axes:
+          fsWrite:
+            state: available
+            provenance: native-known
+    - name: modelless
+      agent: codex
+      tier: cheap
+      executionCapabilities:
+        version: 1
+        axes:
+          fsWrite:
+            state: available
+            provenance: native-known
+    - name: rollout
+      agent: claude
+      tier: capable-1
+      model: claude-opus-4
+`),
+                project,
+            );
+            await writeFleet(project, {
+                version: 1,
+                members: [
+                    { executor: 'writer' },
+                    { executor: 'modelless' },
+                    { role: 'reviewer' },
+                    { executor: 'writer', enabled: false },
+                ],
+            });
+            const fleet = await svc.resolve(project);
+            // Pinned executor profile's model rides the member.
+            expect(fleet.members[0]).toMatchObject({
+                instanceId: `${slug}-writer`,
+                executor: 'writer',
+                model: 'claude-sonnet-4',
+            });
+            // Omitted, never '' — a profile declaring no model has nothing to render.
+            expect(fleet.members[1]?.executor).toBe('modelless');
+            expect(fleet.members[1]?.model).toBeUndefined();
+            // Role-only members carry the tier-ladder winner's model (`rollout` is the
+            // only profile at or above the reviewer role's capable-1 rung here).
+            expect(fleet.members[2]).toMatchObject({ executor: 'rollout', model: 'claude-opus-4' });
+            // A disabled member is never resolved against executors: no model, and
+            // its declared executor name rides through unresolved.
+            expect(fleet.members[3]?.model).toBeUndefined();
+            expect(fleet.members[3]).toMatchObject({
+                enabled: false,
+                executor: 'writer',
+                writeCapable: false,
+                capabilityState: 'unknown',
+            });
+        } finally {
+            await cleanup();
+        }
+    });
+
     test('R7: a fully disabled roster resolves with missing naming the fix, ids still derived', async () => {
         const { project, slug, cleanup } = await makeProject();
         try {
@@ -469,50 +539,31 @@ describe('FleetService materialize (0835 R2/R3/R6)', () => {
         }
     });
 
-    test('fleet and team materialization are namespace-disjoint when a registry name equals a config team id (review P2)', async () => {
+    test('0857: re-materializing the same fleet is idempotent and never orphans its own specs', async () => {
         const { project, cleanup } = await makeProject();
         const prevCwd = process.cwd();
-        let db: DbAdapter | undefined;
         try {
-            // Registry display name == a config team id: the collision case.
+            // Registry display name == the fleet slug: the derived instance id is what
+            // must stay stable across passes, never a second group's namespace.
             const slug = 'shared';
             await new ProjectRegistry(join(project, '.spur', 'registry.json')).upsert({
                 name: slug,
                 path: project,
             });
             await writeFleet(project, { version: 1, members: [{ id: 'lead', executor: 'writer' }] });
-
-            const teamYaml = `${EXECUTORS_YAML}  team:\n    shared:\n      name: shared\n      work_dir: ${project}\n      members:\n        - id: dev\n          executor: writer\n`;
-            const spurConfig = parseConfig(teamYaml);
-            db = await createMigratedDb({ url: ':memory:' });
-            const teamCtx: TeamServiceContext = {
-                cwd: project,
-                env: {},
-                getDb: async () => db as DbAdapter,
-                fs: createNodeFileSystem(project),
-                roles: ROLES,
-                spurConfig,
-            };
-            const teamSvc = new TeamService(teamCtx);
             process.chdir(project);
-            const fleetSvc = makeService(spurConfig, project);
+            const fleetSvc = makeService(parseConfig(EXECUTORS_YAML), project);
 
-            // Both materializations run over the SAME spec dir.
-            const team1 = await teamSvc.materializeTeam(slug);
-            expect(team1.upserted).toEqual([`${slug}-dev`]);
             const fleet1 = await fleetSvc.materialize(project);
             expect(fleet1.upserted).toEqual([`${slug}-lead`]);
 
-            // Re-running either side must not delete the other's specs.
-            const team2 = await teamSvc.materializeTeam(slug);
-            expect(team2.orphaned).toEqual([]);
+            // A second pass over the same declaration must not retire what it wrote.
             const fleet2 = await fleetSvc.materialize(project);
             expect(fleet2.orphaned).toEqual([]);
             const specs = await loadAgentSpecs(join(project, '.spur', 'agents'));
-            expect(specs.map((s) => s.id).sort()).toEqual([`${slug}-dev`, `${slug}-lead`].sort());
+            expect(specs.map((s) => s.id).sort()).toEqual([`${slug}-lead`]);
         } finally {
             process.chdir(prevCwd);
-            db?.close();
             await cleanup();
         }
     });

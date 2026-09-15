@@ -1,33 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import type { MaterializeResult, ProcessEntry, ProcessFrame, TeamListing, TeardownResult } from '@gobing-ai/spur-app';
-import type { AgentSpec } from '@gobing-ai/ts-ai-runner';
+import type { ProcessEntry, ProcessFrame } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { enqueueFrame, sendHeartbeat, teamModule } from '../../../src/modules/team';
-
-/** Minimal TeamService stub surface — the module only calls these methods. */
-interface TeamServiceStub {
-    listTeams(): Promise<TeamListing[]>;
-    materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult>;
-    teardownTeam(teamId: string, opts?: { purge?: boolean }): Promise<TeardownResult>;
-    listAgentSpecs(): Promise<AgentSpec[]>;
-}
-
-/** Build a complete TeamServiceStub from a partial — defaults are type-correct no-ops. */
-function teamServiceStub(overrides: Partial<TeamServiceStub>): TeamServiceStub {
-    return {
-        listTeams: async () => [],
-        materializeTeam: async () => ({ teamId: '', upserted: [], orphaned: [], written: false }),
-        teardownTeam: async () => ({ teamId: '', purged: [], stopped: [] }),
-        listAgentSpecs: async () => [],
-        ...overrides,
-    };
-}
-
-/** A minimal AgentSpec for the up-route autostart filter (0256 R3/R5). */
-function autostartSpec(id: string, autoStart = true): AgentSpec {
-    return { id, name: id, type: 'claude', workspace: '/w', purpose: 'member', tags: [], config: {}, autoStart };
-}
 
 /**
  * Build a stub ServerContext whose supervisor returns canned process data and
@@ -43,7 +18,6 @@ function ctxWithStubs(opts: {
     writeStdinThrows?: Error;
     start?: (id: string) => Promise<ProcessEntry>;
     stop?: (id: string) => Promise<void>;
-    teamService?: TeamServiceStub;
 }): {
     ctx: ServerContext;
     stdinCalls: Array<{ agentId: string; line: string }>;
@@ -95,7 +69,6 @@ function ctxWithStubs(opts: {
             complete: () => {},
             clear: () => {},
         }),
-        ...(opts.teamService ? { teamService: () => opts.teamService } : {}),
     } as unknown as ServerContext;
     return { ctx, stdinCalls, startCalls, stopCalls };
 }
@@ -641,161 +614,6 @@ describe('team module', () => {
             expect(res.status).toBe(400);
             const body = (await res.json()) as { error: string };
             expect(body.error).toContain('not running');
-        });
-    });
-
-    // ── 0256 routes: teams / up / down / health ──
-
-    /** Minimal team-member spec factory (typed via TeamListing's specs element). */
-    function spec(id: string, type = 'claude'): TeamListing['specs'][number] {
-        return {
-            id,
-            name: id,
-            type,
-            workspace: '/tmp',
-            purpose: 'test',
-            tags: ['team:devops', 'spur:generated'],
-            config: {},
-        };
-    }
-
-    describe('GET /api/team/teams', () => {
-        test('returns 503 when teamService is unavailable (Cloudflare Workers gate)', async () => {
-            // No teamService on the ctx → the Bun-only gate fires.
-            const { ctx } = ctxWithStubs({});
-            const app = new Hono();
-            teamModule.mount(app, ctx);
-
-            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
-            expect(res.status).toBe(503);
-            const body = (await res.json()) as { error: string };
-            expect(body.error).toContain('Bun server context');
-        });
-
-        test('enriches members with running status and pid from the supervisor', async () => {
-            const team: TeamListing = {
-                teamId: 'devops',
-                name: 'DevOps',
-                members: [],
-                specs: [spec('planner'), spec('reviewer')],
-                workDir: '/tmp',
-                isCurrentProject: false,
-            };
-            const teamService = teamServiceStub({ listTeams: async () => [team] });
-            const list: ProcessEntry[] = [
-                {
-                    agentId: 'planner',
-                    pid: 4242,
-                    status: 'running',
-                    startedAt: '2026-07-05T00:00:00.000Z',
-                    exitCode: null,
-                    ringBuffer: [],
-                },
-            ];
-            const { ctx } = ctxWithStubs({ list, teamService });
-            const app = new Hono();
-            teamModule.mount(app, ctx);
-
-            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
-            expect(res.status).toBe(200);
-            const body = (await res.json()) as {
-                teams: Array<{
-                    teamId: string;
-                    workDir: string | null;
-                    isCurrentProject: boolean;
-                    members: Array<{ id: string; type: string; status: string; pid?: number; autoStart: boolean }>;
-                }>;
-                count: number;
-            };
-            expect(body.count).toBe(1);
-            // R4: work_dir + current-project facts are surfaced on the response.
-            expect(body.teams[0]?.workDir).toBe('/tmp');
-            expect(body.teams[0]?.isCurrentProject).toBe(false);
-            const members = body.teams[0]?.members ?? [];
-            // Running member carries pid + status; the un-supervised one falls back to 'unknown'.
-            const planner = members.find((m) => m.id === 'planner');
-            expect(planner?.status).toBe('running');
-            expect(planner?.pid).toBe(4242);
-            const reviewer = members.find((m) => m.id === 'reviewer');
-            expect(reviewer?.status).toBe('unknown');
-            expect(reviewer?.pid).toBeUndefined();
-            // autoStart is surfaced (defaults to false when the spec has none) so the
-            // Roster can hint when no member is autostart.
-            expect(planner?.autoStart).toBe(false);
-            expect(reviewer?.autoStart).toBe(false);
-        });
-
-        test('surfaces autoStart=true for autostart members', async () => {
-            const team: TeamListing = {
-                teamId: 'devops',
-                name: 'DevOps',
-                members: [],
-                specs: [autostartSpec('runner', true), autostartSpec('idle', false)],
-                workDir: '/tmp',
-                isCurrentProject: false,
-            };
-            const teamService = teamServiceStub({ listTeams: async () => [team] });
-            const { ctx } = ctxWithStubs({ teamService });
-            const app = new Hono();
-            teamModule.mount(app, ctx);
-
-            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
-            expect(res.status).toBe(200);
-            const body = (await res.json()) as { teams: Array<{ members: Array<{ id: string; autoStart: boolean }> }> };
-            const members = body.teams[0]?.members ?? [];
-            expect(members.find((m) => m.id === 'runner')?.autoStart).toBe(true);
-            expect(members.find((m) => m.id === 'idle')?.autoStart).toBe(false);
-        });
-
-        test('0544 R3: member payload carries the declared role and resolved executor (omitted when unset)', async () => {
-            const roleSpec: TeamListing['specs'][number] = {
-                id: 'devops-reviewer-1',
-                name: 'reviewer',
-                type: 'claude',
-                executor: 'capable-exec',
-                workspace: '/tmp',
-                purpose: 'review pass',
-                tags: ['team:devops', 'spur:generated'],
-                config: { role: 'reviewer' },
-            };
-            const plainSpec: TeamListing['specs'][number] = {
-                id: 'devops-claude',
-                name: 'claude',
-                type: 'claude',
-                executor: 'cheap-exec',
-                workspace: '/tmp',
-                purpose: 'plain',
-                tags: ['team:devops', 'spur:generated'],
-                config: {},
-            };
-            const team: TeamListing = {
-                teamId: 'devops',
-                name: 'DevOps',
-                members: [],
-                specs: [roleSpec, plainSpec],
-                workDir: '/tmp',
-                isCurrentProject: false,
-            };
-            const teamService = teamServiceStub({ listTeams: async () => [team] });
-            const { ctx } = ctxWithStubs({ teamService });
-            const app = new Hono();
-            teamModule.mount(app, ctx);
-
-            const res = await app.fetch(new Request('http://localhost/api/team/teams'));
-            expect(res.status).toBe(200);
-            const body = (await res.json()) as {
-                teams: Array<{
-                    members: Array<{ id: string; role?: string; executor?: string }>;
-                }>;
-            };
-            const members = body.teams[0]?.members ?? [];
-            const reviewer = members.find((m) => m.id === 'devops-reviewer-1');
-            expect(reviewer?.role).toBe('reviewer');
-            expect(reviewer?.executor).toBe('capable-exec');
-            // Undeclared role is omitted (undefined in JSON) — never blank, never inferred.
-            const plain = members.find((m) => m.id === 'devops-claude');
-            expect(plain?.role).toBeUndefined();
-            expect(plain?.executor).toBe('cheap-exec');
         });
     });
 

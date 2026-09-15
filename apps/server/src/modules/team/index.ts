@@ -209,43 +209,6 @@ export const teamModule: ServerModule = {
             });
         });
 
-        // ── GET /api/team/teams — teams grouped with member status (0256 R2) ──
-        app.get('/api/team/teams', async (c) => {
-            if (!ctx.teamService) return c.json({ error: 'team API requires Bun server context' }, 503);
-            const svc = ctx.teamService();
-            const supervisor = ctx.supervisor();
-            const teams = await svc.listTeams();
-            const processes = supervisor.list();
-            const enriched = teams.map((team) => ({
-                teamId: team.teamId,
-                name: team.name,
-                workDir: team.workDir,
-                isCurrentProject: team.isCurrentProject,
-                members: team.specs.map((spec) => {
-                    const proc = processes.find((p) => p.agentId === spec.id);
-                    // R11: surface optional `model` from the resolved spec config (omit when unset).
-                    const configModel = spec.config?.model;
-                    return {
-                        id: spec.id,
-                        type: spec.type,
-                        status: proc?.status ?? 'unknown',
-                        // Surfaced so the Roster can show a hint when no member is
-                        // autostart (the Up button starts only autostart members).
-                        autoStart: spec.autoStart === true,
-                        // 0544 R3: declared role + resolved executor ride the member
-                        // payload (omitted when unset — the Board renders `unset`).
-                        ...(typeof spec.config?.role === 'string' && spec.config.role.length > 0
-                            ? { role: spec.config.role }
-                            : {}),
-                        ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
-                        ...(typeof configModel === 'string' && configModel.length > 0 ? { model: configModel } : {}),
-                        ...(proc?.pid !== undefined ? { pid: proc.pid } : {}),
-                    };
-                }),
-            }));
-            return c.json({ teams: enriched, count: enriched.length });
-        });
-
         // ── GET /api/team/health — liveness probe (0256 R4) ──
         app.get('/api/team/health', (c) => {
             return c.json({ ok: true });

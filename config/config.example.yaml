@@ -194,9 +194,10 @@ agent:
   #     "orchestrator": "planner-1"
   #   }
   # `enabled: false` keeps the member's derived `<role>-<n>` id index, so later
-  # members never silently reallocate ids. The legacy `agent.team.<teamId>`
-  # config key still parses, but the roster is keyed on the worktree path now, not on a config-global
-  # team name.
+  # members never silently reallocate ids. The retired per-team config key is no
+  # longer read — a leftover block fails the load and names `agent.fleet` as the
+  # replacement — and the roster is keyed on the worktree path now, not on a
+  # config-global team name.
 
 rules:
   paths:

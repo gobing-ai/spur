@@ -347,7 +347,7 @@ export const AgentRoleConfigSchema = z.object({
 /** Inferred type for one role override — mirrors {@link AgentRoleOverride}. */
 export type AgentRoleConfig = z.infer<typeof AgentRoleConfigSchema>;
 
-// ---- Team config (feature M) ----
+// ---- Member identity (the project fleet's member fields) ----
 
 /**
  * Agent-id format mirrored from `@gobing-ai/ts-ai-runner` `validateAgentId`
@@ -356,91 +356,24 @@ export type AgentRoleConfig = z.infer<typeof AgentRoleConfigSchema>;
  * runner's id format ever changes.
  */
 // 0848: exported for the `spur task update --assignee` boundary — the same format
-// check the team roster applies, now that assignment lives under `spur task`.
+// check the retired team roster applied, now that assignment lives under `spur task`.
 export const AGENT_ID_REGEX = /^[a-z][a-z0-9_-]{1,63}$/;
 
 /**
- * Schema for a single team member reference under `agent.team.<id>.members`.
- *
- * A bare string (`- claude`) is shorthand for `{ executor: "claude" }`, normalized by
- * {@link normalizeMember}. The object form carries per-member overrides.
+ * The member fields identity derives from — the shape `memberLocalId` consumes and
+ * the project fleet declaration carries (0857: the retired team roster and its
+ * normalizing union are gone; `FleetMember` is the only member source).
  */
-export const TeamMemberConfigSchema = z.union([
-    z.string().min(1),
-    z.object({
-        // 0543 R4: executor is optional — at least one of role/executor is
-        // required (superRefine on AgentConfigSchema names team id + position).
-        executor: z.string().min(1).optional(),
-        id: z.string().min(1).optional(),
-        // Layer-1 role id (0538 R3): typed routing field; `purpose` stays prose.
-        // The role is the primary axis (0543): a role-only member resolves an
-        // executor through the tier ladder at materialization.
-        // R5 (0543): the error names the offending value AND the accepted set —
-        // zod's default enum error ("Invalid option: expected one of …") omits
-        // the value, which the requirement explicitly demands.
-        role: z
-            .enum(AGENT_ROLE_NAMES, {
-                error: (issue) =>
-                    new Error(`Unknown role "${issue.input}" — expected one of: ${AGENT_ROLE_NAMES.join(', ')}`),
-            })
-            .optional(),
-        purpose: z.string().optional(),
-        workspace: z.string().min(1).optional(),
-        model: z.string().min(1).optional(),
-        autonomy: z.string().optional(),
-        systemPrompt: z.string().optional(),
-        command: z.array(z.string().min(1)).optional(),
-        autostart: z.boolean().optional(),
-    }),
-]);
-
-/** Inferred type for {@link TeamMemberConfigSchema}. */
-export type TeamMemberConfig = z.infer<typeof TeamMemberConfigSchema>;
-
-/**
- * Schema for one team under `agent.team.<teamId>`.
- *
- * `name` is the human label; `work_dir` is the default member workspace (tilde-expanded
- * at load); `members` is the roster (≥ 1). Member-id uniqueness and the composed-id
- * `<teamId>-<localId>` charset/length are validated in {@link AgentConfigSchema}'s
- * `superRefine` — the composed id needs the `teamId` map key (finalized by 0251).
- */
-export const TeamConfigSchema = z.object({
-    name: z.string().min(1),
-    work_dir: z.string().min(1),
-    autostart: z.boolean().optional(),
-    members: z.array(TeamMemberConfigSchema).min(1),
-});
-
-/** Inferred type for {@link TeamConfigSchema}. */
-export type TeamConfig = z.infer<typeof TeamConfigSchema>;
-
-/** A team member in its normalized object form (shorthand string expanded). */
-export interface NormalizedTeamMember {
+export interface MemberIdentity {
+    /** Explicit stable id — wins outright in {@link memberLocalId} (0835 R3). */
+    id?: string;
     /**
      * Executor name — optional since 0543: a role-only member (no executor)
      * resolves one through the tier ladder at materialization (R1).
      */
     executor?: string;
-    id?: string;
     /** Layer-1 role id (scribe | coder | reviewer | planner); typed routing field (0538 R3). */
     role?: AgentRoleName;
-    purpose?: string;
-    workspace?: string;
-    model?: string;
-    autonomy?: string;
-    systemPrompt?: string;
-    command?: string[];
-    autostart?: boolean;
-}
-
-/**
- * Normalize a team member reference to its object form. A bare string `"claude"`
- * becomes `{ executor: "claude" }`; an object is returned as a shallow copy. The
- * local id is `member.id ?? executor` (0251).
- */
-export function normalizeMember(member: TeamMemberConfig): NormalizedTeamMember {
-    return typeof member === 'string' ? { executor: member } : { ...member };
 }
 
 /**
@@ -451,11 +384,7 @@ export function normalizeMember(member: TeamMemberConfig): NormalizedTeamMember 
  * The neither-role-nor-executor case yields `''` — R4 validation rejects that
  * member before it reaches materialization; callers treat `''` as invalid.
  */
-export function memberLocalId(
-    member: NormalizedTeamMember,
-    roster: readonly NormalizedTeamMember[],
-    index: number,
-): string {
+export function memberLocalId(member: MemberIdentity, roster: readonly MemberIdentity[], index: number): string {
     if (member.id !== undefined) return member.id;
     // 0685 R4: one allocator covers every shape. Duplicate-executor members
     // disambiguate deterministically — first occurrence keeps the bare executor
@@ -630,7 +559,7 @@ export const AgentOutputConfigSchema = z.object({
  * each executor naming the canonical coding-agent tool — omp, claude, codex);
  * the domain surface says **executor** (the named profile that fills a stage
  * role at a capability tier — `AgentExecutorConfig`, `resolveExecutor`,
- * `getExecutorTier`, `NormalizedTeamMember.executor`). This split is
+ * `getExecutorTier`, `FleetMember.executor`). This split is
  * deliberate layering, not drift: the operator picks *an agent* (a concrete
  * tool); the registry reasons about *an executor* (a role filled by whichever
  * agent meets the tier). The two vocabularies meet here — an `agent:`
@@ -643,8 +572,10 @@ export const AgentOutputConfigSchema = z.object({
  * - `executors` — named `{ name, agent, model? }` profiles; names must be unique.
  * - `roles` — optional per-role tier/stage values (0647/ADR-078); keys are the
  *   closed role vocabulary, values merge per-field over the fallback.
- * - `team` — a `Record<teamId, TeamConfig>` map of declarative agent teams (feature M).
  * - `output` — per-run output-capture bounds for pipeline agent runs (task 0414).
+ *
+ * The retired team roster key is gone (0857): a leftover block fails the load in
+ * `loader.ts` rather than being silently stripped by this schema.
  */
 export const AgentConfigSchema = z
     .object({
@@ -655,7 +586,6 @@ export const AgentConfigSchema = z
         // below (naming the offending value + accepted four — the record schema
         // itself only shapes values, so the key diagnostic stays actionable).
         roles: z.record(z.string(), AgentRoleConfigSchema).optional(),
-        team: z.record(z.string(), TeamConfigSchema).optional(),
         output: AgentOutputConfigSchema.optional(),
         sessionAffinity: z.boolean().optional(),
     })
@@ -712,100 +642,6 @@ export const AgentConfigSchema = z
                 seen.add(executor.name);
                 executorNames.add(executor.name);
             }
-        }
-
-        // Team validation (feature M). The composed agent id `<teamId>-<localId>`
-        // (finalized by 0251 — always prefixed) needs the `teamId` map key, so the
-        // dup-localId + composed-id charset/length checks live here on the agent
-        // schema rather than on TeamConfigSchema (which has no access to the key).
-        const team = value.team;
-        if (team === undefined) return;
-        // Composed ids must be globally unique. The `<teamId>-<localId>` join uses `-`,
-        // which BOTH parts may contain, so it is not injective: team `web-01` member
-        // `claude` and team `web` member `01-claude` both yield `web-01-claude`. 0251
-        // assumed cross-team uniqueness "by construction"; enforce it here so a collision
-        // fails at config-load with a clear message, not later at materialization (where
-        // loadAgentSpecs throws a duplicate-id error far from the config).
-        const seenComposed = new Set<string>();
-        for (const [teamId, teamConfig] of Object.entries(team)) {
-            const seenLocal = new Set<string>();
-            const members = teamConfig.members.map(normalizeMember);
-            members.forEach((ref, index) => {
-                // R4 (0543): a member must declare at least one of role or
-                // executor — the message names the team id and the member
-                // position, and states the at-least-one rule. The bare-string
-                // shorthand always carries `executor` (normalizeMember), so
-                // this only fires on the object arm.
-                if (ref.executor === undefined && ref.role === undefined) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Team member at index ${index} in team "${teamId}" declares neither role nor executor — at least one of role or executor is required.`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                    return;
-                }
-                const localId = memberLocalId(ref, members, index);
-                if (seenLocal.has(localId)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Duplicate team member id: ${localId} in team "${teamId}"`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                }
-                seenLocal.add(localId);
-                const composedId = `${teamId}-${localId}`;
-                if (!AGENT_ID_REGEX.test(composedId)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Invalid composed agent id "${composedId}": team key "${teamId}" + member "${localId}" must match ^[a-z][a-z0-9_-]{1,63}$ (2-64 chars, lowercase).`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                }
-                if (seenComposed.has(composedId)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Composed agent id "${composedId}" collides across teams — every <teamId>-<localId> must be globally unique (a hyphenated team key can overlap another team's member id).`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                }
-                seenComposed.add(composedId);
-
-                // Selector namespace disjointness (0537 R4), continued: spec ids
-                // must be disjoint from role names and executor names so one
-                // `--agent` value cannot mean two things. The composed id is what
-                // drain/occupant addressing matches; an explicit member id is
-                // checked too so an operator cannot shadow a role or an executor
-                // with a member name (the AC scenario "member id equal to a name
-                // in agent.executors").
-                if (ref.id !== undefined && (AGENT_ROLE_NAMES as readonly string[]).includes(ref.id)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Team member id "${ref.id}" collides with the role selector namespace ("${ref.id}") in team "${teamId}"; rename the member id.`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                }
-                if (ref.id !== undefined && executorNames.has(ref.id)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Team member id "${ref.id}" collides with executor name "${ref.id}" in team "${teamId}"; the --agent selector namespace must be pairwise disjoint.`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                }
-                if (executorNames.has(composedId)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Composed agent id "${composedId}" collides with executor name "${composedId}"; the --agent selector namespace must be pairwise disjoint.`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                }
-                if ((AGENT_ROLE_NAMES as readonly string[]).includes(composedId)) {
-                    ctx.addIssue({
-                        code: z.ZodIssueCode.custom,
-                        message: `Composed agent id "${composedId}" collides with the role selector namespace ("${composedId}"); the --agent selector namespace must be pairwise disjoint.`,
-                        path: ['team', teamId, 'members', index],
-                    });
-                }
-            });
         }
     });
 
@@ -975,17 +811,14 @@ const PROJECT_SHAPED_GLOBAL_KEYS = ['name', 'bootstrap', 'rules', 'redaction', '
  * without the operator's opt-in.
  *
  * Global-shaped keys are `agent.default`, `agent.executors`, `agent.roles` and
- * `workflows`. `agent` itself is global-shaped unless it carries the project-shaped
- * `agent.team` sub-key, which is reported as `agent.team`.
+ * `workflows`; `agent` itself is global-shaped. (0857 retired the project-shaped
+ * team sub-key branch along with the roster runtime, so a leftover block is now
+ * rejected at load by the loader guard rather than classified here.)
  */
 export function misplacedGlobalKeys(parsed: Record<string, unknown>): string[] {
     const misplaced: string[] = [];
     for (const key of PROJECT_SHAPED_GLOBAL_KEYS) {
         if (key in parsed) misplaced.push(key);
-    }
-    const agent = parsed.agent;
-    if (typeof agent === 'object' && agent !== null && 'team' in agent) {
-        misplaced.push('agent.team');
     }
     return misplaced;
 }

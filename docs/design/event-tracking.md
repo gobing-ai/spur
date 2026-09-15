@@ -70,8 +70,6 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 26 | `agent.started` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
 | 27 | `agent.stopped` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
 | 28 | `agent.message.sent` | `context.ts:460` → ts-ai-runner | ~ | ~ | P | ~ | – | ~ |
-| 29 | `team.up` | `team-service.ts:801` | ~ | ~ | P | ~ | – | ~ |
-| 30 | `team.down` | `team-service.ts:831` | ~ | ~ | P | ~ | – | ~ |
 | 31 | `team.member.assigned` | `team-service.ts:521` | ~ | ~ | P | ~ | – | ~ |
 | 32 | `team.member.started` | `team-service.ts:959` / `supervisor-service.ts:253` | ~ | ~ | P | ~ | – | ~ |
 | 33 | `team.member.stopped` | `team-service.ts:969` / `supervisor-service.ts:273` | ~ | ~ | P | ~ | – | ~ |
@@ -293,8 +291,6 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `agent.message.sent` | `agentId`, `ok` | `[agent] message -> {agentId}` | `ok` |
 | `strategy.changed` | `projectPath`, `strategy`, `version` | `[strategy] {strategy} (v{version})` | — |
 | `fleet.capacity.changed` | `projectPath`, `change`, `holderId` | `[fleet] write slot {change} — {holderId}` | — |
-| `team.up` | `teamId`, `memberCount`, `outcome` | `[team] {teamId} up` | `outcome` |
-| `team.down` | `teamId`, `memberCount`, `outcome` | `[team] {teamId} down` | `outcome` |
 | `team.member.assigned` | team/member/type/task, `outcome` | `[team] {teamId} · {memberId} assigned` | `outcome` |
 | `team.member.started` | team/member/type, `outcome` | `[team] {teamId} · {memberId} started` | `outcome` |
 | `team.member.stopped` | team/member/type, `outcome` | `[team] {teamId} · {memberId} stopped` | `outcome` |

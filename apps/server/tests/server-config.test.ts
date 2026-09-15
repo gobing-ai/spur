@@ -12,14 +12,10 @@ describe('serverBootstrapConfig', () => {
         expect(config.scheduler.enabled).toBe(false);
     });
 
-    test('resolves logging and team autostart settings', () => {
-        const config = serverBootstrapConfig({
-            SPUR_LOG_LEVEL: 'debug',
-            SPUR_TEAM_AUTOSTART: 'alpha, beta, ,gamma',
-        });
+    test('resolves the logging settings', () => {
+        const config = serverBootstrapConfig({ SPUR_LOG_LEVEL: 'debug' });
 
         expect(config.logging).toEqual({ enabled: true, level: 'debug', console: false });
-        expect(config.teamAutostart).toEqual(['alpha', 'beta', 'gamma']);
     });
 
     test('uses production defaults when optional settings are absent', () => {
@@ -28,6 +24,5 @@ describe('serverBootstrapConfig', () => {
         expect(config.logging).toEqual({ enabled: true, level: 'info', console: false });
         expect(config.jobqueue.enabled).toBe(true);
         expect(config.scheduler.enabled).toBe(true);
-        expect(config.teamAutostart).toEqual([]);
     });
 });

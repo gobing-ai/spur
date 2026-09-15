@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
-import { homedir, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
@@ -738,35 +738,85 @@ describe('spurConfigCache invalidation', () => {
     });
 });
 
-// ---- agent.team tilde expansion (R5 / AC4) ----
+// ---- retired agent.team guard (0857 R2) ----
 
-describe('agent.team tilde expansion', () => {
-    test('AC4: work_dir "~/x" resolves to an absolute path under home', async () => {
+describe('retired agent.team guard', () => {
+    test('R2: a project config carrying agent.team fails the load, naming the file and the replacement', async () => {
         await writeConfig(
             tmpCwd,
-            'version: "1"\nname: t\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - claude\n        - executor: omp-zai\n          workspace: "~/y"\n          purpose: reviewer\n',
+            'version: "1"\nname: t\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - claude\n',
         );
-        const config = await loadSpurConfig(tmpCwd);
-        const team = config.agent?.team?.['devops-01'];
-        expect(team?.work_dir).toBe(join(homedir(), 'x'));
-        // bare-string member is untouched (no workspace to expand)
-        expect(team?.members[0]).toBe('claude');
-        // object member's workspace is expanded
-        const member1 = team?.members[1];
-        expect(typeof member1).toBe('object');
-        if (typeof member1 === 'object') {
-            expect(member1.workspace).toBe(join(homedir(), 'y'));
-            expect(member1.purpose).toBe('reviewer');
-        }
+        const failure = loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+        await expect(failure).rejects.toThrow(/agent\.team is no longer supported/);
+        await expect(failure).rejects.toThrow(/agent\.fleet/);
+        // The offending layer is named, so the operator knows which file to edit.
+        await expect(failure).rejects.toThrow(/config\.yaml/);
     });
 
-    test('a non-tilde work_dir is left unchanged', async () => {
+    test('R2: the guard runs before JSON Schema validation, so the message stays actionable', async () => {
+        const schemaPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'schemas', 'spur-config.schema.json');
         await writeConfig(
             tmpCwd,
-            'version: "1"\nname: t\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "/abs/path"\n      members:\n        - claude\n',
+            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - claude\n`,
         );
-        const config = await loadSpurConfig(tmpCwd);
-        expect(config.agent?.team?.['devops-01']?.work_dir).toBe('/abs/path');
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow(
+            /agent\.team is no longer supported/,
+        );
+    });
+
+    test('R2: a global-layer agent.team fails naming the global file', async () => {
+        // GLOBAL_CONFIG_FILE binds homedir() at module load, so the hermetic path is a
+        // subprocess with HOME pointed at a temp dir (same pattern as the global-fallback
+        // suite below).
+        const fakeHome = await mkdtemp(join(tmpdir(), 'spur-home-'));
+        const globalDir = join(fakeHome, '.config', 'spur');
+        await mkdir(globalDir, { recursive: true });
+        const globalPath = join(globalDir, 'config.yaml');
+        await writeFile(
+            globalPath,
+            'agent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      members:\n        - claude\n',
+        );
+
+        const projectDir = await mkdtemp(join(tmpdir(), 'spur-proj-'));
+        await mkdir(join(projectDir, '.spur'), { recursive: true });
+        await writeFile(join(projectDir, '.spur', 'config.yaml'), 'version: "1"\nname: t\n');
+
+        const loaderPath = join(import.meta.dir, '..', 'src', 'loader.ts');
+        const script = `
+            import { loadSpurConfig } from '${loaderPath}';
+            try {
+                await loadSpurConfig('${projectDir}', { validateJsonSchema: false });
+                process.stdout.write('LOADED');
+            } catch (error) {
+                process.stdout.write(String(error.message));
+            }
+        `;
+        const proc = Bun.spawn(['bun', '-e', script], {
+            env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        const out = await new Response(proc.stdout).text();
+        const code = await proc.exited;
+        await rm(fakeHome, { recursive: true, force: true });
+        await rm(projectDir, { recursive: true, force: true });
+        expect(code).toBe(0);
+        expect(out).not.toBe('LOADED');
+        expect(out).toContain('agent.team is no longer supported');
+        expect(out).toContain(globalPath);
+        expect(out).toContain('agent.fleet');
+    });
+
+    test('R2: nothing is read from the retired key — the load fails instead of stripping it', async () => {
+        await writeConfig(
+            tmpCwd,
+            'version: "1"\nname: kept\nagent:\n  team:\n    devops-01:\n      name: x\n      members:\n        - claude\n',
+        );
+        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
+        // A stripped key would have loaded `name: kept`; the guard must not.
+        await writeConfig(tmpCwd, CONFIG_YAML);
+        const config = await loadSpurConfig(tmpCwd, { validateJsonSchema: false });
+        expect(config.name).toBe('test-project');
     });
 });
 
@@ -776,46 +826,9 @@ describe('agent.team backward-compat', () => {
     test('AC6: a config with no agent.team block loads exactly as today', async () => {
         await writeConfig(tmpCwd, CONFIG_YAML);
         const config = await loadSpurConfig(tmpCwd);
-        expect(config.agent?.team).toBeUndefined();
         expect(config.agent?.default).toBe('codex');
         expect(config.agent?.executors?.[0]?.model).toBe('gpt-5');
         expect(config.tasks?.active).toBe('docs/tasks2');
-    });
-});
-
-// ---- agent.team JSON schema round-trip (R6 / AC7) ----
-
-describe('agent.team JSON schema round-trip', () => {
-    // The runtime SSOT is the zod; this is the editor/CI aid that must stay in sync.
-    const schemaPath = join(import.meta.dir, '..', '..', '..', 'apps', 'cli', 'schemas', 'spur-config.schema.json');
-
-    test('AC7: a valid team config is accepted by both zod and the JSON schema', async () => {
-        await writeConfig(
-            tmpCwd,
-            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - claude\n        - executor: omp-zai\n          purpose: reviewer\n`,
-        );
-        const viaJsonSchema = await loadSpurConfig(tmpCwd, { validateJsonSchema: true });
-        expect(viaJsonSchema.agent?.team?.['devops-01']?.members?.length).toBe(2);
-        const viaZod = await loadSpurConfig(tmpCwd, { validateJsonSchema: false });
-        expect(viaZod.agent?.team?.['devops-01']?.members?.length).toBe(2);
-    });
-
-    test('AC7: an empty members roster is rejected by both', async () => {
-        await writeConfig(
-            tmpCwd,
-            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members: []\n`,
-        );
-        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
-        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
-    });
-
-    test('AC7: a member object missing executor is rejected by both', async () => {
-        await writeConfig(
-            tmpCwd,
-            `version: "1"\nname: t\n$schema: "${schemaPath}"\nagent:\n  team:\n    devops-01:\n      name: "Dev Ops 01"\n      work_dir: "~/x"\n      members:\n        - purpose: reviewer\n`,
-        );
-        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: true })).rejects.toThrow();
-        await expect(loadSpurConfig(tmpCwd, { validateJsonSchema: false })).rejects.toThrow();
     });
 });
 

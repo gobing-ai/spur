@@ -349,7 +349,6 @@ can't express). Web consumes via `fetchWithTimeout` + `resolveApiUrl` and native
 | POST   | `/api/team/agents/:id/stop`      | —                       | `{ ok }` or `{ error }` (400)                                                | Stop a supervised agent.                                      |
 | POST   | `/api/team/processes/:id/stdin`  | `{ line: string }`      | `{ ok }` or `{ error }` (400)                                                | Forward a line to the process stdin.                          |
 | GET    | `/api/team/processes/:id/stream` | —                       | SSE stream of `{stream, ts, line, seq}` frames                               | Ring-buffer replay + live tail. Heartbeat every 15s.          |
-| GET    | `/api/team/teams`                | —                       | `{ teams: [{teamId, name, members: [{id, type, status, pid?, role?, executor?}]}], count }` | Teams grouped by `team:<id>` tag + config (0256 R2); member payload carries the declared role + resolved executor, omitted when unset (0544 R3/R4). |
 | GET    | `/api/team/health`               | —                       | `{ ok: true }`                                                               | Liveness probe (0256 R4). |
 
 <a id="message-routes-appsserversrcmodulesmessagesindexts"></a>

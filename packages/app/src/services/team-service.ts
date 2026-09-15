@@ -1,10 +1,9 @@
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import {
     type AgentConfig,
     ExecutorDisabledError,
+    type MemberIdentity,
     memberLocalId,
-    type NormalizedTeamMember,
-    normalizeMember,
     type ResolvedExecutor,
     resolveExecutor,
     type SpurConfig,
@@ -22,7 +21,6 @@ import {
     type AgentEvents,
     type AgentSpec,
     buildIdentityPreamble,
-    deleteAgentSpec as deleteAgentSpecFile,
     loadAgentSpecs,
     saveAgentSpec,
     TeamOrchestrator,
@@ -64,11 +62,9 @@ export interface TeamServiceContext {
     fs: FileSystem;
     /**
      * Optional EventBus for message lifecycle events (`message.sent|replied`)
-     * and team lifecycle events (`team.up|down`, `team.member.*`). When absent
-     * (CLI default without a ledger attach), those operations still succeed —
-     * they just don't publish. The server injects its bus so the tap persists
-     * and SSE streams the events; CLI `team up|down|assign` attaches a local
-     * bus + ledger (task 0371 R6).
+     * and member events (`team.member.*`). When absent (CLI default without a
+     * ledger attach), those operations still succeed — they just don't publish.
+     * The server injects its bus so the tap persists and SSE streams the events.
      */
     eventBus?: TeamServiceEventBus;
     /**
@@ -106,21 +102,6 @@ export interface MessageEventPayload {
 }
 
 /**
- * Metadata-only payload for team lifecycle events (`team.up` / `team.down`).
- * Carries the team id and resulting member set size (J3 R15); never command
- * lines or message bodies (task 0371 R3).
- */
-export interface TeamLifecycleEventPayload {
-    teamId: string;
-    /** Count of members after the operation (upserted for up; stopped for down). */
-    memberCount: number;
-    /** Operation outcome label (`ok`, `check`, `purged`, …). */
-    outcome: string;
-    /** Producer-owned observability severity. */
-    severity?: 'info' | 'warning' | 'error';
-}
-
-/**
  * Metadata-only payload for member-scoped team events
  * (`team.member.assigned|started|stopped`). Unresolved roster fields stay
  * null rather than dropping the event (task 0371 R5 / J3 R17).
@@ -142,12 +123,10 @@ export type MessageEventBus = EventBus<
     Record<'message.sent' | 'message.replied', (event: MessageEventPayload) => void>
 >;
 
-/** Bus shape consumed by TeamService — message + team lifecycle event names. */
+/** Bus shape consumed by TeamService — message + member event names. */
 export type TeamServiceEventBus = EventBus<{
     'message.sent': (event: MessageEventPayload) => void;
     'message.replied': (event: MessageEventPayload) => void;
-    'team.up': (event: TeamLifecycleEventPayload) => void;
-    'team.down': (event: TeamLifecycleEventPayload) => void;
     'team.member.assigned': (event: TeamMemberEventPayload) => void;
     'team.member.started': (event: TeamMemberEventPayload) => void;
     'team.member.stopped': (event: TeamMemberEventPayload) => void;
@@ -242,37 +221,31 @@ export interface TeamStatusResult {
     agents: TeamStatusEntry[];
 }
 
-/** A team listing entry (R1). */
-export interface TeamListing {
-    teamId: string;
-    name: string;
-    members: NormalizedTeamMember[];
-    specs: AgentSpec[];
-    /**
-     * Resolved absolute path of the team's configured `work_dir` (R4).
-     *
-     * Configured teams use `agent.team.<id>.work_dir` (resolved relative to the
-     * service cwd). Orphaned/untethered groups use a common spec workspace only
-     * when all member specs agree, otherwise this is `null`.
-     */
-    workDir: string | null;
-    /** True when {@link workDir} equals the service cwd — the current project (R4). */
-    isCurrentProject: boolean;
+/**
+ * The member shape the shared roster projection consumes: the identity fields
+ * {@link memberLocalId} derives from, plus the optional per-spec overrides the
+ * projection carries onto the generated spec. The project fleet declaration's
+ * `FleetMember` (config) is structurally assignable. (0857: the retired team
+ * roster union that previously supplied these fields is gone; the fleet
+ * declaration is the only member source.)
+ */
+export interface RosterMember extends MemberIdentity {
+    purpose?: string;
+    workspace?: string;
+    systemPrompt?: string;
+    command?: string[];
+    autonomy?: string;
+    autostart?: boolean;
+    /** Fleet-only (0835): `false` keeps the derived id but skips materialization. */
+    enabled?: boolean;
 }
 
-/** Result of materializing a team (R2). */
+/** Result of materializing a roster: the project fleet's generated spec set (R2). */
 export interface MaterializeResult {
     teamId: string;
     upserted: string[];
     orphaned: string[];
     written: boolean;
-}
-
-/** Result of tearing down a team (R3). */
-export interface TeardownResult {
-    teamId: string;
-    purged: string[];
-    stopped: string[];
 }
 
 /** Input shape for creating an agent spec. */
@@ -299,7 +272,7 @@ export interface RosterProjection {
 
 /** Parameters for {@link resolveMemberExecutor}. */
 export interface ResolveMemberExecutorParams {
-    member: NormalizedTeamMember;
+    member: MemberIdentity;
     /** Roster position — error messages only. */
     index: number;
     /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
@@ -308,7 +281,7 @@ export interface ResolveMemberExecutorParams {
     /** Layer-1 role → tier map; role-only members resolve through it (0543 R1). */
     roles?: ReadonlyMap<string, AgentRoleDefinition>;
     /** Full roster, so error texts name the member by its frozen-index local id. */
-    roster?: readonly NormalizedTeamMember[];
+    roster?: readonly MemberIdentity[];
 }
 
 /**
@@ -384,7 +357,7 @@ export interface MaterializeRosterParams {
     /** Human label for loud errors, e.g. `Team "devops"` or `Fleet "my-project"`. */
     label: string;
     /** Full roster, in declaration order — ids derive over it (frozen index, 0835 R3). */
-    members: readonly NormalizedTeamMember[];
+    members: readonly RosterMember[];
     /** Default workspace for members without their own `workspace`. */
     defaultWorkspace: string;
     agentConfig: AgentConfig | undefined;
@@ -397,7 +370,7 @@ export interface MaterializeRosterParams {
      * local id (0835 review P4). Optional: without it, executor-pinned error
      * texts fall back to `member.id ?? member.executor`.
      */
-    roster?: readonly NormalizedTeamMember[];
+    roster?: readonly RosterMember[];
 }
 
 /**
@@ -422,13 +395,12 @@ export function materializeRoster(params: MaterializeRosterParams): RosterProjec
         const composedId = `${slug}-${localId}`;
         desiredIds.add(composedId);
 
-        // 0835 review P3: a disabled member (fleet declarations; team config
-        // has no `enabled` field, so this is fleet-only in effect) keeps its id
+        // 0835 review P3: a disabled member (fleet declarations) keeps its id
         // in the desired set but is NOT resolved against executors — an
         // unresolvable executor on a disabled member must not block launch.
         // (The id stays desired here; FleetService narrows desiredIds to the
         // enabled subset so a disabled member's stale spec is still pruned.)
-        if ((member as { enabled?: boolean }).enabled === false) continue;
+        if (member.enabled === false) continue;
 
         // Skip hand-authored specs — they are not generated (R2)
         const existing = specs.find((s) => s.id === composedId);
@@ -632,11 +604,12 @@ export class TeamService {
      * this package stays raw-SQL-free (project rule `raw-sql-only-in-domain`).
      * Returns an empty list when the table is absent.
      *
-     * Identity join (R11): `fromId`/`toId` are `teamId-memberId` composed ids.
-     * We resolve them against `listTeams()` + `listAgentSpecs()` for team name,
-     * member label (spec.name), and agent type (spec.type). Unresolved ids
-     * (untethered, operator-originated, stale) leave the identity optional
-     * fields unset — the UI falls back to the raw id.
+     * Identity join (R11): `fromId`/`toId` are composed ids. We resolve them
+     * against the agent specs on disk — `team:<id>` tag (when tethered), spec
+     * name as the member label, spec type as the agent type. Unresolved ids
+     * (operator-originated, stale) leave the identity optional fields unset —
+     * the UI falls back to the raw id. (0857: the team roster config block is gone,
+     * so the team *display name* is no longer resolved; the tag id stands.)
      *
      * Reply signals (R11): parent rows are the newest `limit` messages;
      * `countReplies` then counts **all** children of those parent ids in the
@@ -649,29 +622,17 @@ export class TeamService {
             return { messages: [], count: 0 };
         }
 
-        // Build the identity index once: agentId → { teamId, teamName, memberLabel, agentType }.
-        const [teams, specs] = await Promise.all([this.listTeams(), this.listAgentSpecs()]);
+        // Build the identity index once: agentId → { teamId, memberLabel, agentType }.
+        const specs = await this.listAgentSpecs();
         const identityById = new Map<string, MessageEndpointIdentity>();
-        for (const team of teams) {
-            for (const spec of team.specs) {
-                identityById.set(spec.id, {
-                    agentId: spec.id,
-                    teamId: team.teamId,
-                    teamName: team.name,
-                    memberLabel: spec.name,
-                    agentType: spec.type,
-                });
-            }
-        }
-        // Untethered specs (no team tag) — still resolvable to agentType/memberLabel.
         for (const spec of specs) {
-            if (!identityById.has(spec.id)) {
-                identityById.set(spec.id, {
-                    agentId: spec.id,
-                    memberLabel: spec.name,
-                    agentType: spec.type,
-                });
-            }
+            const teamTag = spec.tags?.find((t) => t.startsWith('team:'));
+            identityById.set(spec.id, {
+                agentId: spec.id,
+                ...(teamTag !== undefined ? { teamId: teamTag.slice('team:'.length) } : {}),
+                memberLabel: spec.name,
+                agentType: spec.type,
+            });
         }
 
         // Reply counts: global child count for each parent id in the current window.
@@ -839,221 +800,6 @@ export class TeamService {
         });
     }
 
-    // -------------------------------------------------------------------------
-    // Team management (0258)
-    // -------------------------------------------------------------------------
-
-    /**
-     * List all teams: groups agent specs by their `team:<id>` tag, cross-referenced
-     * with the `agent.team` config block. Untethered specs (no team tag) are grouped
-     * separately (R1).
-     */
-    async listTeams(): Promise<TeamListing[]> {
-        const specs = await loadAgentSpecs(this.configDir);
-        // A5/ADR-082: merged config threaded on the context — no per-slice load.
-        const config = this.ctx.spurConfig ?? null;
-        const teams = new Map<string, TeamListing>();
-        const configTeamIds = new Set<string>();
-
-        // Initialize from config — configured teams carry their resolved work_dir.
-        if (config?.agent?.team) {
-            for (const [teamId, teamConfig] of Object.entries(config.agent.team)) {
-                configTeamIds.add(teamId);
-                const workDir = this.resolveWorkspaceDir(teamConfig.work_dir);
-                teams.set(teamId, {
-                    teamId,
-                    name: teamConfig.name,
-                    members: [],
-                    specs: [],
-                    workDir,
-                    isCurrentProject: this.isCurrentProject(workDir),
-                });
-            }
-        }
-
-        // Group specs by team tag; collect specs with no team tag for the untethered group.
-        const untethered: AgentSpec[] = [];
-        for (const spec of specs) {
-            const teamTag = spec.tags?.find((t) => t.startsWith('team:'));
-            if (teamTag) {
-                const teamId = teamTag.slice('team:'.length);
-                const entry = teams.get(teamId);
-                if (entry) {
-                    entry.specs.push(spec);
-                } else {
-                    // Team exists in specs but not in config (orphaned generated spec)
-                    teams.set(teamId, {
-                        teamId,
-                        name: teamId,
-                        members: [],
-                        specs: [spec],
-                        workDir: null,
-                        isCurrentProject: false,
-                    });
-                }
-            } else {
-                untethered.push(spec);
-            }
-        }
-
-        // Surface specs with no `team:<id>` tag under a synthetic `__untethered__` group (0256 R2).
-        if (untethered.length > 0) {
-            teams.set('__untethered__', {
-                teamId: '__untethered__',
-                name: 'Untethered',
-                members: [],
-                specs: untethered,
-                workDir: null,
-                isCurrentProject: false,
-            });
-        }
-
-        // Orphaned/untethered groups (not config-declared): use a common spec
-        // workspace only when every member spec agrees; otherwise stay unselectable
-        // (workDir null, isCurrentProject false) — R4.
-        for (const team of Array.from(teams.values())) {
-            if (configTeamIds.has(team.teamId)) continue;
-            const common = this.commonWorkspace(team.specs);
-            team.workDir = common.workDir;
-            team.isCurrentProject = common.isCurrentProject;
-        }
-
-        return Array.from(teams.values());
-    }
-
-    /**
-     * Materialize a team: upsert one `spur:generated`-tagged spec per member,
-     * prune orphaned generated specs, skip `ref:` aliases (R2). When `check` is
-     * true, returns the diff and writes nothing (dry-run).
-     */
-    async materializeTeam(teamId: string, opts?: { check?: boolean }): Promise<MaterializeResult> {
-        // A5/ADR-082: merged config threaded on the context — no per-slice load.
-        // 0799 R3: the launch boundary prefers a fresh merged config so a quota
-        // event applied by the updater gates this materialization immediately.
-        const config =
-            this.ctx.reloadAgentConfig !== undefined
-                ? await this.ctx.reloadAgentConfig()
-                : (this.ctx.spurConfig ?? null);
-        const teamConfig = config?.agent?.team?.[teamId];
-        if (!teamConfig) {
-            throw new Error(`Team "${teamId}" not found in agent.team config`);
-        }
-
-        const specs = await loadAgentSpecs(this.configDir);
-        const existingTeamSpecs = specs.filter(
-            (s) => s.tags?.includes(`team:${teamId}`) && s.tags?.includes('spur:generated'),
-        );
-
-        // Shared roster projection (0835): one loop serves config teams (here)
-        // and project fleets (FleetService.materialize) — id derivation stays
-        // memberLocalId (frozen index) and executor resolution stays the
-        // pinned-or-tier-ladder funnel, never a second selector.
-        const { toUpsert, desiredIds } = materializeRoster({
-            slug: teamId,
-            label: `Team "${teamId}"`,
-            members: teamConfig.members.map((m) => normalizeMember(m)),
-            defaultWorkspace: teamConfig.work_dir,
-            agentConfig: config?.agent,
-            roles: this.ctx.roles,
-            specs,
-        });
-
-        // Prune orphaned generated specs (in the team but not in desired set)
-        const orphaned = existingTeamSpecs.filter((s) => !desiredIds.has(s.id));
-
-        if (opts?.check) {
-            // Dry-run does not transition team state — no lifecycle event (R15).
-            return {
-                teamId,
-                upserted: toUpsert.map((s) => s.id),
-                orphaned: orphaned.map((s) => s.id),
-                written: false,
-            };
-        }
-
-        // Write upserts
-        for (const spec of toUpsert) {
-            await saveAgentSpec(spec, this.configDir);
-        }
-        // Delete orphans
-        for (const spec of orphaned) {
-            await deleteAgentSpecFile(spec.id, this.configDir);
-        }
-
-        const result: MaterializeResult = {
-            teamId,
-            upserted: toUpsert.map((s) => s.id),
-            orphaned: orphaned.map((s) => s.id),
-            written: true,
-        };
-        // Team up lifecycle (task 0371 R1/R2 / J3 R15): cataloged event with
-        // team id + resulting member set size. Metadata only.
-        this.emitTeamLifecycleEvent('team.up', {
-            teamId,
-            memberCount: result.upserted.length,
-            outcome: 'ok',
-        });
-        return result;
-    }
-
-    /**
-     * Teardown a team: stop members (if supervisor is wired) and optionally purge
-     * generated specs (R3). Only `spur:generated` specs are deleted — hand-authored
-     * specs are never touched.
-     */
-    async teardownTeam(teamId: string, opts?: { purge?: boolean }): Promise<TeardownResult> {
-        const specs = await loadAgentSpecs(this.configDir);
-        const teamSpecs = specs.filter((s) => s.tags?.includes(`team:${teamId}`));
-        const generated = teamSpecs.filter((s) => s.tags?.includes('spur:generated'));
-
-        if (opts?.purge) {
-            for (const spec of generated) {
-                await deleteAgentSpecFile(spec.id, this.configDir);
-            }
-        }
-
-        const result: TeardownResult = {
-            teamId,
-            purged: opts?.purge ? generated.map((s) => s.id) : [],
-            stopped: teamSpecs.map((s) => s.id),
-        };
-        // Team down lifecycle (task 0371 R1/R2 / J3 R15).
-        this.emitTeamLifecycleEvent('team.down', {
-            teamId,
-            memberCount: result.stopped.length,
-            outcome: opts?.purge ? 'purged' : 'ok',
-        });
-        return result;
-    }
-
-    // -------------------------------------------------------------------------
-    // Lazy dependency construction
-    // -------------------------------------------------------------------------
-
-    /** Resolve a configured/derived workspace path relative to the service cwd. */
-    private resolveWorkspaceDir(p: string): string {
-        return resolve(this.ctx.cwd, p);
-    }
-
-    /** True when a resolved workspace path equals the service cwd (the current project). */
-    private isCurrentProject(workDir: string): boolean {
-        return resolve(this.ctx.cwd, workDir) === resolve(this.ctx.cwd, this.ctx.cwd);
-    }
-
-    /**
-     * Derive the workspace facts for a spec-derived group (orphaned/untethered).
-     * Returns a common workspace only when all member specs agree on the same
-     * `workspace`; otherwise `workDir = null` and `isCurrentProject = false` (R4).
-     */
-    private commonWorkspace(specs: AgentSpec[]): { workDir: string | null; isCurrentProject: boolean } {
-        if (specs.length === 0) return { workDir: null, isCurrentProject: false };
-        const first = specs[0]?.workspace;
-        if (typeof first !== 'string' || first.length === 0) return { workDir: null, isCurrentProject: false };
-        if (!specs.every((s) => s.workspace === first)) return { workDir: null, isCurrentProject: false };
-        const workDir = this.resolveWorkspaceDir(first);
-        return { workDir, isCurrentProject: this.isCurrentProject(workDir) };
-    }
-
     private async inboxDao(): Promise<InboxMessageDao> {
         const db = await this.ctx.getDb();
         return new InboxMessageDao(db);
@@ -1086,21 +832,6 @@ export class TeamService {
             );
         }
     }
-
-    /**
-     * Publish a team lifecycle event (`team.up` / `team.down`) when a bus is
-     * wired. Same failure isolation as {@link emitMessageEvent} (task 0371).
-     */
-    private emitTeamLifecycleEvent(name: 'team.up' | 'team.down', payload: TeamLifecycleEventPayload): void {
-        const bus = this.ctx.eventBus;
-        if (!bus) return;
-        try {
-            bus.emit(name, { ...payload, severity: 'info' });
-        } catch {
-            // Swallow — event is observable metadata only.
-        }
-    }
-
     /**
      * Publish a member-scoped team event when a bus is wired. Payload fields
      * may be null (unknown roster) — the event is never dropped (R5).
@@ -1187,40 +918,4 @@ export class TeamService {
         );
         return await TaskLocator.forDirs(fs, dirs).findPathByWbs(taskId);
     }
-}
-
-// ---------------------------------------------------------------------------
-// Autostart resolution (0258 R8)
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the set of agent ids with effective autostart = true across all
- * `agent.team.*` entries. Effective autostart = `member.autostart ?? team.autostart ?? false`.
- * A `SPUR_TEAM_AUTOSTART` env entry (comma-separated ids) unions into the set
- * (0253 R2, closes the 0252 handoff).
- */
-export function resolveAutostartSet(config: SpurConfig | null, envAutostart?: string): string[] {
-    const ids = new Set<string>();
-    const teams = config?.agent?.team;
-    if (teams) {
-        for (const [teamId, teamConfig] of Object.entries(teams)) {
-            const members = teamConfig.members.map(normalizeMember);
-            for (const [index, ref] of members.entries()) {
-                const localId = memberLocalId(ref, members, index);
-                const composedId = `${teamId}-${localId}`;
-                const effective = ref.autostart ?? teamConfig.autostart ?? false;
-                if (effective) ids.add(composedId);
-            }
-        }
-    }
-    // Env unions in
-    if (envAutostart) {
-        for (const id of envAutostart
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean)) {
-            ids.add(id);
-        }
-    }
-    return Array.from(ids).sort();
 }

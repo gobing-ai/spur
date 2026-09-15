@@ -249,50 +249,20 @@ describe('loadSpurConfig layering', () => {
         expect(JSON.parse(out)).toEqual(['rules-a', 'rules-b', 'rules-c']);
     });
 
-    test('team members merge by normalized id; stages arrays replace (0639 table)', async () => {
+    test('agent.roles stages arrays replace across layers (0639 table)', async () => {
+        // 0857: the `agent.team.*.members` merge-by-id rule retired with the roster;
+        // the replace-not-merge half of the 0639 table still holds for roles.
         const dirs = await makeLayerDirs(
-            [
-                'agent:',
-                '  team:',
-                '    squad:',
-                '      name: Squad',
-                "      work_dir: '~/work'",
-                '      members:',
-                '        - executor: codex',
-                '          role: reviewer',
-                '  roles:',
-                '    coder:',
-                '      tier: standard',
-                '      stages: [implement]',
-            ].join('\n'),
-            [
-                'agent:',
-                '  team:',
-                '    squad:',
-                '      name: Squad',
-                "      work_dir: '~/work'",
-                '      members:',
-                '        - id: codex',
-                '          model: volc/glm-5.2',
-                '  roles:',
-                '    coder:',
-                '      stages: [review]',
-            ].join('\n'),
+            ['agent:', '  roles:', '    coder:', '      tier: standard', '      stages: [implement]'].join('\n'),
+            ['agent:', '  roles:', '    coder:', '      stages: [review]'].join('\n'),
         );
         dirsToClean.push(dirs);
         const out = await runLoaderScript(
             dirs,
             `const config = await loadSpurConfig('${dirs.projectDir}', { validateJsonSchema: false });
-             const member = config.agent?.team?.squad?.members[0];
-             process.stdout.write(JSON.stringify({
-                 member: typeof member === 'object' ? { role: member.role, model: member.model } : member,
-                 stages: config.agent?.roles?.coder?.stages,
-             }));`,
+             process.stdout.write(JSON.stringify(config.agent?.roles?.coder?.stages));`,
         );
-        expect(JSON.parse(out)).toEqual({
-            member: { role: 'reviewer', model: 'volc/glm-5.2' },
-            stages: ['review'],
-        });
+        expect(JSON.parse(out)).toEqual(['review']);
     });
 
     test('version is label-only: 1, 1.1, and 1.2 all parse (R6 zod side)', async () => {
@@ -352,32 +322,6 @@ describe('layer merge machinery (in-process unit coverage)', () => {
                 'Duplicate executor name: dup',
             );
         }
-    });
-
-    test('members merge by id ?? executor; bare strings replace/append wholesale', () => {
-        const merged = mergeSpurConfigLayers(
-            {
-                agent: {
-                    team: {
-                        squad: {
-                            name: 'S',
-                            work_dir: '~',
-                            members: [{ executor: 'codex', role: 'reviewer' }, 'legacy'],
-                        },
-                    },
-                },
-            },
-            {
-                agent: {
-                    team: { squad: { name: 'S', work_dir: '~', members: [{ id: 'codex', model: 'm' }, 'plain'] } },
-                },
-            },
-        );
-        const members = (merged.agent as { team: { squad: { members: unknown[] } } }).team.squad.members;
-        expect(members).toHaveLength(3);
-        expect(members[0]).toEqual({ executor: 'codex', role: 'reviewer', id: 'codex', model: 'm' });
-        expect(members[1]).toBe('legacy');
-        expect(members[2]).toBe('plain');
     });
 
     test('concat paths dedup; other arrays replace', () => {

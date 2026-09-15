@@ -582,7 +582,6 @@ export type {
     AgentSpecInput,
     InboxEntry,
     InboxResult,
-    MaterializeResult,
     MessageEndpointIdentity,
     MessageEventBus,
     MessageEventPayload,
@@ -590,17 +589,14 @@ export type {
     RecentMessagesResult,
     RosterProjection,
     SendResult,
-    TeamLifecycleEventPayload,
-    TeamListing,
     TeamMemberEventPayload,
     TeamServiceContext,
     TeamServiceEventBus,
     TeamServiceOutput,
     TeamStatusEntry,
     TeamStatusResult,
-    TeardownResult,
 } from './services/team-service';
-export { resolveAutostartSet, TeamService } from './services/team-service';
+export { TeamService } from './services/team-service';
 export type {
     TokenLedgerServiceOptions,
     ToolUseEvent,

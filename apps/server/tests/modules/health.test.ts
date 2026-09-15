@@ -326,6 +326,45 @@ describe('healthModule', () => {
         }
     });
 
+    test("0857 R5: the fleet snapshot carries each member's resolved model", async () => {
+        const { writeFileSync } = await import('node:fs');
+        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
+        writeFileSync(
+            join(tempDir, '.spur', 'fleet.json'),
+            JSON.stringify({
+                version: 1,
+                members: [
+                    { id: 'lead', executor: 'build' },
+                    { id: 'plain', executor: 'plain' },
+                ],
+            }),
+        );
+        // One profile declares a model, one does not — the pane renders the
+        // resolved model and falls back only when there is none to name (0857 R5).
+        ctx.reloadAgentConfig = async () =>
+            spurConfigSchema.parse({
+                agent: {
+                    executors: [
+                        { name: 'build', agent: 'claude', tier: 'standard', model: 'claude-sonnet-4' },
+                        { name: 'plain', agent: 'codex', tier: 'standard' },
+                    ],
+                },
+            });
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+        try {
+            const res = await app.request('/api/project/fleet');
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { members: Array<{ executor: string; model?: string }> };
+            expect(body.members.map((m) => m.executor)).toEqual(['build', 'plain']);
+            expect(body.members[0]?.model).toBe('claude-sonnet-4');
+            // Omitted from the wire, not '' — nothing to render means no key.
+            expect(body.members[1]?.model).toBeUndefined();
+        } finally {
+            close();
+        }
+    });
+
     test('0848: role-only fleet members resolve through fresh configured role tiers on the Board', async () => {
         const { writeFileSync } = await import('node:fs');
         const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));

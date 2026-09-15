@@ -294,12 +294,6 @@ export interface CreateServerContextOptions {
      */
     sectionMatrix?: SectionMatrix;
     /**
-     * Agent spec ids for autostart (task 0195/0207). The supervisor spawns these
-     * at serve boot; a missing spec id fails loud. Omitted → no autostart.
-     */
-    teamAutostart?: string[];
-
-    /**
      * Merged global+project config (A5/ADR-082), loaded once in serve.ts and
      * threaded in so Team/Workflow services never re-read the config file.
      * Omitted/`null` → service defaults (same tolerance as the CLI).
@@ -351,7 +345,6 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         events: { enabled: true, diagnostic: false },
         jobqueue: { enabled: jobQueueEnabled },
         scheduler: { enabled: Boolean(options.scheduler) },
-        teamAutostart: options.teamAutostart ?? [],
     };
     // ── Lazy caches ──
     let dbPromise: Promise<DbAdapter> | undefined;

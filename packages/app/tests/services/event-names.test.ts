@@ -193,14 +193,10 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain('workflow.steering');
     });
 
-    test('registers team.* catalog entries (task 0371 R1)', () => {
-        const names = [
-            'team.up',
-            'team.down',
-            'team.member.assigned',
-            'team.member.started',
-            'team.member.stopped',
-        ] as const;
+    test('registers the team member catalog entries (task 0371 R1)', () => {
+        // 0857: the team up/down pair was removed with the `agent.team` roster runtime;
+        // the member family is what remains of the task 0371 catalog.
+        const names = ['team.member.assigned', 'team.member.started', 'team.member.stopped'] as const;
         for (const name of names) {
             const entry = requireEntry(name);
             expect(entry.source).toBe('team');

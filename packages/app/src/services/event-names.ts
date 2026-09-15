@@ -313,8 +313,6 @@ const BASE_CATALOG = [
     }),
 
     // ── team.* (task 0371 R1) ─────────────────────────────────────────────
-    baseEvent('team.up', 'team', 'team'),
-    baseEvent('team.down', 'team', 'team'),
     baseEvent('team.member.assigned', 'team', 'team'),
     baseEvent('team.member.started', 'team', 'team'),
     baseEvent('team.member.stopped', 'team', 'team'),
@@ -846,25 +844,7 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
         outcome: derivedFromValue('ok'),
     },
 
-    // ── team ──────────────────────────────────────────────────────────────
-    'team.up': {
-        description: 'A team came online with its member count.',
-        fields: [field('teamId', 'Team'), field('memberCount', 'Members'), field('outcome', 'Outcome')],
-        summary: ({ data }) => {
-            const id = s(data, 'teamId');
-            return id !== undefined ? `[team] ${id} up` : '[team] up';
-        },
-        outcome: derivedFrom('outcome'),
-    },
-    'team.down': {
-        description: 'A team went offline with its member count.',
-        fields: [field('teamId', 'Team'), field('memberCount', 'Members'), field('outcome', 'Outcome')],
-        summary: ({ data }) => {
-            const id = s(data, 'teamId');
-            return id !== undefined ? `[team] ${id} down` : '[team] down';
-        },
-        outcome: derivedFrom('outcome'),
-    },
+    // ── team.member.* (the team up/down pair was retired with the roster runtime, 0857) ──
     'team.member.assigned': {
         description: 'A member was assigned to a team, naming the task when present.',
         fields: [

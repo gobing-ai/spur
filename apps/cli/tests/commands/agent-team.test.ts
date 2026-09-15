@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DeliveryReconciler, TeamService } from '@gobing-ai/spur-app';
+import { DeliveryReconciler, FleetService, ProjectRegistry, TeamService } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { RequestKeyConflictError } from '@gobing-ai/ts-db';
@@ -67,23 +67,39 @@ describe('spur agent list --specs', () => {
                     '    - name: capable-exec',
                     '      agent: claude',
                     '      tier: capable-1',
-                    '  team:',
-                    '    alpha:',
-                    '      name: Alpha',
-                    '      work_dir: /tmp/alpha-ws',
-                    '      members:',
-                    '        - role: reviewer',
-                    '        - executor: cheap-exec',
                     '',
                 ].join('\n'),
                 'utf8',
             );
+            // 0857: the roster is materialized from the project fleet declaration, so
+            // the fixture writes `.spur/fleet.json` instead of an `agent.team` block.
+            await writeFile(
+                join(cwd, '.spur', 'fleet.json'),
+                JSON.stringify({
+                    version: 1,
+                    members: [{ role: 'reviewer' }, { executor: 'cheap-exec' }],
+                }),
+                'utf8',
+            );
             const fresh = createCliContext({ cwd, output: out, dbUrl: ':memory:' });
-            await new TeamService({
-                ...fresh,
-                roles: fresh.agentRoles,
-                reloadAgentConfig: () => loadSpurConfig(cwd),
-            }).materializeTeam('alpha');
+            // The instance id derives from the project's registry display name, so the
+            // fixture registers one explicitly (a temp-dir basename is not a valid
+            // agent-id prefix). FleetService.materialize also asserts launch ground
+            // truth: the process cwd must BE the project it materializes (0835 R6).
+            const registry = new ProjectRegistry(join(cwd, '.spur', 'registry.json'));
+            await registry.upsert({ name: 'alpha', path: cwd });
+            const previousCwd = process.cwd();
+            process.chdir(cwd);
+            try {
+                await new FleetService({
+                    ...fresh,
+                    roles: fresh.agentRoles,
+                    registry,
+                    reloadAgentConfig: () => loadSpurConfig(cwd),
+                }).materialize(cwd);
+            } finally {
+                process.chdir(previousCwd);
+            }
 
             // Human: distinct role and executor columns; undeclared role renders `unset`.
             out.messages.length = 0;

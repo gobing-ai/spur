@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import { useTeamsData } from '../../lib/use-teams-data';
 import { type ActivityRow, historyUrl, parseHistory } from './activity-history';
 import { type InboxMessage, parseInboxMessages } from './conversation';
 import MemberTerminal from './MemberTerminal';
 import type { RosterEntry } from './roster';
+import { useProjectContext } from './useProjectContext';
 
 const inboxUrl = (agent: string) => `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;
 const lifecycleUrl = (id: string, verb: 'start' | 'stop') =>
@@ -21,9 +21,14 @@ const lifecycleUrl = (id: string, verb: 'start' | 'stop') =>
  * opener element).
  */
 export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; onClose: () => void }) {
-    const { teams, error: detailsError } = useTeamsData();
-    const team = detailsError ? undefined : teams.find((t) => t.members.some((m) => m.id === entry.instanceId));
-    const member = team?.members.find((m) => m.id === entry.instanceId);
+    // 0857: the retired teams feed is gone (its only reader was this pane). The work
+    // dir is now the fleet snapshot's project `path` (0835/0840) and the model is the
+    // declared member's resolved model from that same snapshot — a member whose
+    // executor profile declares none, and an undeclared live process, have nothing
+    // to name (the latter reads `Unavailable`).
+    const project = useProjectContext();
+    const workDir = project.fleet?.path ?? project.path ?? 'Unavailable';
+    const model = entry.declared === null ? 'Unavailable' : (entry.declared.model ?? 'Executor default');
     const [messages, setMessages] = useState<InboxMessage[] | null>(null);
     const [activity, setActivity] = useState<ActivityRow[] | null>(null);
     const [busy, setBusy] = useState(false);
@@ -135,11 +140,11 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
                 <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
                     <dt className="text-spur-text-muted">Working directory</dt>
                     <dd className="font-mono text-spur-text break-all" data-member-workdir>
-                        {team?.workDir ?? 'Unavailable'}
+                        {workDir}
                     </dd>
                     <dt className="text-spur-text-muted">Model</dt>
                     <dd className="font-mono text-spur-text break-all" data-member-model>
-                        {member ? (member.model ?? 'Executor default') : 'Unavailable'}
+                        {model}
                     </dd>
                 </dl>
             </div>

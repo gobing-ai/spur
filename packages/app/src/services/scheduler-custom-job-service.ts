@@ -83,7 +83,7 @@ export const SCHEDULER_CUSTOM_TIMEOUT_MS = 600_000;
  * milliseconds, or `none`. Absent or invalid values fall back to
  * {@link SCHEDULER_CUSTOM_TIMEOUT_MS} — a bad override must never disable the deadline by
  * accident. Resolved once at daemon boot; follows the ad-hoc env convention
- * (`SPUR_TEAM_AUTOSTART`, `SPUR_SKIP_GLOBAL_CONFIG`).
+ * (`SPUR_SKIP_GLOBAL_CONFIG`, `SPUR_CHILD_KILL_GRACE_MS`).
  */
 export function resolveSchedulerCustomTimeoutMs(env: Record<string, string | undefined>): TimeoutPolicyMs {
     return normalizeLegacyTimeoutMs(env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS, SCHEDULER_CUSTOM_TIMEOUT_MS);

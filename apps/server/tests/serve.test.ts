@@ -143,7 +143,6 @@ function makeDeps(overrides: Partial<StartServerDeps> = {}): StartServerDeps {
             events: { enabled: true, diagnostic: false },
             jobqueue: { enabled: false },
             scheduler: { enabled: false },
-            teamAutostart: [],
         }),
         runNodeApplication: (async (opts: {
             config: unknown;
@@ -530,7 +529,6 @@ describe('startServer', () => {
                 events: { enabled: true, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: true },
-                teamAutostart: [],
             }),
             runNodeApplication: runNodeApplicationWith(() => {
                 const rt = fakeRuntime(logMessages, { enabled: true, adapter });
@@ -592,7 +590,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -680,7 +677,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createNodeFileSystem: (root: string) => {
                 captured.fsRoot = root;
@@ -754,7 +750,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: () => ctx,
             runNodeApplication: (async (opts: {
@@ -833,7 +828,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: () => ctx,
             runNodeApplication: (async (opts: {
@@ -911,7 +905,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: () => ctx,
             runNodeApplication: (async (opts: {
@@ -961,7 +954,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: false },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1121,7 +1113,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: true },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1209,7 +1200,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: false },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1675,7 +1665,6 @@ describe('startServer', () => {
                 events: { enabled: false, diagnostic: false },
                 jobqueue: { enabled: true },
                 scheduler: { enabled: true },
-                teamAutostart: [],
             }),
             createServerContext: (() =>
                 ({
@@ -1964,54 +1953,6 @@ describe('startServer', () => {
             output: { write: () => {}, error: () => {} },
         });
         expect(typeof service.run).toBe('function');
-    });
-
-    test('handles autostart when autostartIds are present and logs error on failure', async () => {
-        installProcessMocks();
-        Bun.serve = (() => ({ stop: () => {}, ref: () => {}, unref: () => {} })) as unknown as typeof Bun.serve;
-
-        const prevAutostart = process.env.SPUR_TEAM_AUTOSTART;
-        process.env.SPUR_TEAM_AUTOSTART = 'agent-1,agent-2';
-
-        let startedIds: string[] = [];
-        try {
-            // Happy path
-            await startServer(
-                { port: 4400, host: '127.0.0.1', openBrowser: false, keepAlive: false },
-                makeDeps({
-                    createServerContext: (() => ({
-                        supervisor: () => ({
-                            startAutostart: async (ids: string[]) => {
-                                startedIds = ids;
-                            },
-                        }),
-                    })) as unknown as StartServerDeps['createServerContext'],
-                }),
-            );
-            expect(startedIds).toEqual(['agent-1', 'agent-2']);
-
-            // Failure path
-            await expect(
-                startServer(
-                    { port: 4401, host: '127.0.0.1', openBrowser: false, keepAlive: false },
-                    makeDeps({
-                        createServerContext: (() => ({
-                            supervisor: () => ({
-                                startAutostart: async () => {
-                                    throw new Error('Autostart supervisor error');
-                                },
-                            }),
-                        })) as unknown as StartServerDeps['createServerContext'],
-                    }),
-                ),
-            ).rejects.toThrow('Autostart supervisor error');
-        } finally {
-            if (prevAutostart !== undefined) {
-                process.env.SPUR_TEAM_AUTOSTART = prevAutostart;
-            } else {
-                delete process.env.SPUR_TEAM_AUTOSTART;
-            }
-        }
     });
 
     test('handles ProjectRegistry.upsert and setPort failures gracefully without throwing', async () => {

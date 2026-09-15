@@ -6,7 +6,6 @@ import {
     type FleetDeclaration,
     FleetDeclarationSchema,
     memberLocalId,
-    type NormalizedTeamMember,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
 import { type DbAdapter, type ProjectClaim, ProjectClaimDao } from '@gobing-ai/spur-domain';
@@ -61,6 +60,13 @@ export interface ResolvedFleetMember {
     role?: AgentRoleName;
     /** Declared executor, or the tier-ladder winner for a role-only member. `''` = not resolved (disabled member). */
     executor: string;
+    /**
+     * The resolved executor profile's `model`, when it declares one — the SAME
+     * value `materializeRoster` writes to the generated spec's `config.model`,
+     * so a reader names the model this member will actually run. Omitted when
+     * the profile declares none, and for a disabled member (never resolved).
+     */
+    model?: string;
     enabled: boolean;
     /** True iff the resolved executor's `fsWrite` attestation is `enforced`/`available` (R4). */
     writeCapable: boolean;
@@ -164,8 +170,8 @@ export class FleetService {
     /**
      * Resolve the declaration against config: stable instance ids (R3, via the
      * shared `memberLocalId` allocator), executor resolution through the same
-     * pinned-or-tier-ladder funnel teams use, and `fsWrite`-attested write
-     * capability (R4). A missing declaration or an all-disabled roster resolves
+     * pinned-or-tier-ladder funnel teams use, the resolved model that funnel
+     * yields (0857 R5), and `fsWrite`-attested write capability (R4). A missing declaration or an all-disabled roster resolves
      * cleanly with `missing` naming the fix (R7) — it does not throw. Disabled
      * members keep their derived id (index preservation) but are not resolved
      * against executors.
@@ -187,7 +193,7 @@ export class FleetService {
         for (const [index, member] of members.entries()) {
             // R3: ids derive over the FULL roster (disabled members preserve
             // their index) via the shared allocator — never re-derived here.
-            const instanceId = `${slug}-${memberLocalId(member as NormalizedTeamMember, members as NormalizedTeamMember[], index)}`;
+            const instanceId = `${slug}-${memberLocalId(member, members, index)}`;
             if (!enabledIndexes.has(index)) {
                 resolvedMembers.push({
                     instanceId,
@@ -199,9 +205,9 @@ export class FleetService {
                 });
                 continue;
             }
-            const { executorName } = resolveMemberExecutor({
-                roster: declaration.members as NormalizedTeamMember[],
-                member: member as NormalizedTeamMember,
+            const { executorName, resolved: resolvedExecutor } = resolveMemberExecutor({
+                roster: declaration.members,
+                member,
                 index,
                 label: `Fleet "${slug}"`,
                 agentConfig,
@@ -219,6 +225,7 @@ export class FleetService {
                 instanceId,
                 ...(member.role !== undefined ? { role: member.role } : {}),
                 executor: executorName,
+                ...(resolvedExecutor.model !== undefined ? { model: resolvedExecutor.model } : {}),
                 enabled: true,
                 writeCapable: capabilityState === 'enforced' || capabilityState === 'available',
                 capabilityState,
@@ -255,9 +262,7 @@ export class FleetService {
             return { state: 'missing', reason: 'no-orchestrator-declared' };
         }
         const members = declaration.members;
-        const localIds = members.map((m, i) =>
-            memberLocalId(m as NormalizedTeamMember, members as NormalizedTeamMember[], i),
-        );
+        const localIds = members.map((m, i) => memberLocalId(m, members, i));
         const index = localIds.indexOf(pointer);
         if (index === -1) {
             return {
@@ -344,7 +349,7 @@ export class FleetService {
         const projection = materializeRoster({
             slug,
             label: `Fleet "${slug}"`,
-            members: declaration.members as NormalizedTeamMember[],
+            members: declaration.members,
             defaultWorkspace: normalized,
             agentConfig: config?.agent,
             roles: this.ctx.roles ?? resolveAgentRoles(config?.agent),

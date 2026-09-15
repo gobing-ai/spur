@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
+import { join } from 'node:path';
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import {
     type AgentEvents,
@@ -15,17 +15,16 @@ import {
 } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
-import { parse as yamlParse } from 'yaml';
 import {
     type AgentRoleDefinition,
     type MessageEventBus,
     type MessageEventPayload,
-    type TeamLifecycleEventPayload,
     type TeamMemberEventPayload,
     TeamService,
     type TeamServiceContext,
     type TeamServiceEventBus,
 } from '../../src/index';
+import { resolveMemberExecutor } from '../../src/services/team-service';
 
 // ---------------------------------------------------------------------------
 // Harness
@@ -464,28 +463,38 @@ describe('TeamService status & assignment', () => {
     });
 
     test('0544 R1: getStatus carries the declared role and resolved executor; unset when absent', async () => {
-        const { svc, cleanup } = await makeService(
-            undefined,
-            undefined,
-            new Map<string, AgentRoleDefinition>([['reviewer', { tier: 'capable-1', stages: ['verify'] }]]),
-            spurConfigSchema.parse(
-                yamlParse(`agent:
-  executors:
-    - name: capable-exec
-      agent: claude
-      tier: capable-1
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - role: reviewer
-        - executor: capable-exec
-`),
-            ),
-        );
+        // 0857: the roster comes from the project fleet declaration, so this case
+        // seeds the two generated specs the fleet would write and asserts the
+        // spec → status projection it actually owns.
+        const { svc, cwd, cleanup } = await makeService();
         try {
-            await svc.materializeTeam('demo');
+            const configDir = join(cwd, '.spur', 'agents');
+            await saveAgentSpec(
+                {
+                    id: 'demo-reviewer-1',
+                    name: 'reviewer',
+                    type: 'claude',
+                    workspace: cwd,
+                    purpose: 'reviewer-1',
+                    executor: 'capable-exec',
+                    tags: ['team:demo', 'spur:generated'],
+                    config: { role: 'reviewer' },
+                },
+                configDir,
+            );
+            await saveAgentSpec(
+                {
+                    id: 'demo-capable-exec',
+                    name: 'capable-exec',
+                    type: 'claude',
+                    workspace: cwd,
+                    purpose: 'capable-exec',
+                    executor: 'capable-exec',
+                    tags: ['team:demo', 'spur:generated'],
+                    config: {},
+                },
+                configDir,
+            );
             const status = await svc.getStatus();
             const byId = new Map(status.agents.map((a) => [a.id, a]));
             const reviewer = byId.get('demo-reviewer-1');
@@ -697,654 +706,27 @@ async function seedSpec(configDir: string, id: string, tags: string[], type = 'c
     );
 }
 
-const DEVOPS_CONFIG = `agent:
-  team:
-    devops:
-      name: DevOps
-      work_dir: /tmp/devops
-      members:
-        - executor: claude
-          purpose: plan work
-        - executor: codex
-`;
+describe('TeamService buildIdentity', () => {
+    test('builds a preamble listing workspace peers (excluding self)', async () => {
+        const { svc, cwd, cleanup } = await makeService();
+        try {
+            const configDir = join(cwd, '.spur', 'agents');
+            await seedSpec(configDir, 'planner', [], 'claude');
+            await seedSpec(configDir, 'reviewer', [], 'codex');
+            await seedSpec(configDir, 'loner', [], 'omp');
+            // 'loner' has a different workspace (/tmp) but the seeds all use /tmp,
+            // so all three share the workspace — planner's peers are reviewer + loner.
 
-/** Parsed view of DEVOPS_CONFIG — the service reads this threaded object, not the file. */
-const DEVOPS_SPUR: SpurConfig = spurConfigSchema.parse(yamlParse(DEVOPS_CONFIG));
-
-describe('TeamService team management (0258)', () => {
-    describe('listTeams (R1)', () => {
-        test('returns config-declared teams with empty specs when no specs exist', async () => {
-            const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const teams = await svc.listTeams();
-                expect(teams).toHaveLength(1);
-                expect(teams[0]?.teamId).toBe('devops');
-                expect(teams[0]?.name).toBe('DevOps');
-                expect(teams[0]?.specs).toEqual([]);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('groups specs under their team: tag and merges with config', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
-                await seedSpec(configDir, 'devops-codex', ['team:devops', 'spur:generated'], 'codex');
-
-                const teams = await svc.listTeams();
-                expect(teams).toHaveLength(1);
-                const ids = teams[0]?.specs.map((s) => s.id).sort();
-                expect(ids).toEqual(['devops-claude', 'devops-codex']);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('groups orphaned specs (team tag not in config) under a synthesized entry', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                // 'ghost' team is not declared in config — synthesized entry uses teamId as name.
-                await seedSpec(configDir, 'ghost-x', ['team:ghost', 'spur:generated']);
-
-                const teams = await svc.listTeams();
-                const byId = new Map(teams.map((t) => [t.teamId, t]));
-                expect(byId.has('devops')).toBe(true);
-                expect(byId.has('ghost')).toBe(true);
-                const ghost = byId.get('ghost');
-                expect(ghost?.name).toBe('ghost'); // synthesized name = teamId
-                expect(ghost?.specs.map((s) => s.id)).toEqual(['ghost-x']);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('surfaces specs with no team tag under the __untethered__ group (0256 R2)', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
-                await seedSpec(configDir, 'lonely', []); // hand-authored spec, no team tag
-
-                const teams = await svc.listTeams();
-                const byId = new Map(teams.map((t) => [t.teamId, t]));
-                const untethered = byId.get('__untethered__');
-                expect(untethered).toBeDefined();
-                expect(untethered?.specs.map((s) => s.id)).toEqual(['lonely']);
-                // The tethered spec stays under its team, not double-counted.
-                expect(byId.get('devops')?.specs.map((s) => s.id)).toEqual(['devops-claude']);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('returns empty list when no config and no specs exist', async () => {
-            const { svc, cleanup } = await makeService();
-            try {
-                const teams = await svc.listTeams();
-                expect(teams).toEqual([]);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        // ── 0197 R4: workDir / isCurrentProject ──
-
-        test('R4: configured team resolves work_dir relative to the service cwd', async () => {
-            const { svc, cwd, cleanup } = await makeService(
-                undefined,
-                undefined,
-                undefined,
-                spurConfigSchema.parse(
-                    yamlParse(
-                        [
-                            'agent:',
-                            '  team:',
-                            '    proj:',
-                            '      name: Proj',
-                            '      work_dir: .',
-                            '      members:',
-                            '        - executor: claude',
-                        ].join('\n'),
-                    ),
-                ),
-            );
-            try {
-                // work_dir '.' resolves to the service cwd -> current project.
-                const teams = await svc.listTeams();
-                expect(teams).toHaveLength(1);
-                const team = teams[0];
-                expect(team?.teamId).toBe('proj');
-                expect(team?.workDir).toBe(resolve(cwd, '.'));
-                expect(team?.isCurrentProject).toBe(true);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('R4: configured team with an external work_dir is not the current project', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const teams = await svc.listTeams();
-                const devops = teams.find((t) => t.teamId === 'devops');
-                expect(devops?.workDir).toBe(resolve(cwd, '/tmp/devops'));
-                expect(devops?.isCurrentProject).toBe(false);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('R4: orphaned group uses a common spec workspace when all members agree', async () => {
-            const { svc, cwd, cleanup } = await makeService();
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                // Two specs in the same orphaned team, same workspace.
-                await seedSpec(configDir, 'ghost-a', ['team:ghost', 'spur:generated']);
-                await seedSpec(configDir, 'ghost-b', ['team:ghost', 'spur:generated'], 'codex');
-                const teams = await svc.listTeams();
-                const ghost = teams.find((t) => t.teamId === 'ghost');
-                expect(ghost?.workDir).toBe(resolve(cwd, '/tmp'));
-                expect(ghost?.isCurrentProject).toBe(false);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('R4: orphaned group with disagreeing spec workspaces is not selectable', async () => {
-            const { svc, cwd, cleanup } = await makeService();
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                await seedSpec(configDir, 'ghost-a', ['team:ghost', 'spur:generated']);
-                // Second spec with a different workspace.
-                await saveAgentSpec(
-                    {
-                        id: 'ghost-b',
-                        name: 'ghost-b',
-                        type: 'codex',
-                        workspace: '/elsewhere',
-                        purpose: 'seeded',
-                        tags: ['team:ghost', 'spur:generated'],
-                        config: {},
-                    },
-                    configDir,
-                );
-                const teams = await svc.listTeams();
-                const ghost = teams.find((t) => t.teamId === 'ghost');
-                expect(ghost?.workDir).toBeNull();
-                expect(ghost?.isCurrentProject).toBe(false);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('R4: untethered group uses a common spec workspace only when specs agree', async () => {
-            const { svc, cwd, cleanup } = await makeService();
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                await seedSpec(configDir, 'lonely', []);
-                const teams = await svc.listTeams();
-                const untethered = teams.find((t) => t.teamId === '__untethered__');
-                expect(untethered?.workDir).toBe(resolve(cwd, '/tmp'));
-                expect(untethered?.isCurrentProject).toBe(false);
-            } finally {
-                await cleanup();
-            }
-        });
-    });
-
-    describe('materializeTeam (R2)', () => {
-        test('throws when the team is not declared in config', async () => {
-            const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                await expect(svc.materializeTeam('unknown')).rejects.toThrow(
-                    'Team "unknown" not found in agent.team config',
-                );
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('check=true returns the diff and writes nothing', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                const result = await svc.materializeTeam('devops', { check: true });
-                expect(result.written).toBe(false);
-                expect(result.upserted).toEqual(['devops-claude', 'devops-codex']);
-                expect(result.orphaned).toEqual([]);
-                // Dry-run must not have written any spec files.
-                const specs = await loadAgentSpecs(configDir);
-                expect(specs).toEqual([]);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('writes one generated spec per member and reports written=true', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                const result = await svc.materializeTeam('devops');
-                expect(result.written).toBe(true);
-                expect(result.upserted).toEqual(['devops-claude', 'devops-codex']);
-
-                const specs = await loadAgentSpecs(configDir);
-                const byId = new Map(specs.map((s) => [s.id, s]));
-                expect(byId.has('devops-claude')).toBe(true);
-                expect(byId.has('devops-codex')).toBe(true);
-                const claude = byId.get('devops-claude');
-                // Member purpose is preserved; type comes from resolveExecutor('claude', undefined).
-                expect(claude?.purpose).toBe('plan work');
-                expect(claude?.type).toBe('claude');
-                expect(claude?.workspace).toBe('/tmp/devops');
-                expect(claude?.tags).toContain('spur:generated');
-                expect(claude?.tags).toContain('team:devops');
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('records the executor name beside the kind (0537 R1)', async () => {
-            const { svc, cwd, cleanup } = await makeService(
-                undefined,
-                undefined,
-                undefined,
-                spurConfigSchema.parse(
-                    yamlParse(`agent:
-  executors:
-    - name: codex-sol
-      agent: codex
-      model: gpt-5.6-sol
-      tier: capable-3
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - executor: codex-sol
-          purpose: verifier
-`),
-                ),
-            );
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                await svc.materializeTeam('demo');
-                const specs = await loadAgentSpecs(configDir);
-                const spec = specs.find((s) => s.id === 'demo-codex-sol');
-                // The kind stays (AiRunner resolves the runner from it)...
-                expect(spec?.type).toBe('codex');
-                // ...and the executor name now survives the round trip (R1).
-                expect(spec?.executor).toBe('codex-sol');
-                expect(spec?.config?.model).toBe('gpt-5.6-sol');
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('0538 R3: a member declaring role records it on the materialized spec', async () => {
-            const { svc, cwd, cleanup } = await makeService(
-                undefined,
-                undefined,
-                undefined,
-                spurConfigSchema.parse(
-                    yamlParse(`agent:
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - executor: claude
-          purpose: verdict writer
-          role: reviewer
-        - executor: codex
-`),
-                ),
-            );
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                await svc.materializeTeam('demo');
-                const specs = await loadAgentSpecs(configDir);
-                const byId = new Map(specs.map((s) => [s.id, s]));
-                // The declared role rides the spec's config bag beside the executor binding.
-                expect(byId.get('demo-claude')?.config?.role).toBe('reviewer');
-                // A member declaring none still materializes, without the key.
-                expect(byId.get('demo-codex')).toBeDefined();
-                expect(byId.get('demo-codex')?.config?.role).toBeUndefined();
-                // purpose stays as documentation.
-                expect(byId.get('demo-claude')?.purpose).toBe('verdict writer');
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('0543 R1: a role-only member resolves through the tier ladder, recording role + resolved executor', async () => {
-            const { svc, cwd, cleanup } = await makeService(
-                undefined,
-                undefined,
-                new Map<string, AgentRoleDefinition>([
-                    ['coder', { tier: 'standard', stages: ['implement'] }],
-                    ['reviewer', { tier: 'capable-1', stages: ['verify'] }],
-                ]),
-                spurConfigSchema.parse(
-                    yamlParse(`agent:
-  executors:
-    - name: cheap-exec
-      agent: pi
-      tier: cheap
-    - name: capable-exec
-      agent: claude
-      tier: capable-1
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - role: reviewer
-`),
-                ),
-            );
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                await svc.materializeTeam('demo');
-                const specs = await loadAgentSpecs(configDir);
-                const byId = new Map(specs.map((s) => [s.id, s]));
-                const spec = byId.get('demo-reviewer-1');
-                expect(spec).toBeDefined();
-                // Cheapest executor eligible for reviewer (capable-1): capable-exec.
-                expect(spec?.type).toBe('claude');
-                expect(spec?.executor).toBe('capable-exec');
-                expect(spec?.config?.role).toBe('reviewer');
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('0543 R2: a pinned executor beats role tier resolution, role still recorded', async () => {
-            const { svc, cwd, cleanup } = await makeService(
-                undefined,
-                undefined,
-                new Map<string, AgentRoleDefinition>([['coder', { tier: 'standard', stages: ['implement'] }]]),
-                spurConfigSchema.parse(
-                    yamlParse(`agent:
-  executors:
-    - name: cheap-exec
-      agent: pi
-      tier: cheap
-    - name: capable-exec
-      agent: claude
-      tier: capable-1
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - executor: cheap-exec
-          role: coder
-`),
-                ),
-            );
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                await svc.materializeTeam('demo');
-                const specs = await loadAgentSpecs(configDir);
-                const byId = new Map(specs.map((s) => [s.id, s]));
-                const spec = byId.get('demo-cheap-exec');
-                expect(spec).toBeDefined();
-                // cheap-exec is NOT eligible for coder's standard tier — the pin wins.
-                expect(spec?.executor).toBe('cheap-exec');
-                expect(spec?.type).toBe('pi');
-                expect(spec?.config?.role).toBe('coder');
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('0543 R3: purpose is annotation — the same role-only member resolves identically without it', async () => {
-            const roles = new Map<string, AgentRoleDefinition>([
-                ['reviewer', { tier: 'capable-1', stages: ['verify', 'review', 'dogfood'] }],
-            ]);
-            const config = (purposeLine: string) =>
-                spurConfigSchema.parse(
-                    yamlParse(`agent:
-  executors:
-    - name: capable-exec
-      agent: claude
-      tier: capable-1
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - role: reviewer
-${purposeLine}
-`),
-                );
-            const {
-                svc: svcWithPurpose,
-                cwd: cwdWithPurpose,
-                cleanup: cleanupWithPurpose,
-            } = await makeService(undefined, undefined, roles, config('          purpose: annotation-only'));
-            const {
-                svc: svcPlain,
-                cwd: cwdPlain,
-                cleanup: cleanupPlain,
-            } = await makeService(undefined, undefined, roles, config(''));
-            try {
-                const configDirWithPurpose = join(cwdWithPurpose, '.spur', 'agents');
-                const configDirPlain = join(cwdPlain, '.spur', 'agents');
-
-                await svcWithPurpose.materializeTeam('demo');
-                await svcPlain.materializeTeam('demo');
-                const withPurpose = (await loadAgentSpecs(configDirWithPurpose)).find(
-                    (s) => s.id === 'demo-reviewer-1',
-                );
-                const plain = (await loadAgentSpecs(configDirPlain)).find((s) => s.id === 'demo-reviewer-1');
-                // Same id, same resolution; only the purpose annotation differs.
-                expect(withPurpose?.executor).toBe('capable-exec');
-                expect(plain?.executor).toBe('capable-exec');
-                expect(withPurpose?.purpose).toBe('annotation-only');
-                expect(plain?.purpose).toBe('claude agent');
-            } finally {
-                await cleanupWithPurpose();
-                await cleanupPlain();
-            }
-        });
-
-        test('0543 R1/R3: repeated role-only members derive distinct <role>-<n> ids', async () => {
-            const { svc, cwd, cleanup } = await makeService(
-                undefined,
-                undefined,
-                new Map<string, AgentRoleDefinition>([['coder', { tier: 'standard', stages: ['implement'] }]]),
-                spurConfigSchema.parse(
-                    yamlParse(`agent:
-  executors:
-    - name: capable-exec
-      agent: claude
-      tier: capable-1
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - role: coder
-        - role: coder
-`),
-                ),
-            );
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                await svc.materializeTeam('demo');
-                const specs = await loadAgentSpecs(configDir);
-                const byId = new Map(specs.map((s) => [s.id, s]));
-                expect(byId.get('demo-coder-1')).toBeDefined();
-                expect(byId.get('demo-coder-2')).toBeDefined();
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('0543 R1: a role-only member fails loudly when no role table is available (server path)', async () => {
-            const { svc, cleanup } = await makeService(
-                undefined,
-                undefined,
-                undefined,
-                spurConfigSchema.parse(
-                    yamlParse(`agent:
-  executors:
-    - name: capable-exec
-      agent: claude
-      tier: capable-1
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - role: reviewer
-`),
-                ),
-            );
-            try {
-                await expect(svc.materializeTeam('demo')).rejects.toThrow('no Layer-1 role table is available');
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('prunes orphaned generated specs that are no longer desired', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                // A previously-generated member that is no longer in the config's member list.
-                await seedSpec(configDir, 'devops-stale', ['team:devops', 'spur:generated']);
-
-                const result = await svc.materializeTeam('devops');
-                expect(result.orphaned).toEqual(['devops-stale']);
-                // The orphan is deleted from disk.
-                const specs = await loadAgentSpecs(configDir);
-                expect(specs.find((s) => s.id === 'devops-stale')).toBeUndefined();
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('skips hand-authored (ref:) specs — never overwrites them', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                // A hand-authored spec occupying devops-claude (team tag but NOT generated).
-                await seedSpec(configDir, 'devops-claude', ['team:devops'], 'handauth');
-
-                const result = await svc.materializeTeam('devops');
-                // devops-claude is hand-authored → skipped (not in upserted, not orphaned).
-                expect(result.upserted).toEqual(['devops-codex']);
-                expect(result.orphaned).toEqual([]);
-                // The hand-authored spec is untouched (type preserved, not overwritten).
-                const specs = await loadAgentSpecs(configDir);
-                const claude = specs.find((s) => s.id === 'devops-claude');
-                expect(claude?.type).toBe('handauth');
-                expect(claude?.tags).not.toContain('spur:generated');
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('falls back to a type-derived purpose when the member omits purpose', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-
-                await svc.materializeTeam('devops');
-                const specs = await loadAgentSpecs(configDir);
-                // codex member has no purpose → falls back to "<agent> agent".
-                const codex = specs.find((s) => s.id === 'devops-codex');
-                expect(codex?.purpose).toBe('codex agent');
-            } finally {
-                await cleanup();
-            }
-        });
-    });
-
-    describe('teardownTeam (R3)', () => {
-        test('without purge returns stopped ids for all team specs and deletes nothing', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
-                await seedSpec(configDir, 'devops-handauth', ['team:devops'], 'handauth');
-
-                const result = await svc.teardownTeam('devops');
-                expect(result.purged).toEqual([]);
-                expect(result.stopped.sort()).toEqual(['devops-claude', 'devops-handauth']);
-                // No deletion without purge.
-                const specs = await loadAgentSpecs(configDir);
-                expect(specs).toHaveLength(2);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('with purge deletes only generated specs and never hand-authored ones', async () => {
-            const { svc, cwd, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                await seedSpec(configDir, 'devops-claude', ['team:devops', 'spur:generated']);
-                await seedSpec(configDir, 'devops-codex', ['team:devops', 'spur:generated'], 'codex');
-                await seedSpec(configDir, 'devops-handauth', ['team:devops'], 'handauth');
-
-                const result = await svc.teardownTeam('devops', { purge: true });
-                expect(result.purged.sort()).toEqual(['devops-claude', 'devops-codex']);
-                // Hand-authored spec survives the purge.
-                const specs = await loadAgentSpecs(configDir);
-                const ids = specs.map((s) => s.id);
-                expect(ids).toEqual(['devops-handauth']);
-            } finally {
-                await cleanup();
-            }
-        });
-
-        test('returns empty stopped list when the team has no specs', async () => {
-            const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-            try {
-                const result = await svc.teardownTeam('devops', { purge: true });
-                expect(result.purged).toEqual([]);
-                expect(result.stopped).toEqual([]);
-            } finally {
-                await cleanup();
-            }
-        });
-    });
-
-    describe('buildIdentity', () => {
-        test('builds a preamble listing workspace peers (excluding self)', async () => {
-            const { svc, cwd, cleanup } = await makeService();
-            try {
-                const configDir = join(cwd, '.spur', 'agents');
-                await seedSpec(configDir, 'planner', [], 'claude');
-                await seedSpec(configDir, 'reviewer', [], 'codex');
-                await seedSpec(configDir, 'loner', [], 'omp');
-                // 'loner' has a different workspace (/tmp) but the seeds all use /tmp,
-                // so all three share the workspace — planner's peers are reviewer + loner.
-
-                const specs = await loadAgentSpecs(configDir);
-                const planner = specs.find((s) => s.id === 'planner') as AgentSpec;
-                const preamble = await svc.buildIdentity(planner, '0258', 'Team runtime');
-                expect(preamble).toContain('planner');
-                // Peers are included; self is not duplicated as a peer.
-                expect(preamble).toContain('reviewer');
-                expect(preamble).toContain('loner');
-            } finally {
-                await cleanup();
-            }
-        });
+            const specs = await loadAgentSpecs(configDir);
+            const planner = specs.find((s) => s.id === 'planner') as AgentSpec;
+            const preamble = await svc.buildIdentity(planner, '0258', 'Team runtime');
+            expect(preamble).toContain('planner');
+            // Peers are included; self is not duplicated as a peer.
+            expect(preamble).toContain('reviewer');
+            expect(preamble).toContain('loner');
+        } finally {
+            await cleanup();
+        }
     });
 });
 
@@ -1415,76 +797,28 @@ describe('TeamService drain loop (0253)', () => {
 
 function makeTeamCapturingBus(): {
     bus: TeamServiceEventBus;
-    lifecycle: Map<string, TeamLifecycleEventPayload[]>;
     members: Map<string, TeamMemberEventPayload[]>;
 } {
     const bus = new EventBus() as unknown as TeamServiceEventBus;
-    const lifecycle = new Map<string, TeamLifecycleEventPayload[]>([
-        ['team.up', []],
-        ['team.down', []],
-    ]);
     const members = new Map<string, TeamMemberEventPayload[]>([
         ['team.member.assigned', []],
         ['team.member.started', []],
         ['team.member.stopped', []],
     ]);
-    bus.on('team.up', (e) => lifecycle.get('team.up')?.push(e));
-    bus.on('team.down', (e) => lifecycle.get('team.down')?.push(e));
     bus.on('team.member.assigned', (e) => members.get('team.member.assigned')?.push(e));
     bus.on('team.member.started', (e) => members.get('team.member.started')?.push(e));
     bus.on('team.member.stopped', (e) => members.get('team.member.stopped')?.push(e));
-    return { bus, lifecycle, members };
+    return { bus, members };
 }
 
 describe('TeamService team.* events (task 0371)', () => {
-    test('R15: materializeTeam emits team.up with teamId and memberCount', async () => {
-        const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
-        try {
-            const result = await svc.materializeTeam('devops');
-            expect(result.written).toBe(true);
-            const ups = lifecycle.get('team.up');
-            expect(ups?.length).toBe(1);
-            expect(ups?.[0]?.teamId).toBe('devops');
-            expect(ups?.[0]?.memberCount).toBe(result.upserted.length);
-            expect(ups?.[0]?.outcome).toBe('ok');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('R15: dry-run materialize does not emit team.up', async () => {
-        const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
-        try {
-            await svc.materializeTeam('devops', { check: true });
-            expect(lifecycle.get('team.up')).toEqual([]);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('R15: teardownTeam emits team.down with teamId and memberCount', async () => {
-        const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
-        try {
-            await svc.materializeTeam('devops');
-            const result = await svc.teardownTeam('devops', { purge: true });
-            const downs = lifecycle.get('team.down');
-            expect(downs?.length).toBe(1);
-            expect(downs?.[0]?.teamId).toBe('devops');
-            expect(downs?.[0]?.memberCount).toBe(result.stopped.length);
-            expect(downs?.[0]?.outcome).toBe('purged');
-        } finally {
-            await cleanup();
-        }
-    });
-
     test('R16: assignTask emits team.member.assigned with teamId/memberId/agentType', async () => {
         const { bus, members } = makeTeamCapturingBus();
-        const { svc, cwd, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
+        const { svc, cwd, cleanup } = await makeService(bus);
         try {
-            await svc.materializeTeam('devops');
+            // 0857: the `team:<id>` tag on the spec is the roster identity now that the
+            // `agent.team` config block is gone — seed the generated spec directly.
+            await seedSpec(join(cwd, '.spur', 'agents'), 'devops-claude', ['team:devops', 'spur:generated']);
             const tasksDir = join(cwd, 'docs', 'tasks');
             await mkdir(tasksDir, { recursive: true });
             await writeFile(join(tasksDir, '0042_demo_task.md'), '---\nname: Demo\nstatus: Todo\n---\n\nbody\n');
@@ -1606,94 +940,36 @@ describe('TeamService team.* events (task 0371)', () => {
             await cleanup();
         }
     });
-
-    test('R15: teardownTeam without purge emits outcome ok (not purged)', async () => {
-        const { bus, lifecycle } = makeTeamCapturingBus();
-        const { svc, cleanup } = await makeService(bus, undefined, undefined, DEVOPS_SPUR);
-        try {
-            await svc.materializeTeam('devops');
-            const result = await svc.teardownTeam('devops');
-            expect(result.purged).toEqual([]);
-            const downs = lifecycle.get('team.down');
-            expect(downs?.length).toBe(1);
-            expect(downs?.[0]?.teamId).toBe('devops');
-            expect(downs?.[0]?.outcome).toBe('ok');
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test('no team.* emit when eventBus is absent (CLI without ledger)', async () => {
-        const { svc, cleanup } = await makeService(undefined, undefined, undefined, DEVOPS_SPUR);
-        try {
-            // Must not throw without a bus.
-            await svc.materializeTeam('devops');
-            await svc.teardownTeam('devops');
-        } finally {
-            await cleanup();
-        }
-    });
 });
 
 // ---- disabled executor guard (0796 R4) ----
 
-describe('TeamService disabled executors (0796)', () => {
-    const disabledTeamSpur = spurConfigSchema.parse(
-        yamlParse(`agent:
-  executors:
-    - name: retired
-      agent: codex
-      disabled: true
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - executor: retired
-          purpose: verify
-`),
-    );
+describe('resolveMemberExecutor disabled executors (0796)', () => {
+    // 0857: the guard lives in `resolveMemberExecutor` (the shared funnel both the
+    // former team materializer and the project fleet use), so it is exercised
+    // directly — the roster source is no longer an `agent.team` block.
+    const roles = new Map<string, AgentRoleDefinition>([['reviewer', { tier: 'capable-1', stages: ['verify'] }]]);
 
-    test('materializeTeam rejects a member pinned to a disabled executor', async () => {
-        const { svc, cleanup } = await makeService(undefined, undefined, undefined, disabledTeamSpur);
-        try {
-            await expect(svc.materializeTeam('demo')).rejects.toThrow(
-                /pins disabled executor "retired" .*enable the profile or repin the member/,
-            );
-        } finally {
-            await cleanup();
-        }
+    test('rejects a member pinned to a disabled executor', () => {
+        expect(() =>
+            resolveMemberExecutor({
+                member: { executor: 'retired' },
+                index: 0,
+                label: 'Fleet "demo"',
+                agentConfig: { executors: [{ name: 'retired', agent: 'codex', disabled: true }] },
+            }),
+        ).toThrow(/pins disabled executor "retired" .*enable the profile or repin the member/);
     });
 
-    test('materializeTeam rejects a role member whose every tier-eligible executor is disabled (111 R3)', async () => {
-        const roleTeamSpur = spurConfigSchema.parse(
-            yamlParse(`agent:
-  executors:
-    - name: retired
-      agent: codex
-      tier: capable-1
-      disabled: true
-  team:
-    demo:
-      name: Demo
-      work_dir: /tmp/demo
-      members:
-        - role: reviewer
-          purpose: verify
-`),
-        );
-        const { svc, cleanup } = await makeService(
-            undefined,
-            undefined,
-            new Map<string, AgentRoleDefinition>([['reviewer', { tier: 'capable-1', stages: ['verify'] }]]),
-            roleTeamSpur,
-        );
-        try {
-            await expect(svc.materializeTeam('demo')).rejects.toThrow(
-                /every tier-eligible executor for role "reviewer" .*is disabled \(retired\)/,
-            );
-        } finally {
-            await cleanup();
-        }
+    test('rejects a role member whose every tier-eligible executor is disabled (111 R3)', () => {
+        expect(() =>
+            resolveMemberExecutor({
+                member: { role: 'reviewer' },
+                index: 0,
+                label: 'Fleet "demo"',
+                agentConfig: { executors: [{ name: 'retired', agent: 'codex', tier: 'capable-1', disabled: true }] },
+                roles,
+            }),
+        ).toThrow(/every tier-eligible executor for role "reviewer" .*is disabled \(retired\)/);
     });
 });

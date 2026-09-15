@@ -113,7 +113,9 @@ describe('misplacedGlobalKeys (task 0649 R4)', () => {
         ).toEqual(['name', 'bootstrap', 'rules', 'redaction', 'tasks', 'features']);
     });
 
-    test('reports agent.team as a project-shaped key without flagging global agent.* keys', () => {
+    test('0857: the retired agent.team key is no longer classified — agent.* stays global-shaped', () => {
+        // The key is rejected at load by the loader guard; this classifier no longer
+        // owns it, and a leftover block must not read as a second "misplaced" report.
         expect(
             misplacedGlobalKeys({
                 agent: {
@@ -124,7 +126,7 @@ describe('misplacedGlobalKeys (task 0649 R4)', () => {
                 },
                 workflows: {},
             }),
-        ).toEqual(['agent.team']);
+        ).toEqual([]);
     });
 
     test('a correctly shaped global config produces no finding (agent.default/executors/roles + workflows)', () => {

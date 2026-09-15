@@ -31,6 +31,8 @@ export interface ResolvedFleetMember {
     instanceId: string;
     role?: string;
     executor: string;
+    /** Resolved model; omitted when the executor profile declares none (0857 R5). */
+    model?: string;
     enabled: boolean;
     writeCapable: boolean;
     capabilityState: string;
