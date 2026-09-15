@@ -276,10 +276,11 @@ under `plugins/sp/commands/` declares `role:` in its YAML frontmatter (from its 
 table; enforced by `plugins/sp/tests/roles.test.ts`, which fails on a command with no `role:`),
 and the command dispatcher threads it into `--agent` so subprocess dispatch routes by the declared
 role; workflow `agent.run` steps declare `role:` beside their `agent:` pin; and
-`.spur/fleet.json` members declare an optional `role` — the **primary axis** since 0543: a
+`.spur/config.yaml`'s `agent.fleet` members declare an optional `role` — the **primary axis** since 0543: a
 member may name the role alone (executor optional) and materialization resolves an executor through
-the tier ladder; a member declaring at least one of role/executor is the load rule (R4). (`agent.team`
-was retired with the roster runtime in 0857; a leftover block now fails the config load.)
+the tier ladder; a member declaring at least one of role/executor is the load rule (R4). (Both retired
+carriers are gone: `agent.team` was removed with the roster runtime in 0857 and `.spur/fleet.json`
+with the fleet-in-config move in 0858; a leftover of either now fails the config load.)
 An explicit `--agent` value always wins over a declaration.
 **Explicit `--agent` is role-first, then executor-aware (0346 / 0536).** An explicit `--agent <name>`
 matches roles first (the vocabulary is closed and pairwise-disjoint from executor names, 0537 R4),

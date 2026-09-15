@@ -68,7 +68,7 @@ graph TB
         TaskSvc[TaskService<br/>PlanningWriteService]
         FeatureSvc[FeatureService<br/>PlanningWriteService]
         HistorySvc[HistoryService]
-        TeamSvc[TeamService]
+        CoordinationSvc[AgentCoordinationService]
     end
 
     subgraph "Domain (packages/domain)"
@@ -91,7 +91,7 @@ graph TB
         Others[pi, omp, OpenCode,<br/>Antigravity, OpenClaw,<br/>Hermes, Grok]
     end
 
-    CLI --> AgentSvc & RuleSvc & WorkflowSvc & TaskSvc & FeatureSvc & HistorySvc & TeamSvc
+    CLI --> AgentSvc & RuleSvc & WorkflowSvc & TaskSvc & FeatureSvc & HistorySvc & CoordinationSvc
     AgentSvc --> AiRunner --> Claude & Codex & Gemini & Others
     RuleSvc --> RuleEngine
     WorkflowSvc --> WorkflowEngine

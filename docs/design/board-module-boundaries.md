@@ -7,9 +7,9 @@ updated_at: 2026-09-14
 ---
 
 > **Superseded (ADR-116).** The Workspace / Inbox / Teams boundary is retired: the Projects module owns
-> Conversation, Agents, and Work, and the three modules were deleted with their routes redirecting into
-> Projects (task 0849). Current boundary: [project-switcher](project-switcher.md). Kept as the
-> historical record of the retired board-module split.
+> Conversation, Agents, and Processes (the Work tab was dropped on 2026-09-14), and the three modules
+> were deleted with their routes redirecting into Projects (task 0849). Current boundary:
+> [project-switcher](project-switcher.md). Kept as the historical record of the retired board-module split.
 
 # Board module boundaries — Workspace / Inbox / Teams under the agent-role mechanism
 

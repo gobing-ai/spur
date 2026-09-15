@@ -1173,6 +1173,14 @@ noun is the cutover commit's work, not this amendment's.
 **Note (2026-09-14):** the G64 cutover removed the `spur team` noun and its `team-noun-retired` shim;
 removing the `agent.team` key follows with the fleet-in-config feature.
 
+**Note (2026-09-15 · G65 / task 0861):** the `agent.team` key is **removed**. Task 0857 deleted the
+schema, the loader merge rule, the `misplacedGlobalKeys` branch and the serve autostart path it fed,
+and added a load-time guard: a config that still carries the block fails the load naming the file and
+`agent.fleet` in `<project>/.spur/config.yaml` as the replacement — nothing is silently stripped or
+read from the retired key. The roster layer itself (layer 2 of the three-layer taxonomy above) is
+unchanged; only its carrier moved, first to `.spur/fleet.json` (0835) and then into the project config
+section below.
+
 **Amendment (2026-08-26 · Task 0685 verification correction):** The capability catalog
 (`agent.roles`, `agent.executors`, `agent.default`) stays machine-global in
 `~/.config/spur/config.yaml`; `.spur/config.yaml` owns the project roster and optional project
@@ -1710,3 +1718,15 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Retains:** ADR-037 (project registry), ADR-057 (control-plane boundary), ADR-022 (task lifecycle).
 - **Detail:** `docs/plans/2026-09-11-project-agent-fleet-brainstorm.md`;
   `docs/design/project-switcher.md` § fleet; features G61–G64.
+
+> **Amendment (2026-09-15 · G65 / tasks 0856–0861):** The fleet declaration moves from
+> `<projectPath>/.spur/fleet.json` into the project config section
+> `agent.fleet { enabled, strategy, orchestrator, members }` (project layer only). `agent.team` is
+> removed. `enabled` gates serve materialization and autostart; `strategy` is reconciled into
+> `project_strategy` at serve start. Retired carriers fail loudly; none is read. The Projects module's
+> tabs are Conversation / Agents / **Processes** — the Work tab was dropped on 2026-09-14. The runtime
+> vocabulary follows the decision: `/api/processes` and `/api/agents/:id/start|stop` replace the
+> `/api/team/*` routes, `task.assigned` replaces `team.member.assigned`, the duplicate
+> `team.member.started|stopped` pair is deleted rather than renamed, and `TeamService` splits into
+> `AgentCoordinationService` plus the fleet service's roster projection. Detail:
+> [fleet declaration system design](design/fleet-config-declaration.md) (Accepted 2026-09-15).

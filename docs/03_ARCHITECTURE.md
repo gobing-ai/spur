@@ -558,11 +558,12 @@ logic exists.
 
 ADR-116 replaces ADR-052's team-scoped composition: **a project — one worktree path — is the
 composition unit.** Its agent roster is a **fleet** declared as `agent.fleet` in the project's
-`.spur/config.yaml` (0835 carrier, moved off `.spur/fleet.json` by 0858) and resolved by
+`.spur/config.yaml` and resolved by
 `FleetService`; the Projects Board module owns Conversation, Agents, and Processes (the three-tab
 contract, `apps/web/src/modules/projects/tabs.tsx`); `agent.fleet` is the only declaration — the
-retired `agent.team` block, the three retired Board modules, and their routes are gone
-(0849/0857). Spec ids stay the mailbox identity and
+retired `agent.team` block and `.spur/fleet.json` carrier, the three retired Board modules, and their
+routes are gone
+(0849/0857/0858). Spec ids stay the mailbox identity and
 occupant address, preserved verbatim across conversion. Fleet shape, resolution, and the dispatch
 boundaries: [project switcher § fleet](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
 Nothing in this section introduces new persistence, service, HTTP route, or CLI noun.

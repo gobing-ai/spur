@@ -164,16 +164,9 @@ Registration preserves an existing project name because fleet mailbox IDs use th
 | `list [--json] [--fleet]` | Table / JSON of name, path, port, running; `--fleet` (0835/0836/0858) also resolves each project's `agent.fleet` declaration, orchestrator binding and capacity under the same verb |
 | `start <name\|path> [--port]` | Spawn `spur serve` in project path (detached child); wait until health OK; update registry |
 | `stop <name\|path>` | SIGTERM process listening on registered port (or recorded pid if we add it later); set port 0 |
-| `migrate [path] [--dry-run\|--apply] [--json]` | Preview legacy team conversion by default; explicit `--apply` backs up a differing fleet declaration and writes the conversion. Conflicts exit 2. |
 
 `--json` on list/start/stop for machine use. Noun name **`projects`** (plural) matches multi-entry
 resource; keep `spur serve` as the low-level launcher.
-
-Migration reads existing inbox and coordination addresses through a read-only SQLite connection,
-without schema migrations; a missing database or table contributes no addresses. It refuses conversion
-when the target registry name differs from the legacy team ID (`project-name-mismatch`): fleet spec
-IDs use the registry name as their prefix, so the names must agree to preserve mailbox identity.
-The operator resolves that conflict explicitly; migration never renames the project or merges teams.
 
 **Future launchd:** `start`/`stop` become thin clients of a daemon; `ProjectRegistry` file contract
 unchanged.
@@ -213,7 +206,8 @@ GET /api/project/fleet   (0840)
 - Wire contract (0840 review F1): `orchestrator` is a **claim projection** —
   `{ state, instanceId?, holderId?, reason? }`. `holderId` is intentionally included on
   `bound-online`; the raw `project_claims` row is never echoed. 0841-0843 freeze on this shape.
-- An invalid/unreadable `.spur/fleet.json` keeps FleetService's purpose-built detail (file +
+- An invalid or unreadable `agent.fleet` — including a leftover `.spur/fleet.json`, which fails the
+  load naming the file (0858) — keeps FleetService's purpose-built detail (file +
   reason) in `capacity.missing` (0840 review F3) — never a placeholder, never a 500.
 
 Optional later: `POST /api/projects/stop` (CLI covers stop for v1).
@@ -290,7 +284,7 @@ independent facts, never collapsed into one indicator:
 - DECLARED — the member from `GET /api/project/fleet` (`members`, the 0840
   wire of FleetService 0835): role, executor, `model` (the resolved executor
   profile's model, omitted when it declares none), `enabled`, `capabilityState`.
-- OBSERVED — the process from the existing `GET /api/team/processes` read:
+- OBSERVED — the process from the existing `GET /api/processes` read:
   `running` / `exited` / `not-started`, pid, startedAt, exitCode.
 
 They disagree in both directions (declared-but-not-running; a live process
@@ -312,7 +306,8 @@ Issue labels are frozen and shared with the global input receipts (0844):
 - Member detail: a pane (not a route, no focus trap) mounting the existing
   process/terminal (`MemberTerminal`), messages (non-consuming
   `GET /api/messages/inbox`), activity (`GET /api/events/history`), and the
-  lifecycle verbs `/api/team/*` already exposes — start, stop, stdin. Escape
+  lifecycle verbs the owning-noun routes already expose (`POST /api/agents/:id/start|stop`,
+  `POST /api/processes/:id/stdin`) — start, stop, stdin. Escape
   restores focus to the opener card.
 - Member details read the fleet snapshot (`GET /api/project/fleet`, already in board context) for the
   selected member's `model` and the project's common working directory. A declared member whose
@@ -334,7 +329,7 @@ reference capture (`addRef({kind:'task', wbs})`) left with it. The draft's ref
 contract (`ConversationRef`, chips, submission) is unchanged.
 
 - `ProcessesView` restores the retired 0262/0264/0267 watch list. It polls
-  `GET /api/team/processes` for rows: supervised processes plus registry
+  `GET /api/processes` for rows: supervised processes plus registry
   one-shots, deduplicated by covered agentId/pid. The rows sit behind the 0267
   filter bar (running-only, source, team/unassigned), with an empty state when
   nothing matches. The wire parse stays in `MemberTerminal.tsx`
