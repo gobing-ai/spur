@@ -34,10 +34,11 @@ import { publish } from './commands/publish';
 import { realRunCost } from './commands/real-run-cost';
 import { bumpVer, dropTags } from './commands/release';
 import { verifyPack } from './commands/verify-pack';
+import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets, promotion',
     );
     process.exit(message ? 1 : 0);
 }
@@ -105,6 +106,9 @@ try {
             break;
         case 'check-pipeline-budgets':
             process.exit(await checkPipelineBudgets(args));
+            break;
+        case 'promotion':
+            process.exit(await runWorkflowPromotion(args));
             break;
         default:
             usage(command ? `unknown command "${command}"` : undefined);

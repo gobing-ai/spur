@@ -154,6 +154,42 @@ what replaces the `task-pipeline2.yaml` pattern ADR-076 deleted: the user-propos
 and retired for reasons that still hold — four attempts over two days of live model quota, never
 reaching a verdict, blocking a feature chain.
 
+The gate is operational (task 0873) as the repo-internal `bun scripts/spur-dev.ts promotion`
+command and a candidate record at `config/workflow-candidates.json`.
+
+### 5.1 Candidate record
+
+A candidate is a **record**, never a standing parallel YAML: its canonical target, a deadline named
+at creation, the recorded real-run inputs to replay, and the projected `agent.run` count. `verdict`
+is `null` while pending and is filled by `promotion evaluate`.
+
+| Field | Meaning |
+| --- | --- |
+| `canonical` | the workflow definition the candidate changes (basename sans `.yaml`) |
+| `deadline` | the date (YYYY-MM-DD) by which it is promoted or deleted — named at creation |
+| `measurement.workflow` / `runIds` | the recorded real-run inputs the shadow-run replays |
+| `delta.agentRunCount` | the candidate's projected `agent.run` action count per run |
+| `verdict` | `null` pending; the shadow-run decision once evaluated |
+
+### 5.2 Shadow-run comparison
+
+The shadow run replays the recorded `action_runs`/`runs` history of the canonical workflow — the
+per-run `agent.run` action count and summed duration over terminal, non-dry runs — rather than
+paying live model quota against a fixture. The verdict (R2) cites both measured quantities, and its
+promote/delete decision is the ADR-076 bar: a candidate is promoted only when it projects strictly
+fewer `agent.run` actions than the canonical definition declares; otherwise it is deleted. Duration
+is cited as measured context, never the decision — a candidate's duration is only knowable by
+running it, which the shadow run deliberately does not.
+
+### 5.3 Deadline enforcement
+
+`promotion resolve --decision promote|delete` resolves a candidate: delete removes it; promote first
+verifies the canonical definition now declares the candidate's projected `agent.run` count and then
+removes it, refusing (exit 1) until the canonical change has actually landed. `promotion check` —
+wired into `spur-check-feature` as the repo-wide catalogue check — fails (R3/R4) on any candidate
+still present past its named deadline and on any unreferenced `<name>2.yaml`-style parallel
+definition in `config/workflows/`.
+
 ## 6. Sequence
 
 1. **Retire** `basic` and `feature-dev`; evaluate `docs-pipeline` against §2.2's discriminator. Fewer
