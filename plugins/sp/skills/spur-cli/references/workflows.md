@@ -95,7 +95,7 @@ Use this skill to:
 
 The skill's logic divides by **whether the LLM adds value**:
 
-- **Direct CLI** (`validate`, `run`, `list`, `trace`, `continue`, `cancel`, `clean`) — deterministic,
+- **Direct CLI** (`validate`, `run`, `list`, `trace`, `progress`, `continue`, `cancel`, `clean`) — deterministic,
   single-verb commands. Run them straight. A slash-command wrapper would only forward flags and add
   drift; **there is no command for these — use the CLI**. The skill still drives them in natural
   language (interpreting a failed validate, reading a run trace).
@@ -113,6 +113,7 @@ The skill's logic divides by **whether the LLM adds value**:
 | `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--logs] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed **and** reclaim retained run logs older than `workflow.logRetentionDays` (30d default) |
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
 | `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output]` | Run history list or per-run timeline |
+| `progress` | `spur workflow progress` (CLI) | `<run-id>` | The `projectWorkflowProgress` projection for that run — current state, per-action attempts, candidate next transitions, diagnostics. Read-only; the verb renders, `packages/app` derives. Unknown run id exits 1 with `Run <id> not found.` |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
 
@@ -262,6 +263,7 @@ spur workflow cancel   <run-id> [--json]
 spur workflow clean    [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]
 spur workflow list     [--json]
 spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]
+spur workflow progress <run-id> [--json]
 ```
 
 ### `show` - project a definition

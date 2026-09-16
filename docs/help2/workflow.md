@@ -15,6 +15,7 @@ phases.
 | `cancel <run-id>` | Cancel a single non-terminal run by id |
 | `list` | List available workflow YAML files |
 | `trace [run-id]` | Show persisted workflow run history |
+| `progress <run-id>` | Project a run's structured progress: current state, action attempts, next transitions |
 | `clean` | Housekeeping: finalize stale runs and reclaim retained logs |
 
 ## spur workflow validate
@@ -118,6 +119,22 @@ instead).
 ```bash
 spur workflow trace <run-id> --follow
 spur workflow clean --older-than 60 --dry-run
+```
+
+## spur workflow progress
+
+```bash
+spur workflow progress <run-id> [--json]
+```
+
+Read-only projection of one run: the current state, every declared action with its recorded
+attempts, and the candidate next transitions. The projection is computed in `packages/app`
+(`projectWorkflowProgress`) and the verb only renders it, so `--json` is the projection itself.
+A running or incomplete run exits `0` and prints unanswered values as `unknown`; an unknown
+run id exits `1` with `Run <run-id> not found.`
+
+```bash
+spur workflow progress <run-id> --json
 ```
 
 ## See also

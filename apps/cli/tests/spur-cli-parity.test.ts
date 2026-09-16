@@ -35,7 +35,7 @@ const EXPECTED_TIER_A_VERBS = {
     ],
     feature: ['create', 'show', 'update', 'advance', 'list', 'move', 'refresh', 'check', 'sync'],
     rule: ['run', 'validate', 'list', 'trace'],
-    workflow: ['validate', 'run', 'continue', 'clean', 'cancel', 'list', 'show', 'trace'],
+    workflow: ['validate', 'run', 'continue', 'clean', 'cancel', 'list', 'show', 'trace', 'progress'],
 } satisfies Record<string, string[]>;
 
 // Critical task verbs required by task 0317

@@ -585,9 +585,9 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   explicit unavailable data without failing the command. Existing JSON keys remain present.
   Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-<a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json"></a>
+<a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json--spur-workflow-progress-run-id---json"></a>
 
-#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]`
+#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
 
 > **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
@@ -608,6 +608,16 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   path}`, the layer and file that name resolution picked (ADR-113). Unknown `--format` exits 1
   naming both values before file resolution; not-found and schema-invalid errors are identical for every
   format. Consumer: the inline driver's layer-1 todo (0696, `inline-pipeline-driver.md`).
+- `progress <run-id> [--json]` — read-only projection of one run's execution progress
+  (D62 / ADR-117). The payload **is** `projectWorkflowProgress`
+  (`packages/app/src/workflow/progress-projection.ts`): `{schemaVersion, runId, workflow, status,
+  definitionDigest, version?, currentState, states[], transitions[], artifacts[],
+  nextTransitions[], diagnostics[], projectedAt}` — current state, each action's attempts
+  (`actionRunId`, status, `ok`, started/completed, `durationMs`), and the candidate next
+  transitions with their eligibility. `apps/cli` renders only; it adds no projection logic and no
+  query shape. A running or incomplete run exits `0` and leaves unanswered values as `unknown`
+  (`null` digest/state, absent attempts, `diagnostics` naming what is missing). An unknown run id
+  exits `1` with `Run <run-id> not found.` (`NOT_FOUND` under `--json-envelope`).
 - `validate <file>` — load + Zod-validate a workflow definition.
 - **YAML extensions (0533/D4):** a workflow may declare `extensions.actions: [./module.ts]` /
   `extensions.guards: [...]` — relative module paths resolved against the workflow file's own

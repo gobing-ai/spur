@@ -16,6 +16,7 @@
 | `continue [run-id]` | Resume a paused (HITL) workflow run |
 | `list` | List available workflow YAML files across project + global layers |
 | `trace [run-id]` | Show persisted workflow run history (or follow a live run) |
+| `progress <run-id>` | Project a run's structured progress: current state, per-action attempts, candidate next transitions |
 | `cancel <run-id>` | Cancel a single non-terminal run by id (mark as failed; SIGTERM async worker when live) |
 | `clean` | Housekeeping: finalize stale non-terminal runs **and** reclaim retained run logs |
 
@@ -270,6 +271,40 @@ of state entries, transitions, and action executions.
 spur workflow trace <run-id> --follow            # stream until terminal
 spur workflow trace <run-id> --follow --poll 500
 spur workflow trace <run-id> --follow --output   # tail the consolidated run log
+```
+
+## spur workflow progress
+
+```
+spur workflow progress [options] <run-id>
+```
+
+| Argument | Description |
+|---|---|
+| `run-id` | Run ID to project |
+
+| Flag | Description |
+|---|---|
+| `--json` | Output machine-readable JSON |
+
+Read-only projection of one run's execution progress: the current state, every declared
+action with its recorded attempts, the candidate next transitions, recorded artifacts, and
+any projection diagnostics. The projection is derived entirely in `packages/app`
+(`projectWorkflowProgress`); this verb renders it and adds no projection logic of its own.
+
+`--json` emits that projection verbatim (schemaVersion, runId, workflow, status,
+definitionDigest, currentState, states, transitions, artifacts, nextTransitions,
+diagnostics, projectedAt). Human mode renders the same object.
+
+A running or incomplete run exits `0`: values the run has not answered yet print as
+`unknown` and the projection's `diagnostics` name what is missing. An **unknown run id**
+exits `1` with `Run <run-id> not found.` (NOT_FOUND under `--json-envelope`) — never an
+empty success.
+
+### Example
+
+```bash
+spur workflow progress <run-id> --json
 ```
 
 ## spur workflow cancel
