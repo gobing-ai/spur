@@ -273,7 +273,7 @@ export function registerSchedulerEntries(
         // and restoring a default timer under `none` would silently defeat it.
         // (Native lease-based recovery stays deferred on the unreleased ts-infra
         // consumer/lease work, task 0812.)
-        const jobPolicy = resolveSchedulerJobTimeoutMs(job.name, env, timeoutMs);
+        const jobPolicy = resolveSchedulerJobTimeoutMs(job.name, env, timeoutMs, job.timeoutMs);
         const sweepThresholdMs = jobPolicy === null ? null : jobPolicy + resolveKillGraceMs(env);
         register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
             const queue = await ctx.jobQueue();
@@ -875,15 +875,26 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // the queue's existing attempt/retry policy.
                 registry.register(SCHEDULER_CUSTOM_JOB, async (job) => {
                     await emitQueueJobStarted(ctx, job);
+                    // Declared per-job policy (`bootstrap.scheduler.jobs[].timeoutMs`).
+                    // The map is read once per attempt; a job name absent from this
+                    // daemon's config falls through to env, then the global default.
+                    const declaredTimeouts = new Map(
+                        appRt.config.scheduler.jobs.map((entry) => [entry.name, entry.timeoutMs] as const),
+                    );
                     return handleSchedulerCustomJob(
                         {
                             cwd: ctx.cwd,
                             executor: childExecutor,
                             // Task 0806 R3: per-job budget override via
-                            // `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`, falling back to the global
-                            // daemon-boot default.
+                            // `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS`, falling back to the job's
+                            // declared `timeoutMs`, then the global daemon-boot default.
                             resolveTimeoutMs: (name) =>
-                                resolveSchedulerJobTimeoutMs(name, env, schedulerCustomTimeoutMs),
+                                resolveSchedulerJobTimeoutMs(
+                                    name,
+                                    env,
+                                    schedulerCustomTimeoutMs,
+                                    declaredTimeouts.get(name),
+                                ),
                             // Task 0863: a claimed duplicate of an already-running job name is
                             // completed, not failed — audit it so the suppression is visible in
                             // the ledger instead of only as a zero-duration completion.
@@ -896,6 +907,21 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                                     reason: `duplicate execution suppressed; ${name} is already running in this process`,
                                 });
                             },
+                            // Shutdown abandonment is likewise audited: the row completes,
+                            // so this is the only record that the command did not finish.
+                            onShutdownAbandon: (name) => {
+                                ctx.eventBus().emit('scheduler.job.executed', {
+                                    name: `${SCHEDULER_CUSTOM_JOB}:${name}`,
+                                    durationMs: 0,
+                                    severity: 'info',
+                                    skipped: true,
+                                    reason: `abandoned by server shutdown; the next tick resumes ${name}`,
+                                });
+                            },
+                            // A child killed by this server's own shutdown teardown is not a
+                            // command verdict. `shuttingDown` flips at the top of `shutdown`
+                            // and is read here at settlement time.
+                            isShuttingDown: () => shuttingDown,
                         },
                         job,
                     );
@@ -909,7 +935,11 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 // tick and execute the job twice. Symmetric with the periodic sweep's
                 // `null`-policy exemption above.
                 const unlimitedJobNames = appRt.config.scheduler.jobs
-                    .filter((job) => resolveSchedulerJobTimeoutMs(job.name, env, schedulerCustomTimeoutMs) === null)
+                    .filter(
+                        (job) =>
+                            resolveSchedulerJobTimeoutMs(job.name, env, schedulerCustomTimeoutMs, job.timeoutMs) ===
+                            null,
+                    )
                     .map((job) => job.name);
                 const orphanCount = await failOrphanedProcessingJobs(await ctx.getDb(), Date.now(), unlimitedJobNames);
                 if (orphanCount > 0) {

@@ -1700,6 +1700,60 @@ describe('startServer', () => {
         expect(String(swept?.reason)).toContain('age-sweep');
     });
 
+    test('a declared job timeoutMs (not only the env override) drives the sweep threshold', async () => {
+        // The declared policy must reach the CHILD side, not just the tick. Without the
+        // declared layer the global 600000ms default would put the sweep at 605000ms —
+        // 7.5x the deadline the operator declared for this job.
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
+        const updates: Array<{ sql: string; params: unknown[] }> = [];
+        const scheduler = {
+            register: (cron: string, action: ScheduledAction) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        const ctx = {
+            // The conflict is what routes the tick into the sweep path.
+            jobQueue: async () => ({
+                enqueue: async () => {
+                    throw schedulerCustomActiveConflict('history-refresh');
+                },
+            }),
+            getDb: async () => ({
+                queryFirst: async (sql: string, ...params: unknown[]) => {
+                    if (sql.includes('scheduler.custom') && params[0] === 'history-refresh') {
+                        return { id: 'stale-1', status: 'processing', processing_at: 1000, updated_at: 1000 };
+                    }
+                    if (sql.includes('changes()')) return { n: 1 };
+                    return undefined;
+                },
+                run: async (sql: string, ...params: unknown[]) => {
+                    updates.push({ sql, params });
+                },
+            }),
+            eventBus: () => ({ emit: () => {} }),
+        } as unknown as ServerContext;
+
+        registerSchedulerEntries(
+            scheduler,
+            ctx,
+            [
+                {
+                    name: 'history-refresh',
+                    cron: '*/15 7-23 * * *',
+                    command: 'bun apps/cli/src/index.ts history daily',
+                    timeoutMs: 60_000,
+                },
+            ],
+            // No deps override: the 600000ms global default is the fallback layer.
+        );
+        await registered[2]?.action(tickCtx);
+
+        expect(updates).toHaveLength(1);
+        expect(String(updates[0]?.params[0])).toContain('age-sweep: processing exceeded 65000ms');
+    });
+
     test('registerSchedulerEntries tolerates a post-sweep enqueue conflict from a concurrent tick (task 0863)', async () => {
         const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
@@ -2051,6 +2105,152 @@ describe('startServer', () => {
         expect(audit?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:duplicate-job`);
         expect(String(audit?.reason)).toContain('duplicate execution suppressed');
         expect(audit?.severity).toBe('info');
+    }, 20_000);
+
+    test('a child killed by server shutdown is abandoned and audited, never reported as a failure (Sep 2026)', async () => {
+        // The incident: a `spur serve` restart mid-`history import` SIGTERMs the job child,
+        // which the queue recorded as an error-severity `queue.job.failed` — the exact
+        // alert text (“terminated before a normal exit (Termination) after 50335ms”) the
+        // operator chased. The attempt must settle as abandoned instead.
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {} })) as unknown as typeof Bun.serve;
+
+        const emitted: Array<{ name: string; payload: Record<string, unknown> }> = [];
+        const registeredHandlers: Record<string, (payload?: unknown) => Promise<void>> = {};
+        const queueConsumer = {
+            register: (type: string, handler: (payload?: unknown) => Promise<void>) => {
+                registeredHandlers[type] = handler;
+            },
+            start: async () => {},
+            stop: async () => {},
+            stats: async () => ({ pending: 0, processing: 0, completed: 0, failed: 0 }),
+            processOnce: async () => 0,
+        };
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: true },
+                scheduler: { enabled: true },
+            }),
+            createServerContext: (() =>
+                ({
+                    queueConsumer: async () => queueConsumer,
+                    getDb: async () => ({
+                        queryFirst: async () => undefined,
+                        run: async () => {},
+                    }),
+                    systemEventDao: async () => ({ pruneQuotas: async () => {} }),
+                    eventBus: () => ({
+                        emit: (name: string, payload: Record<string, unknown>) => {
+                            emitted.push({ name, payload });
+                        },
+                        on: () => {},
+                        off: () => {},
+                    }),
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            runNodeApplication: runNodeApplicationWith(() =>
+                fakeRuntime(undefined, { enabled: true, adapter: recordingScheduler([]).adapter }),
+            ),
+        });
+
+        let shutdownSigint: SigHandler | undefined;
+        let running: Promise<void> | undefined;
+        try {
+            await startServer(
+                { port: 5005, host: '127.0.0.1', openBrowser: false, keepAlive: false, jobWorkerStartDelayMs: 0 },
+                deps,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            shutdownSigint = sigHandlers.SIGINT;
+            const handler = registeredHandlers[SCHEDULER_CUSTOM_JOB];
+            expect(handler).toBeDefined();
+
+            // A long child still running when shutdown lands.
+            running = handler?.({ payload: { name: 'history-refresh', command: 'sleep 30' } });
+            // Let the spawn register its pid with the server's process registry — that
+            // registry is what shutdown signals.
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        } finally {
+            shutdownSigint?.();
+            await exitCalled;
+        }
+
+        // Abandoned, not failed: the handler resolves, so the queue completes the row.
+        await expect(running).resolves.toBeUndefined();
+
+        const audit = emitted
+            .filter((e) => e.name === 'scheduler.job.executed')
+            .map((e) => e.payload)
+            .find((p) => p.skipped === true && p.reason !== undefined);
+        expect(audit?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:history-refresh`);
+        expect(String(audit?.reason)).toContain('abandoned by server shutdown');
+    }, 20_000);
+
+    test('the startup orphan sweep exempts a job declared explicitly unlimited (jobs[].timeoutMs: null)', async () => {
+        // Task 0813 R2's ceremony at the other end: an unlimited job's row is
+        // legitimately in flight, so a restart must not fail it while its detached
+        // child keeps running — the next tick would then execute the job twice.
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {} })) as unknown as typeof Bun.serve;
+
+        const sweepCalls: Array<{ sql: string; params: unknown[] }> = [];
+        const queueConsumer = {
+            register: () => {},
+            start: async () => {},
+            stop: async () => {},
+            stats: async () => ({ pending: 0, processing: 0, completed: 0, failed: 0 }),
+            processOnce: async () => 0,
+        };
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: true },
+                scheduler: { enabled: true },
+            }),
+            createServerContext: (() =>
+                ({
+                    queueConsumer: async () => queueConsumer,
+                    getDb: async () => ({
+                        queryFirst: async (sql: string, ...params: unknown[]) => {
+                            sweepCalls.push({ sql, params });
+                            return { cnt: 0 };
+                        },
+                        run: async () => {},
+                    }),
+                    systemEventDao: async () => ({ pruneQuotas: async () => {} }),
+                    eventBus: () => ({ emit: () => {}, on: () => {}, off: () => {} }),
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            runNodeApplication: runNodeApplicationWith(() =>
+                fakeRuntime(undefined, {
+                    enabled: true,
+                    adapter: recordingScheduler([]).adapter,
+                    jobs: [
+                        { name: 'always-on', command: 'exit 0', intervalMinutes: 5, timeoutMs: null },
+                        { name: 'bounded', command: 'exit 0', intervalMinutes: 5, timeoutMs: 60_000 },
+                    ],
+                }),
+            ),
+        });
+
+        try {
+            await startServer(
+                { port: 5006, host: '127.0.0.1', openBrowser: false, keepAlive: false, jobWorkerStartDelayMs: 0 },
+                deps,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        } finally {
+            sigHandlers.SIGINT?.();
+            await exitCalled;
+        }
+
+        const sweep = sweepCalls.find((c) => c.sql.includes("status = 'processing'"));
+        expect(sweep).toBeDefined();
+        expect(sweep?.params).toEqual(['always-on']);
+        expect(String(sweep?.sql)).toContain("NOT (type = 'scheduler.custom'");
     }, 20_000);
 
     test('parseTaskActionJob validates payload shape and preserves optional routing fields', () => {

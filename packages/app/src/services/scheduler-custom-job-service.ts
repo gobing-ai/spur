@@ -91,6 +91,20 @@ export interface SchedulerCustomJobDeps {
     /** SIGTERM→SIGKILL escalation grace; defaults to {@link CHILD_KILL_GRACE_MS}. */
     killGraceMs?: number;
     /**
+     * Audit seam for an attempt abandoned by a server shutdown (Sep 2026): the row is
+     * completed, so this is the only evidence that the command did not finish and the
+     * next tick owns the work. Omitted → no audit hook (tests, non-server consumers).
+     */
+    onShutdownAbandon?: (name: string) => void;
+    /**
+     * Shutdown probe. When it reports `true` and the child died from a signal (no exit
+     * code), the attempt was ended by `spur serve` tearing down its children rather
+     * than by anything the command did, so it is completed as abandoned instead of
+     * failing. `spur serve` wires the shutdown latch it sets before terminating job
+     * children; omitted → every signal death is a failure, as before.
+     */
+    isShuttingDown?: () => boolean;
+    /**
      * Audit seam for a suppressed same-name duplicate (task 0863). The attempt is
      * completed by the caller, so this is the only observable evidence that a
      * claimed row was folded into an already-running sibling instead of executed.
@@ -149,8 +163,16 @@ export function resolveSchedulerJobTimeoutMs(
     name: string,
     env: Record<string, string | undefined>,
     fallbackMs: TimeoutPolicyMs,
+    declaredMs?: number | null,
 ): TimeoutPolicyMs {
-    return normalizeLegacyTimeoutMs(env[schedulerJobTimeoutEnvName(name)], fallbackMs);
+    const override = env[schedulerJobTimeoutEnvName(name)];
+    if (override !== undefined) return normalizeLegacyTimeoutMs(override, fallbackMs);
+    // Declared policy (`bootstrap.scheduler.jobs[].timeoutMs`): `null` is explicit
+    // unlimited and must survive, so absence is tested against `undefined`, not
+    // falsiness. Without this layer the field bounded only the tick, while the
+    // child kept the global default — a 1h job declared in config died at 10 min.
+    if (declaredMs !== undefined) return declaredMs;
+    return fallbackMs;
 }
 
 /** Output cap. Buffered, so an unbounded-output command cannot exhaust server memory. */
@@ -198,6 +220,17 @@ export function validateSchedulerCustomJobPayload(raw: unknown): SchedulerCustom
  * spawn parallel child processes competing for the SQLite write lock.
  */
 const activeJobs = new Set<string>();
+
+/**
+ * Shutdown abandonment (Sep 2026). `spur serve` deliberately SIGTERMs every live job
+ * child so no importer outlives the server; without {@link
+ * SchedulerCustomJobDeps.isShuttingDown} the handler would report that deliberate kill
+ * as a failed attempt and emit an error-severity `queue.job.failed` — every restart
+ * landing inside a history refresh produced one such false alert (2 in a single day),
+ * burying real failures in the same stream. Configured periodic commands are
+ * checkpoint-idempotent, so the attempt is abandoned rather than failed and the next
+ * tick resumes it.
+ */
 
 /**
  * Run one configured scheduler command. Exit code is the entire success verdict: a spawn
@@ -254,6 +287,12 @@ export async function handleSchedulerCustomJob(deps: SchedulerCustomJobDeps, job
             );
         }
         if (result.exitCode === null) {
+            if (deps.isShuttingDown?.() === true) {
+                // Deliberate shutdown kill, not a command verdict: complete the attempt
+                // and let the next tick resume. Audited, never silent.
+                deps.onShutdownAbandon?.(payload.name);
+                return;
+            }
             const signalDetail = result.signal === undefined ? '' : ` (${result.signal})`;
             throw new Error(
                 `scheduler job "${payload.name}" terminated before a normal exit${signalDetail} ` +

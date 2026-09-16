@@ -48,6 +48,11 @@ bootstrap:
       # Ends with database maintenance (PRAGMA optimize + wal_checkpoint).
       - name: history-daily-report
         cron: "0 5 * * *"
+        # Total child budget. The chain runs a full-corpus import, a model-driven
+        # twelve-section workflow, and a VACUUM: measured daily runs hit the global
+        # 600s default and were killed mid-chain (2026-09-12/13/15). One hour is
+        # ~6x the observed healthy history-anatomy runtime per stage.
+        timeoutMs: 3600000
         command: >-
           bun apps/cli/src/index.ts --no-logo history import --source all &&
           bun apps/cli/src/index.ts --no-logo workflow run config/workflows/history-anatomy.yaml --quiet &&

@@ -63,7 +63,10 @@ queue policy API and the history handler's application default; no second schedu
 Explicit canonical options, including null, beat legacy environment controls. When canonical
 configuration is absent, preserve the existing inputs:
 
-- Configured job: `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` → `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` → 600,000 ms.
+- Configured job: `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` → `bootstrap.scheduler.jobs[].timeoutMs` →
+  `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` → 600,000 ms. The declared per-job value is a real layer at
+  the handler, not only at the tick: it is resolved for the child policy, the stale-row sweep
+  threshold, and the unlimited-row exemption from one call (`resolveSchedulerJobTimeoutMs`).
 - Completion refresh: `SPUR_HISTORY_REFRESH_TIMEOUT_MS` → 600,000 ms; the custom-job global does not widen it.
 - Source import: explicit CLI value → propagated history job policy → 600,000 ms for standalone calls.
 - Termination grace: `SPUR_SCHEDULER_KILL_GRACE_MS` → 5,000 ms, resolved once and passed to actual native termination.
@@ -97,6 +100,15 @@ bounded batches. In-flight transaction work must commit consistently or roll bac
 rejects; only completed checkpoints survive. A cancellation cannot interrupt synchronous SQLite
 mid-call, so the parent process watchdog remains the hard fallback. No background writes may occur
 after the importer promises cancellation has settled.
+
+**Server shutdown is not a command verdict.** `spur serve` terminates live job children on
+shutdown, so the child reports a signal death with no exit code. The handler takes a shutdown
+probe (`SchedulerCustomJobDeps.isShuttingDown`, wired to the server's own latch and flipped
+before the kill) and completes that attempt — with a `scheduler.job.executed` audit row naming
+the abandonment — instead of throwing and emitting an error-severity `queue.job.failed`. Only
+signal deaths are covered: a real non-zero exit or a deadline kill during shutdown still fails.
+Configured periodic commands are checkpoint-idempotent, so the next tick owns the interrupted
+work.
 
 ## Renewable queue ownership
 

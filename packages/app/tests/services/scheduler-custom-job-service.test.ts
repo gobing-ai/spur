@@ -190,6 +190,46 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
         ).rejects.toThrow('scheduler job "slow" terminated before a normal exit (SIGTERM) after 4321ms: killed');
     });
 
+    test('a kill delivered by a server shutdown abandons the attempt instead of failing it', async () => {
+        // Sep 2026: shutdown SIGTERMs live children, which surfaced as an error-severity
+        // `queue.job.failed` for a command that never had a chance to fail. The periodic
+        // commands are checkpoint-idempotent, so the next tick owns the work.
+        const abandoned: string[] = [];
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'Termination', durationMs: 50_335 });
+        await expect(
+            handleSchedulerCustomJob(
+                {
+                    cwd: '/proj',
+                    executor,
+                    isShuttingDown: () => true,
+                    onShutdownAbandon: (name) => abandoned.push(name),
+                },
+                jobOf({ name: 'history-refresh', command: 'history import' }),
+            ),
+        ).resolves.toBeUndefined();
+        expect(abandoned).toEqual(['history-refresh']);
+    });
+
+    test('the shutdown probe is not a blanket mute: a real exit code still fails', async () => {
+        const { executor } = fakeExecutor({ exitCode: 2, stderr: 'boom' });
+        await expect(
+            handleSchedulerCustomJob(
+                { cwd: '/proj', executor, isShuttingDown: () => true },
+                jobOf({ name: 'n', command: 'exit 2' }),
+            ),
+        ).rejects.toThrow('scheduler job "n" exited 2: boom');
+    });
+
+    test('a signal death with no shutdown in progress still fails (probe absent or false)', async () => {
+        const { executor } = fakeExecutor({ exitCode: null, signal: 'SIGKILL', durationMs: 12 });
+        await expect(
+            handleSchedulerCustomJob(
+                { cwd: '/proj', executor, isShuttingDown: () => false },
+                jobOf({ name: 'n', command: 'x' }),
+            ),
+        ).rejects.toThrow('scheduler job "n" terminated before a normal exit (SIGKILL) after 12ms');
+    });
+
     test('a spawn failure propagates to the queue as a failed attempt', async () => {
         const { executor } = fakeExecutor(new Error('spawn ENOENT'));
         await expect(
@@ -264,6 +304,13 @@ describe('resolveSchedulerJobTimeoutMs (task 0806 R3 / 0813 R2)', () => {
     test('a valid per-job override beats the global default; invalid keeps it', () => {
         expect(resolveSchedulerJobTimeoutMs('n', { SPUR_SCHEDULER_TIMEOUT_N_MS: '250' }, 600_000)).toBe(250);
         expect(resolveSchedulerJobTimeoutMs('n', { SPUR_SCHEDULER_TIMEOUT_N_MS: '0' }, 600_000)).toBe(600_000);
+    });
+
+    test('a declared per-job policy is the layer below the env override (jobs[].timeoutMs)', () => {
+        expect(resolveSchedulerJobTimeoutMs('n', {}, 600_000, 3_600_000)).toBe(3_600_000);
+        expect(resolveSchedulerJobTimeoutMs('n', {}, 600_000, null)).toBeNull();
+        expect(resolveSchedulerJobTimeoutMs('n', { SPUR_SCHEDULER_TIMEOUT_N_MS: '250' }, 600_000, 3_600_000)).toBe(250);
+        expect(resolveSchedulerJobTimeoutMs('n', {}, 600_000)).toBe(600_000);
     });
 });
 
