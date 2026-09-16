@@ -42,7 +42,7 @@ Four proven patterns for parallel subagent execution. Each pattern has a distinc
 
 **Example:** Code review of a PR → correctness lens, security lens, efficiency lens, maintainability lens. Each subagent produces per-lens findings; synthesis merges into a unified P1–P4 table.
 
-**Anti-pattern:** Using competency-lens review when a single reviewer would catch everything. For a 20-line change, one thorough review beats 3 shallow ones.
+**Anti-pattern:** Using competency-lens review when a single reviewer would catch everything. A sub-floor scope (see [Size floor](#size-floor)) is cheaper as one thorough pass than as N shallow ones — do not fan it out at all.
 
 ### 3. Independent-Task Batch
 
@@ -89,6 +89,7 @@ Four proven patterns for parallel subagent execution. Each pattern has a distinc
 | Sequential dependency chain | **Do not fan out** | — |
 | Single file touched by multiple tasks | **Do not fan out** | — |
 | Token budget < 20k remaining | **Do not fan out** | — |
+| Scope below the [Size floor](#size-floor) | **Do not fan out — execute inline** | — |
 
 ## Token-budget guard
 
@@ -99,3 +100,56 @@ remaining_budget >= (N × per_subagent_estimate) + synthesis_estimate
 ```
 
 If not: reduce N, or serialize. A fan-out that exhausts the budget mid-run leaves partial results that are worse than sequential. The driver is responsible for this check — the skill provides the estimates; the orchestrator applies them.
+
+## Size floor
+
+Fanning out below a minimum work size wastes the dispatch: a ~20-line change is cheaper as one
+thorough inline pass than as 3 shallow parallel ones. The floor is met — and the driver MUST
+**not** fan out, executing inline instead — when **any** of these constants holds:
+
+- the scope is a **single file**; or
+- the estimated diff is **under ~50 lines**; or
+- the work is **one focused question**.
+
+The thresholds are constants: they are measured from observable scope (files touched, diff lines,
+a single question), never from a model estimate, and never exposed as a config knob — a value that
+never changes is a constant. The floor decides *whether to fan out at all*; once it is met, the
+[When-to-use decision table](#when-to-use-decision-table) and the
+[Token-budget guard](#token-budget-guard) decide *which pattern* and *how many*. This is the
+pre-dispatch gate, not an anti-pattern remark.
+
+## Pre-dispatch permission check
+
+Claude Code exposes no dry-run permission API, so the contract is **name-capabilities + fail-fast
+blocker** — never a permission-probing subsystem:
+
+1. Before dispatching a worker, the orchestrator names the required capabilities in the dispatch
+   prompt: the read/search tools it needs, every shell action it will run, and any write surface it
+   holds.
+2. The worker is instructed to **return a blocker immediately on the first missing capability**
+   instead of waiting at a permission prompt the host cannot see — a worker parked at that prompt is
+   invisible until join.
+3. Record one run-log line per dispatch: `stage <id> permission precheck: ok | <missing capability>`
+   (for ad-hoc fan-out, `<id>` is the dispatched worker's ledger id from
+   [Keep a durable progress ledger](../SKILL.md#keep-a-durable-progress-ledger)).
+
+Read-only investigation fan-out avoids the write-permission class by construction:
+`dev-parallel --mode investigation` and competency-lens review's read-only lenses dispatch
+**read-only worker shapes** — search/read tools only, with no write surface declared.
+
+## Cheap-model hint for read-only fan-out
+
+On hosts whose native subagent invocation accepts a per-call model override (Claude Code: the Agent
+tool's `model` parameter), dispatch read-only fan-out workers — `dev-parallel --mode investigation`
+and competency-lens review's read-only lenses — with the host's cheapest capable model. The rule is
+invocation-side, with two prohibitions and one exemption:
+
+- **Never a definition-file edit.** Subagent definition files (`plugins/sp/agents/*.md`) belong to
+  superskill's lifecycle; this plugin never edits them to route cost.
+- **Never a hard pin.** The host may ignore the override; the hint names a preference, not a
+  contract.
+- **`sp:spur-dev` pipeline stage dispatch is exempt.** Tier routing there is ADR-033/ADR-078's job
+  via [`plugins/sp/references/roles.md`](../../../references/roles.md); this hint does not touch it.
+
+Surface choice is [dispatch-surface.md](dispatch-surface.md)'s axis; this hint applies on the
+surface it selects, not instead of it.

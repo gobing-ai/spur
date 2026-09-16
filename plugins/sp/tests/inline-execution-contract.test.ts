@@ -343,4 +343,34 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         );
         expect(workflow).toContain('resume from the partial tree, never restart the stage inline');
     });
+
+    test('0865 R2 — implement-stage dispatch payload carries the acceptance-evidence field', () => {
+        const driver = readFileSync(
+            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
+            'utf8',
+        );
+        // 0818 R2's payload grows from five fields to six; the sixth is scoped to the implement
+        // stage and every `requireDiff` stage, and carries the three components the delegate
+        // cannot infer: the AC identities (verbatim, read from the task), the required evidence
+        // form, and the success-message-is-not-evidence reminder.
+        expect(driver).toContain('Send exactly these six fields');
+        expect(driver).toContain('implement-stage acceptance-evidence requirement');
+        expect(driver).toContain('`requireDiff`');
+        expect(driver).toContain('AC identities verbatim');
+        expect(driver).toContain('pasted output of the narrow targeted tests');
+        expect(driver).toContain('`file:line` change map');
+        expect(driver).toContain('a delegate success message is not evidence');
+        expect(driver).not.toContain('Send exactly these five fields');
+    });
+
+    test('0865 R3 — the driver carries the pre-dispatch permission rule and its run-log line', () => {
+        const driver = readFileSync(
+            join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
+            'utf8',
+        );
+        expect(driver).toContain('Pre-dispatch permission check');
+        expect(driver).toContain('dry-run permission API');
+        expect(driver).toContain('blocker immediately on the first missing permission');
+        expect(driver).toContain('stage <id> permission precheck: ok | <missing capability>');
+    });
 });

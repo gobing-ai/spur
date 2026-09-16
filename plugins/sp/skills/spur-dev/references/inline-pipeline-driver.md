@@ -253,6 +253,22 @@ reformulate the prose into a command, spawn a subagent for it, or silently promo
 Beyond the deterministic `estimate_hours` floor in condition 5, no token estimate, model heuristic,
 or configuration switch is added.
 
+**Pre-dispatch permission check (2026-09-15 subagent-dispatch evaluation).** Claude Code exposes no
+dry-run permission API, so the contract is **name-capabilities + fail-fast blocker** — never a
+permission-probing subsystem. Before dispatching a stage, the driver names the stage's required
+capabilities in the dispatch payload: the slash command (field 2), the resolved Spur invocation
+(field 4), and any shell actions the YAML action declares. The delegate is instructed to **return a
+blocker immediately on the first missing permission** rather than stalling — a worker parked at a
+prompt the host cannot see is invisible until join. Record one run-log line per dispatch:
+
+```text
+stage <id> permission precheck: ok | <missing capability>
+```
+
+Read-only investigation fan-out (`/sp:dev-parallel --mode investigation`) dispatches read-only
+worker shapes by construction — see the [pre-dispatch permission
+rule](../../parallel-execution/references/fan-out-patterns.md).
+
 **Dispatch and join:** before dispatch, capture the same pre-action git snapshot used by
 `requireDiff` enforcement, and resolve `answerFile`/`expectFile` against the worktree root — the
 resolved absolute path, not the YAML's relative string, is what the dispatched agent is instructed
@@ -260,7 +276,7 @@ to write and what post-join validation reads. Resolving once at the dispatch bou
 surface at once; a relative path would resolve against whatever cwd the writer process happens to
 have.
 
-**Dispatch payload (task 0818 R2).** Send exactly these five fields. The earlier "send only the
+**Dispatch payload (task 0818 R2).** Send exactly these six fields. The earlier "send only the
 stage id, the slash command, and the no-recursion notice" restriction is **deliberately replaced**:
 the execution-tree cwd, the Spur invocation, and the output path are all already resolved at this
 boundary, and a delegate left to re-derive them re-derives them against its own cwd and PATH.
@@ -277,6 +293,17 @@ boundary, and a delegate left to re-derive them re-derives them against its own 
    `--spur-bin` flag rather than a new mechanism.
 5. The **resolved absolute output path** (`answerFile`/`expectFile`, resolved as above) and the
    **owning stage's artifact contract** — for a verify stage, the compact contract below.
+6. **The implement-stage acceptance-evidence requirement** — for the implement stage and any stage
+   whose YAML action declares `requireDiff`. A `requireDiff` stage is the one whose delegate writes
+   the deliverable, so its handoff carries three components:
+   (a) **the task's AC identities verbatim** — the exact `Scenario:` titles / checklist text read by
+   the driver from the task file, never paraphrased;
+   (b) **required evidence** — the pasted output of the narrow targeted tests the delegate ran, and
+   a `file:line` change map written into the task's `## Solution` section;
+   (c) the reminder that **a delegate success message is not evidence** — post-join validation reads
+   the artifacts and the diff, not the delegate's claims.
+   Component (a) is read from the task by the driver; this extends the payload contract and is NOT a
+   new YAML key.
 
 Nothing else: no task/session transcripts, no machine-specific session paths. The WBS/path already
 carried by the slash command remains the task handoff.
@@ -329,7 +356,7 @@ re-ingest the task, the diff, and every skill file it already loaded. When the h
 supports addressing a completed subagent again (Claude Code: send a follow-up message to the same
 agent — its context survives completion), the driver SHOULD resume the prior same-task worker
 subagent for that continuation stage instead of dispatching a fresh one, carrying the same
-five-field payload plus the finding that triggered the continuation. Provenance uses the resumed
+six-field payload plus the finding that triggered the continuation. Provenance uses the resumed
 form:
 
 ```text

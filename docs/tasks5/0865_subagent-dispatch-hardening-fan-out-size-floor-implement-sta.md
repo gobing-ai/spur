@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Subagent dispatch hardening: fan-out size floor, implement-stage handoff contract, pre-dispatch permission check, cheap-model fan-out hint"
-status: todo
+status: wip
 template: standard
 created_at: 2026-09-16T02:53:37.141Z
-updated_at: "2026-09-16T03:33:06.954Z"
+updated_at: "2026-09-16T03:42:43.273Z"
 
 ---
 
@@ -132,7 +132,27 @@ All four items are prompt-contract edits in plugin reference Markdown plus their
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Prompt-contract batch: six-field dispatch payload, fan-out size floor, pre-dispatch permission
+check, and the invocation-side cheap-model hint. No new API — no workflow YAML, CLI verb/flag,
+schema, or config key changed; all four items are reference-Markdown edits plus their pinning tests.
+R5 hygiene holds: cross-cutting.md is untouched and stays the only restatement of `--agent`
+semantics; every new paragraph links to its owning rule instead of duplicating it.
+
+| Req | Change | Anchor |
+| --- | --- | --- |
+| R1 | `Size floor` rule — constants (single file / under ~50 lines / one focused question) mean execute inline, never fan out; the floor decides whether to fan out, the existing tables decide which pattern | `plugins/sp/skills/parallel-execution/references/fan-out-patterns.md:104-119` |
+| R1 | Decision-table row for a below-floor scope: do not fan out — execute inline | `plugins/sp/skills/parallel-execution/references/fan-out-patterns.md:92` |
+| R1 | Pattern-2 anti-pattern remark replaced by a link to the rule so the thresholds are stated once | `plugins/sp/skills/parallel-execution/references/fan-out-patterns.md:45` |
+| R2 | Dispatch payload grows from five to six fields; field 6 is the implement/`requireDiff` acceptance-evidence requirement carrying AC identities verbatim, the required evidence (pasted narrow-test output and the Solution `file:line` change map), and the success-message-is-not-evidence reminder | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:296-306` |
+| R2 | Resume-over-re-dispatch paragraph now cites the six-field payload | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:359` |
+| R2 | Contract test pinning the sixth field | `plugins/sp/tests/inline-execution-contract.test.ts:347-364` |
+| R3 | `Pre-dispatch permission check` rule — name-capabilities + fail-fast blocker, plus the exact run-log line | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:256-270` |
+| R3 | Same rule for ad-hoc fan-out, with the read-only worker shapes named for investigation fan-out | `plugins/sp/skills/parallel-execution/references/fan-out-patterns.md:121-138` |
+| R3 | Contract test pinning the driver's permission rule and run-log line | `plugins/sp/tests/inline-execution-contract.test.ts:366-375` |
+| R4 | `Cheap-model hint` for read-only fan-out — invocation-side, two prohibitions, pipeline exemption | `plugins/sp/skills/parallel-execution/references/fan-out-patterns.md:140-155` |
+| R4 | Cross-linking paragraph recording the hint on the dispatch-surface reference | `plugins/sp/skills/parallel-execution/references/dispatch-surface.md:68-81` |
+| R5 | SSOT hygiene verified by the existing gate: `checkAgentSsotIntegrity` finds no restated value table outside the SSOT; new links resolve | `plugins/sp/scripts/validate-flag-contracts.ts:620` |
+| R5 | Structure test pinning the floor, permission rule, and cheap-model hint | `plugins/sp/tests/skill-structure.test.ts:332-364` |
 
 ### Testing
 
@@ -156,4 +176,5 @@ All four items are prompt-contract edits in plugin reference Markdown plus their
 ### History
 
 - 2026-09-16T03:33:06.954Z backlog → todo (system)
+- 2026-09-16T03:42:43.273Z todo → wip (system)
 

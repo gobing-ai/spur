@@ -65,6 +65,19 @@ and put prompt-layer routing policy into a domain-layer registry. This reference
 surface carries the work*; ADR-033 decides *which tier runs on it*. Read both; apply each to its
 own axis.
 
+## Cheap-model hint for read-only fan-out (2026-09-15 subagent-dispatch evaluation)
+
+Surface choice and model choice stay separate axes, but the invocation surface is where the
+cheap-model hint is applied. On hosts whose native subagent invocation accepts a per-call model
+override (Claude Code: the Agent tool's `model` parameter), dispatch read-only fan-out workers —
+`dev-parallel --mode investigation` and competency-lens review's read-only lenses — with the host's
+cheapest capable model. The rule is owned by
+[fan-out-patterns.md § Cheap-model hint for read-only fan-out](fan-out-patterns.md#cheap-model-hint-for-read-only-fan-out)
+and carries two prohibitions and one exemption: invocation-side only, **never** a subagent
+definition-file edit (superskill owns those), **never** a hard pin (the host may ignore it), and
+`sp:spur-dev` pipeline stage dispatch is exempt — ADR-033's `model_policy` and ADR-078's role
+config own that axis.
+
 ## The sandbox reliability tax on `spur agent run`
 
 `spur agent run` runs the target agent as an external process. Under a sandboxed Bash session it

@@ -329,6 +329,43 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         statSync(join(skillDir, 'references', 'result-synthesis.md'));
     });
 
+    test('0865 — fan-out size floor, pre-dispatch permission rule, and cheap-model hint are documented', () => {
+        const patterns = readFileSync(
+            join(SKILLS_DIR, 'parallel-execution', 'references', 'fan-out-patterns.md'),
+            'utf8',
+        );
+
+        // R1: a Size floor rule with constant thresholds, a matching decision-table row that
+        // refuses fan-out, and the pattern-2 remark replaced by a link (no duplicated thresholds).
+        expect(patterns).toContain('## Size floor');
+        expect(patterns).toContain('single file');
+        expect(patterns).toContain('under ~50 lines');
+        expect(patterns).toContain('one focused question');
+        expect(patterns).toContain('**Do not fan out — execute inline**');
+        expect(patterns).not.toContain('For a 20-line change, one thorough review beats 3 shallow ones.');
+
+        // R3: the pre-dispatch permission rule, the fail-fast blocker instruction, and the exact
+        // run-log line — plus the read-only worker shapes named for investigation fan-out.
+        expect(patterns).toContain('## Pre-dispatch permission check');
+        expect(patterns).toContain('return a blocker immediately');
+        expect(patterns).toContain('stage <id> permission precheck: ok | <missing capability>');
+        expect(patterns).toContain('read-only worker shapes');
+
+        // R4: the invocation-side cheap-model hint with both prohibitions and the pipeline exemption.
+        expect(patterns).toContain('cheapest capable model');
+        expect(patterns).toContain('Never a definition-file edit');
+        expect(patterns).toContain('Never a hard pin');
+        expect(patterns).toContain('plugins/sp/references/roles.md');
+
+        // R4 cross-link: dispatch-surface.md states the hint and defers the rule to the patterns file.
+        const surface = readFileSync(
+            join(SKILLS_DIR, 'parallel-execution', 'references', 'dispatch-surface.md'),
+            'utf8',
+        );
+        expect(surface).toContain('cheapest capable model');
+        expect(surface).toContain('fan-out-patterns.md#cheap-model-hint-for-read-only-fan-out');
+    });
+
     test('redesign-web-ui ships as a dispatcher with disclosed audit references', () => {
         const skillDir = join(SKILLS_DIR, 'redesign-web-ui');
         const skill = readFileSync(join(skillDir, 'SKILL.md'), 'utf8');
