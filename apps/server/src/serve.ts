@@ -335,7 +335,21 @@ export function registerSchedulerEntries(
                         swept: true,
                         reason,
                     });
-                    await enqueueFresh();
+                    // A third daemon can win the fresh enqueue the sweep just made
+                    // possible — the same expected single-flight outcome, not an
+                    // error (task 0863: no error path for a duplicate).
+                    try {
+                        await enqueueFresh();
+                    } catch (error) {
+                        if (!isSchedulerCustomActiveConflict(error)) throw error;
+                        ctx.eventBus().emit('scheduler.job.executed', {
+                            name: `${SCHEDULER_CUSTOM_JOB}:${job.name}`,
+                            durationMs: 0,
+                            severity: 'info',
+                            skipped: true,
+                            reason: 'post-sweep enqueue lost to a concurrent tick',
+                        });
+                    }
                     return;
                 }
             }

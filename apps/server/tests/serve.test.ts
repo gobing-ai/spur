@@ -1700,6 +1700,60 @@ describe('startServer', () => {
         expect(String(swept?.reason)).toContain('age-sweep');
     });
 
+    test('registerSchedulerEntries tolerates a post-sweep enqueue conflict from a concurrent tick (task 0863)', async () => {
+        const registered: Array<{ cron: string; action: ScheduledAction }> = [];
+        const emitted: Array<{ name: string; payload: unknown }> = [];
+        const updates: Array<{ sql: string; params: unknown[] }> = [];
+        const scheduler = {
+            register: (cron: string, action: ScheduledAction) => {
+                registered.push({ cron, action });
+            },
+            start: async () => {},
+            stop: async () => {},
+        };
+        // Every enqueue conflicts — even after the sweep, a third daemon wins the fresh
+        // insert. The tick must settle as swept + skipped, never throw.
+        const ctx = {
+            jobQueue: async () => ({
+                enqueue: async () => {
+                    throw schedulerCustomActiveConflict('history-refresh');
+                },
+            }),
+            getDb: async () => ({
+                queryFirst: async (sql: string, ...params: unknown[]) => {
+                    if (sql.includes('scheduler.custom') && params[0] === 'history-refresh') {
+                        return { id: 'stale-1', status: 'processing', processing_at: 1000, updated_at: 1000 };
+                    }
+                    if (sql.includes('changes()')) return { n: 1 };
+                    return undefined;
+                },
+                run: async (sql: string, ...params: unknown[]) => {
+                    updates.push({ sql, params });
+                },
+            }),
+            eventBus: () => ({
+                emit: (name: string, payload: unknown) => {
+                    emitted.push({ name, payload });
+                },
+            }),
+        } as unknown as ServerContext;
+
+        registerSchedulerEntries(
+            scheduler,
+            ctx,
+            [{ name: 'history-refresh', cron: '*/15 7-23 * * *', command: 'bun apps/cli/src/index.ts history daily' }],
+            { timeoutMs: 60_000 },
+        );
+        await registered[2]?.action(tickCtx);
+
+        expect(updates).toHaveLength(1);
+        const payloads = emitted.map((e) => e.payload as Record<string, unknown>);
+        expect(payloads.find((p) => p.swept === true)?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:history-refresh`);
+        const skipped = payloads.find((p) => p.skipped === true);
+        expect(skipped?.severity).toBe('info');
+        expect(String(skipped?.reason)).toContain('post-sweep');
+    });
+
     test('registerSchedulerEntries never age-sweeps an explicit-unlimited job (task 0813 R2)', async () => {
         const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const enqueued: Array<{ type: string; payload: unknown; options?: unknown }> = [];
