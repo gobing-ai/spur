@@ -383,3 +383,45 @@ describe('WorkflowRunLogSink budget events (task 0707)', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 });
+
+describe('WorkflowRunLogSink contract-violation events (task 0870)', () => {
+    test('appends one line naming the violated contract and observed value', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        const sink = new WorkflowRunLogSink({ bus, dir, runId: 'run-1' });
+        await bus.emit('workflow.agent.contract-violation', {
+            schemaVersion: 1,
+            eventId: 'e-cv',
+            runId: 'run-1',
+            at: '2026-08-02T00:00:05.000Z',
+            severity: 'warning',
+            node: 'implement',
+            kind: 'agent.run',
+            agent: 'claude',
+            contract: 'expectFile',
+            observed: 'missing',
+        });
+        await bus.emit('workflow.agent.contract-violation', {
+            schemaVersion: 1,
+            eventId: 'e-cv2',
+            runId: 'run-1',
+            at: '2026-08-02T00:00:06.000Z',
+            severity: 'warning',
+            node: 'implement',
+            kind: 'agent.run',
+            agent: 'claude',
+            contract: 'requireDiff',
+            observed: 'out-of-scope: src/other.ts',
+            task: '0870',
+        });
+        sink.close();
+
+        const text = readFileSync(sink.filePath, 'utf8');
+        expect(text).toContain(
+            '[2026-08-02T00:00:05.000Z] contract-violation expectFile observed=missing node=implement agent=claude',
+        );
+        expect(text).toContain('contract-violation requireDiff observed=out-of-scope: src/other.ts');
+        expect(text).toContain('task=0870');
+        rmSync(dir, { recursive: true, force: true });
+    });
+});

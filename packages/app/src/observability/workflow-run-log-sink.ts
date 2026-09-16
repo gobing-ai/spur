@@ -2,6 +2,7 @@ import { closeSync, mkdirSync, openSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
     WorkflowAgentBudgetEvent,
+    WorkflowAgentContractViolationEvent,
     WorkflowObservabilityBus,
     WorkflowObservabilityEventMap,
     WorkflowRunFinalizedEvent,
@@ -86,6 +87,7 @@ export class WorkflowRunLogSink {
             'workflow.action.output': (event) => this.onProgress(event),
             'workflow.agent': (event) => this.onAgent(event),
             'workflow.agent.budget': (event) => this.onBudget(event),
+            'workflow.agent.contract-violation': (event) => this.onContractViolation(event),
             'workflow.tripwire.fired': (event) => this.onTripwire(event),
             'workflow.steering': (event) => this.onSteering(event),
             'workflow.run.finalized': (event) => this.onRunFinalized(event),
@@ -198,6 +200,15 @@ export class WorkflowRunLogSink {
         );
     }
 
+    /** One line naming the violated contract and observed value (ADR-118). */
+    private onContractViolation(event: WorkflowAgentContractViolationEvent): void {
+        if (this.fd === undefined || this.closed) return;
+        const task = event.task !== undefined ? ` task=${event.task}` : '';
+        this.append(
+            `[${event.at}] contract-violation ${event.contract} observed=${event.observed} node=${event.node} agent=${event.agent}${task}\n`,
+        );
+    }
+
     private append(text: string): void {
         if (this.fd === undefined || this.closed || this.truncated) return;
         const textBytes = Buffer.byteLength(text);
@@ -235,6 +246,7 @@ const RUN_LOG_EVENT_NAMES: Array<keyof WorkflowObservabilityEventMap> = [
     'workflow.action.output',
     'workflow.agent',
     'workflow.agent.budget',
+    'workflow.agent.contract-violation',
     'workflow.tripwire.fired',
     'workflow.steering',
     'workflow.run.finalized',

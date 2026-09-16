@@ -32,6 +32,9 @@ export const AGENT_RUN_PROGRESS_INTERVAL_MS = 30_000;
 
 const KIND = 'agent.run';
 
+/** A declared `agent.run` post-condition (ADR-118). */
+type ContractName = 'answerFile' | 'expectFile' | 'requireDiff';
+
 /** Config slice injected at composition root for agent.run steps (R1, task 0451). */
 export interface AgentRunAgentConfig {
     default?: string;
@@ -146,6 +149,43 @@ export class AgentRunActionRunner implements ActionRunner {
         private readonly agentConfig: AgentRunAgentConfig = {},
     ) {
         this.agentService = agentService;
+    }
+
+    /**
+     * Third stage outcome (ADR-118): a clean agent exit that missed its own
+     * declared post-condition. The `data.outcome` discriminator keeps it
+     * distinguishable from an executor failure in the action trace, and the
+     * observability bus carries a `workflow.agent.contract-violation` event so
+     * the run log names the violated contract and the observed value. Routing
+     * the outcome to a dedicated repair edge is the next task's concern; here
+     * it is only detected, named, and recorded.
+     */
+    private contractViolation(
+        context: ActionRunContext,
+        agentLabel: string,
+        contract: ContractName,
+        observed: string,
+        error: string,
+        data: Record<string, unknown>,
+    ): ActionResult {
+        void this.observabilityBus?.emit('workflow.agent.contract-violation', {
+            schemaVersion: 1,
+            eventId: crypto.randomUUID(),
+            runId: context.runId,
+            at: new Date().toISOString(),
+            severity: 'warning',
+            node: context.stateOrNodeId,
+            kind: KIND,
+            agent: agentLabel,
+            contract,
+            observed,
+            ...(String(context.vars.wbs ?? '') !== '' ? { task: String(context.vars.wbs) } : {}),
+        });
+        return {
+            ok: false,
+            data: { ...data, outcome: 'contract-violation', contract, observed },
+            error,
+        };
     }
 
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
@@ -577,6 +617,20 @@ export class AgentRunActionRunner implements ActionRunner {
                 await fs.writeFile(target, answer);
             }
 
+            // ADR-118: a declared answerFile is a post-condition — a clean exit
+            // that produced no captured answer violates it. The empty file would
+            // leave a downstream consumer nothing to derive a verdict from.
+            if (ok && answerFile !== undefined && answer.trim() === '') {
+                return this.contractViolation(
+                    context,
+                    agentLabel,
+                    'answerFile',
+                    'empty',
+                    `agent.run (${agentLabel}) exited 0 but produced an empty answer for answerFile: ${answerFile}`,
+                    buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                );
+            }
+
             // R6-S2a: verify expected side-effect artifact exists after exit-0.
             if (ok && expectFile !== undefined) {
                 const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
@@ -592,9 +646,13 @@ export class AgentRunActionRunner implements ActionRunner {
                         this.agentConfig.secretValues,
                     );
                     const partialWorkPath = `.spur/run/${context.runId}-${context.stateOrNodeId}-partial.md`;
-                    return {
-                        ok: false,
-                        data: buildResultData(
+                    return this.contractViolation(
+                        context,
+                        agentLabel,
+                        'expectFile',
+                        'missing',
+                        `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}; executor contract failure preserved at ${partialWorkPath}`,
+                        buildResultData(
                             exitCode,
                             agentLabel,
                             capture,
@@ -608,8 +666,21 @@ export class AgentRunActionRunner implements ActionRunner {
                             traced.stderr ?? undefined,
                             this.agentConfig.secretValues,
                         ),
-                        error: `agent.run (${agentLabel}) exited 0 but expected file is absent: ${expectFile}; executor contract failure preserved at ${partialWorkPath}`,
-                    };
+                    );
+                }
+                // ADR-118: `expectFile empty` is a distinct miss from `missing` —
+                // the agent produced the file but left it with no content, which
+                // needs a different repair than a file it never wrote at all.
+                const expectStat = await fs.stat(target);
+                if (expectStat !== null && expectStat.size === 0) {
+                    return this.contractViolation(
+                        context,
+                        agentLabel,
+                        'expectFile',
+                        'empty',
+                        `agent.run (${agentLabel}) exited 0 but the expected file is empty: ${expectFile}`,
+                        buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                    );
                 }
             }
 
@@ -630,11 +701,14 @@ export class AgentRunActionRunner implements ActionRunner {
                         ? await gitNonCorpusChangedFiles(cwd, this.agentConfig.excludeGlobs)
                         : await gitChangesSinceSnapshot(cwd, diffBaseline, this.agentConfig.excludeGlobs);
                 if (changed.length === 0) {
-                    return {
-                        ok: false,
-                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
-                        error: `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
-                    };
+                    return this.contractViolation(
+                        context,
+                        agentLabel,
+                        'requireDiff',
+                        'empty',
+                        `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
+                        buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                    );
                 }
                 // R1 (task 0487): diff-scope guard. An implement step that wandered
                 // into a *sibling* task's surfaces is the 0486 failure mode — two
@@ -646,11 +720,14 @@ export class AgentRunActionRunner implements ActionRunner {
                 const guardOff = String(context.vars.implementScopeGuard ?? '') === 'off';
                 const rogue = guardOff ? [] : await findOutOfScopeChanges(cwd, wbs, changed);
                 if (rogue.length > 0) {
-                    return {
-                        ok: false,
-                        data: buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
-                        error: `agent.run '${stepLabel}' (${agentLabel}) changed files outside task ${wbs}'s declared surfaces: ${rogue.join(', ')}. Implement only the target WBS; revert the out-of-scope changes (or name those paths in the task body). Set the run var implementScopeGuard: "off" to bypass.`,
-                    };
+                    return this.contractViolation(
+                        context,
+                        agentLabel,
+                        'requireDiff',
+                        `out-of-scope: ${rogue.join(', ')}`,
+                        `agent.run '${stepLabel}' (${agentLabel}) changed files outside task ${wbs}'s declared surfaces: ${rogue.join(', ')}. Implement only the target WBS; revert the out-of-scope changes (or name those paths in the task body). Set the run var implementScopeGuard: "off" to bypass.`,
+                        buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                    );
                 }
             }
 

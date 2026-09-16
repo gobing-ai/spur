@@ -148,6 +148,33 @@ export interface WorkflowAgentBudgetEvent {
 }
 
 /**
+ * A declared `agent.run` post-condition was violated after a clean exit (ADR-118):
+ * the third stage outcome — distinct from an executor failure — carrying the
+ * violated contract's name and the observed value, so the trace and the run log
+ * name the miss before the stage reports success. Identifiers and scalars only:
+ * no prompts, output, or raw provider payloads.
+ */
+export interface WorkflowAgentContractViolationEvent {
+    readonly schemaVersion: 1;
+    readonly eventId: string;
+    readonly runId: string;
+    readonly at: string;
+    readonly severity: 'warning';
+    /** The state (node) whose declared contract was violated. */
+    readonly node: string;
+    /** The action kind (always `agent.run`). */
+    readonly kind: string;
+    /** Resolved executor label. */
+    readonly agent: string;
+    /** The violated contract: `answerFile` | `expectFile` | `requireDiff`. */
+    readonly contract: 'answerFile' | 'expectFile' | 'requireDiff';
+    /** What was observed (`missing`, `empty`, `out-of-scope: <files>`…). */
+    readonly observed: string;
+    /** Correlation: the task wbs, when known. */
+    readonly task?: string;
+}
+
+/**
  * An escalation packet was projected and persisted from run evidence (0709 R6).
  * Identifiers and the artifact reference only — the packet JSON stays on disk.
  */
@@ -241,6 +268,8 @@ export type WorkflowObservabilityEventMap = {
     'workflow.action.output': (event: WorkflowActionOutputEvent) => void;
     /** Bounded hard-budget verdict emitted at the agent.run safe boundary (0707 R6). */
     'workflow.agent.budget': (event: WorkflowAgentBudgetEvent) => void;
+    /** A declared agent.run post-condition was violated after a clean exit (ADR-118). */
+    'workflow.agent.contract-violation': (event: WorkflowAgentContractViolationEvent) => void;
     /** Canonical operational trip-wire event emitted at workflow safe boundaries (0708 R4). */
     'workflow.tripwire.fired': (event: WorkflowTripwireFiredEvent) => void;
     /** Canonical escalation packet projected from run evidence (0709 R6). */

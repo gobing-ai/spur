@@ -2677,3 +2677,181 @@ describe('AgentRunActionRunner operational trip wires (task 0708)', () => {
         expect(trips).toHaveLength(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: AgentRunActionRunner contract violations (task 0870 / ADR-118)
+// ---------------------------------------------------------------------------
+
+describe('AgentRunActionRunner contract violations (task 0870)', () => {
+    let dir: string;
+    afterEach(() => {
+        if (dir) rmSync(dir, { recursive: true, force: true });
+    });
+
+    function recordingContractBus(): {
+        bus: WorkflowObservabilityBus;
+        events: import('../../../src/workflow/observability').WorkflowAgentContractViolationEvent[];
+    } {
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const events: import('../../../src/workflow/observability').WorkflowAgentContractViolationEvent[] = [];
+        bus.on('workflow.agent.contract-violation', (event) => events.push(event));
+        return { bus, events };
+    }
+
+    test('R1/R2/R4: answerFile with an empty answer → named contract-violation (observed: empty)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-cv-answer-'));
+        const file = join(dir, 'answer.txt');
+        const { bus, events } = recordingContractBus();
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ role: 'coder', input: 'verify', answerFile: file }, makeCtx());
+
+        expect(result.ok).toBe(false);
+        expect(result.data).toMatchObject({
+            exitCode: 0,
+            outcome: 'contract-violation',
+            contract: 'answerFile',
+            observed: 'empty',
+        });
+        expect(result.error).toContain('empty answer');
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+            contract: 'answerFile',
+            observed: 'empty',
+            node: 's1',
+            kind: 'agent.run',
+            agent: '<default>',
+        });
+        expect(JSON.stringify(events[0])).not.toContain('verify');
+    });
+
+    test('R1/R2/R4: answerFile with a non-empty answer keeps ok:true (no violation)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-cv-answer-ok-'));
+        const file = join(dir, 'answer.txt');
+        const { bus, events } = recordingContractBus();
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: 'Verdict: PASS', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ role: 'coder', input: 'verify', answerFile: file }, makeCtx());
+
+        expect(result.ok).toBe(true);
+        expect(result.data?.outcome).toBeUndefined();
+        expect(events).toHaveLength(0);
+    });
+
+    test('R1/R2: expectFile missing after a clean exit → named contract-violation (observed: missing)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-cv-missing-'));
+        const { bus, events } = recordingContractBus();
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute(
+            { role: 'coder', input: 'build', expectFile: 'missing.txt', cwd: dir },
+            makeCtx(),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('expected file is absent');
+        expect(result.data).toMatchObject({
+            outcome: 'contract-violation',
+            contract: 'expectFile',
+            observed: 'missing',
+        });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ contract: 'expectFile', observed: 'missing' });
+    });
+
+    test('R1/R2: expectFile empty after a clean exit → named contract-violation (observed: empty)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-cv-empty-'));
+        const file = join(dir, 'verdict.txt');
+        const { bus, events } = recordingContractBus();
+        const svc = svcWithEffect(() => writeFileSync(file, ''), { invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute(
+            { role: 'coder', input: 'verify', expectFile: 'verdict.txt', cwd: dir },
+            makeCtx(),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('expected file is empty');
+        expect(result.data).toMatchObject({
+            outcome: 'contract-violation',
+            contract: 'expectFile',
+            observed: 'empty',
+        });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ contract: 'expectFile', observed: 'empty' });
+    });
+
+    test('R1/R2: requireDiff with zero non-corpus changes → named contract-violation (observed: empty)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-cv-nodiff-'));
+        const { bus, events } = recordingContractBus();
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx(),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('empty implement');
+        expect(result.data).toMatchObject({
+            outcome: 'contract-violation',
+            contract: 'requireDiff',
+            observed: 'empty',
+        });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ contract: 'requireDiff', observed: 'empty' });
+    });
+
+    test('R1/R2: requireDiff out-of-scope → named contract-violation (observed: out-of-scope)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-cv-scope-'));
+        gitInit(dir);
+        const taskFile = join(dir, 'docs/tasks3/0870_probe.md');
+        mkdirSync(dirname(taskFile), { recursive: true });
+        writeFileSync(taskFile, '## 0870. probe\n\nAuthor `plugins/sp/commands/dev-find-conflict.md`.\n');
+        const owned = join(dir, 'plugins/sp/commands/dev-find-conflict.md');
+        mkdirSync(dirname(owned), { recursive: true });
+        writeFileSync(owned, 'base');
+        gitCommitAll(dir, 'base');
+
+        const { bus, events } = recordingContractBus();
+        const rogue = join(dir, 'packages/app/src/observability/agent-execution.ts');
+        const svc = svcWithEffect(() => {
+            writeFileSync(owned, 'implemented');
+            mkdirSync(dirname(rogue), { recursive: true });
+            writeFileSync(rogue, 'export function redactAndBound() {}');
+        });
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute(
+            { role: 'coder', input: 'implement', requireDiff: true, cwd: dir },
+            makeCtx({ vars: { wbs: '0870' } }),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('packages/app/src/observability/agent-execution.ts');
+        expect(result.data).toMatchObject({
+            outcome: 'contract-violation',
+            contract: 'requireDiff',
+            observed: 'out-of-scope: packages/app/src/observability/agent-execution.ts',
+        });
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+            contract: 'requireDiff',
+            observed: 'out-of-scope: packages/app/src/observability/agent-execution.ts',
+        });
+    });
+
+    test('R5: a non-zero executor exit keeps its bare-failure shape (no contract discriminator)', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-cv-exec-'));
+        const { bus, events } = recordingContractBus();
+        const svc = svcWithRunTraced({ exitCode: 3, stdout: 'boom', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, makeCtx());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('exited with code 3');
+        expect(result.data?.outcome).toBeUndefined();
+        expect(result.data?.contract).toBeUndefined();
+        expect(result.data?.observed).toBeUndefined();
+        expect(events).toHaveLength(0);
+    });
+});
