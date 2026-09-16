@@ -1761,7 +1761,7 @@ describe('startServer', () => {
 
     test('registerSchedulerEntries keeps the single-flight skip for a young processing row (task 0803 R4)', async () => {
         const registered: Array<{ cron: string; action: ScheduledAction }> = [];
-        const enqueued: Array<{ type: string; payload: unknown }> = [];
+        const enqueued: Array<{ type: string; payload: unknown; options?: unknown }> = [];
         const emitted: Array<{ name: string; payload: unknown }> = [];
         const updates: Array<{ sql: string; params: unknown[] }> = [];
         const scheduler = {
@@ -1919,6 +1919,84 @@ describe('startServer', () => {
             await exitCalled;
         }
         expect(order).toEqual(['worker.start', 'worker.stop', 'server.stop', 'runtime.stop']);
+    }, 20_000);
+
+    test('a duplicate claim for a running job name is suppressed and audited, not failed (task 0863 R3)', async () => {
+        const { sigHandlers, exitCalled } = installProcessMocks();
+        Bun.serve = (() => ({ stop: () => {} })) as unknown as typeof Bun.serve;
+
+        // The audit hook emits through the server context's bus — capture it here.
+        const emitted: Array<{ name: string; payload: Record<string, unknown> }> = [];
+        const registeredHandlers: Record<string, (payload?: unknown) => Promise<void>> = {};
+        const queueConsumer = {
+            register: (type: string, handler: (payload?: unknown) => Promise<void>) => {
+                registeredHandlers[type] = handler;
+            },
+            start: async () => {},
+            stop: async () => {},
+            stats: async () => ({ pending: 0, processing: 0, completed: 0, failed: 0 }),
+            processOnce: async () => 0,
+        };
+        const deps = makeDeps({
+            serverBootstrapConfig: () => ({
+                logging: { enabled: false, level: 'info' as const, console: false },
+                telemetry: { enabled: false },
+                events: { enabled: false, diagnostic: false },
+                jobqueue: { enabled: true },
+                scheduler: { enabled: true },
+            }),
+            createServerContext: (() =>
+                ({
+                    queueConsumer: async () => queueConsumer,
+                    getDb: async () => ({
+                        queryFirst: async () => undefined,
+                        run: async () => {},
+                    }),
+                    systemEventDao: async () => ({ pruneQuotas: async () => {} }),
+                    eventBus: () => ({
+                        emit: (name: string, payload: Record<string, unknown>) => {
+                            emitted.push({ name, payload });
+                        },
+                        on: () => {},
+                        off: () => {},
+                    }),
+                }) as unknown as ServerContext) as unknown as StartServerDeps['createServerContext'],
+            runNodeApplication: runNodeApplicationWith(() =>
+                fakeRuntime(undefined, { enabled: true, adapter: recordingScheduler([]).adapter }),
+            ),
+        });
+
+        let shutdownSigint: SigHandler | undefined;
+        try {
+            await startServer(
+                { port: 5004, host: '127.0.0.1', openBrowser: false, keepAlive: false, jobWorkerStartDelayMs: 0 },
+                deps,
+            );
+            // Deferred start (Sep 2026): handlers register on the post-listen timer.
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            shutdownSigint = sigHandlers.SIGINT;
+            const handler = registeredHandlers[SCHEDULER_CUSTOM_JOB];
+            expect(handler).toBeDefined();
+
+            // The first attempt holds the job name while its child runs (`sleep 5`).
+            const running = handler?.({ payload: { name: 'duplicate-job', command: 'sleep 5' } });
+            // The same-name guard is synchronous before the handler's first await, so the
+            // second attempt is suppressed and RESOLVES — it is not a failed attempt.
+            // `shutdownSigint` below terminates the still-running child.
+            void running?.catch(() => {});
+            await handler?.({ payload: { name: 'duplicate-job', command: 'sleep 5' } });
+        } finally {
+            shutdownSigint?.();
+            await exitCalled;
+        }
+
+        const audit = emitted
+            .filter((e) => e.name === 'scheduler.job.executed')
+            .map((e) => e.payload)
+            .find((p) => p.skipped === true);
+        expect(audit?.name).toBe(`${SCHEDULER_CUSTOM_JOB}:duplicate-job`);
+        expect(String(audit?.reason)).toContain('duplicate execution suppressed');
+        expect(audit?.severity).toBe('info');
     }, 20_000);
 
     test('parseTaskActionJob validates payload shape and preserves optional routing fields', () => {
@@ -2381,7 +2459,7 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
             expect(active).toHaveLength(1);
             const skipped = schedulerEvents.filter((e) => e.skipped === true);
             expect(skipped).toHaveLength(1);
-            expect(String(skipped[0]?.reason)).toContain(active[0]?.id);
+            expect(String(skipped[0]?.reason)).toContain(String(active[0]?.id));
 
             // The row runs; a later occurrence is admitted again (terminal rows are
             // invisible to the active-name index).
