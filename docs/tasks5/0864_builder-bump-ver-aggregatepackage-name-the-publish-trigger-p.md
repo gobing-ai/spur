@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "builder.bump-ver.aggregatePackage: name the publish trigger package in config"
-status: testing
+status: done
 template: standard
 created_at: 2026-09-15T23:51:55.570Z
-updated_at: "2026-09-16T00:08:03.820Z"
+updated_at: "2026-09-16T00:21:39.068Z"
 
 ---
 
@@ -66,22 +66,39 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 - `apps/cli/src/release-ops.ts:99` — `resolveAggregateTag()` returns that package's own `releaseTag()` (separator-aware, scoped) or `<rootName>-v<version>` when nothing resolves.
 - `apps/cli/src/release-ops.ts:537` (bump) and `apps/cli/src/release-ops.ts:675` (drop) — both aggregate paths call the one resolver, so the pushed and dropped tag cannot diverge.
 - `docs/design/cli-contracts.md:191` and `.spur/config.yaml:78` — the knob, its default, and the failure class it fixes.
-- `apps/cli/tests/release-ops.test.ts:159` — three tests: the configured target is bumped and the pushed trigger tag is the scoped per-package tag; an unknown id aborts before mutating; `drop-tags --all` removes the configured tag locally and on origin.
+- `apps/cli/tests/release-ops.test.ts:161` — three tests: the configured target is bumped and the pushed trigger tag is the scoped per-package tag; an unknown id aborts before mutating; `drop-tags --all` removes the configured tag locally and on origin.
 
 ### Testing
 
-- Unit — `bun test apps/cli/tests/release-ops.test.ts`: **31 pass / 0 fail**, including the three new cases at `apps/cli/tests/release-ops.test.ts:159` (configured target is bumped and the pushed trigger tag is `@demo/app-v0.3.0`; unknown id aborts with no local tag; `drop-tags --all --remote` removes the configured tag locally and on origin). The pre-existing `--all`/root-named-CLI cases still assert `@demo/root-v0.3.0`, covering the unchanged default.
-- Config surface — `bun test apps/cli/tests/config packages/config/tests`: **218 pass / 0 fail** (the embedded `apps/cli/schemas/spur-config.schema.json` copy the loader validates against).
-- Config-level end-to-end probe (`/tmp/kk-aggregate-probe`, a throwaway repo shaped like knowledge-kit: unscoped root `knowledge-kit`, CLI `@gobing-ai/knowledge-kit`, pinned `@gobing-ai/kk-core`), driven by this repo's CLI:
-  - with `builder.bump-ver.aggregatePackage: knowledge-kit` → `bump-ver --all 0.0.16` committed `bump knowledge-kit + kk-core to 0.0.16` and emitted `@gobing-ai/knowledge-kit-v0.0.16` (trace `@gobing-ai/kk-core-v0.0.16`); no `knowledge-kit-v*` tag.
-  - the same command on the same repo before the key existed, and again after removing the builder block → `bump kk-core to 0.0.17` and `knowledge-kit-v0.0.17` (the old, silently unpublished shape) — default behavior is unchanged.
-  - an id that matches no package (`aggregatePackage: nope`) aborts pre-flight with `unknown builder.bump-ver.aggregatePackage "nope"` and no commit/tag.
-- Gates: `biome check` clean on the four changed source/schema files; `typecheck` clean for `@gobing-ai/spur` and `@gobing-ai/spur-config`; `rule run --preset recommended-pre-check` 45 rules pass, `recommended-post-check` 2 rules pass.
-- Full suite `bun run test`: **8365 pass / 1 fail** — the single failure is a 5s timeout in `plugins/sp/tests/feature-dev-precheck.test.ts` under suite load; that file passes in isolation (**27 pass / 0 fail**). `apps/server/tests/serve.test.ts` typecheck errors and the modified `apps/server/tests/serve.test.ts` / `plugins/sp/lib/idea-handoff.generated.mjs` in the tree belong to a concurrent writer, not this task.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/config/src/index.ts:748` (`BuilderBumpVerConfigSchema.aggregatePackage`) + `apps/cli/schemas/spur-config.schema.json:315`; anchors re-read this run; `bun test apps/cli/tests/config packages/config/tests` — 218 pass / 0 fail |
+| R2 | MET | `apps/cli/src/release-ops.ts:248` (aggregate joins `--all` pinned set) + `apps/cli/src/release-ops.ts:99` (`resolveAggregateTag`) + `apps/cli/src/release-ops.ts:537` (bump pushes the package's own scoped tag); `bun test apps/cli/tests/release-ops.test.ts` — 31 pass / 0 fail |
+| R3 | MET | `apps/cli/src/release-ops.ts:675` (drop path calls the same `resolveAggregateTag`); test "drop-tags --all removes the configured aggregate tag locally and on origin" at `apps/cli/tests/release-ops.test.ts:191` — pass |
+| R4 | MET | `apps/cli/src/release-ops.ts:77-84` throws `unknown builder.bump-ver.aggregatePackage "nope"` listing known ids before mutation (test asserts zero local tags); unset keeps root-manifest-name discovery — pre-existing tests at `apps/cli/tests/release-ops.test.ts:104`,`:121`,`:157` assert `@demo/root-v0.3.0` — pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: A repo whose root manifest name is not the published package declares it | MET | test | `apps/cli/tests/release-ops.test.ts:161` (app+lib bumped to 0.3.0, remote tag `@demo/app-v0.3.0`, no `@demo/root-v0.3.0`) — 31 pass this run; e2e probe on throwaway `knowledge-kit`-shaped repo emitted `@gobing-ai/knowledge-kit-v0.0.16`, no `knowledge-kit-v*` tag (see Testing) |
+| Scenario: Default discovery is unchanged for the root-named CLI repo | MET | test | `apps/cli/tests/release-ops.test.ts:104`,`:121`,`:157` assert `@demo/root-v0.3.0` with the key unset — 31 pass this run; probe without the key reproduced `knowledge-kit-v0.0.17` |
+| Scenario: An unknown aggregate package fails loudly | MET | test | `apps/cli/tests/release-ops.test.ts:179` rejects with `unknown builder.bump-ver.aggregatePackage "nope"` and asserts `localTags` empty — pass |
+| Scenario: drop-tags --all removes the configured trigger tag | MET | test | `apps/cli/tests/release-ops.test.ts:191` asserts `@demo/app-v0.3.0` removed locally and on origin after `drop-tags --all 0.3.0 --remote` — pass |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
@@ -92,4 +109,5 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 - 2026-09-16T00:07:54.657Z backlog → todo (system)
 - 2026-09-16T00:07:54.857Z todo → wip (system)
 - 2026-09-16T00:08:03.820Z wip → testing (system)
+- 2026-09-16T00:21:39.068Z testing → done (system)
 
