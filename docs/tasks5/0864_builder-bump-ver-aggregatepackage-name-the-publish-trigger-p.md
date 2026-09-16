@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "builder.bump-ver.aggregatePackage: name the publish trigger package in config"
-status: backlog
+status: testing
 template: standard
 created_at: 2026-09-15T23:51:55.570Z
-updated_at: "2026-09-15T23:52:27.085Z"
+updated_at: "2026-09-16T00:08:03.820Z"
 
 ---
 
@@ -70,7 +70,14 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- Unit — `bun test apps/cli/tests/release-ops.test.ts`: **31 pass / 0 fail**, including the three new cases at `apps/cli/tests/release-ops.test.ts:159` (configured target is bumped and the pushed trigger tag is `@demo/app-v0.3.0`; unknown id aborts with no local tag; `drop-tags --all --remote` removes the configured tag locally and on origin). The pre-existing `--all`/root-named-CLI cases still assert `@demo/root-v0.3.0`, covering the unchanged default.
+- Config surface — `bun test apps/cli/tests/config packages/config/tests`: **218 pass / 0 fail** (the embedded `apps/cli/schemas/spur-config.schema.json` copy the loader validates against).
+- Config-level end-to-end probe (`/tmp/kk-aggregate-probe`, a throwaway repo shaped like knowledge-kit: unscoped root `knowledge-kit`, CLI `@gobing-ai/knowledge-kit`, pinned `@gobing-ai/kk-core`), driven by this repo's CLI:
+  - with `builder.bump-ver.aggregatePackage: knowledge-kit` → `bump-ver --all 0.0.16` committed `bump knowledge-kit + kk-core to 0.0.16` and emitted `@gobing-ai/knowledge-kit-v0.0.16` (trace `@gobing-ai/kk-core-v0.0.16`); no `knowledge-kit-v*` tag.
+  - the same command on the same repo before the key existed, and again after removing the builder block → `bump kk-core to 0.0.17` and `knowledge-kit-v0.0.17` (the old, silently unpublished shape) — default behavior is unchanged.
+  - an id that matches no package (`aggregatePackage: nope`) aborts pre-flight with `unknown builder.bump-ver.aggregatePackage "nope"` and no commit/tag.
+- Gates: `biome check` clean on the four changed source/schema files; `typecheck` clean for `@gobing-ai/spur` and `@gobing-ai/spur-config`; `rule run --preset recommended-pre-check` 45 rules pass, `recommended-post-check` 2 rules pass.
+- Full suite `bun run test`: **8365 pass / 1 fail** — the single failure is a 5s timeout in `plugins/sp/tests/feature-dev-precheck.test.ts` under suite load; that file passes in isolation (**27 pass / 0 fail**). `apps/server/tests/serve.test.ts` typecheck errors and the modified `apps/server/tests/serve.test.ts` / `plugins/sp/lib/idea-handoff.generated.mjs` in the tree belong to a concurrent writer, not this task.
 
 ### Review
 
@@ -81,3 +88,8 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-16T00:07:54.657Z backlog → todo (system)
+- 2026-09-16T00:07:54.857Z todo → wip (system)
+- 2026-09-16T00:08:03.820Z wip → testing (system)
+
