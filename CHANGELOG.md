@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.84] - 2026-09-15
+
+### Added
+
+- sp: harden subagent dispatch contracts (0865) (89259d7df)
+- web: simplify global agent bar to single-line prompt dock (8aa91ead9)
+- server: add slash commands catalog service and discovery module (014b6d639)
+- task: subagent dispatch perf — estimate_hours floor, resume, fork guidance (0e1f25691)
+
+### Fixed
+
+- we: enhance the global agent bar (811addd50)
+
+### Other
+
+- docs(tasks): record 0865 pipeline evidence and complete (done) (e702e4a6c)
+- docs(tasks): promote 0865 to todo (4b6750e1d)
+- docs(tasks): update task status after refinement (004bbe222)
+
 ## [0.3.83] - 2026-09-15
 
 ### Added
