@@ -316,6 +316,18 @@ export const taskFrontmatterSchema = z.object({
      * records that the operator explicitly chose to leave a task unlinked to any feature.
      */
     feature_link_declined: z.preprocess((v) => (typeof v === 'string' ? v === 'true' : v), z.boolean().optional()),
+    /**
+     * Decomposition's size estimate in hours (optional, positive). The inline
+     * pipeline driver reads it as a deterministic dispatch gate: at or below the
+     * documented floor the stage executes host-inline instead of dispatching a
+     * native subagent (tiny jobs cost more to delegate than to do). Accepts the
+     * string form emitted by `TaskService.updateField`, normalizing to a number.
+     * Absent means "no estimate recorded" — dispatch eligibility is unchanged.
+     */
+    estimate_hours: z.preprocess(
+        (v) => (typeof v === 'string' && v.trim() !== '' ? Number(v) : v),
+        z.number().positive().optional(),
+    ),
     created_at: isoDateString,
     updated_at: isoDateString,
 });
@@ -386,6 +398,8 @@ export const taskBatchItemSchema = z
         priority: z.enum(PRIORITIES).optional(),
         tags: z.array(z.string()).optional(),
         template: z.enum(TASK_VARIANTS).optional(),
+        /** Size estimate in hours — persisted to frontmatter; the inline driver's dispatch floor reads it. */
+        estimate_hours: z.number().positive().optional(),
     })
     .strict();
 

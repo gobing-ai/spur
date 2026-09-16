@@ -114,7 +114,10 @@ inline` interpret the existing `task-pipeline.yaml` in the host session; they do
 workflow run` and never redirect silently to `agent.default`. Interactive **omit** is
 **host-controlled and non-subprocess**, but no longer guarantees host-context execution for every
 model stage (task 0508): an eligible `agent.run` stage — pure-slash input, non-interactive state,
-native subagent with shared-worktree read/write/shell capability — dispatches **once** to that
+native subagent with shared-worktree read/write/shell capability, and a task above the
+`estimate_hours` dispatch floor (2026-09-15 subagent-dispatch evaluation; the floor and the
+resume-over-re-dispatch rule for worker-role continuation stages are owned by
+[inline-pipeline-driver.md](inline-pipeline-driver.md)) — dispatches **once** to that
 native subagent and joins before the driver continues; any pre-dispatch eligibility failure falls
 back to one host execution, and a failure after dispatch follows the stage's error policy with no
 automatic host replay. Inline resolution (omitted or explicit, 0687 R1/R2) keeps the native-subagent

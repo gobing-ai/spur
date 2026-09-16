@@ -131,6 +131,7 @@ resolve to a spec under `.spur/agents/` — otherwise exit `2` naming the unknow
 | `--priority <p>` | Set the `priority` frontmatter field (`P0`–`P3`) |
 | `--ac-numbering <mode>` | Set the `ac_numbering` frontmatter field (task-local) — opts the task into the Requirements↔AC coverage check |
 | `--ac-altitude <mode>` | Set the `ac_altitude` frontmatter field: `graduating` (default; DD-09 feature-AC subset rule enforced) or `task-local` (skip it — task scenarios are intentionally not feature ship criteria) |
+| `--estimate-hours <n>` | Set the `estimate_hours` frontmatter field (positive number) — decomposition size estimate; the inline pipeline driver dispatches no subagent at/below its 1-hour floor |
 | `--no-lifecycle` | Suppress lifecycle workflow run creation (used by `task-pipeline.yaml` to avoid orphaned lifecycle runs) |
 | `--assignee <spec-id>` | Set the `assignee` frontmatter field to an agent spec id (validated against the id format and `.spur/agents/`) |
 | `--force-done` | Allow transitioning to `done` even when the verify verdict is not PASS; records an override (task 0292) |

@@ -564,6 +564,7 @@ export class TaskService {
         acceptanceCriteria?: string;
         priority?: string;
         tags?: string[];
+        estimateHours?: number;
     }): Promise<TaskCandidateShape> {
         // A feature link defaults the variant to `feature-impl`; otherwise `standard`.
         // An explicit template always wins.
@@ -621,6 +622,7 @@ export class TaskService {
             ...(input.parentWbs !== undefined ? { parent_wbs: input.parentWbs } : {}),
             ...(input.priority !== undefined ? { priority: input.priority } : {}),
             ...(input.tags !== undefined && input.tags.length > 0 ? { tags: input.tags } : {}),
+            ...(input.estimateHours !== undefined ? { estimate_hours: input.estimateHours } : {}),
         });
 
         let status: string;
@@ -823,6 +825,7 @@ export class TaskService {
             done_reason: true,
             ac_numbering: true,
             ac_altitude: true,
+            estimate_hours: true,
         };
         if (!(key in allowed)) {
             throw new Error(`Field "${key}" is not settable via update; allowed: ${Object.keys(allowed).join(', ')}.`);
@@ -1454,7 +1457,7 @@ export class TaskService {
      * @param jsonPath Path to a batch file matching `taskBatchSchema` (a bare
      *   array of `{name, background?, requirements?, design?, plan?,
      *   acceptance_criteria?, feature_id?, parent_wbs?, priority?, tags?,
-     *   template?}` items).
+     *   template?, estimate_hours?}` items).
      * @returns `children` — one {@link WriteResult} per created task, in the same
      *   order as the input array. `parentsWired` — one {@link ParentWireResult}
      *   per distinct parent touched by the wire-up pass.
@@ -1495,6 +1498,7 @@ export class TaskService {
                 acceptanceCriteria: item.acceptance_criteria,
                 priority: item.priority,
                 tags: item.tags,
+                estimateHours: item.estimate_hours,
             });
             try {
                 this.validateCandidateOrThrow(item.name, shape);

@@ -98,6 +98,30 @@ native subagent with shared-worktree capability); the inline driver remains the 
 provenance, artifact validation, and no-replay guarantees. This reference stays the authority for
 the native-subagent versus `spur agent run` choice everywhere else.
 
+## Fork dispatch on hosts that support it (2026-09-15 subagent-dispatch evaluation)
+
+A fresh native subagent starts with an empty context: it re-loads every skill file, task document,
+and convention the host already holds — the dominant cost of dispatching a context-heavy stage.
+Claude Code offers a **fork** subagent that inherits the parent's full conversation and shares its
+prompt cache, so the worker starts warm instead of re-ingesting. When a dispatch's value depends on
+the host's accumulated context — an implement stage following a long precheck/design discussion, or
+an investigation fan-out whose question only makes sense against what the session already learned —
+prefer the fork surface over a cold native subagent.
+
+Three constraints keep fork honest:
+
+- **Host-specific.** Fork is a Claude Code capability. Hosts without it use the standard native
+  subagent; this paragraph changes nothing there.
+- **Fork always runs the parent's model.** It is never a cost-routing move — cheap-tier work
+  (scribe-role fan-out, read-only exploration) still goes to a cold cheap worker.
+- **Fork inherits the host's framing.** Stages whose value is independent eyes — review, verify,
+  adversarial panels — must NOT fork; a worker that inherits the author's reasoning grades its own
+  homework. Fork is for continuity, cold dispatch is for independence.
+
+The inline driver's resume-over-re-dispatch rule
+([inline-pipeline-driver.md](../../spur-dev/references/inline-pipeline-driver.md)) is the same
+instinct one level down: reuse a warm worker for continuation, dispatch fresh for judgment.
+
 ## Role propagation across fan-out (task 0551, feature I4)
 
 When a run dispatches subagents, the **effective role** each subagent resolves through follows one

@@ -453,6 +453,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             'Set the ac_altitude frontmatter field. Valid: `graduating` (default; feature-AC subset rule enforced) or `task-local` (skip the DD-09 subset rule — task scenarios are intentionally not feature ship criteria). Mirrors the L1 schema enum (packages/domain/src/planning/schema.ts:304).',
         )
         .option(
+            '--estimate-hours <n>',
+            'Set the estimate_hours frontmatter field (positive number) — decomposition size estimate; the inline pipeline driver dispatches no subagent at/below its floor',
+        )
+        .option(
             '--no-lifecycle',
             'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs)',
         )
@@ -534,7 +538,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     options.feature !== undefined ||
                     options.priority !== undefined ||
                     options.acNumbering !== undefined ||
-                    options.acAltitude !== undefined
+                    options.acAltitude !== undefined ||
+                    options.estimateHours !== undefined
                 ) {
                     const key =
                         options.feature !== undefined
@@ -543,9 +548,16 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                               ? 'priority'
                               : options.acNumbering !== undefined
                                 ? 'ac_numbering'
-                                : 'ac_altitude';
+                                : options.acAltitude !== undefined
+                                  ? 'ac_altitude'
+                                  : 'estimate_hours';
                     const value =
-                        options.feature ?? options.priority ?? options.acNumbering ?? options.acAltitude ?? '';
+                        options.feature ??
+                        options.priority ??
+                        options.acNumbering ??
+                        options.acAltitude ??
+                        options.estimateHours ??
+                        '';
                     const result = await svc.updateField(wbs, key, value);
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
@@ -716,7 +728,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                         }
                     }
                 } else {
-                    context.output.error('Either <status>, --section/--from-file, or --feature/--priority is required');
+                    context.output.error(
+                        'Either <status>, --section/--from-file, or a field flag (--feature/--priority/--ac-numbering/--ac-altitude/--estimate-hours) is required',
+                    );
                     context.setExitCode(2);
                 }
             } catch (err) {

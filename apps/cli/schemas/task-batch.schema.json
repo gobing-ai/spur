@@ -58,6 +58,11 @@
                 "type": "string",
                 "enum": ["feature-impl", "issue", "review", "meta"],
                 "description": "Template variant for section structure (default: the standard template)."
+            },
+            "estimate_hours": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Size estimate in hours — persisted to frontmatter; the inline pipeline driver's dispatch floor reads it (at/below floor → host-inline, no subagent dispatch)."
             }
         },
         "additionalProperties": false

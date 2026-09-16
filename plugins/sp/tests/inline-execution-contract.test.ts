@@ -223,11 +223,17 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         const adr = readFileSync(ADR, 'utf8');
 
         // Eligibility is deterministic and observable: pure-slash agent.run, non-interactive
-        // state, native subagent with shared-worktree capability. No subjective heuristic.
+        // state, native subagent with shared-worktree capability, plus the estimate_hours
+        // dispatch floor (2026-09-15). No subjective heuristic beyond the frontmatter gate.
         expect(driver).toContain('Native-subagent dispatch (R2 eligibility');
         expect(driver).toContain('pure slash command');
         expect(driver).toContain('native subagent that shares the working tree');
-        expect(driver).toContain('No token estimate, stage-size threshold, model heuristic');
+        expect(driver).toContain('estimate_hours');
+        expect(driver).toContain('dispatch floor');
+        expect(driver).toContain('no token estimate, model heuristic');
+        // Worker-role continuation resumes the same subagent; reviewer/verify dispatch fresh.
+        expect(driver).toContain('(resumed; host session <session-id>)');
+        expect(driver).toContain('always dispatch **fresh**');
         // Distinct provenance: subagent vs inline; no post-launch replay; host-owned HITL.
         expect(driver).toContain('stage <id> executed via subagent <agent-id> (host session <session-id>)');
         expect(driver).toContain('stage <id> executed inline in session <session-id>');

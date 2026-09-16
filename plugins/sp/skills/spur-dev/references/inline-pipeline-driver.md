@@ -236,13 +236,22 @@ Action semantics come from the YAML and the workflow action contract:
    decision, or other operator prompt.
 4. The platform exposes a native subagent that shares the working tree and has read, write, shell,
    and Spur task/run-artifact access.
+5. **Size floor (2026-09-15 subagent-dispatch evaluation).** The task file's frontmatter
+   `estimate_hours` — when present — is **above** the dispatch floor of **1 hour**. A task at or
+   below the floor is cheaper to execute than to delegate: the stage runs host-inline and the run
+   log carries `stage <id> executed inline in session <session-id> (below dispatch floor:
+   estimate_hours <n> <= 1)`. The field is authored at decomposition time (batch item
+   `estimate_hours` → frontmatter) or set via `spur task update <wbs> --estimate-hours <n>`; a task
+   with no `estimate_hours` passes this condition unchanged. The driver reads the frontmatter value
+   directly — never estimates size itself.
 
-All four pass → dispatch. Any pre-dispatch failure → execute the stage **once** in the host session.
+All five pass → dispatch. Any pre-dispatch failure → execute the stage **once** in the host session.
 An `agent.run` whose `input` is free-form prose rather than a pure slash command fails condition 2
 and is never dispatch-eligible: the driver executes it in the host session and logs it with the
 existing host-fallback line `stage <id> executed inline in session <session-id>` — it does not
 reformulate the prose into a command, spawn a subagent for it, or silently promote it to dispatch.
-No token estimate, stage-size threshold, model heuristic, or configuration switch is added.
+Beyond the deterministic `estimate_hours` floor in condition 5, no token estimate, model heuristic,
+or configuration switch is added.
 
 **Dispatch and join:** before dispatch, capture the same pre-action git snapshot used by
 `requireDiff` enforcement, and resolve `answerFile`/`expectFile` against the worktree root — the
@@ -312,6 +321,26 @@ Host fallback retains exactly `stage <id> executed inline in session <session-id
 before the subagent starts, log the reason and use host fallback. If a started subagent fails or
 leaves invalid artifacts, do **not** replay the stage in the host — follow the YAML error policy so
 partial mutations are not duplicated.
+
+**Resume over re-dispatch for worker-role continuation (2026-09-15 subagent-dispatch evaluation).**
+Some stages continue the *same* task's work product after a finding: `test-fix` after a failing
+`test`, an implement rework after review findings. A cold re-dispatch makes the next worker
+re-ingest the task, the diff, and every skill file it already loaded. When the host platform
+supports addressing a completed subagent again (Claude Code: send a follow-up message to the same
+agent — its context survives completion), the driver SHOULD resume the prior same-task worker
+subagent for that continuation stage instead of dispatching a fresh one, carrying the same
+five-field payload plus the finding that triggered the continuation. Provenance uses the resumed
+form:
+
+```text
+stage <id> executed via subagent <agent-id> (resumed; host session <session-id>)
+```
+
+The resume rule applies to **worker-role** stages only (implement, test-fix). Reviewer and verify
+stages always dispatch **fresh**: their value is independent eyes on the diff, and a resumed worker
+grading its own work defeats the stage. A continuation stage also dispatches fresh when no prior
+same-task subagent exists (the earlier stage ran host-inline or below the dispatch floor), when a
+host-owned gate sat between the stages, or when the platform cannot address completed subagents.
 
 **Timeout boundary (task 0727):** a dispatched subagent is governed by
 **the host platform's subagent limit, not the YAML timeoutMs** — `timeoutMs` stays not-applicable
