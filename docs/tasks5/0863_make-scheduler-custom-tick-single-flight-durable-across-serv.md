@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make scheduler.custom tick single-flight durable across serve daemons and stop failing suppressed duplicates
-status: wip
+status: done
 template: standard
 created_at: 2026-09-15T23:25:40.931Z
-updated_at: "2026-09-15T23:47:05.582Z"
+updated_at: "2026-09-16T00:34:52.572Z"
 
 ---
 
@@ -104,30 +104,46 @@ Impacted surfaces: `queue_jobs` (new index, migration 0047), `spur serve` schedu
 | Change | Where | Why |
 | ------ | ----- | --- |
 | `SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL` (`packages/domain/src/migrations.ts:942`) + migration entry `0047_spur_cli_scheduler_custom_active_unique` (`packages/domain/src/migrations.ts:1493`) + `drizzle/0047_spur_cli_scheduler_custom_active_unique.sql` | `packages/domain/src/migrations.ts`, `drizzle/0047_spur_cli_scheduler_custom_active_unique.sql` | Retires duplicate active `scheduler.custom` rows per job name (oldest survives, rest terminal `failed` with an auditable `last_error`, nothing deleted), then creates the partial unique index on `json_extract(payload,'$.name')` where `type='scheduler.custom'` and `status IN ('pending','processing')`. A table-absence guard (`packages/domain/src/migrations.ts:1718`) keeps legacy DBs upgrading |
-| Same index in the fresh-schema constant | `packages/domain/src/migrations.ts:119` | Fresh databases get the constraint from migration `0004` |
+| Same index in the fresh-schema constant | `packages/domain/src/migrations.ts:81-119` | Fresh databases get the constraint from the same `QUEUE_JOBS_SCHEMA_SQL` constant |
 | `SCHEDULER_CUSTOM_ACTIVE_INDEX` + `isSchedulerCustomActiveConflict()` | `packages/app/src/services/scheduler-custom-job-service.ts:39`, `packages/app/src/services/scheduler-custom-job-service.ts:50` (re-exported from `packages/app/src/index.ts`) | Names the constraint and classifies its violation (code `SQLITE_CONSTRAINT_UNIQUE` + index-naming message) so the tick treats the loss as an expected outcome |
 | Tick: enqueue-as-check, conflict → sweep or `skipped` | `apps/server/src/serve.ts:293` (`enqueueFresh`), `apps/server/src/serve.ts:311` (conflict branch) | The one-active-row invariant is enforced by the index across daemons; the read-then-insert pre-check is gone, and the 0803 R4 age sweep now runs on the conflict path (fresh enqueue after a successful sweep) |
 | Handler: same-name duplicate completes instead of failing, with an audit hook | `packages/app/src/services/scheduler-custom-job-service.ts:221` (`deps.onDuplicate?.`), `packages/app/src/services/scheduler-custom-job-service.ts:99` (dep) | A duplicate claim folds into the sibling run; the model-side hook wired at `apps/server/src/serve.ts:876` emits `scheduler.job.executed` with `skipped: true`, so the suppression is observable rather than silent. The cross-kind `exclusiveKey` guard still fails its own attempt |
-| Design satellite | `docs/design/server-contracts.md:128` | Documents the DB-enforced single-flight and the non-fatal duplicate |
+| Design satellite | `docs/design/server-contracts.md:128` | Documents the database-enforced single-flight and the non-fatal duplicate |
 
 ### Testing
 
-| Command (workspace) | Result |
-| ------------------- | ------ |
-| `bun test tests/db.test.ts tests/dao/migrations.test.ts` (`packages/domain`) | 102 pass / 0 fail — the index admits one active row per name; terminal rows, other names, and other job types are unaffected; migration 0047 retires pre-existing duplicates without deleting rows; registry/governance counts updated |
-| `bun test tests/services/scheduler-custom-job-service.test.ts` (`packages/app`) | 36 pass / 0 fail — a duplicate claim completes without a second child and audits itself; the conflict classifier accepts only this index |
-| `bun test tests/serve.test.ts` (`apps/server`) | 53 pass / 0 fail — tick conflict → `skipped` naming the active row; stale-row sweep still re-enqueues; explicit-unlimited still unswept; real-queue round trip admits one row per occurrence and re-admits after completion |
-| `bun test` for `./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts` | 8363 pass / 0 fail across 472 files (lines 99.20%, functions 98.99%) |
-| `bun run typecheck` (root) | all 7 workspaces exit 0 |
-| `bunx biome check` on the touched files | clean |
-| Live database (project `.spur/spur.db`, 796 `scheduler.custom` rows) | migration applied: index present, no invalid-JSON payloads, 0 active duplicate rows, row count unchanged |
-| Live tick at 2026-09-15 16:40 with two `spur serve` daemons still on the pre-fix code | exactly ONE `scheduler.custom` row created for the occurrence (pre-fix: 2-5); the losing daemon reported `UNIQUE constraint failed: index 'queue_jobs_scheduler_custom_active_unique'` as an error because it predates `isSchedulerCustomActiveConflict` — a daemon restart converts it to the `skipped` outcome |
+**Pipeline verify results**
 
-Adversarial reading of the duplicate family: on 2026-09-14 every one of the 15 `history_import_ledger.record_hash` failures (import exit 2, `pi` source) landed on a tick with 11-14 duplicate rows — concurrent importers, i.e. the same root cause. Those rows stop being creatable once the index is in force.
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/domain/src/migrations.ts:119` (fresh-schema partial unique index) + `packages/domain/src/migrations.ts:942` (`SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL`) + `packages/domain/src/migrations.ts:1493` (migration 0047); `bun test tests/db.test.ts tests/dao/migrations.test.ts` (packages/domain) — 102 pass / 0 fail; live `.spur/spur.db`: index present, 0 active duplicate groups |
+| R2 | MET | `apps/server/src/serve.ts:311` — `SQLITE_CONSTRAINT_UNIQUE` on the index is caught, then `apps/server/src/serve.ts:342-349` emits `scheduler.job.executed` with `skipped: true`, `severity: 'info'`, reason naming the active row; no error-severity event; `bun test tests/serve.test.ts` (apps/server) — 55 pass / 0 fail |
+| R3 | MET | `packages/app/src/services/scheduler-custom-job-service.ts:221` — duplicate claim completes via `deps.onDuplicate?.()` + return (no throw, no second child); audit wired at `apps/server/src/serve.ts:876`; `bun test tests/services/scheduler-custom-job-service.test.ts` (packages/app) — 36 pass / 0 fail; cross-kind `exclusiveKey` guard still throws (`packages/app/src/services/scheduler-custom-job-service.ts:226`) |
+| R4 | MET | `apps/server/src/serve.ts:314-330` — stale `processing` row (age > policy + kill grace) is failed in place with `swept: true` evidence and `enqueueFresh()` re-enqueues on the same tick; the post-sweep enqueue is itself conflict-tolerant (`apps/server/src/serve.ts:343-355`); `sweepThresholdMs === null` (explicit unlimited) never sweeps; serve.test.ts "stale-row sweep still re-enqueues" + "explicit-unlimited still unswept" + "tolerates a post-sweep enqueue conflict" — pass |
+| R5 | MET | `drizzle/0047_spur_cli_scheduler_custom_active_unique.sql` — ROW_NUMBER retirement keeps the deterministically oldest active row per name, rest terminal `failed` with auditable `last_error`, no DELETE; table-absence guard `packages/domain/src/migrations.ts:1718`; domain migration tests — pass; live DB: 799 `scheduler.custom` rows intact post-migration |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: A1 — Two daemons ticking the same occurrence admit one row | MET | test | serve.test.ts real-queue round trip "admits one row per occurrence and re-admits after completion" — 55 pass; live tick 2026-09-15 16:40 with two daemons: exactly ONE row for the occurrence (see task Testing) |
+| Scenario: A2 — A losing tick is observable and non-fatal | MET | test | serve.test.ts "tick conflict → skipped naming the active row" — pass; emission is `severity: 'info'` with `skipped: true` (`apps/server/src/serve.ts:332-338`) |
+| Scenario: A3 — An already-running job name suppresses a duplicate claim | MET | test | scheduler-custom-job-service.test.ts "a duplicate claim completes without a second child and audits itself" — 36 pass; serve.test.ts duplicate-audit hook coverage (commit 53473f037) — 55 pass |
+| Scenario: A4 — A stale processing row is still swept | MET | test | serve.test.ts "stale-row sweep still re-enqueues" + "tolerates a post-sweep enqueue conflict from a concurrent tick" — 55 pass |
+| Scenario: A5 — An explicit-unlimited job is never swept by age | MET | test | serve.test.ts "explicit-unlimited still unswept" — pass |
+| Scenario: A6 — The migration retires pre-existing duplicate active rows | MET | test | domain migrations/db tests: "migration 0047 retires pre-existing duplicates without deleting rows" — 102 pass |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
@@ -136,4 +152,6 @@ Adversarial reading of the duplicate family: on 2026-09-14 every one of the 15 `
 ### History
 
 - 2026-09-15T23:46:59.213Z backlog → wip (system)
+- 2026-09-16T00:30:09.739Z wip → testing (system)
+- 2026-09-16T00:30:15.846Z testing → done (system)
 
