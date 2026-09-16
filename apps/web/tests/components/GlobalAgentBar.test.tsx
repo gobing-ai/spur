@@ -44,6 +44,29 @@ function setPromptValue(textarea: Element, value: string): void {
     act(() => onChange({ target: { value } }));
 }
 
+function submitPrompt(textarea: Element): void {
+    const holder = textarea as unknown as Record<string, Record<string, unknown> | undefined>;
+    const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
+    const props = key ? holder[key] : undefined;
+    const onKeyDown = props?.onKeyDown as ((e: unknown) => void) | undefined;
+    if (!onKeyDown) throw new Error('onKeyDown not found on agent-bar-input');
+    const native = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: false,
+        cancelable: true,
+        shiftKey: false,
+        isComposing: false,
+        keyCode: 0,
+    } as KeyboardEventInit);
+    const synthetic = {
+        nativeEvent: native,
+        key: 'Enter',
+        shiftKey: false,
+        preventDefault: (): void => native.preventDefault(),
+    };
+    act(() => onKeyDown(synthetic));
+}
+
 // ── 0844 harness: the bar consumes ProjectContext + ConversationDraftContext ──
 
 function fleet(overrides: { orchestrator?: Partial<ProjectFleetSnapshot['orchestrator']> } = {}): ProjectFleetSnapshot {
@@ -125,14 +148,22 @@ describe('GlobalAgentBar', () => {
         expect(getByTestId('agent-bar-dock')).toBeDefined();
     });
 
-    test('Send is disabled while the prompt is empty, enabled once text is entered', async () => {
-        const { getByTestId, getByText } = harness();
+    test('Enter submit is ignored while the prompt is empty, executes once text is entered', async () => {
+        const state: { posts: PostRecord[] } = { posts: [] };
+        setFetchForTesting(fetchRouter(state));
+        const view = harness();
         await settleInAct(); // bar mount polls /api/* on mount
-        fireEvent.click(getByTestId('agent-bar-dock'));
-        const send = getByText('Send') as HTMLButtonElement;
-        expect(send.disabled).toBe(true);
-        setPromptValue(getByTestId('agent-bar-input'), 'refine this feature');
-        expect((send as HTMLButtonElement).disabled).toBe(false);
+        fireEvent.click(view.getByTestId('agent-bar-dock'));
+        const input = view.getByTestId('agent-bar-input');
+        submitPrompt(input);
+        await act(async () => {});
+        expect(state.posts).toHaveLength(0);
+
+        setPromptValue(input, 'refine this feature');
+        submitPrompt(input);
+        await act(async () => {});
+        expect(state.posts).toHaveLength(1);
+        view.unmount();
     });
 
     test('BoardLayout renders the global agent bar dock', async () => {
@@ -166,7 +197,7 @@ describe('GlobalAgentBar submission, durability, and receipts (0844)', () => {
         saveDraft({ path: '/repo/wt', text: 'implement F84', refs: [{ kind: 'task', wbs: '0844' }], revision: 1 });
         const view = harness();
         fireEvent.click(view.getByTestId('agent-bar-dock'));
-        fireEvent.click(view.getByText('Send'));
+        submitPrompt(view.getByTestId('agent-bar-input'));
 
         // In flight: the strip names the pending state before any ack.
         expect(view.container.querySelector('[data-receipt-state="pending"]')).not.toBeNull();
@@ -200,13 +231,13 @@ describe('GlobalAgentBar submission, durability, and receipts (0844)', () => {
         const view = harness();
         fireEvent.click(view.getByTestId('agent-bar-dock'));
         setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84');
-        fireEvent.click(view.getByText('Send'));
+        submitPrompt(view.getByTestId('agent-bar-input'));
         await act(async () => {});
         expect(state.posts).toHaveLength(1);
         // Draft untouched by the failed ack.
         expect((view.getByTestId('agent-bar-input') as HTMLTextAreaElement).value).toBe('implement F84');
 
-        fireEvent.click(view.getByText('Send'));
+        submitPrompt(view.getByTestId('agent-bar-input'));
         await act(async () => {});
         expect(state.posts).toHaveLength(2);
         expect(state.posts[1]?.requestKey).toBe(state.posts[0]?.requestKey);
@@ -219,7 +250,7 @@ describe('GlobalAgentBar submission, durability, and receipts (0844)', () => {
         const view = harness();
         fireEvent.click(view.getByTestId('agent-bar-dock'));
         setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84');
-        fireEvent.click(view.getByText('Send'));
+        submitPrompt(view.getByTestId('agent-bar-input'));
         // The edit lands while the POST is still in flight.
         setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84 — with the new constraint');
         await act(async () => {});
@@ -228,15 +259,16 @@ describe('GlobalAgentBar submission, durability, and receipts (0844)', () => {
         expect(input.value).toBe('implement F84 — with the new constraint');
 
         // The edited payload is a different revision → a new key, not the old one.
-        fireEvent.click(view.getByText('Send'));
+        submitPrompt(view.getByTestId('agent-bar-input'));
         await act(async () => {});
         expect(state.posts).toHaveLength(2);
         expect(state.posts[1]?.requestKey).not.toBe(state.posts[0]?.requestKey);
         view.unmount();
     });
 
-    test('unbound orchestrator: Send is disabled and the state is named, never a bare disabled control', () => {
-        setFetchForTesting(fetchRouter({ posts: [] }));
+    test('unbound orchestrator: Enter does not submit and the state is named, never a bare control failure', async () => {
+        const state: { posts: PostRecord[] } = { posts: [] };
+        setFetchForTesting(fetchRouter(state));
         const view = harness(
             projectCtx({ fleet: fleet({ orchestrator: { state: 'missing', instanceId: undefined } }) }),
         );
@@ -245,7 +277,9 @@ describe('GlobalAgentBar submission, durability, and receipts (0844)', () => {
             'no orchestrator instance is bound',
         );
         setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84');
-        expect((view.getByText('Send') as HTMLButtonElement).disabled).toBe(true);
+        submitPrompt(view.getByTestId('agent-bar-input'));
+        await act(async () => {});
+        expect(state.posts).toHaveLength(0);
         view.unmount();
     });
 });
@@ -323,9 +357,10 @@ describe('GlobalAgentBar agent role receiver tag and clean UI', () => {
         // Single line elements exist
         expect(getByTestId('agent-bar-role-tag')).toBeDefined();
         expect(getByTestId('agent-bar-input')).toBeDefined();
-        expect(getByTestId('agent-bar-drawer-toggle')).toBeDefined();
 
-        // Lines 2 and 3 are omitted
+        // Lines 2 and 3, drawer toggle, and Send button are omitted
+        expect(queryByTestId('agent-bar-drawer-toggle')).toBeNull();
+        expect(queryByTestId('agent-bar-drawer')).toBeNull();
         expect(queryByTestId('agent-bar-footer')).toBeNull();
         expect(queryByTestId('agent-bar-chips')).toBeNull();
         expect(queryByTestId('agent-bar-context')).toBeNull();

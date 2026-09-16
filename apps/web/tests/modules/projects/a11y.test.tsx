@@ -149,6 +149,28 @@ function setPromptValue(textarea: Element, value: string): void {
     act(() => onChange({ target: { value } }));
 }
 
+function submitPrompt(textarea: Element): void {
+    const holder = textarea as unknown as Record<string, Record<string, unknown> | undefined>;
+    const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
+    const onKeyDown = key ? (holder[key]?.onKeyDown as (e: unknown) => void) : undefined;
+    if (!onKeyDown) throw new Error('onKeyDown not found on agent-bar-input');
+    const native = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: false,
+        cancelable: true,
+        shiftKey: false,
+        isComposing: false,
+        keyCode: 0,
+    } as KeyboardEventInit);
+    const synthetic = {
+        nativeEvent: native,
+        key: 'Enter',
+        shiftKey: false,
+        preventDefault: (): void => native.preventDefault(),
+    };
+    act(() => onKeyDown(synthetic));
+}
+
 describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablist)', () => {
     test('tablist/tab roles, aria-selected, and aria-controls↔id pairing', async () => {
         setFetchForTesting(stubFetch());
@@ -276,7 +298,7 @@ describe('R3: status is never colour-alone and state changes are announced (0844
         expect(live.getAttribute('role')).toBe('status');
         expect(live.getAttribute('aria-live')).toBe('polite');
 
-        fireEvent.click(view.getByText('Send'));
+        submitPrompt(view.getByTestId('agent-bar-input'));
         // In flight: the pending transition is already written.
         expect(view.container.querySelector('[data-agent-bar-live]')?.textContent).toContain('pending');
 
@@ -328,8 +350,8 @@ describe('carried 0841 P3: the task chip is keyboard-operable, labeled, and remo
 });
 
 describe('0844 bar controls stay reachable and labeled (keyboard parity)', () => {
-    test('dock, drawer toggle, collapse, composer, and Send are labeled native controls', async () => {
-        const { getByTestId, getByLabelText, getByText } = await renderBar();
+    test('dock, collapse, and composer are labeled native controls', async () => {
+        const { getByTestId, getByLabelText, queryByText, queryByTestId } = await renderBar();
         const dock = getByTestId('agent-bar-dock');
         expect(dock.tagName).toBe('BUTTON');
         expect(dock.getAttribute('aria-label')).toBe('Open agent prompt bar');
@@ -337,11 +359,9 @@ describe('0844 bar controls stay reachable and labeled (keyboard parity)', () =>
 
         fireEvent.click(dock);
         expect((getByTestId('agent-bar-input') as HTMLTextAreaElement).getAttribute('aria-label')).toBe('Agent prompt');
-        expect(getByTestId('agent-bar-drawer-toggle').getAttribute('aria-label')).toBe(
-            'Toggle execution telemetry drawer',
-        );
         expect(getByLabelText('Collapse agent prompt bar').tagName).toBe('BUTTON');
-        expect((getByText('Send') as HTMLButtonElement).tagName).toBe('BUTTON');
+        expect(queryByText('Send')).toBeNull();
+        expect(queryByTestId('agent-bar-drawer-toggle')).toBeNull();
     });
 
     test('unbound orchestrator state is named in a status region while controls stay native', () => {
@@ -364,7 +384,7 @@ describe('0844 bar controls stay reachable and labeled (keyboard parity)', () =>
         expect(named.getAttribute('role')).toBe('status');
         expect(named.textContent).toContain('no orchestrator instance is bound');
         setPromptValue(view.getByTestId('agent-bar-input'), 'implement F84');
-        expect((view.getByText('Send') as HTMLButtonElement).disabled).toBe(true);
+        expect(named.textContent).toContain('no orchestrator instance is bound');
         view.unmount();
     });
 });

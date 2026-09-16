@@ -88,7 +88,6 @@ function orchestratorUnbound(fleet: ReturnType<typeof useProjectContext>['fleet'
  */
 export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAgentBarProps) {
     const [isOpen, setIsOpen] = useState(false);
-    const [drawerOpen, setDrawerOpen] = useState(false);
     const [inFlight, setInFlight] = useState(false);
     /** `msgId` of the last accepted submission — joins the thread to the results feed. */
     const [lastMessageId, setLastMessageId] = useState<string | null>(null);
@@ -510,7 +509,10 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                             }
                             if (e.key === 'Tab') {
                                 e.preventDefault();
-                                handleSelectCommand(filteredCommands[selectedCmdIndex].name);
+                                const selected = filteredCommands[selectedCmdIndex];
+                                if (selected) {
+                                    handleSelectCommand(selected.name);
+                                }
                                 return;
                             }
                             if (e.key === 'Escape') {
@@ -521,6 +523,7 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                         }
 
                         if (!shouldSubmit(e)) return;
+                        if (isSendDisabled) return;
                         e.preventDefault();
                         void handleSubmit();
                     }}
@@ -533,28 +536,6 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                 <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setDrawerOpen((prev) => !prev)}
-                    aria-label="Toggle execution telemetry drawer"
-                    aria-expanded={drawerOpen}
-                    data-testid="agent-bar-drawer-toggle"
-                    className="text-spur-text-muted hover:text-spur-text h-8 w-8 p-0 shrink-0"
-                >
-                    ⚡
-                </Button>
-
-                <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={isSendDisabled}
-                    onClick={() => void handleSubmit()}
-                    className="px-3 py-1 text-xs font-medium shrink-0"
-                >
-                    Send <kbd className="text-[10px] opacity-70 ml-1 font-mono">⌘↵</kbd>
-                </Button>
-
-                <Button
-                    variant="ghost"
-                    size="sm"
                     onClick={() => setIsOpen(false)}
                     aria-label="Collapse agent prompt bar"
                     aria-expanded={true}
@@ -563,15 +544,6 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                     ▾
                 </Button>
             </div>
-
-            {drawerOpen && (
-                <div
-                    data-testid="agent-bar-drawer"
-                    className="rounded-lg border border-spur-border bg-spur-surface/80 p-2.5 text-xs text-spur-text-muted"
-                >
-                    <div role="status">Streamed telemetry and tool calls are not wired yet.</div>
-                </div>
-            )}
 
             {selectedRole === 'auto' && unbound && (
                 <div
