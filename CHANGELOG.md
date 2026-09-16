@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.85] - 2026-09-16
+
+### Added
+
+- commands: support multi-plugin discovery, argument hints, and dynamic tag filtering (4c4605a1c)
+
+### Fixed
+
+- scheduler: honour declared job deadlines and abandon shutdown kills (a68e9f81d)
+- workflow: stop labelling fallback agent sessions as omp (a7eed8ce1)
+
+### Changed
+
+- config: move the standard agent rung from omp to pi (865c6c775)
+
 ## [0.3.84] - 2026-09-15
 
 ### Added
