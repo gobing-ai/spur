@@ -922,6 +922,14 @@ gate it on measured real-run data, not on a fixture bar.
 **Detail:** ADR-071 (proof-state invariant), ADR-072 (one canonical pipeline per lifecycle boundary),
 `docs/design/workflow-composition-contract.md`.
 
+> **Amendment (2026-09-16 · feature D62):** the reopening condition above is met and is hereby made
+> operable. A candidate graph change is **shadow-run against recorded real-run inputs** and is
+> **promoted into the canonical definition or deleted** by a date named when the candidate is
+> created. The verdict cites `agent.run` count and duration measured from run history, never a
+> fixture bar. No unreferenced parallel definition may remain in `config/workflows/` past its named
+> date — the shadow run is the comparison surface, a second standing YAML is not. This authorizes a
+> bounded candidate, not a return to the `task-pipeline2` pattern ADR-076 deleted.
+
 ## ADR-077: Pin Beats Role — Explicit Executor Pins Win Routing; Roles Set the Tier Floor
 
 - **Status:** Accepted · **Date:** 2026-08-20
@@ -1730,3 +1738,71 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 > `team.member.started|stopped` pair is deleted rather than renamed, and `TeamService` splits into
 > `AgentCoordinationService` plus the fleet service's roster projection. Detail:
 > [fleet declaration system design](design/fleet-config-declaration.md) (Accepted 2026-09-15).
+
+## ADR-117: Trace Emission Is an Obligation of Every Execution Surface, Not of the Engine
+
+- **Status:** Accepted · **Date:** 2026-09-16 · **Feature:** D62 · **Amends:** ADR-047
+- **Decision:** The structured action trace — an `action_runs` row per executed action and one
+  start/finish `system_events` pair per action boundary, both carrying the dispatching `run_id` — is
+  owed by **whichever surface executes the action**, engine subprocess or inline host-session driver
+  alike. A run's observability is a property of the run, not of who drove it. The inline driver's
+  `.spur/run/<run-id>.log` becomes a human convenience, not the record of truth. One action boundary
+  gets exactly one start name and one finish name; the `workflow.action.start`/`.started` and
+  `.done`/`.finished` aliases collapse. Emission is best-effort **at the boundary only**: a
+  persistence failure is recorded and never changes the run's outcome or wedges the run.
+- **Why:** ADR-047 moved the default surface for `/sp:dev-run`, `/sp:dev-idea` and `/sp:dev-plan`
+  inline but left the emission obligation with the engine, so the observability layer already built
+  in `packages/app/src/workflow/` observes the minority of real work. Measured on 2026-09-16 against
+  this checkout's `.spur/spur.db`: **1,011 of ~1,400 run rows carry zero `action_runs`**, including
+  every one of `task-lifecycle`'s 564 runs and `feature-lifecycle`'s 136 — the two highest-volume run
+  producers in the database. 276 of 443 `agent.invoke.start` events carry a NULL `run_id`, so agent
+  cost cannot be attributed to the run that paid it. The gap is not a reporting nicety: it made a
+  first-pass reading of this same data conclude that five workflows had no traffic when two of them
+  are load-bearing. A trace that omits the default surface produces confidently wrong decisions.
+- **Retains:** ADR-047 (control inversion — the inline driver stays the default surface; only its
+  emission obligation changes).
+- **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §2.
+
+## ADR-118: A Violated Stage Contract Is a Distinct Outcome From an Executor Failure
+
+- **Status:** Accepted · **Date:** 2026-09-16 · **Feature:** D62
+- **Decision:** An `agent.run` stage's declared post-conditions (`answerFile`, `expectFile`,
+  `requireDiff`, verdict parseability) are a **contract**, and violating it is a third stage outcome —
+  `contract-violation` — distinct from success and from executor failure. The trace and the run log
+  name the violated contract and the observed value. A definition may route `contract-violation` to a
+  dedicated repair edge; that repair path **must not** re-dispatch the full stage on its first
+  attempt. Executor failure keeps its existing retry semantics.
+- **Why:** `agent.run` is **96% of machine time** (4,173 min over 723 actions) against `shell`'s 3.3%
+  (141 min over 1,425 actions), so stage economics are the only lever with leverage. Within it,
+  `implement` fails **83 of 180 runs (46%) after paying 9.9 min each** — roughly 780 min of
+  recoverable model time — and sampled payloads split those failures into two populations that the
+  current single `ok: false` collapses: `exitCode: 3` executor errors, and `exitCode: 0` with
+  `ok: false`, a clean agent exit that missed its own post-condition. Today both cost an identical
+  full re-dispatch. Only the second population is cheaply repairable, and it cannot be routed until
+  it is named.
+- **Alternatives rejected:** merging adjacent `agent.run` stages — fewer, larger stages raise the
+  price of each failure without changing the failure rate; adding intermediate FSM states — a finer
+  graph changes when a failure is observed, not what it costs.
+- **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §3.
+
+## ADR-119: Check Scope Must Match Change Scope — Repo-Wide Gates Are Feature-Scoped, Not Per-Task
+
+- **Status:** Accepted · **Date:** 2026-09-16 · **Feature:** D62
+- **Decision:** A validation gate runs at the scope of the invariant it protects. **Task-local**
+  checks — does this diff compile, do its own tests pass, does the task carry its required sections —
+  stay in the per-task pipeline. **Repo-wide** checks — corpus consistency, traceability, contract
+  baselines, doc sync, catalogue-level rule sweeps — move out of the per-task pipeline into a single
+  feature-scoped verification pass that runs once per feature, after its tasks land. A per-task
+  pipeline may not host a check that can fail for a reason the current task did not cause.
+- **Why:** a repo-wide invariant checked once per task is checked N times per feature and can fail on
+  a sibling task's work, which charges the current task's model budget for someone else's defect. The
+  measured direct saving is modest and honest — the gate-shaped shell nodes in `task-pipeline` cost
+  ~55 s per task (`test` 19.1 s, `test-recheck` 35.3 s, `precheck` 0.5 s) against `implement`'s 594 s,
+  about 9% of per-task wall clock. The load-bearing saving is the model rework those cross-scope
+  failures trigger: `resolve-scope` fails 43%, `doc-sync` 35%, `verify` 21%. Consolidation also
+  concentrates the expensive checks where they can be run once, in parallel, against a settled tree.
+- **Consequence:** the per-task pipeline gets cheaper and more local; the feature-scoped pass becomes
+  deliberately the slow one, and a feature is not done until it passes.
+- **Retains:** ADR-072 (one canonical pipeline per lifecycle boundary — the feature-scoped pass owns
+  a boundary no existing pipeline owns, rather than duplicating one).
+- **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §4.

@@ -410,3 +410,16 @@ See [contract detail](design/project-switcher.md#processes-tab-0852).
 ## Board request envelope `SPUR-REQUEST/1` (0841)
 
 See [contract detail](design/project-switcher.md#request-envelope-0841).
+
+## Workflow execution economy (feature D62)
+
+`agent.run` is 96% of workflow machine time and `shell` 3.3%, so stage economics
+— not graph shape — is the lever. Three contracts follow: every execution
+surface owes the structured action trace, not just the engine (ADR-117); a
+violated stage post-condition is an outcome distinct from an executor failure
+and routes to a repair edge (ADR-118); and a validation gate runs at the scope
+of the invariant it protects, so repo-wide checks move to one feature-scoped
+pass (ADR-119). A candidate graph change is shadow-run and promoted-or-deleted
+on measured run history (ADR-076 amendment).
+
+See [contract detail](design/workflow-execution-economy.md).
