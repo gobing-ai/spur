@@ -1430,15 +1430,22 @@ describe('startServer', () => {
         expect(enqueued.map((job) => job.type)).toEqual(['system-events-prune', 'smoke']);
         expect(emitted).toHaveLength(2);
         expect(emitted.every((e) => e.name === 'scheduler.job.executed')).toBe(true);
-        // SchedulerJobExecutedDetail contract: { name, durationMs, error? }
+        // SchedulerJobExecutedDetail contract: { name, durationMs, error? } —
+        // built-in entries additionally carry the registration-stamped action label.
         const successPayload = emitted[0]?.payload as Record<string, unknown>;
-        expect(successPayload).toMatchObject({ name: 'system-events-prune' });
+        expect(successPayload).toMatchObject({
+            name: 'system-events-prune',
+            action: 'prune system_events to retention quotas',
+        });
         expect(successPayload).not.toHaveProperty('kind');
         expect(successPayload).not.toHaveProperty('cron');
         expect(successPayload).not.toHaveProperty('error');
         expect(typeof successPayload.durationMs).toBe('number');
         const smokePayload = emitted[1]?.payload as Record<string, unknown>;
-        expect(smokePayload).toMatchObject({ name: 'smoke' });
+        expect(smokePayload).toMatchObject({
+            name: 'smoke',
+            action: 'scheduler/worker pipeline heartbeat',
+        });
     });
 
     test('registerSchedulerEntries registers no built-in history refresh entry (task 0750)', () => {

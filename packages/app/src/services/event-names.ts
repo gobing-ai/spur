@@ -608,7 +608,12 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
     },
     'scheduler.job.executed': {
         description: 'A scheduler job ran to completion or failed, with its duration.',
-        fields: [field('name', 'Job'), field('durationMs', 'Duration (ms)'), field('error', 'Error')],
+        fields: [
+            field('name', 'Job'),
+            field('action', 'Action'),
+            field('durationMs', 'Duration (ms)'),
+            field('error', 'Error'),
+        ],
         summary: ({ data }) => {
             const name = s(data, 'name');
             return name !== undefined ? `[scheduler] ${name}` : '[scheduler] job executed';

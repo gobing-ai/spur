@@ -190,6 +190,8 @@ export interface SchedulerTickOptions {
 /** Register built-in scheduled queue entries for the Bun serve runtime.
  * Each scheduled action emits `scheduler.job.executed` to the server EventBus
  * so the System Events tab surfaces scheduler activity alongside queue events.
+ * Built-in entries stamp a human-readable `action` label (registration-time)
+ * into the payload so the tab shows what the job does, not just its kind.
  *
  * `jobs` (task 0734) are the validated `bootstrap.scheduler.jobs` definitions
  * resolved by the upstream runtime. Each configured job registers one entry
@@ -216,7 +218,7 @@ export function registerSchedulerEntries(
     const registrations: SchedulerScheduleRegistration[] = [];
     const now = Date.now();
 
-    const register = (cron: string, name: string, action: () => Promise<void>): void => {
+    const register = (cron: string, name: string, action: () => Promise<void>, actionLabel?: string): void => {
         scheduler.register(cron, async () => {
             const startedAt = Date.now();
             let error: unknown;
@@ -228,6 +230,7 @@ export function registerSchedulerEntries(
             } finally {
                 ctx.eventBus().emit('scheduler.job.executed', {
                     name,
+                    ...(actionLabel !== undefined && { action: actionLabel }),
                     durationMs: Date.now() - startedAt,
                     ...(error !== undefined && { error: String(error) }),
                     severity: error !== undefined ? 'error' : 'info',
@@ -235,10 +238,15 @@ export function registerSchedulerEntries(
             }
         });
     };
-    register(SYSTEM_EVENTS_PRUNE_CRON, SYSTEM_EVENTS_PRUNE_JOB, async () => {
-        const queue = await ctx.jobQueue();
-        await queue.enqueue(SYSTEM_EVENTS_PRUNE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
-    });
+    register(
+        SYSTEM_EVENTS_PRUNE_CRON,
+        SYSTEM_EVENTS_PRUNE_JOB,
+        async () => {
+            const queue = await ctx.jobQueue();
+            await queue.enqueue(SYSTEM_EVENTS_PRUNE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
+        },
+        'prune system_events to retention quotas',
+    );
     registrations.push({
         name: SYSTEM_EVENTS_PRUNE_JOB,
         schedule: SYSTEM_EVENTS_PRUNE_CRON,
@@ -246,10 +254,15 @@ export function registerSchedulerEntries(
         registeredAt: now,
     });
 
-    register(SMOKE_CRON, SMOKE_JOB, async () => {
-        const queue = await ctx.jobQueue();
-        await queue.enqueue(SMOKE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
-    });
+    register(
+        SMOKE_CRON,
+        SMOKE_JOB,
+        async () => {
+            const queue = await ctx.jobQueue();
+            await queue.enqueue(SMOKE_JOB, { source: 'scheduler' }, { maxRetries: 1 });
+        },
+        'scheduler/worker pipeline heartbeat',
+    );
     registrations.push({
         name: SMOKE_JOB,
         schedule: SMOKE_CRON,
