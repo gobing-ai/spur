@@ -15,12 +15,13 @@ function runCheck(cwd: string): { status: number; stdout: string; stderr: string
 }
 
 describe('inline-pipeline-parity-check (task 0755 R2/R3)', () => {
-    test('passes against the current repo: documented set matches the union across all 8 workflows', () => {
+    test('passes against the current repo: documented set matches the union across all 9 workflows', () => {
         const res = runCheck(REPO_ROOT);
         expect(res.status).toBe(0);
         expect(res.stdout).toContain('inline-pipeline-parity-check: ok');
-        // 8 = the retained catalogue after task 0866 retired basic / docs-pipeline / feature-dev.
-        expect(res.stdout).toMatch(/8 workflows/);
+        // 9 = the catalogue after task 0866 retired basic / docs-pipeline / feature-dev and
+        // task 0872 added feature-verification (ADR-119 feature-scoped pass).
+        expect(res.stdout).toMatch(/9 workflows/);
         expect(res.stderr).toBe('');
     });
 

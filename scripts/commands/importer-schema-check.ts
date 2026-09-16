@@ -17,7 +17,7 @@ export interface ImporterSchemaCheckOptions {
  * Check that the SQLite database has a recorded importer schema version matching
  * the installed @gobing-ai/ts-llm-jsonl-importer package.
  *
- * Runs as part of the spur-check chain before lint.
+ * Runs as part of the feature-scoped `spur-check-feature` chain (ADR-119, task 0872).
  */
 export async function importerSchemaCheck(
     dbPathOrOptions?: string | ImporterSchemaCheckOptions,

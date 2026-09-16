@@ -80,7 +80,7 @@ export function checkDependencyDrift(options?: { lockfilePath?: string; nodeModu
 
 /**
  * CLI command checking for @gobing-ai/ts-* dependency drift.
- * Runs in the spur-check chain before lint.
+ * Runs in the feature-scoped `spur-check-feature` chain (ADR-119, task 0872).
  */
 export async function dependencyDriftCheck(options?: DependencyDriftCheckOptions): Promise<number> {
     const quiet = options?.quiet ?? false;

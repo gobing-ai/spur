@@ -12,8 +12,8 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Repo root: apps/cli/tests → apps/cli → repo. */
-const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
+/** Repo root: repo-wide-tests → repo. */
+const REPO_ROOT = join(import.meta.dir, '..');
 const ADR_PATH = join(REPO_ROOT, 'docs', '00_ADR.md');
 const ADR_REL = 'docs/00_ADR.md';
 

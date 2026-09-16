@@ -62,11 +62,13 @@ transitions:
   - from: verifying
     to: done
     description: >
-      Feature verified — complete. Runs strict check (AC validated, traceability clean).
+      Feature verified — complete. Requires the feature-scoped verification pass
+      (ADR-119) to have recorded PASS, then strict check (AC validated,
+      traceability clean).
     guard:
       kind: shell
       options:
-        command: '$spurBin feature check $featureId --strict --as done'
+        command: 'test "$(cat .spur/run/$featureId-feature-verification.status 2>/dev/null)" = PASS && $spurBin feature check $featureId --strict --as done'
 
   # Rework: verifying → active (mandatory History entry)
   - from: verifying

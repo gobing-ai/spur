@@ -153,13 +153,16 @@ Architecture depth: `docs/03_ARCHITECTURE.md`. Concrete surfaces: `docs/04_DESIG
 `package.json` owns gate commands. Run focused tests while iterating, then the required gate once:
 
 ```bash
-bun run spur-check       # lint/typecheck, tests, pre/post rules and contract checks
+bun run spur-check          # task-local: lint/typecheck, tests, pre/post rules
+bun run spur-check-feature  # repo-wide: contract/drift/freeze checks + repo-wide tests (per feature, ADR-119)
 bun run test-cf
 bun run build
 git status --short
 ```
 
-`spur-check-new` is the same chain. `bun run corpus-check` is the explicit unsuppressed
+`spur-check-new` is the same task-local chain as `spur-check`. `spur-check-feature` is the
+feature-scoped repo-wide pass run once per feature (task 0872); it is not part of the per-task
+pipeline. `bun run corpus-check` is the explicit unsuppressed
 audit for checker-policy changes (T10); ordinary corpus edits check affected inputs (T11).
 Do not bypass hooks or suppress findings to force green.
 

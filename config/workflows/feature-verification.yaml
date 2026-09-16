@@ -1,0 +1,70 @@
+# Feature-scoped verification pass (ADR-119, feature D62, task 0872).
+#
+# Owns a lifecycle boundary no per-task graph owns: the repo-wide checks whose
+# invariant spans the repository rather than a single task's diff — corpus
+# consistency, contract baselines, dependency/schema drift, the frozen History
+# surface, and the repo-wide test set. They run once per feature against a
+# settled tree, deliberately the slow pass, and `feature-lifecycle`'s
+# verifying→done guard refuses to complete the feature until this pass records
+# PASS (ADR-119 consequence: a feature is not done until it passes).
+#
+# Run: spur workflow run feature-verification.yaml --vars '{"featureId":"D62"}'
+#
+# Shape: verify -> done | failed. The shell action writes the verdict to
+# `.spur/run/<featureId>-feature-verification.status` and always exits 0; the
+# transition guard reads the status so a missing, corrupt or FAIL verdict routes
+# to `failed` (fail-closed), never a silent PASS.
+#
+# Reliability (aligned with task-pipeline / ADR-043): no agent.run nodes; the
+# verification command is a trusted config var executed via `sh -c` (same
+# surface as task-pipeline's qualityGateCmd — never interpolate untrusted input).
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: feature-verification
+version: "1"
+description: "Feature-scoped verification pass (ADR-119): runs the repo-wide check set once per feature against a settled tree and records PASS/FAIL."
+iterationBound: 2
+initialState: verify
+terminalStates:
+  - done
+  - failed
+failureStates:
+  - failed
+vars:
+  featureId: "X"
+  spurBin: "spur"
+  verificationCmd: "bun run spur-check-feature"
+
+states:
+  - id: verify
+    description: >
+      Run the repo-wide check set, record the verdict, always exit 0.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run;
+            sh -c "$verificationCmd" > ".spur/run/$featureId-feature-verification.log" 2>&1
+            && printf 'PASS\n' > ".spur/run/$featureId-feature-verification.status"
+            || printf 'FAIL\n' > ".spur/run/$featureId-feature-verification.status";
+            exit 0
+
+  - id: done
+    description: Terminal — repo-wide checks passed.
+
+  - id: failed
+    description: Terminal — repo-wide checks failed or the verdict is missing/corrupt.
+
+transitions:
+  - from: verify
+    to: done
+    description: Repo-wide checks passed — the feature-scoped verification pass records PASS.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$featureId-feature-verification.status 2>/dev/null)" = PASS'
+  - from: verify
+    to: failed
+    description: Repo-wide checks failed (or the verdict is missing/corrupt) — stop at failed.
+    guard:
+      kind: always

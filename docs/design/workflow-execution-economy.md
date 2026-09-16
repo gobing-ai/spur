@@ -120,6 +120,30 @@ cross-scope model rework those failures trigger (`resolve-scope` 43%, `doc-sync`
 The feature-scoped pass is deliberately the slow one, run once against a settled tree, and a feature
 is not done until it passes.
 
+### 4.1 Per-check classification (task 0872)
+
+The per-task pipeline's quality gate is `bun run spur-check` (task-pipeline `qualityGateCmd`). Task
+0872 relocates its repo-wide components into `bun run spur-check-feature`, run by the
+`feature-verification` workflow, leaving `spur-check` task-local. The pipeline's own precheck shells
+(`task-size-precheck`, `task-evidence-precheck`, `spur task check`) are task-local by construction.
+
+| Check | Invariant it protects | Scope |
+| --- | --- | --- |
+| `link-check` | no `bun link`-ed `@gobing-ai/*` package serves a `dist/` older than its `src/` | repo-wide (developer-environment invariant, not caused by any task diff) |
+| `transition-shim-check` | every `@transition-shim(<id>)` marker ↔ `config/transition-shims.json` entry (two-sided) | repo-wide (whole-repo manifest/marker consistency) |
+| `script-contract-check` | every `plugins/sp/scripts/` entry ↔ `config/plugin-scripts.json` and its `.mjs` twin (two-sided) | repo-wide (whole-repo script-contract consistency) |
+| `inline-pipeline-parity-check` | the inline driver's documented action/guard set ≡ the resolved sets across all `config/workflows/*.yaml` | repo-wide (driver↔catalogue parity) |
+| `dependency-drift-check` | `bun.lock` ↔ installed `@gobing-ai/ts-*` versions | repo-wide (environment invariant) |
+| `importer-schema-check` | the SQLite DB's recorded importer schema version ≡ the installed importer package | repo-wide (shared-DB invariant) |
+| `history-surface-freeze-check` | the frozen History UI + transport contract are unchanged vs the merge base (E91) | repo-wide (whole-branch frozen-surface invariant) |
+| `lint` (biome + typecheck) | the tree compiles and is formatted | task-local (violated by the diff that breaks it) |
+| `test-pre-check` (rule preset) | source respects the typescript/structure/boundary/surface/ui/strict rules | task-local (violated by the diff that introduces the pattern) |
+| `test` (`bun test`) | each package's tests pass | task-local, **except** repo-wide test files relocated to `repo-wide-tests/` (e.g. `adr-supersession.test.ts`, which diffs `docs/00_ADR.md` against HEAD and fires on a sibling's uncommitted ADR addition) |
+| `test-post-check` (`tsdoc-exports` + `coverage-gate`) | exported symbols are documented; per-file line coverage ≥ 90% | task-local for `tsdoc-exports`; the `coverage-gate` is repo-wide in principle but inert in the per-task gate (no lcov unless `test:coverage` ran) and only fires in the deliberate `:full`/`check` chain, which is not the per-task pipeline |
+
+No check is authored by the split — the repo-wide set is relocated into `spur-check-feature`, and the
+repo-wide test file moves to `repo-wide-tests/` unchanged except its repo-root anchor.
+
 ## 5. Promotion gate (ADR-076 amendment)
 
 Where a graph change is genuinely needed, the candidate is shadow-run against recorded real-run

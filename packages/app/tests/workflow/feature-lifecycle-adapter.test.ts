@@ -37,6 +37,78 @@ async function makeAdapter(): Promise<{ adapter: LifecycleAdapter; db: DbAdapter
     return { adapter: new LifecycleAdapter(opts), db };
 }
 
+/** A strict-clean single-feature corpus fixture: one done task linked to a P0 feature. */
+const featureFixtureFile = (id: string, name: string, wbs: string): string =>
+    [
+        '---',
+        'schema_version: 1',
+        `id: "${id}"`,
+        `name: "${name}"`,
+        'status: active',
+        'priority: P0',
+        'created_at: 2026-08-02T00:00:00.000Z',
+        'updated_at: 2026-08-02T00:00:00.000Z',
+        '---',
+        '',
+        `# ${id}: ${name}`,
+        '',
+        '## Goal',
+        '',
+        'Finish the fixture goal.',
+        '',
+        '## Scope',
+        '',
+        'In: fixture',
+        'Out: nothing',
+        '',
+        '## Acceptance Criteria',
+        '',
+        '- [ ] fixture item',
+        '',
+        '## Tasks',
+        '',
+        '| WBS | Task | Status |',
+        '| --- | ---- | ------ |',
+        `| ${wbs} | done task | done |`,
+        '',
+        '## Notes',
+        '',
+        'Fixture feature for the feature-lifecycle guard regression.',
+    ].join('\n');
+
+const taskFixtureFile = (wbs: string, featureId: string): string =>
+    [
+        '---',
+        'schema_version: 1',
+        `wbs: "${wbs}"`,
+        `name: "Task ${wbs}"`,
+        'status: done',
+        `feature_id: "${featureId}"`,
+        'created_at: 2026-08-02T00:00:00.000Z',
+        'updated_at: 2026-08-02T00:00:00.000Z',
+        '---',
+        '',
+        `# ${wbs}: Task ${wbs}`,
+        '',
+        '### Solution',
+        '',
+        'Done.',
+    ].join('\n');
+
+/** Build a feature-lifecycle adapter against a fixture project at `root`. */
+function makeFixtureAdapter(root: string, db: DbAdapter): LifecycleAdapter {
+    const repoRoot = resolve(import.meta.dir, '..', '..', '..', '..');
+    const opts: LifecycleAdapterOptions = {
+        profile: FEATURE_LIFECYCLE_PROFILE,
+        getDb: async () => db,
+        taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
+        workflowPath: WORKFLOW_PATH,
+        cwd: root,
+        spurBin: `${process.execPath} ${join(repoRoot, 'apps', 'cli', 'src', 'index.ts')}`,
+    };
+    return new LifecycleAdapter(opts);
+}
+
 describe('FeatureLifecycleAdapter (engine integration)', () => {
     test('R1: allows a transition declared in the feature-lifecycle graph (backlog → active)', async () => {
         const { adapter, db } = await makeAdapter();
@@ -132,82 +204,17 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         mkdirSync(featuresDir, { recursive: true });
         mkdirSync(tasksDir, { recursive: true });
 
-        const featureFile = (id: string, name: string, wbs: string): string =>
-            [
-                '---',
-                'schema_version: 1',
-                `id: "${id}"`,
-                `name: "${name}"`,
-                'status: active',
-                'priority: P0',
-                'created_at: 2026-08-02T00:00:00.000Z',
-                'updated_at: 2026-08-02T00:00:00.000Z',
-                '---',
-                '',
-                `# ${id}: ${name}`,
-                '',
-                '## Goal',
-                '',
-                'Finish the fixture goal.',
-                '',
-                '## Scope',
-                '',
-                'In: fixture',
-                'Out: nothing',
-                '',
-                '## Acceptance Criteria',
-                '',
-                '- [ ] fixture item',
-                '',
-                '## Tasks',
-                '',
-                '| WBS | Task | Status |',
-                '| --- | ---- | ------ |',
-                `| ${wbs} | done task | done |`,
-                '',
-                '## Notes',
-                '',
-                'Fixture feature for the 0418 deadlock-recovery regression.',
-            ].join('\n');
-        const taskFile = (wbs: string, featureId: string): string =>
-            [
-                '---',
-                'schema_version: 1',
-                `wbs: "${wbs}"`,
-                `name: "Task ${wbs}"`,
-                'status: done',
-                `feature_id: "${featureId}"`,
-                'created_at: 2026-08-02T00:00:00.000Z',
-                'updated_at: 2026-08-02T00:00:00.000Z',
-                '---',
-                '',
-                `# ${wbs}: Task ${wbs}`,
-                '',
-                '### Solution',
-                '',
-                'Done.',
-            ].join('\n');
-
-        writeFileSync(join(featuresDir, 'F2_second.md'), featureFile('F2', 'Second P0', '9901'));
-        writeFileSync(join(featuresDir, 'F4_fourth.md'), featureFile('F4', 'Fourth P0', '9902'));
-        writeFileSync(join(tasksDir, '9901_done.md'), taskFile('9901', 'F2'));
-        writeFileSync(join(tasksDir, '9902_done.md'), taskFile('9902', 'F4'));
+        writeFileSync(join(featuresDir, 'F2_second.md'), featureFixtureFile('F2', 'Second P0', '9901'));
+        writeFileSync(join(featuresDir, 'F4_fourth.md'), featureFixtureFile('F4', 'Fourth P0', '9902'));
+        writeFileSync(join(tasksDir, '9901_done.md'), taskFixtureFile('9901', 'F2'));
+        writeFileSync(join(tasksDir, '9902_done.md'), taskFixtureFile('9902', 'F4'));
 
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
         // The dev CLI entry is the spur binary the FSM shell guards invoke — it
         // carries the `--as` support this fix adds. `cwd` points at the fixture
         // project so the spawned check resolves docs/features + docs/tasks there.
-        const repoRoot = resolve(import.meta.dir, '..', '..', '..', '..');
-        const opts: LifecycleAdapterOptions = {
-            profile: FEATURE_LIFECYCLE_PROFILE,
-            getDb: async () => db,
-            taskRunLinkDao: (adapter) => new TaskRunLinkDao(adapter),
-            workflowPath: WORKFLOW_PATH,
-            cwd: root,
-            spurBin: `${process.execPath} ${join(repoRoot, 'apps', 'cli', 'src', 'index.ts')}`,
-        };
-        const adapter = new LifecycleAdapter(opts);
+        const adapter = makeFixtureAdapter(root, db);
 
         // The adapter is the write service's LifecyclePort: it validates and
         // re-seeds engine state but never writes frontmatter. Mirror what the
@@ -226,8 +233,12 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         if (!hop1.allowed) throw new Error(`expected relieving transition allowed: ${hop1.report}`);
         writeStatus('F2_second.md', 'verifying');
 
-        // Terminal hop: F2 → done — strict guard (`--as done`) passes because the
-        // fixture is strict-clean and the goal rule no longer counts a done target.
+        // Terminal hop: F2 → done — the ADR-119 guard requires the feature-scoped
+        // verification pass to have recorded PASS (task 0872 R4) before the strict
+        // check (`--as done`) runs. Mirror the pass recording it before the hop.
+        mkdirSync(join(root, '.spur', 'run'), { recursive: true });
+        writeFileSync(join(root, '.spur', 'run', 'F2-feature-verification.status'), 'PASS\n');
+
         const hop2 = await adapter.requestTransition(makeRef('F2'), 'verifying', 'done');
         expect(hop2.allowed, hop2.report ?? 'no report').toBe(true);
         if (!hop2.allowed) throw new Error(`expected terminal transition allowed: ${hop2.report}`);
@@ -246,6 +257,59 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
             const goalErrors = res.findings.filter((f) => f.message.includes('One-active-goal'));
             expect(goalErrors).toHaveLength(0);
         }
+
+        db.close();
+        rmSync(root, { recursive: true, force: true });
+    });
+
+    test('R4 (0872): verifying→done refuses until the feature-scoped pass records PASS', async () => {
+        // ADR-119 (task 0872): a feature cannot reach done while its repo-wide
+        // verification pass is failing. The verifying→done shell guard reads
+        // `.spur/run/<id>-feature-verification.status` and only proceeds to the
+        // strict check when it is exactly PASS. A missing or FAIL verdict must
+        // deny the hop even though the feature itself is strict-clean.
+        const root = mkdtempSync(join(tmpdir(), 'spur-0872-r4-'));
+        const featuresDir = join(root, 'docs', 'features');
+        const tasksDir = join(root, 'docs', 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        writeFileSync(join(featuresDir, 'F6_sixth.md'), featureFixtureFile('F6', 'Sixth', '9903'));
+        writeFileSync(join(tasksDir, '9903_done.md'), taskFixtureFile('9903', 'F6'));
+
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const adapter = makeFixtureAdapter(root, db);
+
+        const writeStatus = (file: string, status: string): void => {
+            const path = join(featuresDir, file);
+            const raw = readFileSync(path, 'utf8').replace(/^status: .*$/m, `status: ${status}`);
+            writeFileSync(path, raw);
+        };
+
+        const hop1 = await adapter.requestTransition(makeRef('F6'), 'active', 'verifying');
+        expect(hop1.allowed, hop1.report ?? 'no report').toBe(true);
+        if (!hop1.allowed) throw new Error(`expected active→verifying allowed: ${hop1.report}`);
+        writeStatus('F6_sixth.md', 'verifying');
+
+        // 1. No recorded verdict → denied (fail-closed).
+        const missing = await adapter.requestTransition(makeRef('F6'), 'verifying', 'done');
+        expect(missing.allowed).toBe(false);
+        if (missing.allowed) throw new Error('expected denial while the pass verdict is missing');
+
+        // 2. A FAIL verdict → denied, even on a strict-clean feature.
+        const runDir = join(root, '.spur', 'run');
+        mkdirSync(runDir, { recursive: true });
+        writeFileSync(join(runDir, 'F6-feature-verification.status'), 'FAIL\n');
+        const failing = await adapter.requestTransition(makeRef('F6'), 'verifying', 'done');
+        expect(failing.allowed).toBe(false);
+        if (failing.allowed) throw new Error('expected denial while the pass verdict is FAIL');
+
+        // 3. A PASS verdict → the strict check runs and the hop is allowed.
+        writeFileSync(join(runDir, 'F6-feature-verification.status'), 'PASS\n');
+        const passing = await adapter.requestTransition(makeRef('F6'), 'verifying', 'done');
+        expect(passing.allowed, passing.report ?? 'no report').toBe(true);
+        if (!passing.allowed)
+            throw new Error(`expected verifying→done allowed once PASS is recorded: ${passing.report}`);
 
         db.close();
         rmSync(root, { recursive: true, force: true });

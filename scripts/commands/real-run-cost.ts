@@ -23,8 +23,8 @@
  * (ADR-051; surface questions route to task 0608).
  *
  * The `--workflow` filter defaults to the full in-scope cohort (every definition in
- * `config/workflows/` — 8 after task 0866 retired `basic`, `docs-pipeline` and
- * `feature-dev`), 0730 R1; `--json` emits a machine-readable object. `n/a`, never `0`, for
+ * `config/workflows/` — 9 after task 0866 retired `basic`, `docs-pipeline` and
+ * `feature-dev` and task 0872 added `feature-verification`), 0730 R1; `--json` emits a machine-readable object. `n/a`, never `0`, for
  * an unmeasured duration/cost (0284 invariant).
  */
 import { Database } from 'bun:sqlite';
