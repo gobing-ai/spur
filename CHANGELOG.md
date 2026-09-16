@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.83] - 2026-09-15
+
+### Added
+
+- config: name the publish-trigger package via builder.bump-ver.aggregatePackage (35b255517)
+
+### Fixed
+
+- scheduler: make configured-job single-flight durable and stop failing suppressed duplicates (729b67574)
+
+### Other
+
+- docs(task): record 0864 verify verdict PASS, Solution anchor fix, done transition (a212af5cd)
+- test(scheduler): cover the duplicate-audit hook and fix the restored test types (0863) (53473f037)
+- docs(task): record 0864 requirements, AC, solution and verification evidence (3bec947ad)
+- docs(task): record 0863 implementation evidence and move to wip (b21bbab10)
+
 ## [0.3.82] - 2026-09-15
 
 ### Added
