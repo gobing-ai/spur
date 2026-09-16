@@ -638,7 +638,7 @@ const JSON_PROBES: string[][] = [
     ['agent', 'list', '--json'],
     ['agent', 'doctor', 'pi', '--json'],
     ['workflow', 'list', '--json'],
-    ['workflow', 'validate', 'basic.yaml', '--json'],
+    ['workflow', 'validate', 'task-pipeline.yaml', '--json'],
     ['status', '--json'],
     ['projects', 'list', '--json'],
 ];

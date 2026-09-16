@@ -129,7 +129,7 @@ describe('init command', () => {
         // Bundled config assets (from seedGlobalConfig) also land here.
         expect(existsSync(join(globalDir, 'rules', 'recommended-pre-check.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'rules', 'recommended-post-check.yaml'))).toBe(true);
-        expect(existsSync(join(globalDir, 'workflows', 'basic.yaml'))).toBe(true);
+        expect(existsSync(join(globalDir, 'workflows', 'wrapup-pipeline.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'workflows', 'task-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'workflows', 'feature-lifecycle.yaml'))).toBe(true);
         expect(existsSync(join(globalDir, 'workflows', 'task-pipeline.yaml'))).toBe(true);

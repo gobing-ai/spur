@@ -28,17 +28,6 @@
             "source": "Post-merge count (0607 R2: doc-sync + learning-capture consolidated, 2 -> 1). Real-run reading (R5): median 253s, max-sane 2319s (n=44). Budget = 60 min ceiling.",
             "decision": null
         },
-        "docs-pipeline": {
-            "modelQueries": 2,
-            "wallClockMs": null,
-            "tokenCostUsd": null,
-            "source": "No fixture (0607 option a) and only dry/short runs recorded in history (max 1s, n=4) — wall-clock budget unenforced until a real docs-pipeline run exists. Query budget 2 matches the live workflow definition's query list ['draft','verify'] (added by task 0704; 0607 R3 recorded 1, which is stale against the definition). 0754 R6: FIX, not raise — the value was wrong against the definition, the workflow's declared query count did not change.",
-            "decision": {
-                "date": "2026-09-03",
-                "wbs": "0754",
-                "note": "align docs-pipeline.modelQueries to the live workflow definition's query list ['draft','verify']; not a measured-cost raise — the workflow's declared query count was already 2 (added by 0704); the budget was the stale side, not the workflow. Per D8 Decision 11."
-            }
-        },
         "pr-review": {
             "modelQueries": 0,
             "wallClockMs": null,
@@ -53,22 +42,8 @@
             "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
             "decision": null
         },
-        "feature-dev": {
-            "modelQueries": 2,
-            "wallClockMs": null,
-            "tokenCostUsd": null,
-            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
-            "decision": null
-        },
         "wayfinder-resolution": {
             "modelQueries": 2,
-            "wallClockMs": null,
-            "tokenCostUsd": null,
-            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
-            "decision": null
-        },
-        "basic": {
-            "modelQueries": 1,
             "wallClockMs": null,
             "tokenCostUsd": null,
             "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",

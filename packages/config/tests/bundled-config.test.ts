@@ -22,8 +22,8 @@ describe('bundled-config', () => {
         // Rule presets extracted in task 0024.
         expect(files).toContain('rules/recommended-pre-check.yaml');
         expect(files).toContain('rules/recommended-post-check.yaml');
-        // Workflow extracted in task 0024.
-        expect(files).toContain('workflows/basic.yaml');
+        // Workflow assets extracted in task 0024.
+        expect(files).toContain('workflows/wrapup-pipeline.yaml');
         expect(files).toContain('workflows/task-pipeline.yaml');
     });
 

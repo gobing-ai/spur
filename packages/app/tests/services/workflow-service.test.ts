@@ -3319,12 +3319,15 @@ describe('resolveWorkflowFile — two-tier resolution (task 0648)', () => {
         const bundledRoot = loaderModule.bundledConfigRoot();
         expect(bundledRoot).not.toBeNull();
 
-        // A project dir with no .spur/workflows/basic.yaml resolves to the bundled copy.
-        const resolved = resolveWorkflowFile('/tmp/nonexistent-project-dir-0648', '.spur/workflows/basic.yaml');
+        // A project dir with no `.spur/workflows/wrapup-pipeline.yaml` resolves to the bundled copy.
+        const resolved = resolveWorkflowFile(
+            '/tmp/nonexistent-project-dir-0648',
+            '.spur/workflows/wrapup-pipeline.yaml',
+        );
         expect(resolved.path).not.toBeNull();
         if (resolved.path !== null) {
             expect(resolved.source).toBe('shared');
-            expect(resolved.path).toBe(join(bundledRoot as string, 'workflows', 'basic.yaml'));
+            expect(resolved.path).toBe(join(bundledRoot as string, 'workflows', 'wrapup-pipeline.yaml'));
         }
     });
 

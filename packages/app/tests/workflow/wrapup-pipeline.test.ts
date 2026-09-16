@@ -121,15 +121,12 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. feature-dev is '3'
-        // since task 0782 redefined it as existing-feature reuse and 0784 removed its
-        // pseudo-checkpoint writer (frozen design, see feature-dev-definition.test.ts and
-        // docs/design/essential-workflow-checks.md). wrapup-pipeline is '3' since 0783
-        // redefined its consumers and 0784 removed its pseudo-checkpoint writer.
+        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '3'
+        // since 0783 redefined its consumers and 0784 removed its pseudo-checkpoint writer.
+        // (feature-dev was pinned '3' until task 0866 retired the definition.)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '1',
-            'feature-dev': '3',
             'wrapup-pipeline': '3',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {

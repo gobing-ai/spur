@@ -61,7 +61,7 @@ jobs:
                   set -euo pipefail
                   test -f apps/cli/spur.js
                   test -f apps/cli/config/rules/recommended-pre-check.yaml
-                  test -f apps/cli/config/workflows/basic.yaml
+                  test -f apps/cli/config/workflows/task-pipeline.yaml
                   test -f apps/cli/config/templates/task/standard.md
                   test -f apps/cli/web/index.html
                   # Pack must list package-root config/ and web/ (not legacy spur-cli/ only).

@@ -3,18 +3,19 @@
  *
  * The lifecycle FSM's `* → done` transition was verdict-blind: a task could
  * reach `done` regardless of what the verify leg produced, and `--no-lifecycle`
- * (used by `task-pipeline.yaml:182`, `docs-pipeline.yaml:70`, and historically
- * by `wayfinder-resolution.yaml`) bypassed even the section-status guard. This
- * module backs the CLI-layer gate that consults the verdict artifact before
- * any `done` transition is allowed through.
+ * (used by `task-pipeline.yaml:182` and, until task 0866 retired it,
+ * `docs-pipeline.yaml:70`; historically also by `wayfinder-resolution.yaml`)
+ * bypassed even the section-status guard. This module backs the CLI-layer gate
+ * that consults the verdict artifact before any `done` transition is allowed
+ * through.
  *
  * Design (0292, tightened post–F81 dogfood):
  *   - The guard runs at the CLI layer (`apps/cli/src/commands/task.ts`), the
  *     single choke point above both `--no-lifecycle` and the lifecycle adapter.
  *     R8: `--no-lifecycle` skips the FSM, not this gate.
  *   - Missing artifact is a **deny** (not a silent allow). Docs-only / emergency
- *     closes use `--force-done --reason`. Docs pipelines certify via a measured
- *     verdict artifact produced by a verify hop (docs-pipeline.yaml, task 0704).
+ *     closes use `--force-done --reason`. Pipelines certify via a measured
+ *     verdict artifact produced by a verify hop (`task-pipeline.yaml`).
  *   - R10 consistency: the aggregate `verdict` in the artifact is validated
  *     against the per-requirement / per-AC rows using the same aggregation rule
  *     as `deriveVerdict` (any UNMET → FAIL; any PARTIAL → PARTIAL). An

@@ -27,11 +27,6 @@
             "twin": "dogfood-testing/validate-report.mjs"
         },
         {
-            "rel": "feature-dev-precheck.ts",
-            "contract": "standard",
-            "twin": "feature-dev-precheck.mjs"
-        },
-        {
             "rel": "feature-sync-bounded.ts",
             "contract": "standard",
             "twin": "feature-sync-bounded.mjs"

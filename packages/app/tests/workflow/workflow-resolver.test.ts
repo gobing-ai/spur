@@ -214,7 +214,8 @@ terminalStates:
         const wfDir = join(dir, '.spur', 'workflows');
         await mkdir(wfDir, { recursive: true });
 
-        // basic.yaml exists in bundled layer with name: basic
+        // `basic` is a synthetic minimal graph in this fixture; the bundled copy that once
+        // shared the name was retired (task 0866), so nothing here relies on the bundled layer.
         const projectBasic = join(wfDir, 'basic.yaml');
         await writeFile(
             projectBasic,
@@ -492,9 +493,9 @@ terminalStates:
         await mkdir(projectDir, { recursive: true });
         const registeredFile = join(registeredDir, 'custom.yaml');
         const projectFile = join(projectDir, 'custom.yaml');
-        const sharedFile = join(bundledConfigRoot() as string, 'workflows', 'basic.yaml');
+        const sharedFile = join(bundledConfigRoot() as string, 'workflows', 'wrapup-pipeline.yaml');
         await writeFile(registeredFile, MINIMAL('basic'));
-        // basic.yaml declares `$schema: "@gobing-ai/spur/schemas/..."`; production always
+        // wrapup-pipeline.yaml declares `$schema: "@gobing-ai/spur/schemas/..."`; production always
         // resolves that ref through embeddedSchemas (the CLI's EMBEDDED_SPUR_SCHEMAS), never
         // node_modules — a fresh install links nothing under `@gobing-ai/spur` (the repo root
         // package owns the name), so resolving from node_modules is install-layout-dependent.

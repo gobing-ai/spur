@@ -1,7 +1,7 @@
 # Workflow composition contract
 
 **Area:** workflow definition composition, deterministic action ownership, pipeline promotion, and run artifacts.
-**Status:** composition/projection infrastructure built; the digest-bound proof chain shipped for the task and docs pipelines (ADR-071; tasks 0703/0704/0769). Physical path confinement, spec-complete proof inputs, honest review-completion evidence, and bound artifact registration at record entry landed (task 0785).
+**Status:** composition/projection infrastructure built; the digest-bound proof chain shipped for `task-pipeline` (ADR-071; tasks 0703/0769) — the docs half retired with `docs-pipeline.yaml` (task 0866). Physical path confinement, spec-complete proof inputs, honest review-completion evidence, and bound artifact registration at record entry landed (task 0785).
 **Authority:** derived; decisions live in `00_ADR`, module boundaries in `03_ARCHITECTURE`.
 
 ## Target workflow inventory
@@ -12,12 +12,19 @@
 | ~~`task-pipeline2.yaml`~~ | *(deleted 2026-08-20)* | **removed under ADR-076** — unreferenced duplicate declaring a 5th model query against the canonical pipeline's 4; deleted rather than promoted |
 | `planning-pipeline.yaml` | feature planning front half | absorb into the canonical idea/dev-plan path, then delete after caller parity |
 | `idea-pipeline.yaml` | idea discovery, design review, and decomposition | keep separate; migrate last |
-| `docs-pipeline.yaml` | numbered-document evolution | keep separate |
+| ~~`docs-pipeline.yaml`~~ | *(deleted 2026-09-16)* | **removed under task 0866 (feature D62)** — zero non-dry runs and zero real completions in the retained run history, and no invoking command, skill, agent, script or config outside tests and documentation (the `/sp:dev-run --mode implement` caller declared in `plugins/sp/README.md` was never wired; that mode is the single implement competency). The docs-only **procedure** is unaffected — it runs through `/sp:dev-run --mode implement` + `spur task record` on `task-pipeline.yaml` |
+| ~~`feature-dev.yaml`~~ | *(deleted 2026-09-16)* | **removed under task 0866 (feature D62)** — zero non-dry runs and zero real completions; its declared caller (`/sp:dev-runall --feature`) dispatches `task-pipeline.yaml` per task, not this graph. Its only invoking surfaces — the `bun run features` script, the `feature-dev-precheck` plugin script and the `integration-review` defect record — were retired with it rather than left dangling |
+| ~~`basic.yaml`~~ | *(deleted 2026-09-16)* | **removed under task 0866 (feature D62)** — zero non-dry runs and zero real completions; it was a generic implement/check/fix example with no caller. The bundled example surface it occupied was not load-bearing: the retained definitions are seeded by `spur init` and exercised by the resolver/composition tests |
 | `wrapup-pipeline.yaml` | completed-task wrap-up | keep separate |
-| `pr-review.yaml` | integration-HEAD review | keep separate; invoke once per stable HEAD after local gates |
+| `pr-review.yaml` | integration-HEAD review | keep separate; invoke once per stable HEAD after local gates. **Retained (task 0866)** despite zero real completions: `plugins/sp/scripts/pr-reviewing.ts` + `/sp:dev-pr-review` declare it as the spine SSOT, so the caller half of the retirement test fails |
+| `history-anatomy.yaml` | daily/ad-hoc diagnostic report | keep separate; real completions in the window (7 `done`, last 2026-09-13) |
+| `wayfinder-resolution.yaml` | research/specification ticket resolution loop | **retained (task 0866)**: records a real completion (1 non-dry `done`, 2026-07-19, 225 s) across 6 non-dry runs, so it does not meet the zero-real-completion half; operator-invocable free-form (`spur workflow run`) |
+| `task-lifecycle.yaml` | TaskStatus FSM | **retained (task 0866)**: 545 non-dry runs / 40 real `done` (last 2026-09-16), externally driven by `requestTransition`; zero `action_runs` is correct for a pure status FSM, never evidence of absent traffic |
+| `feature-lifecycle.yaml` | FeatureStatus FSM | **retained (task 0866)**: 118 non-dry runs / 29 real `done` (last 2026-09-15); same externally driven shape as `task-lifecycle` |
 
-`feature-dev.yaml` remains a caller/orchestrator, not a second owner of any lifecycle above. Other
-workflow definitions remain regression fixtures or examples unless a later ADR changes their status.
+Other workflow definitions remain regression fixtures or examples unless a later ADR changes their
+status. The retirement discriminator is **zero real completions AND no live caller** — never
+`zero action_runs` (task 0866 R1/R2; ADR-117).
 
 ### Migration status (task 0604)
 

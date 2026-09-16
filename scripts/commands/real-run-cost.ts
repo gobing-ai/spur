@@ -22,8 +22,9 @@
  * transition_runs); it is a repo-internal dev-script, NOT a new public `spur` noun/verb
  * (ADR-051; surface questions route to task 0608).
  *
- * The `--workflow` filter defaults to the full in-scope cohort (all 11 repository
- * workflows, 0730 R1); `--json` emits a machine-readable object. `n/a`, never `0`, for
+ * The `--workflow` filter defaults to the full in-scope cohort (every definition in
+ * `config/workflows/` — 8 after task 0866 retired `basic`, `docs-pipeline` and
+ * `feature-dev`), 0730 R1; `--json` emits a machine-readable object. `n/a`, never `0`, for
  * an unmeasured duration/cost (0284 invariant).
  */
 import { Database } from 'bun:sqlite';
