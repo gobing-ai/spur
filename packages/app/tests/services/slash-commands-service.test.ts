@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { slashCommandsFileSchema } from '@gobing-ai/spur-config';
 import {
     deduceCommandCategory,
+    discoverEnabledClaudePlugins,
     generateSlashCommands,
     generateSlashCommandsFile,
     getBuiltinClaudeCommands,
@@ -98,8 +99,32 @@ Some documentation body here.
             role: 'tester',
             argumentHint: '<arg1> [--flag]',
             category: 'dev',
+            tags: ['dev', 'sp', 'custom', 'test'],
             source: 'plugin:sp',
         });
+    });
+
+    test('scanMarkdownCommands parses explicit tags from frontmatter', () => {
+        const mdDir = join(tempDir, 'explicit_tags');
+        mkdirSync(mdDir, { recursive: true });
+
+        const customMd = `---
+description: Tagged test command
+tags:
+  - testing
+  - quality
+---
+# Tagged Command
+`;
+        writeFileSync(join(mdDir, 'tagged-cmd.md'), customMd, 'utf-8');
+
+        const items = scanMarkdownCommands(mdDir, { prefix: '/cc:', source: 'plugin:cc', pluginId: 'cc' });
+        expect(items.length).toBe(1);
+        const first = items[0];
+        expect(first).toBeDefined();
+        expect(first?.tags).toContain('testing');
+        expect(first?.tags).toContain('quality');
+        expect(first?.tags).toContain('cc');
     });
 
     test('scanMarkdownCommands falls back to header if description is missing', () => {
@@ -190,5 +215,79 @@ Details about the command.
         // Regenerate writes fresh content
         const regenResult = service.generate();
         expect(regenResult.count).toBe(commands.length);
+    });
+
+    test('discoverEnabledClaudePlugins locates mock installed and enabled plugins', () => {
+        const mockClaudeDir = join(tempDir, 'mock_claude');
+        const mockPluginsDir = join(mockClaudeDir, 'plugins');
+        const mockCcDir = join(tempDir, 'mock_cc_plugin');
+        const mockKkDir = join(tempDir, 'mock_kk_plugin');
+        mkdirSync(join(mockCcDir, 'commands'), { recursive: true });
+        mkdirSync(join(mockKkDir, 'commands'), { recursive: true });
+        mkdirSync(mockPluginsDir, { recursive: true });
+
+        // Add dummy markdown commands
+        writeFileSync(
+            join(mockCcDir, 'commands', 'agent-add.md'),
+            '---\ndescription: Add agent\nargument-hint: "<name>"\n---\n# Add Agent',
+        );
+        writeFileSync(
+            join(mockKkDir, 'commands', 'tell-me.md'),
+            '---\ndescription: Tell me\nargument-hint: "[topic]"\n---\n# Tell Me',
+        );
+
+        // Write mock settings.json
+        const settings = {
+            enabledPlugins: {
+                'cc@superskill': true,
+                'kk@knowledge-kit': true,
+                'disabled@test': false,
+            },
+        };
+        writeFileSync(join(mockClaudeDir, 'settings.json'), JSON.stringify(settings));
+
+        // Write mock installed_plugins.json
+        const installed = {
+            version: 2,
+            plugins: {
+                'cc@superskill': [{ installPath: mockCcDir }],
+                'kk@knowledge-kit': [{ installPath: mockKkDir }],
+            },
+        };
+        writeFileSync(join(mockPluginsDir, 'installed_plugins.json'), JSON.stringify(installed));
+
+        const discovered = discoverEnabledClaudePlugins({
+            projectRoot: tempDir,
+            claudeDir: mockClaudeDir,
+        });
+
+        expect(discovered.length).toBe(2);
+        const names = discovered.map((d) => d.name);
+        expect(names).toContain('cc');
+        expect(names).toContain('kk');
+
+        const ccPlugin = discovered.find((d) => d.name === 'cc');
+        expect(ccPlugin?.commandsDir).toBe(join(mockCcDir, 'commands'));
+
+        // Test that generateSlashCommands includes discovered plugin commands
+        const allCmds = generateSlashCommands({
+            projectRoot: tempDir,
+            claudeDir: mockClaudeDir,
+            includeAllPlugins: true,
+            includeBuiltin: false,
+            includePluginSp: false,
+            includeProjectClaude: false,
+            includeUserClaude: false,
+            includeUserSpur: false,
+        });
+
+        expect(allCmds.length).toBe(2);
+        const cmdNames = allCmds.map((c) => c.name);
+        expect(cmdNames).toContain('/cc:agent-add');
+        expect(cmdNames).toContain('/kk:tell-me');
+
+        const ccCmd = allCmds.find((c) => c.name === '/cc:agent-add');
+        expect(ccCmd?.argumentHint).toBe('<name>');
+        expect(ccCmd?.tags).toContain('cc');
     });
 });

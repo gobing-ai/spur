@@ -21,90 +21,114 @@ export const BUILTIN_CLAUDE_COMMANDS: readonly SlashCommandItem[] = [
         name: '/help',
         description: 'View available commands, tools, and usage hints',
         category: 'sys',
+        argumentHint: '[command]',
+        tags: ['builtin', 'sys', 'help'],
         source: 'builtin',
     },
     {
         name: '/clear',
         description: 'Clear conversation history and reset context window',
         category: 'sys',
+        tags: ['builtin', 'sys', 'clear'],
         source: 'builtin',
     },
     {
         name: '/compact',
         description: 'Purge execution trace and condense context window',
         category: 'sys',
+        argumentHint: '[focus]',
+        tags: ['builtin', 'sys', 'compact', 'context'],
         source: 'builtin',
     },
     {
         name: '/cost',
         description: 'Inspect token breakdown and USD expenditure',
         category: 'sys',
+        tags: ['builtin', 'sys', 'cost', 'tokens'],
         source: 'builtin',
     },
     {
         name: '/doctor',
         description: 'Run diagnostic health checks on environment and tools',
         category: 'sys',
+        tags: ['builtin', 'sys', 'doctor', 'health'],
         source: 'builtin',
     },
     {
         name: '/init',
         description: 'Initialize project instructions, settings and guidelines',
         category: 'harness',
+        tags: ['builtin', 'harness', 'init'],
         source: 'builtin',
     },
     {
         name: '/review',
         description: 'Inspect staged git diff, verify test coverage & lint',
         category: 'git',
+        argumentHint: '[target] [--cached]',
+        tags: ['builtin', 'git', 'review'],
         source: 'builtin',
     },
     {
         name: '/commit',
         description: 'Draft conventional commit message from staged hunks',
         category: 'git',
+        argumentHint: '[--all] [-m <message>]',
+        tags: ['builtin', 'git', 'commit'],
         source: 'builtin',
     },
     {
         name: '/terminal',
         description: 'Run isolated bash execution in sandbox mirror',
         category: 'sys',
+        argumentHint: '[command]',
+        tags: ['builtin', 'sys', 'terminal', 'bash'],
         source: 'builtin',
     },
     {
         name: '/revert',
         description: 'Undo last agent file changes or restore git stash',
         category: 'git',
+        argumentHint: '[stash-id | file]',
+        tags: ['builtin', 'git', 'revert'],
         source: 'builtin',
     },
     {
         name: '/resume',
         description: 'Resume paused background agent run',
         category: 'dev',
+        argumentHint: '[run-id]',
+        tags: ['builtin', 'dev', 'resume'],
         source: 'builtin',
     },
     {
         name: '/bug',
         description: 'Report a bug or issue with diagnostic transcript',
         category: 'sys',
+        argumentHint: '[description]',
+        tags: ['builtin', 'sys', 'bug'],
         source: 'builtin',
     },
     {
         name: '/config',
         description: 'View or update local/global configuration settings',
         category: 'sys',
+        argumentHint: '[key] [value]',
+        tags: ['builtin', 'sys', 'config'],
         source: 'builtin',
     },
     {
         name: '/login',
         description: 'Authenticate account and refresh API credentials',
         category: 'sys',
+        tags: ['builtin', 'sys', 'login', 'auth'],
         source: 'builtin',
     },
     {
         name: '/logout',
         description: 'Sign out of current account and remove stored session',
         category: 'sys',
+        tags: ['builtin', 'sys', 'logout', 'auth'],
         source: 'builtin',
     },
 ];
@@ -210,6 +234,8 @@ export interface ScanMarkdownOptions {
     prefix?: string;
     source?: string;
     defaultCategory?: SlashCommandCategory;
+    pluginId?: string;
+    tags?: string[];
 }
 
 /**
@@ -220,7 +246,7 @@ export function scanMarkdownCommands(dirPath: string, options: ScanMarkdownOptio
         return [];
     }
 
-    const { prefix = '/', source = 'plugin:sp', defaultCategory } = options;
+    const { prefix = '/', source = 'plugin:sp', defaultCategory, pluginId } = options;
     const items: SlashCommandItem[] = [];
 
     try {
@@ -270,18 +296,73 @@ export function scanMarkdownCommands(dirPath: string, options: ScanMarkdownOptio
             }
 
             // Argument hint
-            const hintRaw = frontmatter['argument-hint'] ?? frontmatter.argumentHint;
+            const hintRaw =
+                frontmatter['argument-hint'] ?? frontmatter.argumentHint ?? frontmatter.arguments ?? frontmatter.args;
             const argumentHint = typeof hintRaw === 'string' && hintRaw.trim().length > 0 ? hintRaw.trim() : undefined;
 
             // Role
             const roleRaw = frontmatter.role;
             const role = typeof roleRaw === 'string' && roleRaw.trim().length > 0 ? roleRaw.trim() : undefined;
 
+            // Tags extraction & derivation
+            const rawTags = frontmatter.tags ?? frontmatter.tag;
+            const tagSet = new Set<string>();
+
+            // 1. Explicit tags from frontmatter (array or comma-delimited string)
+            if (Array.isArray(rawTags)) {
+                for (const t of rawTags) {
+                    if (typeof t === 'string' && t.trim().length > 0) {
+                        tagSet.add(t.trim().toLowerCase());
+                    }
+                }
+            } else if (typeof rawTags === 'string' && rawTags.trim().length > 0) {
+                for (const t of rawTags.split(',')) {
+                    if (t.trim().length > 0) {
+                        tagSet.add(t.trim().toLowerCase());
+                    }
+                }
+            }
+
+            // 2. Extra tags passed via options
+            if (Array.isArray(options.tags)) {
+                for (const t of options.tags) {
+                    if (t.trim().length > 0) {
+                        tagSet.add(t.trim().toLowerCase());
+                    }
+                }
+            }
+
+            // 3. Category tag
+            if (category) {
+                tagSet.add(category);
+            }
+
+            // 4. Plugin identifier / prefix tag (e.g. 'sp', 'cc', 'kk', 'wt')
+            if (pluginId) {
+                tagSet.add(pluginId.toLowerCase());
+            } else if (prefix && prefix !== '/') {
+                const clean = prefix.replace(/^[/:]+|[/:]+$/g, '').toLowerCase();
+                if (clean.length > 0) {
+                    tagSet.add(clean);
+                }
+            }
+
+            // 5. Inferred words from stem (e.g. 'dev-plan' -> 'dev', 'plan')
+            for (const part of stem.split(/[-_]/)) {
+                const p = part.trim().toLowerCase();
+                if (p.length > 1 && !tagSet.has(p)) {
+                    tagSet.add(p);
+                }
+            }
+
+            const tags = Array.from(tagSet);
+
             items.push({
                 name,
                 description,
                 category,
                 argumentHint,
+                tags,
                 role,
                 source,
             });
@@ -293,14 +374,189 @@ export function scanMarkdownCommands(dirPath: string, options: ScanMarkdownOptio
     return items;
 }
 
+/** Information about a discovered Claude Code plugin. */
+export interface DiscoveredPlugin {
+    id: string;
+    name: string;
+    marketplace?: string;
+    installPath?: string;
+    commandsDir?: string;
+}
+
+/** Options for discovering installed and enabled Claude Code plugins. */
+export interface DiscoverPluginsOptions {
+    projectRoot?: string;
+    claudeDir?: string;
+}
+
+/**
+ * Discover all installed and enabled Claude Code plugins across the user's system and project.
+ */
+export function discoverEnabledClaudePlugins(options: DiscoverPluginsOptions = {}): DiscoveredPlugin[] {
+    const { projectRoot = process.cwd(), claudeDir = join(homedir(), '.claude') } = options;
+
+    const userSettingsPath = join(claudeDir, 'settings.json');
+    const projectSettingsPath = join(projectRoot, '.claude', 'settings.json');
+    const installedPath = join(claudeDir, 'plugins', 'installed_plugins.json');
+
+    let userSettings: Record<string, unknown> = {};
+    if (existsSync(userSettingsPath)) {
+        try {
+            userSettings = JSON.parse(readFileSync(userSettingsPath, 'utf-8'));
+        } catch {
+            // Tolerant
+        }
+    }
+
+    let projectSettings: Record<string, unknown> = {};
+    if (existsSync(projectSettingsPath)) {
+        try {
+            projectSettings = JSON.parse(readFileSync(projectSettingsPath, 'utf-8'));
+        } catch {
+            // Tolerant
+        }
+    }
+
+    const enabledPlugins: Record<string, boolean> = {
+        ...((userSettings.enabledPlugins as Record<string, boolean> | undefined) ?? {}),
+        ...((projectSettings.enabledPlugins as Record<string, boolean> | undefined) ?? {}),
+    };
+
+    const extraKnownMarketplaces: Record<string, { source?: { source?: string; path?: string } }> = {
+        ...((userSettings.extraKnownMarketplaces as
+            | Record<string, { source?: { source?: string; path?: string } }>
+            | undefined) ?? {}),
+        ...((projectSettings.extraKnownMarketplaces as
+            | Record<string, { source?: { source?: string; path?: string } }>
+            | undefined) ?? {}),
+    };
+
+    let installedManifest: { plugins?: Record<string, Array<{ installPath?: string }>> } = { plugins: {} };
+    if (existsSync(installedPath)) {
+        try {
+            installedManifest = JSON.parse(readFileSync(installedPath, 'utf-8'));
+        } catch {
+            // Tolerant
+        }
+    }
+
+    const installedPlugins = installedManifest.plugins ?? {};
+
+    const candidateKeys = new Set<string>();
+    for (const [key, isEnabled] of Object.entries(enabledPlugins)) {
+        if (isEnabled) {
+            candidateKeys.add(key);
+        }
+    }
+    if (candidateKeys.size === 0) {
+        for (const key of Object.keys(installedPlugins)) {
+            if (enabledPlugins[key] !== false) {
+                candidateKeys.add(key);
+            }
+        }
+    }
+
+    const results: DiscoveredPlugin[] = [];
+
+    for (const pluginKey of candidateKeys) {
+        if (enabledPlugins[pluginKey] === false) {
+            continue;
+        }
+
+        const atIndex = pluginKey.indexOf('@');
+        const pluginName = atIndex !== -1 ? pluginKey.slice(0, atIndex) : pluginKey;
+        const marketplaceName = atIndex !== -1 ? pluginKey.slice(atIndex + 1) : undefined;
+
+        let resolvedDir: string | null = null;
+
+        // 1. Check installPath in installed_plugins.json
+        const installs = installedPlugins[pluginKey];
+        if (Array.isArray(installs)) {
+            for (const inst of installs) {
+                if (typeof inst.installPath === 'string' && existsSync(inst.installPath)) {
+                    resolvedDir = inst.installPath;
+                    break;
+                }
+            }
+        }
+
+        // 2. Check extraKnownMarketplaces directory source
+        if (!resolvedDir && marketplaceName && extraKnownMarketplaces[marketplaceName]) {
+            const mSrc = extraKnownMarketplaces[marketplaceName]?.source;
+            if (mSrc?.source === 'directory' && typeof mSrc.path === 'string') {
+                const cand1 = join(mSrc.path, 'plugins', pluginName);
+                const cand2 = join(mSrc.path, pluginName);
+                if (existsSync(cand1)) {
+                    resolvedDir = cand1;
+                } else if (existsSync(cand2)) {
+                    resolvedDir = cand2;
+                }
+            }
+        }
+
+        // 3. Check cache: ~/.claude/plugins/cache/<marketplace>/<plugin>
+        if (!resolvedDir && marketplaceName) {
+            const cacheDir = join(claudeDir, 'plugins', 'cache', marketplaceName, pluginName);
+            if (existsSync(cacheDir)) {
+                try {
+                    const entries = readdirSync(cacheDir, { withFileTypes: true });
+                    const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+                    const lastDir = dirs[dirs.length - 1];
+                    if (lastDir) {
+                        resolvedDir = join(cacheDir, lastDir);
+                    }
+                } catch {
+                    // Tolerant
+                }
+            }
+        }
+
+        // 4. Check ~/.claude/plugins/marketplaces/<marketplace>/plugins/<plugin>
+        if (!resolvedDir && marketplaceName) {
+            const mpDir = join(claudeDir, 'plugins', 'marketplaces', marketplaceName, 'plugins', pluginName);
+            if (existsSync(mpDir)) {
+                resolvedDir = mpDir;
+            }
+        }
+
+        // 5. Local project fallback (e.g. plugins/sp in spur-new)
+        if (!resolvedDir) {
+            const localPlugin = resolve(projectRoot, 'plugins', pluginName);
+            if (existsSync(localPlugin)) {
+                resolvedDir = localPlugin;
+            }
+        }
+
+        let commandsDir: string | undefined;
+        if (resolvedDir) {
+            const candidateCommands = join(resolvedDir, 'commands');
+            if (existsSync(candidateCommands)) {
+                commandsDir = candidateCommands;
+            }
+        }
+
+        results.push({
+            id: pluginKey,
+            name: pluginName,
+            marketplace: marketplaceName,
+            installPath: resolvedDir ?? undefined,
+            commandsDir,
+        });
+    }
+
+    return results;
+}
+
 /** Options for generating the aggregate slash commands list. */
 export interface GenerateSlashCommandsOptions {
     projectRoot?: string;
     includeBuiltin?: boolean;
     includePluginSp?: boolean;
+    includeAllPlugins?: boolean;
     includeProjectClaude?: boolean;
     includeUserClaude?: boolean;
     includeUserSpur?: boolean;
+    claudeDir?: string;
 }
 
 /**
@@ -312,9 +568,11 @@ export function generateSlashCommands(options: GenerateSlashCommandsOptions = {}
         projectRoot = process.cwd(),
         includeBuiltin = true,
         includePluginSp = true,
+        includeAllPlugins = true,
         includeProjectClaude = true,
         includeUserClaude = true,
         includeUserSpur = true,
+        claudeDir,
     } = options;
 
     const commandMap = new Map<string, SlashCommandItem>();
@@ -326,21 +584,42 @@ export function generateSlashCommands(options: GenerateSlashCommandsOptions = {}
         }
     }
 
-    // 2. Monorepo plugin commands (plugins/sp/commands/*.md)
-    if (includePluginSp) {
-        const spCommandsDir =
-            findPluginsSpCommandsDir(projectRoot) ?? resolve(projectRoot, 'plugins', 'sp', 'commands');
-        const spCommands = scanMarkdownCommands(spCommandsDir, {
-            prefix: '/sp:',
-            source: 'plugin:sp',
-            defaultCategory: 'harness',
-        });
-        for (const cmd of spCommands) {
-            commandMap.set(cmd.name, cmd);
+    // 2. All enabled Claude Code plugins (cc, kk, wt, sp, etc.)
+    if (includeAllPlugins) {
+        const plugins = discoverEnabledClaudePlugins({ projectRoot, claudeDir });
+        for (const plugin of plugins) {
+            if (plugin.commandsDir) {
+                const pluginCommands = scanMarkdownCommands(plugin.commandsDir, {
+                    prefix: `/${plugin.name}:`,
+                    source: `plugin:${plugin.name}`,
+                    pluginId: plugin.name,
+                    defaultCategory: deduceCommandCategory(plugin.name),
+                });
+                for (const cmd of pluginCommands) {
+                    commandMap.set(cmd.name, cmd);
+                }
+            }
         }
     }
 
-    // 3. Project-level Claude commands (.claude/commands/*.md)
+    // 3. Monorepo plugin commands (plugins/sp/commands/*.md) - override/merge local sp
+    if (includePluginSp) {
+        const spCommandsDir =
+            findPluginsSpCommandsDir(projectRoot) ?? resolve(projectRoot, 'plugins', 'sp', 'commands');
+        if (existsSync(spCommandsDir)) {
+            const spCommands = scanMarkdownCommands(spCommandsDir, {
+                prefix: '/sp:',
+                source: 'plugin:sp',
+                pluginId: 'sp',
+                defaultCategory: 'harness',
+            });
+            for (const cmd of spCommands) {
+                commandMap.set(cmd.name, cmd);
+            }
+        }
+    }
+
+    // 4. Project-level Claude commands (.claude/commands/*.md)
     if (includeProjectClaude) {
         const projectClaudeDir =
             findProjectClaudeCommandsDir(projectRoot) ?? resolve(projectRoot, '.claude', 'commands');
@@ -353,7 +632,7 @@ export function generateSlashCommands(options: GenerateSlashCommandsOptions = {}
         }
     }
 
-    // 4. User-level Claude commands (~/.claude/commands/*.md)
+    // 5. User-level Claude commands (~/.claude/commands/*.md)
     if (includeUserClaude) {
         const userClaudeDir = join(homedir(), '.claude', 'commands');
         const userClaudeCommands = scanMarkdownCommands(userClaudeDir, {
@@ -365,12 +644,13 @@ export function generateSlashCommands(options: GenerateSlashCommandsOptions = {}
         }
     }
 
-    // 5. User-level Spur commands (~/.config/spur/commands/*.md)
+    // 6. User-level Spur commands (~/.config/spur/commands/*.md)
     if (includeUserSpur) {
         const userSpurDir = join(homedir(), '.config', 'spur', 'commands');
         const userSpurCommands = scanMarkdownCommands(userSpurDir, {
             prefix: '/sp:',
             source: 'spur:user',
+            pluginId: 'sp',
             defaultCategory: 'harness',
         });
         for (const cmd of userSpurCommands) {

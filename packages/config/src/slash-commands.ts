@@ -17,6 +17,8 @@ export const slashCommandItemSchema = z.object({
     category: slashCommandCategorySchema.default('dev'),
     /** Syntax hint for arguments, e.g. '"<description>" [--auto]'. */
     argumentHint: z.string().optional(),
+    /** Tags for categorization and dynamic filtering, e.g. ['sp', 'dev', 'plan']. */
+    tags: z.array(z.string()).default([]),
     /** Target agent role or executor if pinned, e.g. 'planner'. */
     role: z.string().optional(),
     /** Provenance source, e.g. 'builtin', 'plugin:sp', 'user'. */

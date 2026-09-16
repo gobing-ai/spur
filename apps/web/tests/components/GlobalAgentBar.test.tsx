@@ -375,4 +375,32 @@ describe('GlobalAgentBar agent role receiver tag and clean UI', () => {
         expect(roleTag.className).toContain('border-spur-border');
         expect(roleTag.className).toContain('text-spur-accent');
     });
+
+    test('shows argumentHint after command name and supports dynamic tag filtering', async () => {
+        const { getByTestId, getByRole, queryByText } = harness();
+        await settleInAct();
+        fireEvent.click(getByTestId('agent-bar-dock'));
+
+        // Type / to open palette
+        setPromptValue(getByTestId('agent-bar-input'), '/');
+        const palette = getByTestId('agent-bar-palette');
+        expect(palette).toBeDefined();
+
+        // Check argument hint is rendered for /review
+        expect(palette.textContent).toContain('/review');
+        expect(palette.textContent).toContain('[target] [--cached]');
+
+        // Tag buttons should be present (e.g. All, sp, git)
+        expect(getByRole('tab', { name: 'All' })).toBeDefined();
+        const gitTagBtn = getByRole('tab', { name: 'git' });
+        expect(gitTagBtn).toBeDefined();
+
+        // Click 'git' tag to filter
+        fireEvent.click(gitTagBtn);
+        expect(palette.textContent).toContain('/review');
+        expect(palette.textContent).toContain('/commit');
+        // Non-git commands should be filtered out
+        expect(queryByText('/cost')).toBeNull();
+        expect(queryByText('/sp:dev-plan')).toBeNull();
+    });
 });

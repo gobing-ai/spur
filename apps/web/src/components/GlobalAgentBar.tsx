@@ -1,4 +1,4 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Textarea } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { encodeRequestEnvelope, OPERATOR_AGENT_ID } from '../modules/projects/conversation';
@@ -37,7 +37,10 @@ function shouldSubmit(e: ReactKeyboardEvent<HTMLTextAreaElement>): boolean {
 export interface SlashCommandCandidate {
     name: string;
     description: string;
-    category: 'git' | 'dev' | 'sys' | 'harness';
+    category: 'git' | 'dev' | 'sys' | 'harness' | string;
+    argumentHint?: string;
+    tags?: string[];
+    role?: string;
 }
 
 /**
@@ -45,23 +48,74 @@ export interface SlashCommandCandidate {
  * Augmented or refreshed from the orchestrator commands endpoint when reachable.
  */
 export const DEFAULT_SLASH_COMMANDS: readonly SlashCommandCandidate[] = [
-    { name: '/review', description: 'Inspect staged git diff, verify test coverage & lint', category: 'git' },
-    { name: '/commit', description: 'Draft conventional commit message from staged hunks', category: 'git' },
-    { name: '/compact', description: 'Purge execution trace and condense context window', category: 'sys' },
-    { name: '/revert', description: 'Undo last agent file changes or restore git stash', category: 'git' },
-    { name: '/resume', description: 'Resume paused background agent run', category: 'dev' },
-    { name: '/terminal', description: 'Run isolated bash execution in sandbox mirror', category: 'sys' },
-    { name: '/cost', description: 'Inspect token breakdown and USD expenditure', category: 'sys' },
-    { name: '/sp:dev-plan', description: 'Plan a feature from description (intake → AC → tasks)', category: 'harness' },
+    {
+        name: '/review',
+        description: 'Inspect staged git diff, verify test coverage & lint',
+        category: 'git',
+        argumentHint: '[target] [--cached]',
+        tags: ['builtin', 'git', 'review'],
+    },
+    {
+        name: '/commit',
+        description: 'Draft conventional commit message from staged hunks',
+        category: 'git',
+        argumentHint: '[--all] [-m <message>]',
+        tags: ['builtin', 'git', 'commit'],
+    },
+    {
+        name: '/compact',
+        description: 'Purge execution trace and condense context window',
+        category: 'sys',
+        argumentHint: '[focus]',
+        tags: ['builtin', 'sys', 'compact'],
+    },
+    {
+        name: '/revert',
+        description: 'Undo last agent file changes or restore git stash',
+        category: 'git',
+        argumentHint: '[stash-id | file]',
+        tags: ['builtin', 'git', 'revert'],
+    },
+    {
+        name: '/resume',
+        description: 'Resume paused background agent run',
+        category: 'dev',
+        argumentHint: '[run-id]',
+        tags: ['builtin', 'dev', 'resume'],
+    },
+    {
+        name: '/terminal',
+        description: 'Run isolated bash execution in sandbox mirror',
+        category: 'sys',
+        argumentHint: '[command]',
+        tags: ['builtin', 'sys', 'terminal'],
+    },
+    {
+        name: '/cost',
+        description: 'Inspect token breakdown and USD expenditure',
+        category: 'sys',
+        tags: ['builtin', 'sys', 'cost'],
+    },
+    {
+        name: '/sp:dev-plan',
+        description: 'Plan a feature from description (intake → AC → tasks)',
+        category: 'harness',
+        argumentHint: '"<description>" [--feature <id>]',
+        tags: ['sp', 'dev', 'plan'],
+    },
     {
         name: '/sp:dev-run',
         description: 'Drive one task end-to-end through verification pipeline',
         category: 'harness',
+        argumentHint: '<wbs> [--mode <full|implement>]',
+        tags: ['sp', 'dev', 'run'],
     },
     {
         name: '/sp:dev-verify',
         description: 'Verify a task against requirements and acceptance criteria',
         category: 'harness',
+        argumentHint: '<wbs> [--bdd] [--auto]',
+        tags: ['sp', 'dev', 'verify'],
     },
 ];
 
@@ -99,8 +153,39 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
     // Slash command palette state
     const [paletteDismissed, setPaletteDismissed] = useState(false);
     const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
-    const [activeCategory, setActiveCategory] = useState<'all' | 'git' | 'dev' | 'sys'>('all');
+    const [activeTag, setActiveTag] = useState<string>('all');
     const [commands, setCommands] = useState<readonly SlashCommandCandidate[]>(DEFAULT_SLASH_COMMANDS);
+
+    // Dynamic tag filters extracted from commands
+    const availableTags = useMemo(() => {
+        const counts = new Map<string, number>();
+        for (const cmd of commands) {
+            if (Array.isArray(cmd.tags)) {
+                for (const t of cmd.tags) {
+                    if (t && typeof t === 'string') {
+                        const norm = t.trim().toLowerCase();
+                        counts.set(norm, (counts.get(norm) ?? 0) + 1);
+                    }
+                }
+            }
+            if (cmd.category) {
+                const cat = cmd.category.trim().toLowerCase();
+                counts.set(cat, (counts.get(cat) ?? 0) + 1);
+            }
+        }
+        // Priority order: main plugins and categories first
+        const priority = ['sp', 'cc', 'kk', 'wt', 'git', 'dev', 'sys', 'harness', 'builtin'];
+        const sorted = Array.from(counts.keys()).sort((a, b) => {
+            const aPri = priority.indexOf(a);
+            const bPri = priority.indexOf(b);
+            if (aPri !== -1 && bPri !== -1) return aPri - bPri;
+            if (aPri !== -1) return -1;
+            if (bPri !== -1) return 1;
+            const diff = (counts.get(b) ?? 0) - (counts.get(a) ?? 0);
+            return diff !== 0 ? diff : a.localeCompare(b);
+        });
+        return ['all', ...sorted];
+    }, [commands]);
 
     const project = useProjectContext();
     const { draft, setText, persistPending, clearSubmitted } = useConversationDraft();
@@ -161,10 +246,18 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
     const isSlashQuery = query.startsWith('/') && !paletteDismissed;
     const filteredCommands = isSlashQuery
         ? commands.filter((cmd) => {
-              const matchCat = activeCategory === 'all' || cmd.category === activeCategory;
+              const matchTag =
+                  activeTag === 'all' ||
+                  (Array.isArray(cmd.tags) && cmd.tags.map((t) => t.toLowerCase()).includes(activeTag)) ||
+                  cmd.category.toLowerCase() === activeTag;
+              const queryContent = query.startsWith('/') ? query.slice(1) : query;
               const matchQuery =
-                  cmd.name.toLowerCase().startsWith(query) || cmd.name.toLowerCase().includes(query.slice(1));
-              return matchCat && matchQuery;
+                  cmd.name.toLowerCase().startsWith(query) ||
+                  cmd.name.toLowerCase().includes(queryContent) ||
+                  Boolean(cmd.argumentHint?.toLowerCase().includes(queryContent)) ||
+                  cmd.description.toLowerCase().includes(queryContent) ||
+                  (Array.isArray(cmd.tags) && cmd.tags.some((t) => t.toLowerCase().includes(queryContent)));
+              return matchTag && matchQuery;
           })
         : [];
 
@@ -289,34 +382,33 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                     data-testid="agent-bar-palette"
                     className="w-full rounded-2xl bg-base-100/95 border border-spur-border shadow-2xl overflow-hidden flex flex-col backdrop-blur-2xl mb-1 transition-colors"
                 >
-                    {/* Palette Header: Match Count + Category Filters */}
+                    {/* Palette Header: Match Count + Dynamic Tag Filters */}
                     <div className="flex items-center justify-between px-3.5 py-2 border-b border-spur-border bg-base-200/50 text-xs">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                             <span className="font-mono text-spur-accent font-semibold text-[13px]">/</span>
                             <span className="font-mono text-[12px] font-medium text-spur-text">Commands</span>
                             <span className="text-[11px] font-mono text-spur-text-muted">
                                 {filteredCommands.length} available
                             </span>
                         </div>
-                        <div className="flex items-center gap-1">
-                            {(['all', 'git', 'dev', 'sys'] as const).map((cat) => (
+                        <div
+                            className="flex items-center gap-1 overflow-x-auto no-scrollbar max-w-[65%] py-0.5"
+                            role="tablist"
+                        >
+                            {availableTags.slice(0, 10).map((tag) => (
                                 <button
-                                    key={cat}
+                                    key={tag}
                                     type="button"
-                                    onClick={() => setActiveCategory(cat)}
-                                    className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
-                                        activeCategory === cat
+                                    role="tab"
+                                    aria-selected={activeTag === tag}
+                                    onClick={() => setActiveTag(tag)}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors shrink-0 cursor-pointer ${
+                                        activeTag === tag
                                             ? 'bg-spur-accent/15 text-spur-accent border border-spur-accent/30 font-medium'
                                             : 'text-spur-text-muted hover:text-spur-text hover:bg-base-200'
                                     }`}
                                 >
-                                    {cat === 'all'
-                                        ? 'All'
-                                        : cat === 'git'
-                                          ? 'Git'
-                                          : cat === 'dev'
-                                            ? 'Lifecycle'
-                                            : 'System'}
+                                    {tag === 'all' ? 'All' : tag}
                                 </button>
                             ))}
                         </div>
@@ -333,6 +425,7 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                                     role="option"
                                     aria-selected={isSelected}
                                     onClick={() => handleSelectCommand(cmd.name)}
+                                    title={cmd.description}
                                     className={`flex items-center w-full text-left px-3 py-2 rounded-lg cursor-pointer transition-colors ${
                                         isSelected
                                             ? 'bg-spur-surface text-spur-accent font-medium'
@@ -349,18 +442,36 @@ export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAg
                                         >
                                             {cmd.name}
                                         </span>
-                                        <span className="text-spur-border font-sans">—</span>
-                                        <span
-                                            className={`${
-                                                isSelected ? 'text-spur-text' : 'text-spur-text-muted'
-                                            } font-sans text-[13px] truncate`}
-                                        >
-                                            {cmd.description}
-                                        </span>
+                                        {cmd.argumentHint ? (
+                                            <span
+                                                className={`font-mono text-xs truncate ${
+                                                    isSelected ? 'text-spur-text/80' : 'text-spur-text-muted'
+                                                }`}
+                                            >
+                                                {cmd.argumentHint}
+                                            </span>
+                                        ) : (
+                                            <span
+                                                className={`font-sans text-xs italic truncate ${
+                                                    isSelected ? 'text-spur-text/60' : 'text-spur-text-muted/60'
+                                                }`}
+                                            >
+                                                {cmd.description}
+                                            </span>
+                                        )}
                                     </div>
-                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-base-200 text-spur-text-muted border border-spur-border ml-2 shrink-0">
-                                        {cmd.category}
-                                    </span>
+                                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                                        {(cmd.tags && cmd.tags.length > 0 ? cmd.tags.slice(0, 2) : [cmd.category]).map(
+                                            (tag) => (
+                                                <span
+                                                    key={tag}
+                                                    className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-base-200 text-spur-text-muted border border-spur-border"
+                                                >
+                                                    {tag}
+                                                </span>
+                                            ),
+                                        )}
+                                    </div>
                                 </button>
                             );
                         })}

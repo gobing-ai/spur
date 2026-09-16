@@ -43,6 +43,7 @@ describe('packages/config slash-commands schemas and path resolution', () => {
             expect(item.name).toBe('/test');
             expect(item.description).toBe('Test command description');
             expect(item.category).toBe('dev');
+            expect(item.tags).toEqual([]);
         });
 
         it('parses a full slash command item', () => {
@@ -51,11 +52,13 @@ describe('packages/config slash-commands schemas and path resolution', () => {
                 description: 'Plan a feature',
                 category: 'harness',
                 argumentHint: '"<description>"',
+                tags: ['sp', 'dev', 'plan'],
                 role: 'planner',
                 source: 'plugin:sp',
             });
             expect(item.name).toBe('/sp:dev-plan');
             expect(item.category).toBe('harness');
+            expect(item.tags).toEqual(['sp', 'dev', 'plan']);
             expect(item.role).toBe('planner');
             expect(item.source).toBe('plugin:sp');
         });

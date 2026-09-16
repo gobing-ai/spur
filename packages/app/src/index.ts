@@ -459,7 +459,10 @@ export {
 } from './services/scheduler-custom-job-service';
 export {
     BUILTIN_CLAUDE_COMMANDS,
+    type DiscoveredPlugin,
+    type DiscoverPluginsOptions,
     deduceCommandCategory,
+    discoverEnabledClaudePlugins,
     type GenerateSlashCommandsFileResult,
     type GenerateSlashCommandsOptions,
     generateSlashCommands,
