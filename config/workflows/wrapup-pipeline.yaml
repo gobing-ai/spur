@@ -31,7 +31,7 @@
 # merge    — set --vars '{"merge":"true"}' to run branch cleanup (irreversible
 # HITL)
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
-#   agent    — agent for agent.run steps (default: omp)
+#   agent    — agent for agent.run steps (default: auto → `agent.default` in config)
 #
 # Reliability (aligned with task-pipeline / ADR-043):
 # - Prefer pure slash commands when a command exists; free-form inputs remain

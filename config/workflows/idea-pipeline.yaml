@@ -33,7 +33,7 @@
 #              lets profile=auto route around the idea-eval taste gate (default "false")
 #   CLI --approve-taste sets both design_approved and idea_approved to true.
 #   spurBin  — PATH-independent spur invocation (overridden by CLI at run start)
-#   agent    — agent for agent.run steps (default: omp)
+#   agent    — agent for agent.run steps (default: auto → `agent.default` in config)
 #
 # Reliability (aligned with task-pipeline / ADR-043):
 #   - Soft agent doctor at start → failed via transitions (not raw lifecycle abort)

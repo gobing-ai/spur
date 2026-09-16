@@ -97,7 +97,8 @@ You own the spaces **between** task runs:
 You explicitly do **NOT** own step-level execution:
 
 - How an `agent.run` step (implement/test/review/verify) runs is `vars.agent`'s concern - default
-  `omp`, pinned in `task-pipeline.yaml`. `--agent <value>` from the command flows into each
+  `auto` (`agent.default` in config resolves the executor), pinned in `task-pipeline.yaml`.
+  `--agent <value>` from the command flows into each
   per-task `vars.agent`; you forward it, you do not interpret it.
 - You never edit the pipeline YAML, never reach into a step, and never decide how a single
   `agent.run` stage executes. The per-task pipeline is invoked **verbatim**.
