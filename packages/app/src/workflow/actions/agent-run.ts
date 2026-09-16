@@ -184,7 +184,12 @@ export class AgentRunActionRunner implements ActionRunner {
         const compareExecutorWith = asOptionalString(options.compareExecutorWith) ?? 'implement';
 
         const agentLabel = dispatchAgent ?? '<default>';
-        const targetAgentDir = dispatchAgent ?? this.agentConfig.default ?? 'omp';
+        // Session-dir label. Never a literal agent name as the fallback: this directory
+        // names the source the history importer attributes the run's sessions to
+        // (`history-service.ts` maps `.spur/run/<id>/agent-sessions/<agent>/` back to a
+        // source), so a hardcoded fallback mislabelled unrelated executors' sessions as
+        // that source. `default` states "no agent declared" instead of claiming one.
+        const targetAgentDir = dispatchAgent ?? this.agentConfig.default ?? 'default';
         const prevAgent = freshSession ? undefined : asOptionalString(context.vars.__agentSessionAgent);
 
         let sessionDir = freshSession ? undefined : asOptionalString(context.vars.__agentSessionDir);
