@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Subagent dispatch hardening: fan-out size floor, implement-stage handoff contract, pre-dispatch permission check, cheap-model fan-out hint"
-status: backlog
+status: todo
 template: standard
 created_at: 2026-09-16T02:53:37.141Z
-updated_at: "2026-09-16T03:22:14.785Z"
+updated_at: "2026-09-16T03:33:06.954Z"
 
 ---
 
@@ -154,3 +154,6 @@ All four items are prompt-contract edits in plugin reference Markdown plus their
 - Tasks 0508 / 0687 / 0818 / 0727 — prior dispatch-contract decisions this task extends.
 
 ### History
+
+- 2026-09-16T03:33:06.954Z backlog → todo (system)
+
