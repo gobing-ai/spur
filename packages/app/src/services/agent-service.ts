@@ -21,6 +21,7 @@ import {
 import {
     AgentDetector,
     type AgentName,
+    type AgentRunCorrelation,
     type AgentRunResult,
     AiRunner,
     type DoctorResult,
@@ -992,6 +993,16 @@ export class AgentService {
         // `resolveAgent` below and re-stamped on each escalation re-resolve —
         // the invoke bridge reads it at emit time.
         let routing: AgentRoutingAttribution | undefined;
+        // 0869 R3: the dispatching run's correlation identity, computed once and
+        // shared by the invoke bridge and the execution lifecycle. Resolution
+        // probes (version/auth) run before the lifecycle exists and emit
+        // `agent.invoke.*` without a correlation, so the bridge stamps this same
+        // id onto them — every invoke event is attributable to the run that paid
+        // for it, never inferred at read time.
+        const runCorrelation: AgentRunCorrelation = options.execution?.correlation ?? {
+            runId: crypto.randomUUID(),
+            executionId: crypto.randomUUID(),
+        };
         const invokeBridge = this.ctx.events !== undefined ? bridgeEventBus(this.ctx.events) : undefined;
         let receiptRunId: string | undefined;
         const pendingExits: Record<string, unknown>[] = [];
@@ -1014,7 +1025,14 @@ export class AgentService {
             new AiRunner({
                 processExecutor: dispatchExecutor,
                 ...(invokeBridge !== undefined
-                    ? { events: withInvokeRouting(invokeBridge, () => routing, publishExit) }
+                    ? {
+                          events: withInvokeRouting(
+                              invokeBridge,
+                              () => routing,
+                              publishExit,
+                              () => runCorrelation,
+                          ),
+                      }
                     : {}),
                 ...(invokeBridge !== undefined ? { processEvents: invokeBridge } : {}),
             });
@@ -1124,7 +1142,7 @@ export class AgentService {
         const onExternalAbort = () => controller.abort();
         const lifecycle = new AgentExecutionLifecycle(
             options.execution?.observer,
-            options.execution?.correlation,
+            runCorrelation,
             configuredSecretValues(this.ctx.env),
             options.execution?.heartbeatMs,
         );
@@ -1140,7 +1158,7 @@ export class AgentService {
         // supervisor-process-shared-generation refinement is handoff 0530; Wave 1
         // only needs an addressable, monotonic pin (ponytail: one source of truth).
         const specId = stringFlag(flags, 'spec-id', '');
-        const coordinationRunId = options.execution?.correlation?.runId ?? lifecycle.identity.runId;
+        const coordinationRunId = runCorrelation.runId;
         let occupantRef: OccupantRef | undefined;
         if (this.ctx.getDb !== undefined) {
             receiptRunId = coordinationRunId;

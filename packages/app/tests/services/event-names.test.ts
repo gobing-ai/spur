@@ -141,7 +141,8 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         ]) {
             expect(SYSTEM_EVENT_NAMES).toContain(name);
         }
-        // workflow.* native engine names (R4 alias policy)
+        // workflow.* native engine names (R4 alias policy; the action-boundary
+        // aliases collapsed to verb-form in 0869 — see the retired-names test).
         for (const name of [
             'workflow.run.started',
             'workflow.run.done',
@@ -151,8 +152,6 @@ describe('SYSTEM_EVENT_CATALOG', () => {
             'workflow.run.reseeded',
             'workflow.node.enter',
             'workflow.node.transition',
-            'workflow.action.start',
-            'workflow.action.done',
             'workflow.action.failed_continue',
             'workflow.guard.evaluated',
             'workflow.transition.requested',
@@ -191,6 +190,20 @@ describe('SYSTEM_EVENT_CATALOG', () => {
         expect(steeringEntry?.payloadPolicy).toBe('redacted');
         expect(steeringEntry?.tier).toBe('default');
         expect(SYSTEM_EVENT_DEFAULT_NAMES).toContain('workflow.steering');
+    });
+
+    test('retired action-boundary aliases are absent from the catalog (task 0869 R2)', () => {
+        // The engine-native `workflow.action.start`/`.done` double-named the same
+        // boundary as the observability adapter's verb-form `started`/`finished`.
+        // The retired aliases are deleted, not aliased — the surviving pair stays,
+        // the engine-native pair must not exist in the catalog at all.
+        expect(SYSTEM_EVENT_NAMES).toContain('workflow.action.started');
+        expect(SYSTEM_EVENT_NAMES).toContain('workflow.action.finished');
+        expect(SYSTEM_EVENT_NAMES).not.toContain('workflow.action.start');
+        expect(SYSTEM_EVENT_NAMES).not.toContain('workflow.action.done');
+        const presenters = SYSTEM_EVENT_PRESENTERS as Record<string, unknown>;
+        expect(presenters['workflow.action.start']).toBeUndefined();
+        expect(presenters['workflow.action.done']).toBeUndefined();
     });
 
     test('registers the task.assigned catalog entry (task 0371 R1; 0860 R2)', () => {

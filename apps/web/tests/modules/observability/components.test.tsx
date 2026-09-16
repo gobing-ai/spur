@@ -878,7 +878,7 @@ describe('observability components', () => {
                     events: [
                         {
                             id: 'evt-correlated',
-                            eventName: 'workflow.action.done',
+                            eventName: 'workflow.action.finished',
                             occurredAt: '2026-07-29T12:00:00.000Z',
                             actor: 'runner',
                             runId: 'run-42',
@@ -901,7 +901,7 @@ describe('observability components', () => {
                     count: 1,
                     catalog: [
                         {
-                            name: 'workflow.action.done',
+                            name: 'workflow.action.finished',
                             prefix: 'workflow',
                             source: 'workflow',
                             renderer: 'workflow-action',
@@ -915,8 +915,8 @@ describe('observability components', () => {
         }) as unknown as typeof fetch);
 
         const view = render(<SystemEventsTab {...tabProps} />);
-        await waitFor(() => expect(view.getByText('workflow.action.done')).toBeDefined());
-        const row = view.getByText('workflow.action.done').closest('tr') as HTMLTableRowElement;
+        await waitFor(() => expect(view.getByText('workflow.action.finished')).toBeDefined());
+        const row = view.getByText('workflow.action.finished').closest('tr') as HTMLTableRowElement;
         expect(row.textContent).toContain('info');
         expect(row.textContent).toContain('Workflow action completed');
         expect(row.textContent).not.toContain('spur-new');
@@ -927,7 +927,7 @@ describe('observability components', () => {
         expect(row.textContent).not.toContain('Trace workflow run');
 
         fireEvent.click(row.querySelector('button[aria-expanded]') as HTMLButtonElement);
-        const detail = view.container.querySelector('section[aria-label="Detail for workflow.action.done"]');
+        const detail = view.container.querySelector('section[aria-label="Detail for workflow.action.finished"]');
         expect(detail?.textContent).toContain('project: spur-new');
         expect(detail?.textContent).toContain('producer: spur / test');
         expect(detail?.textContent).toContain('run-42');

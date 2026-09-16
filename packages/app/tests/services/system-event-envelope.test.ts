@@ -18,7 +18,7 @@ const project = systemEventProjectContext('/workspace/acme');
 describe('buildSystemEventEnvelope', () => {
     test('builds the canonical v2 project, producer, correlation, and presentation shape', () => {
         const envelope = buildSystemEventEnvelope(
-            requireEntry('workflow.action.done'),
+            requireEntry('workflow.action.finished'),
             {
                 runId: 'run-42',
                 executionId: 'exec-7',
@@ -259,7 +259,7 @@ describe('buildSystemEventEnvelope', () => {
 
     test('projectTablePresentation derives correlators, actionLabel, and agent without opaque IDs', async () => {
         const { projectTablePresentation } = await import('../../src/services/system-event-envelope');
-        const entry = requireEntry('workflow.action.start');
+        const entry = requireEntry('workflow.action.started');
         const result = projectTablePresentation({
             entry,
             data: {

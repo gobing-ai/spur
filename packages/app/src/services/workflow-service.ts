@@ -64,7 +64,7 @@ import {
     workflowLayers,
 } from '../workflow/workflow-resolver';
 import type { AgentService } from './agent-service';
-import { bridgeEventBus, withWorkflowIdentity } from './event-bridge';
+import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
 import type { RuleService } from './rule-service';
 import {
     type SystemEventAction,
@@ -519,10 +519,12 @@ export interface WorkflowAppServiceContext {
     observabilityBus?(): WorkflowObservabilityBus;
     /**
      * Optional canonical server EventBus. When provided, the engine's
-     * per-step lifecycle events (`workflow.run.started`, `workflow.action.start`,
-     * etc.) are forwarded to the system_events tap (R3) and SSE stream. Engine
-     * names are canonical — the observability adapter's verb-form names occupy
-     * the same lifecycle moment and do not produce duplicate rows.
+     * per-step lifecycle events (`workflow.run.started`, `workflow.node.enter`,
+     * etc.) are forwarded to the system_events tap (R3) and SSE stream. The
+     * action boundary is verb-form only (`workflow.action.started`/`.finished`
+     * from the observability adapter); the engine-native
+     * `workflow.action.start`/`.done` aliases are filtered out at the bridge
+     * (0869 R2) so the boundary is never double-named.
      */
     events?(): EventBus<Record<string, (event: unknown) => void>>;
     /**
@@ -737,8 +739,12 @@ export class WorkflowAppService {
             ...(isDry ? { dryRun: true } : {}),
             ...(eventsBus !== undefined
                 ? {
-                      // R3 (0601): engine-native events also carry workflow identity.
-                      events: withWorkflowIdentity(bridgeEventBus(eventsBus), workflow),
+                      // R3 (0601): engine-native events also carry workflow identity;
+                      // the retired action-boundary aliases are filtered out first (0869 R2).
+                      events: withWorkflowIdentity(
+                          dropRetiredActionBoundaryAliases(bridgeEventBus(eventsBus)),
+                          workflow,
+                      ),
                   }
                 : {}),
         });
@@ -1261,8 +1267,12 @@ export class WorkflowAppService {
             ...(Object.keys(resumeVars).length > 0 ? { vars: resumeVars } : {}),
             ...(eventsBus !== undefined
                 ? {
-                      // R3 (0601): engine-native resume events carry workflow identity.
-                      events: withWorkflowIdentity(bridgeEventBus(eventsBus), workflow),
+                      // R3 (0601): engine-native resume events carry workflow identity;
+                      // the retired action-boundary aliases are filtered out first (0869 R2).
+                      events: withWorkflowIdentity(
+                          dropRetiredActionBoundaryAliases(bridgeEventBus(eventsBus)),
+                          workflow,
+                      ),
                   }
                 : {}),
         });

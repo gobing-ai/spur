@@ -1,3 +1,4 @@
+import type { AgentRunCorrelation } from '@gobing-ai/ts-ai-runner';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import type { EventBus, EventMap } from '@gobing-ai/ts-infra';
 import type { AgentRoutingAttribution } from '../observability/agent-execution';
@@ -46,21 +47,59 @@ export function withWorkflowIdentity<T extends EventMap>(bridge: EventBus<T>, de
 }
 
 /**
+ * Engine-native action-boundary names retired when the alias pairs collapsed
+ * (task 0869 R2): `workflow.action.start`/`.done` double-named the same moment
+ * the observability adapter's verb-form `workflow.action.started`/`.finished`
+ * already describe. The retired aliases are deleted, not aliased — a filter
+ * here keeps them off the shared bus so neither the tap nor the SSE stream
+ * records a row that no longer has a meaning.
+ */
+const RETIRED_ACTION_BOUNDARY_ALIASES = new Set(['workflow.action.start', 'workflow.action.done']);
+
+/**
+ * Wrap a typed bridge so the retired action-boundary aliases never reach the
+ * underlying bus. Everything else passes through unchanged, so engine-native
+ * lifecycle names the adapter does not duplicate (run done/failed, guard,
+ * HITL, custom, …) still flow exactly as before.
+ */
+export function dropRetiredActionBoundaryAliases<T extends EventMap>(bridge: EventBus<T>): EventBus<T> {
+    const loose = bridge as unknown as EventBus<Record<string, (event: unknown) => void>>;
+    const wrapped = {
+        on: (event: string, listener: (event: unknown) => void) => loose.on(event, listener),
+        off: (event: string, listener: (event: unknown) => void) => loose.off(event, listener),
+        emit: (event: string, detail: unknown) => {
+            if (RETIRED_ACTION_BOUNDARY_ALIASES.has(event)) return Promise.resolve();
+            return Promise.resolve(loose.emit(event, detail));
+        },
+    };
+    return wrapped as unknown as EventBus<T>;
+}
+
+/**
  * Wrap a typed bridge so `agent.invoke.*` payloads carry the dispatching run's
- * routing decision (task 0545 R1). The resolution funnel
- * (`resolveExecutorSelector` and siblings) is the only place that knows role,
- * tier, executor, and source together; the AiRunner emits the invoke lifecycle
- * events the ledger persists. The per-run routing context is merged here, at
- * the one seam between decision and persistence — the facts are never
- * re-derived downstream. Payloads pass through untouched when no routing
- * context is set (resolutions without a tier/executor) or for non-invoke
- * events. `readRouting` is called at emit time so escalation hops re-stamp
- * the payload with the next decision before the re-dispatch.
+ * routing decision (task 0545 R1) and its correlation id (task 0869 R3). The
+ * resolution funnel (`resolveExecutorSelector` and siblings) is the only place
+ * that knows role, tier, executor, and source together; the AiRunner emits the
+ * invoke lifecycle events the ledger persists. The per-run routing context is
+ * merged here, at the one seam between decision and persistence — the facts
+ * are never re-derived downstream.
+ *
+ * `readCorrelation` supplies the dispatching run's id when the AiRunner did
+ * not attach one: the prompt dispatch carries `options.correlation` already,
+ * but the resolution probes (`version`/`auth`) run before the dispatch and
+ * emit invoke events without it. Stamping the same correlation keeps every
+ * `agent.invoke.*` row attributable to the run that paid for it (R3); an
+ * already-present correlation is never overwritten.
+ *
+ * `readRouting` is called at emit time so escalation hops re-stamp the payload
+ * with the next decision before the re-dispatch. Payloads pass through
+ * untouched for non-invoke events.
  */
 export function withInvokeRouting<T extends EventMap>(
     bridge: EventBus<T>,
     readRouting: () => AgentRoutingAttribution | undefined,
     publishExit?: (detail: Record<string, unknown>) => Promise<void>,
+    readCorrelation?: () => AgentRunCorrelation | undefined,
 ): EventBus<T> {
     // Loose reference for payload access; the wrapper is cast to the caller's
     // typed EventBus at the single structural cast site, like bridgeEventBus.
@@ -74,12 +113,14 @@ export function withInvokeRouting<T extends EventMap>(
                 detail !== null &&
                 typeof detail === 'object'
             ) {
+                const record = detail as Record<string, unknown>;
                 const routing = readRouting();
-                const payload = { ...(detail as Record<string, unknown>), ...(routing ? { routing } : {}) };
+                const correlation = readCorrelation?.();
+                const base =
+                    correlation !== undefined && record.correlation === undefined ? { ...record, correlation } : record;
+                const payload = { ...base, ...(routing !== undefined ? { routing } : {}) };
                 if (event === 'agent.invoke.exit' && publishExit !== undefined) return publishExit(payload);
-                if (routing !== undefined) {
-                    return Promise.resolve(loose.emit(event, { ...(detail as Record<string, unknown>), routing }));
-                }
+                return Promise.resolve(loose.emit(event, payload));
             }
             return Promise.resolve(loose.emit(event, detail));
         },

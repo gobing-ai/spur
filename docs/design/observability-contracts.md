@@ -220,12 +220,12 @@ fabricated action. The Board renders those sentinels as `-`.
 api`). Each catalog entry additionally fixes its concrete producer package and subsystem. The catalog
 declaration order is canonical; `SYSTEM_EVENT_PREFIXES` is derived and powers the UI prefix filter.
 
-**Event-name alias policy (task 0221 R4).** Where upstream and canonical names diverge
-(e.g. engine `workflow.action.start` vs. observability adapter `workflow.action.started`),
-the engine-native names are catalog-canonical and the alternates get their own row — one
-per logical moment — to avoid silently collapsing two lifecycle moments into one row.
-The persistence-side `ObservableWorkflowAdapter` continues to feed live consumers via
-its own typed bus; it produces a separate `system_events` row only if the engine did not.
+**Event-name alias policy (task 0221 R4; amended 0869).** One action boundary gets exactly
+one start name and one finish name (ADR-117 §2.3). The verb-form pair
+`workflow.action.started`/`.finished` — the names the live consumers (CLI progress reporter,
+`trace-writer`, run-log sink) already read — is canonical; the engine-native
+`workflow.action.start`/`.done` aliases are deleted, not aliased: they are filtered at the
+engine bridge and removed from the catalog, so the boundary is never double-named.
 
 **Producer invariant (R3).** Board-visible server work receives the canonical bus,
 directly or through a typed adapter. Each app service has an optional `events?()`:

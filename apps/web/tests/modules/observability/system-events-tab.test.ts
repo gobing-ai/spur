@@ -56,7 +56,7 @@ describe('parseSystemEventView', () => {
         for (const eventName of [
             'task.updated',
             'queue.job.failed',
-            'workflow.action.done',
+            'workflow.action.finished',
             'rule.eval.error',
             'agent.invoke.exit',
             'process.exited',
@@ -77,7 +77,7 @@ describe('parseSystemEventView', () => {
     });
 
     test('bounds display strings and rejects malformed actions', () => {
-        const view = parseSystemEventView('workflow.action.done', {
+        const view = parseSystemEventView('workflow.action.finished', {
             ...envelope,
             presentation: {
                 ...envelope.presentation,
@@ -91,7 +91,7 @@ describe('parseSystemEventView', () => {
     });
 
     test('maps server-projected table presentation fields (correlators, actionLabel, agent)', () => {
-        const view = parseSystemEventView('workflow.action.done', {
+        const view = parseSystemEventView('workflow.action.finished', {
             ...envelope,
             presentation: {
                 ...envelope.presentation,

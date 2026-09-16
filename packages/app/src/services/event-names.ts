@@ -344,9 +344,7 @@ const BASE_CATALOG = [
     baseEvent('workflow.transition', 'workflow', 'workflow-transition'),
     baseEvent('workflow.transition.requested', 'workflow', 'workflow-transition', 'metadata-only', 'diagnostic'),
     baseEvent('workflow.transition.denied', 'workflow', 'workflow-transition', 'metadata-only', 'diagnostic'),
-    baseEvent('workflow.action.start', 'workflow', 'workflow-action'),
     baseEvent('workflow.action.started', 'workflow', 'workflow-action'),
-    baseEvent('workflow.action.done', 'workflow', 'workflow-action'),
     baseEvent('workflow.action.finished', 'workflow', 'workflow-action'),
     baseEvent('workflow.action.failed_continue', 'workflow', 'workflow-action'),
     baseEvent('workflow.guard.evaluated', 'workflow', 'workflow-guard', 'metadata-only', 'diagnostic'),
@@ -1278,28 +1276,6 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
         },
         outcome: derivedFrom('reason'),
     },
-    'workflow.action.start': {
-        description: 'A workflow action started, naming the step and kind.',
-        fields: [
-            field('runId', 'Run'),
-            field('workflowName', 'Workflow'),
-            field('nodeLabel', 'Step'),
-            field('node', 'Node'),
-            field('kind', 'Kind'),
-        ],
-        retain: [
-            field('metadata.agent', 'Agent'),
-            field('metadata.role', 'Role'),
-            field('routing.executor', 'Executor'),
-        ],
-        summary: (input) => {
-            const name = humanWorkflowTitle(input);
-            const step = humanStepLabel(input.data);
-            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
-            return parts.length > 0 ? `[workflow] ${parts.join(' · ')} started` : '[workflow] action started';
-        },
-        outcome: unsupported,
-    },
     'workflow.action.started': {
         description: 'A workflow action began executing, naming the step and kind.',
         fields: [
@@ -1322,31 +1298,6 @@ export const SYSTEM_EVENT_PRESENTERS: Record<SystemEventName, SystemEventPresent
             return parts.length > 0 ? `[workflow] ${parts.join(' · ')} started` : '[workflow] action started';
         },
         outcome: unsupported,
-    },
-    'workflow.action.done': {
-        description: 'A workflow action finished successfully.',
-        fields: [
-            field('runId', 'Run'),
-            field('workflowName', 'Workflow'),
-            field('nodeLabel', 'Step'),
-            field('node', 'Node'),
-            field('actionId', 'Action'),
-            field('kind', 'Kind'),
-            field('durationMs', 'Duration (ms)'),
-            field('ok', 'OK'),
-        ],
-        retain: [
-            field('metadata.agent', 'Agent'),
-            field('metadata.role', 'Role'),
-            field('routing.executor', 'Executor'),
-        ],
-        summary: (input) => {
-            const name = humanWorkflowTitle(input);
-            const step = humanStepLabel(input.data);
-            const parts = [name, step].filter((part): part is string => typeof part === 'string' && part !== '');
-            return parts.length > 0 ? `[workflow] ${parts.join(' · ')} done` : '[workflow] action done';
-        },
-        outcome: derivedFromValue('ok'),
     },
     'workflow.action.finished': {
         description: 'A workflow action finished, reporting its status and success.',

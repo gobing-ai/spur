@@ -38,6 +38,12 @@ Every cataloged event must answer six questions. "Present" means the payload car
 
 ## 4. 5W1H matrix (74/74)
 
+> **Alias collapse (task 0869 R2):** the action-boundary aliases
+> `workflow.action.start`/`.done` were retired in favour of the verb-form
+> `workflow.action.started`/`.finished` (the names existing consumers already
+> read). Rows 58 and 60 below are kept only as the audit trail; the retired
+> names no longer fire and no longer exist in the catalog (§11).
+
 Scores are family-uniform **by construction** — the defect from §2.1 means presentation is inherited per source, not per event. Emitter lines are the Spur-side emit/wiring point; ts-libs producers stamp the payload upstream and are attributed via the bridge.
 
 | # | Event | Emitter (`path:line`) | Who | What | When | Where | Why | How |
@@ -95,9 +101,9 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 55 | `workflow.transition` | `observability.ts:247` / `observability.ts:265` | ~ | ~ | P | P | ~ | P |
 | 56 | `workflow.transition.requested` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | ~ | ~ |
 | 57 | `workflow.transition.denied` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
-| 58 | `workflow.action.start` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | ~ |
+| 58 | ~~`workflow.action.start`~~ *(retired 0869 → `started`)* | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | ~ |
 | 59 | `workflow.action.started` | `observability.ts:284` | ~ | P | P | P | – | P |
-| 60 | `workflow.action.done` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | P |
+| 60 | ~~`workflow.action.done`~~ *(retired 0869 → `finished`)* | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | – | P |
 | 61 | `workflow.action.finished` | `observability.ts:312` | ~ | P | P | P | – | P |
 | 62 | `workflow.action.failed_continue` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | P |
 | 63 | `workflow.guard.evaluated` | ts-dual-workflow-engine → `workflow-service.ts:563` | ~ | ~ | P | P | P | ~ |
@@ -162,7 +168,7 @@ Rules:
 
 ## 7. `workflow.*` naming convention
 
-**Defect (G2):** step events render raw uuids — `Run <runId>` / `Node <node>` / `Action <actionId>`. The adapter threads `workflowName` only for run-start (`observability.ts:222-226`) and resolves it once in `envelope()` (`observability.ts:325-333`), but engine-native rows (`workflow.node.enter`, `workflow.action.start`, `workflow.transition.*`, `workflow.hitl.*`, `workflow.custom`) go straight through `bridgeEventBus` (`workflow-service.ts:563`) without that enrichment, and no `nodeLabel` exists anywhere.
+**Defect (G2):** step events render raw uuids — `Run <runId>` / `Node <node>` / `Action <actionId>`. The adapter threads `workflowName` only for run-start (`observability.ts:222-226`) and resolves it once in `envelope()` (`observability.ts:325-333`), but engine-native rows (`workflow.node.enter`, `workflow.node.transition`, `workflow.transition.*`, `workflow.hitl.*`, `workflow.custom`) go straight through `bridgeEventBus` (`workflow-service.ts:563`) without that enrichment, and no `nodeLabel` exists anywhere.
 
 **Accepted J9 convention — every engine-native and persistence-adapter `workflow.*` payload carries the available human identity in addition to machine correlation:**
 
@@ -314,9 +320,7 @@ The following matrix fixes summary behavior, retained facts, and outcome support
 | `workflow.transition` | `runId`, `workflowName`, `from`, `to`, `trigger` | `[workflow] {workflowName} : {from} -> {to}` | `to` |
 | `workflow.transition.requested` | `runId`, `workflowName`, `from`, `to`, `trigger` | `[workflow] {workflowName} requested {from} -> {to}` | — |
 | `workflow.transition.denied` | `runId`, `workflowName`, `from`, `to`, `reason` | `[workflow] {workflowName} denied {from} -> {to}` | `reason` |
-| `workflow.action.start` | `runId`, `workflowName`, node identity, `kind` | `[workflow] {workflowName} · {nodeLabel | kind} started` | — |
 | `workflow.action.started` | `runId`, `workflowName`, node identity, action id, `kind` | `[workflow] {workflowName} · {nodeLabel | kind} started` | — |
-| `workflow.action.done` | run/workflow/node/action identity, `kind`, duration, `ok` | `[workflow] {workflowName} · {nodeLabel | kind} done` | `ok` |
 | `workflow.action.finished` | run/workflow/node/action identity, `kind`, duration, `status`, `ok` | `[workflow] {workflowName} · {nodeLabel | kind} finished` | `status` / `ok` |
 | `workflow.action.failed_continue` | run/workflow/node identity, transitionsTaken, `error` | `[workflow] {workflowName} · {nodeLabel} failed; continuing` | `error` |
 | `workflow.guard.evaluated` | `runId`, `workflowName`, `from`, `to`, `kind`, `passed` | `[workflow] {workflowName} guard {from} -> {to}` | `passed` |

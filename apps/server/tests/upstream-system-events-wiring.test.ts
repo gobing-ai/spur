@@ -171,7 +171,7 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
                 runId: 'run-test',
                 dryRun: false,
             });
-            await bus.emit('workflow.action.start', { runId: 'run-test', node: 'review', kind: 'shell' });
+            await bus.emit('workflow.action.started', { runId: 'run-test', node: 'review', kind: 'shell' });
             await bus.emit('workflow.hitl.ask', {
                 runId: 'run-test',
                 node: 'review',
@@ -184,8 +184,13 @@ describe('upstream system event wiring (task 0221 R3 + task 0226 R8)', () => {
             const runRows = await dao.query({ name: 'workflow.run.started', limit: 5 });
             expect(runRows.length).toBeGreaterThanOrEqual(1);
 
-            const actionRows = await dao.query({ name: 'workflow.action.start', limit: 5 });
+            const actionRows = await dao.query({ name: 'workflow.action.started', limit: 5 });
             expect(actionRows.length).toBeGreaterThanOrEqual(1);
+
+            // 0869 R2: the retired engine-native action-boundary alias must not
+            // land in the ledger — it is filtered out, not merely unsubscribed.
+            const retiredRows = await dao.query({ name: 'workflow.action.start', limit: 5 });
+            expect(retiredRows.length).toBe(0);
 
             const hitlRows = await dao.query({ name: 'workflow.hitl.ask', limit: 5 });
             expect(hitlRows.length).toBeGreaterThanOrEqual(1);

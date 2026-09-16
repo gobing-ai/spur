@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentRoutingAttribution } from '../../src/observability/agent-execution';
-import { bridgeEventBus, withInvokeRouting, withWorkflowIdentity } from '../../src/services/event-bridge';
+import {
+    bridgeEventBus,
+    dropRetiredActionBoundaryAliases,
+    withInvokeRouting,
+    withWorkflowIdentity,
+} from '../../src/services/event-bridge';
 
 /** Event map for bridge tests — concrete payload types (not the open `EventMap` never default). */
 type TestEvents = {
@@ -146,6 +151,49 @@ describe('withInvokeRouting (task 0545 R1)', () => {
         expect(calls[0]?.args[0]).toEqual({ agent: 'pi' });
     });
 
+    test('stamps the dispatching correlation into invoke payloads that lack one (0869 R3)', async () => {
+        const { bus, calls } = stubEventBus();
+        const correlation = { runId: 'run-42', executionId: 'exec-7' };
+        const wrapped = withInvokeRouting<AgentEvents>(
+            bridgeEventBus<AgentEvents>(bus),
+            () => undefined,
+            undefined,
+            () => correlation,
+        );
+
+        await wrapped.emit('agent.invoke.start', { agent: 'pi', operation: 'version', label: 'ai-runner.pi.version' });
+
+        const detail = calls[0]?.args[0] as Record<string, unknown>;
+        expect(detail.correlation).toEqual(correlation);
+        expect(detail.operation).toBe('version');
+    });
+
+    test('does not overwrite a caller-supplied correlation (prompt dispatch)', async () => {
+        const { bus, calls } = stubEventBus();
+        const fallback = { runId: 'fallback-run', executionId: 'fallback-exec' };
+        const wrapped = withInvokeRouting<AgentEvents>(
+            bridgeEventBus<AgentEvents>(bus),
+            () => undefined,
+            undefined,
+            () => fallback,
+        );
+        const existing = { runId: 'prompt-run', executionId: 'prompt-exec', actionId: 'act-1' };
+
+        await wrapped.emit('agent.invoke.start', { agent: 'pi', correlation: existing });
+
+        const detail = calls[0]?.args[0] as Record<string, unknown>;
+        expect(detail.correlation).toEqual(existing);
+    });
+
+    test('leaves invoke payloads untouched when no correlation reader is supplied', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => undefined);
+
+        await wrapped.emit('agent.invoke.start', { agent: 'pi', operation: 'version', label: 'ai-runner.pi.version' });
+
+        expect(calls[0]?.args[0]).toEqual({ agent: 'pi', operation: 'version', label: 'ai-runner.pi.version' });
+    });
+
     test('forwards on() and off() to the underlying bridge', () => {
         const { bus, calls } = stubEventBus();
         const wrapped = withInvokeRouting<AgentEvents>(bridgeEventBus<AgentEvents>(bus), () => routing);
@@ -153,6 +201,52 @@ describe('withInvokeRouting (task 0545 R1)', () => {
         const listener = (_e: Record<string, unknown>) => {};
         wrapped.on('agent.invoke.start', listener);
         wrapped.off('agent.invoke.start', listener);
+
+        expect(calls.map((c) => c.method)).toEqual(['on', 'off']);
+    });
+});
+
+describe('dropRetiredActionBoundaryAliases (0869 R2)', () => {
+    type WorkflowEvents = {
+        'workflow.action.start': (event: Record<string, unknown>) => void;
+        'workflow.action.done': (event: Record<string, unknown>) => void;
+        'workflow.action.started': (event: Record<string, unknown>) => void;
+        'workflow.action.finished': (event: Record<string, unknown>) => void;
+        'workflow.node.enter': (event: Record<string, unknown>) => void;
+    };
+
+    test('drops the retired action-boundary aliases before they reach the bus', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = dropRetiredActionBoundaryAliases<WorkflowEvents>(bridgeEventBus<WorkflowEvents>(bus));
+
+        await wrapped.emit('workflow.action.start', { runId: 'r', node: 'n', kind: 'shell' });
+        await wrapped.emit('workflow.action.done', { runId: 'r', node: 'n', kind: 'shell' });
+
+        expect(calls).toHaveLength(0);
+    });
+
+    test('passes every other workflow name through unchanged', async () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = dropRetiredActionBoundaryAliases<WorkflowEvents>(bridgeEventBus<WorkflowEvents>(bus));
+
+        await wrapped.emit('workflow.action.started', { runId: 'r' });
+        await wrapped.emit('workflow.action.finished', { runId: 'r' });
+        await wrapped.emit('workflow.node.enter', { runId: 'r', node: 'n' });
+
+        expect(calls.map((c) => c.event)).toEqual([
+            'workflow.action.started',
+            'workflow.action.finished',
+            'workflow.node.enter',
+        ]);
+    });
+
+    test('forwards on() and off() to the underlying bridge', () => {
+        const { bus, calls } = stubEventBus();
+        const wrapped = dropRetiredActionBoundaryAliases<WorkflowEvents>(bridgeEventBus<WorkflowEvents>(bus));
+
+        const listener = (_e: Record<string, unknown>) => {};
+        wrapped.on('workflow.node.enter', listener);
+        wrapped.off('workflow.node.enter', listener);
 
         expect(calls.map((c) => c.method)).toEqual(['on', 'off']);
     });
