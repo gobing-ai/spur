@@ -603,10 +603,14 @@ transitions:
     - from: precheck
       to: implement
       description: Deterministic size, evidence, and task checks are green — begin implementation.
+      # (warn) 5 commands: named size/evidence status reads + task check (legibility, 0874).
       guard:
           kind: shell
           options:
-              command: 'test "$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$wbs-precheck-evidence.status 2>/dev/null)" = PASS && $spurBin task check $wbs'
+              command: >-
+                  size_status="$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)";
+                  evidence_status="$(cat .spur/run/$wbs-precheck-evidence.status 2>/dev/null)";
+                  test "$size_status" = PASS && test "$evidence_status" = PASS && $spurBin task check $wbs
     - from: precheck
       to: failed
       description: Size and/or task check failed — stop before implement.
@@ -626,14 +630,18 @@ transitions:
       guard:
           kind: shell
           options:
-              command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" = fast'
+              command: >-
+                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
+                  test "$gate_status" = PASS && test "$mode" = fast
     - from: test
       to: review
       description: Quality gate already green and safety mode — proceed to review.
       guard:
           kind: shell
           options:
-              command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" != fast'
+              command: >-
+                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
+                  test "$gate_status" = PASS && test "$mode" != fast
     - from: test
       to: test-fix
       description: Quality gate red — start bounded fixall loop.
@@ -659,28 +667,40 @@ transitions:
       guard:
           kind: shell
           options:
-              command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" = fast'
+              command: >-
+                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
+                  test "$gate_status" = PASS && test "$mode" = fast
     - from: test-recheck
       to: review
       description: Quality gate green after fixall and safety mode — proceed to review.
       guard:
           kind: shell
           options:
-              command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = PASS && test "$mode" != fast'
+              command: >-
+                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
+                  test "$gate_status" = PASS && test "$mode" != fast
     - from: test-recheck
       to: test-fix
       description: Still red and under qualityGateMaxFixAttempts — another fixall hop.
+      # (warn) 5 commands: named gate status + fix attempts (legibility, 0874).
       guard:
           kind: shell
           options:
-              command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"'
+              command: >-
+                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
+                  fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
+                  test "$gate_status" = FAIL && test "$fix_attempts" -lt "$qualityGateMaxFixAttempts"
     - from: test-recheck
       to: failed
       description: Still red after max fixall attempts — stop at failed (not silent abort).
+      # (warn) 5 commands: named gate status + fix attempts (legibility, 0874).
       guard:
           kind: shell
           options:
-              command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL && test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -ge "$qualityGateMaxFixAttempts"'
+              command: >-
+                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
+                  fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
+                  test "$gate_status" = FAIL && test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
     # Defense: corrupt recheck status — failed, not review.
     - from: test-recheck
       to: failed
@@ -748,7 +768,16 @@ transitions:
           kind: shell
           options:
               command: >-
-                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" '.verdict == "PASS" and (.proof.digest // "") == $d and (.proof.stages.qualityGate.digest // "") == $d and (.proof.stages.review.digest // "") == $d and (.proof.stages.review.status // "") == "completed" and (.proof.stages.verification.digest // "") == $d and (.proof.runId // "") == $r and (.proof.definitionDigest // "") == $dd' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
+                  jq -e --arg d "$proofDigest" --arg r "$__runId" --arg dd "$__definitionDigest" '
+                  .verdict == "PASS"
+                  and (.proof.digest // "") == $d
+                  and (.proof.stages.qualityGate.digest // "") == $d
+                  and (.proof.stages.review.digest // "") == $d
+                  and (.proof.stages.review.status // "") == "completed"
+                  and (.proof.stages.verification.digest // "") == $d
+                  and (.proof.runId // "") == $r
+                  and (.proof.definitionDigest // "") == $dd
+                  ' ".spur/run/$wbs-verdict.json" >/dev/null 2>&1
     - from: verify
       to: test-fix
       description: >-
@@ -760,8 +789,8 @@ transitions:
           kind: shell
           options:
               command: >-
-                  V="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)";
-                  test -n "$V" && test "$V" != PASS &&
+                  verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)";
+                  test -n "$verdict" && test "$verdict" != PASS &&
                   test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"
     - from: verify
       to: failed
@@ -778,6 +807,7 @@ transitions:
     - from: record
       to: done
       description: Task check passed and the verdict proof block still names the captured digest — certify done.
+      # (warn) 5 commands: named verdict + proof digest reads after the task check (legibility, 0874).
       guard:
           kind: shell
           options:
@@ -788,8 +818,9 @@ transitions:
               # one shell line.
               command: >-
                   $spurBin task check $wbs --as done &&
-                  test "$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS &&
-                  test "$(jq -r '.proof.digest // ""' .spur/run/$wbs-verdict.json 2>/dev/null)" = "$proofDigest"
+                  verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" &&
+                  proof_digest="$(jq -r '.proof.digest // ""' .spur/run/$wbs-verdict.json 2>/dev/null)" &&
+                  test "$verdict" = PASS && test "$proof_digest" = "$proofDigest"
     - from: record
       to: failed
       description: Task check failed or proof evidence missing/malformed/mismatched — block before done.

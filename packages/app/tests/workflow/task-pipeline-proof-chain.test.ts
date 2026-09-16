@@ -413,7 +413,9 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
         const guard = cmdOf('record', 'done');
         expect(guard).toContain('task check $wbs --as done');
         // The pre-existing backstops stay: PASS verdict + digest match on the proof block.
-        expect(guard).toContain('"$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)" = PASS');
+        // 0874 names the reads for legibility — the predicate is unchanged.
+        expect(guard).toContain('verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)"');
+        expect(guard).toContain('test "$verdict" = PASS');
         expect(guard).toContain('.proof.digest');
         // No unprojected plain check remains.
         expect(guard.includes('task check $wbs &&')).toBe(false);
