@@ -16,6 +16,7 @@ describe('module registry', () => {
             'observability',
             'runs',
             'history',
+            'commands',
         ]);
     });
 
@@ -34,5 +35,11 @@ describe('module registry', () => {
         const featMod = builtins.find((m) => m.name === 'feature');
         expect(featMod).toBeDefined();
         expect(featMod?.name).toBe('feature');
+    });
+
+    test('commandsModule is a ServerModule with name "commands"', () => {
+        const cmdMod = builtins.find((m) => m.name === 'commands');
+        expect(cmdMod).toBeDefined();
+        expect(cmdMod?.name).toBe('commands');
     });
 });

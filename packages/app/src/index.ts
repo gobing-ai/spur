@@ -457,6 +457,22 @@ export {
     schedulerJobTimeoutEnvName,
     validateSchedulerCustomJobPayload,
 } from './services/scheduler-custom-job-service';
+export {
+    BUILTIN_CLAUDE_COMMANDS,
+    deduceCommandCategory,
+    type GenerateSlashCommandsFileResult,
+    type GenerateSlashCommandsOptions,
+    generateSlashCommands,
+    generateSlashCommandsFile,
+    getBuiltinClaudeCommands,
+    loadSlashCommands,
+    type ScanMarkdownOptions,
+    type SlashCommandCategory,
+    type SlashCommandItem,
+    type SlashCommandsFile,
+    SlashCommandsService,
+    scanMarkdownCommands,
+} from './services/slash-commands-service';
 // Persisted rest/GTD strategy runtime (0838)
 export {
     DEFAULT_STRATEGY,

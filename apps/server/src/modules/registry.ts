@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { ServerContext } from '../context';
+import { commandsModule } from './commands';
 import { eventsModule } from './events';
 import { featureModule } from './feature';
 import { healthModule } from './health';
@@ -34,6 +35,7 @@ const builtins: ServerModule[] = [
     observabilityModule,
     runsModule,
     historyModule,
+    commandsModule,
 ];
 
 /**
