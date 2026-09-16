@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Stop the idea pipeline from invalidating its own preparation evidence
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-16T11:04:31.573Z
-updated_at: "2026-09-16T11:05:18.556Z"
+updated_at: "2026-09-16T21:15:17.681Z"
 feature_id: D62
 
 priority: P2
@@ -20,10 +20,10 @@ The same ordering makes `handoff-finalize` non-idempotent: a second run over an 
 
 ### Requirements
 
-- [ ] R1. A task is never reported `planning digest stale` on account of a frontmatter mutation the pipeline itself applied between binding the evidence and verifying it.
-- [ ] R2. `handoff-finalize` is idempotent: re-running it against an unchanged corpus reports the same per-task outcome as the first run.
-- [ ] R3. A genuine post-preparation change to planning content (Background, Requirements, Design, Plan, Acceptance Criteria, Q&A, References, feature_id, template) still moves the digest and still degrades to the refine action.
-- [ ] R4. The chosen resolution is recorded against `computePlanningDigest`'s contract and its test in packages/app/tests/services/task-readiness.test.ts, which today asserts that dependency membership moves the digest.
+- [x] R1. A task is never reported `planning digest stale` on account of a frontmatter mutation the pipeline itself applied between binding the evidence and verifying it.
+- [x] R2. `handoff-finalize` is idempotent: re-running it against an unchanged corpus reports the same per-task outcome as the first run.
+- [x] R3. A genuine post-preparation change to planning content (Background, Requirements, Design, Plan, Acceptance Criteria, Q&A, References, feature_id, template) still moves the digest and still degrades to the refine action.
+- [x] R4. The chosen resolution is recorded against `computePlanningDigest`'s contract and its test in packages/app/tests/services/task-readiness.test.ts, which today asserts that dependency membership moves the digest.
 
 ### Acceptance Criteria
 
@@ -65,15 +65,54 @@ B is the smaller and more honest diff; A is the more conservative one. Do not ad
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Resolution — Option B (unbind `dependencies` from the digest).
+
+Chose B over A: B is the smaller, more honest diff and satisfies R2 (idempotence)
+for free. `computePlanningDigest` has exactly one consumer (`idea-handoff.ts`),
+which is also the only writer of the `dependencies` frontmatter, so a bound value
+can never signal drift there. Dependency drift stays checked independently by the
+ready-checklist `dependencies` row (`READY_CHECKLIST_IDS`) and `spur task check`.
+A (move deps application into state K) would preserve the old contract but costs an
+extracted batch-dependency step and a pipeline edit for no added drift coverage.
+The forbidden third option (rebind digest after deps) would mask every other
+post-preparation change, violating R3.
+
+#### Change map
+
+- `packages/app/src/services/task-readiness.ts:389` — updated `computePlanningDigest` doc comment to record that `dependencies` is deliberately unbound (the pipeline applies `spur task deps` between bind and verify).
+- `packages/app/src/services/task-readiness.ts:403-410` — removed `dependencies` from the hashed payload; the digest now binds planning sections + `feature_id` + `template` only.
+- `packages/app/tests/services/task-readiness.test.ts:375` — dependency-membership assertion now asserts membership does **not** move the digest.
+- `packages/app/tests/workflow/idea-handoff.test.ts:211` — regression test: deps applied between binding and verification does not stale; a Background edit still degrades to refine.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-readiness.ts:400-410` removes `dependencies` from the hashed payload; `packages/app/tests/workflow/idea-handoff.test.ts:211` proves deps applied between binding and verification no longer reports `planning digest stale` |
+| R2 | MET | `packages/app/src/services/task-readiness.ts:400-410` makes the digest invariant to dependency frontmatter (the only mutation `handoff-finalize` applies post-bind), so a second pass over an unchanged corpus computes the same digest; `packages/app/tests/services/task-readiness.test.ts:375` asserts dependency membership changes do not move the digest |
+| R3 | MET | `packages/app/tests/services/task-readiness.test.ts:368` asserts planning-body edits still move the digest; `packages/app/tests/workflow/idea-handoff.test.ts:211` proves a Requirements edit still degrades to the refine action (`/sp:dev-refineall`) |
+| R4 | MET | `packages/app/src/services/task-readiness.ts:388-399` records the unbinding decision in `computePlanningDigest`'s doc comment; `packages/app/tests/services/task-readiness.test.ts:375` updates the dependency-membership assertion to encode the new contract |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R15 — Preparation evidence survives the pipeline's own deterministic mutations | MET | test | `packages/app/tests/workflow/idea-handoff.test.ts:211` — deps applied between binding and verification does not stale (next command `/sp:dev-runall`); a Requirements edit still degrades to refine |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:3f84be8a46088ef7d8ee4de81cede9aa712dfc884bc7e017bdedc576b1c79e02 |
 
 ### References
 
@@ -82,4 +121,7 @@ B is the smaller and more honest diff; A is the more conservative one. Do not ad
 ### History
 
 - 2026-09-16T11:05:18.556Z backlog → todo (system)
+- 2026-09-16T20:51:23.267Z todo → wip (system)
+- 2026-09-16T21:15:16.312Z wip → testing (system)
+- 2026-09-16T21:15:17.681Z testing → done (system)
 
