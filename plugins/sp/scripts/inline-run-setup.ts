@@ -30,14 +30,26 @@
  * Usage:
  *   bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]
  *   bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]
+ *   bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> \
+ *       --status <done|failed|running|paused> --ok <true|false> --duration-ms <n> [--spur-bin <path>]
+ *   bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--spur-bin <path>]
  *
  * The `--fingerprint` mode prints the engine's proof-input digest for the given spec files and
  * creates nothing (task 0862 R5).
  *
+ * The `--action` / `--close` modes are the inline driver's ADR-117 emission boundary (task
+ * 0868): `--action` records one completed action boundary as an `action_runs` row through the
+ * shared `WorkflowActionTraceWriter`, `--close` marks the run row terminal through the same
+ * writer. `--action` is best-effort: a persistence failure is appended to
+ * `.spur/run/<run-id>.log` and the script still exits 0 with `{"ok":false}` on stdout, so
+ * observation never wedges the run. `--close` is NOT best-effort: the run-row closure is
+ * bookkeeping, so a missing run row or a persistence failure exits 1 with a named error.
+ * Exit 2 is reserved for usage errors.
+ *
  * Env: SPUR_BIN
  */
 
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,6 +74,13 @@ function usage(): never {
     );
     console.error(
         '       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]',
+    );
+    console.error(
+        '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> ' +
+            '--status <done|failed|running|paused> --ok <true|false> --duration-ms <n> [--spur-bin <path>]',
+    );
+    console.error(
+        '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--spur-bin <path>]',
     );
     process.exit(2);
 }
@@ -177,12 +196,132 @@ async function printFingerprint(taskFile: string, featureFile: string, spurBin: 
     return 0;
 }
 
+/** Terminal statuses the inline driver may declare when closing its run row. */
+const CLOSE_STATUSES = new Set(['done', 'failed', 'paused']);
+
+/** Action-row statuses the engine's `action_runs.status` column accepts. */
+const ACTION_STATUSES = new Set(['running', 'done', 'failed', 'paused']);
+
+/** Input for the ADR-117 emission modes (`--action` / `--close`). */
+interface TraceModeInput {
+    readonly runId: string;
+    readonly close: boolean;
+    readonly node: string;
+    readonly kind: string;
+    readonly status: string;
+    readonly ok: boolean;
+    readonly durationMs: number;
+    readonly spurBin: string;
+}
+
+/**
+ * Append one emission-failure line to `.spur/run/<run-id>.log` — the run log the inline
+ * driver already owns. Best-effort and synchronous (the process may exit immediately
+ * after), and never throws: an unwritable log must not wedge the run (ADR-117 R3).
+ */
+function appendTraceFailureLine(runId: string, detail: string): void {
+    try {
+        const runDir = join(process.cwd(), '.spur', 'run');
+        if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
+        const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, '_');
+        const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+        appendFileSync(join(runDir, `${safeRunId}.log`), `[${stamp}] ${detail}\n`);
+    } catch {
+        // Best-effort (R3): the run continues even when the failure cannot be recorded.
+    }
+}
+
+/**
+ * Emit one trace write through the SHARED `WorkflowActionTraceWriter` (task 0868 R5/R7).
+ * `--action` is best-effort: an emission failure is recorded to the run log and reported
+ * on stdout as `{"ok":false}`, and the script exits 0 so the run still reaches its declared
+ * terminal state (R3/R12). `--close` is bookkeeping, so a missing run row or a persistence
+ * failure fails loudly with exit 1 (review findings #1/#4).
+ */
+async function runTraceMode(input: TraceModeInput): Promise<number> {
+    const operation = input.close ? 'run.close' : 'action.finish';
+    const fail = (error: string): number => {
+        appendTraceFailureLine(
+            input.runId,
+            `trace-emission-failed operation=${operation} run=${input.runId}` +
+                `${input.node === '' ? '' : ` node=${input.node}`}${input.kind === '' ? '' : ` kind=${input.kind}`}: ${error}`,
+        );
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
+        // The action boundary is best-effort (exit 0); the run-row closure fails loudly (exit 1).
+        return input.close ? 1 : 0;
+    };
+
+    const { entry, repoRoot, chain } = resolveAppEntry(input.spurBin);
+    if (entry === null || repoRoot === null) {
+        return fail(
+            `no monorepo checkout of spur is reachable via ${chain} — the shared trace writer ` +
+                'lives in packages/app (point SPUR_BIN at a repo checkout)',
+        );
+    }
+
+    const app = (await import(entry)) as {
+        openInlineRunProjectDb: (workdir: string) => Promise<{ adapter: unknown; close: () => void }>;
+        createWorkflowActionTraceWriter: (
+            db: unknown,
+            recordFailure?: (failure: unknown) => void,
+        ) => {
+            recordAction: (boundary: Record<string, unknown>) => Promise<{ ok: boolean; actionId?: string }>;
+            closeRun: (runId: string, status: string) => Promise<{ ok: boolean }>;
+        };
+    };
+
+    let projectDb: { adapter: unknown; close: () => void } | undefined;
+    try {
+        projectDb = await app.openInlineRunProjectDb(process.cwd());
+        const writer = app.createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
+            const detail = failure as { operation?: string; error?: string };
+            appendTraceFailureLine(
+                input.runId,
+                `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? 'unknown error'}`,
+            );
+        });
+        const result = input.close
+            ? await writer.closeRun(input.runId, input.status)
+            : await writer.recordAction({
+                  runId: input.runId,
+                  node: input.node,
+                  kind: input.kind,
+                  status: input.status,
+                  ok: input.ok,
+                  durationMs: input.durationMs,
+              });
+        process.stdout.write(`${JSON.stringify({ ...result, runId: input.runId })}\n`);
+        return 0;
+    } catch (error) {
+        if (input.close && (error as { name?: string }).name === 'RunRowNotFoundError') {
+            // The run row must exist before --close can mark it terminal (R6); a missing row
+            // is a loud correctness failure, not a best-effort emission failure (finding #4).
+            const message = error instanceof Error ? error.message : String(error);
+            appendTraceFailureLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
+            process.stdout.write(
+                `${JSON.stringify({ ok: false, runId: input.runId, error: message, code: 'RUN_NOT_FOUND' })}\n`,
+            );
+            return 1;
+        }
+        return fail(error instanceof Error ? error.message : String(error));
+    } finally {
+        projectDb?.close();
+    }
+}
+
 async function main(): Promise<void> {
     let runId = '';
     let file = '';
     let fingerprint = false;
     let taskFile = '';
     let featureFile = '';
+    let action = false;
+    let close = false;
+    let node = '';
+    let kind = '';
+    let status = '';
+    let okRaw = '';
+    let durationRaw = '';
     let spurBin = process.env.SPUR_BIN ?? '';
     const argv = process.argv.slice(2);
     for (let i = 0; i < argv.length; i++) {
@@ -191,6 +330,13 @@ async function main(): Promise<void> {
         else if (argv[i] === '--fingerprint') fingerprint = true;
         else if (argv[i] === '--task-file') taskFile = argv[++i] ?? '';
         else if (argv[i] === '--feature-file') featureFile = argv[++i] ?? '';
+        else if (argv[i] === '--action') action = true;
+        else if (argv[i] === '--close') close = true;
+        else if (argv[i] === '--node') node = argv[++i] ?? '';
+        else if (argv[i] === '--kind') kind = argv[++i] ?? '';
+        else if (argv[i] === '--status') status = argv[++i] ?? '';
+        else if (argv[i] === '--ok') okRaw = argv[++i] ?? '';
+        else if (argv[i] === '--duration-ms') durationRaw = argv[++i] ?? '';
         else if (argv[i] === '--spur-bin') spurBin = argv[++i] ?? spurBin;
     }
 
@@ -200,6 +346,42 @@ async function main(): Promise<void> {
         if (runId !== '' || file !== '' || taskFile.trim() === '') usage();
         process.exit(await printFingerprint(taskFile, featureFile, spurBin));
     }
+
+    // ADR-117 emission modes (task 0868): the inline driver reports one completed action
+    // boundary, or closes its run row at the declared terminal state. Both share the run-id
+    // filename guard, the app-entry resolution chain and the best-effort failure contract.
+    if (action || close) {
+        if (action && close) usage();
+        if (runId.trim() === '' || status.trim() === '') usage();
+        if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
+        if (close) {
+            if (!CLOSE_STATUSES.has(status)) usage();
+            process.exit(
+                await runTraceMode({
+                    runId,
+                    close: true,
+                    node: '',
+                    kind: '',
+                    status,
+                    ok: true,
+                    durationMs: 0,
+                    spurBin,
+                }),
+            );
+        }
+        if (node.trim() === '' || kind.trim() === '') usage();
+        if (!ACTION_STATUSES.has(status)) usage();
+        // `--ok` and `--duration-ms` are required and exact for the action mode
+        // (review finding #2): a miscased `--ok True` or an omitted `--duration-ms`
+        // must be a loud usage error, never a silently-defaulted `ok=0` /
+        // `duration_ms=0` row.
+        if (okRaw !== 'true' && okRaw !== 'false') usage();
+        const ok = okRaw === 'true';
+        const durationMs = Number(durationRaw);
+        if (durationRaw.trim() === '' || !Number.isFinite(durationMs) || durationMs < 0) usage();
+        process.exit(await runTraceMode({ runId, close: false, node, kind, status, ok, durationMs, spurBin }));
+    }
+
     if (runId.trim() === '' || file.trim() === '') usage();
     if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
 

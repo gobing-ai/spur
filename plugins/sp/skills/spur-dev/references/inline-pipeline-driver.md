@@ -398,6 +398,60 @@ keep their exact content after the stamp prefix. This normalization is contractu
 **bare local-clock stamps are prohibited** — a hand-appended `[stage 12:31]` form mixes timezones
 in one file and makes the run unauditable (task 0726 mixed both forms).
 
+## Structured trace emission (ADR-117, task 0868)
+
+`.spur/run/<run-id>.log` is a human convenience, **not the record of truth**. A run's
+observability is a property of the run, so the inline driver owes the same structured trace the
+engine subprocess writes — and it owes it through the **same writer**, never a parallel
+implementation. The shared writer is `WorkflowActionTraceWriter`
+(`packages/app/src/workflow/action-trace.ts`): the same decorator the engine composition installs
+around `DbWorkflowPersistenceAdapter`, so the two surfaces call one emission path and one run-row
+closure path and cannot drift.
+
+The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
+`plugins/sp/scripts/inline-run-setup.ts`) — no new entry point, no second resolution chain:
+
+- **Every executed action** — after the action settles, whether it ran host-inline or via a native
+  subagent — append its provenance line as before, then record the boundary:
+
+  ```bash
+  bun "$SETUP_SCRIPT" --action --run-id "$RUN_ID" --node <state-id> --kind <action-kind> \
+    --status <done|failed> --ok <true|false> --duration-ms <measured-ms>
+  ```
+
+  `<state-id>` is the current YAML state id (the `node`), `<action-kind>` the YAML action kind
+  (`agent.run`, `shell`, `note`, `doctor.probe`, …). `--status` is `done` when the action settled
+  under its declared error policy and `failed` otherwise; `--duration-ms` is the wall clock the
+  driver measured around the action. This writes the `action_runs` row (node, kind, status, `ok`,
+  `duration_ms`, `run_id`) the engine would have written, so the run's rows are queryable by run id
+  (`spur workflow progress <run-id>`, `ActionRunDao`) without reading the text log.
+
+- **At the run's declared terminal state** — before the driver reports the run complete, close the
+  row so a successful inline run is never left non-terminal for `spur workflow clean` to reap as
+  stale:
+
+  ```bash
+  bun "$SETUP_SCRIPT" --close --run-id "$RUN_ID" --status <done|failed|paused>
+  ```
+
+  `--status` is the declared terminal state's verdict, not a guess: a run that reached a terminal
+  state is `done`; a run halted by a failing action under its error policy is `failed`.
+
+**Best-effort at the action boundary only (ADR-117).** An `--action` persistence failure is
+recorded — the delegate appends a `trace-emission-failed` line to `.spur/run/<run-id>.log` and
+prints `{"ok":false}` on stdout — and the run continues to its declared terminal state; the
+delegate exits `0` for that outcome and the driver must never treat an emission failure as a run
+failure, retry it in a loop, or substitute a hand-written row. The run-row closure (`--close`) is
+bookkeeping, not trace emission, and is **not** best-effort: a missing run row or a persistence
+failure exits `1` with `{"ok":false}` and a named error (a missing row also carries
+`code:"RUN_NOT_FOUND"`), because a silently `running` row is exactly the stale state
+`spur workflow clean` reaps as `failed`. Exit `2` means the invocation itself was malformed
+(missing `--node`/`--kind`/`--status`/`--ok`, a miscased `--ok`, a missing or malformed
+`--duration-ms`, or an unsafe run id) and must be corrected, not ignored.
+
+Emission is not optional and not deferred: an inline run that skips it reintroduces the
+1,011-untraced-runs gap ADR-117 exists to close.
+
 Transition guards are not advisory. Execute the declared guard exactly, in order, with the same
 resolved variables and artifacts. `--no-lifecycle` remains bookkeeping only; the YAML's task checks,
 verdict gate, record step, and done guard all remain authoritative.

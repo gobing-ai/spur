@@ -681,6 +681,20 @@ export {
     WRITE_SLOT_TTL_MS,
     WriteSlotService,
 } from './services/write-slot-service';
+export type {
+    ActionTraceBoundary,
+    ActionTraceFailure,
+    ActionTraceFailureRecorder,
+    ActionTraceOperation,
+    ActionTraceResult,
+} from './workflow/action-trace';
+export {
+    createRunLogTraceFailureRecorder,
+    createWorkflowActionTraceWriter,
+    RunRowNotFoundError,
+    WorkflowActionTraceWriter,
+    withActionTrace,
+} from './workflow/action-trace';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';

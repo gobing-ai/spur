@@ -43,6 +43,7 @@ import {
 } from '@gobing-ai/ts-runtime';
 import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
+import { createRunLogTraceFailureRecorder, withActionTrace } from '../workflow/action-trace';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import {
@@ -1669,7 +1670,16 @@ export class WorkflowAppService {
             await this.loadWorkflowExtensions(host, opts.extensions.workflow, opts.extensions.file);
         }
         const db = await this.ctx.getDb();
-        let persistence: WorkflowPersistenceAdapter = new DbWorkflowPersistenceAdapter(db);
+        // ADR-117 / task 0868: the action-boundary emission is best-effort through the
+        // SAME writer the inline driver calls — a persistence failure is recorded to the
+        // run log and never wedges the run. The run-row closure (`finalizeRun`) is NOT
+        // best-effort: it propagates, so the engine's terminal closure fails loudly as it
+        // did before the writer. Pure pass-through otherwise, so engine behavior is
+        // unchanged on success.
+        let persistence: WorkflowPersistenceAdapter = withActionTrace(
+            new DbWorkflowPersistenceAdapter(db),
+            createRunLogTraceFailureRecorder(this.ctx.cwd),
+        );
         // Async worker: stamp this process's pid onto the run row at creation so
         // `spur workflow cancel` can SIGTERM the live process group.
         if (opts.recordSelfPid === true) {

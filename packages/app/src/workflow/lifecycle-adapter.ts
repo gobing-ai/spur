@@ -24,6 +24,7 @@ import {
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { EntityRef, LifecyclePort, TransitionResult } from '../services/planning-write-service';
 import { extractReviewSectionBody, hasPopulatedPriorityTable } from '../services/task-check';
+import { createRunLogTraceFailureRecorder, withActionTrace } from './action-trace';
 import { EnvShellGuardRunner } from './guards/shell';
 
 /**
@@ -115,7 +116,10 @@ export class LifecycleAdapter implements LifecyclePort {
         // with no `env`, which would expand every `$NAME` to empty and deny every transition.
         const host = createDefaultWorkflowEngineHost();
         host.registerGuard(new EnvShellGuardRunner(new NodeProcessExecutor()), 'builtin');
-        const persistence = new DbWorkflowPersistenceAdapter(db);
+        const persistence = withActionTrace(
+            new DbWorkflowPersistenceAdapter(db),
+            createRunLogTraceFailureRecorder(this.opts.cwd),
+        );
         const svc = new EngineWorkflowService(host, persistence);
         const workflow = this.bindGuardVar(await this.loadWorkflow(), ref.id);
         const externalKey = `${profile.entityPrefix}:${ref.id}`;
