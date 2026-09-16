@@ -4,7 +4,7 @@ name: "builder.bump-ver.aggregatePackage: name the publish trigger package in co
 status: done
 template: standard
 created_at: 2026-09-15T23:51:55.570Z
-updated_at: "2026-09-16T00:21:39.068Z"
+updated_at: "2026-09-16T00:23:29.451Z"
 
 ---
 
@@ -16,10 +16,10 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 
 ### Requirements
 
-- R1. `builder.bump-ver.aggregatePackage` (zod + the hand-maintained `apps/cli/schemas/spur-config.schema.json`) names the package whose own release tag is the publish trigger for the aggregate (`--all`) path, by unscoped package id.
-- R2. `bump-ver --all <version>` bumps that package alongside the `workspace:`-pinned set, and `bump-ver --all --push` pushes that package's own `<scoped-name><separator><version>` tag instead of `<rootName>-v<version>`.
-- R3. `drop-tags --all <version> [--remote]` drops the same resolved aggregate tag (bump and drop share one resolver).
-- R4. An `aggregatePackage` that matches no workspace package aborts before any mutation and lists the known ids; unset keeps today's behavior byte-identical (root-manifest-name discovery, `<rootName>-v<version>` tag).
+- [x] R1. `builder.bump-ver.aggregatePackage` (zod + the hand-maintained `apps/cli/schemas/spur-config.schema.json`) names the package whose own release tag is the publish trigger for the aggregate (`--all`) path, by unscoped package id.
+- [x] R2. `bump-ver --all <version>` bumps that package alongside the `workspace:`-pinned set, and `bump-ver --all --push` pushes that package's own `<scoped-name><separator><version>` tag instead of `<rootName>-v<version>`.
+- [x] R3. `drop-tags --all <version> [--remote]` drops the same resolved aggregate tag (bump and drop share one resolver).
+- [x] R4. An `aggregatePackage` that matches no workspace package aborts before any mutation and lists the known ids; unset keeps today's behavior byte-identical (root-manifest-name discovery, `<rootName>-v<version>` tag).
 
 ### Acceptance Criteria
 
@@ -52,11 +52,30 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 
 ### Design
 
-<!-- Chosen approach, key tradeoffs, invariants, and impacted surfaces. Keep snippets short. -->
+Chosen approach: name the publish-trigger package explicitly through `builder.bump-ver.aggregatePackage`
+(unscoped package id) instead of deriving it from the workspace root manifest name.
+
+- **Invariant 1 — unset is byte-identical.** With the key absent, `resolveAggregatePackage` keeps the
+  historical root-manifest-name discovery and `resolveAggregateTag` falls back to
+  `<rootName>-v<version>`; the spur repo's own release flow is untouched.
+- **Invariant 2 — one resolver for bump and drop.** `bumpAll` and `dropAll` both call
+  `resolveAggregateTag`, so the pushed publish tag and the dropped tag can never diverge.
+- **Invariant 3 — fail before mutation.** An id matching no workspace package throws during
+  `releaseContext` assembly (pre-flight), listing the known ids — before any file edit, commit, or tag.
+- **Tradeoff accepted:** one more config knob in `BuilderBumpVerConfigSchema` (mirrored into the
+  hand-maintained `apps/cli/schemas/spur-config.schema.json`) in exchange for publishing repos whose
+  root manifest name is unscoped.
+- **Rejected:** scope-aware root-name fuzzy matching (heuristic, silently wrong on collisions) and
+  per-repo wrapper-script pinning (the workaround this replaces; not portable, invisible to the CLI).
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. [x] Add `aggregatePackage` to `BuilderBumpVerConfigSchema` (zod) and mirror it into `apps/cli/schemas/spur-config.schema.json` (embedded via `embedded-schemas.ts`).
+2. [x] Add `resolveAggregatePackage()` / `resolveAggregateTag()` in `apps/cli/src/release-ops.ts`; wire the resolved package into the `--all` pinned set in `releaseContext`.
+3. [x] Route both aggregate paths (`bumpAll`, `dropAll`) through the shared resolver.
+4. [x] Add the three tests (configured target + scoped push tag, unknown id aborts pre-mutation, drop-tags removes the configured tag).
+5. [x] Document the knob in `docs/design/cli-contracts.md` and `.spur/config.yaml`.
+6. [x] End-to-end probe on a throwaway `knowledge-kit`-shaped repo (key set, key absent, unknown id).
 
 ### Solution
 
@@ -66,7 +85,7 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 - `apps/cli/src/release-ops.ts:99` — `resolveAggregateTag()` returns that package's own `releaseTag()` (separator-aware, scoped) or `<rootName>-v<version>` when nothing resolves.
 - `apps/cli/src/release-ops.ts:537` (bump) and `apps/cli/src/release-ops.ts:675` (drop) — both aggregate paths call the one resolver, so the pushed and dropped tag cannot diverge.
 - `docs/design/cli-contracts.md:191` and `.spur/config.yaml:78` — the knob, its default, and the failure class it fixes.
-- `apps/cli/tests/release-ops.test.ts:161` — three tests: the configured target is bumped and the pushed trigger tag is the scoped per-package tag; an unknown id aborts before mutating; `drop-tags --all` removes the configured tag locally and on origin.
+- `apps/cli/tests/release-ops.test.ts:161` — the configured target is bumped and the pushed trigger tag is the scoped per-package tag; `apps/cli/tests/release-ops.test.ts:180` — an unknown id aborts before mutating; `apps/cli/tests/release-ops.test.ts:190` — `drop-tags --all` removes the configured tag locally and on origin.
 
 ### Testing
 
@@ -83,10 +102,10 @@ Captured from the creation title: "builder.bump-ver.aggregatePackage: name the p
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: A repo whose root manifest name is not the published package declares it | MET | test | `apps/cli/tests/release-ops.test.ts:161` (app+lib bumped to 0.3.0, remote tag `@demo/app-v0.3.0`, no `@demo/root-v0.3.0`) — 31 pass this run; e2e probe on throwaway `knowledge-kit`-shaped repo emitted `@gobing-ai/knowledge-kit-v0.0.16`, no `knowledge-kit-v*` tag (see Testing) |
+| Scenario: A repo whose root manifest name is not the published package declares it | MET | test | `apps/cli/tests/release-ops.test.ts:161-177` (app+lib bumped to 0.3.0, remote tag `@demo/app-v0.3.0` asserted at :176, no `@demo/root-v0.3.0`) — 31 pass this run; e2e probe on throwaway `knowledge-kit`-shaped repo emitted `@gobing-ai/knowledge-kit-v0.0.16`, no `knowledge-kit-v*` tag (see Testing) |
 | Scenario: Default discovery is unchanged for the root-named CLI repo | MET | test | `apps/cli/tests/release-ops.test.ts:104`,`:121`,`:157` assert `@demo/root-v0.3.0` with the key unset — 31 pass this run; probe without the key reproduced `knowledge-kit-v0.0.17` |
-| Scenario: An unknown aggregate package fails loudly | MET | test | `apps/cli/tests/release-ops.test.ts:179` rejects with `unknown builder.bump-ver.aggregatePackage "nope"` and asserts `localTags` empty — pass |
-| Scenario: drop-tags --all removes the configured trigger tag | MET | test | `apps/cli/tests/release-ops.test.ts:191` asserts `@demo/app-v0.3.0` removed locally and on origin after `drop-tags --all 0.3.0 --remote` — pass |
+| Scenario: An unknown aggregate package fails loudly | MET | test | `apps/cli/tests/release-ops.test.ts:180-188` rejects with `unknown builder.bump-ver.aggregatePackage "nope"` (:186) and asserts `localTags` empty — pass |
+| Scenario: drop-tags --all removes the configured trigger tag | MET | test | `apps/cli/tests/release-ops.test.ts:190-201` asserts `@demo/app-v0.3.0` removed locally and on origin after `drop-tags --all 0.3.0 --remote` (:199-200) — pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
