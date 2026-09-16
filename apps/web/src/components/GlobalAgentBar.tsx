@@ -1,5 +1,5 @@
-import { type KeyboardEvent as ReactKeyboardEvent, useState } from 'react';
-import { Badge, Button, Textarea } from '@/ui';
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from 'react';
+import { Button, Textarea } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { encodeRequestEnvelope, OPERATOR_AGENT_ID } from '../modules/projects/conversation';
 import { useConversationDraft } from '../modules/projects/drafts';
@@ -34,12 +34,44 @@ function shouldSubmit(e: ReactKeyboardEvent<HTMLTextAreaElement>): boolean {
     );
 }
 
-const MODULE_CHIPS: Record<string, readonly string[]> = {
-    features: ['Decompose feature', 'Verify acceptance criteria'],
-    tasks: ['Run task', 'Check readiness', 'Refine requirements'],
-    observability: ['Explain recent failure', 'Audit doctor status'],
-    history: ['Summarize session', 'Find recurring bottlenecks'],
-};
+export interface SlashCommandCandidate {
+    name: string;
+    description: string;
+    category: 'git' | 'dev' | 'sys' | 'harness';
+}
+
+/**
+ * Default catalog of server-side slash command candidates (as in Claude Code & Spur harness).
+ * Augmented or refreshed from the orchestrator commands endpoint when reachable.
+ */
+export const DEFAULT_SLASH_COMMANDS: readonly SlashCommandCandidate[] = [
+    { name: '/review', description: 'Inspect staged git diff, verify test coverage & lint', category: 'git' },
+    { name: '/commit', description: 'Draft conventional commit message from staged hunks', category: 'git' },
+    { name: '/compact', description: 'Purge execution trace and condense context window', category: 'sys' },
+    { name: '/revert', description: 'Undo last agent file changes or restore git stash', category: 'git' },
+    { name: '/resume', description: 'Resume paused background agent run', category: 'dev' },
+    { name: '/terminal', description: 'Run isolated bash execution in sandbox mirror', category: 'sys' },
+    { name: '/cost', description: 'Inspect token breakdown and USD expenditure', category: 'sys' },
+    { name: '/sp:dev-plan', description: 'Plan a feature from description (intake → AC → tasks)', category: 'harness' },
+    {
+        name: '/sp:dev-run',
+        description: 'Drive one task end-to-end through verification pipeline',
+        category: 'harness',
+    },
+    {
+        name: '/sp:dev-verify',
+        description: 'Verify a task against requirements and acceptance criteria',
+        category: 'harness',
+    },
+];
+
+/** Predefined fallback roles when fleet members are not explicitly declared. */
+const DEFAULT_ROLES = [
+    { id: 'auto', label: 'auto', desc: 'Orchestrator auto-dispatch (default)' },
+    { id: 'coder', label: 'coder', desc: 'Implementation & refactoring specialist' },
+    { id: 'reviewer', label: 'reviewer', desc: 'Verification, lint & SECUA reviewer' },
+    { id: 'planner', label: 'planner', desc: 'Architecture & decomposition specialist' },
+];
 
 /** No orchestrator instance bound (0836 vocabulary): submission cannot be delivered. */
 function orchestratorUnbound(fleet: ReturnType<typeof useProjectContext>['fleet']): boolean {
@@ -49,52 +81,127 @@ function orchestratorUnbound(fleet: ReturnType<typeof useProjectContext>['fleet'
 }
 
 /**
- * Foldable global orchestrator agent bar (feature A7 / task 0779; submission
- * and receipt states are 0844). Mounted globally by `BoardLayout` — inside
- * `ProjectProvider` + `ConversationDraftProvider` — so it is available on
- * every Board route (R7) and submits the SAME shared draft the Conversation
- * view renders: no second composer, no second draft store.
- *
- * Submission persists the request identity (`pending`) BEFORE the POST (R1),
- * clears only the submitted revision (R2), and keeps the draft + identity on
- * a failed ack so a retry reuses the same requestKey (R3). Results render from
- * the closed receipt vocabulary (`receipt.ts`); a run exit is never shown as a
- * verified result.
+ * Clean, single-line global agent prompt bar matching the Stitch design specification:
+ * - Single row: `>` prompt + `to: auto ▾` agent role dropdown tag + prompt input + telemetry `⚡` + Send `⌘↵` + collapse `▾`.
+ * - Floating popup palette with middle operation hints bar (`↑↓ navigate • Tab complete • ↵ execute • ESC dismiss`).
+ * - Fully theme-adapted to current mode (both light and dark) using Spur and DaisyUI tokens.
  */
-export default function GlobalAgentBar({ activeModule }: GlobalAgentBarProps) {
+export default function GlobalAgentBar({ activeModule: _activeModule }: GlobalAgentBarProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [inFlight, setInFlight] = useState(false);
     /** `msgId` of the last accepted submission — joins the thread to the results feed. */
     const [lastMessageId, setLastMessageId] = useState<string | null>(null);
 
+    // Agent role receiver state (default: 'auto' for orchestrator dispatch)
+    const [selectedRole, setSelectedRole] = useState('auto');
+    const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+
+    // Slash command palette state
+    const [paletteDismissed, setPaletteDismissed] = useState(false);
+    const [selectedCmdIndex, setSelectedCmdIndex] = useState(0);
+    const [activeCategory, setActiveCategory] = useState<'all' | 'git' | 'dev' | 'sys'>('all');
+    const [commands, setCommands] = useState<readonly SlashCommandCandidate[]>(DEFAULT_SLASH_COMMANDS);
+
     const project = useProjectContext();
     const { draft, setText, persistPending, clearSubmitted } = useConversationDraft();
-    const instanceId = project.fleet?.orchestrator?.instanceId;
+    const orchestratorInstanceId = project.fleet?.orchestrator?.instanceId;
     const unbound = orchestratorUnbound(project.fleet);
-    const { requests, failed: feedFailed } = useProjectRequests(instanceId ?? null);
-
-    const contextLabel = activeModule?.sidebarLabel ?? activeModule?.name ?? 'Board';
-    const chips = activeModule?.id ? MODULE_CHIPS[activeModule.id] : undefined;
+    const { requests, failed: feedFailed } = useProjectRequests(orchestratorInstanceId ?? null);
 
     const receipt = lastMessageId !== null ? (requests.get(lastMessageId) ?? null) : null;
     const receiptState = classifyReceipt(receipt, project.fleet, inFlight);
     const label = RECEIPT_LABELS[receiptState];
     const showReceipt = inFlight || lastMessageId !== null;
-    // R3 announcement: the same words the visible strip shows — label plus its
-    // one action — written into a stable polite region so a transition made
-    // while the bar is collapsed is still announced (0845).
     const liveText = showReceipt ? `${label.label} — Next: ${label.action}` : '';
+
+    const roleMenuRef = useRef<HTMLDivElement>(null);
+
+    // Fetch dynamic server slash commands if available
+    useEffect(() => {
+        let mounted = true;
+        void (async () => {
+            try {
+                const res = await fetchWithTimeout(new Request(`${resolveApiUrl()}/agent/commands`));
+                if (res.ok) {
+                    const data = (await res.json()) as { commands?: SlashCommandCandidate[] };
+                    if (mounted && Array.isArray(data.commands) && data.commands.length > 0) {
+                        setCommands(data.commands);
+                    }
+                }
+            } catch {
+                // Endpoint unavailable — graceful fallback to DEFAULT_SLASH_COMMANDS
+            }
+        })();
+        return () => {
+            mounted = false;
+        };
+    }, []);
+
+    // Dismiss role dropdown on outside click
+    useEffect(() => {
+        if (!roleMenuOpen) return;
+        const handleOutsideClick = (e: MouseEvent) => {
+            if (roleMenuRef.current && !roleMenuRef.current.contains(e.target as Node)) {
+                setRoleMenuOpen(false);
+            }
+        };
+        document.addEventListener('click', handleOutsideClick);
+        return () => document.removeEventListener('click', handleOutsideClick);
+    }, [roleMenuOpen]);
+
+    // Re-enable palette when draft text begins with '/'
+    useEffect(() => {
+        if (draft.text.startsWith('/')) {
+            setPaletteDismissed(false);
+        }
+    }, [draft.text]);
+
+    // Filter command candidates
+    const query = draft.text.trim().toLowerCase();
+    const isSlashQuery = query.startsWith('/') && !paletteDismissed;
+    const filteredCommands = isSlashQuery
+        ? commands.filter((cmd) => {
+              const matchCat = activeCategory === 'all' || cmd.category === activeCategory;
+              const matchQuery =
+                  cmd.name.toLowerCase().startsWith(query) || cmd.name.toLowerCase().includes(query.slice(1));
+              return matchCat && matchQuery;
+          })
+        : [];
+
+    const isPaletteVisible = isSlashQuery && filteredCommands.length > 0;
+
+    const handleSelectCommand = (cmdName: string) => {
+        setText(`${cmdName} `);
+        setPaletteDismissed(true);
+        const input = document.querySelector<HTMLTextAreaElement>('[data-testid="agent-bar-input"]');
+        input?.focus();
+    };
+
+    const handleInsertTrigger = (trigger: string) => {
+        const cur = draft.text;
+        const next = cur.length > 0 && !cur.endsWith(' ') ? `${cur} ${trigger}` : `${cur}${trigger}`;
+        setText(next);
+        const input = document.querySelector<HTMLTextAreaElement>('[data-testid="agent-bar-input"]');
+        input?.focus();
+    };
+
+    // Determine destination instance based on selected role
+    const resolvedReceiver = (): string | undefined => {
+        if (selectedRole === 'auto') {
+            return orchestratorInstanceId;
+        }
+        const member = project.fleet?.members?.find((m) => m.role === selectedRole || m.instanceId === selectedRole);
+        return member?.instanceId ?? orchestratorInstanceId;
+    };
 
     const handleSubmit = async () => {
         const path = project.path;
-        if (path === null || instanceId === undefined || inFlight) return;
+        const targetInstance = resolvedReceiver();
+        if (path === null || targetInstance === undefined || inFlight) return;
         const text = draft.text;
         if (text.trim().length === 0) return;
         const submitted = { text, refs: draft.refs, revision: draft.revision };
-        // Reuse the pending identity only when it was minted for THIS revision
-        // (R3): an edited payload mints a new key. Consumer-side guard — the
-        // loader keeps `pending` additive and unvalidated.
         const pending =
             draft.pending !== undefined &&
             typeof draft.pending.requestKey === 'string' &&
@@ -103,18 +210,17 @@ export default function GlobalAgentBar({ activeModule }: GlobalAgentBarProps) {
                 ? draft.pending
                 : undefined;
         const requestKey = pending !== undefined ? pending.requestKey : crypto.randomUUID();
-        // Durable identity BEFORE the POST (R1): a crash mid-submit leaves the
-        // retry able to reuse the same key instead of writing a duplicate.
         persistPending(requestKey);
         setInFlight(true);
         setLastMessageId(null);
+        setPaletteDismissed(true);
         try {
             const res = await fetchWithTimeout(
                 new Request(`${resolveApiUrl()}/messages`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        to: instanceId,
+                        to: targetInstance,
                         from: OPERATOR_AGENT_ID,
                         body: encodeRequestEnvelope(submitted.text, submitted.refs),
                         requestKey,
@@ -122,37 +228,27 @@ export default function GlobalAgentBar({ activeModule }: GlobalAgentBarProps) {
                     }),
                 }),
             );
-            if (!res.ok) return; // failed ack — draft + pending stay intact (R3)
+            if (!res.ok) return;
             const payload: unknown = await res.json().catch(() => null);
             const msgId = (payload as { msgId?: unknown } | null)?.msgId;
             setLastMessageId(typeof msgId === 'string' ? msgId : null);
-            // Clear ONLY the submitted revision (R2): a no-op when a newer
-            // edit exists, so the newer edit survives.
             clearSubmitted(submitted.revision);
         } catch {
-            // Network failure — same as a failed ack: draft + pending intact (R3).
+            // Network failure — draft + pending intact
         } finally {
             setInFlight(false);
         }
     };
 
-    const handleChipClick = (chipText: string) => {
-        setText(chipText);
-        const input = document.querySelector<HTMLTextAreaElement>('[data-testid="agent-bar-input"]');
-        input?.focus();
-    };
-
     if (!isOpen) {
         return (
             <>
-                {/* R3: present in BOTH branches — a receipt that changes while the
-                bar is folded is still announced (0845). */}
                 <div role="status" aria-live="polite" className="sr-only" data-agent-bar-live>
                     {liveText}
                 </div>
                 <Button
                     variant="ghost"
-                    className="fixed bottom-6 right-6 z-30 h-12 w-12 rounded-full backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl text-xl"
+                    className="fixed bottom-6 right-6 z-30 h-12 w-12 rounded-full backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl text-xl text-spur-text"
                     onClick={() => setIsOpen(true)}
                     aria-label="Open agent prompt bar"
                     aria-expanded={false}
@@ -164,39 +260,276 @@ export default function GlobalAgentBar({ activeModule }: GlobalAgentBarProps) {
         );
     }
 
+    // Combine declared fleet members with default fallback roles
+    const availableRoleOptions =
+        project.fleet?.members && project.fleet.members.length > 0
+            ? [
+                  { id: 'auto', label: 'auto', desc: 'Orchestrator auto-dispatch (default)' },
+                  ...project.fleet.members.map((m) => ({
+                      id: m.instanceId,
+                      label: m.role || m.instanceId,
+                      desc: `${m.executor}${m.model ? ` · ${m.model}` : ''}`,
+                  })),
+              ]
+            : DEFAULT_ROLES;
+
+    const isSendDisabled = draft.text.trim().length === 0 || (selectedRole === 'auto' && unbound);
+
     return (
         <div
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100vw-2rem)] max-w-[84rem] backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl p-2.5 flex flex-col gap-2"
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-30 w-[calc(100vw-2rem)] max-w-[84rem] backdrop-blur-md bg-base-100/80 border border-spur-border shadow-2xl rounded-2xl p-2.5 flex flex-col gap-2 transition-colors"
             data-testid="agent-bar"
         >
             <div role="status" aria-live="polite" className="sr-only" data-agent-bar-live>
                 {liveText}
             </div>
+
+            {/* FLOATING POPUP COMMAND PALETTE (Opens on '/') */}
+            {isPaletteVisible && (
+                <div
+                    data-testid="agent-bar-palette"
+                    className="w-full rounded-2xl bg-base-100/95 border border-spur-border shadow-2xl overflow-hidden flex flex-col backdrop-blur-2xl mb-1 transition-colors"
+                >
+                    {/* Palette Header: Match Count + Category Filters */}
+                    <div className="flex items-center justify-between px-3.5 py-2 border-b border-spur-border bg-base-200/50 text-xs">
+                        <div className="flex items-center gap-2">
+                            <span className="font-mono text-spur-accent font-semibold text-[13px]">/</span>
+                            <span className="font-mono text-[12px] font-medium text-spur-text">Commands</span>
+                            <span className="text-[11px] font-mono text-spur-text-muted">
+                                {filteredCommands.length} available
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            {(['all', 'git', 'dev', 'sys'] as const).map((cat) => (
+                                <button
+                                    key={cat}
+                                    type="button"
+                                    onClick={() => setActiveCategory(cat)}
+                                    className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
+                                        activeCategory === cat
+                                            ? 'bg-spur-accent/15 text-spur-accent border border-spur-accent/30 font-medium'
+                                            : 'text-spur-text-muted hover:text-spur-text hover:bg-base-200'
+                                    }`}
+                                >
+                                    {cat === 'all'
+                                        ? 'All'
+                                        : cat === 'git'
+                                          ? 'Git'
+                                          : cat === 'dev'
+                                            ? 'Lifecycle'
+                                            : 'System'}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Command List */}
+                    <div className="flex flex-col py-1.5 px-2 max-h-[260px] overflow-y-auto" role="listbox">
+                        {filteredCommands.map((cmd, idx) => {
+                            const isSelected = idx === selectedCmdIndex;
+                            return (
+                                <button
+                                    key={cmd.name}
+                                    type="button"
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    onClick={() => handleSelectCommand(cmd.name)}
+                                    className={`flex items-center w-full text-left px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                                        isSelected
+                                            ? 'bg-spur-surface text-spur-accent font-medium'
+                                            : 'hover:bg-base-200 text-spur-text-muted hover:text-spur-text'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-2 font-mono text-[13px] min-w-0 truncate flex-1">
+                                        <span
+                                            className={
+                                                isSelected
+                                                    ? 'font-semibold text-spur-accent'
+                                                    : 'font-medium text-spur-text'
+                                            }
+                                        >
+                                            {cmd.name}
+                                        </span>
+                                        <span className="text-spur-border font-sans">—</span>
+                                        <span
+                                            className={`${
+                                                isSelected ? 'text-spur-text' : 'text-spur-text-muted'
+                                            } font-sans text-[13px] truncate`}
+                                        >
+                                            {cmd.description}
+                                        </span>
+                                    </div>
+                                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-base-200 text-spur-text-muted border border-spur-border ml-2 shrink-0">
+                                        {cmd.category}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* OPERATION HINTS BAR IN THE MIDDLE (Keycaps + Context Triggers) */}
+                    <div
+                        data-testid="agent-bar-hints"
+                        className="flex items-center justify-between px-4 py-2 border-t border-spur-border bg-base-200/70 font-mono text-[11px] text-spur-text-muted select-none"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="flex items-center gap-1.5">
+                                <kbd className="px-1.5 py-0.5 rounded bg-base-100 border border-spur-border text-spur-text font-semibold text-[10px] shadow-sm">
+                                    ↑↓
+                                </kbd>
+                                <span>navigate</span>
+                            </span>
+                            <span className="text-spur-border">•</span>
+                            <span className="flex items-center gap-1.5">
+                                <kbd className="px-1.5 py-0.5 rounded bg-base-100 border border-spur-border text-spur-text font-semibold text-[10px] shadow-sm">
+                                    Tab
+                                </kbd>
+                                <span>complete</span>
+                            </span>
+                            <span className="text-spur-border">•</span>
+                            <span className="flex items-center gap-1.5">
+                                <kbd className="px-1.5 py-0.5 rounded bg-base-100 border border-spur-border text-spur-text font-semibold text-[10px] shadow-sm">
+                                    ↵
+                                </kbd>
+                                <span>execute</span>
+                            </span>
+                            <span className="text-spur-border">•</span>
+                            <span className="flex items-center gap-1.5">
+                                <kbd className="px-1.5 py-0.5 rounded bg-base-100 border border-spur-border text-spur-text font-semibold text-[10px] shadow-sm">
+                                    ESC
+                                </kbd>
+                                <span>dismiss</span>
+                            </span>
+                        </div>
+
+                        <div className="flex items-center gap-3 font-mono text-[11px]">
+                            <button
+                                type="button"
+                                onClick={() => handleInsertTrigger('@')}
+                                className="text-spur-text-muted hover:text-spur-accent cursor-pointer transition-colors flex items-center gap-0.5 group"
+                                title="Reference files"
+                            >
+                                <span className="font-semibold text-spur-accent group-hover:underline">@</span>
+                                <span className="group-hover:text-spur-text">files</span>
+                            </button>
+                            <span className="text-spur-border">•</span>
+                            <button
+                                type="button"
+                                onClick={() => handleInsertTrigger('#')}
+                                className="text-spur-text-muted hover:text-spur-accent cursor-pointer transition-colors flex items-center gap-0.5 group"
+                                title="Reference tasks and context"
+                            >
+                                <span className="font-semibold text-spur-accent group-hover:underline">#</span>
+                                <span className="group-hover:text-spur-text">context</span>
+                            </button>
+                            <span className="text-spur-border">•</span>
+                            <button
+                                type="button"
+                                onClick={() => handleInsertTrigger('!')}
+                                className="text-spur-text-muted hover:text-spur-accent cursor-pointer transition-colors flex items-center gap-0.5 group"
+                                title="Execute shell directly"
+                            >
+                                <span className="font-semibold text-spur-accent group-hover:underline">!</span>
+                                <span className="group-hover:text-spur-text">bash</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* SINGLE TYPING LINE: > + to: auto ▾ + Prompt Input + Telemetry ⚡ + Send ⌘↵ + Collapse ▾ */}
             <div className="flex items-center gap-2">
-                <Badge variant="outline" size="sm" className="shrink-0 font-mono">
-                    agent · stub
-                </Badge>
-                <Badge variant="neutral" size="sm" className="shrink-0 font-mono" data-testid="agent-bar-context">
-                    Context: {contextLabel}
-                </Badge>
+                <span className="text-spur-text-muted font-mono text-sm select-none font-bold pl-1">&gt;</span>
+
+                {/* Agent Role Dropdown Tag (Default: 'auto' for orchestrator dispatch) */}
+                <div className="relative shrink-0" ref={roleMenuRef}>
+                    <button
+                        type="button"
+                        onClick={() => setRoleMenuOpen((prev) => !prev)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-spur-surface hover:bg-base-200 border border-spur-border text-xs font-mono text-spur-accent transition-colors cursor-pointer group"
+                        title="Target Agent Receiver (default: auto dispatch to orchestrator)"
+                        data-testid="agent-bar-role-tag"
+                    >
+                        <span className="text-spur-text-muted font-sans text-[11px]">to:</span>
+                        <span className="font-semibold">{selectedRole}</span>
+                        <span className="text-spur-text-muted text-[10px] group-hover:text-spur-text transition-colors">
+                            ▾
+                        </span>
+                    </button>
+
+                    {/* Agent Role Popover Menu */}
+                    {roleMenuOpen && (
+                        <div
+                            data-testid="agent-bar-role-menu"
+                            className="absolute bottom-full left-0 mb-2 w-56 rounded-xl bg-base-100 border border-spur-border shadow-2xl p-1.5 z-50 flex flex-col gap-1 text-spur-text"
+                        >
+                            <div className="px-2.5 py-1 text-[10px] font-mono text-spur-text-muted uppercase tracking-wider">
+                                Dispatch Target
+                            </div>
+                            {availableRoleOptions.map((opt) => (
+                                <button
+                                    key={opt.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setSelectedRole(opt.label);
+                                        setRoleMenuOpen(false);
+                                    }}
+                                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs font-mono transition-colors ${
+                                        selectedRole === opt.label
+                                            ? 'bg-spur-accent/15 text-spur-accent font-semibold'
+                                            : 'hover:bg-base-200 text-spur-text-muted hover:text-spur-text'
+                                    }`}
+                                >
+                                    <div className="flex flex-col">
+                                        <span className="font-medium text-spur-text">{opt.label}</span>
+                                        <span className="text-[10px] text-spur-text-muted">{opt.desc}</span>
+                                    </div>
+                                    {selectedRole === opt.label && <span className="text-[12px]">✓</span>}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
                 <Textarea
+                    variant="ghost"
                     rows={1}
                     value={draft.text}
                     onChange={(e) => setText(e.target.value)}
                     onKeyDown={(e) => {
-                        // R1: preventDefault BEFORE submit so a submitting Enter
-                        // never also inserts a newline; on false the event is left
-                        // alone so Shift+Enter inserts the newline natively. One
-                        // submit path — the same handleSubmit the Send button uses.
+                        if (isPaletteVisible && filteredCommands.length > 0) {
+                            if (e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                setSelectedCmdIndex((i) => (i + 1) % filteredCommands.length);
+                                return;
+                            }
+                            if (e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                setSelectedCmdIndex((i) => (i - 1 + filteredCommands.length) % filteredCommands.length);
+                                return;
+                            }
+                            if (e.key === 'Tab') {
+                                e.preventDefault();
+                                handleSelectCommand(filteredCommands[selectedCmdIndex].name);
+                                return;
+                            }
+                            if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setPaletteDismissed(true);
+                                return;
+                            }
+                        }
+
                         if (!shouldSubmit(e)) return;
                         e.preventDefault();
                         void handleSubmit();
                     }}
-                    placeholder="Ask a coding agent to refine or implement this feature…"
+                    placeholder="Ask a coding agent to refine or implement, or type / for commands…"
                     aria-label="Agent prompt"
-                    className="flex-1 min-h-9 resize-none bg-transparent"
+                    className="flex-1 min-h-9 resize-none bg-transparent text-spur-text placeholder:text-spur-text-muted border-0 focus:ring-0 focus:outline-none"
                     data-testid="agent-bar-input"
                 />
+
                 <Button
                     variant="ghost"
                     size="sm"
@@ -204,29 +537,43 @@ export default function GlobalAgentBar({ activeModule }: GlobalAgentBarProps) {
                     aria-label="Toggle execution telemetry drawer"
                     aria-expanded={drawerOpen}
                     data-testid="agent-bar-drawer-toggle"
+                    className="text-spur-text-muted hover:text-spur-text h-8 w-8 p-0 shrink-0"
                 >
                     ⚡
                 </Button>
+
                 <Button
                     variant="primary"
                     size="sm"
-                    disabled={draft.text.trim().length === 0 || unbound}
+                    disabled={isSendDisabled}
                     onClick={() => void handleSubmit()}
+                    className="px-3 py-1 text-xs font-medium shrink-0"
                 >
-                    Send
+                    Send <kbd className="text-[10px] opacity-70 ml-1 font-mono">⌘↵</kbd>
                 </Button>
+
                 <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setIsOpen(false)}
                     aria-label="Collapse agent prompt bar"
                     aria-expanded={true}
+                    className="text-spur-text-muted hover:text-spur-text h-8 w-8 p-0 shrink-0"
                 >
                     ▾
                 </Button>
             </div>
 
-            {unbound && (
+            {drawerOpen && (
+                <div
+                    data-testid="agent-bar-drawer"
+                    className="rounded-lg border border-spur-border bg-spur-surface/80 p-2.5 text-xs text-spur-text-muted"
+                >
+                    <div role="status">Streamed telemetry and tool calls are not wired yet.</div>
+                </div>
+            )}
+
+            {selectedRole === 'auto' && unbound && (
                 <div
                     data-testid="agent-bar-orchestrator-missing"
                     role="status"
@@ -234,30 +581,6 @@ export default function GlobalAgentBar({ activeModule }: GlobalAgentBarProps) {
                 >
                     Orchestrator unavailable — no orchestrator instance is bound to this project, so requests cannot be
                     delivered yet.
-                </div>
-            )}
-
-            {chips && chips.length > 0 && (
-                <div data-testid="agent-bar-chips" className="flex items-center gap-1.5 flex-wrap px-1">
-                    {chips.map((chip) => (
-                        <button
-                            key={chip}
-                            type="button"
-                            onClick={() => handleChipClick(chip)}
-                            className="text-xs px-2.5 py-0.5 rounded-full border border-spur-border bg-spur-surface/80 hover:bg-spur-border/40 text-spur-text-muted hover:text-spur-text transition-colors"
-                        >
-                            {chip}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {drawerOpen && (
-                <div
-                    data-testid="agent-bar-drawer"
-                    className="rounded-lg border border-spur-border bg-spur-surface/60 p-2.5 text-xs text-spur-text-muted"
-                >
-                    <div role="status">Streamed telemetry and tool calls are not wired yet.</div>
                 </div>
             )}
 

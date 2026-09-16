@@ -250,86 +250,94 @@ describe('GlobalAgentBar submission, durability, and receipts (0844)', () => {
     });
 });
 
-describe('GlobalAgentBar context, chips, and execution drawer', () => {
-    test('renders context badge matching active module label and falls back to Board', () => {
-        const mockModule: WebModule = {
-            id: 'features',
-            name: 'Features',
-            sidebarLabel: 'Features',
-            route: 'features',
-            icon: '🗺️',
-            component: () => null,
-        };
-
-        const { getByTestId, rerender } = render(<GlobalAgentBar activeModule={mockModule} />);
+describe('GlobalAgentBar agent role receiver tag and clean UI', () => {
+    test('renders agent role tag defaulting to auto', () => {
+        const { getByTestId } = render(<GlobalAgentBar />);
         fireEvent.click(getByTestId('agent-bar-dock'));
-        expect(getByTestId('agent-bar-context').textContent).toBe('Context: Features');
 
-        // Without active module, falls back to Board
-        rerender(<GlobalAgentBar activeModule={undefined} />);
-        expect(getByTestId('agent-bar-context').textContent).toBe('Context: Board');
+        const roleTag = getByTestId('agent-bar-role-tag');
+        expect(roleTag).toBeDefined();
+        expect(roleTag.textContent).toContain('auto');
     });
 
-    test('renders task-route chip set and clicking a chip populates the prompt input', async () => {
-        const tasksModule: WebModule = {
-            id: 'tasks',
-            name: 'Tasks',
-            sidebarLabel: 'Tasks',
-            route: 'tasks',
-            icon: '📋',
-            component: () => null,
-        };
-
-        const { getByTestId, getByText } = harness(projectCtx(), tasksModule);
-        await settleInAct(); // bar mount polls /api/* inside the provider
+    test('clicking agent role tag opens dropdown menu and allows selecting a specific receiver', () => {
+        const { getByTestId, queryByTestId, getByText } = render(<GlobalAgentBar />);
         fireEvent.click(getByTestId('agent-bar-dock'));
 
-        const chips = getByTestId('agent-bar-chips');
-        expect(chips).toBeDefined();
-        expect(chips.textContent).toContain('Run task');
-        expect(chips.textContent).toContain('Check readiness');
-        expect(chips.textContent).toContain('Refine requirements');
+        // Menu closed initially
+        expect(queryByTestId('agent-bar-role-menu')).toBeNull();
 
-        const input = getByTestId('agent-bar-input') as HTMLTextAreaElement;
-        expect(input.value).toBe('');
+        // Open role menu
+        fireEvent.click(getByTestId('agent-bar-role-tag'));
+        const menu = getByTestId('agent-bar-role-menu');
+        expect(menu).toBeDefined();
+        expect(menu.textContent).toContain('Dispatch Target');
+        expect(menu.textContent).toContain('auto');
+        expect(menu.textContent).toContain('coder');
+        expect(menu.textContent).toContain('reviewer');
 
-        fireEvent.click(getByText('Run task'));
-        expect(input.value).toBe('Run task');
+        // Select coder
+        fireEvent.click(getByText('coder'));
+        expect(getByTestId('agent-bar-role-tag').textContent).toContain('coder');
+        expect(queryByTestId('agent-bar-role-menu')).toBeNull();
     });
 
-    test('renders no chip set when module has no quick actions or is undefined', () => {
-        const noActionModule: WebModule = {
-            id: 'projects',
-            name: 'Projects',
-            sidebarLabel: 'Projects',
-            route: 'projects',
-            icon: '📂',
-            component: () => null,
-        };
-
-        const { getByTestId, queryByTestId, rerender } = render(<GlobalAgentBar activeModule={noActionModule} />);
+    test('slash command palette opens when prompt starts with / and operation hints are rendered', async () => {
+        const { getByTestId, queryByTestId, getByText } = harness();
+        await settleInAct();
         fireEvent.click(getByTestId('agent-bar-dock'));
+
+        // No palette initially
+        expect(queryByTestId('agent-bar-palette')).toBeNull();
+
+        // Type /
+        setPromptValue(getByTestId('agent-bar-input'), '/');
+        const palette = getByTestId('agent-bar-palette');
+        expect(palette).toBeDefined();
+
+        // Operation hints bar in the middle
+        const hints = getByTestId('agent-bar-hints');
+        expect(hints.textContent).toContain('navigate');
+        expect(hints.textContent).toContain('complete');
+        expect(hints.textContent).toContain('execute');
+        expect(hints.textContent).toContain('dismiss');
+        expect(hints.textContent).toContain('files');
+        expect(hints.textContent).toContain('context');
+
+        // Filter commands with /re
+        setPromptValue(getByTestId('agent-bar-input'), '/re');
+        expect(palette.textContent).toContain('/review');
+        expect(palette.textContent).toContain('/revert');
+        expect(palette.textContent).toContain('/resume');
+
+        // Clicking a command selects it and fills the input
+        fireEvent.click(getByText('/review'));
+        expect((getByTestId('agent-bar-input') as HTMLTextAreaElement).value).toContain('/review');
+    });
+
+    test('keeps only the single input line and omits lines 2 and 3 (footer, chips, context)', async () => {
+        const { getByTestId, queryByTestId } = harness();
+        await settleInAct();
+        fireEvent.click(getByTestId('agent-bar-dock'));
+
+        // Single line elements exist
+        expect(getByTestId('agent-bar-role-tag')).toBeDefined();
+        expect(getByTestId('agent-bar-input')).toBeDefined();
+        expect(getByTestId('agent-bar-drawer-toggle')).toBeDefined();
+
+        // Lines 2 and 3 are omitted
+        expect(queryByTestId('agent-bar-footer')).toBeNull();
         expect(queryByTestId('agent-bar-chips')).toBeNull();
+        expect(queryByTestId('agent-bar-context')).toBeNull();
 
-        rerender(<GlobalAgentBar activeModule={undefined} />);
-        expect(queryByTestId('agent-bar-chips')).toBeNull();
-    });
+        // Bar and role tag use theme-adaptive classes
+        const bar = getByTestId('agent-bar');
+        expect(bar.className).toContain('border-spur-border');
+        expect(bar.className).toContain('bg-base-100/80');
 
-    test('toggling execution drawer displays not-wired-yet notice and closes back', () => {
-        const { getByTestId, queryByTestId } = render(<GlobalAgentBar />);
-        fireEvent.click(getByTestId('agent-bar-dock'));
-
-        // Drawer closed initially
-        expect(queryByTestId('agent-bar-drawer')).toBeNull();
-
-        // Toggle open
-        fireEvent.click(getByTestId('agent-bar-drawer-toggle'));
-        const drawer = getByTestId('agent-bar-drawer');
-        expect(drawer).toBeDefined();
-        expect(drawer.textContent).toContain('Streamed telemetry and tool calls are not wired yet');
-
-        // Toggle closed
-        fireEvent.click(getByTestId('agent-bar-drawer-toggle'));
-        expect(queryByTestId('agent-bar-drawer')).toBeNull();
+        const roleTag = getByTestId('agent-bar-role-tag');
+        expect(roleTag.className).toContain('bg-spur-surface');
+        expect(roleTag.className).toContain('border-spur-border');
+        expect(roleTag.className).toContain('text-spur-accent');
     });
 });
