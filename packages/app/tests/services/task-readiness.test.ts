@@ -372,10 +372,10 @@ describe('task readiness — planning digest boundary (0788 EVIDENCE)', () => {
         expect(computePlanningDigest(taskDoc({ requirements: 'Changed requirements.' }))).not.toBe(base);
     });
 
-    test('dependency sets are order-insensitive; membership changes move the digest', () => {
+    test('dependency frontmatter changes do not move the digest (task 0875)', () => {
         const base = computePlanningDigest(taskDoc({ dependencies: ['0001', '0003'] }));
         expect(computePlanningDigest(taskDoc({ dependencies: ['0003', '0001'] }))).toBe(base);
-        expect(computePlanningDigest(taskDoc({ dependencies: ['0001', '0003', '0004'] }))).not.toBe(base);
+        expect(computePlanningDigest(taskDoc({ dependencies: ['0001', '0003', '0004'] }))).toBe(base);
     });
 
     test('digest sections exclude exactly the execution-owned set', () => {

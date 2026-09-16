@@ -82,8 +82,12 @@ The planning owner applies the existing ready-refinement checklist and writes th
 ```
 
 Checklist IDs: `requirements`, `design`, `plan`, `ac`, `decisions`, `dependencies`, `premises`.
-`planningDigest` is SHA-256 over allowed planning sections plus feature, template and dependency
-metadata, excluding timestamps and execution-owned sections. Handoff requires the current run,
+`planningDigest` is SHA-256 over allowed planning sections plus feature and template,
+excluding timestamps and execution-owned sections. Dependency frontmatter is deliberately **not**
+bound: `handoff-finalize` applies `spur task deps` after `ready-prepare` binds the digest and
+before it verifies it, so binding dependencies would make the pipeline invalidate its own
+preparation evidence (task 0875). Dependency drift stays checked by the ready-checklist
+`dependencies` row and `spur task check`. Handoff requires the current run,
 matching WBS set and digests, seven successful checks with nonempty evidence, and valid task checks.
 The artifact records the planning owner's semantic assessment; its structure is not itself proof
 that the design is correct.

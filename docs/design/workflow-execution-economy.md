@@ -166,4 +166,8 @@ task stale, because pass one wrote the dependencies pass two's digest now includ
 
 Fix is an ordering or scoping choice — apply dependencies before the digest is taken, or exclude
 `dependencies` from the planning digest — not a readiness question. Carried as task **0875**
-(scenario R15), added to this feature after the original batch was approved.
+(scenario R15), added to this feature after the original batch was approved. Resolved by **unbinding
+`dependencies` from the planning digest** (`packages/app/src/services/task-readiness.ts`,
+`computePlanningDigest`) — the smaller of the two options: it needs no new ordering state, keeps the
+ready-checklist `dependencies` row as the drift check, and makes `handoff-finalize` idempotent as a
+consequence rather than a second fix.

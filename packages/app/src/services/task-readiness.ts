@@ -388,7 +388,12 @@ export const PLANNING_DIGEST_SECTIONS: readonly string[] = TASK_CANONICAL_SECTIO
 
 /**
  * SHA-256 digest binding the actual allowed planning-section content plus
- * feature/template/dependencies of one task document (EVIDENCE/HANDOFF).
+ * feature/template of one task document (EVIDENCE/HANDOFF). Dependency
+ * frontmatter is deliberately unbound: `handoff-finalize` applies `spur task
+ * deps` after `ready-prepare` binds the digest and before it verifies it, so
+ * binding dependencies would make the pipeline invalidate its own preparation
+ * evidence and break idempotence (task 0875). Dependency drift stays checked
+ * by the ready-checklist `dependencies` row and `spur task check`.
  * Excludes created_at/updated_at and execution-owned sections, so preparation
  * evidence stays valid while execution records accumulate.
  */
@@ -402,7 +407,6 @@ export function computePlanningDigest(raw: string): string {
         }),
         featureId: typeof fm.feature_id === 'string' ? fm.feature_id : null,
         template: typeof fm.template === 'string' ? fm.template : null,
-        dependencies: Array.isArray(fm.dependencies) ? [...fm.dependencies].map(String).sort() : null,
     };
     return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }

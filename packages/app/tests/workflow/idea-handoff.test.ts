@@ -207,6 +207,79 @@ describe('finalizeIdeaHandoff', () => {
         ]);
     });
 
+    // ── task 0875: deps applied between binding and verification must not stale ──
+    test('deps applied between binding and verification do not stale; a Requirements edit still does', async () => {
+        const runId = 'test-idea-run-deps-boundary';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        const batch = [{ name: 'Task A' }];
+        const result = { wbs: ['0601'] };
+        const order = [{ name: 'Task A' }];
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify(batch));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify(result));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify(order));
+
+        // The file as verification reads it AFTER handoff-finalize applied `spur task deps`.
+        const postDepsBody =
+            '---\nstatus: todo\nwbs: 0601\ndependencies: ["0600"]\n---\n\n### Background\n\nPrepared background.\n\n### Requirements\n\nRequirements body.\n\n### Acceptance Criteria\n\n- [ ] Scenario one.\n';
+        // The digest as ready-prepare bound it BEFORE deps were applied (same doc, no dependencies).
+        const preDepsBody =
+            '---\nstatus: todo\nwbs: 0601\n---\n\n### Background\n\nPrepared background.\n\n### Requirements\n\nRequirements body.\n\n### Acceptance Criteria\n\n- [ ] Scenario one.\n';
+        const taskPath = `${runDir}/${runId}-0601.md`;
+        await fs.writeFile(taskPath, postDepsBody);
+        await fs.writeFile(
+            `${runDir}/${runId}-idea-ready.json`,
+            JSON.stringify({
+                runId,
+                depth: 'ready',
+                tasks: [
+                    {
+                        wbs: '0601',
+                        status: 'ready',
+                        planningDigest: computePlanningDigest(preDepsBody),
+                        checks: READY_IDS.map((id) => ({ id, pass: true, evidence: `${id} verified` })),
+                    },
+                ],
+            }),
+        );
+
+        const res = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            processExecutor: evidenceAwareExecutor({ '0601': taskPath }),
+        });
+        expect(res.ok).toBe(true);
+        expect(res.nextCommand).toContain('/sp:dev-runall --feature D5');
+
+        // A genuine post-preparation Requirements edit still degrades to refine.
+        const editedBody = postDepsBody.replace('Requirements body.', 'Changed requirements after preparation.');
+        await fs.writeFile(taskPath, editedBody);
+        const res2 = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            processExecutor: evidenceAwareExecutor({ '0601': taskPath }),
+        });
+        expect(res2.ok).toBe(true);
+        expect(res2.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        const report2 = await fs.readFile(res2.reportPath);
+        expect(report2).toContain('planning digest stale');
+
+        await cleanupRun(
+            runId,
+            ['0601'],
+            [
+                `${runDir}/${runId}-idea-task-batch.json`,
+                `${runDir}/${runId}-idea-batch-create-result.json`,
+                `${runDir}/${runId}-idea-task-order.json`,
+                res.reportPath,
+                res2.reportPath,
+            ],
+        );
+    });
+
     test('handles batch mismatch and duplicate names gracefully', async () => {
         const runId = 'test-idea-run-err';
         const featureId = 'D5';
