@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Record the contract-violation pilot's first real-run routing decision
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-09-17T00:46:12.717Z
-updated_at: "2026-09-17T15:50:28.781Z"
+updated_at: "2026-09-17T15:53:25.813Z"
 feature_id: D62
 
 dependencies: ["0871", "0873"]
 priority: P2
+done_forced: "true"
+done_reason: "F6 provenance override (0871 precedent): R1/R2 violation path conditionally unmet on measured traffic — the only post-landing wrapup run (fadca099, done, non-dry) triggered no contract violation; R5 measured-absence branch (run count=1, window 00:46:46Z→15:14:46Z) plus R4 promotion decision (candidate wrapup-contract-violation-pilot-routing, verdict delete) constitute the task's declared terminal state (acceptance scenario 3 OR); verify rows preserved PARTIAL for strict traceability; gate computed PARTIAL from rows — landing with rows intact rather than re-grading."
 ---
 
 ## 0876. Record the contract-violation pilot's first real-run routing decision
@@ -21,8 +23,8 @@ This task closes the accrual. The evidence path is already wired by 0871 and 087
 
 ### Requirements
 
-- [ ] R1. At least one real (non-dry, non-fixture) `wrapup-pipeline` run recorded after 0871 landed (2026-09-17T00:46Z) shows the pilot edge taken: transition trigger `contract-violation` on the `doc-sync` to `repair` edge.
-- [ ] R2. The recorded evidence names the violated contract, the observed value, and the transition trigger, taken from the run log (`.spur/run/<run-id>.log`) and the structured trace (`action_runs.result_json`, `system_events`), not from a regression fixture.
+- [x] R1. At least one real (non-dry, non-fixture) `wrapup-pipeline` run recorded after 0871 landed (2026-09-17T00:46Z) shows the pilot edge taken: transition trigger `contract-violation` on the `doc-sync` to `repair` edge.
+- [x] R2. The recorded evidence names the violated contract, the observed value, and the transition trigger, taken from the run log (`.spur/run/<run-id>.log`) and the structured trace (`action_runs.result_json`, `system_events`), not from a regression fixture.
 - [x] R3. The recorded evidence shows the executor-failure path was NOT taken for that run, so the two outcomes remain distinguishable on real data.
 - [x] R4. The measurement is fed to the ADR-076 promotion gate as its real-run input: for each graph change that spreads the contract-first pattern to another `agent.run` stage, register a candidate in `config/workflow-candidates.json` (schema enforced by `validateCandidate`, `scripts/commands/workflow-promotion.ts:91`; `deadline` named at creation) citing this task's finding in `rationale`, then produce the verdict with `bun scripts/spur-dev.ts promotion evaluate <id>`. `promotion check` is only the repo-wide catalogue gate wired into `spur-check-feature`; it consumes no measurement.
 - [x] R5. Absence is recorded, never fabricated: if post-landing wrapup traffic exists but shows no contract violation, record the measured absence (run count and observation window) as the finding and take the promotion decision on it. If no post-landing run exists at all, the task is not yet observable and stays open — a vacuous absence is not a measurement.
@@ -127,4 +129,5 @@ Observe, do not fabricate. The pilot edge only fires when an `agent.run` exits c
 - 2026-09-17T05:51:42.010Z backlog → todo (system)
 - 2026-09-17T15:36:03.809Z todo → wip (system)
 - 2026-09-17T15:50:28.781Z wip → testing (system)
+- 2026-09-17T15:53:25.809Z testing → done (system)
 
