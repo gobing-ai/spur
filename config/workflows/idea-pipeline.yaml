@@ -244,9 +244,9 @@ states:
             S=plugins/sp/scripts/idea-coverage-check.ts &&
             if [ ! -f "$S" ]; then S="$(superskill script path sp idea-coverage-check.ts 2>/dev/null)"; fi &&
             if [ -n "$S" ] && [ -f "$S" ]; then
-              bun "$S" --run-id "$__runId" --report ".spur/run/$__runId-idea-eval-report.md" --ac ".spur/run/$__runId-idea-ac-content.md";
+              bun "$S" --run-id "$__runId" --report ".spur/run/$__runId-idea-eval-report.md" --ac ".spur/run/$__runId-idea-ac-content.md" || printf 'FAIL run=%s checker exited nonzero (bun missing or checker crash)\n' "$__runId" > ".spur/run/$__runId-idea-coverage.reason";
             else
-              echo "idea-coverage-check failed closed — checker not found — run 'superskill install sp'" >&2;
+              printf 'FAIL run=%s checker not found — run superskill install sp\n' "$__runId" | tee ".spur/run/$__runId-idea-coverage.reason" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-idea-coverage.status";
             fi
 
@@ -270,7 +270,7 @@ states:
     onEnter:
       - kind: hitl.confirm
         options:
-          prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Requirement coverage status: $(cat .spur/run/${vars.__runId}-idea-coverage.status 2>/dev/null || echo unknown) (.spur/run/${vars.__runId}-idea-coverage.status). (Failures route back to ac-generate for revision, capped at 3 retries.)"
+          prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Requirement coverage status: $(cat .spur/run/${vars.__runId}-idea-coverage.status 2>/dev/null || echo unknown) — reason: $(cat .spur/run/${vars.__runId}-idea-coverage.reason 2>/dev/null || echo n/a) (.spur/run/${vars.__runId}-idea-coverage.status[.reason]). (Failures route back to ac-generate for revision, capped at 3 retries.)"
 
   - id: system-design
     description: >

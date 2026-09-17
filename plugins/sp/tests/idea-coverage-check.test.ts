@@ -16,7 +16,11 @@ function run(dir: string, report: string, ac: string) {
         [SCRIPT, '--run-id', 'run-0887', '--report', reportPath, '--ac', acPath, '--out', join(dir, 'coverage.status')],
         { stdio: 'pipe' },
     ).toString();
-    return { status: readFileSync(join(dir, 'coverage.status'), 'utf8'), stdout };
+    return {
+        status: readFileSync(join(dir, 'coverage.status'), 'utf8'),
+        reason: readFileSync(join(dir, 'coverage.status.reason'), 'utf8'),
+        stdout,
+    };
 }
 
 const REPORT = [
@@ -49,8 +53,10 @@ const AC_FULL = [
 test('all non-deferred inventory items covered → PASS', () => {
     const dir = mkdtempSync(join(tmpdir(), 'idea-coverage-'));
     try {
-        const { status, stdout } = run(dir, REPORT, AC_FULL);
+        const { status, reason, stdout } = run(dir, REPORT, AC_FULL);
         expect(status).toBe('PASS\n');
+        expect(reason).toContain('PASS run=run-0887');
+        expect(reason).toContain('all covered');
         expect(stdout).toContain('idea-coverage-check PASS run=run-0887');
         expect(stdout).toContain('deferred=1');
     } finally {
@@ -62,8 +68,10 @@ test('an uncovered owing item → FAIL and names it; the deferred item stays exe
     const dir = mkdtempSync(join(tmpdir(), 'idea-coverage-'));
     try {
         const ac = AC_FULL.replace('    # covers: I1\n', '');
-        const { status, stdout } = run(dir, REPORT, ac);
+        const { status, reason, stdout } = run(dir, REPORT, ac);
         expect(status).toBe('FAIL\n');
+        expect(reason).toContain('FAIL run=run-0887');
+        expect(reason).toContain('uncovered=I1');
         expect(stdout).toContain('uncovered=I1');
         // The deferred item alone never fails the gate.
         expect(stdout).not.toContain('uncovered=I3');
@@ -115,6 +123,7 @@ test('absent input files fail closed rather than crashing', () => {
             { stdio: 'pipe' },
         ).toString();
         expect(readFileSync(outPath, 'utf8')).toBe('FAIL\n');
+        expect(readFileSync(`${outPath}.reason`, 'utf8')).toContain('missing input');
         expect(stdout).toContain('missing input');
     } finally {
         rmSync(dir, { recursive: true, force: true });

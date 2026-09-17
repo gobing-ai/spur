@@ -123,19 +123,21 @@ function parseCoverage(ac: string): Map<string, number> {
     return covered;
 }
 
-function writeStatus(outPath: string, verdict: 'PASS' | 'FAIL'): void {
+function writeStatus(outPath: string, verdict: 'PASS' | 'FAIL', runId: string, detail: string): void {
     mkdirSync(dirname(outPath), { recursive: true });
     writeFileSync(outPath, `${verdict}\n`);
+    // Sibling reason file: the feature-check HITL prompt surfaces WHY next to the bare
+    // status letter, without guards having to parse a multi-line status file.
+    writeFileSync(`${outPath}.reason`, `${verdict} run=${runId} ${detail}\n`);
 }
 
 function main(): void {
     const args = parseArgs(process.argv.slice(2));
 
     if (!existsSync(args.reportPath) || !existsSync(args.acPath)) {
-        writeStatus(args.outPath, 'FAIL');
-        process.stdout.write(
-            `idea-coverage-check FAIL run=${args.runId} missing input (report=${existsSync(args.reportPath) ? 'ok' : 'absent'}, ac=${existsSync(args.acPath) ? 'ok' : 'absent'})\n`,
-        );
+        const detail = `missing input (report=${existsSync(args.reportPath) ? 'ok' : 'absent'}, ac=${existsSync(args.acPath) ? 'ok' : 'absent'})`;
+        writeStatus(args.outPath, 'FAIL', args.runId, detail);
+        process.stdout.write(`idea-coverage-check FAIL run=${args.runId} ${detail}\n`);
         return;
     }
 
@@ -143,28 +145,24 @@ function main(): void {
     const covered = parseCoverage(readFileSync(args.acPath, 'utf8'));
 
     if (!inventory.hasSection || inventory.owing.size + inventory.deferred.size === 0) {
-        writeStatus(args.outPath, 'FAIL');
-        process.stdout.write(
-            `idea-coverage-check FAIL run=${args.runId} no Requirement inventory items in ${args.reportPath}\n`,
-        );
+        const detail = `no Requirement inventory items in ${args.reportPath}`;
+        writeStatus(args.outPath, 'FAIL', args.runId, detail);
+        process.stdout.write(`idea-coverage-check FAIL run=${args.runId} ${detail}\n`);
         return;
     }
 
     const uncovered = [...inventory.owing].filter((id) => (covered.get(id) ?? 0) === 0).sort();
+    const shape = `inventory=${inventory.owing.size + inventory.deferred.size} (deferred=${inventory.deferred.size})`;
     if (uncovered.length > 0) {
-        writeStatus(args.outPath, 'FAIL');
-        process.stdout.write(
-            `idea-coverage-check FAIL run=${args.runId} inventory=${inventory.owing.size + inventory.deferred.size}` +
-                ` (deferred=${inventory.deferred.size}) covered=${inventory.owing.size - uncovered.length} uncovered=${uncovered.join(',')}\n`,
-        );
+        const detail = `${shape} covered=${inventory.owing.size - uncovered.length} uncovered=${uncovered.join(',')}`;
+        writeStatus(args.outPath, 'FAIL', args.runId, detail);
+        process.stdout.write(`idea-coverage-check FAIL run=${args.runId} ${detail}\n`);
         return;
     }
 
-    writeStatus(args.outPath, 'PASS');
-    process.stdout.write(
-        `idea-coverage-check PASS run=${args.runId} inventory=${inventory.owing.size + inventory.deferred.size}` +
-            ` (deferred=${inventory.deferred.size}) all covered\n`,
-    );
+    const detail = `${shape} all covered`;
+    writeStatus(args.outPath, 'PASS', args.runId, detail);
+    process.stdout.write(`idea-coverage-check PASS run=${args.runId} ${detail}\n`);
 }
 
 main();
