@@ -1,4 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
     type HitlResponder,
     MemoryWorkflowPersistenceAdapter,
@@ -58,6 +61,39 @@ describe('registerSpurBuiltins', () => {
         expect(host.actionOrigin('file.read')).toBe('builtin');
         expect(host.actionOrigin('file.read.into-var')).toBe('builtin');
         expect(host.actionOrigin('http.request')).toBe('builtin');
+    });
+
+    test('registers the contract-violation guard with origin builtin (0871)', async () => {
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+        });
+
+        expect(host.guardOrigin('contract-violation')).toBe('builtin');
+        expect(host.listGuards()).toContain('contract-violation');
+        expect(host.hasGuard('contract-violation')).toBe(true);
+
+        // The guard is discriminator-only: a named contract violation passes, an
+        // executor failure (ok:false, no discriminator) does not.
+        const ctx = { runId: 'r1', current: 'doc-sync', vars: {} } as const;
+        expect(
+            await host.evaluateGuard(
+                'contract-violation',
+                {},
+                {
+                    ...ctx,
+                    lastActionResult: {
+                        ok: false,
+                        data: { outcome: 'contract-violation', contract: 'expectFile', observed: 'empty' },
+                    },
+                },
+            ),
+        ).toBe(true);
+        expect(await host.evaluateGuard('contract-violation', {}, { ...ctx, lastActionResult: { ok: false } })).toBe(
+            false,
+        );
     });
 
     test('agent.run resolves through host.runAction', async () => {
@@ -384,5 +420,80 @@ describe('registerSpurBuiltins', () => {
 
         expect(result.status).toBe('done');
         expect(resolvedInLaterStep).toBe('ship it');
+    });
+
+    test('0871 R1/R2: a contract-violation agent.run result routes to the repair edge, not a re-dispatch', async () => {
+        // A clean agent exit with an empty answer violates the declared answerFile
+        // post-condition (task 0870) — ok:false with data.outcome: 'contract-violation'.
+        // `onError: continue` lets the transition guards read that result instead of
+        // halting, and the contract-violation guard routes to `repair` first (ADR-118).
+        const persistence = new MemoryWorkflowPersistenceAdapter();
+        const host = new WorkflowEngineHost();
+        registerSpurBuiltins(host, {
+            agentService: { runTraced: async () => ({ exitCode: 0, stdout: '' }) } as unknown as AgentService,
+            ruleService: { evaluate: async () => ({ exitCode: 0, findings: [] }) } as unknown as RuleService,
+            hitlResponder: { respond: async () => ({ value: 'yes' }) } as unknown as HitlResponder,
+        });
+
+        let repairArrived = false;
+        host.registerAction(
+            {
+                kind: 'repair.marker',
+                async execute() {
+                    repairArrived = true;
+                    return { ok: true };
+                },
+            },
+            'extension',
+        );
+
+        // Isolate the declared answerFile outside the repo so the empty-answer write
+        // the action performs before naming the violation never pollutes the tree.
+        const scratch = mkdtempSync(join(tmpdir(), 'contract-route-e2e-'));
+        try {
+            const result = await new StateMachineDriver({ host, persistence }).run(
+                {
+                    name: 'contract-route-e2e',
+                    initialState: 'doc-sync',
+                    terminalStates: ['metrics-record'],
+                    states: [
+                        {
+                            id: 'doc-sync',
+                            onEnter: [
+                                {
+                                    kind: 'agent.run',
+                                    onError: 'continue',
+                                    options: {
+                                        role: 'coder',
+                                        input: '/probe',
+                                        answerFile: join(scratch, 'answer.md'),
+                                    },
+                                },
+                            ],
+                        },
+                        { id: 'repair', onEnter: [{ kind: 'repair.marker' }] },
+                        { id: 'metrics-record' },
+                    ],
+                    transitions: [
+                        { from: 'doc-sync', to: 'repair', guard: { kind: 'contract-violation' } },
+                        { from: 'doc-sync', to: 'metrics-record', guard: { kind: 'action-ok' } },
+                        { from: 'repair', to: 'metrics-record' },
+                    ],
+                },
+                { runId: 'contract-route-e2e-1' },
+            );
+            await Promise.resolve();
+
+            expect(result.status).toBe('done');
+            expect(result.finalState).toBe('metrics-record');
+            expect(repairArrived).toBe(true);
+            // The action trace records the named contract violation, not a bare executor failure.
+            const traceJson = persistence.actionRuns[0]?.resultJson ?? '';
+            expect(traceJson).toContain('contract-violation');
+            expect(traceJson).toContain('answerFile');
+            expect(traceJson).toContain('empty');
+        } finally {
+            rmSync(scratch, { recursive: true, force: true });
+        }
     });
 });

@@ -32,6 +32,7 @@ const WRAPUP_STEPS = join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'wrapup-steps.t
 
 interface ShellAction {
     kind: string;
+    onError?: string;
     options?: { command?: string };
 }
 
@@ -44,6 +45,7 @@ interface StateDef {
 interface TransitionDef {
     from: string;
     to: string;
+    trigger?: string;
     guard?: { kind: string; options?: Record<string, unknown> };
 }
 
@@ -96,7 +98,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     const def = loadDef('wrapup-pipeline');
 
     test('identity: the definition carries an explicit version tag', () => {
-        expect(def.version).toBe('3');
+        expect(def.version).toBe('4');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -121,13 +123,13 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '3'
-        // since 0783 redefined its consumers and 0784 removed its pseudo-checkpoint writer.
+        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '4'
+        // since 0871 added the contract-violation repair edge (ADR-118 pilot).
         // (feature-dev was pinned '3' until task 0866 retired the definition.)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '1',
-            'wrapup-pipeline': '3',
+            'wrapup-pipeline': '4',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -391,6 +393,67 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         expect(raw).not.toContain('never hard-fails');
         expect(raw).not.toContain('Genuinely soft');
         expect(raw).toContain('cannot convert a failed sync into');
+    });
+
+    describe('0871 contract-first routing (ADR-118 pilot)', () => {
+        test('doc-sync declares onError: continue so transition guards read the agent result', () => {
+            const state = def.states.find((s) => s.id === 'doc-sync');
+            const agent = state?.onEnter?.find((a) => a.kind === 'agent.run');
+            expect(agent?.onError).toBe('continue');
+            expect((state?.onEnter ?? []).map((a) => a.kind)).toEqual(['agent.run']);
+        });
+
+        test('doc-sync routes contract violation → repair, success → learnings-append, failure → failed', () => {
+            const edges = def.transitions.filter((t: TransitionDef) => t.from === 'doc-sync');
+            // Declaration order is load-bearing: the discriminating contract-violation
+            // edge is tried first, then action-ok success, then the always defense.
+            expect(edges.map((e) => [e.to, e.guard?.kind, e.trigger ?? null])).toEqual([
+                ['repair', 'contract-violation', 'contract-violation'],
+                ['learnings-append', 'action-ok', null],
+                ['failed', 'always', 'executor-failure'],
+            ]);
+        });
+
+        test('repair is cheap (shell only) and never re-dispatches the agent', () => {
+            const state = def.states.find((s) => s.id === 'repair');
+            const kinds = (state?.onEnter ?? []).map((a) => a.kind);
+            expect(kinds).toEqual(['shell']);
+            const cmd = String(state?.onEnter?.[0]?.options?.command ?? '');
+            expect(cmd).toContain('wrapup-repair.status');
+            expect(cmd).toContain('skipped re-dispatch');
+            expect(cmd).not.toContain('wrapup-steps');
+            // The repair path never re-enters doc-sync: it flows straight to metrics-record.
+            expect(def.transitions.filter((t: TransitionDef) => t.from === 'repair').map((e) => e.to)).toEqual([
+                'metrics-record',
+            ]);
+        });
+
+        test('learnings-append holds the soft append shell and flows to metrics-record', () => {
+            const state = def.states.find((s) => s.id === 'learnings-append');
+            const cmd = String(state?.onEnter?.[0]?.options?.command ?? '');
+            expect(cmd).toContain('.spur/memory/learnings.md');
+            expect(
+                def.transitions.filter((t: TransitionDef) => t.from === 'learnings-append').map((e) => e.to),
+            ).toEqual(['metrics-record']);
+        });
+
+        test('R4: only wrapup-pipeline declares the contract-violation edge (opt-in)', () => {
+            const others = [
+                'task-lifecycle',
+                'feature-lifecycle',
+                'feature-verification',
+                'idea-pipeline',
+                'task-pipeline',
+                'pr-review',
+                'wayfinder-resolution',
+                'history-anatomy',
+            ];
+            for (const name of others) {
+                const other = loadDef(name);
+                const uses = other.transitions.some((t: TransitionDef) => t.guard?.kind === 'contract-violation');
+                expect(uses, `${name} must not declare a contract-violation edge`).toBe(false);
+            }
+        });
     });
 
     test('every terminal state is reachable (closed table still holds with failed)', () => {

@@ -13,10 +13,12 @@
 # pauses,
 # even under --auto (Iron Law #6: irreversible action -> surface to human).
 #
-# Shape: start -> task-resolve -> doc-sync -> metrics-record
+# Shape: start -> task-resolve -> doc-sync -> learnings-append -> metrics-record
 #          -> feature-transition (conditional: if vars.feature set)
 #          -> branch-cleanup (conditional: if vars.merge=true)
 #          -> done
+#        doc-sync routes a contract violation to `repair` (cheap, no
+#        re-dispatch — ADR-118 pilot) and an executor failure to `failed`;
 #        task-resolve with a VALIDATED empty list short-circuits to `skipped`;
 #        invalid wrap input, an unresolved/non-completed task, a failed metrics
 #        capture, a failed required sync, or a failed feature gate routes to
@@ -72,7 +74,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "3"
+version: "4"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -168,13 +170,16 @@ states:
       learnings (task 0607 R2: two adjacent agent.run hops merged, count 2 -> 1;
       no operator-decision pause or verdict boundary sits between them). No dedicated
       slash command yet — free-form skill pointer until a /sp:doc-evolve command
-      exists (ADR-043 residual). Capture+shell decoupling preserved: expectFile gates
-      a non-empty capture before the append; append is best-effort soft (empty capture
-      skips without aborting wrap-up).
+      exists (ADR-043 residual). This is the expensive stage; a contract violation
+      (a clean exit that missed its declared answerFile/expectFile post-condition)
+      routes to the cheap `repair` edge instead of a full re-dispatch (ADR-118
+      pilot, 0871) — `onError: continue` lets the transition guards read the
+      agent's result instead of halting the run.
     onEnter:
       # (warn) free-form prompt: no /sp:doc-evolve command surface yet (ADR-043
       # residual, 0607 R2 one-query merge); capture is bounded by expectFile.
       - kind: agent.run
+        onError: continue
         options:
           agent: ${vars.agent}
           input: >-
@@ -192,6 +197,13 @@ states:
           answerFile: .spur/run/${vars.__runId}-wrapup-learnings.md
           expectFile: .spur/run/${vars.__runId}-wrapup-learnings.md
           timeoutMs: ${vars.stepTimeoutMs}
+
+  - id: learnings-append
+    description: >
+      Best-effort soft append of the captured learnings to .spur/memory/learnings.md
+      (0607 R2): an empty capture skips without aborting wrap-up. Runs only after
+      doc-sync's contract held; a contract violation never reaches this state.
+    onEnter:
       # (warn) learnings append is intentionally soft (empty capture skips
       # without aborting wrap-up, 0607 R2).
       - kind: shell
@@ -205,6 +217,21 @@ states:
             else
               echo "wrapup: learning capture missing or empty at $PWD/$LEARNINGS_FILE - append skipped" >&2;
             fi &&
+            exit 0
+
+  - id: repair
+    description: >
+      Contract-violation repair (ADR-118 pilot, 0871): doc-sync's agent.run missed
+      its declared post-condition after a clean exit, so wrap-up does NOT re-dispatch
+      the expensive agent on this attempt. The miss is recorded to a run-scoped
+      repair status and wrap-up proceeds to metrics-record — the run log and action
+      trace already name the violated contract and the observed value.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            printf 'contract-violation: doc-sync learnings capture missed its declared contract — repair skipped re-dispatch (ADR-118 pilot)\n' > ".spur/run/$__runId-wrapup-repair.status" &&
             exit 0
 
   - id: metrics-record
@@ -354,10 +381,46 @@ transitions:
     guard:
       kind: always
 
-  # ── linear body: doc-sync -> metrics-record ──
+  # ── doc-sync: contract-first routing (ADR-118 pilot, 0871) ──
+  # Declaration order matters: the contract-violation edge is tried first, then
+  # success (action-ok), then the executor-failure defense (always) — a failed
+  # agent.run reaches these guards because doc-sync's agent.run declares
+  # onError: continue.
   - from: doc-sync
+    to: repair
+    description: >
+      Contract violation (ADR-118): the agent exited 0 but missed its declared
+      post-condition. Route to the cheap repair edge — never re-dispatch the
+      full agent.run on this attempt.
+    trigger: contract-violation
+    guard:
+      kind: contract-violation
+  - from: doc-sync
+    to: learnings-append
+    description: Doc drift repair + learning capture succeeded — append learnings.
+    guard:
+      kind: action-ok
+  - from: doc-sync
+    to: failed
+    description: >
+      Executor failure (non-zero exit, signal, or dispatch error) — keep the
+      existing fail semantics; a contract violation never falls through here
+      because the contract-violation edge is declared first.
+    trigger: executor-failure
+    guard:
+      kind: always
+
+  # ── linear body: learnings-append -> metrics-record ──
+  - from: learnings-append
     to: metrics-record
-    description: Doc drift repair + learning capture complete — record metrics.
+    description: Learning capture appended (or soft-skipped) — record metrics.
+    guard:
+      kind: always
+
+  # ── repair: cheap path, no re-dispatch -> metrics-record ──
+  - from: repair
+    to: metrics-record
+    description: Contract-violation repair recorded — proceed to metrics without re-dispatch.
     guard:
       kind: always
 

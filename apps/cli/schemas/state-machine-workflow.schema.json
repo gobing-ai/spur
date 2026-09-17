@@ -161,6 +161,11 @@
                 "options": {
                     "type": "object",
                     "additionalProperties": true
+                },
+                "onError": {
+                    "type": "string",
+                    "enum": ["fail", "continue"],
+                    "description": "Per-action error handling policy: 'fail' halts the run; 'continue' logs the failure and proceeds so transition guards can route the outcome."
                 }
             }
         },

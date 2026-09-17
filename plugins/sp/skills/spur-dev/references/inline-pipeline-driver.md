@@ -25,7 +25,11 @@ implements it; remove the entry when the corresponding kind is dropped from the 
 
 **Actions:** `shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate`
 
-**Guards (transitions):** `always` · `shell`
+**Guards (transitions):** `always` · `shell` · `action-ok` · `contract-violation`
+
+- `action-ok` — pass iff the prior action on this state/node succeeded (engine builtin).
+- `contract-violation` — pass iff the prior `agent.run` result is a named contract violation
+  (`data.outcome === 'contract-violation'`, ADR-118); the report carries `contract` and `observed`.
 
 ## What this driver is
 

@@ -43,7 +43,7 @@ const DOCUMENTED = {
         'run.artifact',
         'command.gate',
     ]),
-    guards: new Set(['always', 'shell']),
+    guards: new Set(['always', 'shell', 'action-ok', 'contract-violation']),
 } as const;
 
 /** Directory of workflow definitions the driver is responsible for. */

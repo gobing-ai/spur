@@ -23,6 +23,7 @@ import { ResponseValidateActionRunner, type ResponseValidateEngine } from './act
 import { RuleCheckActionRunner } from './actions/rule-check';
 import { RunArtifactActionRunner } from './actions/run-artifact';
 import { StreamingShellActionRunner } from './actions/shell';
+import { ContractViolationGuardRunner } from './guards/contract-violation';
 import { EnvShellGuardRunner } from './guards/shell';
 import type { WorkflowObservabilityBus } from './observability';
 import type { WorkflowSteeringController } from './steering';
@@ -70,6 +71,10 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
     // reference vars as `$NAME` instead of having values embedded in the command string
     // (task 0435; the guard-side counterpart to the action handoff in task 0432).
     host.registerGuard(new EnvShellGuardRunner(options.processExecutor ?? new NodeProcessExecutor()), 'builtin');
+    // Contract-violation guard (ADR-118, task 0871): routes the named third stage
+    // outcome to a distinct repair edge. Opt-in per definition — absent an edge
+    // the outcome keeps today's behaviour.
+    host.registerGuard(new ContractViolationGuardRunner(), 'builtin');
     host.registerAction(new RuleCheckActionRunner(options.ruleService), 'builtin');
     host.registerAction(new FileExistsActionRunner(fileSystem), 'builtin');
     host.registerAction(new FileReadActionRunner(fileSystem), 'builtin');
