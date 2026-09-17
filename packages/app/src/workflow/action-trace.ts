@@ -134,11 +134,16 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
             // its failure record (review finding #3) instead of falling back to `runId: ''`.
             const syntheticId = `${UNPERSISTED_PREFIX}${crypto.randomUUID()}`;
             this.boundaries.set(syntheticId, { runId, node, kind });
+            this.lastStart = { runId, node, kind };
             return syntheticId;
         }
         this.boundaries.set(outcome.value, { runId, node, kind });
+        this.lastStart = { runId, node, kind };
         return outcome.value;
     }
+
+    /** Last started action identity — attribution fallback when the boundary map misses (0868 #2). */
+    private lastStart?: { runId: string; node?: string; kind?: string };
 
     /** Best-effort variant of the engine's `saveActionFinalize`. */
     async saveActionFinalize(
@@ -151,7 +156,10 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
         redactor?: ActionRedactor,
     ): Promise<void> {
         const boundary = this.boundaries.get(actionId);
-        await this.guard('action.finish', { runId: boundary?.runId ?? '', node: boundary?.node, kind }, () =>
+        // 0868 finding #2: an unobserved finalize (boundary already gone) keeps its run-id
+        // attribution via the remembered last-start identity instead of degrading to ''.
+        const origin = boundary ?? this.lastStart;
+        await this.guard('action.finish', { runId: origin?.runId ?? '', node: origin?.node, kind }, () =>
             this.inner.saveActionFinalize(actionId, status, durationMs, ok, kind, result, redactor),
         );
         this.boundaries.delete(actionId);
@@ -327,7 +335,7 @@ export function createRunLogTraceFailureRecorder(cwd: string): ActionTraceFailur
         ]
             .filter((part) => part !== '')
             .join(' ');
-        const line = `[${failure.at}] trace-emission-failed operation=${failure.operation} run=${failure.runId}${location === '' ? '' : ` ${location}`}: ${failure.error}\n`;
+        const line = `[${failure.at.replace(/\.\d{3}Z$/, 'Z')}] trace-emission-failed operation=${failure.operation} run=${failure.runId}${location === '' ? '' : ` ${location}`}: ${failure.error}\n`;
         void (async () => {
             await fileSystem.ensureDir(dir);
             await fileSystem.appendFile(join(dir, `${safeRunId}.log`), line);

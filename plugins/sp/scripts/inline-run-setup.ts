@@ -31,7 +31,7 @@
  *   bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]
  *   bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]
  *   bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> \
- *       --status <done|failed|running|paused> --ok <true|false> --duration-ms <n> [--spur-bin <path>]
+ *       --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]
  *   bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--spur-bin <path>]
  *
  * The `--fingerprint` mode prints the engine's proof-input digest for the given spec files and
@@ -78,7 +78,7 @@ function usage(): never {
     );
     console.error(
         '       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> ' +
-            '--status <done|failed|running|paused> --ok <true|false> --duration-ms <n> [--spur-bin <path>]',
+            '--status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]',
     );
     console.error(
         '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--spur-bin <path>]',
@@ -200,10 +200,12 @@ async function printFingerprint(taskFile: string, featureFile: string, spurBin: 
 /** Terminal statuses the inline driver may declare when closing its run row. */
 const CLOSE_STATUSES = new Set(['done', 'failed', 'paused']);
 
-/** Action-row statuses the engine's `action_runs.status` column accepts. */
-const ACTION_STATUSES = new Set(['running', 'done', 'failed', 'paused']);
+/** Finalize statuses — a finish emission is terminal, so only done|failed are valid (0868 #4). */
+const ACTION_STATUSES = new Set(['done', 'failed']);
 
 /** Input for the ADR-117 emission modes (`--action` / `--close`). */
+import type { WorkflowActionTraceWriter } from '@gobing-ai/app';
+
 interface TraceModeInput {
     readonly runId: string;
     readonly close: boolean;
@@ -260,15 +262,15 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
         );
     }
 
+    // Compile-time link (0868 finding #5): the writer half is typed by the real packages/app
+    // export (type-only import, erased at runtime) so a signature drift breaks THIS file's
+    // typecheck instead of hiding behind the hand-declared cast.
     const app = (await import(entry)) as {
         openInlineRunProjectDb: (workdir: string) => Promise<{ adapter: unknown; close: () => void }>;
         createWorkflowActionTraceWriter: (
             db: unknown,
             recordFailure?: (failure: unknown) => void,
-        ) => {
-            recordAction: (boundary: Record<string, unknown>) => Promise<{ ok: boolean; actionId?: string }>;
-            closeRun: (runId: string, status: string) => Promise<{ ok: boolean }>;
-        };
+        ) => WorkflowActionTraceWriter;
     };
 
     let projectDb: { adapter: unknown; close: () => void } | undefined;
@@ -281,16 +283,24 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
                 `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? 'unknown error'}`,
             );
         });
-        const result = input.close
-            ? await writer.closeRun(input.runId, input.status)
-            : await writer.recordAction({
-                  runId: input.runId,
-                  node: input.node,
-                  kind: input.kind,
-                  status: input.status,
-                  ok: input.ok,
-                  durationMs: input.durationMs,
-              });
+        const result = (
+            input.close
+                ? await writer.closeRun(input.runId, input.status)
+                : await writer.recordAction({
+                      runId: input.runId,
+                      node: input.node,
+                      kind: input.kind,
+                      status: input.status,
+                      ok: input.ok,
+                      durationMs: input.durationMs,
+                  })
+        ) as Record<string, unknown>;
+        if (result.ok !== true && result.failure !== undefined) {
+            // One stdout shape for emission failures (0868 finding #1): flatten the guard's
+            // nested failure object to the same `{ok, runId, error}` the direct paths emit.
+            const failure = result.failure as { error?: string };
+            return fail(failure.error ?? 'unknown trace emission failure');
+        }
         process.stdout.write(`${JSON.stringify({ ...result, runId: input.runId })}\n`);
         return 0;
     } catch (error) {

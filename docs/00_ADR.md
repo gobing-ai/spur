@@ -1763,6 +1763,11 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   emission obligation changes).
 - **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §2.
 
+- **Amendment (2026-09-17, task 0879):** the `system_events` retention half of this decision is
+  **out of scope**: `action_runs` plus run-row closure already satisfy the decision's observability
+  intent, and no consumer reads `system_events` for the inline surface today. Revisit only when a
+  consumer exists.
+
 ## ADR-118: A Violated Stage Contract Is a Distinct Outcome From an Executor Failure
 
 - **Status:** Accepted · **Date:** 2026-09-16 · **Feature:** D62

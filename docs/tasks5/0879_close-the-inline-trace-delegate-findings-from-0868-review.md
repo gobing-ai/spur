@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Close the inline trace delegate findings from 0868 review
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.059Z
-updated_at: "2026-09-17T17:53:22.507Z"
+updated_at: "2026-09-17T17:59:52.134Z"
 feature_id: D62
 
 ---
@@ -44,15 +44,42 @@ Captured from the creation title: "Close the inline trace delegate findings from
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/workflow/action-trace.ts:137` |
+| `packages/app/src/workflow/action-trace.ts:141` |
+| `packages/app/src/workflow/action-trace.ts:145` |
+| `packages/app/src/workflow/action-trace.ts:159` |
+| `packages/app/src/workflow/action-trace.ts:338` |
+| `packages/app/src/workflow/progress-projection.ts:358` |
+| `packages/app/src/workflow/progress-projection.ts:408` |
+| `packages/app/src/workflow/progress-projection.ts:496` |
+| `plugins/sp/scripts/inline-run-setup.ts:203` |
+| `plugins/sp/scripts/inline-run-setup.ts:207` |
+| `plugins/sp/scripts/inline-run-setup.ts:265` |
+| `plugins/sp/scripts/inline-run-setup.ts:273` |
+| `plugins/sp/scripts/inline-run-setup.ts:286` |
+| `plugins/sp/scripts/inline-run-setup.ts:34` |
+| `plugins/sp/scripts/inline-run-setup.ts:81` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun test plugins/sp/tests/inline-run-trace.test.ts` — 6 pass, 0 fail.
+- `bun test packages/app` trace + projection suites — 23 pass, 0 fail.
+- `biome check` on the three changed files — clean.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
 
 ### References
 
@@ -62,4 +89,6 @@ Captured from the creation title: "Close the inline trace delegate findings from
 
 - 2026-09-17T17:50:01.362Z backlog → todo (system)
 - 2026-09-17T17:53:22.507Z todo → wip (system)
+- 2026-09-17T17:59:51.525Z wip → testing (system)
+- 2026-09-17T17:59:52.134Z testing → done (system)
 

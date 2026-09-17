@@ -355,6 +355,10 @@ export async function projectWorkflowProgress(
         actionsByNode[row.node] = group;
     }
 
+    // Rows that matched a declared onEnter/onExit action (0868 finding #7: orphan rows
+    // would otherwise silently vanish from the projection).
+    const matchedActionRowIds = new Set<string>();
+
     for (const { state: stateId, visit } of stateVisits) {
         const defState = defStates.find((s) => s.id === stateId);
         const onEnterActions = Array.isArray(defState?.onEnter) ? defState.onEnter : [];
@@ -401,6 +405,7 @@ export async function projectWorkflowProgress(
 
             // Find matching rows by node + kind
             const candidateRows = stateActionRows.filter((r) => r.kind === kind && !usedActionRowIds.has(r.id));
+            for (const r of candidateRows) matchedActionRowIds.add(r.id);
 
             let actionStatus: WorkflowActionProgress['status'] = 'pending';
             const attempts: WorkflowActionAttempt[] = [];
@@ -484,6 +489,16 @@ export async function projectWorkflowProgress(
                 to: tr.to,
                 trigger: tr.description ?? null,
                 eligibility,
+            });
+        }
+    }
+
+    // Surface rows no declared state action claimed — invisible-orphan failure mode (0868 #7).
+    for (const row of actionRows) {
+        if (!matchedActionRowIds.has(row.id)) {
+            diagnostics.push({
+                code: 'orphan-action-row',
+                message: `Action row ${row.id} (node ${row.node}, kind ${row.kind}) matches no declared state action`,
             });
         }
     }
