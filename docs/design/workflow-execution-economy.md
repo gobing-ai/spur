@@ -125,8 +125,8 @@ their reasons are in ADR-118.
 A per-task pipeline may not host a check that can fail for a reason the current task did not cause.
 The direct saving is ~55 s per task (≈9% of per-task wall clock); the load-bearing saving is the
 cross-scope model rework those failures trigger (`resolve-scope` 43%, `doc-sync` 35%, `verify` 21%).
-The feature-scoped pass is deliberately the slow one, run once against a settled tree, and a feature
-is not done until it passes.
+The feature-scoped pass is deliberately the slow one, run once per feature (invoked at
+`verifying` entry), and a feature is not done until it passes.
 
 ### 4.1 Per-check classification (task 0872)
 

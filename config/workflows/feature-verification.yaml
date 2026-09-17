@@ -3,10 +3,11 @@
 # Owns a lifecycle boundary no per-task graph owns: the repo-wide checks whose
 # invariant spans the repository rather than a single task's diff — corpus
 # consistency, contract baselines, dependency/schema drift, the frozen History
-# surface, and the repo-wide test set. They run once per feature against a
-# settled tree, deliberately the slow pass, and `feature-lifecycle`'s
-# verifying→done guard refuses to complete the feature until this pass records
-# PASS (ADR-119 consequence: a feature is not done until it passes).
+# surface, and the repo-wide test set. They run once per feature, deliberately
+# the slow pass; `feature-lifecycle`'s verifying entry invokes this workflow (task
+# 0880 caller wiring), and its verifying→done guard refuses to complete the
+# feature until this pass records PASS (ADR-119 consequence: a feature is not
+# done until it passes).
 #
 # Run: spur workflow run feature-verification.yaml --vars '{"featureId":"D62"}'
 #
@@ -22,7 +23,7 @@
 kind: state-machine
 name: feature-verification
 version: "1"
-description: "Feature-scoped verification pass (ADR-119): runs the repo-wide check set once per feature against a settled tree and records PASS/FAIL."
+description: "Feature-scoped verification pass (ADR-119): runs the repo-wide check set once per feature and records PASS/FAIL. Invoked by feature-lifecycle's verifying entry."
 iterationBound: 2
 initialState: verify
 terminalStates:

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Wire the feature verification caller into feature-lifecycle and drop the settled-tree precondition
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.462Z
-updated_at: "2026-09-17T17:50:01.646Z"
+updated_at: "2026-09-17T18:01:55.818Z"
 feature_id: D62
 
 ---
@@ -43,15 +43,28 @@ Captured from the creation title: "Wire the feature verification caller into fea
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/tests/feature-verification-scope.test.ts:98` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun test plugins/sp/tests/feature-verification-scope.test.ts` — 6 pass, 0 fail (incl. new R5 caller assertion).
+- `bun test packages/app/tests/workflow/feature-lifecycle-adapter.test.ts` — 9 pass, 0 fail.
+- `spur workflow validate` on both yamls — valid; yaml parse check clean.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
 
 ### References
 
@@ -60,4 +73,7 @@ Captured from the creation title: "Wire the feature verification caller into fea
 ### History
 
 - 2026-09-17T17:50:01.646Z backlog → todo (system)
+- 2026-09-17T18:00:02.206Z todo → wip (system)
+- 2026-09-17T18:01:55.132Z wip → testing (system)
+- 2026-09-17T18:01:55.818Z testing → done (system)
 

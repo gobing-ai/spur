@@ -37,6 +37,12 @@ states:
     description: >
       Feature verification work (DD-13). Makes verification derivable —
       listable, event-triggerable, assignable.
+    onEnter:
+      # Caller wiring (task 0880, ADR-119): entering verification RUNS the
+      # feature-scoped pass instead of only passively reading its status file.
+      - kind: shell
+        options:
+          command: '$spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\"}"'
   - id: blocked
     description: Impediment; work suspended.
   - id: done
