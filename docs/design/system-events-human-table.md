@@ -84,7 +84,7 @@ function humanStepLabel(data: Readonly<Record<string, unknown>> | null): string 
     // does not read kind or UUID-shaped node
 ```
 
-Operator pin: `workflow.action.start` / `workflow.action.started` with `workflowName=idea-pipeline` and a long `nodeLabel` must produce a Summary that contains neither `runId` nor `eventId`.
+Operator pin: `workflow.action.started` with `workflowName=idea-pipeline` and a long `nodeLabel` must produce a Summary that contains neither `runId` nor `eventId`.
 
 ## Table projector
 
@@ -181,7 +181,7 @@ Desktop columns become:
 
 ## Test pins
 
-- `workflow.action.start` / `started` with `workflowName=idea-pipeline` and a long `nodeLabel`: Summary matches the grammar; contains neither `runId` nor `eventId`.
+- `workflow.action.started` with `workflowName=idea-pipeline` and a long `nodeLabel`: Summary matches the grammar; contains neither `runId` nor `eventId`.
 - Correlation and Action strings contain no UUID and no `live-` token.
 - Action is not `spur workflow trace <runId>`. That command remains on `presentation.action` for the tooltip.
 - Agent from `routing.executor`, then `data.agent`, then `metadata.agent`, then executor-shaped row `actor`; empty for `workflow.node.enter` / `workflow.transition`.

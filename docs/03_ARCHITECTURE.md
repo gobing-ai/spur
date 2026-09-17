@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.47.0
+version: 1.48.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-14
+updated_at: 2026-09-16
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1023,3 +1023,27 @@ Lease renewal is finite even for execution without a deadline. Age-based recover
 explicitly unlimited jobs. Durable claim ownership remains an upstream persistence concern;
 the finite-deadline sweep is the recovery backstop while that contract is pending.
 Details: [execution deadlines](design/execution-deadlines.md).
+
+## 27. Workflow Execution Economy — built (ADR-117/118/119; ADR-076 amendment)
+
+Workflow stage economics, not graph shape, are the lever on machine time (`agent.run` is ~96% of
+workflow machine time). Four invariants now bind every execution surface:
+
+- **Trace parity (ADR-117).** The structured action trace — an `action_runs` row plus one
+  start/finish `system_events` pair per action boundary, each carrying the dispatching run id — is
+  owed by whichever surface executes the action: engine subprocess or inline host-session driver
+  alike. Emission is best-effort at the action boundary only; run-row closure still fails loudly.
+  The inline run log is a human convenience, not the record of truth. One action boundary keeps
+  exactly one start name and one finish name (`workflow.action.started`/`.finished`).
+- **Stage contracts (ADR-118).** A violated `agent.run` post-condition is a third stage outcome —
+  `contract-violation` — distinct from success and from executor failure, named in the trace and
+  run log, and routable to a dedicated repair edge that must not re-dispatch the full stage on its
+  first attempt (piloted on `wrapup-pipeline`).
+- **Gate scope (ADR-119).** Task-local checks stay in the per-task pipeline; repo-wide checks
+  (corpus consistency, traceability, contract baselines, doc sync, catalogue-level rule sweeps)
+  run once per feature in the feature-scoped verification pass (`bun run spur-check-feature`). A
+  per-task pipeline may not host a check that can fail for a reason the current task did not cause.
+- **Promotion gate (ADR-076 amendment).** A candidate graph change is shadow-run against recorded
+  real-run inputs and promoted or deleted by a named deadline; no standing second YAML.
+
+Details: [workflow execution economy](design/workflow-execution-economy.md).

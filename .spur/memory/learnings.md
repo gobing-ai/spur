@@ -1804,3 +1804,52 @@ Wrapup doc-evolve repairs (this run, 2026-09-14)
   (`<runtime> <mainModule>` form of `spurBin`, i.e. `bun <tree>/apps/cli/src/index.ts`), which also
   gives the `__definitionDigest` that the record-time proof block must match.
 
+Wrapup complete.
+
+**Drift repairs applied** (skill `sp:doc-evolve`, §7.2 auto-repair; docs only — no corpus writes):
+
+| File | Repair |
+| --- | --- |
+| `docs/00_ADR.md` | frontmatter `1.45.0/2026-09-14` → `1.46.0/2026-09-16` (ADR-117/118/119 content landed without bump) |
+| `docs/03_ARCHITECTURE.md` | NEW §27 "Workflow Execution Economy" (compact, §6.4 style: trace parity, stage contracts, gate scope, promotion gate) + `1.47.0` → `1.48.0` |
+| `docs/04_DESIGN.md` | frontmatter `1.75.0/2026-09-14` → `1.76.0/2026-09-16` (content already synced) |
+| `docs/design/event-tracking.md` | §4 matrix 74/74 → 75/75; added row 75 `workflow.agent.contract-violation` (0870) |
+| `docs/design/system-events-human-table.md` | dropped retired `workflow.action.start` from operator + test pins (0869 alias collapse) |
+
+Verified: links resolve, `00:1750` alias mention is ADR-117 decision history (preserved), no residual stale counts. `docs/design/workflow-execution-economy.md` was already current. Artifact written to `.spur/run/27010e57-a163-4258-a4b8-cc7825714cd2-wrapup-learnings.md`.
+
+# Workflow Execution Economy — batch learnings (feature D62, tasks 0866–0875)
+
+Date: 2026-09-16 (all tasks done; commits bc8e52739..de8a43dbe)
+
+## Cross-cutting conventions
+
+- Workflow stage economics, not graph shape, drive machine time: `agent.run` is ~96% of workflow machine time. Every change in the batch was judged by its effect on `agent.run` count/duration, not node count.
+- One action boundary keeps exactly one start name and one finish name. Alias pairs (`workflow.action.start`/`.done`) were retired in favor of the verb-form names existing consumers already read (`workflow.action.started`/`.finished`); retired matrix rows stay as strikethrough audit trail.
+- The trace is the record of truth; run logs are a human convenience. A structured action trace (`action_runs` row + start/finish `system_events` pair) is owed by whichever surface executes the action — engine subprocess or inline host-session driver alike (trace parity).
+- Doc comments in source are contract records: when a digest deliberately excludes a field or a command narrows scope, the WHY lives in the adjacent doc comment (`packages/app/src/services/task-readiness.ts:389`, `scripts/commands/*`) and in the owning design satellite, same commit.
+- Census guards track definition counts: `plugins/sp/tests/inline-pipeline-parity-check.test.ts` went 11→8 after 0866 retirements, 8→9 after 0872 added `feature-verification.yaml`.
+- Guards keep ≤5 logical commands (composition-gate warn band, zero error-level findings). Named status captures (`gate_status="$(cat …)"`) reduce command counts and read better than repeated inline `$(cat … 2>/dev/null)`.
+
+## Patterns that worked
+
+- Fail-closed status guard (0872): the shell command always exits 0 and writes a status file; the transition guard reads it, so missing/corrupt/FAIL fails closed. Verdicts come from the status, never from command exit codes.
+- Parity-by-execution (0874): after refactoring guard predicates, run pre-refactor (baseline fixture) and post-refactor commands against the same recorded var/artifact state cross-product and assert identical routing decisions — executed proof, not inspection.
+- Third outcome, not a boolean (0870/0871): a violated `agent.run` post-condition is `contract-violation`, distinct from executor failure, because the executor-failure payload carries no discriminator. Routing distinguishes them at the transition `trigger`.
+- Opt-in guards (0871): the `contract-violation` guard is inert unless the definition declares a `contract-violation`-guarded edge; existing definitions unchanged.
+- Repair states are cheap and shell-only (0871): a repair edge must not re-dispatch the full stage on its first attempt — the pilot `repair` state records the miss with no `agent.run`. `onError: continue` on the action lets a clean-exit contract miss reach the guards instead of halting.
+- Promotion bar as data (0873): promote a candidate only when it projects strictly fewer `agent.run` actions than the canonical declares, citing measured real-run count/duration from `action_runs`/`runs`; `resolve --decision promote` refuses until the canonical actually carries the count. Zero-`agent.run` runs count 0 with an unmeasured (null) duration.
+- Smaller honest diff over contract preservation (0875): Option B (unbind `dependencies` from `computePlanningDigest`) beat Option A (move deps application into the pipeline state) because B satisfies idempotence for free and the only digest consumer is also the only writer of the field — a bound value can never signal drift there.
+- Shadow-run then delete (0873, ADR-076 amendment): candidate graphs are shadow-run against recorded real-run inputs and promoted or deleted by a named deadline recorded at creation — never a standing `<name>2.yaml`.
+
+## Errors fixed / gotchas
+
+- 0866: retiring definitions (`basic`, `docs-pipeline`, `feature-dev`) required a compatibility surface for batch runs still referencing them; `wrapup-solo` was added in the same change. Real-run evidence: dogfood execution 8 `agent.run`s/run vs 10 inline; mean duration 72.6s vs 48.3s.
+- 0867: workflow progress moved to the `runs`/`action_runs` projection (`projectWorkflowProgress`, `run-progress.ts:99`); the `planningWorkflowProgress` table is retained only for retired v1 writers — do not read it for current state. CLI reads the `workflow_progress` view.
+- 0868: nested `agent.run` dispatch needs `trigger_run_id` correlation so the trace keeps one boundary = one start/finish pair even when a stage dispatches another action.
+- 0869: event renames must update consumer-facing docs and test pins the same commit; the alias collapse left two stale `workflow.action.start` pins in `docs/design/system-events-human-table.md` (operator + test pins) — repaired in this wrapup.
+- 0870: `workflow.agent.contract-violation` was missing from the event-tracking 5W1H matrix (claimed 74/74) — repaired to 75/75 in this wrapup; emitters `agent-run.ts:36` (`contractViolation`) and `observability.ts:272` (event map).
+- 0872: the adr-supersession test was repo-wide, not task-local — relocated to `repo-wide-tests/` (not rewritten), fixing its repo-root anchor in the move. A per-task pipeline must not host a check that can fail for a reason the current task did not cause (ADR-119 scope rule).
+- 0874: the 455-character `verify → record` jq predicate was the legibility floor; one `and`-clause per line plus renamed capture (`V` → `verdict`). Proof-chain test assertions needed updating because they pinned definition text, not just behavior.
+- 0875: binding `dependencies` into `computePlanningDigest` made every dep application look like drift (digest stale → refine degradation). The forbidden fix (rebinding the digest after deps) would mask all other post-preparation changes — kept the independent ready-checklist/checker coverage instead.
+- Wrapup itself (this session): the batch landed 00/03/04 content without bumping frontmatter version/updated_at, and 03 had zero coverage of the new invariants — added compact §27 "Workflow Execution Economy" (ADR-117/118/119 + ADR-076 amendment) per constitution §6.4 style. Drift in doc-sync batches concentrates in frontmatter metadata, audit matrices, and naming pins — check those three specifically.

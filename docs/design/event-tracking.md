@@ -36,7 +36,7 @@ Every cataloged event must answer six questions. "Present" means the payload car
 
 **Legend:** `P` present · `~` partial · `–` absent.
 
-## 4. 5W1H matrix (74/74)
+## 4. 5W1H matrix (75/75)
 
 > **Alias collapse (task 0869 R2):** the action-boundary aliases
 > `workflow.action.start`/`.done` were retired in favour of the verb-form
@@ -118,6 +118,7 @@ Scores are family-uniform **by construction** — the defect from §2.1 means pr
 | 72 | `bus.emit.noop` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
 | 73 | `bus.handler.error` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | P | P |
 | 74 | `bus.handler.async.enqueued` | `context.ts:411` → ts-infra `EventBus` | – | ~ | P | ~ | – | ~ |
+| 75 | `workflow.agent.contract-violation` *(added 0870)* | `agent-run.ts:36` (`contractViolation`) / `observability.ts:272` | ~ | P | P | P | – | P |
 
 **Tally:** Who — present `0`, partial `50`, absent `24`. What — present `4`, partial `70`, absent `0`. When — present `70`, partial `4`, absent `0`. Where — present `29`, partial `41`, absent `4`. Why — present `20`, partial `12`, absent `42`. How — present `35`, partial `35`, absent `4`.
 
