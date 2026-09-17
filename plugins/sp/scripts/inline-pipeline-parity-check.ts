@@ -11,8 +11,14 @@
  * check is a symmetric set diff: an element present in one and absent in the
  * other fails the check and names the element.
  *
- * The set is defined in {@link DOCUMENTED} below; the driver's markdown list is
- * the human mirror. Update both when the driver adds or drops a kind.
+ * The set is defined in {@link DOCUMENTED} below. Task 0881 (0877 R7): the harness
+ * enumerates state from BOTH reference sets — this constant and the driver
+ * markdown's mirror list — plus the YAML union, as a three-way symmetric diff, so
+ * removing a kind from either reference cannot escape parity. It also scans task
+ * frontmatter `dependencies[]` for spurious edges: a referenced wbs with no task
+ * file (post-0875, dependency edges no longer move the planning digest —
+ * `packages/app/src/services/task-readiness.ts` — so over-declared edges would
+ * otherwise be silently unbound).
  *
  * Usage:
  *   bun plugins/sp/scripts/inline-pipeline-parity-check.ts
@@ -48,6 +54,91 @@ const DOCUMENTED = {
 
 /** Directory of workflow definitions the driver is responsible for. */
 const WORKFLOW_DIR = join('config', 'workflows');
+
+/** The driver reference doc — the second reference set (0881). */
+const DRIVER_REF = join('plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md');
+
+/** Task corpus dirs scanned for spurious `dependencies[]` edges (0881). */
+const TASK_DIRS = ['docs/tasks', 'docs/tasks5'];
+
+/**
+ * Parse the driver reference's mirrored kind lists (`**Actions:** … · `kind` …`) into
+ * reference sets. Returns null when the doc is absent (fixture roots).
+ */
+function collectMarkdownReferenceKinds(root: string): { actions: Set<string>; guards: Set<string> } | null {
+    let md: string;
+    try {
+        md = readFileSync(join(root, DRIVER_REF), 'utf8');
+    } catch {
+        return null;
+    }
+    const read = (label: RegExp): Set<string> => {
+        const line = md.split('\n').find((l) => label.test(l));
+        const out = new Set<string>();
+        if (!line) return out;
+        for (const m of line.matchAll(/`([^`]+)`/g)) out.add(m[1] ?? '');
+        out.delete('');
+        return out;
+    };
+    return { actions: read(/^\*\*Actions:/), guards: read(/^\*\*Guards/) };
+}
+
+/**
+ * Scan task frontmatter `dependencies[]` for spurious edges: a referenced wbs that
+ * resolves to no task file in the corpus (0881 — post-0875 these edges no longer
+ * move the planning digest, so over-declared ones are otherwise silently unbound).
+ */
+function checkTaskDependencyEdges(root: string, errors: string[]): number {
+    const wbss = new Set<string>();
+    const depFiles: { path: string; deps: string[] }[] = [];
+    for (const dir of TASK_DIRS) {
+        const abs = join(root, dir);
+        let entries: string[] = [];
+        try {
+            entries = readdirSync(abs);
+        } catch {
+            continue;
+        }
+        for (const e of entries) {
+            const m = /^(\d+)_.*\.md$/.exec(e);
+            if (!m || !m[1]) continue;
+            wbss.add(m[1]);
+            const raw = readFileSync(join(abs, e), 'utf8');
+            const fm = /^---\n([\s\S]*?)\n---/.exec(raw);
+            if (!fm || !fm[1]) continue;
+            const deps: string[] = [];
+            const inline = /^dependencies:\s*\[(.*)\]/m.exec(fm[1]);
+            if (inline && inline[1]) {
+                for (const part of inline[1].split(',')) {
+                    const w = part.trim().replace(/["']/g, '');
+                    if (w !== '') deps.push(w);
+                }
+            } else {
+                const block = /^dependencies:\s*$/m.exec(fm[1]);
+                if (block) {
+                    for (const line of fm[1].split('\n')) {
+                        const item = /^\s*-\s*["']?(\d+)["']?\s*$/.exec(line);
+                        if (item && item[1]) deps.push(item[1]);
+                    }
+                }
+            }
+            if (deps.length > 0) depFiles.push({ path: join(dir, e), deps });
+        }
+    }
+    let count = 0;
+    for (const { path, deps } of depFiles) {
+        for (const dep of deps) {
+            // Only wbs-shaped values are machine dependency edges; prose refs in the
+            // legacy corpus are descriptive text, never consumed as edges.
+            if (!/^\d{3,4}$/.test(dep)) continue;
+            if (!wbss.has(dep)) {
+                errors.push(`spurious dependency edge: ${path} depends on ${dep} but no task with wbs ${dep} exists`);
+                count += 1;
+            }
+        }
+    }
+    return count;
+}
 
 /** Walk a state list and yield every `kind:` value found in `onEnter` action
  *  lists. Skips the top-level workflow `kind:` (e.g. `state-machine`). */
@@ -170,6 +261,26 @@ async function main(): Promise<number> {
         errors.push(`guard kind "${x}" documented in inline-pipeline-driver.md but never used in any workflow`);
     }
 
+    // Three-way parity with the markdown mirror (0881): a kind dropped from either
+    // reference set — constant or doc — is caught, not just YAML drift.
+    const ref = collectMarkdownReferenceKinds(root);
+    if (ref !== null) {
+        for (const x of diff(ref.actions, DOCUMENTED.actions).onlyInA)
+            errors.push(`action kind "${x}" in the driver markdown but absent from the DOCUMENTED set`);
+        for (const x of diff(ref.actions, DOCUMENTED.actions).onlyInB)
+            errors.push(`action kind "${x}" in DOCUMENTED but deleted from the driver markdown reference`);
+        for (const x of diff(ref.guards, DOCUMENTED.guards).onlyInA)
+            errors.push(`guard kind "${x}" in the driver markdown but absent from the DOCUMENTED set`);
+        for (const x of diff(ref.guards, DOCUMENTED.guards).onlyInB)
+            errors.push(`guard kind "${x}" in DOCUMENTED but deleted from the driver markdown reference`);
+        for (const x of diff(ref.actions, unionActions).onlyInB)
+            errors.push(`action kind "${x}" in the references but never used in any workflow`);
+        for (const x of diff(ref.guards, unionGuards).onlyInB)
+            errors.push(`guard kind "${x}" in the references but never used in any workflow`);
+    }
+
+    const spuriousEdges = checkTaskDependencyEdges(root, errors);
+
     if (errors.length > 0) {
         process.stderr.write(`inline-pipeline-parity-check: ${errors.length} divergence(s)\n`);
         for (const e of errors) process.stderr.write(`  - ${e}\n`);
@@ -177,7 +288,7 @@ async function main(): Promise<number> {
     }
 
     process.stdout.write(
-        `inline-pipeline-parity-check: ok (${unionActions.size} actions, ${unionGuards.size} guards agree across ${files.length} workflows)\n`,
+        `inline-pipeline-parity-check: ok (${unionActions.size} actions, ${unionGuards.size} guards agree across ${files.length} workflows and both reference sets; ${spuriousEdges} spurious dependency edges)\n`,
     );
     return 0;
 }

@@ -54,4 +54,52 @@ transitions:
             fs.rmSync(tmp, { recursive: true, force: true });
         }
     });
+
+    test('0881 R7: a kind deleted from the driver markdown reference is caught', () => {
+        const fs = require('node:fs') as typeof import('node:fs');
+        const tmp = join('/tmp', `t0881-ref-${Date.now()}`);
+        const workflowsDir = join(tmp, 'config', 'workflows');
+        fs.mkdirSync(workflowsDir, { recursive: true });
+        fs.writeFileSync(
+            join(workflowsDir, 'ok.yaml'),
+            `kind: state-machine\ninitialState: s1\nterminalStates: [s1]\nstates:\n  - id: s1\n    onEnter:\n      - kind: shell\n        options: { command: 'true' }\ntransitions:\n  - from: s1\n    to: s1\n    guard:\n      kind: always\n`,
+        );
+        // Real driver doc, minus the `shell` action — the deleted reference.
+        const real = fs.readFileSync(
+            join(REPO_ROOT, 'plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md'),
+            'utf8',
+        );
+        const refDir = join(tmp, 'plugins/sp/skills/spur-dev/references');
+        fs.mkdirSync(refDir, { recursive: true });
+        fs.writeFileSync(join(refDir, 'inline-pipeline-driver.md'), real.replace('`shell` · `note`', '`note`'));
+        try {
+            const res = runCheck(tmp);
+            expect(res.status).toBe(1);
+            expect(res.stderr).toContain('deleted from the driver markdown reference');
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    test('0881 R7: a spurious dependencies[] edge is caught', () => {
+        const fs = require('node:fs') as typeof import('node:fs');
+        const tmp = join('/tmp', `t0881-dep-${Date.now()}`);
+        const workflowsDir = join(tmp, 'config', 'workflows');
+        const tasksDir = join(tmp, 'docs', 'tasks5');
+        fs.mkdirSync(workflowsDir, { recursive: true });
+        fs.mkdirSync(tasksDir, { recursive: true });
+        fs.writeFileSync(
+            join(workflowsDir, 'ok.yaml'),
+            `kind: state-machine\ninitialState: s1\nterminalStates: [s1]\nstates:\n  - id: s1\n    onEnter:\n      - kind: shell\n        options: { command: 'true' }\ntransitions:\n  - from: s1\n    to: s1\n    guard:\n      kind: always\n`,
+        );
+        fs.writeFileSync(join(tasksDir, '0001_real.md'), '---\ntitle: real\ndependencies: ["9999"]\n---\n\nbody\n');
+        try {
+            const res = runCheck(tmp);
+            expect(res.status).toBe(1);
+            expect(res.stderr).toContain('spurious dependency edge');
+            expect(res.stderr).toContain('9999');
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
+        }
+    });
 });

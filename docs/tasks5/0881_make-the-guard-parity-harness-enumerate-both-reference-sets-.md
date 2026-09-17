@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make the guard-parity harness enumerate both reference sets and catch spurious dependency edges
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.770Z
-updated_at: "2026-09-17T17:50:01.975Z"
+updated_at: "2026-09-17T18:07:01.261Z"
 feature_id: D62
 
 ---
@@ -41,15 +41,32 @@ Captured from the creation title: "Make the guard-parity harness enumerate both 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/scripts/inline-pipeline-parity-check.ts:14` |
+| `plugins/sp/scripts/inline-pipeline-parity-check.ts:264` |
+| `plugins/sp/scripts/inline-pipeline-parity-check.ts:291` |
+| `plugins/sp/scripts/inline-pipeline-parity-check.ts:58` |
+| `plugins/sp/tests/inline-pipeline-parity-check.test.ts:57` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun test plugins/sp/tests/inline-pipeline-parity-check.test.ts` — 4 pass, 0 fail (new: deleted-reference caught; spurious dependency edge caught).
+- Live harness run: exit 0, both reference sets + YAML union agree, 0 spurious edges.
+- `bunx biome format` clean on both touched files.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
 
 ### References
 
@@ -58,4 +75,7 @@ Captured from the creation title: "Make the guard-parity harness enumerate both 
 ### History
 
 - 2026-09-17T17:50:01.975Z backlog → todo (system)
+- 2026-09-17T18:02:05.973Z todo → wip (system)
+- 2026-09-17T18:07:00.638Z wip → testing (system)
+- 2026-09-17T18:07:01.261Z testing → done (system)
 
