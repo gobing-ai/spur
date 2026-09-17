@@ -1853,3 +1853,51 @@ Date: 2026-09-16 (all tasks done; commits bc8e52739..de8a43dbe)
 - 0874: the 455-character `verify → record` jq predicate was the legibility floor; one `and`-clause per line plus renamed capture (`V` → `verdict`). Proof-chain test assertions needed updating because they pinned definition text, not just behavior.
 - 0875: binding `dependencies` into `computePlanningDigest` made every dep application look like drift (digest stale → refine degradation). The forbidden fix (rebinding the digest after deps) would mask all other post-preparation changes — kept the independent ready-checklist/checker coverage instead.
 - Wrapup itself (this session): the batch landed 00/03/04 content without bumping frontmatter version/updated_at, and 03 had zero coverage of the new invariants — added compact §27 "Workflow Execution Economy" (ADR-117/118/119 + ADR-076 amendment) per constitution §6.4 style. Drift in doc-sync batches concentrates in frontmatter metadata, audit matrices, and naming pins — check those three specifically.
+Drift audit complete per sp-doc-evolve §7. Two real drift findings, both repaired; five surfaces verified clean with the detection commands that produced zero delta. Batch task list resolved to WBS **0871** (only entry in the normalized capture).
+
+**Drift report**
+
+| Doc | Code says | Doc said | Authority | Repair |
+|---|---|---|---|---|
+| `docs/design/workflow-composition-contract.md` | Per-action `onError: fail\|continue` shipped in both dialect schemas (0871: `state-machine-workflow.schema.json:165`, `transition-flow-workflow.schema.json:144`) | `softFail` bullet claimed the schema "exposes no `onError`" | 03 §20.2 points here for exact shapes | Bullet rewritten: both knobs documented, `softFail` keeps the `resultFile` guarantee |
+| `docs/design/workflow-execution-economy.md` | `contract-violation` routing shipped (guard builtin at `builtins.ts:77`, pilot edges in `wrapup-pipeline.yaml`, event at `event-tracking.md:121`) | §3 in proposal tense ("Today … indistinguishable"); header `Status: proposed` vs Accepted ADR-117/118/119 | ADR-118 is authority; this is its declared detail target | §3 moved to shipped state with the opt-in mechanism + 0876 handoff; status split honestly (§5 gate still pending on 0873/0876) |
+
+**Clean (no repair):** `docs/00_ADR.md` ADR-118/119/120 · `docs/03_ARCHITECTURE.md:1038-1041` · `docs/04_DESIGN.md` index rows · `docs/design/event-tracking.md` · `docs/design/workflow-run-log.md`.
+
+**Out-of-scope note (not committed):** the same false "no `onError`" claim also lives in a code comment at `packages/app/src/workflow/actions/command-gate.ts:46` — needs a code change, not a doc edit.
+
+No task/feature corpus writes. Diff: 2 files, +22/−12. Artifact written to `.spur/run/fadca099-25a7-4884-a4ae-923cd0239775-wrapup-learnings.md`.
+
+# Working learnings — wrapup run fadca099 (batch: task 0871)
+
+## 2026-09-16 — Task 0871 (feature D62): route a contract violation to a repair edge, piloted on wrapup-pipeline
+
+### Conventions
+
+- New workflow guard kinds register as Spur builtins on the workflow host: `ContractViolationGuardRunner` (`packages/app/src/workflow/guards/contract-violation.ts:19`) registered at `packages/app/src/workflow/builtins.ts:77`. The guard passes iff the prior action's `data.outcome === 'contract-violation'` and reports `contract`/`observed` for the trace.
+- Dialect parity is a same-commit rule: a new action-level capability (`onError: fail | continue`) lands in BOTH dialect schemas — `apps/cli/schemas/state-machine-workflow.schema.json:165` and `apps/cli/schemas/transition-flow-workflow.schema.json:144` — plus the inline-driver parity set (`plugins/sp/scripts/inline-pipeline-parity-check.ts:46` gains `action-ok` and `contract-violation`) and the driver reference (`plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:28`).
+- New outcomes are opt-in and inert by default (R4): a graph changes behavior only when it authors a `contract-violation`-guarded edge; definitions without the edge are unchanged.
+- Evidence vocabulary stays layered: routing decisions are distinguished at the transition `trigger` (`contract-violation` vs `executor-failure`) alongside 0870's `workflow.agent.contract-violation` run-log line, with the action trace carrying an `outcome`/`contract`/`observed` triple.
+- ADR-118's repair constraint shapes the graph: the repair edge must not re-dispatch the full `agent.run` stage on its first attempt — the pilot's `repair` state (`config/workflows/wrapup-pipeline.yaml:222`) is a cheap shell that only records the miss, and `learnings-append` was moved out of `doc-sync` into its own state so the append cannot be blamed for the stage's failure.
+
+### Errors fixed
+
+- `doc-sync` `agent.run` previously hard-failed the whole wrapup run on a clean-exit contract miss; the pilot hop now declares `onError: continue` (`config/workflows/wrapup-pipeline.yaml:182`) so transition guards read the result and route: contract violation → shell-only `repair`, success → `learnings-append`, executor failure → existing `failed` routing (trigger `executor-failure`).
+- A false schema claim ("the shipped action schema exposes no `onError`") had propagated into two surfaces: `docs/design/workflow-composition-contract.md` (the `softFail` bullet) and a code comment (`packages/app/src/workflow/actions/command-gate.ts:46`). Once 0871 added `onError`, both became false. The design doc was repaired in this wrapup run; the code comment is flagged as out-of-doc-scope residue for a follow-up code change.
+
+### Patterns
+
+- Name the failure population before routing it: 0870 made the contract violation a distinct, traceable stage outcome; 0871 routed it. Splitting the work keeps executor-failure retry semantics untouched (ADR-118's rejected alternatives: merging stages raises per-failure cost; finer FSM states change when a failure is observed, not what it costs).
+- Promotion discipline (ADR-076 amendment): the pattern spreads to other `agent.run` stages only after task 0873's promotion gate consumes measured real-run data — never synthetic fixtures (R5).
+
+### Gotchas
+
+- A "real-run evidence" acceptance conjunct is structurally unverifiable in the same task that ships the edge: no real contract violation can occur before the edge lands. The verify verdict was recorded honestly as PARTIAL (exactly one conjunct) in `.spur/run/0871-verdict.json` — not rewritten to PASS — and the task closed via the documented F6 provenance override with the partial recorded in `done_reason`.
+- The outstanding conjunct has a named owner: task 0876 records the pilot's first real-run routing decision and feeds the measurement to 0873's promotion gate. If the F6 closure call is wrong, revert 0871 to `testing` and let 0876 carry R5.
+
+## 2026-09-17 — Doc-drift wrapup over the 0871 surface (this run)
+
+- Drift found and repaired: `docs/design/workflow-composition-contract.md` `softFail` bullet asserted the action schema "exposes no `onError`" — false since 0871; rewritten to describe both knobs (`softFail` keeps the gate-specific guarantee that `FAIL` reaches `resultFile`; `onError: continue` is the general per-action routing path).
+- Drift found and repaired: `docs/design/workflow-execution-economy.md` §3 still spoke in proposal tense ("Today … indistinguishable in the trace") after the routing shipped; rewritten to shipped state with the opt-in mechanism, pilot pointer, and 0876 handoff. Frontmatter `Status: proposed` contradicted Accepted ADR-117/118/119; updated to in-flight split (§2/§3/§4 shipped via 0870–0872; §5 promotion gate pending on 0873/0876 evidence).
+- Verified current, left untouched: `docs/00_ADR.md` ADR-118/119/120; `docs/03_ARCHITECTURE.md:1038-1041` (ADR-118 summary names `contract-violation`, the repair edge, and the wrapup pilot); `docs/04_DESIGN.md` index rows (economy, run log, composition contract); `docs/design/event-tracking.md:121` (`workflow.agent.contract-violation`, added 0870); `docs/design/workflow-run-log.md` (sink/marker-level contract, no line-kind catalogue to extend).
+- Audit method that paid off: grep the exact change surface (guard files, schema diffs via `git log -S`, task anchors) against the docs that point at them (ADR "Detail:" targets, `03` "Exact shapes live in" pointers, `04` index rows) — every finding was a code-reality vs. doc-claim contradiction with a file:line on both sides; no speculative rewrites.

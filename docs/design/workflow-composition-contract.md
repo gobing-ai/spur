@@ -130,11 +130,13 @@ Contract:
   version-controlled project script (`spur-check` above).
 - **`softFail` (added, task 0604 / D5-J).** Default `false` — a failed final attempt fails the
   action. With `softFail: true` the gate still writes `FAIL` to `resultFile` but returns success,
-  so the transition guards decide the route. This is required, not a convenience: the shipped
-  action schema pins `additionalProperties: false` at the action level and exposes no `onError`,
-  so a hard-failing gate aborts the run before any guard can read the result file. Every soft
-  probe whose FAIL must reach a `failed` state through the graph — the docs precheck, the
-  advisory integration review — sets it. Hard gates leave it unset.
+  so the transition guards decide the route. Since task 0871 the shipped action schema also
+  exposes a per-action `onError: fail | continue`; `continue` records the failure and proceeds,
+  so a hard-failing action no longer necessarily aborts the run before a guard can read state —
+  but `softFail` remains the gate-specific knob that additionally guarantees the `FAIL` token
+  lands in `resultFile` for the guard to read. Every soft probe whose FAIL must reach a `failed`
+  state through the graph — the docs precheck, the advisory integration review — routes its
+  failure to the guards via one of the two. Hard gates leave both unset.
 - Formatting and auto-fix are separate `write` remediation actions. The named gate script is
   observe-only and cannot establish PASS if it changes the proof-input digest.
 - `retry.maxAttempts` is a positive bounded integer. Only declared failure classes retry; each

@@ -2,7 +2,10 @@
 
 **Area:** where workflow machine time goes, what the trace must record for that to be knowable,
 how an expensive stage fails cheaply, and at what scope a validation gate belongs.
-**Status:** proposed (feature D62, 2026-09-16). Decisions: ADR-117 (trace parity), ADR-118 (contract
+**Status:** feature D62 in flight (2026-09-16): ADR-117/118/119 accepted; §2 trace parity, §3
+contract-violation routing, and §4 gate scope shipped (tasks 0870–0872, pilot on `wrapup-pipeline`);
+the §5 promotion gate awaits the real-run evidence accruing under tasks 0873/0876. Decisions: ADR-117
+(trace parity), ADR-118 (contract
 violation as a stage outcome), ADR-119 (check scope matches change scope), ADR-076 amendment
 (measured promotion gate).
 **Authority:** derived; decisions live in `00_ADR`, module boundaries in `03_ARCHITECTURE`, the
@@ -93,9 +96,9 @@ surface that can open a run owes the row that ends it.
 ## 3. Stage contracts (ADR-118)
 
 An `agent.run` stage already declares its post-conditions (`answerFile`, `expectFile`, `requireDiff`,
-verdict parseability). Today a stage that exits cleanly and misses one is indistinguishable in the
-trace from an executor that crashed: both are `ok: false`, and both cost a full re-dispatch of a
-stage averaging 357 s.
+verdict parseability). Before tasks 0870/0871 a stage that exited cleanly and missed one was
+indistinguishable in the trace from an executor that crashed: both were `ok: false`, and both cost a
+full re-dispatch of a stage averaging 357 s.
 
 | Outcome | Signal | Routing |
 | --- | --- | --- |
@@ -103,9 +106,14 @@ stage averaging 357 s.
 | `contract-violation` | clean exit, declared post-condition unmet | dedicated repair edge; first attempt must not re-dispatch the full stage |
 | executor failure | non-zero executor exit, transport error | existing retry semantics |
 
-The violation is detected and named **before the stage reports success**, and the run log and trace
-record which contract was violated and the observed value. Rejected alternatives and their reasons
-are in ADR-118.
+Shipped (tasks 0870/0871): the violation is detected and named **before the stage reports success**
+— the run log carries the `workflow.agent.contract-violation` line and the action trace records
+`outcome`/`contract`/`observed`. A definition opts in by setting `onError: continue` on the hop and
+authoring a `contract-violation`-guarded edge (the guard passes iff the prior action's
+`data.outcome === 'contract-violation'`), routing to a repair path that does not re-dispatch the full
+stage on its first attempt. The pilot lives on `wrapup-pipeline`; its first real-run routing decision
+is recorded under task 0876. Definitions without the edge are unchanged. Rejected alternatives and
+their reasons are in ADR-118.
 
 ## 4. Gate scope (ADR-119)
 
