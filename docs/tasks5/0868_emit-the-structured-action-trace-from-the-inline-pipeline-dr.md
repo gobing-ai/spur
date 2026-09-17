@@ -4,7 +4,7 @@ name: Emit the structured action trace from the inline pipeline driver
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.224Z
-updated_at: "2026-09-16T20:23:19.899Z"
+updated_at: "2026-09-17T17:19:24.520Z"
 feature_id: D62
 priority: P0
 tags:
@@ -81,9 +81,9 @@ Extract the engine's action-boundary emission into a surface-agnostic `WorkflowA
 | Engine composition wraps `DbWorkflowPersistenceAdapter` in `withActionTrace` with a run-log failure recorder — best-effort at the action boundary only; the run closure propagates | `packages/app/src/services/workflow-service.ts:1679` |
 | Lifecycle surface wraps its adapter in `withActionTrace` — the same shared emission and closure path as the engine; its parking `finalizeRun` now fails loudly again | `packages/app/src/workflow/lifecycle-adapter.ts:119` |
 | `runTraceMode` — the ADR-117 emission delegate: `--action` records a completed action boundary (best-effort, exit 0), `--close` marks the run row terminal and fails loudly (exit 1) on a missing row or persistence failure; `--ok`/`--duration-ms` are required and exact | `plugins/sp/scripts/inline-run-setup.ts:241` |
-| Driver contract documents the emission obligation: the text log is demoted to a human convenience; every action emits a row; `--action` is best-effort, `--close` is bookkeeping and fails loudly | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:401` |
+| Driver contract documents the emission obligation: the text log is demoted to a human convenience; every action emits a row; `--action` is best-effort, `--close` is bookkeeping and fails loudly | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:414-427` |
 | `WorkflowActionTraceWriter` unit tests: rows queryable by run id, best-effort start/finish failures, propagating closure, `RunRowNotFoundError`, and the run-id-preserving finalize attribution | `packages/app/tests/workflow/action-trace.test.ts:43` |
-| `WorkflowActionTraceWriter` delegate end-to-end: setup → action → close lands a run-id-queryable row plus a terminal run row; `--ok`/`--duration-ms` usage errors exit 2; a missing-row close exits 1 | `plugins/sp/tests/inline-run-trace.test.ts:62` |
+| `WorkflowActionTraceWriter` delegate end-to-end: setup → action → close lands a run-id-queryable row plus a terminal run row; `--ok`/`--duration-ms` usage errors exit 2; a missing-row close exits 1 | `plugins/sp/tests/inline-run-trace.test.ts:199-274` |
 
 ### Testing
 

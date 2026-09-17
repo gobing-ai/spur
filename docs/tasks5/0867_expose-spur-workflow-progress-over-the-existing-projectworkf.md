@@ -4,7 +4,7 @@ name: Expose spur workflow progress over the existing projectWorkflowProgress pr
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.223Z
-updated_at: "2026-09-16T17:37:33.173Z"
+updated_at: "2026-09-17T17:19:24.853Z"
 feature_id: D62
 priority: P1
 tags:
@@ -77,6 +77,8 @@ Wiring only: `spur workflow progress <run-id>` exposes the projection that alrea
 - `apps/cli/src/commands/workflow.ts:1463-1523` — `formatWorkflowProgress`: human rendering of the same object (status, current state, definition identity, each state's actions with their attempts, candidate next transitions, diagnostics). Unanswered values print as `unknown` (R4); the formatter derives nothing.
 - `apps/cli/src/commands/workflow.ts:14,33` — imports `projectWorkflowProgress` and `WorkflowProgressProjection` from the `@gobing-ai/spur-app` barrel (`packages/app/src/index.ts:755`).
 - `apps/cli/tests/commands/workflow.test.ts:2592-2770` — four CLI tests: complete run (R1/R3: `--json` deep-equals a direct `projectWorkflowProgress` call apart from `projectedAt`), running run (R2/R4: exit 0, attempts + `mid → done` next transition, `unknown` for unanswered values), incomplete run with an unresolvable definition (R4: exit 0, `States: none recorded` + `definition-unavailable`), unknown run id (R5: exit 1, plain stderr + structured `NOT_FOUND` under `--json-envelope`).
+- `apps/cli/tests/json-envelope-inventory.test.ts:278-284` — the 0699 R1 census pin `66 → 67` plus its count-history comment; the one production-adjacent file the **test-fix** stage changed (review finding #1 backfill).
+- `docs/tasks5/0867_expose-spur-workflow-progress-over-the-existing-projectworkf.md` — this task file (§Solution/§Testing backfilled in `record`).
 - Docs + parity: `docs/help/cmd_workflow.md:276`, `docs/help2/workflow.md:124`, `docs/design/cli-contracts.md:590`, `docs/04_DESIGN.md:152`, `plugins/sp/skills/spur-cli/references/workflows.md:116,266`, `apps/cli/tests/spur-cli-parity.test.ts:38`.
 
 **Notes**

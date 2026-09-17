@@ -620,14 +620,11 @@ pipeline owns one lifecycle phase:
 
 | Workflow                    | Phase                             | Entry command                     |
 | --------------------------- | --------------------------------- | --------------------------------- |
-| `basic.yaml`                | Generic implement/check/fix       | direct `spur workflow run`        |
 | `feature-lifecycle.yaml`    | Feature status FSM                | `spur feature update`             |
 | `task-lifecycle.yaml`       | Task status FSM                   | `spur task update`                |
 | `task-pipeline.yaml`        | Single-task execution             | `/sp:dev-run`                     |
 | `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
-| `feature-dev.yaml`          | Feature umbrella execution        | `/sp:dev-runall --feature`        |
 | `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
-| `docs-pipeline.yaml`        | Docs-only task execution          | `/sp:dev-run --mode implement`    |
 | `wayfinder-resolution.yaml` | Wayfinder ticket resolution loop  | `spur workflow run` (free-form)   |
 
 ### Lifecycle operations

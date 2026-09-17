@@ -149,7 +149,7 @@ passed, so provenance denied first and Review L3 denied on the retry.
 
 | # | Gate layer | Triggers denial when | Remediation |
 |---|------------|----------------------|-------------|
-| 1 | **Strict-core + verdict artifact** (`spur task check <wbs> --strict-core` + `done-transition-guard.ts`) | The strict-core check fails, or `.spur/run/<wbs>-verdict.json` is **missing** or has a non-PASS aggregate. **Missing artifact is a deny** (not a silent allow — closes the 0349 "done without verdict" class). The aggregate is recomputed from requirement/AC rows; the harsher of stored and computed wins. | Re-run `/sp:dev-verify <wbs>` until PASS (writes the artifact), or explicitly override with `spur task update <wbs> done --force-done --reason "<why>"`. Docs-only pipelines (`docs-pipeline.yaml`) meet the same layer: read-only measured verification
+| 1 | **Strict-core + verdict artifact** (`spur task check <wbs> --strict-core` + `done-transition-guard.ts`) | The strict-core check fails, or `.spur/run/<wbs>-verdict.json` is **missing** or has a non-PASS aggregate. **Missing artifact is a deny** (not a silent allow — closes the 0349 "done without verdict" class). The aggregate is recomputed from requirement/AC rows; the harsher of stored and computed wins. | Re-run `/sp:dev-verify <wbs>` until PASS (writes the artifact), or explicitly override with `spur task update <wbs> done --force-done --reason "<why>"`. Docs-only procedures meet the same layer: read-only measured verification
 (answer file + `spur task verdict`) writes the standard `.spur/run/<wbs>-verdict.json` artifact
 under proof-input digest bracketing; missing or non-PASS evidence is a refusal, never a synthetic
 PASS stub. |

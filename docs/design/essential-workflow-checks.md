@@ -122,8 +122,8 @@ assigned once below. Every package includes focused positive/negative checks and
 | P2 | R2, R3, R4 corpus | Explicit audit without suppressions; retire automatic callers; reconcile T10/T11 and check guidance | P1 |
 | P3 | R4 composition | Live-definition inventory/budget/eval/advisory migration; preserve digest/JSON fixture; verify combined retirement after corpus migration | P2 |
 | P4 | R5, R6 | Side-effect-free shared plan/version identity and host fallback; cross-surface progress/metadata tests | P1 |
-| P5 | R7, R11 subset | idea-pipeline, docs-pipeline, wayfinder-resolution: repeated-check removal, evidence and batch-schema parity | P2, P3, P4 |
-| P6 | R8, R11 subset | task-lifecycle, feature-lifecycle, feature-dev, wrapup-pipeline: single-edge transitions, honest review/sync outcomes | P2, P3, P4 |
+| P5 | R7, R11 subset | idea-pipeline, wayfinder-resolution: repeated-check removal, evidence and batch-schema parity | P2, P3, P4 |
+| P6 | R8, R11 subset | task-lifecycle, feature-lifecycle, wrapup-pipeline: single-edge transitions, honest review/sync outcomes | P2, P3, P4 |
 | P7 | R9, R11 subset | basic, history-anatomy, pr-review: command execution, evidence/cache safety, head-pinned pending review | P3, P4 |
 | P8 | R10, R11 whole, R12 | task-pipeline last; unchanged proof floor; bundle/skills/templates parity and comparable savings evidence | P5, P6, P7 |
 
@@ -137,7 +137,7 @@ in generated output. The task-pipeline quality gate emits a bounded summary (gre
 attempts, log path, bytes; red: last 40 lines plus path) with the full log preserved on disk.
 Rollout evidence: `docs/plans/2026-09-04-d61-rollout-evidence.md`.
 
-**Implemented (task 0782, 2026-09-06):** `feature-dev.yaml` (shipped as v2 by 0782; later bumped
+**Implemented (task 0782, 2026-09-06; definition retired 2026-09-16 by task 0866 — the `feature-dev.yaml` umbrella below is deleted, history preserved):** `feature-dev.yaml` (shipped as v2 by 0782; later bumped
 to v3 by task 0784's resume-identity change without altering this contract) reuses an existing feature's
 accepted AC and task roster instead of re-planning. Brainstorm/plan states are deleted; the
 precheck validates the essential roster contract through CLI reads (identity, nonempty array,

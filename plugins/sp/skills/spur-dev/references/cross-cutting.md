@@ -573,8 +573,6 @@ invariants that keep the pipeline set coherent as new ones are added.
 | `idea-pipeline.yaml` | Ideation + planning (vague idea or known slug → feature + AC + task batch) | `/sp:dev-idea`, `/sp:dev-plan` | `handoff`, `cancelled` |
 | `task-pipeline.yaml` | Execution (one task → done) | `/sp:dev-run` | `done`, `failed` |
 | `wrapup-pipeline.yaml` | Wrap-up (completed tasks → learning + metrics + doc-sync) | `/sp:dev-wrap`, `/sp:dev-wrapall` | `done`, `skipped` |
-| `feature-dev.yaml` | Umbrella (brainstorm → plan → execute → feature-verify) | `/sp:dev-runall --feature <id>` (or `--tasks feature:<id>`) | `done`, `failed` |
-| `basic.yaml` | Simple (generic implement/check/fix loop) | direct `spur workflow run` | `done`, `failed` |
 | `feature-lifecycle.yaml` | Feature status FSM (entity lifecycle, not a phase pipeline) | `spur feature update` | `done`, `cancelled` |
 | `task-lifecycle.yaml` | Task status FSM (entity lifecycle, not a phase pipeline) | `spur task update` | `done`, `cancelled` |
 
@@ -587,8 +585,9 @@ not replace them.
 A pipeline may invoke another workflow through a command wrapper or `spur workflow run` **only at a
 phase boundary** — it must NOT inline another pipeline's state graph. Concretely:
 
-- `feature-dev.yaml`'s `execute-tasks` state may invoke `task-pipeline.yaml` per task via
-  `spur workflow run` (phase boundary: design → execution).
+- The feature-level batch entry (`/sp:dev-runall --feature <id>`) dispatches `task-pipeline.yaml`
+  per task through the CLI command wrapper, not by inlining the task graph (feature roster →
+  execution boundary).
 - `idea-pipeline.yaml`'s `handoff` state may output a command for the operator to run
   `task-pipeline.yaml` (phase boundary: ideation → execution).
 - `task-pipeline.yaml`'s `implement` state must NOT contain a nested state machine for
@@ -692,7 +691,7 @@ Field semantics (enforced by `parseCheckpointMetadata` / `checkpointStaleness`):
 **Writer cadence (0784 R4).** There is exactly one canonical writer: the `task-pipeline` done
 state's terminal checkpoint (`status: done`, real HEAD, run id from `$__runId`, and `$wbs`-expanded
 artifact paths). It is a plain `shell` step — checkpoints are working memory, not CLI-gated corpus.
-The `feature-dev`, `wrapup-pipeline`, and `idea-pipeline` pipelines used to echo pseudo-checkpoints
+The `wrapup-pipeline`, and `idea-pipeline` pipelines (plus the since-retired `feature-dev`) used to echo pseudo-checkpoints
 ("checkpoint: <workflow> done ...") that violated the canonical schema; those writers were removed
 in 0784 — the persisted run row is the authoritative terminal record, and a non-canonical echo
 cannot be resumed, routed, or reclaimed safely.

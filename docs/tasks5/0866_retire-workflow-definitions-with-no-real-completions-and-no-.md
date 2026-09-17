@@ -4,7 +4,7 @@ name: Retire workflow definitions with no real completions and no live caller
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.220Z
-updated_at: "2026-09-16T15:22:41.667Z"
+updated_at: "2026-09-17T17:20:01.037Z"
 feature_id: D62
 priority: P1
 tags:
@@ -118,18 +118,25 @@ Verdict: **retire**.
 
 - Deleted definitions: `config/workflows/basic.yaml`, `config/workflows/docs-pipeline.yaml`,
   `config/workflows/feature-dev.yaml` (R1).
+- `.github/workflows/publish.yml:64` — the post-bundle asset assertion repointed
+  `- basic.yaml` → `+ task-pipeline.yaml` (verify-stage remediation: the assertion must name a
+  surviving bundled workflow).
 - `config/pipeline-budgets.json:31-48`, `:56-60`, `:70-75` — the three budget entries removed (R3);
   the gate now reports `check-pipeline-budgets: PASS (6 pipelines, 0 violations)`.
 - `docs/design/workflow-composition-contract.md:3` (Status: the docs half of the ADR-071 chain
   retired with its subject) and `:15-17` + retained-definition rows (R4 inventory dispositions).
-- `package.json:73` — the `features` script (the only non-test/non-doc invoker of
-  `feature-dev.yaml`) removed; `:61` dropped the `feature-dev-precheck` conversion from
+- `package.json` — the `features` script (the only non-test/non-doc invoker of
+  `feature-dev.yaml`) removed; its former line `:73` no longer exists, so this entry names the
+  removal without a surviving anchor; `:61` dropped the `feature-dev-precheck` conversion from
   `build:scripts`.
-- `config/plugin-scripts.json:30` — the `feature-dev-precheck` standard-script entry removed with the
+- `config/plugin-scripts.json` — the `feature-dev-precheck` standard-script entry (its former line
+  `:30` no longer exists, so this entry names the removal without a surviving anchor) removed with the
   script; `plugins/sp/scripts/feature-dev-precheck.ts` + `.mjs` deleted (its stated purpose was to
   port `feature-dev.yaml`'s precheck shell one-for-one, so the retirement leaves it no consumer).
 - `plugins/sp/scripts/surface-drift-inventory.ts:641` — the hard-coded `workflow validate basic.yaml`
   JSON probe repointed to `task-pipeline.yaml`; the generic `sweepWorkflows` walk needs no change.
+  One of two invocation-surface edits — the other is the `.github/workflows/publish.yml:64` repoint
+  above.
 - `packages/app/src/services/done-transition-guard.ts:5-9`, `:16-18` — comments updated: the
   `--no-lifecycle` caller and the measured-verdict example no longer name a live deleted file.
 - `scripts/commands/real-run-cost.ts:25-27` — cohort size 11 → 8.

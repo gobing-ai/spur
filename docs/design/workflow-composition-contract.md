@@ -38,7 +38,7 @@ status. The retirement discriminator is **zero real completions AND no live call
 | D5-M | pipeline2 residual made read-only | landed — the sweep is bracketed by a tree snapshot and any post-PASS mutation routes to `failed`, never `record` (ADR-071) |
 | D5-N | ~~eval-pipeline promotion bar~~ | **retired (ADR-076, 2026-08-20)** — the bar is no longer a gate; `task-pipeline2.yaml` was deleted rather than promoted. `eval-pipeline` remains a measurement tool only |
 | D5-O | idea handoff onto `finalizeIdeaHandoff` | landed as monorepo writer + bundled plugin-script fallback (0824) |
-| D5-P | advisory integration review at the feature boundary | landed in `feature-dev.yaml` |
+| D5-P | advisory integration review at the feature boundary | landed in `feature-dev.yaml` (carrier retired 2026-09-16, task 0866) |
 
 **Known baseline gap (carried forward by design).** The composition measures are heuristic. They
 measure shell size, prompt size and slash-invocation shape, so a semantic rewrite of a shell body
@@ -51,7 +51,7 @@ Task 0775 retired `config/workflow-composition-baseline.json` and the two-sided 
 Resolved composition facts (`terminalStates`, `modelQueries`, per-action `kind`/`invocation`) are
 extracted from the live definitions by `extractResolvedWorkflowFacts`
 (`packages/app/src/workflow/composition-baseline.ts`) and guarded by unit tests
-(`composition-baseline.test.ts`, `task-pipeline-proof-chain.test.ts`). The checker-era guarantee —
+(`composition-baseline.test.ts`). The checker-era guarantee —
 a field-level diff until design and definition are deliberately updated together — is now carried
 by those unit gates plus the advisory. The snapshot's `stateEffect`/`evidenceEffect` declarations
 and the proof-input baseline retired with the snapshot.
@@ -230,10 +230,11 @@ tasks), review completion is stamped only from a run-scoped marker written by th
 itself and is additionally required by the `verify → record` guard, and the completion boundary
 is the bound `run.artifact` registration at `record` entry — a fresh capture agreeing with the
 run's declared digest, the raw proof block, the authoritative RunDao identity, and the review
-marker, all before any ledger row or task record. The docs pipeline runs the same `--fix none`
-measured verification with its own digest bracket (task 0704/0769), and the retired composition
-baseline's job is done by structural test suites (`task-pipeline-proof-chain.test.ts`,
-`docs-pipeline-proof-chain.test.ts`, and the workflow action suites) rather than a manifest (task
+marker, all before any ledger row or task record. Docs-only procedures run the same `--fix none`
+measured verification through `task-pipeline` (the retired `docs-pipeline` carried its own digest
+bracket, tasks 0704/0769), and the retired composition
+baseline's job is done by structural test suites (`composition-baseline.test.ts` and the workflow
+action suites) rather than a manifest (task
 0775).
 
 ## Run-definition binding
