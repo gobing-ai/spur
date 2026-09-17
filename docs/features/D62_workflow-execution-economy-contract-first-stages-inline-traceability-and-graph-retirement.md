@@ -204,7 +204,7 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 0874 | Refactor transition guards for legibility while preserving routing semantics | done |
 | 0875 | Stop the idea pipeline from invalidating its own preparation evidence | done |
 | 0876 | Record the contract-violation pilot's first real-run routing decision | todo |
-| 0877 | Close out the D62 session-review findings that are neither fixed nor owned | backlog |
+| 0877 | Close out the D62 session-review findings that are neither fixed nor owned | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
