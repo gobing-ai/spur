@@ -210,6 +210,10 @@ See [contract detail](design/planning-command-contracts.md#131-spdev-find-confli
 
 See [contract detail](design/planning-command-contracts.md#132-spdev-find-next--feature-frontier-prioritizer-feature-h12-tasks-0497-0498).
 
+#### 1.3.3 `/sp:dev-refactor` — lens-routed refactoring with a preservation contract (feature H13, tasks 0883–0886)
+
+See [contract detail](design/dev-refactor-command.md).
+
 ## 2. Configuration
 
 See [contract detail](design/configuration-contracts.md#2-configuration).
