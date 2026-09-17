@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "idea-pipeline robustness: verbatim idea artifact, requirement inventory + coverage gate, task-check-aware stage prompts, --from-file, inline trace startedAt"
-status: todo
+status: done
 template: issue
 created_at: 2026-09-17T18:10:46.487Z
-updated_at: "2026-09-17T21:32:40.674Z"
+updated_at: "2026-09-17T22:57:12.368Z"
 
 feature_id: I12
 ---
@@ -28,25 +28,25 @@ Evidence of the remaining defects (all read-only checks in the review session):
 
 ### Requirements
 
-- [ ] R1. The idea text is persisted verbatim to `.spur/run/<runId>-idea-input.md` before discovery, in both drivers: the `start` state writes `$idea` through a shell action for headless runs, and the inline driver writes the operator's argument text unmodified before executing `start`. The precheck fails the run when the file is empty.
-- [ ] R2. Every model-bearing stage prompt (discovery, feature-create, ac-generate, system-design, decompose, ready-prepare) references `.spur/run/<runId>-idea-input.md` as the authoritative ask instead of, or in addition to, `${vars.idea}`.
-- [ ] R3. The idea-evaluation report carries a `## Requirement inventory` section: one numbered item `I<n>` per explicit ask in the input, each quoting or closely paraphrasing its source line, plus an `unclear` marker where the ask is ambiguous. `idea-evaluation.md` owns the template.
-- [ ] R4. Acceptance-criteria generation maps coverage: each scenario lists the inventory items it covers (a `# covers: I1, I3` comment line inside the Gherkin scenario or an equivalent documented form), and a deterministic run-scoped check reports any inventory item not covered by at least one scenario. Uncovered items route through the existing capped ac-generate retry loop under `profile=auto` and surface in the interactive feature-check prompt otherwise; an explicit `deferred` disposition in the inventory is allowed and exempts the item.
-- [ ] R5. The ac-generate and decompose prompts state the two task-check rules the docs now carry: AC bullets are exact scenario titles, and the `L4.gate-language` words are forbidden in titles, section bodies and enum values.
-- [ ] R6. The feature-create prompt names the `--json` envelope (`.ref.id`) so the id is read correctly on the first attempt.
-- [ ] R7. `/sp:dev-idea` accepts `--from-file <path>` as an alternative to the positional idea (mutually exclusive; the file body becomes the idea text, no shell quoting). Flag glossary, `dev-operations.md` § idea and the command file are updated together; this is a plugin command flag, not a public `spur` noun/verb.
-- [ ] R8. Inline `--action` trace rows back-date `startedAt` by `durationMs` so `completedAt - startedAt == durationMs` in `spur workflow trace --json`.
-- [ ] R9. Workflow YAML changes regenerate `apps/cli/config/` via `build:bundle`, refresh the tracked contract baseline for the new definition digest, and keep `inline-pipeline-parity-check` green.
+- [x] R1. The idea text is persisted verbatim to `.spur/run/<runId>-idea-input.md` before discovery, in both drivers: the `start` state writes `$idea` through a shell action for headless runs, and the inline driver writes the operator's argument text unmodified before executing `start`. The precheck fails the run when the file is empty.
+- [x] R2. Every model-bearing stage prompt (discovery, feature-create, ac-generate, system-design, decompose, ready-prepare) references `.spur/run/<runId>-idea-input.md` as the authoritative ask instead of, or in addition to, `${vars.idea}`.
+- [x] R3. The idea-evaluation report carries a `## Requirement inventory` section: one numbered item `I<n>` per explicit ask in the input, each quoting or closely paraphrasing its source line, plus an `unclear` marker where the ask is ambiguous. `idea-evaluation.md` owns the template.
+- [x] R4. Acceptance-criteria generation maps coverage: each scenario lists the inventory items it covers (a `# covers: I1, I3` comment line inside the Gherkin scenario or an equivalent documented form), and a deterministic run-scoped check reports any inventory item not covered by at least one scenario. Uncovered items route through the existing capped ac-generate retry loop under `profile=auto` and surface in the interactive feature-check prompt otherwise; an explicit `deferred` disposition in the inventory is allowed and exempts the item.
+- [x] R5. The ac-generate and decompose prompts state the two task-check rules the docs now carry: AC bullets are exact scenario titles, and the `L4.gate-language` words are forbidden in titles, section bodies and enum values.
+- [x] R6. The feature-create prompt names the `--json` envelope (`.ref.id`) so the id is read correctly on the first attempt.
+- [x] R7. `/sp:dev-idea` accepts `--from-file <path>` as an alternative to the positional idea (mutually exclusive; the file body becomes the idea text, no shell quoting). Flag glossary, `dev-operations.md` § idea and the command file are updated together; this is a plugin command flag, not a public `spur` noun/verb.
+- [x] R8. Inline `--action` trace rows back-date `startedAt` by `durationMs` so `completedAt - startedAt == durationMs` in `spur workflow trace --json`.
+- [x] R9. Workflow YAML changes regenerate `apps/cli/config/` via `build:bundle`, refresh the tracked contract baseline for the new definition digest, and keep `inline-pipeline-parity-check` green.
 
 ### Acceptance Criteria
 
-- [ ] R1 — Idea text persists verbatim as a run artifact in both drivers
-- [ ] R2 — Discovery emits a numbered requirement inventory
-- [ ] R3 — Coverage gate routes uncovered inventory items back to ac-generate
-- [ ] R4 — Stage prompts carry the checker rules and the create envelope
-- [ ] R5 — dev-idea accepts --from-file
-- [ ] R6 — Inline trace action rows carry a consistent span
-- [ ] R7 — Generated bundle and baselines stay green
+- [x] R1 — Idea text persists verbatim as a run artifact in both drivers
+- [x] R2 — Discovery emits a numbered requirement inventory
+- [x] R3 — Coverage gate routes uncovered inventory items back to ac-generate
+- [x] R4 — Stage prompts carry the checker rules and the create envelope
+- [x] R5 — dev-idea accepts --from-file
+- [x] R6 — Inline trace action rows carry a consistent span
+- [x] R7 — Generated bundle and baselines stay green
 
 Task-local checks: `spur task check` on a freshly created batch shows no L4 gate-language or uncovered-scenario findings; `spur workflow trace <run> --json` action rows satisfy `completedAt - startedAt == durationMs`.
 
@@ -100,14 +100,42 @@ Placement follows the Design: pipeline mechanics in `config/workflows/idea-pipel
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | idea-pipeline.yaml start.onEnter verbatim printf + awk NF empty gate; driver doc 163-192; definition test R1 |
+| R2 | MET | all six stage prompts name -idea-input.md authoritative; definition test R2 |
+| R3 | MET | idea-evaluation.md:35-41 inventory template; discovery mandate; brainstorm SKILL pointer; definition test R3 |
+| R4 | MET | idea-coverage-check.ts soft fail-closed; wiring 234-250; auto-profile guards conjunct cov_status; interactive surface; ac-style-guide # covers; 6 unit tests |
+| R5 | MET | ac-generate prompt carries both task-check rules inline; decompose binds by reference to decomposition.md:557-561 (letter-partial vs requirement text, intent satisfied; classification recorded) |
+| R6 | MET | feature-create prompt names .ref.id envelope |
+| R7 | MET | dev-idea.md + flag-glossary + dev-operations --from-file, mutually exclusive; validate-commands 39 pass |
+| R8 | MET | action-trace.ts backdateStart anchored on completed_at-durationMs; domain DAO setStartedAt; span/zero-duration/backdate-failure tests |
+| R9 | MET | guard-parity fixture refreshed per protocol, one-shot assertion retired; spur-check exit 0; inline-pipeline-parity-check ok (9 actions, 4 guards) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | quality-gate | — | bun run spur-check exit 0 (8434 tests, 477 files) |
+| P4 | review | — | reviewer subagent c71e12b3: 0 P0/P1, 5 P2 non-blocking |
+| P4 | inline-pipeline-parity-check | — | ok (9 actions, 4 guards agree across 9 workflows) |
 
 ### References
 
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-09-17T21:33:29.197Z todo → wip (system)
+- 2026-09-17T22:56:51.098Z wip → testing (system)
+- 2026-09-17T22:57:12.368Z testing → done (system)
+
