@@ -23,11 +23,11 @@ updated_at: "{{ CREATED_AT }}"
 
 ### Requirements
 
-<!-- R-numbered list derived from the linked feature or refined task scope. -->
+<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Derive from the linked feature or refined task scope. -->
 
 ### Acceptance Criteria
 
-<!-- Copy or derive real scenarios from the linked feature. Do not leave placeholder AC here. -->
+<!-- `- [ ] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Do not leave placeholder AC here. -->
 
 ### Q&A
 

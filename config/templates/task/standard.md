@@ -23,11 +23,11 @@ updated_at: "{{ CREATED_AT }}"
 
 ### Requirements
 
-<!-- R-numbered list of what must be true when this task is complete. Keep empty until requirements are known. -->
+<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Keep empty until requirements are known. -->
 
 ### Acceptance Criteria
 
-<!-- Given/When/Then scenarios or a checklist derived from Requirements. Keep empty if this task has no objective AC yet. -->
+<!-- `- [ ] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Keep empty if this task has no objective AC yet. -->
 
 ### Q&A
 

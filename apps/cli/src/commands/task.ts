@@ -436,6 +436,8 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 '`spur task update <wbs> done --force-done --provenance-bypass --reason "…"`.',
                 'See the gate checklist (spur-dev/references/gate-checklists.md).',
                 'Valid section names (no failed write): `spur task sections <wbs> list`.',
+                'Requirements body: one `- [ ] R1. <text>` per line. Acceptance Criteria body: `- [ ] R1 — <exact',
+                'feature scenario title>` bullets or `Scenario:` blocks titled verbatim from the feature AC (or `ac_altitude: task-local`).',
                 'Sections replace, with one exception: `--section "Q&A"` APPENDS a timestamped',
                 '`#### Q&A entry — <ISO>` block. Start the body with `<!-- qa:replace -->` to replace it wholesale.',
             ].join('\n'),
@@ -572,6 +574,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
+                        for (const warning of result.warnings ?? []) {
+                            context.output.error(warning);
+                        }
                         context.output.write(`Set ${key}=${value} on task ${result.ref.id}`);
                     }
                 } else if (status !== undefined) {

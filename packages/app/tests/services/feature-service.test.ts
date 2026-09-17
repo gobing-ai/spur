@@ -168,6 +168,26 @@ describe('FeatureService', () => {
             expect(shown?.content).not.toContain('## Acceptance Criteria\n## Acceptance Criteria');
         });
 
+        test('warns at write time when Gherkin AC lacks a Feature: line', async () => {
+            const created = await svc.create('BDD Warn Feature');
+            const source = join(root, 'feature-ac-nofeature.md');
+            writeFileSync(source, '```gherkin\n  Scenario: Alpha\n    Given x\n    Then y\n```\n');
+
+            const result = await svc.updateSection(created.ref.id, 'Acceptance Criteria', source);
+
+            expect((result.warnings ?? []).join('\n')).toContain('L3.ac-bdd-error');
+        });
+
+        test('stays silent for a checklist-tier AC', async () => {
+            const created = await svc.create('Checklist AC Feature');
+            const source = join(root, 'feature-ac-checklist.md');
+            writeFileSync(source, '- [ ] R1 — Alpha\n- [ ] R2 — Beta\n');
+
+            const result = await svc.updateSection(created.ref.id, 'Acceptance Criteria', source);
+
+            expect((result.warnings ?? []).join('\n')).not.toContain('L3.ac-bdd-error');
+        });
+
         test('throws with available sections when the section is absent', async () => {
             const created = await svc.create('Missing Section Feature');
             const source = join(root, 'feature-missing.md');

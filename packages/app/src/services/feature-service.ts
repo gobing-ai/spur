@@ -6,7 +6,14 @@
  * Parent is derived by dropping the last character.
  */
 
-import { acquireCreateLock, atomicWriteAsync, MarkdownDocument } from '@gobing-ai/spur-domain';
+import {
+    acquireCreateLock,
+    atomicWriteAsync,
+    MarkdownDocument,
+    parseChecklist,
+    stripAcFence,
+    validateAcceptanceCriteria,
+} from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import {
     type CheckFeatureFindings,
@@ -236,7 +243,21 @@ export class FeatureService {
         }
         const raw = await this.ctx.fs.readFile(sourceFile);
         const body = stripLeadingSectionHeader(raw, sectionName);
-        return this.ctx.writeService.updateSection(ref, sectionName, body);
+        let result = await this.ctx.writeService.updateSection(ref, sectionName, body);
+        // Write-time mirror of `feature check` L3.ac-bdd-error (same validator, same
+        // checklist-tier exemption): a Gherkin AC without a `Feature:` line is the
+        // recurring authoring slip, so name it at the write instead of the next check.
+        if (sectionName === 'Acceptance Criteria' && body.trim().length > 0) {
+            const acBody = stripAcFence(body);
+            const looksGherkin = /^\s*(Feature:|Scenario:|Scenario Outline:)/m.test(acBody);
+            if (looksGherkin || parseChecklist(acBody).length === 0) {
+                const errors = validateAcceptanceCriteria(acBody).errors.map(
+                    (e) => `L3.ac-bdd-error: BDD: ${e.message}`,
+                );
+                if (errors.length > 0) result = { ...result, warnings: [...(result.warnings ?? []), ...errors] };
+            }
+        }
+        return result;
     }
 
     /** Replace the feature's body content (everything after frontmatter). */
@@ -955,6 +976,8 @@ updated_at: "${now}"
 ## Acceptance Criteria
 
 \`\`\`gherkin
+# Keep the Feature: line (feature check L3.ac-bdd-error without it). Each Scenario: title is the
+# identity key tasks reference verbatim ("- [ ] R1 — <title>"); number R1, R2, …; never rename after tasks link.
 Feature: ${name}
 
   Scenario: Basic acceptance

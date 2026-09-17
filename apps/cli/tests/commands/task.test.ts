@@ -3375,7 +3375,7 @@ describe('spur task ready-by-default (0788, fake executor)', () => {
     // fills that make `task check --as todo` pass with warnings only (verified
     // against the real checker).
     const AC_PLACEHOLDER =
-        '<!-- Given/When/Then scenarios or a checklist derived from Requirements. Keep empty if this task has no objective AC yet. -->';
+        '<!-- `- \\[ \\] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Keep empty if this task has no objective AC yet. -->';
     const DESIGN_PLACEHOLDER =
         '<!-- Chosen approach, key tradeoffs, invariants, and impacted surfaces. Keep snippets short. -->';
     const PLAN_PLACEHOLDER = '<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->';

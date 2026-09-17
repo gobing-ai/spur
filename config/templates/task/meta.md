@@ -23,11 +23,11 @@ updated_at: "{{ CREATED_AT }}"
 
 ### Requirements
 
-<!-- R-numbered expectations for the process/docs/chore outcome. Keep empty if not applicable. -->
+<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Keep empty if not applicable. -->
 
 ### Acceptance Criteria
 
-<!-- Lightweight checklist or Given/When/Then if there is an observable completion condition. -->
+<!-- `- [ ] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Keep empty if not applicable. -->
 
 ### Q&A
 

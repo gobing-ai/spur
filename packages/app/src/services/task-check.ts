@@ -445,6 +445,16 @@ function hasAdjacentFileLineColumns(body: string): boolean {
  * truth shared by the L3 checker and the task-write seam (task 0510 R1) so
  * write-time and `task check` behavior cannot drift.
  */
+/** L4.gate-language predicate — shared by `task check` and the write-time warning in TaskService. */
+export const GATE_LANGUAGE_SECTIONS = ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan'] as const;
+/** True when the body names a gate/human-approval marker that does not belong in a task spec. */
+export function hasGateLanguage(body: string): boolean {
+    return /(?<![\w-])(HITL|human[- ]in[- ]the-loop|approval|approved|merge event|merged|content-gate|GATED|capstone)(?![\w-])/i.test(
+        body,
+    );
+}
+
+/** True when the Solution body carries at least one `file:line`-shaped citation. */
 export function hasSolutionFileLineCitation(body: string): boolean {
     const hasFileLine = /`[^`]+?:\d+(-\d+)?`/.test(body) || /[^\s`]\.\w+:\d+/.test(body);
     return hasFileLine || hasAdjacentFileLineColumns(body);
@@ -1407,14 +1417,10 @@ export class TaskCheckService extends PlanningCheckService {
         // demands — repeating the advice there is pure noise (0694, 0698).
         const declaredDeps = doc.frontmatterData?.dependencies;
         if (Array.isArray(declaredDeps) && declaredDeps.length > 0) return;
-        for (const section of ['Background', 'Requirements', 'Design', 'Acceptance Criteria', 'Plan']) {
+        for (const section of GATE_LANGUAGE_SECTIONS) {
             const body = doc.getSection(section);
             if (body === null) continue;
-            if (
-                /(?<![\w-])(HITL|human[- ]in[- ]the-loop|approval|approved|merge event|merged|content-gate|GATED|capstone)(?![\w-])/i.test(
-                    body,
-                )
-            ) {
+            if (hasGateLanguage(body)) {
                 findings.push({
                     layer: 'L4',
                     code: FINDING_CODES.L4_GATE_LANGUAGE,

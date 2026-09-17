@@ -23,11 +23,11 @@ updated_at: "{{ CREATED_AT }}"
 
 ### Requirements
 
-<!-- R-numbered expectations for the fix. Include repro/expected behavior if it helps traceability. -->
+<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Include repro/expected behavior if it helps traceability. -->
 
 ### Acceptance Criteria
 
-<!-- Given/When/Then regression scenario or checklist proving the bug is fixed. -->
+<!-- `- [ ] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Use a regression scenario proving the bug is fixed. -->
 
 ### Q&A
 

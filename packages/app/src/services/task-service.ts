@@ -31,9 +31,10 @@ import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
-import type { CheckFindings, SectionMatrix } from './planning-check-base';
+import { type CheckFindings, FINDING_CODES, type SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
-import { hasSolutionFileLineCitation, TaskCheckService } from './task-check';
+import { structuralFindings } from './structural-repair';
+import { GATE_LANGUAGE_SECTIONS, hasGateLanguage, hasSolutionFileLineCitation, TaskCheckService } from './task-check';
 import { TaskLocator } from './task-locator';
 import {
     escapeTablePipe,
@@ -832,7 +833,20 @@ export class TaskService {
         }
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
-        return this.writeService.updateFrontmatter(ref, key, value);
+        let result = await this.writeService.updateFrontmatter(ref, key, value);
+        // Attaching a feature AFTER the AC was written is the common idea-pipeline
+        // order; re-run the DD-09 subset warning against the AC already on disk so the
+        // orphan scenarios surface now rather than at the next `task check`.
+        if (key === 'feature_id') {
+            const ac = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').getSection(
+                'Acceptance Criteria',
+            );
+            if (ac !== null && ac.trim().length > 0) {
+                const warnings = await this.checkAcSubsetWarning(filePath, ac);
+                if (warnings.length > 0) result = { ...result, warnings: [...(result.warnings ?? []), ...warnings] };
+            }
+        }
+        return result;
     }
 
     // ── mutateDependencies (task 0303 — CLI-safe dependencies[] write) ──
@@ -1193,14 +1207,28 @@ export class TaskService {
             );
         }
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
-        const result = await this.writeService.updateSection(ref, sectionName, body);
+        let result = await this.writeService.updateSection(ref, sectionName, body);
 
         if (sectionName === 'Acceptance Criteria') {
             const warnings = await this.checkAcSubsetWarning(filePath, body);
             if (warnings.length > 0) {
-                return {
+                result = { ...result, warnings: [...(result.warnings ?? []), ...warnings] };
+            }
+        }
+
+        // Write-time mirror of L4.gate-language: same predicate and same
+        // `dependencies[]` exemption as `task check`, surfaced when the prose is
+        // authored instead of at the next check.
+        if ((GATE_LANGUAGE_SECTIONS as readonly string[]).includes(sectionName) && hasGateLanguage(body)) {
+            const deps = MarkdownDocument.parse(await this.ctx.fs.readFile(filePath), 'task').frontmatterData
+                ?.dependencies;
+            if (!Array.isArray(deps) || deps.length === 0) {
+                result = {
                     ...result,
-                    warnings: [...(result.warnings ?? []), ...warnings],
+                    warnings: [
+                        ...(result.warnings ?? []),
+                        `L4.gate-language: ${sectionName} contains gate language (HITL/approval/approved/merged/…) — say "operator answer"/"accepted", or model the gate as a frontmatter dependency`,
+                    ],
                 };
             }
         }
@@ -1212,11 +1240,21 @@ export class TaskService {
         // reasons ride the existing `warnings[]` channel (stderr in human mode,
         // inside the payload under `--json`) with no CLI change.
         if (sectionName === 'Requirements' || sectionName === 'Plan') {
-            const report = evaluateTaskSize(await this.ctx.fs.readFile(filePath));
-            if (!report.ok) {
+            const written = await this.ctx.fs.readFile(filePath);
+            const warnings: string[] = [];
+            // Same predicate as `task check` (L3.requirements-checkbox), surfaced at the
+            // moment the R-items are authored so the exact form is learned once, here.
+            if (sectionName === 'Requirements') {
+                for (const f of structuralFindings(written, 'task')) {
+                    if (f.code === FINDING_CODES.L3_REQUIREMENTS_CHECKBOX) warnings.push(`${f.code}: ${f.message}`);
+                }
+            }
+            const report = evaluateTaskSize(written);
+            if (!report.ok) warnings.push(...report.reasons);
+            if (warnings.length > 0) {
                 return {
                     ...result,
-                    warnings: [...(result.warnings ?? []), ...report.reasons],
+                    warnings: [...(result.warnings ?? []), ...warnings],
                 };
             }
         }

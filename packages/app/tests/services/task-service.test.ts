@@ -2408,6 +2408,89 @@ describe('TaskService 0416: WBS collision guard + baseCounter', () => {
         });
     });
 
+    // Write-time mirror of L3.requirements-checkbox: the exact R-item form is surfaced
+    // when Requirements are authored, not only at the later `task check`.
+    describe('updateSection — Requirements checkbox warning', () => {
+        const root = () => tasksDir.replace('/tasks', '');
+
+        async function writeReq(name: string, body: string): Promise<string> {
+            const fs = createNodeFileSystem(root());
+            const path = join(tasksDir, `${name}.req.tmp.md`);
+            await fs.writeFile(path, `${body}\n`);
+            return path;
+        }
+
+        test('R-items without the checkbox marker warn without blocking', async () => {
+            const created = await svc.create({ title: 'Checkbox warn' });
+            const src = await writeReq('no-box', '- R1 — first\n- R2. second');
+
+            const result = await svc.updateSection(created.ref.id, 'Requirements', src);
+
+            expect((result.warnings ?? []).join('\n')).toContain('L3.requirements-checkbox');
+            const fs = createNodeFileSystem(root());
+            expect(await fs.readFile(result.ref.filePath)).toContain('- R2. second');
+        });
+
+        test('conforming `- [ ] R1.` items stay silent', async () => {
+            const created = await svc.create({ title: 'Checkbox clean' });
+            const src = await writeReq('boxed', '- [ ] R1. first\n- [ ] R2. second');
+
+            const result = await svc.updateSection(created.ref.id, 'Requirements', src);
+
+            expect((result.warnings ?? []).join('\n')).not.toContain('L3.requirements-checkbox');
+        });
+    });
+
+    // Write-time mirror of L4.gate-language and the late `--feature` attach path.
+    describe('updateSection / updateField — gate-language and late-attach warnings', () => {
+        const root = () => tasksDir.replace('/tasks', '');
+
+        async function writeTmp(name: string, body: string): Promise<string> {
+            const fs = createNodeFileSystem(root());
+            const path = join(tasksDir, `${name}.gl.tmp.md`);
+            await fs.writeFile(path, `${body}\n`);
+            return path;
+        }
+
+        test('Background with gate vocabulary warns without blocking', async () => {
+            const created = await svc.create({ title: 'Gate words' });
+            const src = await writeTmp('gate', 'Blocked until HITL approval of the parent.');
+
+            const result = await svc.updateSection(created.ref.id, 'Background', src);
+
+            expect((result.warnings ?? []).join('\n')).toContain('L4.gate-language');
+        });
+
+        test('gate vocabulary stays silent once dependencies[] is declared', async () => {
+            const created = await svc.create({ title: 'Gate words deps' });
+            await svc.mutateDependencies(created.ref.id, 'set', ['0001']);
+            const src = await writeTmp('gate-deps', 'Blocked until HITL approval of the parent.');
+
+            const result = await svc.updateSection(created.ref.id, 'Background', src);
+
+            expect((result.warnings ?? []).join('\n')).not.toContain('L4.gate-language');
+        });
+
+        test('attaching feature_id after the AC write re-runs the DD-09 subset warning', async () => {
+            const fs = createNodeFileSystem(root());
+            const featuresDir = join(root(), 'features');
+            await fs.ensureDir(featuresDir);
+            await fs.writeFile(
+                join(featuresDir, 'Y7_late-attach.md'),
+                '---\nid: Y7\nname: "late"\n---\n\n# Y7\n\n## Acceptance Criteria\n\n```gherkin\n  Scenario: Known\n    Given x\n    Then y\n```\n',
+            );
+            const created = await svc.create({ title: 'Late attach' });
+            const src = await writeTmp('late-ac', '- [ ] R1 — Known\n- [ ] R2 — Unknown title');
+            const first = await svc.updateSection(created.ref.id, 'Acceptance Criteria', src);
+            expect((first.warnings ?? []).join('\n')).not.toContain('DD-09');
+
+            const attached = await svc.updateField(created.ref.id, 'feature_id', 'Y7');
+
+            expect((attached.warnings ?? []).join('\n')).toContain('Unknown title');
+            expect((attached.warnings ?? []).join('\n')).toContain('DD-09 subset rule');
+        });
+    });
+
     // 0575 R1: the authoring-time size warning must surface the pipeline precheck's
     // evaluation on the mutation result's warnings[] channel, never block the write.
     describe('updateSection — authoring-time size warning (0575 R1)', () => {

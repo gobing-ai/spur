@@ -20,7 +20,7 @@
             },
             "requirements": {
                 "type": "string",
-                "description": "R-numbered requirement items (R1. R2. …) — a referenceable list."
+                "description": "Pre-filled ### Requirements body: one R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); any other form fails `spur task check`."
             },
             "design": {
                 "type": "string",
@@ -32,7 +32,7 @@
             },
             "acceptance_criteria": {
                 "type": "string",
-                "description": "Pre-filled ### Acceptance Criteria body (Gherkin or checklist)."
+                "description": "Pre-filled ### Acceptance Criteria body: `- [ ] R1 — <exact feature scenario title>` bullets or `Scenario:` blocks titled verbatim from the feature AC (L4.uncovered-task-scenario); task-only checks go in prose after the bullets."
             },
             "feature_id": {
                 "type": "string",

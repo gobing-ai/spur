@@ -33,11 +33,11 @@ in the reviewed PR/commit/diff). Fix in priority order (P1 → P2 → …); re-r
 
 ### Requirements
 
-<!-- R-numbered fix requirements derived from the findings. Fill after triage/refinement. -->
+<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Fill after triage/refinement from the findings. -->
 
 ### Acceptance Criteria
 
-<!-- Checks that prove the findings were addressed. Keep empty until the review task becomes executable work. -->
+<!-- `- [ ] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Keep empty until the review task becomes executable work. -->
 
 ### Q&A
 

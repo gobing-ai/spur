@@ -134,14 +134,13 @@ single run-on paragraph on render, even though they look like separate items in 
 "requirements": "- [ ] R1. <text>\n- [ ] R2. <text>\n- [ ] R3. <text>"
 ```
 
-`R1. <text>\nR2. <text>` (no marker) is the trap. `spur task check` **accepts** it — the L3
-R-numbering rule matches the bare `Rn.` token — so nothing fails, and the defect only surfaces later
-as an unreadable paragraph in Board preview. Do not rely on `check` to catch this. Keep the `Rn.`
+`R1. <text>\nR2. <text>` and `- R1 — <text>` are the traps: `spur task check` reports
+`L3.requirements-checkbox` and a bare run renders as one paragraph in Board preview. Keep the `Rn.`
 (period) token inside the marker so R-numbering still resolves; see the canonical rule in
 `sp:spur-dev` → `references/planning-workflow.md`.
 
 Applies to the other body fields too: `plan` as an ordered list (`1. …\n2. …`), `acceptance_criteria`
-as a fenced ```` ```gherkin ```` block, and any enumeration inside `background` or `design` as a
+as `- [ ] R1 — <exact feature scenario title>` bullets (see § Idea-pipeline emission), and any enumeration inside `background` or `design` as a
 `- ` list.
 
 ### Design at create (default) vs `--skip-design`
@@ -523,7 +522,7 @@ The payload is a top-level JSON **array** (no `tasks` wrapper):
     "requirements": "- [ ] R1. Accept a title and an optional description on POST /tasks.\n- [ ] R2. Reject an empty title with a 400 and a reason.\n- [ ] R3. Allocate the task file through the CLI-gated write path.",
     "design": "Approach: POST /tasks via existing TaskService.create.\nRejected: ad-hoc SQL in handler.\nInvariants: CLI-gated corpus writes only.",
     "plan": "1. Contract\n2. Handler\n3. Tests",
-    "acceptance_criteria": "Scenario: create succeeds\n  Given a valid title\n  When POST /tasks\n  Then a task file is allocated"
+    "acceptance_criteria": "- [ ] R1 — User can create a task with required fields"
   },
   {
     "name": "Implement task listing endpoint",

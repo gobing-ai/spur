@@ -187,7 +187,9 @@ spur feature check --strict --json  # warnings → failures
 ```
 
 The 4-layer validator (frontmatter, AC syntax, children-limit/structure, L4 traceability) emits its
-verdict and findings as JSON. **Query this, don't re-derive it** — the rules live in the CLI, never
+verdict and findings as a JSON **array**, one entry per feature (`jq '.[0].pass'`, `.[0].findings[].code`),
+like `spur task check --json`. Gherkin AC must keep its `Feature:` line (`L3.ac-bdd-error`) and
+every `Scenario:` title is the identity key tasks reference verbatim. **Query this, don't re-derive it** — the rules live in the CLI, never
 restated as prose here. This is what `sp:spur-dev`'s feature-check gate loop runs.
 
 ## Status sync - `sync`

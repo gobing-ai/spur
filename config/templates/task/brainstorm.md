@@ -23,11 +23,11 @@ updated_at: "{{ CREATED_AT }}"
 
 ### Requirements
 
-<!-- Constraints the eventual direction must satisfy, if known. -->
+<!-- One R-item per line, exactly `- [ ] R1. <text>` (checkbox + `R<n>.`); `spur task check` flags any other form. Constraints the eventual direction must satisfy, if known. -->
 
 ### Acceptance Criteria
 
-<!-- Decision criteria or success checks for the brainstorm output. Keep empty if not applicable. -->
+<!-- `- [ ] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Keep empty if not applicable. -->
 
 ### Q&A
 
