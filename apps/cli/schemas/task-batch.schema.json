@@ -32,7 +32,7 @@
             },
             "acceptance_criteria": {
                 "type": "string",
-                "description": "Pre-filled ### Acceptance Criteria body: `- [ ] R1 — <exact feature scenario title>` bullets or `Scenario:` blocks titled verbatim from the feature AC (L4.uncovered-task-scenario); task-only checks go in prose after the bullets."
+                "description": "Pre-filled ### Acceptance Criteria body: items numbered AC1, AC2, … (never R<n>, the Requirements namespace): `- [ ] AC1 — <feature scenario title without its R-number>` bullets or `Scenario: AC1 — <title>` blocks (L4.uncovered-task-scenario matches the title after the prefix); `(req: R<n>)` binds a task requirement; task-only checks go in prose after the bullets."
             },
             "feature_id": {
                 "type": "string",

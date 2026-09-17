@@ -2799,10 +2799,27 @@ describe('TaskCheckService', () => {
             expect(findings).toEqual([]);
         });
 
-        test('warns when opted in but no scenario is R-numbered', async () => {
-            const findings = await coverageFindings(taskWith(['- [ ] R1. Does X.'], scenario('X happens')));
+        test('warns when opted in but no scenario binds a requirement', async () => {
+            const findings = await coverageFindings(taskWith(['- [ ] R1. Does X.'], scenario('AC1 — X happens')));
             expect(findings).toHaveLength(1);
-            expect(findings[0]?.message).toContain('no scenario is R-numbered');
+            expect(findings[0]?.message).toContain('no scenario binds a requirement');
+        });
+
+        test('AC-numbered scenarios bind requirements through (req: …)', async () => {
+            // WHY: task AC uses task-local `AC<n>` so it never collides with Requirements
+            // `R<n>`; the req clause is the explicit R link the check reads.
+            const findings = await coverageFindings(
+                taskWith(
+                    ['- [ ] R1. Does X.', '- [ ] R2. Does Y.', '- [ ] R3. Does Z.'],
+                    [...scenario('AC1 — X happens (req: R1; R2)'), ...scenario('AC2 — Z happens (req: R3)')],
+                ),
+            );
+            expect(findings).toEqual([]);
+            const partial = await coverageFindings(
+                taskWith(['- [ ] R1. Does X.', '- [ ] R2. Does Y.'], scenario('AC1 — X happens (req: R1)')),
+            );
+            expect(partial).toHaveLength(1);
+            expect(partial[0]?.message).toContain('R2');
         });
 
         test('stays silent on a legacy task that does not declare ac_numbering', async () => {

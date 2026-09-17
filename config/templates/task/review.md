@@ -37,7 +37,7 @@ in the reviewed PR/commit/diff). Fix in priority order (P1 → P2 → …); re-r
 
 ### Acceptance Criteria
 
-<!-- `- [ ] R1 — <exact feature scenario title>` bullets, or `Scenario:` blocks titled verbatim from the linked feature AC; task-only checks go in prose below, or set `ac_altitude: task-local`. Keep empty until the review task becomes executable work. -->
+<!-- Number items AC1, AC2, … (never R<n> — that is the Requirements namespace): `- [ ] AC1 — <feature scenario title without its R-number>` bullets or `Scenario: AC1 — <title>` blocks; add `(req: R<n>)` to bind a task requirement; task-only checks go in prose below, or set `ac_altitude: task-local`. Keep empty until the review task becomes executable work. -->
 
 ### Q&A
 

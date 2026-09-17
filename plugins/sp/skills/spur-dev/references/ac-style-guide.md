@@ -27,6 +27,14 @@ Rules:
 - **One R-number = one scenario.** Never split a requirement across multiple scenarios
   under the same R-number; never merge two requirements into one scenario.
 
+## Task-side numbering (`AC<n>`)
+
+`R<n>` is the **feature** scenario key and the **task Requirements** key. Task `### Acceptance
+Criteria` items therefore use their own namespace: `- [ ] AC1 — <title>` or `Scenario: AC1 — <title>`,
+numbered task-locally. Carry a feature scenario by copying its title after the prefix (`normalizeTitle`
+strips both `AC<n>` and `R<n>`, so DD-09 matching is unaffected); bind a task requirement with
+`(req: R<n>)`. Legacy tasks that wrote `- [ ] R<n> —` / `Scenario: R<n> —` keep working unchanged.
+
 ## Two AC tiers (authoring convention)
 
 A planning convention (DD-06 "permissive start"), not a `spur feature check` feature today —

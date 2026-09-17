@@ -44,7 +44,10 @@ function stripScenarioPrefixes(title: string): string {
             .replace(/^\[[^\]]*\]\s*/, '')
             .replace(/\s*\[[^\]]*\]\s*$/, '')
             .replace(/^Scenario:\s*/i, '')
-            .replace(/^R\d+\s*[:\-—]?\s*/, '')
+            .replace(/^(?:AC|R)\d+\.?\s*[:\-—]?\s*/, '')
+            // `(req: R1; R2)` binds a task AC item to task Requirements (L3.ac-requirement-coverage);
+            // it is not part of the title. `(covers: …)` stays: it names feature scenarios.
+            .replace(/\s*\(req:[^)]*\)/i, ' ')
             .trim();
     } while (out !== previous);
     return out;
@@ -52,11 +55,12 @@ function stripScenarioPrefixes(title: string): string {
 
 /**
  * Normalize a scenario title for matching: lowercase, collapse whitespace,
- * strip bracket tags, a `Scenario:` prefix, R-id prefixes, and common punctuation.
+ * strip bracket tags, a `Scenario:` prefix, `R<n>` / `AC<n>` id prefixes (feature scenarios carry
+ * `R<n>`; task AC items carry task-local `AC<n>`), and common punctuation.
  */
 export function normalizeTitle(title: string): string {
     return stripScenarioPrefixes(title)
-        .replace(/^(R\d+)\s*[:\-—]?\s*/, '')
+        .replace(/^(?:AC|R)\d+\.?\s*[:\-—]?\s*/, '')
         .trim()
         .toLowerCase()
         .replace(/[\u0027\u2018\u2019\u201c\u201d]/g, '')

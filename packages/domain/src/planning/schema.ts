@@ -282,8 +282,10 @@ export const taskFrontmatterSchema = z.object({
      * so the coverage check stays off unless a task declares `task-local`. Existing tasks
      * therefore emit no new warnings and need no migration.
      *
-     * Opting an old task in is a pure prefix renumber: `normalizeTitle` strips `R\d+`
-     * before matching, so feature traceability (DD-09) cannot see the change.
+     * New tasks number AC items `AC<n>` (task-local) and bind requirements with
+     * `(req: R<n>)`; legacy `Scenario: R<n>` still binds by prefix. Either way
+     * `normalizeTitle` strips the prefix before DD-09 matching, so feature traceability
+     * cannot see the change.
      */
     ac_numbering: z.literal('task-local').optional(),
     /**

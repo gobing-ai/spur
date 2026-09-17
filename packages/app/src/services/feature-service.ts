@@ -977,7 +977,7 @@ updated_at: "${now}"
 
 \`\`\`gherkin
 # Keep the Feature: line (feature check L3.ac-bdd-error without it). Each Scenario: title is the
-# identity key tasks reference verbatim ("- [ ] R1 — <title>"); number R1, R2, …; never rename after tasks link.
+# identity key tasks reference verbatim ("- [ ] AC1 — <title>"); number R1, R2, …; never rename after tasks link.
 Feature: ${name}
 
   Scenario: Basic acceptance

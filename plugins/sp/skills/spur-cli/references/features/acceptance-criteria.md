@@ -47,8 +47,10 @@ Every scenario/item carries an `R1, R2, …` prefix:
 
 - **Sequential within a feature**, starting at R1.
 - **Stable forever.** Never renumber once tasks exist — tasks match AC by **normalized scenario
-  title** (the `R<n> —` prefix is stripped on comparison), so renumbering around a title is safe
-  but *rewording* a title breaks the coverage edge.
+  title** (the `R<n> —` prefix is stripped on comparison, as is the task side's `AC<n> —`), so
+  renumbering around a title is safe but *rewording* a title breaks the coverage edge.
+- **`R<n>` is the feature's namespace.** Task AC items are numbered `AC<n>` (task-local) and copy
+  the feature title after their own prefix; task Requirements own `R<n>.` inside the task.
 - **One R-number = one scenario.** Don't split one requirement across scenarios under a single
   R-number; don't merge two requirements into one scenario.
 

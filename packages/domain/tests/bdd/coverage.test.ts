@@ -10,6 +10,8 @@ describe('normalizeTitle', () => {
     test('strips R-id prefix', () => {
         expect(normalizeTitle('R1: user can log in')).toBe('user can log in');
         expect(normalizeTitle('R2 - password reset')).toBe('password reset');
+        expect(normalizeTitle('AC1 — password reset')).toBe('password reset');
+        expect(normalizeTitle('AC3. password reset')).toBe('password reset');
     });
 
     test('collapses whitespace', () => {

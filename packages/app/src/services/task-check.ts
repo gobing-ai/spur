@@ -750,8 +750,8 @@ export class TaskCheckService extends PlanningCheckService {
         // R-numbers (Requirements R1–R5 beside `Scenario: R6` is correct there), 29 number
         // locally, and 38 use no R-ids at all. Ungated, this fires on nearly every task and
         // trains everyone to ignore L3. So it runs only where the task declares the
-        // namespace. Opting a legacy task in is a pure prefix renumber — `normalizeTitle`
-        // strips `R\d+` before matching, so feature traceability cannot see it.
+        // namespace. New tasks number scenarios `AC<n>` and bind requirements via
+        // `(req: R<n>)`; `normalizeTitle` strips both prefixes, so DD-09 cannot see either.
         const acBodyForCoverage = doc.getSection('Acceptance Criteria');
         if (
             doc.frontmatterData?.ac_numbering === 'task-local' &&
@@ -771,8 +771,16 @@ export class TaskCheckService extends PlanningCheckService {
                 const s = /^\s*Scenario(?:\s+Outline)?:\s*(.*)$/.exec(line);
                 if (s === null) continue;
                 scenarioCount++;
-                const id = /^R(\d+)\b/.exec((s[1] ?? '').trim());
-                if (id?.[1] !== undefined) acIds.add(id[1]);
+                const title = (s[1] ?? '').trim();
+                // Task-local `AC<n>` scenarios bind requirements via `(req: R1; R2)`;
+                // legacy `Scenario: R<n> —` titles still bind by their own prefix.
+                const req = /\(req:\s*([^)]*)\)/i.exec(title);
+                if (req?.[1] !== undefined) {
+                    for (const m of req[1].matchAll(/\bR(\d+)\b/g)) if (m[1] !== undefined) acIds.add(m[1]);
+                } else {
+                    const id = /^R(\d+)\b/.exec(title);
+                    if (id?.[1] !== undefined) acIds.add(id[1]);
+                }
             }
             const byNumber = (a: string, b: string): number => Number(a) - Number(b);
             if (reqIds.size > 0 && scenarioCount > 0 && acIds.size === 0) {
@@ -783,7 +791,7 @@ export class TaskCheckService extends PlanningCheckService {
                     severity: 'warning',
                     section: 'Acceptance Criteria',
                     message:
-                        'ac_numbering is task-local but no scenario is R-numbered — prefix each scenario with the requirement it covers (Scenario: R1 — …)',
+                        'ac_numbering is task-local but no scenario binds a requirement — add `(req: R1)` to each `Scenario: AC<n> — …` title (legacy: `Scenario: R1 — …`)',
                 });
             } else if (reqIds.size > 0 && acIds.size > 0) {
                 const uncovered = [...reqIds].filter((id) => !acIds.has(id)).sort(byNumber);

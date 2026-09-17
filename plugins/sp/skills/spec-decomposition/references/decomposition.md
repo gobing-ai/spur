@@ -140,7 +140,7 @@ single run-on paragraph on render, even though they look like separate items in 
 `sp:spur-dev` → `references/planning-workflow.md`.
 
 Applies to the other body fields too: `plan` as an ordered list (`1. …\n2. …`), `acceptance_criteria`
-as `- [ ] R1 — <exact feature scenario title>` bullets (see § Idea-pipeline emission), and any enumeration inside `background` or `design` as a
+as `- [ ] AC1 — <feature scenario title without its R-number>` bullets (see § Idea-pipeline emission), and any enumeration inside `background` or `design` as a
 `- ` list.
 
 ### Design at create (default) vs `--skip-design`
@@ -206,20 +206,22 @@ scenarios are numbered in the **feature's** namespace. Both appear in a task's
 
 The rule:
 
-- **Scenarios covering the task's own requirements carry the task-local R-prefix** —
-  `Scenario: R3 — <observable outcome>`. Tasks declaring `ac_numbering: task-local` in frontmatter
-  get these cross-checked by `spur task check` (`L3.ac-requirement-coverage`): a requirement with no
-  scenario, or a scenario citing a requirement that does not exist, is reported.
-- **Scenarios carried verbatim from the feature (for DD-09 traceability) carry NO R-prefix** — copy
-  the title text only. `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:58`) strips `R\d+`
-  before matching, so the prefix is invisible to feature coverage anyway; dropping it keeps the
-  feature's number from being read as a task requirement id. Verified empirically: removing the
-  prefix from a carried scenario left the feature's orphan count unchanged.
+- **Task AC items are numbered `AC1, AC2, …` (task-local), never `R<n>`** — `R<n>` is the
+  Requirements namespace, and two R-numberings in one file is how they get confused.
+- **Bind a scenario to the task requirement it covers with `(req: R<n>)`** —
+  `Scenario: AC1 — <observable outcome> (req: R3)` (semicolons for several: `R1; R2`). Tasks
+  declaring `ac_numbering: task-local` get these cross-checked by `spur task check`
+  (`L3.ac-requirement-coverage`): a requirement with no scenario, or a scenario citing a requirement
+  that does not exist, is reported.
+- **Scenarios carried from the feature (for DD-09 traceability) copy the title text after the
+  feature's `R<n> —`** — `- [ ] AC2 — <title>`. `normalizeTitle`
+  (`packages/domain/src/bdd/coverage.ts`) strips both `AC\d+` and `R\d+` before matching, so the
+  prefix is invisible to feature coverage; the feature's number is never read as a task id.
 
 **Legacy tasks are exempt.** Most existing tasks predate this and copied feature AC wholesale,
 carrying the feature's numbers. The coverage check is opt-in precisely so they emit nothing —
-absent `ac_numbering`, only DD-09 applies. Opting an old task in is a pure prefix renumber; it cannot
-break traceability. New tasks get `ac_numbering: task-local` from the templates automatically;
+absent `ac_numbering`, only DD-09 applies. Legacy `Scenario: R<n> —` titles still bind by prefix, so
+opting an old task in cannot break traceability. New tasks get `ac_numbering: task-local` from the templates automatically;
 `spur task update <wbs> --ac-numbering task-local` opts in an existing one.
 
 Edge-case scenarios may map to tasks, merge into a sibling, or be deferred. Record deferrals
@@ -522,7 +524,7 @@ The payload is a top-level JSON **array** (no `tasks` wrapper):
     "requirements": "- [ ] R1. Accept a title and an optional description on POST /tasks.\n- [ ] R2. Reject an empty title with a 400 and a reason.\n- [ ] R3. Allocate the task file through the CLI-gated write path.",
     "design": "Approach: POST /tasks via existing TaskService.create.\nRejected: ad-hoc SQL in handler.\nInvariants: CLI-gated corpus writes only.",
     "plan": "1. Contract\n2. Handler\n3. Tests",
-    "acceptance_criteria": "- [ ] R1 — User can create a task with required fields"
+    "acceptance_criteria": "- [ ] AC1 — User can create a task with required fields"
   },
   {
     "name": "Implement task listing endpoint",
