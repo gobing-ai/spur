@@ -8,6 +8,14 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// ../ts-libs/packages/utils/dist/env.js
+function getEnvVar(name, fallback) {
+  const raw = process.env[name];
+  return raw === undefined ? fallback : raw;
+}
+
+// plugins/sp/scripts/feature-sync-bounded.ts
 function classifySyncResult(result) {
   if (result.proposal.gateBlocked === true)
     return "blocked";
@@ -95,8 +103,8 @@ through unchanged.
 
 Exit: 0 = sync handled (applied / no-op / suppressed-blocked / live-blocked).`;
 function defaultSpurBin() {
-  if (process.env.SPUR_BIN)
-    return process.env.SPUR_BIN;
+  if (getEnvVar("SPUR_BIN"))
+    return getEnvVar("SPUR_BIN");
   const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
   if (existsSync(local))
     return `bun ${local}`;

@@ -14,6 +14,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
 import {
     type ActionCostAttributionLike,
     buildStepProfile,
@@ -472,13 +473,13 @@ describe('task 0827 R1 — CLI flags, defaults and exit codes', () => {
     });
 
     test('defaultSpurBin resolves SPUR_BIN before the monorepo entry and PATH', () => {
-        const previous = process.env.SPUR_BIN;
-        process.env.SPUR_BIN = '/custom/spur';
+        const previous = getEnvVar('SPUR_BIN');
+        setEnvVar('SPUR_BIN', '/custom/spur');
         try {
             expect(defaultSpurBin()).toBe('/custom/spur');
         } finally {
-            if (previous === undefined) delete process.env.SPUR_BIN;
-            else process.env.SPUR_BIN = previous;
+            if (previous === undefined) removeEnvVar('SPUR_BIN');
+            else setEnvVar('SPUR_BIN', previous);
         }
     });
 
@@ -519,7 +520,7 @@ function installStub(name: string, body: string): string {
 function spawnScript(stub: string): { exitCode: number; stdout: string; stderr: string } {
     const proc = Bun.spawnSync(['bun', SCRIPT, 'idea-pipeline', '--json', '--spur-bin', stub], {
         cwd: SCRATCH,
-        env: { ...process.env, STUB_DIR: SCRATCH },
+        env: { ...getEnvVars(), STUB_DIR: SCRATCH },
         stdout: 'pipe',
         stderr: 'pipe',
     });

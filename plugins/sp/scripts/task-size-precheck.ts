@@ -19,13 +19,14 @@
  *   bun plugins/sp/scripts/task-size-precheck.ts <wbs> [--spur-bin <path>]
  *     [--max-reqs <n>] [--max-plan-items <n>]
  *
- * Env: SPUR_BIN, MAX_IMPLEMENT_REQS, MAX_IMPLEMENT_PLAN_ITEMS
+ * Env: SPUR_BIN (flags own the size ceilings — env overrides removed, task 0902)
  */
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 // ─── Counting (sync with packages/app/src/services/task-size-precheck.ts) ────
 
@@ -88,7 +89,7 @@ function usage(): never {
  * keeps ad-hoc invocations from silently hitting a stale PATH install.
  */
 function defaultSpurBin(): string {
-    if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
+    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
     // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts (fileURLToPath — raw pathname breaks
     // on %-encoded paths, e.g. spaces in the checkout directory)
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
@@ -107,8 +108,9 @@ function parseArgs(argv: string[]): {
     // Doubled deterministic ceiling (0723 operator decision): 10 R-items / 16
     // Plan items — keep in sync with DEFAULT_TASK_SIZE_LIMITS in
     // packages/app/src/services/task-size-precheck.ts (asserted by test).
-    let maxReqs = Number(process.env.MAX_IMPLEMENT_REQS) || 10;
-    let maxPlanItems = Number(process.env.MAX_IMPLEMENT_PLAN_ITEMS) || 16;
+    // Overridable per invocation via --max-reqs / --max-plan-items (no env fallback).
+    let maxReqs = 10;
+    let maxPlanItems = 16;
 
     let i = 0;
     while (i < argv.length) {

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as spurApp from '@gobing-ai/spur-app';
-import { slashCommandsFileSchema } from '@gobing-ai/spur-config';
+import { getEnvVar, removeEnvVar, setEnvVar, slashCommandsFileSchema } from '@gobing-ai/spur-config';
 import { Hono } from 'hono';
 import { commandsModule } from '../../src/modules/commands';
 
@@ -13,18 +13,18 @@ describe('commandsModule', () => {
     let originalEnv: string | undefined;
 
     beforeEach(() => {
-        originalEnv = process.env.SPUR_SLASH_COMMANDS_FILE;
+        originalEnv = getEnvVar('SPUR_SLASH_COMMANDS_FILE');
         tempDir = join(tmpdir(), `spur_srv_slash_cmd_${Date.now()}_${Math.random().toString(36).slice(2)}`);
         mkdirSync(tempDir, { recursive: true });
         tempJsonPath = join(tempDir, 'slash_commands.json');
-        process.env.SPUR_SLASH_COMMANDS_FILE = tempJsonPath;
+        setEnvVar('SPUR_SLASH_COMMANDS_FILE', tempJsonPath);
     });
 
     afterEach(() => {
         if (originalEnv !== undefined) {
-            process.env.SPUR_SLASH_COMMANDS_FILE = originalEnv;
+            setEnvVar('SPUR_SLASH_COMMANDS_FILE', originalEnv);
         } else {
-            delete process.env.SPUR_SLASH_COMMANDS_FILE;
+            removeEnvVar('SPUR_SLASH_COMMANDS_FILE');
         }
         try {
             rmSync(tempDir, { recursive: true, force: true });

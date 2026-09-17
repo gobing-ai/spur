@@ -11,6 +11,7 @@ import {
 import {
     buildConfigFromEnv,
     DEFAULT_DATABASE_URL,
+    getEnvVars,
     IN_MEMORY_DATABASE_URL,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
@@ -129,7 +130,7 @@ export function createCliContext(options: {
     agentRoles?: ReadonlyMap<string, AgentRoleDefinition>;
 }): CliContext {
     const cwd = resolve(options.cwd ?? process.cwd());
-    const env = options.env ?? process.env;
+    const env = options.env ?? getEnvVars();
     const fs = createNodeFileSystem(cwd);
 
     // When runNodeApplication injects an eager DB adapter, use it directly (R4).
@@ -197,7 +198,7 @@ export function noopSetExitCode(_code: number): void {}
 /** Create the CLI SQLite adapter and apply the local Spur schema. */
 export async function createMigratedDbAdapter(
     cwd = process.cwd(),
-    env: Record<string, string | undefined> = process.env,
+    env: Record<string, string | undefined> = getEnvVars(),
     dbUrl?: string,
 ): Promise<DbAdapter> {
     const config = buildConfigFromEnv(env);

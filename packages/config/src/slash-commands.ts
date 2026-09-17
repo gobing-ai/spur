@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 import { z } from 'zod';
 
 /** Standard categories for slash commands in Spur & Claude Code. */
@@ -43,8 +44,9 @@ export type SlashCommandsFile = z.infer<typeof slashCommandsFileSchema>;
  * Respects SPUR_SLASH_COMMANDS_FILE env override for tests and custom locations.
  */
 export function getSlashCommandsFilePath(): string {
-    if (process.env.SPUR_SLASH_COMMANDS_FILE) {
-        return process.env.SPUR_SLASH_COMMANDS_FILE;
+    const override = getEnvVar('SPUR_SLASH_COMMANDS_FILE');
+    if (override) {
+        return override;
     }
     return join(homedir(), '.config', 'spur', 'slash_commands.json');
 }

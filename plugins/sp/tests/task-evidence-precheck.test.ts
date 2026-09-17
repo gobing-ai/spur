@@ -11,6 +11,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { parse } from 'yaml';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
@@ -245,7 +246,7 @@ describe('0726 pipeline wiring', () => {
             const command = shellCommands('precheck').find((c) => c.includes('task-evidence-precheck.ts'));
             const result = Bun.spawnSync(['sh', '-c', command ?? ''], {
                 cwd: dir,
-                env: { ...process.env, wbs: '0726', spurBin: join(dir, 'spur-fake') },
+                env: { ...getEnvVars(), wbs: '0726', spurBin: join(dir, 'spur-fake') },
                 stdout: 'pipe',
                 stderr: 'pipe',
             });
@@ -270,10 +271,10 @@ describe('0726 pipeline wiring', () => {
             const result = Bun.spawnSync(['sh', '-c', command ?? ''], {
                 cwd: dir,
                 env: {
-                    ...process.env,
+                    ...getEnvVars(),
                     wbs: '0726',
                     spurBin: join(dir, 'spur-fake'),
-                    PATH: `${bin}:${process.env.PATH ?? ''}`,
+                    PATH: `${bin}:${getEnvVar('PATH') ?? ''}`,
                 },
                 stdout: 'pipe',
                 stderr: 'pipe',

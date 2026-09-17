@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 import { ARTIFACT_ARRAY_CLASSIFICATION, RANKED_ARTIFACT_KEYS } from '../lib/artifact-digest.generated.mjs';
 import {
     type CacheCliResult,
@@ -976,7 +977,7 @@ describe('CLI assert-clean (0676 R3)', () => {
                 execFileSync('git', args, {
                     cwd: dir,
                     env: {
-                        ...process.env,
+                        ...getEnvVars(),
                         GIT_AUTHOR_NAME: 't',
                         GIT_COMMITTER_NAME: 't',
                         GIT_AUTHOR_EMAIL: 't@t',

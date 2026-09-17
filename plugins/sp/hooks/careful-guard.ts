@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+
 /**
  * careful-guard — PreToolUse guard for destructive shell commands (task 0215, R3).
  *
@@ -21,6 +22,7 @@
  * adapter. This file owns the Claude Code payload/decision shape only.
  */
 
+import { getEnvVar } from '@gobing-ai/ts-utils';
 import { classifyCommand } from './destructive-policy';
 
 interface ToolPayload {
@@ -43,7 +45,7 @@ function preToolUseDecision(decision: Decision, reason?: string): never {
 }
 
 async function main(): Promise<void> {
-    if (process.env.SPUR_CAREFUL === 'off') preToolUseDecision('allow');
+    if (getEnvVar('SPUR_CAREFUL') === 'off') preToolUseDecision('allow');
 
     const stdinText = await Bun.stdin.text();
     let payload: ToolPayload;

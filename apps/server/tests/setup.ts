@@ -1,1 +1,3 @@
-process.env.NODE_ENV = 'test';
+import { setEnvVar } from '@gobing-ai/spur-config';
+
+setEnvVar('NODE_ENV', 'test');

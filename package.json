@@ -1,6 +1,6 @@
 {
     "name": "@gobing-ai/spur",
-    "description": "Spur \u2014 a local-first harness engineering toolkit that wraps mainstream coding agents with constraint checking, workflow orchestration, and history analytics.",
+    "description": "Spur — a local-first harness engineering toolkit that wraps mainstream coding agents with constraint checking, workflow orchestration, and history analytics.",
     "keywords": [
         "bun",
         "typescript",
@@ -29,14 +29,14 @@
             "packages/*"
         ],
         "catalog": {
-            "@gobing-ai/ts-ai-runner": "^0.4.66",
-            "@gobing-ai/ts-db": "^0.4.66",
-            "@gobing-ai/ts-dual-workflow-engine": "^0.4.66",
-            "@gobing-ai/ts-infra": "^0.4.66",
-            "@gobing-ai/ts-llm-jsonl-importer": "^0.4.66",
-            "@gobing-ai/ts-rule-engine": "^0.4.66",
-            "@gobing-ai/ts-runtime": "^0.4.66",
-            "@gobing-ai/ts-utils": "^0.4.66",
+            "@gobing-ai/ts-ai-runner": "^0.4.67",
+            "@gobing-ai/ts-db": "^0.4.67",
+            "@gobing-ai/ts-dual-workflow-engine": "^0.4.67",
+            "@gobing-ai/ts-infra": "^0.4.67",
+            "@gobing-ai/ts-llm-jsonl-importer": "^0.4.67",
+            "@gobing-ai/ts-rule-engine": "^0.4.67",
+            "@gobing-ai/ts-runtime": "^0.4.67",
+            "@gobing-ai/ts-utils": "^0.4.67",
             "@orpc/client": "1.14.4",
             "@orpc/contract": "1.14.4",
             "@orpc/openapi": "1.14.4",
@@ -101,14 +101,15 @@
         "history-surface-freeze-check": "bun scripts/commands/history-surface-freeze-check.ts"
     },
     "dependencies": {
-        "@gobing-ai/ts-ai-runner": "catalog:",
-        "@gobing-ai/ts-db": "catalog:",
-        "@gobing-ai/ts-dual-workflow-engine": "catalog:",
-        "@gobing-ai/ts-infra": "catalog:",
-        "@gobing-ai/ts-llm-jsonl-importer": "catalog:",
-        "@gobing-ai/ts-rule-engine": "catalog:",
-        "@gobing-ai/ts-runtime": "catalog:",
-        "@gobing-ai/ts-utils": "catalog:"
+        "@gobing-ai/spur-config": "workspace:0.3.85",
+        "@gobing-ai/ts-ai-runner": "0.4.67",
+        "@gobing-ai/ts-db": "0.4.67",
+        "@gobing-ai/ts-dual-workflow-engine": "0.4.67",
+        "@gobing-ai/ts-infra": "0.4.67",
+        "@gobing-ai/ts-llm-jsonl-importer": "0.4.67",
+        "@gobing-ai/ts-rule-engine": "0.4.67",
+        "@gobing-ai/ts-runtime": "0.4.67",
+        "@gobing-ai/ts-utils": "0.4.67"
     },
     "devDependencies": {
         "@biomejs/biome": "2.4.16",

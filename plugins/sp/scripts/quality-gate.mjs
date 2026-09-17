@@ -17,6 +17,13 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+
+// ../ts-libs/packages/utils/dist/env.js
+function getEnvVars() {
+  return process.env;
+}
+
+// plugins/sp/scripts/quality-gate.ts
 var MAX_GATE_ATTEMPTS = 5;
 var MAX_FINDINGS = 20;
 var RETRY_DELAY_MS_DEFAULT = 1e4;
@@ -178,7 +185,7 @@ function runQualityGate(mode, env, options = {}) {
   return { status, attempts: gateAttempt, logFile, findingsFile, statusFile, attemptFile };
 }
 var QUALITY_GATE_USAGE = "usage: quality-gate.ts <run|recheck>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest)";
-function main(argv, env = process.env) {
+function main(argv, env = getEnvVars()) {
   const mode = argv[0];
   if (mode !== "run" && mode !== "recheck") {
     process.stderr.write(`${QUALITY_GATE_USAGE}

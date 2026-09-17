@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { parse } from 'yaml';
 
 interface PipelineAction {
@@ -61,7 +62,7 @@ function initGitRepo(dir: string): void {
 function runShell(command: string, cwd: string, env: Record<string, string>): { exitCode: number; output: string } {
     const result = Bun.spawnSync(['sh', '-c', command], {
         cwd,
-        env: { ...process.env, ...env },
+        env: { ...getEnvVars(), ...env },
         stdout: 'pipe',
         stderr: 'pipe',
     });
@@ -130,7 +131,7 @@ describe('0503 task-pipeline resilience', () => {
             const result = runShell(command, dir, {
                 wbs: '0723',
                 spurBin: 'spur',
-                PATH: `${bin}:${process.env.PATH ?? ''}`,
+                PATH: `${bin}:${getEnvVar('PATH') ?? ''}`,
             });
             expect(result.exitCode).toBe(0);
             expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('FAIL\n');

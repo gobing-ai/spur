@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/spur-config';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import { EventBus } from '@gobing-ai/ts-infra';
 import {
@@ -242,7 +243,7 @@ describe('StreamingShellActionRunner', () => {
         expect(capturedOptions?.env?.idea).toBe('free text');
         expect(capturedOptions?.env?.__runId).toBe('r1');
         // The ambient process environment is inherited so the shell can still resolve tools.
-        expect(capturedOptions?.env?.PATH).toBe(process.env.PATH);
+        expect(capturedOptions?.env?.PATH).toBe(getEnvVar('PATH'));
     });
 
     test('treats a var carrying shell metacharacters as data — no injection (R3)', async () => {

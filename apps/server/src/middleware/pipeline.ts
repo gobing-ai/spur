@@ -1,3 +1,4 @@
+import { getEnvVar } from '@gobing-ai/spur-config';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
 import type { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -55,7 +56,8 @@ export const trimOrigins = (origins: string): string[] =>
  * unaffected, so the board (same-origin) and CLI clients keep working.
  */
 export function mountMiddleware(app: Hono, appRt?: ApplicationRuntime): void {
-    const corsOrigins = process.env.SPUR_CORS_ORIGINS ? trimOrigins(process.env.SPUR_CORS_ORIGINS) : [];
+    const rawOrigins = getEnvVar('SPUR_CORS_ORIGINS');
+    const corsOrigins = rawOrigins ? trimOrigins(rawOrigins) : [];
 
     app.use('*', secureHeaders());
     // Same-origin default (R2): an empty allowlist means no foreign origin is echoed back.

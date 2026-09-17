@@ -5,6 +5,13 @@
 import { spawnSync } from "child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+
+// ../ts-libs/packages/utils/dist/env.js
+function getEnvVars() {
+  return process.env;
+}
+
+// plugins/sp/scripts/wrapup-steps.ts
 function jqPick(...values) {
   for (const value of values) {
     if (value !== null && value !== undefined && value !== false)
@@ -319,7 +326,7 @@ function runFeatureTransition(env, options = {}) {
   return { status: syncStatus, statusFile: relStatusFile, exitCode: 0 };
 }
 var WRAPUP_STEPS_USAGE = "usage: wrapup-steps.ts <resolve|metrics|feature-transition>  (env: __runId, tasks, feature, featureGateCmd, spurBin)";
-function main(argv, env = process.env, options = {}) {
+function main(argv, env = getEnvVars(), options = {}) {
   const sub = argv[0];
   if (sub === "resolve")
     return resolveTasks(env, options).exitCode;

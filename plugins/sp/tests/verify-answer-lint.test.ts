@@ -11,6 +11,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 import { parse } from 'yaml';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
@@ -66,7 +67,7 @@ function makeSandbox(
     chmodSync(bin, 0o755);
     const answerPath = join(dir, 'verify-answer.txt');
     const env = {
-        ...process.env,
+        ...getEnvVars(),
         FAKE_TASK: join(dir, `task-${wbs}.json`),
         FAKE_FEATURE: join(dir, 'feature-F9.json'),
     };
@@ -201,7 +202,7 @@ describe('verify-answer-lint behavior (0726 R3)', () => {
         const missing = sb.exec('   ');
         expect(missing.code).not.toBe(0);
         const env = {
-            ...process.env,
+            ...getEnvVars(),
             FAKE_TASK: join(sb.dir, 'task-0726.json'),
             FAKE_FEATURE: join(sb.dir, 'feature-F9.json'),
         };

@@ -15,6 +15,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 const HOOK = join(import.meta.dir, 'careful-guard.ts');
 
@@ -28,7 +29,7 @@ async function runGuard(payload: unknown, env: Record<string, string> = {}, stdi
         stdin: new TextEncoder().encode(stdinText ?? JSON.stringify(payload)),
         stdout: 'pipe',
         stderr: 'pipe',
-        env: { PATH: process.env.PATH ?? '', ...env },
+        env: { PATH: getEnvVar('PATH') ?? '', ...env },
     });
     const out = await new Response(proc.stdout).text();
     await proc.exited;

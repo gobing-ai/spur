@@ -1,3 +1,4 @@
+import { getAppOptions, type SpurConfig } from '@gobing-ai/spur-config';
 import type { ProcessExecutor, ProcessRegistry, ProcessResult } from '@gobing-ai/ts-runtime';
 import type { TimeoutPolicyMs } from './execution-policy';
 
@@ -32,15 +33,19 @@ import type { TimeoutPolicyMs } from './execution-policy';
 export const CHILD_KILL_GRACE_MS = 5_000;
 
 /**
- * Resolve the termination grace from the environment (task 0806 R1). Accepted: a
- * positive integer number of milliseconds. Absent or invalid values fall back to
- * {@link CHILD_KILL_GRACE_MS} — a bad override must never disable the escalation.
+ * Resolve the termination grace from `bootstrap.options.schedulerKillGraceMs`
+ * (task 0902 wave 2; was `SPUR_SCHEDULER_KILL_GRACE_MS`). Accepted: a positive
+ * integer number of milliseconds. Absent falls back to {@link CHILD_KILL_GRACE_MS};
+ * a malformed value throws — config drift must surface at boot, not silently
+ * weaken the escalation.
  */
-export function resolveKillGraceMs(env: Record<string, string | undefined>): number {
-    const raw = env.SPUR_SCHEDULER_KILL_GRACE_MS;
-    if (raw === undefined || raw.trim() === '') return CHILD_KILL_GRACE_MS;
-    const parsed = Number(raw);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : CHILD_KILL_GRACE_MS;
+export function resolveKillGraceMs(spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined): number {
+    const raw = getAppOptions(spurConfig, 'schedulerKillGraceMs', undefined);
+    if (raw === undefined) return CHILD_KILL_GRACE_MS;
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) return raw;
+    throw new Error(
+        `bootstrap.options.schedulerKillGraceMs must be a positive integer number of milliseconds; received ${JSON.stringify(raw)}`,
+    );
 }
 
 /** Options for {@link runBoundedChild} — the command plus its execution policy. */

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 import { parse } from 'yaml';
 
 interface ActionOptions {
@@ -59,7 +60,7 @@ function expand(value: string, vars: Record<string, string>): string {
 function runShell(command: string, cwd: string, env: Record<string, string>): number {
     const result = Bun.spawnSync(['sh', '-c', command], {
         cwd,
-        env: { ...process.env, ...env },
+        env: { ...getEnvVars(), ...env },
         stdout: 'pipe',
         stderr: 'pipe',
     });

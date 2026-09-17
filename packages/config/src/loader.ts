@@ -20,9 +20,9 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { createNodeFileSystem, loadStructuredConfig, validateDeclaredJsonSchema } from '@gobing-ai/ts-runtime';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 import { parse as parseYaml } from 'yaml';
 import { ZodError } from 'zod';
-
 import {
     DEFAULT_FEATURES_DIR,
     DEFAULT_TASKS_DIR,
@@ -176,12 +176,12 @@ export interface ResolvedConfigLayers {
  */
 export function resolveConfigLayers(cwd?: string): ResolvedConfigLayers {
     const layers: ResolvedConfigLayers = {};
-    const skipProject = cwd === undefined && process.env.SPUR_SKIP_PROJECT_CONFIG === 'true';
+    const skipProject = cwd === undefined && getEnvVar('SPUR_SKIP_PROJECT_CONFIG') === 'true';
     if (!skipProject) {
         const projectConfig = join(cwd ?? process.cwd(), SPUR_CONFIG_DIR, SPUR_CONFIG_FILE);
         if (existsSync(projectConfig)) layers.project = projectConfig;
     }
-    if (process.env.SPUR_SKIP_GLOBAL_CONFIG !== 'true' && existsSync(GLOBAL_CONFIG_FILE)) {
+    if (getEnvVar('SPUR_SKIP_GLOBAL_CONFIG') !== 'true' && existsSync(GLOBAL_CONFIG_FILE)) {
         layers.global = GLOBAL_CONFIG_FILE;
     }
     return layers;
@@ -268,7 +268,7 @@ export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions)
         return spurConfigSchema.parse({});
     }
 
-    const validateJsonSchema = opts?.validateJsonSchema ?? process.env.NODE_ENV !== 'test';
+    const validateJsonSchema = opts?.validateJsonSchema ?? getEnvVar('NODE_ENV') !== 'test';
     const mtimeOf = (path?: string): string => (path !== undefined ? String(statSync(path).mtimeMs) : '-');
     // Key on BOTH layers (paths + mtimes, R4): editing either file must invalidate.
     const key = [
@@ -734,7 +734,7 @@ export async function loadStructuredSpurConfig(
     configPath: string,
     opts?: LoadSpurConfigOptions,
 ): Promise<Record<string, unknown>> {
-    const validateJsonSchema = opts?.validateJsonSchema ?? process.env.NODE_ENV !== 'test';
+    const validateJsonSchema = opts?.validateJsonSchema ?? getEnvVar('NODE_ENV') !== 'test';
     if (!validateJsonSchema) {
         const nodeFs = createNodeFileSystem();
         const resolved = nodeFs.resolve(configPath);

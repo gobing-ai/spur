@@ -16,6 +16,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 const HOOKS_DIR = import.meta.dir;
 const START_HOOK = join(HOOKS_DIR, 'context-session-start.ts');
@@ -41,7 +42,7 @@ async function runHook(
         stdin: new TextEncoder().encode(stdinText ?? JSON.stringify(payload)),
         stdout: 'pipe',
         stderr: 'pipe',
-        env: { CLAUDE_PROJECT_DIR: projectDir, PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
+        env: { CLAUDE_PROJECT_DIR: projectDir, PATH: getEnvVar('PATH') ?? '', HOME: getEnvVar('HOME') ?? '' },
     });
     const stdout = await new Response(proc.stdout).text();
     const stderr = await new Response(proc.stderr).text();

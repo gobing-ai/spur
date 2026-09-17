@@ -1,10 +1,11 @@
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { echo, echoError } from '@gobing-ai/ts-utils';
 import { type FinalizeIdeaHandoffResult, finalizeIdeaHandoff } from './idea-handoff';
 
 /**
  * Environment slice the idea-handoff entrypoint reads.
  *
- * Taken as a parameter rather than off `process.env` directly so the entrypoint is
+ * Taken as a parameter rather than off `getEnvVars()` directly so the entrypoint is
  * testable without mutating global state — the previous revision ran its logic at
  * module top level, which is why it shipped untested and was removed in `596e9f64`.
  */
@@ -63,7 +64,7 @@ export async function runIdeaHandoffCli(
 
 /* c8 ignore start -- process-level wiring, exercised by the pipeline rather than unit tests */
 if (import.meta.main) {
-    const outcome = await runIdeaHandoffCli(process.env as IdeaHandoffCliEnv);
+    const outcome = await runIdeaHandoffCli(getEnvVars() as IdeaHandoffCliEnv);
     process.exit(outcome.exitCode);
 }
 /* c8 ignore stop */

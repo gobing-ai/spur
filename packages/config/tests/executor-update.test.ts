@@ -18,6 +18,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 import { ExecutorUpdateError, loadSpurConfig, setProjectExecutorDisabled } from '../src/loader';
 
@@ -26,11 +27,11 @@ let root: string;
 beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), 'executor-update-'));
     mkdirSync(join(root, '.spur'));
-    process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true'; // deterministic layering
+    setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true'); // deterministic layering
 });
 
 afterEach(() => {
-    delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+    removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
     chmodSync(root, 0o700);
 });
 

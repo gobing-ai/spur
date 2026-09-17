@@ -19,6 +19,7 @@ import {
     type TimeoutPolicyMs,
     UnsafeHistoryImporterError,
 } from '@gobing-ai/spur-app';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { formatSummary, stalenessBanner } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
@@ -146,7 +147,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             // timer overflow are usage errors, and only 'none' disables the deadline.
             let sourceTimeout: TimeoutPolicyMs;
             try {
-                sourceTimeout = resolveCliSourceTimeout(options.sourceTimeout, process.env);
+                sourceTimeout = resolveCliSourceTimeout(options.sourceTimeout, getEnvVars());
             } catch (e) {
                 const timeoutMsg = `spur history import: ${e instanceof Error ? e.message : String(e)}`;
                 context.output.write(
@@ -434,7 +435,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             // same contract as `history import` (only 'none' disables the deadline).
             let sourceTimeout: TimeoutPolicyMs;
             try {
-                sourceTimeout = resolveCliSourceTimeout(options.sourceTimeout, process.env);
+                sourceTimeout = resolveCliSourceTimeout(options.sourceTimeout, getEnvVars());
             } catch (e) {
                 const timeoutMsg = `spur history daily: ${e instanceof Error ? e.message : String(e)}`;
                 context.output.write(
@@ -458,7 +459,7 @@ export function registerHistoryCommand(program: Command, context: CliContext): v
             // absent env keeps interactive `history daily` unchanged.
             let refresh: HistoryRefreshPayload | null;
             try {
-                refresh = parseHistoryRefreshContext(process.env[HISTORY_REFRESH_CONTEXT_ENV]);
+                refresh = parseHistoryRefreshContext(getEnvVar(HISTORY_REFRESH_CONTEXT_ENV));
             } catch (e) {
                 const detail = e instanceof Error ? e.message : String(e);
                 context.output.write(

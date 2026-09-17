@@ -23,6 +23,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSy
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { resolveAgentHint as resolveAgentHintShared, resolveModelHint as resolveModelHintShared } from '../agent-hint';
 import { classifyCommand } from '../destructive-policy';
 import { couldBeTaskFile } from '../task-file-policy';
@@ -81,7 +82,7 @@ function resolveSpurTaskOwnership(filePath: string): TaskOwnership {
         spawnSync(cmd, args, { cwd: process.cwd(), encoding: 'utf-8', timeout: 8000 });
 
     // 1. SPUR_BIN env override (may include args) or `spur` on PATH
-    const envBin = process.env.SPUR_BIN || 'spur';
+    const envBin = getEnvVar('SPUR_BIN') || 'spur';
     const envParts = envBin.split(' ');
     let res = run(envParts[0] ?? 'spur', [...envParts.slice(1), 'task', 'resolve', filePath, '--strict', '--json']);
     // Only 0 (owned) / 1 (unowned) are valid spur exit codes; 127 (interpreter
@@ -203,8 +204,8 @@ function initSession(): void {
         const sessionId = generateSessionId();
         const session = {
             session_id: sessionId,
-            agent: resolveAgentHintShared(process.env, 'pi'),
-            model: resolveModelHintShared(process.env),
+            agent: resolveAgentHintShared(getEnvVars(), 'pi'),
+            model: resolveModelHintShared(getEnvVars()),
             started_at: new Date().toISOString(),
         };
         writeFileSync(sessionFilePath(), `${JSON.stringify(session, null, 2)}\n`);

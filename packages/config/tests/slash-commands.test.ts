@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '../src/index';
 import {
     getSlashCommandsFilePath,
     slashCommandCategorySchema,
@@ -10,13 +11,13 @@ import {
 } from '../src/slash-commands';
 
 describe('packages/config slash-commands schemas and path resolution', () => {
-    const originalEnv = process.env.SPUR_SLASH_COMMANDS_FILE;
+    const originalEnv = getEnvVar('SPUR_SLASH_COMMANDS_FILE');
 
     afterEach(() => {
         if (originalEnv !== undefined) {
-            process.env.SPUR_SLASH_COMMANDS_FILE = originalEnv;
+            setEnvVar('SPUR_SLASH_COMMANDS_FILE', originalEnv);
         } else {
-            delete process.env.SPUR_SLASH_COMMANDS_FILE;
+            removeEnvVar('SPUR_SLASH_COMMANDS_FILE');
         }
     });
 
@@ -90,12 +91,12 @@ describe('packages/config slash-commands schemas and path resolution', () => {
 
     describe('getSlashCommandsFilePath', () => {
         it('returns SPUR_SLASH_COMMANDS_FILE env override when set', () => {
-            process.env.SPUR_SLASH_COMMANDS_FILE = '/custom/slash_commands.json';
+            setEnvVar('SPUR_SLASH_COMMANDS_FILE', '/custom/slash_commands.json');
             expect(getSlashCommandsFilePath()).toBe('/custom/slash_commands.json');
         });
 
         it('returns default ~/.config/spur/slash_commands.json when SPUR_SLASH_COMMANDS_FILE is unset', () => {
-            delete process.env.SPUR_SLASH_COMMANDS_FILE;
+            removeEnvVar('SPUR_SLASH_COMMANDS_FILE');
             const expected = join(homedir(), '.config', 'spur', 'slash_commands.json');
             expect(getSlashCommandsFilePath()).toBe(expected);
         });

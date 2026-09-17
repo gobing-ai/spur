@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { apiSuccessSchema } from '@gobing-ai/spur-contracts';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { z } from 'zod';
@@ -58,12 +59,12 @@ const envelopeOf = apiSuccessSchema(z.unknown());
 
 let previousEnv: string | undefined;
 beforeEach(() => {
-    previousEnv = process.env.SPUR_JSON_ENVELOPE;
-    delete process.env.SPUR_JSON_ENVELOPE;
+    previousEnv = getEnvVar('SPUR_JSON_ENVELOPE');
+    removeEnvVar('SPUR_JSON_ENVELOPE');
 });
 afterEach(() => {
-    if (previousEnv === undefined) delete process.env.SPUR_JSON_ENVELOPE;
-    else process.env.SPUR_JSON_ENVELOPE = previousEnv;
+    if (previousEnv === undefined) removeEnvVar('SPUR_JSON_ENVELOPE');
+    else setEnvVar('SPUR_JSON_ENVELOPE', previousEnv);
 });
 
 async function agentList(enveloped?: boolean): Promise<string> {
@@ -180,13 +181,13 @@ describe('service-layer --json-envelope (AC2)', () => {
 
         test(`${name} SPUR_JSON_ENVELOPE=1 produces the identical document to the flag`, async () => {
             const viaFlag = await emit(true);
-            process.env.SPUR_JSON_ENVELOPE = '1';
+            setEnvVar('SPUR_JSON_ENVELOPE', '1');
             const viaEnv = await emit(undefined);
             expect(viaEnv).toBe(viaFlag);
         });
 
         test(`${name} explicit --json-envelope=false wins over SPUR_JSON_ENVELOPE=1`, async () => {
-            process.env.SPUR_JSON_ENVELOPE = '1';
+            setEnvVar('SPUR_JSON_ENVELOPE', '1');
             expect(await emit(false)).toBe(baseline[name]);
         });
     }

@@ -6,7 +6,7 @@ import type { Job } from '@gobing-ai/ts-infra';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import { splitLaunchCommand } from '../workflow/split-launch-command';
 import { type BoundedChildResult, describeBoundedFailure, runBoundedChild } from './bounded-child-run';
-import { assertCanonicalTimeoutMs, normalizeLegacyTimeoutMs, type TimeoutPolicyMs } from './execution-policy';
+import { assertCanonicalTimeoutMs, resolveTimeoutOption, type TimeoutPolicyMs } from './execution-policy';
 import { acquireExclusiveJob, HISTORY_PRODUCER_EXCLUSIVE_KEY, releaseExclusiveJob } from './job-exclusion-guard';
 import { SCHEDULER_CUSTOM_TIMEOUT_MS } from './scheduler-custom-job-service';
 
@@ -287,31 +287,31 @@ export interface HistoryRefreshJobDeps {
     /** Process seam — the real server wires `NodeProcessExecutor`. */
     executor: ProcessExecutor;
     /**
-     * Legacy env-resolved execution policy (task 0803 R1; `null` = explicit
-     * unlimited since task 0813 R2). Defaults to `SCHEDULER_CUSTOM_TIMEOUT_MS`;
-     * the server resolves it once from `SPUR_HISTORY_REFRESH_TIMEOUT_MS` and
+     * Resolved execution policy (task 0803 R1; `null` = explicit unlimited since
+     * task 0813 R2). Defaults to `SCHEDULER_CUSTOM_TIMEOUT_MS`; the server
+     * resolves it once from `bootstrap.options.historyRefreshTimeoutMs` and
      * threads the same value into the child handler. A canonical policy on the
-     * job payload takes precedence over this legacy value (R3).
+     * job payload takes precedence (R3).
      */
     timeoutMs?: TimeoutPolicyMs;
 }
 
 /**
- * Resolve the history-refresh child policy from the environment (task 0806 R3;
- * `none` → explicit unlimited since task 0813 R2). Decoupled from the
- * scheduler.custom global: raising `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` to bound a
- * long configured chain must NOT lengthen this short completion-triggered
- * deadline. Default stays the ten-minute application default (task 0803 R1);
- * invalid values fall back to it. A canonical `timeoutMs` (e.g. persisted on
- * the queued payload) beats the legacy env chain; a malformed canonical value
- * throws instead of falling back.
+ * Resolve the history-refresh child policy from `bootstrap.options.historyRefreshTimeoutMs`
+ * (task 0806 R3; env origin replaced in task 0902 wave 2; `'none'` → explicit unlimited
+ * since task 0813 R2). Decoupled from the scheduler.custom default: raising
+ * `schedulerCustomTimeoutMs` to bound a long configured chain must NOT lengthen this
+ * short completion-triggered deadline. Default stays the ten-minute application default
+ * (task 0803 R1); a malformed value throws. A canonical `timeoutMs` (e.g. persisted on
+ * the queued payload) beats the config chain; a malformed canonical value throws instead
+ * of falling back.
  */
 export function resolveHistoryRefreshTimeoutMs(
-    env: Record<string, string | undefined>,
+    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined,
     canonical?: TimeoutPolicyMs,
 ): TimeoutPolicyMs {
     if (canonical !== undefined) return assertCanonicalTimeoutMs(canonical);
-    return normalizeLegacyTimeoutMs(env.SPUR_HISTORY_REFRESH_TIMEOUT_MS, SCHEDULER_CUSTOM_TIMEOUT_MS);
+    return resolveTimeoutOption(spurConfig, 'historyRefreshTimeoutMs', SCHEDULER_CUSTOM_TIMEOUT_MS);
 }
 
 /**

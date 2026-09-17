@@ -23,6 +23,7 @@
 import { execSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 /** Tools recorded by this hook (must match hooks.json PostToolUse matcher). */
 export const ALLOWED_TOOLS = new Set(['Bash', 'Grep', 'Glob', 'Read', 'Write', 'Edit']);
@@ -411,7 +412,7 @@ export function readContextFreshness(contextDir: string): string | null {
 // Entrypoint — thin wrapper; logic lives in {@link recordToolUseEvent} for unit coverage.
 if (import.meta.main) {
     void (async () => {
-        const dir = join(process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), '.spur', 'context');
+        const dir = join(getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd(), '.spur', 'context');
         try {
             const stdinText = await Bun.stdin.text();
             const payload = JSON.parse(stdinText) as ToolPayload;

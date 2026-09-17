@@ -59,27 +59,21 @@ describe('per-job budget resolution (task 0806 R3)', () => {
 
     test('per-job override wins; invalid values fall back to the global budget', () => {
         const env = { SPUR_SCHEDULER_TIMEOUT_ALPHA_MS: '1234', SPUR_SCHEDULER_TIMEOUT_BETA_MS: 'nope' };
-        const fallback = resolveSchedulerCustomTimeoutMs({});
+        const fallback = resolveSchedulerCustomTimeoutMs(null);
         expect(resolveSchedulerJobTimeoutMs('alpha', env, fallback)).toBe(1234);
         expect(resolveSchedulerJobTimeoutMs('beta', env, fallback)).toBe(fallback);
         expect(resolveSchedulerJobTimeoutMs('gamma', env, fallback)).toBe(fallback);
     });
 
-    test('kill grace resolves from env with safe fallback', () => {
-        expect(resolveKillGraceMs({})).toBe(CHILD_KILL_GRACE_MS);
-        expect(resolveKillGraceMs({ SPUR_SCHEDULER_KILL_GRACE_MS: '250' })).toBe(250);
-        expect(resolveKillGraceMs({ SPUR_SCHEDULER_KILL_GRACE_MS: '-1' })).toBe(CHILD_KILL_GRACE_MS);
-        expect(resolveKillGraceMs({ SPUR_SCHEDULER_KILL_GRACE_MS: 'abc' })).toBe(CHILD_KILL_GRACE_MS);
+    test('kill grace resolves from bootstrap.options with safe fallback', () => {
+        expect(resolveKillGraceMs(null)).toBe(CHILD_KILL_GRACE_MS);
+        expect(resolveKillGraceMs({ bootstrap: { options: { schedulerKillGraceMs: 250 } } })).toBe(250);
     });
 
     test('history refresh watchdog is decoupled from the scheduler.custom default', () => {
-        const env = { SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '600000', SPUR_HISTORY_REFRESH_TIMEOUT_MS: '90000' };
-        expect(resolveHistoryRefreshTimeoutMs(env)).toBe(90000);
-        expect(resolveHistoryRefreshTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '600000' })).toBe(
-            resolveSchedulerCustomTimeoutMs({}),
+        expect(resolveHistoryRefreshTimeoutMs({ bootstrap: { options: { historyRefreshTimeoutMs: 90_000 } } })).toBe(
+            90_000,
         );
-        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: 'x' })).toBe(
-            resolveSchedulerCustomTimeoutMs({}),
-        );
+        expect(resolveHistoryRefreshTimeoutMs(null)).toBe(resolveSchedulerCustomTimeoutMs(null));
     });
 });

@@ -1,4 +1,5 @@
 import { WbsCollisionError } from '@gobing-ai/spur-app';
+import { getEnvVar } from '@gobing-ai/spur-config';
 import type { ErrorHandler } from 'hono';
 import { GuardDeniedError, LockTimeoutError } from '../errors';
 
@@ -190,7 +191,7 @@ function resolveError(err: unknown, requestId: string | undefined, isProd: boole
  */
 export const globalErrorHandler: ErrorHandler = (err, c) => {
     const requestId = c.get('requestId');
-    const isProd = (process.env.NODE_ENV ?? '') === 'production';
+    const isProd = (getEnvVar('NODE_ENV') ?? '') === 'production';
     const resolved = resolveError(err, requestId, isProd);
 
     const ctx = c.get('ctx');

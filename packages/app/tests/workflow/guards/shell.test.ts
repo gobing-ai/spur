@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { getEnvVar } from '@gobing-ai/spur-config';
 import type { GuardContext } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     NodeProcessExecutor,
@@ -36,7 +37,7 @@ describe('EnvShellGuardRunner', () => {
         expect(captured?.env?.profile).toBe('auto');
         expect(captured?.env?.__runId).toBe('r1');
         // Ambient env is inherited so the guard's shell can still resolve tools.
-        expect(captured?.env?.PATH).toBe(process.env.PATH);
+        expect(captured?.env?.PATH).toBe(getEnvVar('PATH'));
     });
 
     test('passed reflects exit code, preserving guard semantics', async () => {

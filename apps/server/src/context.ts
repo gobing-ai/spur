@@ -46,6 +46,7 @@ import {
     DEFAULT_DATABASE_URL,
     DEFAULT_FEATURES_DIR,
     DEFAULT_TASKS_DIR,
+    getEnvVars,
     IN_MEMORY_DATABASE_URL,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
@@ -131,6 +132,12 @@ export interface ServerContext {
     readonly cwd: string;
     readonly fs: FileSystem;
     readonly webDistPath?: string;
+
+    /**
+     * Project Spur config as loaded at boot (task 0902 wave 2). `undefined` when
+     * the load failed — resolvers treat it as absent config, not fatal.
+     */
+    readonly spurConfig?: SpurConfig;
 
     /** Lazy, cached migrated DbAdapter. May throw D1NotConfiguredError on CF. */
     getDb(): Promise<DbAdapter>;
@@ -333,7 +340,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     const eventsBus = options.eventsBus ?? (appRt.events as unknown as EventBus<ServerEventMap>);
     const jobQueueEnabled = options.jobQueueEnabled ?? false;
     const eventProjectContext = makeSystemEventProjectContext(cwd);
-    const eventSecretValues = configuredSecretValues(options.env ?? process.env);
+    const eventSecretValues = configuredSecretValues(options.env ?? getEnvVars());
     // Planning folders (phase folders) come pre-resolved from `.spur/config.yaml` via
     // serve.ts — never hardcoded here. Fall back to schema defaults when absent.
     const folders = options.folders ?? DEFAULT_PLANNING_FOLDERS;
@@ -561,7 +568,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
             // without forcing their construction at context build time.
             workflowSvc ??= new WorkflowAppServiceImpl({
                 cwd,
-                secretValues: configuredSecretValues(options.env ?? process.env),
+                secretValues: configuredSecretValues(options.env ?? getEnvVars()),
                 warn: (message) => appRt.logger.warn(message),
                 getDb: this.getDb.bind(this),
                 agentService: this.agentService.bind(this),
@@ -593,7 +600,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         hitlResponder(): HitlResponder {
             // Default-deny: server HITL never auto-approves unless the operator
             // opts in with SPUR_HITL_AUTO_APPROVE=1 (headless/CI explicit consent).
-            const confirm = hitlConfirmDefault(options.env ?? process.env);
+            const confirm = hitlConfirmDefault(options.env ?? getEnvVars());
             return {
                 respond: async () => ({ value: confirm }),
             };

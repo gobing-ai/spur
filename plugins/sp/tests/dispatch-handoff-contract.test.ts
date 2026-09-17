@@ -12,6 +12,7 @@ import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
 const DRIVER = readFileSync(
@@ -76,7 +77,7 @@ describe('0818 R2 — dispatch payload contract', () => {
         const checkout = join(dir, 'checkout-spur');
         writeFileSync(checkout, '#!/bin/sh\necho CHECKOUT "$@"\n');
         chmodSync(checkout, 0o755);
-        const env = { ...process.env, PATH: `${competingDir}:${process.env.PATH ?? ''}` };
+        const env = { ...getEnvVars(), PATH: `${competingDir}:${getEnvVar('PATH') ?? ''}` };
 
         const supplied = Bun.spawnSync(['sh', '-c', `"${checkout}" task check 0818`], { cwd: dir, env });
         expect(supplied.stdout.toString().trim()).toBe('CHECKOUT task check 0818');
@@ -142,7 +143,7 @@ function roundTrip(body: string): RoundTrip {
     chmodSync(fake, 0o755);
     const answerPath = join(dir, 'verify-answer.txt');
     writeFileSync(answerPath, body);
-    const env = { ...process.env, FAKE_TASK: join(dir, 'task.json'), FAKE_FEATURE: join(dir, 'feature.json') };
+    const env = { ...getEnvVars(), FAKE_TASK: join(dir, 'task.json'), FAKE_FEATURE: join(dir, 'feature.json') };
 
     const lint = Bun.spawnSync(['bun', LINT, '0818', '--answer', answerPath, '--spur-bin', fake], {
         cwd: dir,

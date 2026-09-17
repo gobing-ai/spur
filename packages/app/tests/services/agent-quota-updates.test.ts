@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { AgentExecutorUpdateDao, applyCliMigrations } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
@@ -42,13 +43,13 @@ beforeEach(async () => {
             '',
         ].join('\n'),
     );
-    process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+    setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
     db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
 });
 
 afterEach(async () => {
-    delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+    removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
     rmSync(root, { recursive: true, force: true });
     db.close();
 });

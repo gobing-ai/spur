@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
-import { buildConfigFromEnv, DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, DEFAULT_DATABASE_URL, getEnvVars } from '@gobing-ai/spur-config';
 import { startServer } from '@gobing-ai/spur-server';
 import type { CliContext } from '../context';
 import { CommandError, errorMessage } from '../errors';
@@ -61,7 +61,7 @@ export function registerServeCommand(program: Command, context: CliContext, opti
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (options) => {
             try {
-                const env = process.env as Record<string, string | undefined>;
+                const env = getEnvVars();
                 const config = buildConfigFromEnv(env);
 
                 const port = options.port ?? config.server.port;

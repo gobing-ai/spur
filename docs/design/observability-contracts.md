@@ -90,10 +90,10 @@ ingestion ships). Trusted-shape schemas ship on `@gobing-ai/spur-config/agent-qu
 | Tier             | Meaning                                                                                                  |
 | ---------------- | -------------------------------------------------------------------------------------------------------- |
 | `default`        | Persisted and streamed on the SSE channel without extra runtime config.                                  |
-| `diagnostic`     | Persisted and streamed only when `SPUR_DIAGNOSTIC_EVENTS=1` (or `true`) is set on the server runtime.    |
+| `diagnostic`     | Persisted and streamed only when `bootstrap.options.diagnosticEvents: true` is set in `.spur/config.yaml` (was the `SPUR_DIAGNOSTIC_EVENTS` env flag). |
 | (out of catalog) | Emit is not part of the board contract — CLI-local buses, browser store notifications, raw Node signals. |
 
-The `SPUR_DIAGNOSTIC_EVENTS` flag ships through `serverBootstrapConfig(env).events.diagnostic`
+The `diagnosticEvents` option ships through `serverBootstrapConfig(env, spurConfig).events.diagnostic`
 (`apps/server/src/bootstrap.ts`) and is consulted in two places: the system-event tap
 (`registerSystemEventTap(bus, dao, logger, { diagnosticEnabled })`) and the SSE module when
 building the stream name list. Diagnostic entries remain in the catalog so the UI can

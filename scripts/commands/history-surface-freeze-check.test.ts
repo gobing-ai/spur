@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { FROZEN_HISTORY_SURFACES, historySurfaceFreezeCheck, resolveFrozenBase } from './history-surface-freeze-check';
 
 const FROZEN_WEB = 'apps/web/src/modules/history/SummaryTab.tsx';
+const FROZEN_SHELL = 'apps/web/src/modules/history/HistoryShell.tsx';
 const FROZEN_CONTRACT = 'packages/contracts/src/history.ts';
 const UNRELATED = 'packages/domain/src/analytics/other.ts';
 
@@ -37,6 +38,7 @@ beforeAll(async () => {
     git(['config', 'user.name', 'Spur Test']);
 
     await write(FROZEN_WEB, 'export const SummaryTab = () => null;\n');
+    await write(FROZEN_SHELL, '<h1>History</h1>\n');
     await write(FROZEN_CONTRACT, 'export const history = true;\n');
     await write(UNRELATED, 'export const x = 1;\n');
     git(['add', '.']);
@@ -96,6 +98,27 @@ describe('history-surface-freeze-check (0745 R1/R2)', () => {
         const result = historySurfaceFreezeCheck(repo, { defaultBranch: 'main' });
         expect(result.ok).toBe(true);
         expect(result.changes).toHaveLength(0);
+    });
+
+    test('allows the pinned Histories heading allowance in HistoryShell.tsx', async () => {
+        await write(FROZEN_SHELL, '<h1>Histories</h1>\n');
+        const result = historySurfaceFreezeCheck(repo, { defaultBranch: 'main' });
+        expect(result.ok).toBe(true);
+        expect(result.changes).toHaveLength(0);
+    });
+
+    test('fails when the HistoryShell delta matches but the content does not', async () => {
+        await write(FROZEN_SHELL, '<h1>Rename</h1>\n');
+        const result = historySurfaceFreezeCheck(repo, { defaultBranch: 'main' });
+        expect(result.ok).toBe(false);
+        expect(result.changes.some((c) => c.path === FROZEN_SHELL)).toBe(true);
+    });
+
+    test('fails when HistoryShell changes beyond the pinned delta', async () => {
+        await write(FROZEN_SHELL, '<h1>Histories</h1>\nexport const touch = 1;\n');
+        const result = historySurfaceFreezeCheck(repo, { defaultBranch: 'main' });
+        expect(result.ok).toBe(false);
+        expect(result.changes.some((c) => c.path === FROZEN_SHELL)).toBe(true);
     });
 
     test('uses the merge base, not HEAD~1 — a change-then-revert is not flagged', async () => {

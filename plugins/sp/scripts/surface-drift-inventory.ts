@@ -179,9 +179,6 @@ export function parseInvocation(spanRaw: string): Parsed | null {
         }
     }
     if (nouns.length === 0 && verbs.length === 0 && flags.length === 0) return null;
-    if (process.env.DEBUG_SPANS === '1') {
-        process.stderr.write(`SPAN ${JSON.stringify({ spanRaw, nouns, verbs, flags })}\n`);
-    }
     return { nouns, verbs, flags };
 }
 

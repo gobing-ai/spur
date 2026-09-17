@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
-import { AGENT_ROLE_NAMES } from '@gobing-ai/spur-config';
+import { AGENT_ROLE_NAMES, getEnvVars } from '@gobing-ai/spur-config';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
@@ -1173,7 +1173,7 @@ async function createGitWorkingTreeSnapshot(
     try {
         await fs.ensureDir(dirname(indexFile));
         const env = Object.fromEntries(
-            Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+            Object.entries(getEnvVars()).filter((entry): entry is [string, string] => entry[1] !== undefined),
         );
         env.GIT_INDEX_FILE = indexFile;
         const executor = new NodeProcessExecutor();

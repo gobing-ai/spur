@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
+import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
 import {
     buildDailySummary,
     type CliOptions,
@@ -27,13 +27,13 @@ import { enableLogger } from '../../scripts/daily-summary/logger';
 
 beforeAll(() => {
     enableLogger(false, false);
-    process.env.SP_DAILY_SUMMARY_NO_PROMPT = '1';
+    setEnvVar('SP_DAILY_SUMMARY_NO_PROMPT', '1');
 });
 
 afterAll(() => {
     enableLogger(true, true);
-    delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
-    delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+    removeEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
+    removeEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
 });
 
 // Suppress noisy stdout from main()/printUsage() in-process invocations.
@@ -400,30 +400,30 @@ describe('generateMarkdown', () => {
 
 describe('promptUser', () => {
     test('returns empty annotations when SP_DAILY_SUMMARY_NO_PROMPT=1', async () => {
-        const originalSp = process.env.SP_DAILY_SUMMARY_NO_PROMPT;
-        process.env.SP_DAILY_SUMMARY_NO_PROMPT = '1';
+        const originalSp = getEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
+        setEnvVar('SP_DAILY_SUMMARY_NO_PROMPT', '1');
         try {
             const result = await promptUser();
             expect(result).toEqual({ learnings: '', issuesFixed: '', pending: '' });
         } finally {
-            if (originalSp !== undefined) process.env.SP_DAILY_SUMMARY_NO_PROMPT = originalSp;
-            else delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+            if (originalSp !== undefined) setEnvVar('SP_DAILY_SUMMARY_NO_PROMPT', originalSp);
+            else removeEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
         }
     });
 
     test('returns empty annotations when RD3_DAILY_SUMMARY_NO_PROMPT=1 (fallback with deprecation warning)', async () => {
-        const originalSp = process.env.SP_DAILY_SUMMARY_NO_PROMPT;
-        const originalRd3 = process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
-        delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
-        process.env.RD3_DAILY_SUMMARY_NO_PROMPT = '1';
+        const originalSp = getEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
+        const originalRd3 = getEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
+        removeEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
+        setEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT', '1');
         try {
             const result = await promptUser();
             expect(result).toEqual({ learnings: '', issuesFixed: '', pending: '' });
         } finally {
-            if (originalSp !== undefined) process.env.SP_DAILY_SUMMARY_NO_PROMPT = originalSp;
-            else delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
-            if (originalRd3 !== undefined) process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalRd3;
-            else delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+            if (originalSp !== undefined) setEnvVar('SP_DAILY_SUMMARY_NO_PROMPT', originalSp);
+            else removeEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
+            if (originalRd3 !== undefined) setEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT', originalRd3);
+            else removeEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
         }
     });
 
@@ -433,10 +433,10 @@ describe('promptUser', () => {
         Object.defineProperty(fakeStdin, 'isTTY', { value: false });
 
         const originalStdin = process.stdin;
-        const originalNoPrompt = process.env.SP_DAILY_SUMMARY_NO_PROMPT;
-        const originalRd3 = process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
-        delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
-        delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+        const originalNoPrompt = getEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
+        const originalRd3 = getEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
+        removeEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
+        removeEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
         Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true });
         try {
             const result = await promptUser();
@@ -444,14 +444,14 @@ describe('promptUser', () => {
         } finally {
             Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true });
             if (originalNoPrompt !== undefined) {
-                process.env.SP_DAILY_SUMMARY_NO_PROMPT = originalNoPrompt;
+                setEnvVar('SP_DAILY_SUMMARY_NO_PROMPT', originalNoPrompt);
             } else {
-                delete process.env.SP_DAILY_SUMMARY_NO_PROMPT;
+                removeEnvVar('SP_DAILY_SUMMARY_NO_PROMPT');
             }
             if (originalRd3 !== undefined) {
-                process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalRd3;
+                setEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT', originalRd3);
             } else {
-                delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+                removeEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
             }
         }
     });
@@ -462,8 +462,8 @@ describe('promptUser', () => {
         Object.defineProperty(fakeStdin, 'isTTY', { value: true });
 
         const originalStdin = process.stdin;
-        const originalNoPrompt = process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
-        delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+        const originalNoPrompt = getEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
+        removeEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
         Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true });
 
         // Suppress readline's direct writes to stdout so they don't pollute the test reporter.
@@ -478,7 +478,7 @@ describe('promptUser', () => {
             stdoutWriteSpy.mockRestore();
             Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true });
             if (originalNoPrompt !== undefined) {
-                process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalNoPrompt;
+                setEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT', originalNoPrompt);
             }
         }
     });
@@ -489,8 +489,8 @@ describe('promptUser', () => {
         Object.defineProperty(fakeStdin, 'isTTY', { value: false });
 
         const originalStdin = process.stdin;
-        const originalNoPrompt = process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
-        delete process.env.RD3_DAILY_SUMMARY_NO_PROMPT;
+        const originalNoPrompt = getEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
+        removeEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT');
         Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true });
         try {
             const result = await promptUser();
@@ -498,7 +498,7 @@ describe('promptUser', () => {
         } finally {
             Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true });
             if (originalNoPrompt !== undefined) {
-                process.env.RD3_DAILY_SUMMARY_NO_PROMPT = originalNoPrompt;
+                setEnvVar('RD3_DAILY_SUMMARY_NO_PROMPT', originalNoPrompt);
             }
         }
     });
@@ -1036,10 +1036,10 @@ describe('main entrypoint (in-process)', () => {
     });
 
     test('defaultProcessSpawner executes process and handles error', async () => {
-        const ok = await defaultProcessSpawner('echo', ['hello'], process.env);
+        const ok = await defaultProcessSpawner('echo', ['hello'], getEnvVars());
         expect(ok.exitCode).toBe(0);
         expect(ok.stdout.trim()).toBe('hello');
 
-        await expect(defaultProcessSpawner('__non_existent_binary_for_test__', [], process.env)).rejects.toThrow();
+        await expect(defaultProcessSpawner('__non_existent_binary_for_test__', [], getEnvVars())).rejects.toThrow();
     });
 });

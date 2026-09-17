@@ -11,6 +11,7 @@ import { mkdir, mkdtemp, readdir, readFile, rename, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { FINDING_CODES, TaskCandidateInvalidError, TaskService, WbsCollisionError } from '@gobing-ai/spur-app';
+import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/spur-config';
 import * as configModule from '@gobing-ai/spur-config/loader';
 import { apiErrorSchema } from '@gobing-ai/spur-contracts';
 import { main } from '../../src/index';
@@ -1892,7 +1893,7 @@ Only this section exists.
             const exitCode = await main(['task', 'update', wbs, 'done'], {
                 cwd,
                 output,
-                env: { ...process.env, SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
+                env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
             });
             expect(exitCode).toBe(1);
             expect(output.errors.some((e) => e.includes('blocked'))).toBe(true);
@@ -1985,7 +1986,7 @@ Only this section exists.
             const exitCode = await main(['task', 'update', wbs, 'done'], {
                 cwd,
                 output,
-                env: { ...process.env, SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
+                env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
             });
             // With the fix (strict:false), the L4 warning stays a warning → pass:true → done succeeds.
             expect(exitCode).toBe(0);
@@ -2041,7 +2042,7 @@ Only this section exists.
             const exitCode = await main(['task', 'update', wbs, 'done'], {
                 cwd,
                 output,
-                env: { ...process.env, SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
+                env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: join(cwd, 'no-such-global-config') },
             });
             expect(exitCode).toBe(1);
             expect(output.errors.some((e) => e.includes('blocked'))).toBe(true);
@@ -3395,7 +3396,7 @@ describe('spur task ready-by-default (0788, fake executor)', () => {
     });
 
     afterAll(() => {
-        if (savedPath !== undefined) process.env.PATH = savedPath;
+        if (savedPath !== undefined) setEnvVar('PATH', savedPath);
         rmSync(isoCwd, { recursive: true, force: true });
     });
 
@@ -3444,15 +3445,15 @@ exit 1
         const script = join(binDir, 'claude');
         await writeFile(script, body);
         await Bun.$`chmod +x ${script}`.quiet();
-        if (savedPath === undefined) savedPath = process.env.PATH;
-        process.env.PATH = `${binDir}:${savedPath}`;
+        if (savedPath === undefined) savedPath = getEnvVar('PATH');
+        setEnvVar('PATH', `${binDir}:${savedPath}`);
         return log;
     }
 
     function dropFakeFromPath(): void {
         // Minimal system PATH: no fake dir AND no real claude install — the
         // resolution ladder must find nothing.
-        process.env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+        setEnvVar('PATH', '/usr/bin:/bin:/usr/sbin:/sbin');
     }
 
     test('default flow prepares and promotes the task to todo', async () => {

@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 /**
  * 0824 (spec): execution pins for the registered `idea-handoff` twin. A seeded project runs
@@ -19,7 +20,7 @@ test('0824: the twin fails closed without __runId/featureId — exact stderr, ex
     // Env stripped to PATH only: the mis-invocation guard lives in the shared
     // runIdeaHandoffCli, whose message idea-handoff-cli.test.ts pins verbatim — the twin
     // must surface the identical bytes and exit 1, never a silent skip.
-    const proc = Bun.spawnSync(['node', TWIN], { env: { PATH: process.env.PATH ?? '' } });
+    const proc = Bun.spawnSync(['node', TWIN], { env: { PATH: getEnvVar('PATH') ?? '' } });
     expect(proc.exitCode).toBe(1);
     expect(proc.stderr.toString()).toBe('idea-handoff: __runId and featureId env vars are required\n');
 });
@@ -29,8 +30,14 @@ test('0824: a happy-path spawn runs the generated lib through the twin to exit 0
     const twinText = readFileSync(TWIN, 'utf8');
     // The computed-URL import of the generated lib is the twin's single bridge to the shared
     // implementation: no packages/ import (a seeded checkout has none) and no inline copy.
+    // Bundled ts-utils functions carry bun's `// path` comments — strip comment lines so the
+    // assertion measures runtime references, not bundler provenance notes.
     expect(twinText).toContain('../lib/idea-handoff.generated.mjs');
-    expect(twinText).not.toMatch(/packages\//);
+    const runtimeText = twinText
+        .split('\n')
+        .filter((line) => !line.trim().startsWith('//'))
+        .join('\n');
+    expect(runtimeText).not.toMatch(/packages\//);
 
     const cwd = mkdtempSync(join(tmpdir(), 'idea-handoff-twin-'));
     try {
@@ -48,7 +55,7 @@ test('0824: a happy-path spawn runs the generated lib through the twin to exit 0
         writeFileSync(join(runDir, 'twin-idea-task-order.json'), JSON.stringify([{ name: 'fixture task' }]));
         const stub = join(cwd, 'stub-spur');
         // The payload (task-doc) path is baked into the stub — spawned children inherit
-        // process.env, not per-call env objects (same pattern as wrapup-steps.test.ts).
+        // getEnvVars(), not per-call env objects (same pattern as wrapup-steps.test.ts).
         writeFileSync(
             stub,
             [
@@ -64,7 +71,7 @@ test('0824: a happy-path spawn runs the generated lib through the twin to exit 0
         chmodSync(stub, 0o755);
         const proc = Bun.spawnSync(['node', TWIN], {
             cwd,
-            env: { PATH: process.env.PATH ?? '', __runId: 'twin', featureId: 'I21', spurBin: stub },
+            env: { PATH: getEnvVar('PATH') ?? '', __runId: 'twin', featureId: 'I21', spurBin: stub },
         });
         expect(proc.exitCode).toBe(0);
         expect(proc.stderr.toString()).toBe('');

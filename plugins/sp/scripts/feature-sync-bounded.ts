@@ -24,6 +24,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 // ── Local types (match packages/app FeatureService shapes; no package import) ───────────
 
@@ -250,7 +251,7 @@ Exit: 0 = sync handled (applied / no-op / suppressed-blocked / live-blocked).`;
  * keeps ad-hoc invocations from silently hitting a stale PATH install.
  */
 export function defaultSpurBin(): string {
-    if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
+    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
     // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts (fileURLToPath — raw pathname breaks
     // on %-encoded paths, e.g. spaces in the checkout directory)
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));

@@ -1,3 +1,5 @@
+import { getEnvVars } from '@gobing-ai/spur-config';
+
 /**
  * Proto shim recursion markers (`PROTO_SHIM_*` / `PROTO_INTERNAL_*`) are set by the proto
  * tool-version shim on every shim-launched process. When a spawned child invokes a shimmed
@@ -14,7 +16,7 @@ const SHIM_INTERNAL_ENV = /^PROTO_(SHIM|INTERNAL)_/;
  */
 export function childProcessEnv(vars?: Record<string, string>): Record<string, string> {
     const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries({ ...process.env, ...vars })) {
+    for (const [key, value] of Object.entries({ ...getEnvVars(), ...vars })) {
         // Blank (never delete) shim-internal markers: executor env merging re-adds deleted keys
         // from the parent env, while an explicit empty string wins the merge and the shim treats
         // it as unset (proto fallback_loop guard passes on '').

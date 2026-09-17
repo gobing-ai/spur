@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+
+import { getEnvVars } from '@gobing-ai/ts-utils';
+
 /**
  * idea-handoff — portable entrypoint for the idea-pipeline finalization (task 0824, feature I21).
  *
@@ -29,7 +32,7 @@ export async function loadHandoffLib(): Promise<typeof import('../lib/idea-hando
 export const IDEA_HANDOFF_USAGE =
     'usage: idea-handoff.ts  (env: __runId, featureId, optional spurBin) — no subcommands';
 
-export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env): Promise<number> {
+export async function main(argv: string[], env: NodeJS.ProcessEnv = getEnvVars()): Promise<number> {
     if (argv.length > 0) {
         process.stderr.write(`${IDEA_HANDOFF_USAGE}\n`);
         return 2;

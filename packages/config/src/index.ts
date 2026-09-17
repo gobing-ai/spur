@@ -1,3 +1,4 @@
+import { getEnvVars } from '@gobing-ai/ts-utils';
 import { z } from 'zod';
 
 // NOTE: this is the CF-safe CORE entry of @gobing-ai/spur-config.
@@ -815,9 +816,24 @@ export function resolveHistoryRefreshTrigger(
  * `version` is a **string** label (recommended `"1.2"`; older strings remain accepted). There is
  * no hard migrator keyed on this field yet — unquoted YAML numbers fail validation.
  */
+/** Zod schema for the `bootstrap.options` runtime-option bag read via {@link getAppOptions}. */
+export const bootstrapOptionsSchema = z.object({
+    /**
+     * Free-form runtime options keyed by name — the typed replacement surface for
+     * config-carrying environment variables (task 0902). Consumers validate their
+     * own keys at the read site via {@link getAppOptions} + coercion.
+     */
+    options: z.record(z.string(), z.unknown()).optional(),
+});
+
+/**
+ * Root schema for a merged `.spur/config.yaml` document (global + project layers,
+ * loaded exclusively by {@link loadSpurConfig} per ADR-027).
+ */
 export const spurConfigSchema = z.object({
     version: z.string().optional(),
     name: z.string().optional(),
+    bootstrap: bootstrapOptionsSchema.optional(),
     agent: AgentConfigSchema.optional(),
     rules: RulesConfigSchema.optional(),
     workflows: WorkflowsConfigSchema.optional(),
@@ -831,6 +847,26 @@ export const spurConfigSchema = z.object({
 
 /** Inferred type for the unified {@link spurConfigSchema}. */
 export type SpurConfig = z.infer<typeof spurConfigSchema>;
+
+/** Inferred type for the `bootstrap.options` runtime-option bag. */
+export type BootstrapOptions = z.infer<typeof bootstrapOptionsSchema>;
+
+/**
+ * Env/app-options gateway, single-sourced from `@gobing-ai/ts-utils` (`packages/utils/src/env.ts`).
+ * Re-exported here so `packages/config` stays the one import surface: direct environment
+ * access is banned everywhere in this repo — packages/config included — and every
+ * surviving read (host contracts, deployment plane, invocation contracts — documented
+ * in `.env.example`) stays greppable through this funnel. Signatures and contracts live in
+ * ts-libs; portable plugin scripts bundle the same functions from ts-utils via
+ * `superskill script convert`.
+ */
+export {
+    getAppOptions,
+    getEnvVar,
+    getEnvVars,
+    removeEnvVar,
+    setEnvVar,
+} from '@gobing-ai/ts-utils';
 
 /**
  * Top-level keys that belong at the project layer, never the global layer, per the
@@ -929,7 +965,7 @@ export function parseEnvBoolean(value: string | undefined): boolean | undefined 
 }
 
 /** Read process-like bindings without coupling config parsing to Node globals. */
-export function buildConfigFromEnv(env: Record<string, string | undefined> = process.env): Config {
+export function buildConfigFromEnv(env: Record<string, string | undefined> = getEnvVars()): Config {
     return configSchema.parse({
         database: {
             url: env[SPUR_ENV_VARS.databaseUrl],

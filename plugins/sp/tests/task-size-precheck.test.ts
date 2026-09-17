@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 
 /** Within the default ceiling: 3 R-items, 1 Plan item. */
 const WITHIN_LIMITS_BODY = '### Requirements\\n- [ ] R1. x\\n- [ ] R2. x\\n- [ ] R3. x\\n### Plan\\n- [ ] x';
@@ -63,7 +64,7 @@ printf '%s\\n' '{"content":"### Requirements\\n- [ ] R1. x\\n### Plan\\n- [ ] x"
         execFileSync('bun', [join(import.meta.dir, '..', 'scripts', 'task-size-precheck.ts'), '0539'], {
             cwd: dir,
             stdio: 'pipe',
-            env: { ...process.env, SPUR_BIN: fakeSpur },
+            env: { ...getEnvVars(), SPUR_BIN: fakeSpur },
         });
 
         // The fake bin ran (marker) and the status file was written from its within-limits body.
@@ -81,9 +82,9 @@ test('script defaults stay aligned with the application ceiling (0723: 10/16)', 
 
     expect(app.match(/maxReqs: (\d+)/)?.[1]).toBe('10');
     expect(app.match(/maxPlanItems: (\d+)/)?.[1]).toBe('16');
-    // Script env/flag fallbacks (parses `Number(...) || <n>` and `Number(argv[i+1]) || <n>`).
+    // Script argv-flag fallbacks (parses `Number(argv[i+1]) || <n>`; env knobs removed, task 0902).
     const fallbacks = [...plugin.matchAll(/\|\| (\d+);/g)].map((m) => m[1]);
-    expect(fallbacks).toEqual(['10', '16', '10', '16']);
+    expect(fallbacks).toEqual(['10', '16']);
 });
 
 test('count-only since 0723: no executor flag, no doctor call site remains', () => {

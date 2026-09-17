@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
     classifyPortBindError,
     isPortAvailable,
@@ -22,13 +23,13 @@ describe('ProjectRegistry', () => {
     beforeEach(() => {
         tempDir = mkdtempSync(join(tmpdir(), 'spur-project-registry-test-'));
         projectsFile = join(tempDir, 'projects.json');
-        process.env.SPUR_PROJECTS_FILE = projectsFile;
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
         registry = new ProjectRegistry(projectsFile);
     });
 
     afterEach(() => {
         setPortProbeForTests(undefined);
-        delete process.env.SPUR_PROJECTS_FILE;
+        removeEnvVar('SPUR_PROJECTS_FILE');
         if (existsSync(tempDir)) {
             rmSync(tempDir, { recursive: true, force: true });
         }

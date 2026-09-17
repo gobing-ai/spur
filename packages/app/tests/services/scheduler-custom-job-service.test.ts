@@ -258,28 +258,37 @@ describe('handleSchedulerCustomJob (task 0734 R6)', () => {
     });
 });
 
-describe('resolveSchedulerCustomTimeoutMs (task 0803 R1 / 0813 R2)', () => {
+describe('resolveSchedulerCustomTimeoutMs (task 0803 R1 / 0813 R2 / 0902 wave 2)', () => {
     test('defaults to 600000ms — ten minutes, not the one-hour default that wedged the daemon', () => {
         expect(SCHEDULER_CUSTOM_TIMEOUT_MS).toBe(600_000);
-        expect(resolveSchedulerCustomTimeoutMs({})).toBe(600_000);
+        expect(resolveSchedulerCustomTimeoutMs(null)).toBe(600_000);
     });
 
-    test('parses a positive integer SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS override', () => {
-        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '5000' })).toBe(5_000);
+    test('parses a positive integer bootstrap.options.schedulerCustomTimeoutMs override', () => {
+        expect(resolveSchedulerCustomTimeoutMs({ bootstrap: { options: { schedulerCustomTimeoutMs: 5_000 } } })).toBe(
+            5_000,
+        );
     });
 
     test("an explicit 'none' resolves to unlimited (null)", () => {
-        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: 'none' })).toBeNull();
-        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: ' NONE ' })).toBeNull();
+        expect(
+            resolveSchedulerCustomTimeoutMs({ bootstrap: { options: { schedulerCustomTimeoutMs: 'none' } } }),
+        ).toBeNull();
     });
 
-    test('falls back to the default for empty, non-numeric, zero, negative, or fractional values', () => {
-        const env = { SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '  ' };
-        expect(resolveSchedulerCustomTimeoutMs(env)).toBe(600_000);
-        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: 'abc' })).toBe(600_000);
-        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '0' })).toBe(600_000);
-        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '-5' })).toBe(600_000);
-        expect(resolveSchedulerCustomTimeoutMs({ SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS: '3.5' })).toBe(600_000);
+    test('throws on malformed values — config drift must fail loud, not silently keep the default', () => {
+        expect(() =>
+            resolveSchedulerCustomTimeoutMs({ bootstrap: { options: { schedulerCustomTimeoutMs: 'abc' } } }),
+        ).toThrow(/schedulerCustomTimeoutMs/);
+        expect(() =>
+            resolveSchedulerCustomTimeoutMs({ bootstrap: { options: { schedulerCustomTimeoutMs: 0 } } }),
+        ).toThrow(/schedulerCustomTimeoutMs/);
+        expect(() =>
+            resolveSchedulerCustomTimeoutMs({ bootstrap: { options: { schedulerCustomTimeoutMs: -5 } } }),
+        ).toThrow(/schedulerCustomTimeoutMs/);
+        expect(() =>
+            resolveSchedulerCustomTimeoutMs({ bootstrap: { options: { schedulerCustomTimeoutMs: 3.5 } } }),
+        ).toThrow(/schedulerCustomTimeoutMs/);
     });
 });
 

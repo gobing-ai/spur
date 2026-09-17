@@ -1,5 +1,5 @@
 import { basename, dirname, join } from 'node:path';
-import { buildConfigFromEnv } from '@gobing-ai/spur-config';
+import { buildConfigFromEnv, getEnvVars } from '@gobing-ai/spur-config';
 import { startServer } from './serve';
 
 export { createApp } from './bootstrap';
@@ -29,7 +29,7 @@ export function resolveStandaloneSpurInvocation(execPath: string, sourceDir = im
 
 /** Entry-point logic extracted for testability. Called by the import.meta.main block. */
 export async function main(
-    env: Record<string, string | undefined> = process.env,
+    env: Record<string, string | undefined> = getEnvVars(),
     deps: MainDeps = { buildConfigFromEnv, startServer },
 ): Promise<void> {
     const config = deps.buildConfigFromEnv(env);

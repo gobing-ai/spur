@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
 import {
     type BlockedState,
     blockedStateFile,
@@ -19,19 +20,19 @@ import {
 } from '../scripts/feature-sync-bounded';
 
 describe('defaultSpurBin (monorepo-safe CLI resolution, 0539)', () => {
-    const prev = process.env.SPUR_BIN;
+    const prev = getEnvVar('SPUR_BIN');
     afterEach(() => {
-        if (prev === undefined) delete process.env.SPUR_BIN;
-        else process.env.SPUR_BIN = prev;
+        if (prev === undefined) removeEnvVar('SPUR_BIN');
+        else setEnvVar('SPUR_BIN', prev);
     });
 
     test('SPUR_BIN env wins over every other rung', () => {
-        process.env.SPUR_BIN = '/custom/spur';
+        setEnvVar('SPUR_BIN', '/custom/spur');
         expect(defaultSpurBin()).toBe('/custom/spur');
     });
 
     test('falls back to the monorepo-local CLI entry before PATH spur', () => {
-        delete process.env.SPUR_BIN;
+        removeEnvVar('SPUR_BIN');
         const repoRoot = join(import.meta.dir, '..', '..', '..');
         expect(defaultSpurBin()).toBe(`bun ${join(repoRoot, 'apps/cli/src/index.ts')}`);
     });

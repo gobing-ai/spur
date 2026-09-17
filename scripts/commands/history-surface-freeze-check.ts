@@ -33,6 +33,33 @@ export const FROZEN_HISTORY_SURFACES = ['apps/web/src/modules/history/', 'packag
  */
 export const FROZEN_HISTORY_EXCLUSIONS = ['apps/web/src/modules/history/index.tsx'] as const;
 
+/**
+ * Pinned line allowances: a path here may differ from the merge base only by an exact
+ * +added −deleted delta whose working-tree content matches `pattern`. Feature A7 rebranded
+ * the History page heading to "Histories" to match the sanctioned sidebarLabel rename in
+ * index.tsx; whole-file exclusion would unprotect ~665 lines of live tab/filter UI, so the
+ * allowance is delta- and content-pinned instead — any other change to the file fails the
+ * check again.
+ */
+export const FROZEN_HISTORY_LINE_ALLOWANCES = [
+    {
+        path: 'apps/web/src/modules/history/HistoryShell.tsx',
+        added: 1,
+        deleted: 1,
+        pattern: /<h1[^>]*>Histories<\/h1>/,
+    },
+] as const;
+
+function isAllowedLineChange(path: string, added: number, deleted: number, cwd: string): boolean {
+    return FROZEN_HISTORY_LINE_ALLOWANCES.some(
+        (allowance) =>
+            allowance.path === path &&
+            allowance.added === added &&
+            allowance.deleted === deleted &&
+            allowance.pattern.test(readFileSync(`${cwd.replace(/\/$/, '')}/${path}`, 'utf8')),
+    );
+}
+
 export interface FrozenSurfaceChange {
     path: string;
     added: number;
@@ -118,7 +145,11 @@ export function historySurfaceFreezeCheck(
         }
         for (const line of diff.stdout.split('\n').filter(Boolean)) {
             const change = parseNumstat(line);
-            if (change.path && !FROZEN_HISTORY_EXCLUSIONS.some((excluded) => change.path === excluded)) {
+            if (
+                change.path &&
+                !FROZEN_HISTORY_EXCLUSIONS.some((excluded) => change.path === excluded) &&
+                !isAllowedLineChange(change.path, change.added, change.deleted, cwd)
+            ) {
                 changes.push(change);
             }
         }

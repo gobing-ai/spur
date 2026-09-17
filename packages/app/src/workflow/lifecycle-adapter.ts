@@ -81,6 +81,13 @@ export interface LifecycleAdapterOptions {
      * Tests inject synthetic bodies without touching the filesystem.
      */
     readTaskMarkdown?: (ref: EntityRef) => Promise<string | null>;
+    /**
+     * Opt-in audited bypass of the P2 provenance gate (task 0902 wave 2; was the
+     * `SPUR_PROVENANCE_OVERRIDE` env var). When `true`, a `* → done` transition with no
+     * pipeline run records a `provenance_bypass` link instead of denying; the bypass
+     * stays recorded and audited exactly as before. Absent/false keeps the gate strict.
+     */
+    provenanceBypass?: boolean;
 }
 
 /**
@@ -132,7 +139,7 @@ export class LifecycleAdapter implements LifecyclePort {
             const hasPipelineRun = links.some((l) => l.kind === 'pipeline');
             const hasPriorBypass = links.some((l) => l.kind === 'provenance_bypass');
             if (!hasPipelineRun && !hasPriorBypass) {
-                if (process.env.SPUR_PROVENANCE_OVERRIDE === '1') {
+                if (this.opts.provenanceBypass === true) {
                     await this.opts.taskRunLinkDao(db).insert({
                         id: createId('trl'),
                         wbs: ref.id,
@@ -148,7 +155,7 @@ export class LifecycleAdapter implements LifecyclePort {
                         report:
                             `No pipeline run recorded for ${ref.id}. Run the pipeline first (` +
                             `spur workflow run task-pipeline.yaml --vars '{"wbs":"${ref.id}"}'), ` +
-                            'or set SPUR_PROVENANCE_OVERRIDE=1 to bypass (recorded).',
+                            'or pass --provenance-bypass on `spur task update` to bypass (recorded).',
                     };
                 }
             }

@@ -2,6 +2,7 @@ import { expect, spyOn, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
 import { main, WBS_PATTERN, WRAPUP_STEPS_USAGE, type WrapupStepsEnv } from '../scripts/wrapup-steps';
 
 /**
@@ -84,14 +85,14 @@ function stubFeatureEnv(cwd: string, opts: FtStubOptions): WrapupStepsEnv {
 
 /** Runs the script with a temp cwd plus a stub-first PATH (for the superskill probe). */
 function runSteps(argv: string[], env: WrapupStepsEnv, cwd: string): { code: number; out: string; err: string } {
-    const prevPath = process.env.PATH;
+    const prevPath = getEnvVar('PATH');
     const cap = capture();
-    process.env.PATH = `${cwd}${prevPath ? `:${prevPath}` : ''}`;
+    setEnvVar('PATH', `${cwd}${prevPath ? `:${prevPath}` : ''}`);
     try {
-        const code = main(argv, { ...process.env, ...env }, { cwd });
+        const code = main(argv, { ...getEnvVars(), ...env }, { cwd });
         return { code, out: cap.out(), err: cap.err() };
     } finally {
-        process.env.PATH = prevPath;
+        setEnvVar('PATH', prevPath);
         cap.restore();
     }
 }
@@ -306,7 +307,7 @@ test('0783 R3: escaped JSON fields survive serialization as parseable rows', () 
         const jsonFile = join(cwd, 'stub-payload.json');
         writeFileSync(jsonFile, payload);
         const stub = join(cwd, 'stub-spur');
-        // Spawned children inherit process.env, not the env object given to main(), so the
+        // Spawned children inherit getEnvVars(), not the env object given to main(), so the
         // payload path is baked into the stub (same pattern as the quality-gate scripts).
         writeFileSync(stub, `#!/bin/sh\ncase "$1 $2" in "task show") cat '${jsonFile}';; esac\nexit 0\n`);
         chmodSync(stub, 0o755);

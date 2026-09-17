@@ -139,13 +139,24 @@ describe('runBoundedChild native policy forwarding (task 0813 R1)', () => {
     });
 });
 
-describe('resolveKillGraceMs (task 0806 R1)', () => {
-    test('falls back to the default for absent, blank, and invalid overrides', () => {
-        expect(resolveKillGraceMs({})).toBe(CHILD_KILL_GRACE_MS);
-        expect(resolveKillGraceMs({ SPUR_SCHEDULER_KILL_GRACE_MS: '' })).toBe(CHILD_KILL_GRACE_MS);
-        expect(resolveKillGraceMs({ SPUR_SCHEDULER_KILL_GRACE_MS: 'nope' })).toBe(CHILD_KILL_GRACE_MS);
-        expect(resolveKillGraceMs({ SPUR_SCHEDULER_KILL_GRACE_MS: '-1' })).toBe(CHILD_KILL_GRACE_MS);
-        expect(resolveKillGraceMs({ SPUR_SCHEDULER_KILL_GRACE_MS: '250' })).toBe(250);
+describe('resolveKillGraceMs (task 0806 R1 / 0902 wave 2)', () => {
+    test('falls back to the default when the option is absent', () => {
+        expect(resolveKillGraceMs(null)).toBe(CHILD_KILL_GRACE_MS);
+        expect(resolveKillGraceMs(undefined)).toBe(CHILD_KILL_GRACE_MS);
+        expect(resolveKillGraceMs({ bootstrap: { options: {} } })).toBe(CHILD_KILL_GRACE_MS);
+    });
+
+    test('parses a positive integer bootstrap.options.schedulerKillGraceMs override', () => {
+        expect(resolveKillGraceMs({ bootstrap: { options: { schedulerKillGraceMs: 250 } } })).toBe(250);
+    });
+
+    test('throws on malformed values — config drift must surface, not silently weaken escalation', () => {
+        expect(() => resolveKillGraceMs({ bootstrap: { options: { schedulerKillGraceMs: -1 } } })).toThrow(
+            /schedulerKillGraceMs/,
+        );
+        expect(() => resolveKillGraceMs({ bootstrap: { options: { schedulerKillGraceMs: 'abc' } } })).toThrow(
+            /schedulerKillGraceMs/,
+        );
     });
 });
 

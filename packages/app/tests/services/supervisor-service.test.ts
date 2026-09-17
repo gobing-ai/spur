@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'bun:test';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import type { AgentSpec } from '@gobing-ai/ts-ai-runner';
 import type { PipeProcess, PipeProcessOptions, ProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
@@ -755,8 +756,8 @@ describe('SupervisorService', () => {
         });
 
         test('falls back to SPUR_SERVE_URL env when constructor omits it', async () => {
-            const prev = process.env.SPUR_SERVE_URL;
-            process.env.SPUR_SERVE_URL = 'http://from-env:9999';
+            const prev = getEnvVar('SPUR_SERVE_URL');
+            setEnvVar('SPUR_SERVE_URL', 'http://from-env:9999');
             try {
                 const { executor, calls } = createMockExecutor();
                 const { bus } = createMockBus();
@@ -771,8 +772,8 @@ describe('SupervisorService', () => {
                 const env = calls[0]?.env as Record<string, string>;
                 expect(env.SPUR_SERVE_URL).toBe('http://from-env:9999');
             } finally {
-                if (prev === undefined) delete process.env.SPUR_SERVE_URL;
-                else process.env.SPUR_SERVE_URL = prev;
+                if (prev === undefined) removeEnvVar('SPUR_SERVE_URL');
+                else setEnvVar('SPUR_SERVE_URL', prev);
             }
         });
     });

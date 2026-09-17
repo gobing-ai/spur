@@ -1,3 +1,4 @@
+import { getEnvVar } from '@gobing-ai/spur-config';
 import type {
     ApiErrorCode,
     apiErrorSchema,
@@ -61,7 +62,7 @@ export interface EnvelopeOptions {
 /** True when the CLI should emit the enveloped shape (ADR-091): explicit flag > env > raw. */
 export function envelopeEnabled(explicit?: boolean): boolean {
     if (explicit !== undefined) return explicit;
-    return process.env.SPUR_JSON_ENVELOPE === '1';
+    return getEnvVar('SPUR_JSON_ENVELOPE') === '1';
 }
 
 /**

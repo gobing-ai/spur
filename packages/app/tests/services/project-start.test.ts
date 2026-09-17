@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { ProjectRegistry, setPortProbeForTests } from '../../src/services/project-registry';
 import {
     type DetachedServeChild,
@@ -49,15 +50,15 @@ describe('project-start', () => {
     beforeEach(() => {
         tempDir = mkdtempSync(join(tmpdir(), 'spur-project-start-test-'));
         projectsFile = join(tempDir, 'projects.json');
-        process.env.SPUR_PROJECTS_FILE = projectsFile;
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
         registry = new ProjectRegistry(projectsFile);
     });
 
     afterEach(() => {
         setPortProbeForTests(undefined);
         setDetachedServeSpawnForTests(undefined);
-        delete process.env.SPUR_PROJECTS_FILE;
-        delete process.env.SPUR_CLI_PATH;
+        removeEnvVar('SPUR_PROJECTS_FILE');
+        removeEnvVar('SPUR_CLI_PATH');
         if (existsSync(tempDir)) {
             rmSync(tempDir, { recursive: true, force: true });
         }
@@ -85,7 +86,7 @@ describe('project-start', () => {
     });
 
     it('startRegisteredProject expands tilde paths before treating them as cwd', async () => {
-        const tildeStyle = tempDir.replace(process.env.HOME ?? '', '~');
+        const tildeStyle = tempDir.replace(getEnvVar('HOME') ?? '', '~');
         await registry.upsert({ name: 'TildeStart', path: tempDir, port: 0 });
         if (tildeStyle.startsWith('~/') || tildeStyle.startsWith('~')) {
             writeFileSync(
@@ -153,18 +154,18 @@ describe('project-start', () => {
     });
 
     it('resolveSpurServeCommand prefers SPUR_CLI_PATH when set', () => {
-        const origEnv = process.env.SPUR_CLI_PATH;
+        const origEnv = getEnvVar('SPUR_CLI_PATH');
         try {
             const fakeCli = join(tempDir, 'fake-spur.js');
             writeFileSync(fakeCli, '#!/usr/bin/env node');
-            process.env.SPUR_CLI_PATH = fakeCli;
+            setEnvVar('SPUR_CLI_PATH', fakeCli);
             const cmd = resolveSpurServeCommand();
             expect(cmd).toEqual([process.execPath, fakeCli]);
         } finally {
             if (origEnv !== undefined) {
-                process.env.SPUR_CLI_PATH = origEnv;
+                setEnvVar('SPUR_CLI_PATH', origEnv);
             } else {
-                delete process.env.SPUR_CLI_PATH;
+                removeEnvVar('SPUR_CLI_PATH');
             }
         }
     });
@@ -328,9 +329,9 @@ describe('project-start', () => {
         const origArgv = process.argv[1];
         const origWhich = Bun.which;
         const origCwd = process.cwd;
-        const origEnv = process.env.SPUR_CLI_PATH;
+        const origEnv = getEnvVar('SPUR_CLI_PATH');
         try {
-            delete process.env.SPUR_CLI_PATH;
+            removeEnvVar('SPUR_CLI_PATH');
             process.argv[1] = '/usr/bin/other-app';
             process.cwd = () => tempDir; // no apps/cli/src/index.ts under tempDir
             Bun.which = (bin: string) => (bin === 'spur' ? '/usr/local/bin/spur' : null);
@@ -339,8 +340,8 @@ describe('project-start', () => {
             if (origArgv !== undefined) process.argv[1] = origArgv;
             process.cwd = origCwd;
             Bun.which = origWhich;
-            if (origEnv !== undefined) process.env.SPUR_CLI_PATH = origEnv;
-            else delete process.env.SPUR_CLI_PATH;
+            if (origEnv !== undefined) setEnvVar('SPUR_CLI_PATH', origEnv);
+            else removeEnvVar('SPUR_CLI_PATH');
         }
     });
 

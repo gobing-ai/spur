@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { isPortLive, normalizeProjectPath, type ProjectRegistry } from './project-registry';
 
@@ -96,7 +97,7 @@ export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options
         command: shell.command,
         args: shell.args,
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-        env: flattenEnv(options.env ?? process.env),
+        env: flattenEnv(options.env ?? getEnvVars()),
         forceBuffered: true,
         rejectOnError: false,
     });
@@ -124,8 +125,9 @@ export function setDetachedServeSpawnForTests(spawn: DetachedServeSpawn | undefi
  * never reuse the server entry as argv[1] (that spawned the wrong program).
  */
 export function resolveSpurServeCommand(): string[] {
-    if (process.env.SPUR_CLI_PATH && existsSync(process.env.SPUR_CLI_PATH)) {
-        return [process.execPath, process.env.SPUR_CLI_PATH];
+    const cliPath = getEnvVar('SPUR_CLI_PATH');
+    if (cliPath !== undefined && existsSync(cliPath)) {
+        return [process.execPath, cliPath];
     }
 
     const argv1 = process.argv[1];
@@ -226,7 +228,7 @@ export async function startRegisteredProject(
                 cwd: projectPath,
                 detached: true,
                 stdio: ['ignore', 'ignore', 'ignore'],
-                env: process.env,
+                env: getEnvVars(),
             },
         ),
     );

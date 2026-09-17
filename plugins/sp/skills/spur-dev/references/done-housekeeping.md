@@ -105,7 +105,7 @@ gate will reject the task without it). Use the normal `--section --from-file` co
 **4. Force-done with an honest reason.**
 
 ```bash
-SPUR_PROVENANCE_OVERRIDE=1 spur task update <wbs> done --force-done \
+spur task update <wbs> done --force-done --provenance-bypass \
   --reason "<step> agent.run timed out at <N>s; recovered manually: lint clean, <suite> pass, sections authored by hand"
 ```
 

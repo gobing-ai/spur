@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 import { z } from 'zod';
 
 /** Zod schema for a single project entry in projects.json. */
@@ -29,8 +30,9 @@ export type ProjectsFile = z.infer<typeof projectsFileSchema>;
  * Respects SPUR_PROJECTS_FILE env override for tests and custom locations.
  */
 export function getProjectsFilePath(): string {
-    if (process.env.SPUR_PROJECTS_FILE) {
-        return process.env.SPUR_PROJECTS_FILE;
+    const override = getEnvVar('SPUR_PROJECTS_FILE');
+    if (override) {
+        return override;
     }
     return join(homedir(), '.config', 'spur', 'projects.json');
 }

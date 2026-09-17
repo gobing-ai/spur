@@ -22,6 +22,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
 // link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
@@ -611,7 +612,7 @@ const PROMOTION_BAR_PROPOSAL =
 const NESTING_ENV = 'SPUR_EVAL_PIPELINE_ACTIVE';
 
 export async function evalPipeline(argv: string[]): Promise<number> {
-    if (process.env[NESTING_ENV] === '1') {
+    if (getEnvVar(NESTING_ENV) === '1') {
         console.error(
             [
                 `eval-pipeline: REFUSING to run — already inside an eval-pipeline run (${NESTING_ENV}=1).`,
@@ -626,7 +627,7 @@ export async function evalPipeline(argv: string[]): Promise<number> {
         );
         return 1;
     }
-    process.env[NESTING_ENV] = '1';
+    setEnvVar(NESTING_ENV, '1');
     const args = parseArgs(argv);
     const label = args.label ?? 'run';
     const workflowFacts = await loadWorkflowFacts(join(REPO_ROOT, 'config/workflows'));

@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
@@ -171,7 +172,7 @@ describe('precheck route writer is run-attributed (0759 R1/R5)', () => {
 
     const run = (vars: Record<string, string>): string => {
         const cwd = mkdtempSync(join(tmpdir(), 'tp-route-'));
-        const res = spawnSync('sh', ['-c', writer], { cwd, env: { ...process.env, ...vars } });
+        const res = spawnSync('sh', ['-c', writer], { cwd, env: { ...getEnvVars(), ...vars } });
         expect(res.status).toBe(0);
         return cwd;
     };
@@ -195,7 +196,7 @@ describe('precheck route writer is run-attributed (0759 R1/R5)', () => {
         ]) {
             const res = spawnSync('sh', ['-c', writer], {
                 cwd,
-                env: { ...process.env, __runId: id, mode, wbs: '0759' },
+                env: { ...getEnvVars(), __runId: id, mode, wbs: '0759' },
             });
             expect(res.status).toBe(0);
         }

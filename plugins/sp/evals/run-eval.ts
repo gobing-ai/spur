@@ -19,6 +19,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 import { judgeTranscript } from './judge';
 import { EVAL_FIXTURES, EVAL_SCENARIOS, type EvalScenario } from './scenarios';
 
@@ -32,7 +33,7 @@ interface Row {
 
 /** Live tier: run the scenario prompt through the configured agent and return its transcript. */
 function runLive(scenario: EvalScenario): string | null {
-    const spurBin = process.env.SPUR_BIN || 'spur';
+    const spurBin = getEnvVar('SPUR_BIN') || 'spur';
     const parts = spurBin.split(' ');
     const cmd = parts[0] ?? 'spur';
     const args = [...parts.slice(1), 'agent', 'run', scenario.prompt];

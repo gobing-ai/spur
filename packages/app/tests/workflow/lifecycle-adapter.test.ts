@@ -19,7 +19,10 @@ const makeRef = (wbs: string): EntityRef => ({
     folder: '/tasks',
 });
 
-async function makeAdapter(spurBin = 'spur'): Promise<{ adapter: LifecycleAdapter; db: DbAdapter }> {
+async function makeAdapter(
+    spurBin = 'spur',
+    extra: Partial<LifecycleAdapterOptions> = {},
+): Promise<{ adapter: LifecycleAdapter; db: DbAdapter }> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(db);
     const opts: LifecycleAdapterOptions = {
@@ -29,6 +32,7 @@ async function makeAdapter(spurBin = 'spur'): Promise<{ adapter: LifecycleAdapte
         workflowPath: WORKFLOW_PATH,
         cwd: process.cwd(),
         spurBin,
+        ...extra,
     };
     return { adapter: new LifecycleAdapter(opts), db };
 }
@@ -179,25 +183,18 @@ describe('LifecycleAdapter (engine integration)', () => {
         db.close();
     });
 
-    test('P2: SPUR_PROVENANCE_OVERRIDE=1 allows done and records provenance_bypass', async () => {
-        const { adapter, db } = await makeAdapter();
-        const saved = process.env.SPUR_PROVENANCE_OVERRIDE;
-        process.env.SPUR_PROVENANCE_OVERRIDE = '1';
-        try {
-            const result = await adapter.requestTransition(makeRef('9997'), 'testing', 'done');
-            // Provenance bypass recorded; shell guard fires.
-            expect(result.allowed).toBe(false);
-            if (result.allowed) throw new Error('expected guard denial');
-            expect(result.report ?? '').toMatch(/guard/i);
-            // The bypass row was inserted.
-            const links = await new TaskRunLinkDao(db).listByWbs('9997', 20);
-            const bypass = links.filter((l) => l.kind === 'provenance_bypass');
-            expect(bypass).toHaveLength(1);
-            expect(bypass[0]?.run_id).toBe('manual');
-        } finally {
-            if (saved === undefined) delete process.env.SPUR_PROVENANCE_OVERRIDE;
-            else process.env.SPUR_PROVENANCE_OVERRIDE = saved;
-        }
+    test('P2: provenanceBypass=true allows done and records provenance_bypass', async () => {
+        const { adapter, db } = await makeAdapter('spur', { provenanceBypass: true });
+        const result = await adapter.requestTransition(makeRef('9997'), 'testing', 'done');
+        // Provenance bypass recorded; shell guard fires.
+        expect(result.allowed).toBe(false);
+        if (result.allowed) throw new Error('expected guard denial');
+        expect(result.report ?? '').toMatch(/guard/i);
+        // The bypass row was inserted.
+        const links = await new TaskRunLinkDao(db).listByWbs('9997', 20);
+        const bypass = links.filter((l) => l.kind === 'provenance_bypass');
+        expect(bypass).toHaveLength(1);
+        expect(bypass[0]?.run_id).toBe('manual');
         db.close();
     });
 

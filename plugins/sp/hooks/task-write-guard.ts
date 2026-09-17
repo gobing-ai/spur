@@ -20,6 +20,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 import { couldBeTaskFile } from './task-file-policy';
 
 interface ToolPayload {
@@ -40,7 +41,7 @@ function preToolUseDecision(decision: 'allow' | 'deny', reason?: string): never 
 
 /** Resolve whether a path is owned by a Spur task via `spur task resolve --strict --json`. */
 function resolveSpurTaskOwnership(filePath: string, cwd: string): TaskOwnership {
-    const spurBin = process.env.SPUR_BIN || 'spur';
+    const spurBin = getEnvVar('SPUR_BIN') || 'spur';
     const parts = spurBin.split(' ');
     const cmd = parts[0] ?? 'spur';
     const args = [...parts.slice(1), 'task', 'resolve', filePath, '--strict', '--json'];
@@ -54,7 +55,7 @@ function resolveSpurTaskOwnership(filePath: string, cwd: string): TaskOwnership 
 }
 
 async function main(): Promise<void> {
-    if (process.env.SPUR_WRITE_GUARD === 'off') preToolUseDecision('allow');
+    if (getEnvVar('SPUR_WRITE_GUARD') === 'off') preToolUseDecision('allow');
 
     const stdinText = await Bun.stdin.text();
     let payload: ToolPayload;
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
     // cannot name a task file — that is every ordinary source edit.
     if (!couldBeTaskFile(filePath)) preToolUseDecision('allow');
 
-    const ownership = resolveSpurTaskOwnership(filePath, process.env.CLAUDE_PROJECT_DIR ?? process.cwd());
+    const ownership = resolveSpurTaskOwnership(filePath, getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd());
     if (ownership === 'owned') {
         preToolUseDecision(
             'deny',

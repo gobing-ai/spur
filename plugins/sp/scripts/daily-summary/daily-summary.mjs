@@ -8,6 +8,15 @@ import { spawn, spawnSync } from "child_process";
 import { existsSync, mkdirSync, readlinkSync, writeFileSync } from "fs";
 import { dirname, isAbsolute, join, resolve } from "path";
 
+// ../ts-libs/packages/utils/dist/env.js
+function getEnvVar(name, fallback) {
+  const raw = process.env[name];
+  return raw === undefined ? fallback : raw;
+}
+function getEnvVars() {
+  return process.env;
+}
+
 // plugins/sp/scripts/daily-summary/logger.ts
 var state = { console: true, file: false };
 function emit(stream, message) {
@@ -103,7 +112,7 @@ var defaultProcessSpawner = (cmd, args, env) => {
     try {
       const proc = spawn(cmd, args, {
         stdio: ["ignore", "pipe", "pipe"],
-        env: env ?? process.env
+        env: env ?? getEnvVars()
       });
       const stdoutChunks = [];
       const stderrChunks = [];
@@ -130,7 +139,7 @@ function setProcessSpawner(next) {
 }
 async function getCcusageData(date) {
   try {
-    const env = { ...process.env };
+    const env = { ...getEnvVars() };
     const ccusageCheck = await processSpawner("ccusage", ["--version"], env);
     if (ccusageCheck.exitCode !== 0) {
       return null;
@@ -279,10 +288,10 @@ async function getGitCommits(date) {
   }
 }
 async function promptUser() {
-  if (process.env.SP_DAILY_SUMMARY_NO_PROMPT === "1") {
+  if (getEnvVar("SP_DAILY_SUMMARY_NO_PROMPT") === "1") {
     return { learnings: "", issuesFixed: "", pending: "" };
   }
-  if (process.env.RD3_DAILY_SUMMARY_NO_PROMPT === "1") {
+  if (getEnvVar("RD3_DAILY_SUMMARY_NO_PROMPT") === "1") {
     logger.warn("[deprecate] RD3_DAILY_SUMMARY_NO_PROMPT is deprecated; use SP_DAILY_SUMMARY_NO_PROMPT");
     return { learnings: "", issuesFixed: "", pending: "" };
   }

@@ -20,6 +20,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 
 interface Transition {
@@ -207,7 +208,13 @@ function evaluatePair(
     for (const [path, content] of state.files) {
         if (content !== null) writeFileSync(join(cwd, path), content, 'utf8');
     }
-    const env: Record<string, string> = { ...process.env, ...state.vars, spurBin };
+    // Ambient environment comes through the config gateway, never a direct ambient-env read
+    // (ADR-120); the guard's own vars are layered on top exactly as the engine exports them.
+    const ambient: Record<string, string> = {};
+    for (const [name, value] of Object.entries(getEnvVars())) {
+        if (value !== undefined) ambient[name] = value;
+    }
+    const env: Record<string, string> = { ...ambient, ...state.vars, spurBin };
     if (oldCommand.includes('$spurBin') || newCommand.includes('$spurBin')) {
         env.SPUR_STUB_EXIT = String(state.spurExit);
     }

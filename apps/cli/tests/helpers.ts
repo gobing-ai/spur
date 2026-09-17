@@ -1,6 +1,7 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import type { CommandOutput } from '../src/output';
 
 /** Captured command output for CLI tests. */
@@ -66,7 +67,7 @@ export async function runCli(
     cwd?: string,
     env?: Record<string, string | undefined>,
 ): Promise<CliResult> {
-    const mergedEnv: Record<string, string | undefined> = { ...process.env, ...env };
+    const mergedEnv: Record<string, string | undefined> = { ...getEnvVars(), ...env };
     // tests/setup.ts sets SPUR_SKIP_PROJECT_CONFIG for in-process loads; a subprocess
     // CLI run against a fixture cwd is exactly where reading the project layer is the
     // behavior under test (config layering, early config failure), so the inherited

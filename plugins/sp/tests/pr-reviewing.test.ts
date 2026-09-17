@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
+import { getEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
 import type { CmdResult, CommandRunner } from '../scripts/pr-reviewing';
 import {
     buildRequestBody,
@@ -457,8 +457,8 @@ beforeEach(() => {
     writeFileSync(join(fix, 'calls.txt'), '');
     setCommandRunner(makeStubRunner(fix));
     seedHealthy(fix);
-    origPath = process.env.PATH ?? '';
-    process.env.PATH = `${fix}:${origPath}`;
+    origPath = getEnvVar('PATH') ?? '';
+    setEnvVar('PATH', `${fix}:${origPath}`);
     logSpy = spyOn(console, 'log').mockImplementation((...data: unknown[]) => {
         logs.push(data.map(String).join(' '));
     });
@@ -471,7 +471,7 @@ afterEach(() => {
     logSpy.mockRestore();
     errSpy.mockRestore();
     setCommandRunner();
-    process.env.PATH = origPath;
+    setEnvVar('PATH', origPath);
     rmSync(fix, { recursive: true, force: true });
 });
 

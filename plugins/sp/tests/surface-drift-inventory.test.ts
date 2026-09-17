@@ -115,28 +115,6 @@ describe('parseInvocation — noun/verb/flag extraction', () => {
         expect(parseInvocation('spur status.')).toEqual({ nouns: ['status'], verbs: [], flags: [] });
     });
 
-    test('DEBUG_SPANS emits a stderr trace line without changing the result', () => {
-        const prev = process.env.DEBUG_SPANS;
-        process.env.DEBUG_SPANS = '1';
-        const err: string[] = [];
-        const spy = process.stderr.write.bind(process.stderr);
-        process.stderr.write = (chunk: string | Uint8Array) => {
-            err.push(String(chunk));
-            return true;
-        };
-        try {
-            expect(parseInvocation('spur task show 0042')).toEqual({
-                nouns: ['task'],
-                verbs: ['show'],
-                flags: [],
-            });
-        } finally {
-            process.env.DEBUG_SPANS = prev;
-            process.stderr.write = spy;
-        }
-        expect(err.join('')).toContain('SPAN ');
-    });
-
     test('a flag after an ellipsis is still claimed (elision ends noun/verb, not flags)', () => {
         expect(parseInvocation('spur feature … --json')).toEqual({
             nouns: ['feature'],

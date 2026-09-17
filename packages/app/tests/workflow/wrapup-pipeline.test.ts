@@ -23,6 +23,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
@@ -108,7 +109,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const stub = join(cwd, 'spur-stub');
             writeFileSync(stub, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
             chmodSync(stub, 0o755);
-            const env = { ...process.env, spurBin: stub, feature: 'D61' };
+            const env = { ...getEnvVars(), spurBin: stub, feature: 'D61' };
             const result = spawnSync('sh', ['-c', def.vars?.featureGateCmd ?? 'exit 99'], { env, encoding: 'utf8' });
             expect(result.status).toBe(0);
             expect(result.stdout).toBe('feature\ncheck\nD61\n');
@@ -198,13 +199,13 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                     const script = spawnSync(process.execPath, [WRAPUP_STEPS, 'resolve'], {
                         cwd,
                         encoding: 'utf8',
-                        env: { ...process.env, __runId: runId, tasks: `["${wbs}"]`, spurBin },
+                        env: { ...getEnvVars(), __runId: runId, tasks: `["${wbs}"]`, spurBin },
                     });
                     expect(script.status).toBe(0);
                     const writer = spawnSync('sh', ['-c', String(route.options?.command ?? '')], {
                         cwd,
                         encoding: 'utf8',
-                        env: { ...process.env, __runId: runId, tasks: `["${wbs}"]`, spurBin, mode: '' },
+                        env: { ...getEnvVars(), __runId: runId, tasks: `["${wbs}"]`, spurBin, mode: '' },
                     });
                     expect(writer.status).toBe(0);
                 };
@@ -230,7 +231,7 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 return String(edge?.guard?.options?.command ?? '');
             };
             const runGuard = (command: string, cwd: string, env: Record<string, string>): boolean =>
-                spawnSync('sh', ['-c', command], { cwd, encoding: 'utf8', env: { ...process.env, ...env } }).status ===
+                spawnSync('sh', ['-c', command], { cwd, encoding: 'utf8', env: { ...getEnvVars(), ...env } }).status ===
                 0;
             const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-guards-'));
             try {
@@ -368,12 +369,12 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                         cwd,
                         encoding: 'utf8',
                         env: {
-                            ...process.env,
+                            ...getEnvVars(),
                             __runId: `r-fc-${state}`,
                             spurBin: 'true',
                             featureGateCmd: '$spurBin feature check "$feature"',
                             feature: 'D61',
-                            PATH: `${cwd}:${process.env.PATH ?? ''}`,
+                            PATH: `${cwd}:${getEnvVar('PATH') ?? ''}`,
                         },
                     });
                     expect(result.status, state).toBe(0);

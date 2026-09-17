@@ -14,6 +14,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const SHIM_DIR = join(REPO_ROOT, 'scripts', 'test-shims');
@@ -30,7 +31,7 @@ function runBareSpur(args: string[], options: { cwd: string; path: string }): Pr
     return new Promise((resolvePromise, rejectPromise) => {
         const child = spawn('spur', args, {
             cwd: options.cwd,
-            env: { ...process.env, PATH: options.path },
+            env: { ...getEnvVars(), PATH: options.path },
         });
         let stdout = '';
         let stderr = '';
@@ -57,7 +58,7 @@ beforeAll(async () => {
     // A stand-in for a stale global install: if it ever runs it leaves a file behind.
     writeFileSync(sentinel, `#!/bin/sh\necho GLOBAL-SENTINEL > "${sentinelMarker}"\nexit 0\n`);
     chmodSync(sentinel, 0o755);
-    pathWithSentinel = `${SHIM_DIR}:${sentinelDir}:${process.env.PATH ?? ''}`;
+    pathWithSentinel = `${SHIM_DIR}:${sentinelDir}:${getEnvVar('PATH') ?? ''}`;
 });
 
 afterAll(async () => {
@@ -115,7 +116,7 @@ describe('0818 R1 — source-local spur launcher', () => {
             const result = await runBareSpur(['task', 'show', 'a b c'], {
                 cwd: callerCwd,
                 // Spaced checkout first, sentinel later: the spaced path must still win.
-                path: `${join(checkout, 'scripts', 'test-shims')}:${sentinelDir}:${process.env.PATH ?? ''}`,
+                path: `${join(checkout, 'scripts', 'test-shims')}:${sentinelDir}:${getEnvVar('PATH') ?? ''}`,
             });
 
             expect(result.code).toBe(7); // underlying exit status propagated, not collapsed to 0/1

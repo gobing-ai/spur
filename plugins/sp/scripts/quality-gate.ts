@@ -41,6 +41,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 
 export const MAX_GATE_ATTEMPTS = 5;
 export const MAX_FINDINGS = 20;
@@ -268,7 +269,7 @@ export function runQualityGate(
 export const QUALITY_GATE_USAGE =
     'usage: quality-gate.ts <run|recheck>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest)';
 
-export function main(argv: string[], env: QualityGateEnv = process.env): number {
+export function main(argv: string[], env: QualityGateEnv = getEnvVars()): number {
     const mode = argv[0];
     if (mode !== 'run' && mode !== 'recheck') {
         process.stderr.write(`${QUALITY_GATE_USAGE}\n`);

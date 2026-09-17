@@ -1,3 +1,4 @@
+import { getAppOptions, type SpurConfig } from '@gobing-ai/spur-config';
 import { CHILD_KILL_GRACE_MS, resolveKillGraceMs } from './bounded-child-run';
 
 /**
@@ -67,6 +68,29 @@ export function normalizeLegacyTimeoutMs(raw: string | undefined, fallbackMs: Ti
     if (raw.trim().toLowerCase() === 'none') return null;
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallbackMs;
+}
+
+/**
+ * Resolve one `bootstrap.options` timeout policy (task 0902 wave 2 — the config
+ * replacement for the legacy `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` /
+ * `SPUR_HISTORY_REFRESH_TIMEOUT_MS` env chain). Accepted: absent →
+ * `fallbackMs`; `'none'` → explicit unlimited (`null`); a positive integer
+ * within the platform timer range passes through; anything else throws — a
+ * malformed config value is drift and must fail loudly instead of silently
+ * keeping the fallback.
+ */
+export function resolveTimeoutOption(
+    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined,
+    key: string,
+    fallbackMs: TimeoutPolicyMs,
+): TimeoutPolicyMs {
+    const raw = getAppOptions(spurConfig, key, undefined);
+    if (raw === undefined) return fallbackMs;
+    if (raw === 'none') return null;
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0 && raw <= MAX_TIMEOUT_INPUT_MS) return raw;
+    throw new Error(
+        `bootstrap.options.${key} must be a positive integer number of milliseconds or 'none'; received ${JSON.stringify(raw)}`,
+    );
 }
 
 /**
