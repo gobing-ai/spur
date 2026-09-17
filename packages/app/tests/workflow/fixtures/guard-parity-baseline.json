@@ -52,25 +52,25 @@
             "from": "ac-generate",
             "to": "system-design",
             "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\"; cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\"; test \"$profile\" = auto && test \"$ac_status\" = PASS && test \"$cov_status\" = PASS && test \"$design\" = auto && test \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" != false"
+            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\"; test \"$profile\" = auto -a \"$ac_status\" = PASS && test \"$cov_status\" = PASS && test \"$design\" = auto -a \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" != false"
         },
         {
             "from": "ac-generate",
             "to": "decompose",
             "kind": "shell",
-            "command": "test \"$profile\" = auto && test \"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" = PASS && test \"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\" = PASS && (test \"$design\" = skip || (test \"$design\" = auto && test \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" = false))"
+            "command": "test \"$profile\" = auto && test \"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" = PASS && test \"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\" = PASS && test \"$design\" = skip -o \"$design\" = auto -a \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" = false"
         },
         {
             "from": "ac-generate",
             "to": "ac-generate",
             "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\"; cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\"; test \"$profile\" = auto && { test \"$ac_status\" != PASS || test \"$cov_status\" != PASS; } && test \"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\" -lt 3"
+            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\" retry=\"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\"; { test \"$ac_status\" != PASS || test \"$cov_status\" != PASS; } && test \"$profile\" = auto -a \"$retry\" -lt 3"
         },
         {
             "from": "ac-generate",
             "to": "failed",
             "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\"; cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\"; test \"$profile\" = auto && { test \"$ac_status\" != PASS || test \"$cov_status\" != PASS; } && test \"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\" -ge 3"
+            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\" retry=\"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\"; { test \"$ac_status\" != PASS || test \"$cov_status\" != PASS; } && test \"$profile\" = auto -a \"$retry\" -ge 3"
         },
         {
             "from": "ac-generate",

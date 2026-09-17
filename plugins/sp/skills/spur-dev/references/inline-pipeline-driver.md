@@ -164,7 +164,7 @@ the human/native presentation layer — labels are display addresses only, never
 
 Minimum files to read for `/sp:dev-idea` inline runs — then drive `idea-pipeline.yaml`:
 
-- `config/workflows/idea-pipeline.yaml` (the machine) and this driver.
+- `.spur/workflows/idea-pipeline.yaml` (the machine) and this driver.
 - `plugins/sp/skills/spur-dev/references/idea-evaluation.md` (report template incl. the mandatory
   `## Requirement inventory`) and `references/ac-style-guide.md` (scenario `# covers:` form).
 - `references/dev-operations.md` § idea for the stage-by-stage surface.

@@ -28,7 +28,7 @@
  */
 
 import { join } from 'node:path';
-import type { DbAdapter } from '@gobing-ai/spur-domain';
+import { ActionRunDao, type DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionRedactor,
     DbWorkflowPersistenceAdapter,
@@ -225,14 +225,13 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
             'action.backdate',
             { runId: boundary.runId, node: boundary.node, kind: boundary.kind },
             async () => {
-                const row = await db.queryFirst<{ completed_at: string | null }>(
-                    'SELECT completed_at FROM action_runs WHERE id = ?',
-                    actionId,
-                );
-                const completedAt = row?.completed_at;
-                if (completedAt === null || completedAt === undefined) return;
+                // Raw action_runs SQL lives in the domain DAO (sole ts-db consumer, ADR); the
+                // completed_at anchor keeps the reconstructed started_at exact by construction.
+                const dao = new ActionRunDao(db);
+                const completedAt = await dao.completedAtById(actionId);
+                if (completedAt === null) return;
                 const startedAt = new Date(new Date(completedAt).getTime() - boundary.durationMs).toISOString();
-                await db.run('UPDATE action_runs SET started_at = ? WHERE id = ?', startedAt, actionId);
+                await dao.setStartedAt(actionId, startedAt);
             },
         );
     }

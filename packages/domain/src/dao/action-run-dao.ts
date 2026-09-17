@@ -18,6 +18,20 @@ export interface ActionRunRow {
 export class ActionRunDao {
     constructor(private readonly db: DbAdapter) {}
 
+    /** Completed_at for one action row — the backdate anchor (ADR-117 startedAt reconstruction). */
+    async completedAtById(id: string): Promise<string | null> {
+        const row = await this.db.queryFirst<{ completed_at: string | null }>(
+            'SELECT completed_at FROM action_runs WHERE id = ?',
+            id,
+        );
+        return row?.completed_at ?? null;
+    }
+
+    /** Reconstruct started_at from the stored completed_at minus the measured wall clock. */
+    async setStartedAt(id: string, startedAt: string): Promise<void> {
+        await this.db.run('UPDATE action_runs SET started_at = ? WHERE id = ?', startedAt, id);
+    }
+
     /** Raw action rows by run id for trace timeline, ordered by created_at. */
     async actionRowsByRunId(runId: string): Promise<ActionRunRow[]> {
         try {
