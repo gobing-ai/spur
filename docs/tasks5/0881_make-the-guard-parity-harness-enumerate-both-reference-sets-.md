@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make the guard-parity harness enumerate both reference sets and catch spurious dependency edges
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-17T17:41:13.770Z
-updated_at: "2026-09-17T17:41:58.125Z"
+updated_at: "2026-09-17T17:50:01.975Z"
 feature_id: D62
 
 ---
@@ -56,3 +56,6 @@ Captured from the creation title: "Make the guard-parity harness enumerate both 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-17T17:50:01.975Z backlog → todo (system)
+

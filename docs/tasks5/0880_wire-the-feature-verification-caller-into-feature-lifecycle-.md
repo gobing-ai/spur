@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Wire the feature verification caller into feature-lifecycle and drop the settled-tree precondition
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-17T17:41:13.462Z
-updated_at: "2026-09-17T17:41:57.312Z"
+updated_at: "2026-09-17T17:50:01.646Z"
 feature_id: D62
 
 ---
@@ -58,3 +58,6 @@ Captured from the creation title: "Wire the feature verification caller into fea
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-17T17:50:01.646Z backlog → todo (system)
+

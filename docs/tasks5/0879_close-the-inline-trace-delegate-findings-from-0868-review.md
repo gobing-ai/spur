@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Close the inline trace delegate findings from 0868 review
-status: backlog
+status: wip
 template: feature-impl
 created_at: 2026-09-17T17:41:13.059Z
-updated_at: "2026-09-17T17:41:56.631Z"
+updated_at: "2026-09-17T17:53:22.507Z"
 feature_id: D62
 
 ---
@@ -59,3 +59,7 @@ Captured from the creation title: "Close the inline trace delegate findings from
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-17T17:50:01.362Z backlog → todo (system)
+- 2026-09-17T17:53:22.507Z todo → wip (system)
+

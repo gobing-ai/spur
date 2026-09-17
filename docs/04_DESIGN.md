@@ -48,6 +48,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Design — `--agent` on critical dev-* commands + `sp:dogfood-testing` extraction | [dev-agent-flag-and-dogfood-skill.md](design/dev-agent-flag-and-dogfood-skill.md) |
 | Historical inline-host contract — superseded by ADR-087 | [agent-inline-host-session.md](design/agent-inline-host-session.md) |
 | Design — Dev-command argument contract | [dev-command-argument-contract.md](design/dev-command-argument-contract.md) |
+| Design — `/sp:dev-refactor` lens-routed refactoring with a preservation contract (feature H13) | [dev-refactor-command.md](design/dev-refactor-command.md) |
 | End-to-end workflow proposal | [e2e-workflow-for-system-development.md](design/e2e-workflow-for-system-development.md) |
 | Design — Portable `AGENTS.md` harness contract | [portable-agents-harness-contract.md](design/portable-agents-harness-contract.md) |
 | Feature-tree status affordance — design | [feature-tree-status-affordance.md](design/feature-tree-status-affordance.md) |

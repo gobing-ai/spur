@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Harden the ADR-076 promotion gate and resolve the pilot candidate through it
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-09-17T17:38:39.161Z
-updated_at: "2026-09-17T17:51:17.151Z"
+updated_at: "2026-09-17T17:53:10.470Z"
 feature_id: D62
 
 ---
@@ -92,4 +92,5 @@ Each entry cites the first changed line per file (`file:line`).
 - 2026-09-17T17:50:01.047Z backlog → todo (system)
 - 2026-09-17T17:50:02.609Z todo → wip (system)
 - 2026-09-17T17:51:17.151Z wip → testing (system)
+- 2026-09-17T17:53:10.470Z testing → done (system)
 

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Refuse retiring workflow definitions that still have real non-dry runs
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-17T17:41:14.081Z
-updated_at: "2026-09-17T17:41:58.926Z"
+updated_at: "2026-09-17T17:50:02.295Z"
 feature_id: D62
 
 ---
@@ -55,3 +55,6 @@ Captured from the creation title: "Refuse retiring workflow definitions that sti
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-17T17:50:02.295Z backlog → todo (system)
+
