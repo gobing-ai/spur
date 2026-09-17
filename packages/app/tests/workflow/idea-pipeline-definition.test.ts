@@ -26,7 +26,7 @@ interface Transition {
 }
 interface Action {
     kind: string;
-    options?: { command?: string; input?: string; answerFile?: string; expectFile?: string };
+    options?: { command?: string; input?: string; answerFile?: string; expectFile?: string; prompt?: string };
 }
 interface WorkflowDef {
     states: { id: string; pause?: boolean; onEnter?: Action[] }[];
@@ -570,5 +570,105 @@ describe('idea-pipeline definition — regression invariants and no-surface guar
         for (const leaked of ['depends_on_names', 'dependencies', 'dependsOnNames', 'order']) {
             expect(schema.items.properties, `schema must not expose "${leaked}"`).not.toHaveProperty(leaked);
         }
+    });
+});
+
+// ─── 0887: idea-pipeline robustness (verbatim idea, coverage gate, prompt contracts) ───
+
+function stateActions(stateId: string): Action[] {
+    return DEF.states.find((s) => s.id === stateId)?.onEnter ?? [];
+}
+
+function agentPrompt(stateId: string): string {
+    const action = stateActions(stateId).find((a) => a.kind === 'agent.run');
+    expect(action, `state "${stateId}" must carry an agent.run`).toBeDefined();
+    return String(action?.options?.input ?? '');
+}
+
+function guardCommand(from: string, to: string): string {
+    const guard = DEF.transitions.find((t) => t.from === from && t.to === to)?.guard;
+    expect(guard, `transition ${from}→${to} must declare a guard`).toBeDefined();
+    return String(guard?.options?.command ?? '');
+}
+
+describe('idea-pipeline definition — 0887 robustness contract', () => {
+    test('R1: start persists the idea verbatim to -idea-input.md and fails the run when it is empty', () => {
+        const shell = stateActions('start').find((a) => a.kind === 'shell');
+        const command = String(shell?.options?.command ?? '');
+        expect(command).toContain('-idea-input.md');
+        // Verbatim write of $idea, then a whitespace-aware non-empty check (a bare `test -s`
+        // passes a newline-only file, so emptiness must be measured with awk NF).
+        expect(command).toContain('printf \'%s\\n\' "$idea" >');
+        expect(command).toContain("awk 'NF'");
+        expect(command).toContain('-idea-precheck-doctor.status');
+    });
+
+    test('R2: every model-bearing stage prompt treats the idea-input artifact as the authoritative ask', () => {
+        for (const state of [
+            'discovery',
+            'feature-create',
+            'ac-generate',
+            'system-design',
+            'decompose',
+            'ready-prepare',
+        ]) {
+            expect(agentPrompt(state), `${state} prompt must reference idea-input.md`).toContain('-idea-input.md');
+        }
+    });
+
+    test('R3: discovery requires the mandatory Requirement inventory section with I<n> items', () => {
+        const prompt = agentPrompt('discovery');
+        expect(prompt).toContain('## Requirement inventory');
+        expect(prompt).toContain('[unclear:');
+        expect(prompt).toContain('[deferred:');
+    });
+
+    test('R4: ac-generate measures requirement coverage in a soft shell after idea-ac-check', () => {
+        const actions = stateActions('ac-generate');
+        const kinds = actions.map((a) => a.kind);
+        // The gate runs before the coverage shell; both sit at the same author/revise boundary.
+        expect(kinds.indexOf('command.gate')).toBeGreaterThanOrEqual(0);
+        expect(kinds.indexOf('command.gate')).toBeLessThan(kinds.lastIndexOf('shell'));
+        const coverage = actions
+            .filter((a) => a.kind === 'shell')
+            .find((a) => String(a.options?.command).includes('idea-coverage-check.ts'));
+        expect(coverage).toBeDefined();
+        const command = String(coverage?.options?.command ?? '');
+        expect(command).toContain('-idea-eval-report.md');
+        expect(command).toContain('-idea-ac-content.md');
+        expect(command).toContain('-idea-coverage.status');
+        // Seeded-project resolution: repo checkout first, then the superskill-staged script;
+        // neither present fails closed to FAIL (the shell itself always exits 0 — soft).
+        expect(command).toContain('superskill script path');
+        expect(command).toContain("printf 'FAIL");
+    });
+
+    test('R4: profile=auto ac-generate guards conjunct the recorded coverage status', () => {
+        const forward = guardCommand('ac-generate', 'system-design');
+        expect(forward).toContain('-idea-coverage.status');
+        expect(forward).toContain('test "$cov_status" = PASS');
+        expect(guardCommand('ac-generate', 'decompose')).toContain(
+            'test "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS',
+        );
+        for (const to of ['ac-generate', 'failed'] as const) {
+            const command = guardCommand('ac-generate', to);
+            expect(command).toContain('test "$ac_status" != PASS || test "$cov_status" != PASS');
+        }
+    });
+
+    test('R4: interactive feature-check surfaces the coverage status in its prompt', () => {
+        const confirm = stateActions('feature-check').find((a) => a.kind === 'hitl.confirm');
+        expect(String(confirm?.options?.prompt ?? '')).toContain('-idea-coverage.status');
+    });
+
+    test('R5: ac-generate prompt carries both task-check rules (verbatim titles, gate language)', () => {
+        const prompt = agentPrompt('ac-generate');
+        expect(prompt).toContain('# covers:');
+        expect(prompt).toContain('byte-identical');
+        expect(prompt).toContain('L4.gate-language');
+    });
+
+    test('R6: feature-create prompt names the .ref.id --json envelope', () => {
+        expect(agentPrompt('feature-create')).toContain('.ref.id');
     });
 });

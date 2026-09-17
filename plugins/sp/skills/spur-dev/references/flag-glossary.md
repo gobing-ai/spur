@@ -303,6 +303,16 @@ verifying a task whose artifact is intentionally not yet shippable (e.g. a doc-o
 Omit the design package (system-design satellite + task `### Design`) on planning commands
 (`dev-plan`, `dev-idea`). The task is created without the design section; refine supplies it later.
 
+### `--from-file <path>` — read the idea from a file (dev-idea)
+
+**Anchor:** `#flag-from-file`.
+
+`dev-idea` reads the idea text from `<path>` instead of the positional argument. Mutually
+exclusive with `"<idea>"` — exactly one must be present. The file's contents become the verbatim
+idea text, persisted unmodified to `.spur/run/<run-id>-idea-input.md` (0887 R1) and treated as
+the authoritative ask by every model-bearing stage prompt. Useful for long or multiline asks
+that are awkward to quote (0887 R7).
+
 ### `--output <path>` — write the result to a path
 
 **Anchor:** `#flag-output`.

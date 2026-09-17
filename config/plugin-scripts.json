@@ -51,6 +51,10 @@
             "contract": "repo-only"
         },
         {
+            "rel": "idea-coverage-check.ts",
+            "contract": "repo-only"
+        },
+        {
             "rel": "inline-pipeline-parity-check.ts",
             "contract": "repo-only"
         },

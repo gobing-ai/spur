@@ -85,7 +85,7 @@ each would be scope creep for one-liner procedures.
 | 13a | parallel   | `dev-parallel`      | `Skill()`         | `sp:parallel-execution`                                                            | `--tasks <selector> [--feature <id>] [--mode <fan-out\|review-panel\|investigation>] [--agent <inline\|auto\|name>] [--json]`                                                                          |
 | 14  | wrap       | `dev-wrap`          | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `<wbs> [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                                                                 |
 | 15  | wrapall    | `dev-wrapall`       | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `[--since <iso>] [--feature <id>] [--status <s>] [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                        |
-| 16  | idea       | `dev-idea`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<idea>" [--auto] [--skip-design] [--approve-taste] [--agent <inline\|auto\|name>]`                                                                                                                                                  |
+| 16  | idea       | `dev-idea`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<idea>" [--from-file <path>] [--auto] [--skip-design] [--approve-taste] [--agent <inline\|auto\|name>]`                                                                                                                              |
 | 17  | refactor   | `dev-refactor`      | `Skill()`         | `sp:code-refactoring` skill (thin wrapper, ADR-032)                                | `[<description>] [--scope <path>] [--focus <api\|architect\|tests\|ui\|auto>] [--fix <none\|blockers-first\|all>] [--check <cmd>] [--agent <inline\|auto\|name>] [--auto]`                                                                                          |
 
 ## Skill-backed operations
@@ -336,11 +336,18 @@ must not be changed without updating the backing skill.
 ### 16. idea
 
 - **Purpose:** Turn a vague idea into a feature with AC and a decomposed task batch — the unified entry point for the planning half.
-- **Inputs:** `"<idea>"` (required, positional, quoted). Three everyday axes:
+- **Inputs:** `"<idea>"` (quoted) or `--from-file <path>` — exactly one; the two are mutually
+  exclusive (0887 R7). Three everyday axes:
   - `--auto` — skip **objective** HITL (feature-check, batch-create); taste gates still pause.
   - `--skip-design` — design package off (system-design + task Design).
   - `--approve-taste` — with `--auto`, skip **all** remaining taste pauses this run (idea-eval + design-approval). Sets `idea_approved=true` and `design_approved=true`.
     Aliases (prefer `--approve-taste`): `--idea-approved` → `idea_approved`; `--design-approved` → `design_approved`. There is **no** `--design` force flag.
+  - `--from-file <path>` — read the idea text from a file instead of the positional argument
+    (verbatim; long/multiline asks). Mutually exclusive with `"<idea>"`.
+- **Verbatim idea artifact:** before `start` executes, the driver persists the idea argument (or
+  `--from-file` contents) unmodified to `.spur/run/<run-id>-idea-input.md` (0887 R1); the precheck
+  fails the run when that file is empty or missing, and every model-bearing stage prompt treats
+  it as the authoritative ask (R2).
 - **Backing:** `idea-pipeline.yaml` through the inline driver for omitted/`inline`, or `spur workflow run idea-pipeline.yaml --async` for `auto`/name.
 - **Behavior:** Builds vars from the table above and drives the idea pipeline. Flow: discovery → **idea-eval** (taste; reject → cancelled) → feature-create → ac-generate → feature-check → system-design (conditional) → design-approval (taste) → decompose → batch-create (`--skip-ready`) → ready-prepare (ready checklist per created task + ready-evidence sidecar, 0788) → handoff. STOPS at handoff — no task execution, no pipeline nesting. Headless runs use one `trace --follow`; cancellation is reported stopped only when `workflow cancel --json` returns `killed: true`.
 - **Delegation:** Host-session inline driver by default; explicit executor selection uses the async workflow worker.

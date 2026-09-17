@@ -97,7 +97,10 @@ states:
       - kind: shell
         options:
           command: >-
-            test -n "$idea" || printf 'FAIL\n' > ".spur/run/$__runId-idea-precheck-doctor.status"
+            mkdir -p .spur/run &&
+            printf '%s\n' "$idea" > ".spur/run/$__runId-idea-input.md" &&
+            awk 'NF' ".spur/run/$__runId-idea-input.md" | grep -q . ||
+            printf 'FAIL\n' > ".spur/run/$__runId-idea-precheck-doctor.status"
 
   - id: discovery
     description: >
@@ -109,12 +112,14 @@ states:
       brainstorm also emits the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md
       (template: the `sp:spur-dev` skill's `idea-evaluation` reference — named by skill, not by
       repo path, because `spur init` never scaffolds `plugins/sp/` into a seeded project).
+      The operator's verbatim idea argument is persisted at .spur/run/${vars.__runId}-idea-input.md
+      (written by start; the authoritative ask every model-bearing stage reads).
       expectFile fails a silent no-op discovery (no eval report).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: "Run sp:brainstorm for the idea: ${vars.idea}. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per the `sp:spur-dev` skill's `idea-evaluation` reference (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty)."
+          input: "The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md — the idea argument persisted verbatim at start; treat it as the authoritative ask and read it first (${vars.idea} is only a convenience echo). Run sp:brainstorm for the idea. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) and the design summary per the skill's `Design Approval Gate` and `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per the `sp:spur-dev` skill's `idea-evaluation` reference (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation, and the mandatory `## Requirement inventory` section: numbered I<n> items quoting or paraphrasing the source lines from the idea-input artifact, with `[unclear: ...]` markers where the ask is ambiguous and `[deferred: <reason>]` markers where an item is explicitly out of scope). At the END of the report, append a provenance footer block of the exact form: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339 timestamp>\\n---` (omit the footer only if run_id is empty)."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           expectFile: .spur/run/${vars.__runId}-idea-eval-report.md
@@ -143,12 +148,14 @@ states:
       checklists never enter Goal. Shell actions then persist both sections through
       `spur feature update --section Goal|Scope --from-file ...`; a missing/empty artifact
       stops the state. Prefer the enhanced idea from .spur/run/${vars.__runId}-idea-eval-report.md as
-      context; do not overwrite vars.idea.
+      context; do not overwrite vars.idea. The operator's verbatim ask of record is
+      .spur/run/${vars.__runId}-idea-input.md (persisted at start; authoritative over any
+      paraphrase).
     onEnter:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: 'Create a feature for the idea: ${vars.idea}. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use ''spur feature create "<name>" --json'' to create it. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets.'
+          input: 'Create a feature for the idea. The operator''s ask of record is .spur/run/${vars.__runId}-idea-input.md — the idea argument persisted verbatim at start; treat it as the authoritative ask. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use ''spur feature create "<name>" --json'' to create it; with --json the feature id is returned under the .ref.id envelope (n), not a top-level .id — read it from there. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets.'
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           expectFile: .spur/run/${vars.__runId}-idea-feature-id.txt
@@ -182,6 +189,9 @@ states:
       check records FAIL and routes through the capped retry loop via guards that consume the
       recorded result — it never fails the run (the engine's default onError policy is `fail`,
       so an in-action check failure would kill the run before the retry edges are evaluated).
+      Requirement coverage is MEASURED alongside it by the soft idea-coverage-check shell
+      (0887 R4): the recorded coverage status conjuncts into the profile=auto ac-generate
+      guards below so uncovered inventory items route through the same capped retry loop.
     onEnter:
       - kind: shell
         options:
@@ -189,7 +199,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: "Generate acceptance criteria for feature ${vars.featureId}. Read the feature file and author R-numbered BDD Gherkin scenarios per ac-style-guide.md. Output only the complete Acceptance Criteria section body, including the gherkin code fence, with no surrounding commentary and no section heading."
+          input: "Generate acceptance criteria for feature ${vars.featureId}. The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md — the idea argument persisted verbatim at start; treat it as the authoritative ask. Read the feature file and author R-numbered BDD Gherkin scenarios per ac-style-guide.md. Tie every scenario to the `## Requirement inventory` items of .spur/run/${vars.__runId}-idea-eval-report.md: directly under each `Scenario:` heading add a comment line `# covers: I1, I3` listing the inventory ids the scenario covers — every inventory item without a `[deferred: ...]` marker must be covered by at least one scenario. Two `spur task check` rules bind the AC text: (1) AC bullets copy scenario titles verbatim, so each scenario title is the byte-identical identity key of its AC bullet; (2) gate-language words (HITL, approval/approved, merged/merge event, content-gate, GATED, capstone as standalone words) are forbidden in scenario titles, section bodies, and enum values (L4.gate-language) — rephrase around them. Output only the complete Acceptance Criteria section body, including the gherkin code fence, with no surrounding commentary and no section heading."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           answerFile: .spur/run/${vars.__runId}-idea-ac-content.md
@@ -221,6 +231,24 @@ states:
           resultFile: .spur/run/${vars.__runId}-idea-ac-check.status
           softFail: true
           timeoutMs: 120000
+      # 0887 R4: requirement-inventory ↔ AC coverage, measured once at the same author/revise
+      # boundary. Soft shell (exit 0 always): the checker writes the PASS/FAIL status itself and
+      # the guards below consume the recorded result — never re-run the checker (0769 pattern).
+      # Repo-checkout path first, then the superskill-staged twin (handoff-finalize resolution
+      # shape); neither present fails closed to FAIL so readiness degrades visibly instead of
+      # silently skipping coverage.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            S=plugins/sp/scripts/idea-coverage-check.ts &&
+            if [ ! -f "$S" ]; then S="$(superskill script path sp idea-coverage-check.ts 2>/dev/null)"; fi &&
+            if [ -n "$S" ] && [ -f "$S" ]; then
+              bun "$S" --run-id "$__runId" --report ".spur/run/$__runId-idea-eval-report.md" --ac ".spur/run/$__runId-idea-ac-content.md";
+            else
+              echo "idea-coverage-check failed closed — checker not found — run 'superskill install sp'" >&2;
+              printf 'FAIL\n' > ".spur/run/$__runId-idea-coverage.status";
+            fi
 
   - id: feature-check
     description: >
@@ -235,11 +263,14 @@ states:
       the transition guards route directly from ac-generate to the appropriate next
       state, so this state is only entered in interactive mode. On failure, the retry
       cap routes back to ac-generate (≤3 retries) or escalates to failed.
+      Requirement coverage (.spur/run/${vars.__runId}-idea-coverage.status, 0887 R4) is part of
+      the recorded results this gate surfaces: a FAIL there means some inventory items have no
+      covering scenario — answer no to route back to ac-generate for revision if needed.
     pause: true
     onEnter:
       - kind: hitl.confirm
         options:
-          prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? (Failures route back to ac-generate for revision, capped at 3 retries.)"
+          prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Requirement coverage status: $(cat .spur/run/${vars.__runId}-idea-coverage.status 2>/dev/null || echo unknown) (.spur/run/${vars.__runId}-idea-coverage.status). (Failures route back to ac-generate for revision, capped at 3 retries.)"
 
   - id: system-design
     description: >
@@ -264,7 +295,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: 'Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly. Design-review contract (.spur/run/${vars.__runId}-idea-design-review.md, fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): on the first pass write the proposed design summary under `## Proposed design` and leave `## Operator feedback` empty; on retry with operator feedback present, revise the design/ADR artifacts, document the changes under `## Reconciliation`, and when the feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file and persist it via `$spurBin feature update "$featureId" --section "Acceptance Criteria" --from-file <file>` — never edit feature corpus files directly.'
+          input: 'The operator''s ask of record is .spur/run/${vars.__runId}-idea-input.md (the idea argument persisted verbatim at start; authoritative). Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) following the constitution edit rules. Do not write task or feature corpus files directly. Design-review contract (.spur/run/${vars.__runId}-idea-design-review.md, fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): on the first pass write the proposed design summary under `## Proposed design` and leave `## Operator feedback` empty; on retry with operator feedback present, revise the design/ADR artifacts, document the changes under `## Reconciliation`, and when the feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file and persist it via `$spurBin feature update "$featureId" --section "Acceptance Criteria" --from-file <file>` — never edit feature corpus files directly.'
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           expectFile: .spur/run/${vars.__runId}-idea-design-review.md
@@ -331,7 +362,7 @@ states:
       - kind: agent.run
         options:
           agent: ${vars.planningAgent}
-          input: "Run sp:spec-decomposition for feature ${vars.featureId} per skill references/decomposition.md § Idea-pipeline emission: sizing first, then the batch JSON at .spur/run/${vars.__runId}-idea-task-batch.json and the private task-order sidecar at .spur/run/${vars.__runId}-idea-task-order.json."
+          input: "The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md (the idea argument persisted verbatim at start; authoritative). Run sp:spec-decomposition for feature ${vars.featureId} per skill references/decomposition.md § Idea-pipeline emission: sizing first, then the batch JSON at .spur/run/${vars.__runId}-idea-task-batch.json and the private task-order sidecar at .spur/run/${vars.__runId}-idea-task-order.json."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
           expectFile: .spur/run/${vars.__runId}-idea-task-batch.json
@@ -422,7 +453,9 @@ states:
           # project's own computePlanningDigest), so the bounded prompt pins the skill
           # reference instead of a command; artifacts are gated by answerFile/expectFile.
           input: >-
-            Run the ready-prepare stage for feature ${vars.featureId} per sp:spur-dev
+            The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md (the idea
+            argument persisted verbatim at start; authoritative). Run the ready-prepare stage
+            for feature ${vars.featureId} per sp:spur-dev
             references/planning-workflow.md § Step 5.6 (Ready preparation): read
             .spur/run/${vars.__runId}-idea-batch-create-result.json and write
             .spur/run/${vars.__runId}-idea-ready.json.
@@ -559,57 +592,62 @@ transitions:
 
   # ── ac-generate: auto-skip (profile=auto) OR enter feature-check HITL gate (interactive) ──
   # Declaration order: auto-skip guards tried FIRST (same pattern as task-pipeline review→verify
-  # and design-gen→handoff). Under profile=auto, the recorded `idea-ac-check` result routes
-  # directly to the appropriate next state — guards never re-run the CLI (task 0769). Under
-  # interactive, the always fallback enters the feature-check state whose onEnter hitl.confirm
-  # pauses for operator confirmation.
+  # and design-gen→handoff). Under profile=auto, the recorded `idea-ac-check` result and the
+  # recorded requirement-coverage status (0887 R4) route directly to the appropriate next
+  # state — guards never re-run the CLI or the checker (task 0769). Under interactive, the
+  # always fallback enters the feature-check state whose onEnter hitl.confirm pauses for
+  # operator confirmation (coverage is surfaced in that prompt; the operator's answer governs).
   #
-  # Auto-skip 1: pass + design route → system-design (design=auto + needs_design != false)
+  # Auto-skip 1: pass + coverage + design route → system-design (design=auto + needs_design != false)
   - from: ac-generate
     to: system-design
-    description: "profile=auto, check passed, design route — run system design."
-    # (warn) 5 commands (named status capture + 4 conditions): profile gate + captured status + route signal jointly own the
+    description: "profile=auto, check passed, requirements covered, design route — run system design."
+    # (warn) 6 commands (named status captures + conditions): profile gate + captured statuses + route signal jointly own the
     # route; guards never re-run the CLI (0769), so there is nothing smaller to extract.
     guard:
       kind: shell
       options:
         command: >-
           ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)";
-          test "$profile" = auto && test "$ac_status" = PASS && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false
-  # Auto-skip 2: pass + skip-design route → decompose
+          cov_status="$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)";
+          test "$profile" = auto && test "$ac_status" = PASS && test "$cov_status" = PASS && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false
+  # Auto-skip 2: pass + coverage + skip-design route → decompose
   - from: ac-generate
     to: decompose
-    description: "profile=auto, check passed, skip-design route — go directly to decompose."
-    # (warn) 5 test segments: same as auto-skip 1 plus the OR'd design=auto/needs_design=false
-    # pair that keeps one captured signal file authoritative for both routes (0769).
+    description: "profile=auto, check passed, requirements covered, skip-design route — go directly to decompose."
+    # (warn) 6 test segments: profile + captured ac status + captured coverage status + the OR'd
+    # design=auto/needs_design=false pair that keeps one captured signal file authoritative for
+    # both routes (0769).
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
-  # Auto-skip 3: check failed, retry < 3 → loop back to ac-generate (self-loop)
+        command: 'test "$profile" = auto && test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
+  # Auto-skip 3: check or coverage failed, retry < 3 → loop back to ac-generate (self-loop)
   - from: ac-generate
     to: ac-generate
-    description: "profile=auto, check failed, retry cap not reached — re-run ac-generate."
-    # (warn) 5 commands (named status capture + 4 conditions): profile gate + captured status + captured retry count; the
+    description: "profile=auto, check or coverage failed, retry cap not reached — re-run ac-generate."
+    # (warn) 6 commands (named status captures + conditions): profile gate + captured statuses + captured retry count; the
     # retry loop is the smallest honest formulation of cap<3 routing (0769).
     guard:
       kind: shell
       options:
         command: >-
           ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)";
-          test "$profile" = auto && test "$ac_status" != PASS && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3
-  # Auto-skip 4: check failed, retry cap reached → escalate to failed
+          cov_status="$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)";
+          test "$profile" = auto && { test "$ac_status" != PASS || test "$cov_status" != PASS; } && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3
+  # Auto-skip 4: check or coverage failed, retry cap reached → escalate to failed
   - from: ac-generate
     to: failed
-    description: "profile=auto, check failed after 3 retries — escalate to failed."
-    # (warn) 5 commands (named status capture + 4 conditions): mirror of the retry guard with cap>=3; keeping escalation and
+    description: "profile=auto, check or coverage failed after 3 retries — escalate to failed."
+    # (warn) 6 commands (named status captures + conditions): mirror of the retry guard with cap>=3; keeping escalation and
     # retry as one test-chain pair makes the cap boundary auditable in the diff (0769).
     guard:
       kind: shell
       options:
         command: >-
           ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)";
-          test "$profile" = auto && test "$ac_status" != PASS && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3
+          cov_status="$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)";
+          test "$profile" = auto && { test "$ac_status" != PASS || test "$cov_status" != PASS; } && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3
   # Interactive fallback: enter feature-check HITL gate
   - from: ac-generate
     to: feature-check

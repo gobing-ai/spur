@@ -211,6 +211,18 @@ Use the canonical BDD template at `templates/bdd/gherkin.md`. Key rules:
 - **When** describes the single action under test.
 - **Then** asserts the observable outcome.
 - **And** chains additional preconditions, actions, or assertions.
+- **Trace the scenario to its requirements (0887 R4).** Directly under each `Scenario:`
+  heading add a comment line listing the requirement-inventory ids the scenario covers;
+  the BDD parser skips `#` comment lines, so the form is checker-inert:
+
+  ```gherkin
+  Scenario: Registered user can log in with email and password
+    # covers: I1, I3
+    Given ...
+  ```
+
+  Every inventory item without a `[deferred: ...]` marker must be covered by at least one
+  scenario — `idea-coverage-check` measures this at the idea-pipeline's ac-generate boundary.
 
 Avoid:
 

@@ -60,7 +60,7 @@ export interface ActionTraceBoundary {
 }
 
 /** Which trace write failed. */
-export type ActionTraceOperation = 'action.start' | 'action.finish' | 'run.close';
+export type ActionTraceOperation = 'action.start' | 'action.finish' | 'run.close' | 'action.backdate';
 
 /** A recorded emission failure — never thrown, always surfaced to the recorder. */
 export interface ActionTraceFailure {
@@ -112,6 +112,7 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
     constructor(
         private readonly inner: WorkflowPersistenceAdapter,
         private readonly recordFailure?: ActionTraceFailureRecorder,
+        private readonly db?: DbAdapter,
     ) {}
 
     /**
@@ -202,7 +203,38 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
                     boundary.redactor,
                 ),
         );
-        return finish.ok ? { ok: true, actionId: start.value } : finish;
+        if (!finish.ok) return finish;
+        await this.backdateStart(start.value, boundary);
+        return { ok: true, actionId: start.value };
+    }
+
+    /**
+     * Back-date the persisted `started_at` from the row's own `completed_at` so that
+     * `completed_at - started_at == duration_ms` exactly (task 0887 R8). The engine stamps
+     * `started_at = now` at insert and `completed_at = now` at finalize; `recordAction` runs
+     * both back-to-back after the real span was already measured, so the stored interval
+     * collapses to ~0 while `duration_ms` carries the true wall clock. Anchoring the
+     * subtraction on the stored `completed_at` (not a fresh timestamp) keeps the equality
+     * exact by construction. Best-effort: a failure is recorded as `action.backdate` and
+     * never affects the recorded boundary.
+     */
+    private async backdateStart(actionId: string, boundary: ActionTraceBoundary): Promise<void> {
+        const db = this.db;
+        if (db === undefined || boundary.durationMs <= 0) return;
+        await this.guard(
+            'action.backdate',
+            { runId: boundary.runId, node: boundary.node, kind: boundary.kind },
+            async () => {
+                const row = await db.queryFirst<{ completed_at: string | null }>(
+                    'SELECT completed_at FROM action_runs WHERE id = ?',
+                    actionId,
+                );
+                const completedAt = row?.completed_at;
+                if (completedAt === null || completedAt === undefined) return;
+                const startedAt = new Date(new Date(completedAt).getTime() - boundary.durationMs).toISOString();
+                await db.run('UPDATE action_runs SET started_at = ? WHERE id = ?', startedAt, actionId);
+            },
+        );
     }
 
     /**
@@ -315,7 +347,9 @@ export function createWorkflowActionTraceWriter(
     db: DbAdapter,
     recordFailure?: ActionTraceFailureRecorder,
 ): WorkflowActionTraceWriter {
-    return new WorkflowActionTraceWriter(new DbWorkflowPersistenceAdapter(db), recordFailure);
+    // The db reference enables the started_at back-date in recordAction; without it the
+    // writer still traces, but intervals stay engine-stamped (start≈finish).
+    return new WorkflowActionTraceWriter(new DbWorkflowPersistenceAdapter(db), recordFailure, db);
 }
 
 /**

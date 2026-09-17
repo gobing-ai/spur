@@ -85,6 +85,76 @@ describe('WorkflowActionTraceWriter (task 0868 R4/R12)', () => {
         });
     });
 
+    test('R8: recordAction back-dates started_at so completed_at − started_at == duration_ms exactly', async () => {
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter);
+        await writer.createRun(runRecord());
+
+        await writer.recordAction({
+            runId: RUN_ID,
+            node: 'implement',
+            kind: 'shell',
+            status: 'done',
+            ok: true,
+            durationMs: 1500,
+        });
+
+        const row = (await new ActionRunDao(projectDb.adapter).actionRowsByRunId(RUN_ID))[0];
+        expect(row).toBeDefined();
+        const span = new Date(row?.completed_at ?? '').getTime() - new Date(row?.started_at ?? '').getTime();
+        expect(span).toBe(1500);
+    });
+
+    test('R8: a zero-duration action keeps the engine-stamped started_at (no back-date needed)', async () => {
+        const writer = createWorkflowActionTraceWriter(projectDb.adapter);
+        await writer.createRun(runRecord());
+
+        await writer.recordAction({
+            runId: RUN_ID,
+            node: 'note',
+            kind: 'note',
+            status: 'done',
+            ok: true,
+            durationMs: 0,
+        });
+
+        const row = (await new ActionRunDao(projectDb.adapter).actionRowsByRunId(RUN_ID))[0];
+        expect(row).toBeDefined();
+        // Engine stamps started_at and completed_at back-to-back for an instant action, so the
+        // span is already ~0 and no back-date write happens.
+        const span = new Date(row?.completed_at ?? '').getTime() - new Date(row?.started_at ?? '').getTime();
+        expect(Math.abs(span)).toBeLessThan(1000);
+    });
+
+    test('R8: a back-date failure is recorded as action.backdate and never fails the recorded boundary', async () => {
+        const failures: ActionTraceFailure[] = [];
+        const throwingDb = {
+            queryFirst: async () => {
+                throw new Error('injected backdate failure');
+            },
+        } as unknown as typeof projectDb.adapter;
+        const writer = new WorkflowActionTraceWriter(
+            new DbWorkflowPersistenceAdapter(projectDb.adapter),
+            (failure) => failures.push(failure),
+            throwingDb,
+        );
+        await writer.createRun(runRecord());
+
+        const result = await writer.recordAction({
+            runId: RUN_ID,
+            node: 'test',
+            kind: 'shell',
+            status: 'done',
+            ok: true,
+            durationMs: 250,
+        });
+
+        expect(result).toMatchObject({ ok: true });
+        expect(failures).toHaveLength(1);
+        expect(failures[0]).toMatchObject({ operation: 'action.backdate', runId: RUN_ID, node: 'test' });
+        // The boundary row itself was written before the back-date attempt.
+        expect(await new ActionRunDao(projectDb.adapter).actionRowsByRunId(RUN_ID)).toHaveLength(1);
+    });
+
     test('R4: a failed action records ok=0 with its own duration, one row per boundary', async () => {
         const writer = createWorkflowActionTraceWriter(projectDb.adapter);
         await writer.createRun(runRecord());

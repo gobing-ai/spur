@@ -20,7 +20,9 @@ recommendation is mandatory, stakes in plain English, and approve/reject is the 
 re-author the report.
 
 **Sidecar rule:** The enhanced idea does **not** overwrite `vars.idea`. Feature-create reads both
-the original idea and this report.
+the original idea and this report. The operator's verbatim ask of record is the run's
+`.spur/run/<run-id>-idea-input.md` (persisted by the pipeline `start` state / the inline driver
+before any processing); the `## Requirement inventory` items trace back to it.
 
 ## Template
 
@@ -29,6 +31,13 @@ the original idea and this report.
 
 ## Enhanced Idea
 <one-paragraph refined statement of what the idea actually requires — the "real requirement" after discovery sharpens the vague input>
+
+## Requirement inventory
+<mandatory — the coverage gate (idea-coverage-check) parses this section, so keep the exact `- I<n> — ` item form>
+- I1 — <requirement stated as an ask, quoting or paraphrasing the source line from the run's idea-input artifact> (source: "<quoted fragment from the operator's idea>")
+- I2 — <next requirement>
+- I<n> — <optional: a requirement explicitly out of scope> [deferred: <reason>]
+- I<n> — <optional: an ambiguous ask> [unclear: <why it is ambiguous>] — an unclear marker does not exempt the item; it still needs coverage or an explicit deferral
 
 ## Scores
 
@@ -74,6 +83,7 @@ Stakes: <plain-English cost of proceeding vs not; reversibility; blast radius>
 |------|--------|
 | Filled instance path | `.spur/run/idea-eval-report.md` |
 | Template home | this file |
+| Requirement inventory | mandatory `## Requirement inventory` section (0887 R3); consumed by `idea-coverage-check` (R4) |
 | HITL state | `idea-eval` in `idea-pipeline.yaml` |
 | Approve | continue → `feature-create` |
 | Reject / cancel | → `cancelled` (no feature) |

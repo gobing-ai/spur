@@ -1,7 +1,7 @@
 ---
 description: Turn a vague idea into a feature with AC and a decomposed task batch — discovery, idea-eval, feature-create, AC, feature-check, system-design, decompose, batch-create (Design by default), handoff
 role: planner
-argument-hint: "\"<idea>\" [--auto] [--skip-design] [--approve-taste] [--agent <inline|auto|name>]"
+argument-hint: "\"<idea>\" [--from-file <path>] [--auto] [--skip-design] [--approve-taste] [--agent <inline|auto|name>]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 ---
 
@@ -14,7 +14,8 @@ contract below maps to that workflow's transitions.
 
 | Flag | Description | Default |
 | --- | --- | --- |
-| `"<idea>"` | Vague idea to turn into a feature with AC and tasks. | required |
+| `"<idea>"` | Vague idea to turn into a feature with AC and tasks. | required (or `--from-file`) |
+| `--from-file` `<path>` | Read the idea from a file instead of the positional argument. Mutually exclusive with `"<idea>"` — exactly one must be present. The file's contents become the verbatim idea text (trimmed of surrounding whitespace only). Useful for long or multiline asks that are awkward to quote. | off |
 | `--auto` | Skip objective HITL gates only (taste gates still pause). | off |
 | `--skip-design` | Omit system-design and per-task Design. | off |
 | `--approve-taste` | With `--auto`: set idea_approved + design_approved so idea-eval / design-approval do not pause. | off |
@@ -47,5 +48,9 @@ vars as subsets of `--approve-taste` (`idea_approved` / `design_approved`). Pref
 - `Skill(skill="sp:spur-dev", args="idea $ARGUMENTS")`
 - Pass the idea text through every hop **verbatim** — never paraphrase or shorten it in the nested
   `Skill` call or stage prompts; long ideas lose their trailing asks when summarized at the hop.
+- Before executing the pipeline's `start` state, persist the operator's idea argument (or the
+  `--from-file` contents) **unmodified** to `.spur/run/<run-id>-idea-input.md` (0887 R1); every
+  model-bearing stage prompt treats that file as the authoritative ask, and the precheck fails
+  the run when it is empty or missing.
 - Stage contract (discovery → idea-eval → feature-create → AC → feature-check → system-design →
   decompose → batch-create → ready-prepare → handoff): `plugins/sp/skills/spur-dev/references/dev-operations.md` § idea.

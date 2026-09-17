@@ -160,6 +160,35 @@ the human/native presentation layer — labels are display addresses only, never
    This is required for the normal `testing → done` provenance guard. Planning pipelines have no
    task lifecycle link and skip this task-specific action.
 
+### Idea-pipeline quick start (0887 R1/R2)
+
+Minimum files to read for `/sp:dev-idea` inline runs — then drive `idea-pipeline.yaml`:
+
+- `config/workflows/idea-pipeline.yaml` (the machine) and this driver.
+- `plugins/sp/skills/spur-dev/references/idea-evaluation.md` (report template incl. the mandatory
+  `## Requirement inventory`) and `references/ac-style-guide.md` (scenario `# covers:` form).
+- `references/dev-operations.md` § idea for the stage-by-stage surface.
+
+**Persist the verbatim idea FIRST.** Before executing the `start` state, write the operator's
+idea argument (or `--from-file` contents) **unmodified** to
+`.spur/run/<run-id>-idea-input.md`; the run precheck fails when that file is empty or missing,
+and every model-bearing stage prompt treats it as the authoritative ask. `--from-file` and the
+positional idea are mutually exclusive — exactly one must be present.
+
+Expected artifacts per stage (all run-scoped under `.spur/run/<run-id>-*`):
+
+| Stage | Artifacts |
+| ----- | --------- |
+| start | `-idea-input.md` (verbatim idea), `-idea-precheck-doctor.status` |
+| discovery | `-idea-eval-report.md` (with `## Requirement inventory`), `-idea-needs-design.json` |
+| feature-create | `-idea-feature-id.txt`, `-idea-goal.md`, `-idea-scope.md` |
+| ac-generate | `-idea-ac-content.md`, `-idea-ac-check.status`, `-idea-coverage.status` |
+| system-design | `-idea-design-review.md`, `-idea-design-check.status` |
+| decompose | `-idea-task-batch.json`, `-idea-task-order.json` |
+| batch-create-run | `-idea-batch-create-result.json`, `-idea-batch-create.done`/`.failed` |
+| ready-prepare | `-idea-ready.json` |
+| handoff-finalize | `-idea-handoff.md` |
+
 ## Comprehensive-check retention and evidence (R7/R8)
 
 **R7 — comprehensive checks stay at their owning boundaries.** Quick readiness and plan projection are
@@ -428,7 +457,10 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
   under its declared error policy and `failed` otherwise; `--duration-ms` is the wall clock the
   driver measured around the action. This writes the `action_runs` row (node, kind, status, `ok`,
   `duration_ms`, `run_id`) the engine would have written, so the run's rows are queryable by run id
-  (`spur workflow progress <run-id>`, `ActionRunDao`) without reading the text log.
+  (`spur workflow progress <run-id>`, `ActionRunDao`) without reading the text log. The writer
+  back-dates the row's `started_at` from its own `completed_at` minus the measured duration
+  (0887 R8), so `completed_at − started_at == duration_ms` exactly; a back-date failure is
+  recorded (`action.backdate`) and never affects the run.
 
 - **At the run's declared terminal state** — before the driver reports the run complete, close the
   row so a successful inline run is never left non-terminal for `spur workflow clean` to reap as

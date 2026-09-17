@@ -197,6 +197,10 @@ When brainstorm runs under `idea-pipeline` discovery, it MUST also emit a filled
 [`spur-dev/references/idea-evaluation.md`](../spur-dev/references/idea-evaluation.md):
 
 - Enhanced idea statement (sidecar — does **not** overwrite the operator's original idea text)
+- **Requirement inventory** — mandatory `## Requirement inventory` section: numbered `I<n>` items
+  quoting or paraphrasing the source lines from the run's verbatim idea artifact
+  (`.spur/run/<run-id>-idea-input.md`, 0887 R1/R3), with `[unclear: ...]` markers where the ask is
+  ambiguous and `[deferred: <reason>]` markers for explicit out-of-scope items
 - Urgency and necessity scores (0–5) with one-line rationales
 - Premises, pros, cons, better alternatives (if any)
 - Recommendation (`proceed` | `reshape` | `drop`) + stakes
