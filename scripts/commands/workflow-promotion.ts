@@ -260,7 +260,7 @@ export function measureAgentRunHistory(dbPath: string, workflow: string, runIds?
             rows.map((r) => r.count),
             rows.length,
         ),
-        agentRunDurationMs: stat(durations, rows.length),
+        agentRunDurationMs: stat(durations, durations.length),
     };
 }
 
@@ -281,16 +281,25 @@ export function evaluateCandidate(
     nowIso: string,
 ): WorkflowCandidateVerdict {
     const candidateCount = candidate.delta.agentRunCount;
-    const decision: 'promote' | 'delete' = candidateCount < canonicalAgentRunCount ? 'promote' : 'delete';
+    // ADR-076: the gate decides on the measured data it cites — zero recorded real runs cannot promote.
+    const decision: 'promote' | 'delete' =
+        measured.agentRunCount.runs > 0 && candidateCount < canonicalAgentRunCount ? 'promote' : 'delete';
     const measuredCitation =
         measured.agentRunCount.runs === 0
             ? 'no measured real-run history'
             : `${measured.agentRunCount.runs} real run(s), median ${measured.agentRunCount.median ?? 'n/a'} ` +
               `agent.run action(s)/run, median ${measured.agentRunDurationMs.median ?? 'n/a'} ms/run`;
-    const reason =
-        decision === 'promote'
-            ? `candidate projects ${candidateCount} agent.run action(s) against the canonical ${candidate.canonical} count of ${canonicalAgentRunCount} (${measuredCitation})`
-            : `candidate projects ${candidateCount} agent.run action(s), not fewer than the canonical ${candidate.canonical} count of ${canonicalAgentRunCount} (${measuredCitation}) — ADR-076 rejected a graph adding a model hop`;
+    let reason: string;
+    if (measured.agentRunCount.runs === 0) {
+        reason =
+            `candidate projects ${candidateCount} agent.run action(s) against the canonical ${candidate.canonical} count of ` +
+            `${canonicalAgentRunCount}, but with no measured real-run history the ADR-076 gate cannot promote unmeasured — ` +
+            `decision falls to delete; re-evaluate after real runs`;
+    } else if (decision === 'promote') {
+        reason = `candidate projects ${candidateCount} agent.run action(s) against the canonical ${candidate.canonical} count of ${canonicalAgentRunCount} (${measuredCitation})`;
+    } else {
+        reason = `candidate projects ${candidateCount} agent.run action(s), not fewer than the canonical ${candidate.canonical} count of ${canonicalAgentRunCount} (${measuredCitation}) — ADR-076 rejected a graph adding a model hop`;
+    }
     return {
         decision,
         evaluatedAt: nowIso,
@@ -399,7 +408,6 @@ interface ResolveArgs {
     decision: 'promote' | 'delete';
     workflowsDir: string;
     configPath: string;
-    nowIso: string;
 }
 
 function parseResolveArgs(argv: string[]): ResolveArgs {
@@ -407,7 +415,6 @@ function parseResolveArgs(argv: string[]): ResolveArgs {
         decision: 'delete',
         workflowsDir: WORKFLOWS_DIR,
         configPath: CANDIDATES_PATH,
-        nowIso: new Date().toISOString(),
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -424,7 +431,6 @@ function parseResolveArgs(argv: string[]): ResolveArgs {
             args.decision = value;
         } else if (a === '--workflows-dir') args.workflowsDir = next();
         else if (a === '--config') args.configPath = next();
-        else if (a === '--now') args.nowIso = next();
         else throw new Error(`workflow-promotion: unknown argument ${a}`);
     }
     return args;
@@ -519,6 +525,14 @@ export async function runWorkflowPromotion(argv: string[]): Promise<number> {
         const index = config.candidates.findIndex((c) => c.id === id);
         if (index === -1) throw new Error(`workflow-promotion: candidate ${id} not found`);
         const candidate = config.candidates[index] as WorkflowCandidate;
+        if (candidate.verdict && candidate.verdict.decision !== args.decision) {
+            console.error(
+                `workflow-promotion: resolve refused — candidate ${candidate.id}'s evaluated verdict is ` +
+                    `${candidate.verdict.decision} (${candidate.verdict.evaluatedAt}); --decision ${args.decision} contradicts it. ` +
+                    `Re-evaluate or hold the candidate.`,
+            );
+            return 1;
+        }
         if (args.decision === 'promote') {
             const counts = loadCanonicalAgentRunCounts(args.workflowsDir);
             const actual = counts[candidate.canonical];

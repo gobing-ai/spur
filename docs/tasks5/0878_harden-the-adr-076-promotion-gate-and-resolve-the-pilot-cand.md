@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Harden the ADR-076 promotion gate and resolve the pilot candidate through it
-status: backlog
+status: testing
 template: feature-impl
 created_at: 2026-09-17T17:38:39.161Z
-updated_at: "2026-09-17T17:41:55.978Z"
+updated_at: "2026-09-17T17:51:17.151Z"
 feature_id: D62
 
 ---
@@ -46,18 +46,50 @@ Captured from the creation title: "Harden the ADR-076 promotion gate and resolve
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `scripts/commands/workflow-promotion.test.ts:16` |
+| `scripts/commands/workflow-promotion.test.ts:161` |
+| `scripts/commands/workflow-promotion.test.ts:20` |
+| `scripts/commands/workflow-promotion.test.ts:217` |
+| `scripts/commands/workflow-promotion.test.ts:219` |
+| `scripts/commands/workflow-promotion.test.ts:225` |
+| `scripts/commands/workflow-promotion.test.ts:6` |
+| `scripts/commands/workflow-promotion.ts:263` |
+| `scripts/commands/workflow-promotion.ts:284` |
+| `scripts/commands/workflow-promotion.ts:292` |
+| `scripts/commands/workflow-promotion.ts:410` |
+| `scripts/commands/workflow-promotion.ts:417` |
+| `scripts/commands/workflow-promotion.ts:433` |
+| `scripts/commands/workflow-promotion.ts:528` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `bun test scripts/commands/workflow-promotion.test.ts` — 23 pass, 0 fail (49 expects), including the three new resolve-CLI tests and the flipped unmeasured-gate expectation.
+- Live gate exercise: `promotion resolve wrapup-contract-violation-pilot-routing --decision promote` → refused (verdict contradiction, candidate retained); `--decision delete` → `resolved … as delete`, candidates left 0, `promotion check` PASS.
+- Duration fold pinned: wrapup-pipeline seeded case asserts `agentRunDurationMs.runs === 0` while `agentRunCount.runs === 1`.
+- `--now` dropped from resolve (parsed-never-used); check/evaluate keep theirs.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-17T17:50:01.047Z backlog → todo (system)
+- 2026-09-17T17:50:02.609Z todo → wip (system)
+- 2026-09-17T17:51:17.151Z wip → testing (system)
+

@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -12,9 +12,11 @@ import {
     isPastDeadline,
     loadCanonicalAgentRunCounts,
     measureAgentRunHistory,
+    runWorkflowPromotion,
     validateCandidate,
     type WorkflowCandidate,
     type WorkflowCandidatesConfig,
+    type WorkflowCandidateVerdict,
 } from './workflow-promotion';
 
 /** A minimal valid candidate record. */
@@ -155,6 +157,8 @@ describe('measureAgentRunHistory (0873 R1/R2 shadow-run inputs)', () => {
             expect(m.agentRunCount.runs).toBe(1);
             expect(m.agentRunCount.median).toBe(0);
             expect(m.agentRunDurationMs.median).toBeNull();
+            // 0878 R6: the duration fold's .runs counts the durations actually folded (0), not the row count (1).
+            expect(m.agentRunDurationMs.runs).toBe(0);
         } finally {
             await close();
         }
@@ -209,11 +213,76 @@ describe('evaluateCandidate (0873 R2 verdict)', () => {
         ).toBe('delete');
     });
 
-    test('cites measured history even when it is empty (unmeasured, never a fixture)', () => {
+    test('cannot promote a candidate with zero measured real runs (0878 R6 ADR-076 gate)', () => {
         const v = evaluateCandidate(candidate({ delta: { agentRunCount: 3 } }), emptyMeasurement(), 4, 'x');
-        expect(v.decision).toBe('promote'); // static reduction 4 -> 3 holds
+        expect(v.decision).toBe('delete'); // static reduction 4 -> 3 holds, but the gate refuses unmeasured
         expect(v.agentRunCount.median).toBeNull();
         expect(v.reason).toContain('no measured real-run history');
+    });
+});
+
+describe('resolve CLI (0878 R6)', () => {
+    const verdict = (decision: 'promote' | 'delete'): WorkflowCandidateVerdict => ({
+        decision,
+        evaluatedAt: '2026-09-16T00:00:00Z',
+        agentRunCount: { runs: 2, mean: 4, median: 4, min: 4, max: 4 },
+        agentRunDurationMs: { runs: 2, mean: 600, median: 600, min: 600, max: 600 },
+        candidateAgentRunCount: 3,
+        canonicalAgentRunCount: 4,
+        reason: 'test',
+    });
+
+    async function candidatesFile(cands: WorkflowCandidate[]): Promise<string> {
+        const dir = await mkdtemp(join(tmpdir(), 'resolve-'));
+        const p = join(dir, 'candidates.json');
+        await writeFile(p, JSON.stringify(config(cands)));
+        return p;
+    }
+
+    test('refuses a decision that contradicts the evaluated verdict and keeps the candidate', async () => {
+        const p = await candidatesFile([candidate({ verdict: verdict('promote') })]);
+        const code = await runWorkflowPromotion(['resolve', 'c1', '--decision', 'delete', '--config', p]);
+        expect(code).toBe(1);
+        expect(JSON.parse(await readFile(p, 'utf8')).candidates).toHaveLength(1);
+    });
+
+    test('refuses --decision promote when the canonical count mismatches (0873 refusal branch)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'canonical-resolve-'));
+        const p = await candidatesFile([candidate({ verdict: verdict('promote'), delta: { agentRunCount: 3 } })]);
+        try {
+            await writeFile(
+                join(dir, 'task-pipeline.yaml'),
+                [
+                    'terminalStates: [done]',
+                    'states:',
+                    '  - id: implement',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options: { input: run }',
+                ].join('\n'),
+            );
+            const code = await runWorkflowPromotion([
+                'resolve',
+                'c1',
+                '--decision',
+                'promote',
+                '--config',
+                p,
+                '--workflows-dir',
+                dir,
+            ]);
+            expect(code).toBe(1);
+            expect(JSON.parse(await readFile(p, 'utf8')).candidates).toHaveLength(1);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('resolves a delete consistent with the verdict and removes the candidate', async () => {
+        const p = await candidatesFile([candidate({ verdict: verdict('delete') })]);
+        const code = await runWorkflowPromotion(['resolve', 'c1', '--decision', 'delete', '--config', p]);
+        expect(code).toBe(0);
+        expect(JSON.parse(await readFile(p, 'utf8')).candidates).toHaveLength(0);
     });
 });
 

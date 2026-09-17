@@ -1,41 +1,5 @@
 {
     "schemaVersion": 1,
     "note": "Workflow graph-change promotion candidates (task 0873, feature D62; ADR-076 amendment). A candidate is shadow-run against recorded real-run inputs and is promoted into the canonical definition or deleted by its named deadline — never left as a standing parallel <name>2.yaml. `verdict` is null while pending and is filled by `bun scripts/spur-dev.ts promotion evaluate <id>`; `promotion check` (spur-check-feature) fails any candidate still present past its deadline and any unreferenced parallel definition in config/workflows/.",
-    "candidates": [
-        {
-            "id": "wrapup-contract-violation-pilot-routing",
-            "canonical": "wrapup-pipeline",
-            "deadline": "2026-10-17",
-            "createdAt": "2026-09-17",
-            "rationale": "ADR-118 pilot graph change shipped by task 0871 (doc-sync contract-violation routing to the shell-only repair state). Registered by task 0876 to take the promotion decision on its first real-run measurement (R4/R5): wrapup-pipeline run fadca099-25a7-4884-a4ae-923cd0239775 (done, state-machine, definition sha256:cad7ad8b..., v4, created 2026-09-17T15:14:46Z, 14h28m after 0871 landed at 00:46:46Z - the only post-landing terminal non-dry wrapup run) routed doc-sync->learnings-append on the default edge: the doc-sync agent.run exited clean (exitCode 0) and produced its declared expectFile capture (.spur/run/fadca099-...-wrapup-learnings.md), so data.outcome was success, ContractViolationGuardRunner passed:false (packages/app/src/workflow/guards/contract-violation.ts:26), zero workflow.agent.contract-violation system_events, zero failed actions (executor-failure path not taken), no repair status file. Measured absence on real traffic - never fabricated. The change projects delta.agentRunCount=1 (unchanged): the repair edge adds no model hop (repair is a shell that records the miss; ADR-118 forbids re-dispatch), so the ADR-076 cost bar cannot reward it; its justification is ADR-118 routing correctness, evidenced here by the measured absence on the first real run. Disposition (resolve delete, or hold as the pattern-spread precedent for 0873's gate) belongs to the D62 owner before the deadline.",
-            "measurement": {
-                "workflow": "wrapup-pipeline",
-                "runIds": ["fadca099-25a7-4884-a4ae-923cd0239775"]
-            },
-            "delta": {
-                "agentRunCount": 1
-            },
-            "verdict": {
-                "decision": "delete",
-                "evaluatedAt": "2026-09-17T15:33:27.274Z",
-                "agentRunCount": {
-                    "runs": 1,
-                    "mean": 1,
-                    "median": 1,
-                    "min": 1,
-                    "max": 1
-                },
-                "agentRunDurationMs": {
-                    "runs": 1,
-                    "mean": 505937,
-                    "median": 505937,
-                    "min": 505937,
-                    "max": 505937
-                },
-                "candidateAgentRunCount": 1,
-                "canonicalAgentRunCount": 1,
-                "reason": "candidate projects 1 agent.run action(s), not fewer than the canonical wrapup-pipeline count of 1 (1 real run(s), median 1 agent.run action(s)/run, median 505937 ms/run) — ADR-076 rejected a graph adding a model hop"
-            }
-        }
-    ]
+    "candidates": []
 }
