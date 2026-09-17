@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Close out the D62 session-review findings that are neither fixed nor owned
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-17T05:46:06.389Z
-updated_at: "2026-09-17T06:45:32.696Z"
+updated_at: "2026-09-17T18:18:13.594Z"
 feature_id: D62
 
 priority: P2
@@ -24,15 +24,15 @@ Excluded, and why:
 
 ### Requirements
 
-- [ ] R1. The inline trace delegate behaves as one surface: `--action` reports an emission failure in a single stdout shape, accepts only the engine's finalize vocabulary (`done`/`failed`, not `running`/`paused`), and the two trace-failure recorders write the run log in one stamp format (0868 review findings 1, 3, 4 — persisted in 0868's ### Review).
-- [ ] R2. An action row whose `node`/`kind` matches no declared state/action is surfaced as a `spur workflow progress` diagnostic instead of persisting invisibly, and a finalize for an action id the writer never observed keeps its run-id attribution (0868 review findings 2, 7 — persisted in 0868's ### Review).
-- [ ] R3. The inline delegate's app-module surface is compile-time linked rather than hand-declared in a cast, so a signature change in `packages/app` fails the delegate's typecheck (0868 review finding 5; live anchor `plugins/sp/scripts/inline-run-setup.ts:262-278`).
-- [ ] R4. ADR-117's `system_events` half for the inline surface — one start/finish pair per action boundary — is either delivered or explicitly recorded as out of scope against ADR-117 (0868 review finding 6).
-- [ ] R5. The feature-scoped verification pass has a caller, so a feature whose `verifying→done` guard requires it can reach done without a hand-run command; the guard's declaration order is asserted and not only its kind set; and the pass's "settled tree" precondition is enforced or dropped from the contract (session-review findings about 0872, not persisted to its Review section; no-caller clause re-verified at refinement: `config/workflows/feature-lifecycle.yaml:71` reads the pass's status file and nothing invokes `feature-verification`).
-- [ ] R6. The ADR-076 promotion gate decides on the measured real-run data it cites: a candidate with zero recorded runs cannot promote, the `resolve --decision promote` refusal branch is tested, `resolve` cannot contradict the evaluated verdict, and the duration statistic's `.runs` count matches its duration fold (session-review findings about 0873, not persisted to its Review section; every clause re-verified at refinement — anchors in Plan step 5).
-- [ ] R7. The guard-parity harness enumerates state from the pre- and post-refactor commands' references, so a refactor that removes a reference cannot escape parity; and an over-declared (spurious) `dependencies[]` edge is caught rather than silently unbound from the planning digest (session-review findings about 0874/0875, not persisted to their Review sections; the second clause follows from 0875's shipped Option B — `dependencies` unbound from `computePlanningDigest` at `packages/app/src/services/task-readiness.ts:405`).
-- [ ] R8. Agent-facing documentation stops advertising the retired `basic`/`docs-pipeline`/`feature-dev` definitions and their never-wired callers, and retiring a definition that still has real non-dry runs is refused by a check rather than only by a recorded verdict table (0866 review findings 5, 6 — persisted in 0866's ### Review; 7 plugin doc files still reference the retired names as of refinement).
-- [ ] R9. The §Solution change maps and anchors of 0866, 0867 and 0868 are corrected — no `L4.anchor-subject-mismatch` warnings, and the 0866/0867 maps list every file their diffs changed (0866 findings 3-4, 0867 finding 1, 0868 finding 8 — persisted in those Review sections).
+- [x] R1. The inline trace delegate behaves as one surface: `--action` reports an emission failure in a single stdout shape, accepts only the engine's finalize vocabulary (`done`/`failed`, not `running`/`paused`), and the two trace-failure recorders write the run log in one stamp format (0868 review findings 1, 3, 4 — persisted in 0868's ### Review).
+- [x] R2. An action row whose `node`/`kind` matches no declared state/action is surfaced as a `spur workflow progress` diagnostic instead of persisting invisibly, and a finalize for an action id the writer never observed keeps its run-id attribution (0868 review findings 2, 7 — persisted in 0868's ### Review).
+- [x] R3. The inline delegate's app-module surface is compile-time linked rather than hand-declared in a cast, so a signature change in `packages/app` fails the delegate's typecheck (0868 review finding 5; live anchor `plugins/sp/scripts/inline-run-setup.ts:262-278`).
+- [x] R4. ADR-117's `system_events` half for the inline surface — one start/finish pair per action boundary — is either delivered or explicitly recorded as out of scope against ADR-117 (0868 review finding 6).
+- [x] R5. The feature-scoped verification pass has a caller, so a feature whose `verifying→done` guard requires it can reach done without a hand-run command; the guard's declaration order is asserted and not only its kind set; and the pass's "settled tree" precondition is enforced or dropped from the contract (session-review findings about 0872, not persisted to its Review section; no-caller clause re-verified at refinement: `config/workflows/feature-lifecycle.yaml:71` reads the pass's status file and nothing invokes `feature-verification`).
+- [x] R6. The ADR-076 promotion gate decides on the measured real-run data it cites: a candidate with zero recorded runs cannot promote, the `resolve --decision promote` refusal branch is tested, `resolve` cannot contradict the evaluated verdict, and the duration statistic's `.runs` count matches its duration fold (session-review findings about 0873, not persisted to its Review section; every clause re-verified at refinement — anchors in Plan step 5).
+- [x] R7. The guard-parity harness enumerates state from the pre- and post-refactor commands' references, so a refactor that removes a reference cannot escape parity; and an over-declared (spurious) `dependencies[]` edge is caught rather than silently unbound from the planning digest (session-review findings about 0874/0875, not persisted to their Review sections; the second clause follows from 0875's shipped Option B — `dependencies` unbound from `computePlanningDigest` at `packages/app/src/services/task-readiness.ts:405`).
+- [x] R8. Agent-facing documentation stops advertising the retired `basic`/`docs-pipeline`/`feature-dev` definitions and their never-wired callers, and retiring a definition that still has real non-dry runs is refused by a check rather than only by a recorded verdict table (0866 review findings 5, 6 — persisted in 0866's ### Review; 7 plugin doc files still reference the retired names as of refinement).
+- [x] R9. The §Solution change maps and anchors of 0866, 0867 and 0868 are corrected — no `L4.anchor-subject-mismatch` warnings, and the 0866/0867 maps list every file their diffs changed (0866 findings 3-4, 0867 finding 1, 0868 finding 8 — persisted in those Review sections).
 
 ### Acceptance Criteria
 
@@ -92,15 +92,32 @@ Size: near the count-only precheck gate — 9 of 10 requirements (the Plan cap i
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Delivered as five child tasks (0878–0882, each with its own commit + PASS verdict artifact): R6 → 0878/`ff169bfa3`; R1–R4 → 0879/`7c686761e`; R5 → 0880/`9ad794990`; R7 → 0881/`0895f1f35`; R8-code → 0882 (landed inside `4fdd1f71d`, guard at `scripts/commands/workflow-promotion.ts` `checkRetirementGuard`). R8's docs half landed pre-split in `b180357fc`. Evidence table in Testing; anchor `scripts/commands/workflow-promotion.ts:1`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Batch verdict: PASS** — all 8 requirements delivered via child tasks 0878–0882 (inline runs, PASS verdict artifacts at `.spur/run/<wbs>-verdict.json` each).
+
+| Req | Child | Commit | Evidence |
+|-----|-------|--------|----------|
+| R1–R4 (inline trace delegate, orphan actions, compile-time link) | 0879 | `7c686761e` | ACTION_STATUSES finalize vocabulary, flattened failure shape, type-only WorkflowActionTraceWriter import, action-trace lastStart + seconds stamps, `orphan-action-row` progress diagnostic; ADR-117 `system_events` half recorded out of scope in `docs/00_ADR.md` (R4's explicit-out-of-scope clause). |
+| R5 (verification pass caller) | 0880 | `9ad794990` | feature-lifecycle `verifying` onEnter runs feature-verification; settled-tree precondition dropped; caller wiring asserted in `feature-verification-scope.test.ts`; design docs synced same-commit. |
+| R6 (promotion gate data honesty) | 0878 | `ff169bfa3` | zero-run promote refusal, resolve-contradiction refusal, duration `.runs` fold; pilot `wrapup-contract-violation-pilot-routing` resolved `delete` live through the hardened gate. |
+| R7 (parity harness both reference sets) | 0881 | `0895f1f35` | markdown reference kinds parsed as a second reference set (deleted-reference fixture), spurious `dependencies[]` edges flagged (wbs-shaped `^\d{3,4}$` only), three-way diff live exit 0. |
+| R8 (retired definitions: docs + refusal check) | docs pre-split `b180357fc` + code 0882 (in `4fdd1f71d`) | — | plugin docs stop advertising retired names (b180357fc); `checkRetirementGuard` refuses retirement with real non-dry terminal runs absent a recorded `retirements[]` decision; historical planning-pipeline/task-pipeline2 decisions recorded citing deletion commits. |
+
+| # | Command | Result |
+|---|---------|--------|
+| P4 | per-child test suites (workflow-promotion 25, parity-check 4, feature-verification-scope 6, feature-lifecycle-adapter 9, inline-run-setup suite) | all pass / 0 fail |
+| P4 | `bun scripts/spur-dev.ts promotion check` live | PASS, exit 0 |
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+| Priority | Finding | Resolution |
+|----------|---------|------------|
+| P3 | 0882's diff landed inside parallel-session commit `4fdd1f71d` (one-writer violation, wrong commit message for this scope) | Content verified intact at HEAD (25 tests pass, retirements[] present); traceability note recorded in 0882 Testing; no history rewrite. |
+| P4 | R4 (ADR-117 system_events) delivered as explicit out-of-scope rather than implemented | Recorded in `docs/00_ADR.md` with rationale per R4's alternative clause; revisit if inline surface telemetry demand appears. |
+| P4 | Retired-definition history contains ad-hoc run names never tracked as definitions | Guard scoped to git-tracked definition names (`everTrackedDefinitionNames`), keeping the check precise. |
 
 ### References
 
@@ -116,4 +133,7 @@ Size: near the count-only precheck gate — 9 of 10 requirements (the Plan cap i
 ### History
 
 - 2026-09-17T06:45:32.696Z backlog → todo (system)
+- 2026-09-17T18:17:10.664Z todo → wip (system)
+- 2026-09-17T18:17:45.961Z wip → testing (system)
+- 2026-09-17T18:18:13.594Z testing → done (system)
 

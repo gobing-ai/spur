@@ -4,7 +4,7 @@ name: Refuse retiring workflow definitions that still have real non-dry runs
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:14.081Z
-updated_at: "2026-09-17T18:15:50.823Z"
+updated_at: "2026-09-17T18:16:38.521Z"
 feature_id: D62
 
 ---
@@ -61,6 +61,69 @@ Each entry cites the first changed line per file (`file:line`).
 
 ### Testing
 
+---
+schema_version: 1
+name: Refuse retiring workflow definitions that still have real non-dry runs
+status: done
+template: feature-impl
+created_at: 2026-09-17T17:41:14.081Z
+updated_at: "2026-09-17T18:15:50.823Z"
+feature_id: D62
+
+---
+
+## 0882. Refuse retiring workflow definitions that still have real non-dry runs
+
+#### Background
+
+Captured from the creation title: "Refuse retiring workflow definitions that still have real non-dry runs".
+
+#### Requirements
+
+- A check refuses retiring a workflow definition that still has real (non-dry) terminal runs absent a recorded decision, reading `runs × metadata_json.dryRun` — the column 0866's verdict table used (0866 review finding 6).
+
+#### Acceptance Criteria
+
+- Refusal test with mixed dry/non-dry history; clean retirements pass.
+- `bun run spur-check` green.
+
+#### Q&A
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Design
+
+<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+
+#### Plan
+
+<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+
+#### Solution
+
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `scripts/commands/workflow-promotion.test.ts:388` |
+| `scripts/commands/workflow-promotion.test.ts:8` |
+| `scripts/commands/workflow-promotion.ts:111` |
+| `scripts/commands/workflow-promotion.ts:117` |
+| `scripts/commands/workflow-promotion.ts:122` |
+| `scripts/commands/workflow-promotion.ts:22` |
+| `scripts/commands/workflow-promotion.ts:35` |
+| `scripts/commands/workflow-promotion.ts:37` |
+| `scripts/commands/workflow-promotion.ts:421` |
+| `scripts/commands/workflow-promotion.ts:540` |
+| `scripts/commands/workflow-promotion.ts:548` |
+| `scripts/commands/workflow-promotion.ts:560` |
+| `scripts/commands/workflow-promotion.ts:574` |
+
+#### Testing
+
 **Pipeline verify results**
 
 - Verdict: PASS (from verdict artifact)
@@ -81,6 +144,29 @@ Each entry cites the first changed line per file (`file:line`).
 
 - Live gate first failed on planning-pipeline + task-pipeline2 (retired with real history, no recorded decision) — the exact 0866 review finding 6 scenario, now blocked.
 - Decisions recorded in `config/workflow-candidates.json` `retirements[]` citing their deletion commits; gate re-run → PASS.
+- Note: the 0882 diff landed inside parallel session commit 4fdd1f71d ("fix(sp): fix issues with idea pipeline", one-writer violation); content verified intact at HEAD — 25 tests pass, retirements[] present. No history rewrite.
+
+#### Review
+
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | bun test scripts/commands/workflow-promotion.test.ts | — | 25 pass / 0 fail |
+| P4 | promotion check live gate | — | PASS (0 candidates, no parallel definitions), exit 0 |
+
+#### References
+
+<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+
+#### History
+
+- 2026-09-17T17:50:02.295Z backlog → todo (system)
+- 2026-09-17T18:15:49.604Z todo → wip (system)
+- 2026-09-17T18:15:50.256Z wip → testing (system)
+- 2026-09-17T18:15:50.823Z testing → done (system)
 
 ### Review
 
