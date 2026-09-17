@@ -4,7 +4,7 @@ name: Stop the idea pipeline from invalidating its own preparation evidence
 status: done
 template: feature-impl
 created_at: 2026-09-16T11:04:31.573Z
-updated_at: "2026-09-16T21:15:17.681Z"
+updated_at: "2026-09-17T18:40:54.941Z"
 feature_id: D62
 
 priority: P2
@@ -92,14 +92,14 @@ post-preparation change, violating R3.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-readiness.ts:400-410` removes `dependencies` from the hashed payload; `packages/app/tests/workflow/idea-handoff.test.ts:211` proves deps applied between binding and verification no longer reports `planning digest stale` |
-| R2 | MET | `packages/app/src/services/task-readiness.ts:400-410` makes the digest invariant to dependency frontmatter (the only mutation `handoff-finalize` applies post-bind), so a second pass over an unchanged corpus computes the same digest; `packages/app/tests/services/task-readiness.test.ts:375` asserts dependency membership changes do not move the digest |
-| R3 | MET | `packages/app/tests/services/task-readiness.test.ts:368` asserts planning-body edits still move the digest; `packages/app/tests/workflow/idea-handoff.test.ts:211` proves a Requirements edit still degrades to the refine action (`/sp:dev-refineall`) |
-| R4 | MET | `packages/app/src/services/task-readiness.ts:388-399` records the unbinding decision in `computePlanningDigest`'s doc comment; `packages/app/tests/services/task-readiness.test.ts:375` updates the dependency-membership assertion to encode the new contract |
+| R1 | MET | `packages/app/src/services/task-readiness.ts:400-410` re-read: computePlanningDigest payload hashes sections + featureId + template — dependencies absent; idea-handoff.test.ts:211 proves deps applied between bind and verify no longer reports stale. Re-run: `bun test tests/services/task-readiness.test.ts tests/workflow/idea-handoff.test.ts` -> 38 pass / 0 fail (2026-09-17). |
+| R2 | MET | Digest invariant to dependency frontmatter (the only post-bind mutation handoff-finalize applies); task-readiness.test.ts:375 asserts dependency membership does not move the digest (passing) — second pass over unchanged corpus computes the same digest. |
+| R3 | MET | task-readiness.test.ts:368 (planning-body edits still move the digest) and idea-handoff.test.ts:211 (Requirements edit still degrades to refine) in the passing set. |
+| R4 | MET | Unbinding decision recorded in computePlanningDigest's doc comment (task-readiness.ts:388-399, adjacent to re-read anchor); test :375 encodes the new contract. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R15 — Preparation evidence survives the pipeline's own deterministic mutations | MET | test | `packages/app/tests/workflow/idea-handoff.test.ts:211` — deps applied between binding and verification does not stale (next command `/sp:dev-runall`); a Requirements edit still degrades to refine |
+| Scenario: R15 — Preparation evidence survives the pipeline's own deterministic mutations | MET | test | idea-handoff.test.ts:211 (deps between bind/verify → not stale; Requirements edit → refine) in the 38-test pass re-run 2026-09-17. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -111,8 +111,8 @@ post-preparation change, violating R3.
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:3f84be8a46088ef7d8ee4de81cede9aa712dfc884bc7e017bdedc576b1c79e02 |
+| P4 | design-conformance | — | Digest unbinding matches Design; contract comment + test updated as required. |
+| P4 | secua | — | Genuine edits still degrade to refine — no validation weakening; no findings this run. |
 
 ### References
 

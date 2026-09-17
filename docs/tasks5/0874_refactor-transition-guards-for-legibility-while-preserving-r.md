@@ -4,7 +4,7 @@ name: Refactor transition guards for legibility while preserving routing semanti
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.227Z
-updated_at: "2026-09-16T23:26:01.858Z"
+updated_at: "2026-09-17T18:40:04.848Z"
 feature_id: D62
 priority: P2
 tags:
@@ -106,14 +106,14 @@ that no test of the happy path catches. The harness is the regression guard for 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Retained guards rewritten for legibility: named status reads replace repeated `$(cat …)` — `config/workflows/idea-pipeline.yaml:577,599,611,631,651,661` (`ac_status="$(cat …)"`), `config/workflows/task-pipeline.yaml:611-612` (`size_status`/`evidence_status`), `:634,643,671,680,690,701` (`gate_status`), `:691,702` (`fix_attempts`), `:792` (`verdict`), `:821-822` (`verdict`/`proof_digest`); the 455-char `verify → record` jq predicate is split one `and`-clause per line at `:771-780`. |
-| R2 | MET | Executed parity: `packages/app/tests/workflow/guard-parity.test.ts:256` evaluates each rewritten guard's pre-refactor command (from baseline fixture `packages/app/tests/workflow/fixtures/guard-parity-baseline.json:1`) and post-refactor command against the SAME recorded var/artifact cross-product and asserts identical pass/fail (654 expect() calls across 16 rewritten guards). |
-| R3 | MET | Parity check EXECUTED this run, not asserted by inspection: command `cd packages/app && bun test tests/workflow/guard-parity.test.ts` → `2 pass / 0 fail, 654 expect() calls` (6.37s). |
-| R4 | MET | Reachable state set unchanged: `packages/app/tests/workflow/guard-parity.test.ts:248` asserts transition topology (from/to/kind, in declaration order) identical to baseline; with per-guard boolean parity (R2) and the engine's first-passing-edge-in-order selection, identical edge order + identical guard booleans ⇒ identical reachable state set. |
+| R1 | MET | Named status reads in retained definitions re-confirmed: idea-pipeline.yaml:577-661 ac_status reads, task-pipeline.yaml:611-822 size/evidence/gate/verdict/proof_digest reads; 455-char jq predicate split one and-clause per line at task-pipeline.yaml:771-780. |
+| R2 | MET | Executed parity re-run this run: `cd packages/app && bun test tests/workflow/guard-parity.test.ts` -> 2 pass / 0 fail / 654 expect() calls — each rewritten guard's pre/post command evaluated over the same recorded var/artifact cross-product with identical pass/fail (guard-parity.test.ts:256 + baseline fixture). |
+| R3 | MET | Parity executed, not inspected: same command output above (2 pass, 654 expects, ~5s runtime). |
+| R4 | MET | Topology assertion at guard-parity.test.ts:248 (from/to/kind in declaration order identical to baseline) in the passing set; identical edge order + identical guard booleans ⇒ identical reachable state set. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R10 — Guard refactoring preserves routing semantics | MET | test | test `packages/app/tests/workflow/guard-parity.test.ts:256` runs pre-refactor vs post-refactor guard commands over the same recorded var/artifact state and asserts equal routing decisions, `:248` asserts unchanged topology; command `cd packages/app && bun test tests/workflow/guard-parity.test.ts` → 2 pass / 0 fail, 654 expect() calls (executed this run). |
+| Scenario: R10 — Guard refactoring preserves routing semantics | MET | test | Re-run 2026-09-17: guard-parity.test.ts:256 equal routing decisions over same recorded state + :248 unchanged topology — 2 pass / 0 fail / 654 expect(). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -125,12 +125,8 @@ that no test of the happy path catches. The harness is the regression guard for 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Every §Solution change-map row present in the diff: idea-pipeline named `ac_status` reads + updated `(warn)` comments, task-pipeline named `size_status`/`evidence_status`/`gate_status`/`fix_attempts`/`verdict`/`proof_digest` reads, verify→record jq one-`and`-per-line, verify→test-fix `V`→`verdict`, parity harness + baseline fixture NEW, proof-chain assertion update `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:412`. |
-| P4 | scope-creep | — | Modified paths (`config/workflows/idea-pipeline.yaml`, `config/workflows/task-pipeline.yaml`, `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts`, task doc) + new paths (`guard-parity.test.ts`, `fixtures/guard-parity-baseline.json`) all map to R1–R4 / the AC scenario / §Solution; no drive-by edits. |
-| P4 | evidence-rule-pass | — | The behavior-bearing AC row carries executable `test + command` evidence. |
-| P4 | composition-gate | — | `workflow validate` both pipelines `valid: true`; rewritten guards measure 5 logical commands (warn band), zero error-level composition findings (idea 18 warn / task 19 warn, all pre-existing or the intended 5-command guards). |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:bf6eb3f5accb62fb2d73fad8bc14e3c46a0465045f69890b20dfa549875d2ec3 |
+| P4 | design-conformance | — | Legibility rewrites with baseline-pinned parity harness match Design; no deviation. |
+| P4 | secua | — | Semantics-preserving rewrite proven by executed parity; no findings this run. |
 
 ### References
 

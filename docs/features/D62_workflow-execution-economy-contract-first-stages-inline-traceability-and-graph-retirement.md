@@ -203,8 +203,13 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 0873 | Gate a candidate workflow graph change on measured real-run data with a promotion deadline | done |
 | 0874 | Refactor transition guards for legibility while preserving routing semantics | done |
 | 0875 | Stop the idea pipeline from invalidating its own preparation evidence | done |
-| 0876 | Record the contract-violation pilot's first real-run routing decision | todo |
-| 0877 | Close out the D62 session-review findings that are neither fixed nor owned | todo |
+| 0876 | Record the contract-violation pilot's first real-run routing decision | done |
+| 0877 | Close out the D62 session-review findings that are neither fixed nor owned | done |
+| 0878 | Harden the ADR-076 promotion gate and resolve the pilot candidate through it | done |
+| 0879 | Close the inline trace delegate findings from 0868 review | done |
+| 0880 | Wire the feature verification caller into feature-lifecycle and drop the settled-tree precondition | done |
+| 0881 | Make the guard-parity harness enumerate both reference sets and catch spurious dependency edges | done |
+| 0882 | Refuse retiring workflow definitions that still have real non-dry runs | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

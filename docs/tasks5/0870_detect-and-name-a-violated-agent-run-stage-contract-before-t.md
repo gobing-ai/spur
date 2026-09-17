@@ -4,7 +4,7 @@ name: Detect and name a violated agent.run stage contract before the result is a
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.225Z
-updated_at: "2026-09-16T22:03:35.500Z"
+updated_at: "2026-09-17T18:34:17.905Z"
 feature_id: D62
 priority: P0
 tags:
@@ -83,15 +83,15 @@ Introduce the third `agent.run` stage outcome (ADR-118). A clean exit that viola
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Each declared post-condition is enforced at the result-acceptance boundary. `ContractName` vocabulary (`packages/app/src/workflow/actions/agent-run.ts:36`) names the three declarations; `answerFile` empty (`:623-633`), `expectFile` missing/empty (`:635-686`), and `requireDiff` empty/out-of-scope (`:698-732`) each route into `contractViolation`. Executable: `packages/app/tests/workflow/actions/agent-run.test.ts:2701,2741,2762,2784,2805` assert all five violation shapes. |
-| R2 | MET | Detection and naming happen before success: `contractViolation` (`agent-run.ts:163-191`) returns `ok:false` with `data.outcome: 'contract-violation'`, `data.contract`, and `data.observed` — a clean exit (exitCode 0) that missed its declared post-condition never reaches the success return. Executable: every contract-violation test asserts `result.ok === false` plus the `outcome/contract/observed` triple (`agent-run.test.ts:2712-2717,2754-2760,2773-2779,2794-2800,2816-2820`). |
-| R3 | MET | The action trace records the contract and observed value via `data.outcome/contract/observed` (`agent-run.ts:163-191`); the run log names both via the sink handler `onContractViolation` (`packages/app/src/observability/workflow-run-log-sink.ts:204-212`, subscribed at `:90`) emitting `contract-violation <contract> observed=<observed> node=… agent=…`. Executable: `packages/app/tests/workflow/actions/agent-run.test.ts:2716-2726` (trace payload) and `packages/app/tests/observability/workflow-run-log-sink.test.ts:388-429` (log line). |
-| R4 | MET | The `data.outcome: 'contract-violation'` discriminator separates a contract miss from an executor failure; the executor path keeps its bare-`ok:false` shape with no `outcome/contract/observed` fields (`agent-run.ts:744-766` failure construction). The typed `WorkflowAgentContractViolationEvent` (`packages/app/src/workflow/observability.ts:157`) and its event-map entry (`:272`) make the distinction part of the bus contract. Executable: `agent-run.test.ts:2843` asserts a non-zero executor exit has no discriminator; `:2712-2717` asserts the violation result carries it. |
-| R5 | MET | Executor failure semantics are unchanged: the non-zero/signal/dispatch-error path (`agent-run.ts:744-766`) is untouched by this task and returns the same bare `ok:false` with the same error-message framing (exit-code, signal, permission, dispatch). Executable: `agent-run.test.ts:2843` (`R5: a non-zero executor exit keeps its bare-failure shape (no contract discriminator)`) asserts `result.ok === false`, `error` contains `exited with code 3`, and no `outcome/contract/observed` fields, and no contract-violation event fires. |
+| R1 | MET | ContractName vocabulary + the three enforcement points re-read at `packages/app/src/workflow/actions/agent-run.ts:36,:623-633,:635-686,:698-732`; all five violation shapes asserted by agent-run.test.ts:2701,2741,2762,2784,2805 — re-run this run: `bun test tests/workflow/actions/agent-run.test.ts tests/observability/workflow-run-log-sink.test.ts` -> 155 pass / 0 fail / 433 expect. |
+| R2 | MET | `contractViolation` re-read at `agent-run.ts:163-191` returns ok:false with outcome:'contract-violation' + contract + observed before any success return; per-shape assertions :2712-2717 etc. in passing set. |
+| R3 | MET | Run-log sink re-read at `packages/app/src/observability/workflow-run-log-sink.ts:204-212`: emits `contract-violation <contract> observed=<observed> node=… agent=…`; sink test :388-429 and trace payload test :2716-2726 pass. |
+| R4 | MET | outcome discriminator separates contract miss from executor failure; executor path keeps bare ok:false (`agent-run.ts:744-766`); typed WorkflowAgentContractViolationEvent at observability.ts:157,:272; discriminator presence/absence asserted at :2712-2717 and :2843 (passing). |
+| R5 | MET | Executor failure path untouched, same bare ok:false framing; test :2843 asserts non-zero exit has no discriminator and no contract-violation event (passing). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R7 — An expensive stage validates its contract before the result is accepted | MET | test | Executable `test`: `packages/app/tests/workflow/actions/agent-run.test.ts:2701-2857` covers every declared contract's violation shape before success — `answerFile` empty (`:2701`), `expectFile` missing (`:2741`) and empty (`:2762`), `requireDiff` empty (`:2784`) and out-of-scope (`:2805`) — each asserting `result.ok === false` with the `outcome/contract/observed` triple, the non-violation pass (`:2728`), and the unchanged executor-failure shape (`:2843`). `packages/app/tests/observability/workflow-run-log-sink.test.ts:388-429` asserts the run log line naming the violated contract and observed value. Command (this stage): `bun test tests/workflow/actions/agent-run.test.ts tests/observability/workflow-run-log-sink.test.ts` → 155 pass / 0 fail (433 expect calls); `bun run typecheck` clean across all 7 workspaces; `biome check` on all 5 changed source/test files clean. |
+| Scenario: R7 — An expensive stage validates its contract before the result is accepted | MET | test | Re-run 2026-09-17: agent-run.test.ts:2701-2857 covers answerFile empty, expectFile missing/empty, requireDiff empty/out-of-scope — each ok:false with outcome/contract/observed before success; workflow-run-log-sink.test.ts:388-429 asserts the log line naming contract + observed. 155 pass / 0 fail. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -103,8 +103,8 @@ Introduce the third `agent.run` stage outcome (ADR-118). A clean exit that viola
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:b6a2d6d2b5b53533cba6220cf08a5c88a968f59f0e4e202fea5c6a5dde7917ad |
+| P4 | design-conformance | — | Contract vocabulary, discriminator shape, sink line format all match Design; no deviation on re-read. |
+| P4 | secua | — | Violation naming is deterministic; executor semantics unchanged; no findings this run. |
 
 ### References
 

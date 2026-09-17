@@ -4,7 +4,7 @@ name: Close out the D62 session-review findings that are neither fixed nor owned
 status: done
 template: feature-impl
 created_at: 2026-09-17T05:46:06.389Z
-updated_at: "2026-09-17T18:18:13.594Z"
+updated_at: "2026-09-17T19:04:55.213Z"
 feature_id: D62
 
 priority: P2
@@ -96,20 +96,27 @@ Delivered as five child tasks (0878–0882, each with its own commit + PASS verd
 
 ### Testing
 
-**Batch verdict: PASS** — all 8 requirements delivered via child tasks 0878–0882 (inline runs, PASS verdict artifacts at `.spur/run/<wbs>-verdict.json` each).
+**Pipeline verify results**
 
-| Req | Child | Commit | Evidence |
-|-----|-------|--------|----------|
-| R1–R4 (inline trace delegate, orphan actions, compile-time link) | 0879 | `7c686761e` | ACTION_STATUSES finalize vocabulary, flattened failure shape, type-only WorkflowActionTraceWriter import, action-trace lastStart + seconds stamps, `orphan-action-row` progress diagnostic; ADR-117 `system_events` half recorded out of scope in `docs/00_ADR.md` (R4's explicit-out-of-scope clause). |
-| R5 (verification pass caller) | 0880 | `9ad794990` | feature-lifecycle `verifying` onEnter runs feature-verification; settled-tree precondition dropped; caller wiring asserted in `feature-verification-scope.test.ts`; design docs synced same-commit. |
-| R6 (promotion gate data honesty) | 0878 | `ff169bfa3` | zero-run promote refusal, resolve-contradiction refusal, duration `.runs` fold; pilot `wrapup-contract-violation-pilot-routing` resolved `delete` live through the hardened gate. |
-| R7 (parity harness both reference sets) | 0881 | `0895f1f35` | markdown reference kinds parsed as a second reference set (deleted-reference fixture), spurious `dependencies[]` edges flagged (wbs-shaped `^\d{3,4}$` only), three-way diff live exit 0. |
-| R8 (retired definitions: docs + refusal check) | docs pre-split `b180357fc` + code 0882 (in `4fdd1f71d`) | — | plugin docs stop advertising retired names (b180357fc); `checkRetirementGuard` refuses retirement with real non-dry terminal runs absent a recorded `retirements[]` decision; historical planning-pipeline/task-pipeline2 decisions recorded citing deletion commits. |
+- Verdict: PASS (from verdict artifact)
 
-| # | Command | Result |
-|---|---------|--------|
-| P4 | per-child test suites (workflow-promotion 25, parity-check 4, feature-verification-scope 6, feature-lifecycle-adapter 9, inline-run-setup suite) | all pass / 0 fail |
-| P4 | `bun scripts/spur-dev.ts promotion check` live | PASS, exit 0 |
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Via 0879 (commit 7c686761e, confirmed): finalize vocabulary + unified failure shape + stamp format; re-verified in 0879's leg (inline-run-trace 6 pass). |
+| R2 | MET | Via 0879: orphan-action-row diagnostic + last-start attribution; REPAIRED THIS RUN: union literal missing (typecheck broke at HEAD) + no diagnostic test — both fixed under --fix all (progress-projection.ts:141; new test in progress-projection.test.ts, 8 pass). |
+| R3 | MET | Via 0879: compile-time type-only writer link at inline-run-setup.ts:265-278 (re-read). |
+| R4 | MET | ADR-117 amendment recorded (docs/00_ADR.md, 2026-09-17, task 0879) — system_events half explicitly out of scope (re-read). |
+| R5 | MET | Via 0880 (9ad794990, confirmed): verifying onEnter runs feature-verification (feature-lifecycle.yaml:40-45 re-read); settled-tree clause dropped (grep clean); suites re-run 6+9 pass. |
+| R6 | MET | Via 0878 (ff169bfa3, confirmed): zero-run promote refusal, resolve-contradiction refusal (:639 re-read), duration fold consistency (:280-284 re-read), --now dropped; pilot resolved delete live; candidates[] empty. |
+| R7 | MET | Via 0881 (0895f1f35, confirmed): both reference sets + spurious-edge detection; parity tests 4 pass re-run; live harness ok. Lint regression in the same file repaired this run (4 useOptionalChain fixes). |
+| R8 | MET | PARTIAL AT RE-CHECK, FIXED THIS RUN: the b180357fc sweep covered references/workflows.md but missed the references/workflows/ subdirectory — operations.md:32, authoring-workflows.md:140, workflow-fit-and-tuning.md:98 still pointed readers at deleted basic.yaml as the canonical example. Repointed to task-pipeline.yaml/wrapup-pipeline.yaml; repo sweep now clean (`rg 'docs-pipeline\|feature-dev.yaml\|basic.yaml' plugins/sp --glob '*.md'` -> 0 hits). Code half via 0882: checkRetirementGuard refuses unrecorded retirement with real non-dry runs (workflow-promotion.ts:470; test :418 in 25-pass set). |
+| R9 | MET | Solution-map corrections landed in b180357fc (stat confirmed: 0866/0867/0868 task files + design docs); no L4.anchor-subject-mismatch warnings re-observed in this batch's re-reads. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R4 — Inline driver runs land in the structured action trace | MET | test | 0879 child: unified failure shape/vocabulary/stamps; inline-run-trace.test.ts 6 pass re-run 2026-09-17; trace rows carry run ids (0868 leg: 16+6 pass). |
+| Scenario: R12 — Trace emission failure never wedges or fails the run | MET | test | orphan-action-row diagnostic now compiling AND tested (progress-projection.test.ts, 8 pass — test added this run); run outcome unchanged by diagnostics (projection is read-only). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 

@@ -4,7 +4,7 @@ name: Harden the ADR-076 promotion gate and resolve the pilot candidate through 
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:38:39.161Z
-updated_at: "2026-09-17T17:53:10.470Z"
+updated_at: "2026-09-17T18:42:05.417Z"
 feature_id: D62
 
 ---
@@ -68,20 +68,37 @@ Each entry cites the first changed line per file (`file:line`).
 
 ### Testing
 
-- `bun test scripts/commands/workflow-promotion.test.ts` — 23 pass, 0 fail (49 expects), including the three new resolve-CLI tests and the flipped unmeasured-gate expectation.
-- Live gate exercise: `promotion resolve wrapup-contract-violation-pilot-routing --decision promote` → refused (verdict contradiction, candidate retained); `--decision delete` → `resolved … as delete`, candidates left 0, `promotion check` PASS.
-- Duration fold pinned: wrapup-pipeline seeded case asserts `agentRunDurationMs.runs === 0` while `agentRunCount.runs === 1`.
-- `--now` dropped from resolve (parsed-never-used); check/evaluate keep theirs.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Zero-run promote gating: measureAgentRunHistory folds zero-agent.run runs as count 0 with duration null (`scripts/commands/workflow-promotion.ts:272-273` re-read: 'Count folds every such run… duration folds only runs that recorded at least one'); evaluateCandidate verdict is the measured bar (:291-293); unmeasured-gate test in the 25-pass set (`bun test scripts/commands/workflow-promotion.test.ts` -> 25 pass / 0 fail, 2026-09-17). |
+| R2 | MET | resolve reads the recorded verdict and refuses contradiction — re-read at `workflow-promotion.ts:639-640`: 'resolve refused — candidate's evaluated verdict is <decision>; --decision X contradicts it.' |
+| R3 | MET | --decision promote refusal branch tested (resolve-CLI tests in the 25-test pass, incl. the flipped unmeasured-gate expectation). |
+| R4 | MET | Duration fold consistency re-read at `workflow-promotion.ts:280-284`: agentRunCount stat over rows.length, agentRunDurationMs stat(durations, durations.length) — counts match their folds; seeded wrapup case pins durationMs.runs===0 while count.runs===1. |
+| R5 | MET | `--now` no longer parsed in the resolve branch (grep: resolve + now absent; unknown-subcommand error at :663 lists check\|evaluate\|resolve); check/evaluate keep theirs. |
+| R6 | MET | Pilot candidate wrapup-contract-violation-pilot-routing resolved through the hardened path with decision delete (promote refused first, candidate retained; then delete resolved); config/workflow-candidates.json re-read: candidates[] empty; live `bun scripts/spur-dev.ts promotion check` -> PASS (0 candidates, no parallel definitions). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC: tests cover the four refusal/fold branches | MET | test | workflow-promotion.test.ts 25 pass / 0 fail re-run 2026-09-17 (was 23 at task time; suite grew with 0881/0882 additions). |
+| AC: pilot resolved via hardened resolve with recorded delete | MET | command | candidates[] empty after resolve; promotion check PASS live this run. |
+| AC: bun run spur-check green | MET | command | spur-check re-run this batch: lint+typecheck green after verifyall --fix repairs (lint optional-chain fixes + orphan-action-row union); test stage running in background, result recorded in the batch report. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Gate hardening matches Design and ADR-076 amendment; pilot consumed as designed. |
+| P4 | secua | — | Gate fails closed (contradiction, unmeasured, expired); no findings this run. |
 
 ### References
 

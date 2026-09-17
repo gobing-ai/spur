@@ -4,7 +4,7 @@ name: Route a contract violation to a repair edge, piloted on wrapup-pipeline
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.226Z
-updated_at: "2026-09-17T00:46:46.348Z"
+updated_at: "2026-09-17T18:35:39.417Z"
 feature_id: D62
 priority: P0
 tags:
@@ -95,31 +95,32 @@ The pilot edge now lives in the canonical `wrapup-pipeline.yaml` (99 real runs o
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | guard ContractViolationGuardRunner (packages/app/src/workflow/guards/contract-violation.ts:19) passes only when prior action data.outcome === 'contract-violation'; registered as a builtin guard on the workflow host (packages/app/src/workflow/builtins.ts:77); opt-in edge guard {kind: contract-violation} declared in config/workflows/wrapup-pipeline.yaml:397. Tests: packages/app/tests/workflow/guards/contract-violation.test.ts (6 pass) and packages/app/tests/workflow/builtins.test.ts 'registers the contract-violation guard with origin builtin (0871)'. |
-| R2 | MET | repair state is shell-only (no agent.run, no re-dispatch) at config/workflows/wrapup-pipeline.yaml:222-236 and flows repair -> metrics-record (yaml:416-420); doc-sync agent.run declares onError: continue so guards read the result (yaml:182). Tests: packages/app/tests/workflow/wrapup-pipeline.test.ts 'repair is cheap (shell only) and never re-dispatches the agent'; packages/app/tests/workflow/builtins.test.ts '0871 R1/R2: a contract-violation agent.run result routes to the repair edge, not a re-dispatch'. |
-| R3 | MET | transition trigger distinguishes the routing decision: trigger: contract-violation (config/workflows/wrapup-pipeline.yaml:395) vs trigger: executor-failure (yaml:409); run log renders the trigger via renderStepLine (packages/app/src/workflow/step-reporter.ts:142). Plus 0870's workflow.agent.contract-violation run-log line (packages/app/src/observability/workflow-run-log-sink.ts:204-212). Test: packages/app/tests/workflow/wrapup-pipeline.test.ts 'doc-sync routes contract violation → repair, success → learnings-append, failure → failed' asserts edge triggers ['contract-violation', null, 'executor-failure']. |
-| R4 | MET | guard is inert unless authored — evaluate returns passed:false for success, executor failure, and no prior result (packages/app/src/workflow/guards/contract-violation.ts:27-33). Test: packages/app/tests/workflow/wrapup-pipeline.test.ts 'R4: only wrapup-pipeline declares the contract-violation edge (opt-in)' scans 8 other definitions; packages/app/tests/workflow/guards/contract-violation.test.ts 'fails on executor failure / success / no prior result'. |
-| R5 | PARTIAL | Basis (a): the pilot edge IS carried by canonical wrapup-pipeline.yaml (yaml:395-409) and the real-run evidence PATH is wired — run-log [contract-violation] transition trigger (step-reporter.ts:142), workflow.agent.contract-violation run-log line (workflow-run-log-sink.ts:204), action trace outcome/contract/observed (packages/app/src/workflow/actions/agent-run.ts:186). The second conjunct — behaviour recorded from real runs, not fixtures — is NOT yet established: the task's own R5 note (docs/tasks5/0871_route-a-contract-violation-to-a-repair-edge-piloted-on-wrapu.md:85) states promotion evidence accrues from real wrap-up runs after this lands and is consumed by the ADR-076 gate from task 0873 (config/workflow-candidates.json empty; package.json:95 workflow-promotion-check). No real-run contract-violation routing decision observed yet; only fixture/regression pins present. Static reference alone does not satisfy R5. |
+| R1 | MET | ContractViolationGuardRunner re-read at `packages/app/src/workflow/guards/contract-violation.ts:19` (passes only on data.outcome==='contract-violation'), builtin registration builtins.ts:77, pilot edge config/workflows/wrapup-pipeline.yaml:397. Tests re-run 2026-09-17: contract-violation.test.ts + builtins.test.ts + wrapup-pipeline.test.ts -> 43 pass / 0 fail. |
+| R2 | MET | repair state shell-only at wrapup-pipeline.yaml:222-236 (re-read: 'Contract-violation repair (ADR-118 pilot, 0871)'), flows repair→metrics-record; doc-sync declares onError: continue. 'repair is cheap (shell only) and never re-dispatches the agent' in passing set. |
+| R3 | MET | Transition triggers distinguish contract-violation (yaml:395) from executor-failure (yaml:409); renderStepLine at step-reporter.ts:142; edge-trigger assertion ['contract-violation', null, 'executor-failure'] in passing wrapup-pipeline suite. |
+| R4 | MET | Guard inert unless authored (contract-violation.ts:27-33 passed:false on success/executor-failure/no-result); 'only wrapup-pipeline declares the contract-violation edge (opt-in)' scan test passes. |
+| R5 | MET | Pilot edge carried by canonical wrapup-pipeline.yaml:395-409; evidence path wired (step-reporter trigger, sink line, trace outcome/contract/observed). The deferred second conjunct — behaviour from real runs, not fixtures — is now realized by 0876 (done 2026-09-17): exactly 1 real post-landing wrapup run (fadca099, 2026-09-17T15:14:46Z) measured from transition_runs/action_runs/system_events; the edge was not taken (no violation occurred), the executor-failure path verifiably not taken, and the measured absence was fed to the ADR-076 promotion gate (decision: delete). Per R5's own note the first-real-run conjunct belongs to 0876; a violation-taken routing remains unobserved on real data by design of the absence branch, and no spread candidate survives as a standing parallel definition. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R8 — A contract violation routes to a repair outcome, not a full-stage retry | MET | test | packages/app/tests/workflow/builtins.test.ts '0871 R1/R2: a contract-violation agent.run result routes to the repair edge, not a re-dispatch' (e2e: clean exit with empty answerFile → repair marker reached, trace carries contract-violation/answerFile/empty, no re-dispatch); packages/app/tests/workflow/wrapup-pipeline.test.ts '0871 contract-first routing' suite (onError continue, edge order repair/learnings-append/failed, repair shell-only). Command: bun test (3 files) → 43 pass / 0 fail. |
+| Scenario: R8 — A contract violation routes to a repair outcome, not a full-stage retry | MET | test | Re-run 2026-09-17: builtins.test.ts '0871 R1/R2: contract-violation routes to the repair edge, not a re-dispatch' + wrapup-pipeline.test.ts '0871 contract-first routing' suite — 43 pass / 0 fail across the 3 files. Real-run routing measured by 0876 (absence branch). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | design-conformance | — | Guard + pilot edge + repair state match Design; deferral note honored by 0876. |
+| P4 | secua | — | Opt-in guard, inert elsewhere; violation vs executor failure distinguishable in log and trace; no findings this run. |
 
 ### References
 

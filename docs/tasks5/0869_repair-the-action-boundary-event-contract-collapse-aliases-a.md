@@ -4,7 +4,7 @@ name: "Repair the action-boundary event contract: collapse aliases and correlate
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.224Z
-updated_at: "2026-09-16T21:45:21.836Z"
+updated_at: "2026-09-17T18:33:34.014Z"
 feature_id: D62
 priority: P1
 tags:
@@ -87,15 +87,15 @@ Collapse the action-boundary aliases to the verb-form pair and thread the dispat
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `dropRetiredActionBoundaryAliases` filters engine-native `workflow.action.start`/`.done` at the bridge (packages/app/src/services/event-bridge.ts:57) leaving the adapter's verb-form `workflow.action.started`/`.finished` as the single start/finish pair; test drops retired aliases and passes started/finished through (packages/app/tests/services/event-bridge.test.ts:218-237) |
-| R2 | MET | Retired names deleted from BASE_CATALOG and SYSTEM_EVENT_PRESENTERS rather than aliased (packages/app/src/services/event-names.ts:347); test asserts they are absent from names and presenters (packages/app/tests/services/event-names.test.ts:195) and filter drops them off the bus (packages/app/tests/services/event-bridge.test.ts:218) |
-| R3 | MET | `runCorrelation` computed once and threaded into both the invoke bridge and AgentExecutionLifecycle (packages/app/src/services/agent-service.ts:1002-1016); `withInvokeRouting` readCorrelation seam stamps the non-null run id onto invoke payloads lacking one (packages/app/src/services/event-bridge.ts:113-120); AgentRunCorrelation.runId is a required string; test stamps correlation into agent.invoke.start and never overwrites caller-supplied (packages/app/tests/services/event-bridge.test.ts:154-177) |
-| R4 | MET | Consumers migrated to verb-form: server wiring test (apps/server/tests/upstream-system-events-wiring.test.ts:174), web components and system-events-tab tests (apps/web/tests/modules/observability/), system-event-envelope test (packages/app/tests/services/system-event-envelope.test.ts:21); runtime consumers already read verb-form (apps/cli/src/commands/workflow.ts:844, packages/app/src/workflow/trace-writer.ts:21, packages/app/src/observability/workflow-run-log-sink.ts:84); grep confirms no live source reads the retired names |
+| R1 | MET | `packages/app/src/services/event-bridge.ts:57` re-read: RETIRED_ACTION_BOUNDARY_ALIASES drops engine-native workflow.action.start/.done, leaving verb-form started/finished as the single pair; drop/pass-through asserted by event-bridge.test.ts:218-237 in the 70-test pass (`bun test tests/services/event-bridge.test.ts tests/services/event-names.test.ts tests/services/system-event-envelope.test.ts` -> 70 pass 0 fail). |
+| R2 | MET | Retired names deleted from catalog/presenters (`packages/app/src/services/event-names.ts:347`); absence asserted by event-names.test.ts:195 (passing). Grep this run: `workflow.action.(start\|done)` outside tests appears only as verb-form started/finished consumers (`apps/cli/src/commands/workflow.ts:855`, `packages/app/src/workflow/observability.ts:265,510`) or the retirement comment itself. |
+| R3 | MET | `event-bridge.ts:113-120` re-read: withInvokeRouting stamps readCorrelation() onto invoke payloads lacking one, never overwrites caller-supplied; runCorrelation threaded at `packages/app/src/services/agent-service.ts:1002-1016`; correlation stamping tests event-bridge.test.ts:154-177 pass. |
+| R4 | MET | Consumers migrated to verb-form (server wiring test upstream-system-events-wiring.test.ts:174/192, web observability tests, system-event-envelope.test.ts:21 in passing set); runtime consumers re-grepped this run read started/finished only. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R5 — Each workflow action emits exactly one start event and one finish event | MET | test | event-bridge.test.ts:218-237 (dropRetiredActionBoundaryAliases drops `workflow.action.start`/`.done`, passes `started`/`finished`/`node.enter` through); event-names.test.ts:195 (retired aliases absent from names and presenters); upstream-system-events-wiring.test.ts:192 (retired `workflow.action.start` never persisted) |
-| Scenario: R6 — Agent invocation events carry the run they belong to | MET | test | event-bridge.test.ts:154-177 (correlation stamped onto agent.invoke.start lacking one; caller-supplied correlation never overwritten); agent-service.ts:1002 (runCorrelation computed once and threaded); tap extracts nested.runId (packages/app/src/services/system-event-tap.ts:202) |
+| Scenario: R5 — Each workflow action emits exactly one start event and one finish event | MET | test | 70 pass 0 fail re-run 2026-09-17: event-bridge.test.ts:218-237 (aliases dropped, started/finished pass through), event-names.test.ts:195 (retired names absent from names+presenters), upstream wiring test asserts retired workflow.action.start never persisted. |
+| Scenario: R6 — Agent invocation events carry the run they belong to | MET | test | event-bridge.test.ts:154-177 (correlation stamped onto agent.invoke.start lacking one; caller-supplied never overwritten) passing; agent-service.ts:1002 computes runCorrelation once and threads it. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -107,8 +107,8 @@ Collapse the action-boundary aliases to the verb-form pair and thread the dispat
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:17943dc2488402d0aa2aa834093ee43a13de3c33119f62e473f3e51572f67958 |
+| P4 | design-conformance | — | Alias collapse at the bridge + correlation seam match Design; no deviation on re-read. |
+| P4 | secua | — | No silent duplicates remain; correlation never overwrites caller data; no findings this run. |
 
 ### References
 

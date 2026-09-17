@@ -4,7 +4,7 @@ name: Gate a candidate workflow graph change on measured real-run data with a pr
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.227Z
-updated_at: "2026-09-16T23:57:43.953Z"
+updated_at: "2026-09-17T18:38:42.614Z"
 feature_id: D62
 priority: P2
 tags:
@@ -88,14 +88,14 @@ Make the ADR-076 amendment promotion gate operable (feature D62): a candidate wo
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Candidate is a record (config/workflow-candidates.json:2, empty candidates array), never a standing parallel <name>2.yaml; shadow-run inputs replay recorded action_runs/runs via measureAgentRunHistory (scripts/commands/workflow-promotion.ts:254); test scripts/commands/workflow-promotion.test.ts:126 proves recorded-run replay excludes dry-run + non-terminal rows |
-| R2 | MET | WorkflowCandidateVerdict carries agentRunCount + agentRunDurationMs (scripts/commands/workflow-promotion.ts:77) and evaluateCandidate (workflow-promotion.ts:277) cites them in reason; measured real-run data observed from invoking tree DB /Users/robin/xprojects/spur-new/.spur/spur.db (read-only; this worktree .spur/ is gitignored and empty): task-pipeline n=209 runs median 1 agent.run/run, duration median 738339.5 ms/run (command) |
-| R3 | MET | deadline named at creation (validateCandidate workflow-promotion.ts:91 requires YYYY-MM-DD); isPastDeadline workflow-promotion.ts:178; resolve promote/delete workflow-promotion.ts:461 (promote refuses until canonical count lands); checkWorkflowPromotion workflow-promotion.ts:366 fails expired candidate; tests :98, :188, :285 |
-| R4 | MET | findParallelDefinitions workflow-promotion.ts:341 + checkWorkflowPromotion workflow-promotion.ts:366; observed `bun scripts/spur-dev.ts promotion check` → "workflow-promotion: PASS (0 candidate(s), no parallel definitions)" and findParallelDefinitions("config/workflows") → [] (command) |
+| R1 | MET | Candidate is a record in config/workflow-candidates.json (candidates[] re-read empty — no standing parallel definition); shadow-run replays recorded action_runs/runs via measureAgentRunHistory (`scripts/commands/workflow-promotion.ts:254`); replay excludes dry/non-terminal rows (workflow-promotion.test.ts:126). Re-run: `bun test scripts/commands/workflow-promotion.test.ts` -> 25 pass / 0 fail (2026-09-17). |
+| R2 | MET | WorkflowCandidateVerdict carries agentRunCount + agentRunDurationMs (workflow-promotion.ts:77) and evaluateCandidate (:277) cites them in reason; verdict-citation tests :188 in passing set. |
+| R3 | MET | deadline required at creation by validateCandidate (workflow-promotion.ts:91); isPastDeadline :178; resolve promote/delete :461; expiry/parallel failure tests :98,:188,:285 pass. The 0876 pilot candidate followed this lifecycle to decision=delete and was removed. |
+| R4 | MET | findParallelDefinitions (:341) + checkWorkflowPromotion (:366); re-run this run: `bun scripts/spur-dev.ts promotion check` -> 'workflow-promotion: PASS (0 candidate(s), no parallel definitions)'. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R9 — A candidate graph change is promoted or deleted on measured real-run data | MET | test | test scripts/commands/workflow-promotion.test.ts:188 (verdict cites measured median 4 + duration 600, promotes fewer / deletes equal-or-more), :126 (measured real-run history), :221 (parallel-definition detection), :285 (catalogue check fails expired/parallel); command `bun scripts/spur-dev.ts promotion check` → "workflow-promotion: PASS (0 candidate(s), no parallel definitions)"; command measureAgentRunHistory on /Users/robin/xprojects/spur-new/.spur/spur.db → task-pipeline n=209 median 1 agent.run/run duration 738339.5 ms |
+| Scenario: R9 — A candidate graph change is promoted or deleted on measured real-run data | MET | test | workflow-promotion.test.ts:188 (verdict cites measured count+duration; promotes fewer / deletes equal-or-more), :126 (measured real-run history), :221 (parallel detection), :285 (catalogue gate fails expired/parallel) — 25 pass / 0 fail re-run; live gate `promotion check` PASS with no parallel definitions. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -107,8 +107,8 @@ Make the ADR-076 amendment promotion gate operable (feature D62): a candidate wo
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:c9e6c2044bb00e905d776a053df66e9acdc76339d0a45d1b2e2b6e28aa765af0 |
+| P4 | design-conformance | — | Record-based candidates + measured verdict + deadline lifecycle match ADR-076 amendment design; no deviation. |
+| P4 | secua | — | No parallel definitions remain; gate fails closed on expiry; no findings this run. |
 
 ### References
 

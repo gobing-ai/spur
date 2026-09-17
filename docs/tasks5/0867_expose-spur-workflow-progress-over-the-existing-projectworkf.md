@@ -4,7 +4,7 @@ name: Expose spur workflow progress over the existing projectWorkflowProgress pr
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.223Z
-updated_at: "2026-09-17T17:19:24.853Z"
+updated_at: "2026-09-17T18:31:20.839Z"
 feature_id: D62
 priority: P1
 tags:
@@ -96,16 +96,16 @@ Wiring only: `spur workflow progress <run-id>` exposes the projection that alrea
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/commands/workflow.ts:1382-1414` registers `workflow progress <run-id>` with `--json` and emits `projectWorkflowProgress(runId, { db, projectRoot })` verbatim; test `apps/cli/tests/commands/workflow.test.ts:2628` deep-equals the `--json` payload against a direct projection call; fresh command this run: `workflow progress smoke-0867 --json` → exit 0, `{schemaVersion:1, runId:"smoke-0867", workflow:"progress-flow", status:"completed", currentState:"done", ...}` |
-| R2 | MET | `apps/cli/src/commands/workflow.ts:1463-1523` (`formatWorkflowProgress`) renders `currentState`, each `states[].actions[].attempts[]`, and `nextTransitions[]` from the projection object; test `apps/cli/tests/commands/workflow.test.ts:2670` asserts `currentState:'mid'`, attempt `{actionRunId:'ar-1', status:'running', durationMs:null}` and the `mid → done [blocked]` next transition; fresh command this run printed `Current state: done` plus per-attempt lines `attempt <id>: done ok=yes 0ms` |
-| R3 | MET | `git diff --stat` shows zero `packages/**` paths — all derivation stays in `packages/app/src/workflow/progress-projection.ts`; the verb body is a single call at `apps/cli/src/commands/workflow.ts:1393-1396` plus rendering; test `apps/cli/tests/commands/workflow.test.ts:2628` asserts the CLI payload equals the projection apart from `projectedAt` |
-| R4 | MET | `apps/cli/src/commands/workflow.ts:1494-1503` renders unanswered values as `unknown` (`durationMs === null ? 'unknown'`, `attempt.ok === null ? 'unknown'`); test `apps/cli/tests/commands/workflow.test.ts:2670` (running run: exit 0, `definitionDigest:null`, `definition-digest-missing`, `durationMs:null`) and `apps/cli/tests/commands/workflow.test.ts:2721` (unresolvable definition: exit 0, `Current state: unknown`, `States: none recorded`, `definition-unavailable`); fresh command this run: complete run exit 0 with no fabricated values |
-| R5 | MET | `apps/cli/src/commands/workflow.ts:1398-1402` routes the projection's `orphan-row` diagnostic through `writeJsonError(..., 'NOT_FOUND')` + `setExitCode(1)`; test `apps/cli/tests/commands/workflow.test.ts:2741` asserts exit 1, empty stdout, plain + `--json-envelope` `{ok:false, error:{code:'NOT_FOUND'}}`; fresh command this run: `workflow progress nope` → exit 1, stderr `Run nope not found.`, `--json --json-envelope` → `{"ok":false,"error":{"code":"NOT_FOUND","message":"Run nope not found."}}` |
+| R1 | MET | `apps/cli/src/commands/workflow.ts:1382-1414` re-read: `progress` command registers and calls projectWorkflowProgress verbatim; test `apps/cli/tests/commands/workflow.test.ts:2628` deep-equals payload vs direct projection — re-run this run: 4 pass / 0 fail (`bun test tests/commands/workflow.test.ts -t progress`). |
+| R2 | MET | `apps/cli/src/commands/workflow.ts:1463-1523` (formatWorkflowProgress) re-read: renders currentState, per-state actions/attempts, nextTransitions; test at :2670 covered by the same 4-test pass. |
+| R3 | MET | Verb body re-read at `apps/cli/src/commands/workflow.ts:1393-1402` — thin transport comment (D62/0867 R3, ADR-021) and a single projection call; no packages/** logic added by this verb. |
+| R4 | MET | `apps/cli/src/commands/workflow.ts:1494-1503` re-read: missing data rendered as `States: none recorded` / unknown values; running/incomplete tests at :2670/:2721 pass. |
+| R5 | MET | Unknown-run path at `apps/cli/src/commands/workflow.ts:1398-1402` routes orphan-row diagnostic to writeJsonError NOT_FOUND + exit 1; test :2741 in passing set. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R3 — A progress read surface exposes the existing projection | MET | test | `apps/cli/tests/commands/workflow.test.ts:2628` (`--json` equals a direct `projectWorkflowProgress` call modulo `projectedAt`; names current state, per-action attempts, next transitions); `packages/**` absent from `git diff --stat`; fresh scratch-project command this run: `workflow progress smoke-0867 --json` exit 0 emitting the projection |
-| Scenario: R11 — The progress surface degrades gracefully on an unknown or incomplete run | MET | test | `apps/cli/tests/commands/workflow.test.ts:2670` (running run exits 0, gaps `unknown`/`null`) and `apps/cli/tests/commands/workflow.test.ts:2741` (unknown id exits 1 with named `NOT_FOUND`, never an empty success); fresh scratch-project command this run: unknown id → exit 1 `Run nope not found.` |
+| Scenario: R3 — A progress read surface exposes the existing projection | MET | test | `bun test tests/commands/workflow.test.ts -t progress` -> 4 pass 0 fail (2026-09-17), covering --json projection equality (:2628) and rendering (:2670); CLI adds no projection logic (anchor :1393-1402 re-read). |
+| Scenario: R11 — The progress surface degrades gracefully on an unknown or incomplete run | MET | test | Same 4-test pass covers running-run gaps (:2670), unresolvable definition (:2721), and unknown id exit 1 + NOT_FOUND (:2741). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

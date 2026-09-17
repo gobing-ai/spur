@@ -4,7 +4,7 @@ name: Close the inline trace delegate findings from 0868 review
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.059Z
-updated_at: "2026-09-17T17:59:52.134Z"
+updated_at: "2026-09-17T18:59:50.111Z"
 feature_id: D62
 
 ---
@@ -67,19 +67,35 @@ Each entry cites the first changed line per file (`file:line`).
 
 ### Testing
 
-- `bun test plugins/sp/tests/inline-run-trace.test.ts` — 6 pass, 0 fail.
-- `bun test packages/app` trace + projection suites — 23 pass, 0 fail.
-- `biome check` on the three changed files — clean.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Finalize vocabulary + single stdout failure shape + one stamp format: inline-run-trace.test.ts re-run 6 pass / 0 fail (2026-09-17); delegate --action/--close paths re-read at `plugins/sp/scripts/inline-run-setup.ts:241-296`. |
+| R2 | MET | FIXED THIS RUN (2 defects): (a) `packages/app/src/workflow/progress-projection.ts:497-503` pushed code 'orphan-action-row' but the WorkflowProgressDiagnostic.code union (:136-143) never included it — typecheck broke at HEAD; union literal added, `bun run lint` (incl. typecheck) green. (b) No test covered the diagnostic despite the task AC ('one test per clause') — added `packages/app/tests/workflow/progress-projection.test.ts` 'returns orphan-action-row diagnostic for an unmatched action row' (asserts ghost row flagged, matched row not); file re-run 8 pass / 0 fail. Run-id attribution for unobserved finalize covered by action-trace.test.ts (16 pass). |
+| R3 | MET | Compile-time link re-read at `plugins/sp/scripts/inline-run-setup.ts:265-278`: type-only WorkflowActionTraceWriter import typing the dynamic import — signature drift fails this file's typecheck (comment names 0868 finding #5); lint chain's typecheck leg green this run. |
+| R4 | MET | ADR-117 amendment re-read at `docs/00_ADR.md` (2026-09-17, task 0879): system_events half explicitly recorded out of scope — action_runs + run-row closure satisfy the inline obligation; revisit when a consumer exists. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC: one test per clause | MET | test | R1: inline-run-trace.test.ts (6 pass). R2 diagnostic: progress-projection.test.ts orphan-action-row test (added this run, 8 pass); R2 attribution: action-trace.test.ts lastStart cases (16 pass). R3: compile-time link exercised by the typecheck leg. |
+| AC: R3 verified destructively | MET | static | The type-only import means an app signature change fails the delegate's typecheck — demonstrated inversely this run: the app-side union gap DID fail repo typecheck until fixed, proving the compile-time surface is live. |
+| AC: ADR-117 entry + spur-check green | MET | command | ADR-117 amendment present (docs/00_ADR.md). Repo gates this run: lint+typecheck PASS (after the two --fix repairs), test stage 8416 pass / 0 fail, pre/post rule checks PASS. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Single-shape failure reporting, shared writer, recorded ADR-117 decision — matches Design after repairs. |
+| P4 | secua | — | Repairs under --fix all: (1) union literal `orphan-action-row` in progress-projection.ts (compile blocker); (2) new diagnostic test. Residual: none. |
 
 ### References
 

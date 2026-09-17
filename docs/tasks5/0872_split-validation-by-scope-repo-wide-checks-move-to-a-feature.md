@@ -4,7 +4,7 @@ name: "Split validation by scope: repo-wide checks move to a feature-scoped veri
 status: done
 template: feature-impl
 created_at: 2026-09-16T10:45:25.226Z
-updated_at: "2026-09-16T22:50:32.109Z"
+updated_at: "2026-09-17T19:05:51.063Z"
 feature_id: D62
 priority: P1
 tags:
@@ -97,17 +97,17 @@ Classification is the deliverable and the risky part — a check moved to the wr
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `docs/design/workflow-execution-economy.md:123-147` §4.1 classifies every per-task-pipeline check with an explicit invariant and scope: 7 repo-wide (`link-check`, `transition-shim-check`, `script-contract-check`, `inline-pipeline-parity-check`, `dependency-drift-check`, `importer-schema-check`, `history-surface-freeze-check`) vs task-local (`lint`, `test-pre-check`, `test`, `test-post-check`); the `adr-supersession` working-tree defect is called out under `test`. |
-| R2 | MET | `package.json:81` `spur-check` runs only `lint && test-pre-check && test && test-post-check` — none of the 7 repo-wide scripts; `config/workflows/task-pipeline.yaml:127` `qualityGateCmd` stays `bun run spur-check`; test `plugins/sp/tests/feature-verification-scope.test.ts:51` asserts spur-check contains no repo-wide check and no `test-repo-wide`/`spur-check-feature` (passing). |
-| R3 | MET | `config/workflows/feature-verification.yaml:36-70` is the new shell-only pass running `${vars.verificationCmd}` (`bun run spur-check-feature`) once per feature; `package.json:83` `spur-check-feature` composes all 7 repo-wide checks + `test-repo-wide`; command this run `bun run spur-check-feature` → all 7 checks PASS + 7 repo-wide tests pass; test `plugins/sp/tests/feature-verification-scope.test.ts:60,71` passes. |
-| R4 | MET | `config/workflows/feature-lifecycle.yaml:71` `verifying→done` guard is `test "$(cat .spur/run/$featureId-feature-verification.status)" = PASS && $spurBin feature check $featureId --strict --as done` (fails closed on missing/corrupt/FAIL); test `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:240` (R4 0872) denies the hop with a missing verdict and with a `FAIL` verdict, allows only after `PASS` (9/9 passing). |
-| R5 | MET | `package.json:77` task-local `test` glob is `./apps/cli ./apps/server ./apps/web ./packages ./plugins ./scripts` (excludes `repo-wide-tests`); test `plugins/sp/tests/feature-verification-scope.test.ts:66` asserts `test` excludes and `test-repo-wide` includes the relocated tree; command `bun run spur-check` → 8355 tests pass, 0 fail, lint + pre/post rules clean with no feature-pass consultation. |
-| R6 | MET | No check authored: `git show HEAD:apps/cli/tests/adr-supersession.test.ts` diff vs `repo-wide-tests/adr-supersession.test.ts` = only the 2-line repo-root anchor (`apps/cli/tests → repo` → `repo-wide-tests → repo`); `spur-check-feature` (`package.json:83`) composes the 7 pre-existing scripts, no new checker body added. |
+| R1 | MET | Scope classification at `docs/design/workflow-execution-economy.md:123-147` (7 repo-wide vs task-local lint/test-pre/test/test-post) stands; package.json:81-84 re-read: spur-check = lint+test-pre-check+test+test-post-check; spur-check-feature composes the repo-wide set + test-repo-wide. |
+| R2 | MET | `package.json:81` re-read — spur-check carries no repo-wide script; task-pipeline qualityGateCmd stays bun run spur-check; feature-verification-scope.test.ts:51 asserts the absence — re-run `bun test tests/feature-verification-scope.test.ts` -> 6 pass / 0 fail (2026-09-17). |
+| R3 | MET | `config/workflows/feature-verification.yaml:36-45` re-read: shell-only verify state running ${vars.verificationCmd} = bun run spur-check-feature; live re-run this batch: `bun run spur-check-feature` -> exit 0 (all repo-wide checks + 7 repo-wide tests PASS). |
+| R4 | MET | `config/workflows/feature-lifecycle.yaml:71` re-read: verifying→done guard requires the pass's PASS status file + feature check --strict --as done; feature-lifecycle-adapter.test.ts:240 (R4 0872) denies missing/FAIL verdict, allows PASS — re-run 9 pass / 0 fail. |
+| R5 | MET | `package.json:77` test glob excludes repo-wide-tests; scope test :66 asserts the exclusion — passing; full task-local chain re-run this batch (lint/typecheck green after --fix repairs; test stage result in batch report). |
+| R6 | MET | No new checker authored: spur-check-feature composes 7 pre-existing scripts (package.json:83 re-read); relocation-only diff confirmed in original verify and unchanged since. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R13 — Repo-wide checks run once per feature, not once per task | MET | test | test `plugins/sp/tests/feature-verification-scope.test.ts:51` (spur-check runs no repo-wide check) + `:60` (spur-check-feature owns every repo-wide check) + `:71` (shell-only pass, no `agent.run`) and `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:240` (verifying→done denied until PASS); command `bun run spur-check-feature` → all 7 repo-wide checks + 7 repo-wide tests PASS, and `config/workflows/feature-lifecycle.yaml:71` gates done on that PASS. |
-| Scenario: R14 — A task-local check stays on the per-task pipeline | MET | test | test `plugins/sp/tests/feature-verification-scope.test.ts:66` (task-local `test` excludes `repo-wide-tests`; `test-repo-wide` owns it) + `:51` (spur-check-new byte-identical to spur-check); command `bun run spur-check` → 8355 tests pass, 0 fail, lint + `test-pre-check`/`test-post-check` rules clean, no repo-wide script or feature-pass file consulted. |
+| Scenario: R13 — Repo-wide checks run once per feature, not once per task | MET | test | feature-verification-scope.test.ts:51,:60,:71 + feature-lifecycle-adapter.test.ts:240 — 6+9 pass re-run 2026-09-17; live `bun run spur-check-feature` exit 0; feature-lifecycle.yaml:71 gates done on the pass's PASS. |
+| Scenario: R14 — A task-local check stays on the per-task pipeline | MET | test | scope test :66 (task-local test excludes repo-wide-tests) + :51 (spur-check-new byte-identical) passing; package.json:77,81,82 re-read consistent. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -119,12 +119,8 @@ Classification is the deliverable and the risky part — a check moved to the wr
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | Every §Solution change map row is present in the diff and matches its claim (feature-verification.yaml NEW, package.json split, feature-lifecycle guard, relocated test, docs, census 8→9, comments). |
-| P4 | scope-creep | — | All 12 modified + 3 new paths map to R1–R6, the AC scenarios, or the §Solution doc/test/comment updates; no drive-by edits. |
-| P4 | evidence-rule-pass | — | Both behavior-bearing AC rows carry executable `test + command` evidence. |
-| P4 | cli-golden-path-present | — | Fresh `bun run spur-check-feature` and `bun run spur-check` golden-path commands captured this run (both exit 0). |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:6b99a450131951deffe2fd4287b54e54975830fe4b895b2c8458c3a80e8896b9 |
+| P4 | design-conformance | — | Scope split + feature-verification pass + lifecycle guard match ADR-119 design; no deviation. |
+| P4 | secua | — | Done gate fails closed on missing/corrupt/FAIL verdict; no findings this run. |
 
 ### References
 

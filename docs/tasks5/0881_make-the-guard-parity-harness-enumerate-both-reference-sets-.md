@@ -4,7 +4,7 @@ name: Make the guard-parity harness enumerate both reference sets and catch spur
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:41:13.770Z
-updated_at: "2026-09-17T18:07:01.261Z"
+updated_at: "2026-09-17T19:02:35.504Z"
 feature_id: D62
 
 ---
@@ -54,19 +54,32 @@ Each entry cites the first changed line per file (`file:line`).
 
 ### Testing
 
-- `bun test plugins/sp/tests/inline-pipeline-parity-check.test.ts` — 4 pass, 0 fail (new: deleted-reference caught; spurious dependency edge caught).
-- Live harness run: exit 0, both reference sets + YAML union agree, 0 spurious edges.
-- `bunx biome format` clean on both touched files.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Both reference sets enumerated: `plugins/sp/scripts/inline-pipeline-parity-check.ts` parses markdown reference kinds as a second set; deleted-reference fixture test in `plugins/sp/tests/inline-pipeline-parity-check.test.ts` — re-run 4 pass / 0 fail (2026-09-17). |
+| R2 | MET | Spurious dependencies[] edges flagged (wbs-shaped ^\d{3,4}$ only); 'spurious dependency edge caught' test in the 4-test pass; live harness re-run: `bun run inline-pipeline-parity-check` -> ok (9 actions, 4 guards, 9 workflows, both reference sets; 0 spurious edges). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC: harness test — deleted reference caught; spurious edge caught | MET | test | inline-pipeline-parity-check.test.ts 4 pass / 0 fail re-run 2026-09-17. |
+| AC: bun run spur-check green | MET | command | FIXED THIS RUN: the file carried 4 lint/complexity/useOptionalChain warnings that failed `bun run lint` (--error-on-warnings) at HEAD — biome --write --unsafe applied (4 behavior-neutral optional-chain rewrites), lint chain (biome + typecheck across 7 workspaces) green after; parity harness still ok post-fix. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Two-reference-set enumeration + spurious-edge detection match the design; lint fix is style-only. |
+| P4 | secua | — | Repair: 4 useOptionalChain rewrites in inline-pipeline-parity-check.ts (harness behavior re-verified green after). Residual: none. |
 
 ### References
 

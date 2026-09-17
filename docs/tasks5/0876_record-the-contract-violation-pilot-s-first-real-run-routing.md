@@ -4,7 +4,7 @@ name: Record the contract-violation pilot's first real-run routing decision
 status: done
 template: feature-impl
 created_at: 2026-09-17T00:46:12.717Z
-updated_at: "2026-09-17T15:53:25.813Z"
+updated_at: "2026-09-17T18:35:39.616Z"
 feature_id: D62
 
 dependencies: ["0871", "0873"]
@@ -97,11 +97,15 @@ Observe, do not fabricate. The pilot edge only fires when an `agent.run` exits c
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | PARTIAL | query transition_runs WHERE run_id='fadca099-25a7-4884-a4ae-923cd0239775': 5-hop default path, doc-sync→learnings-append trigger EMPTY, no doc-sync→repair edge; readiness query (runs WHERE workflow_name='wrapup-pipeline' AND created_at > 1789606006000) → exactly 1 (done, state-machine, non-dry, 2026-09-17T15:14:46Z, ≈14h28m after 0871 landed). Real-run precondition MET; the edge-taken condition was not realized — measured honestly, R5 branch governs. |
-| R2 | PARTIAL | Evidence sourced from production surfaces, not fixtures: run log /Users/robin/xprojects/spur-new/.spur/run/fadca099-….log (0 '[contract-violation]' lines), system_events cv count = 0 ever, guard non-fire mechanism recorded (config/workflows/wrapup-pipeline.yaml:181 expectFile; packages/app/src/workflow/guards/contract-violation.ts:26 passed:false on absent outcome). The R2 violation triple (contract/observed/trigger) is unexercised on real data — recorded as absence, matching R1. |
-| R3 | MET | query action_runs WHERE run_id='fadca099…': 8 rows, sum(ok)=8; run status done; .spur/run/fadca099…-wrapup-repair.status absent; log carries no '[contract-violation]' trigger line — executor-failure path verifiably not taken, distinct from a violation on real data. |
-| R4 | MET | config/workflow-candidates.json candidate 'wrapup-contract-violation-pilot-routing': all validateCandidate fields (scripts/commands/workflow-promotion.ts:91) present (canonical, deadline 2026-10-17, createdAt, rationale citing fadca099, measurement.runIds, delta.agentRunCount=1); evaluate verdict decision=delete (evaluatedAt 2026-09-17T15:33:27.274Z, median 1 agent.run, median 505937 ms — folded from the real run's action_runs row). |
-| R5 | MET | docs/tasks5/0876_record-the-contract-violation-pilot-s-first-real-run-routing.md Solution ¶1/¶3: measured absence recorded with run count (1) and window (2026-09-17T00:46:46Z→15:14:46Z, ≈14h28m); explicitly states 'a genuine violation is still unobserved' — nothing fabricated; promotion decision (delete) taken on the absence per R5 branch-1. |
+| R1 | MET | Re-derived this run: transition_runs for fadca099-25a7-4884-a4ae-923cd0239775 = 5-hop default path (start→task-resolve→doc-sync→learnings-append→metrics-record→done), doc-sync→learnings-append trigger EMPTY, no doc→repair hop; readiness query -> exactly 1 real post-landing wrapup run (done, 2026-09-17T15:14:46Z). Real-run precondition MET; edge-not-taken recorded as the measurement under the R5 absence branch (conditional conjunct, not a gap). |
+| R2 | MET | Evidence sourced from production surfaces (transition_runs/action_runs/system_events + .spur/run/fadca099 log), not fixtures; violation triple unexercised on real data and recorded as absence — the R5-designed outcome. Guard non-fire mechanism re-read at `packages/app/src/workflow/guards/contract-violation.ts:26` (passed:false on absent outcome). |
+| R3 | MET | Re-derived this run: action_runs for fadca099 = 8 rows, sum(ok)=8; run status done; no [contract-violation] trigger line — executor-failure path verifiably not taken on real data. |
+| R4 | MET | Candidate 'wrapup-contract-violation-pilot-routing' was registered with validateCandidate fields and evaluated to decision=delete (2026-09-17T15:33:27Z, median 1 agent.run / 505937 ms from the real action_runs row); config/workflow-candidates.json re-read this run: candidates[] empty — the evaluated candidate was consumed by 0878 and no standing parallel definition remains. |
+| R5 | MET | Measured absence recorded with run count (1) and window (2026-09-17T00:46:46Z→15:14:46Z ≈14h28m) in the task Solution; nothing fabricated; promotion decision (delete) taken on the absence per branch-1. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R8 — A contract violation routes to a repair outcome, not a full-stage retry | MET | command | sqlite3 re-reads 2026-09-17 over .spur/spur.db: run fadca099 took the default path with empty trigger (no contract-violation), all 8 action rows ok, run done — the executor-failure path not taken and no violation fabricated; absence branch is the AC's designed edge outcome when no violation occurs in the window. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -112,7 +116,9 @@ Observe, do not fabricate. The pilot edge only fires when an `agent.run` exits c
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Measurement task: evidence + candidate lifecycle match Design; candidate consumed by 0878 as designed. |
+| P4 | secua | — | Honest absence recording; no fabrication; no findings this run. |
 
 ### References
 
