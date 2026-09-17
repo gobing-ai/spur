@@ -137,8 +137,8 @@ runner (see [validation-and-extension.md](validation-and-extension.md)).
 Order matters for both guards and conditions: **the first that passes wins.** Put the discriminating
 guard before the unconditional fallback (`always` / no-guard edge). For multi-condition gates (doctor
 + task check, quality gate + attempt cap), prefer a **soft probe** shell that writes PASS|FAIL and
-always exits 0, then branch with ordered status-file guards — see shipped `basic.yaml` /
-`task-pipeline.yaml` (more reliable than `action-ok` alone when more than one condition decides the edge).
+always exits 0, then branch with ordered status-file guards — see shipped
+`task-pipeline.yaml` / `wrapup-pipeline.yaml` (more reliable than `action-ok` alone when more than one condition decides the edge).
 
 ## Template variables
 

@@ -28,9 +28,9 @@ Authored workflows default to a project-local directory, grouped by purpose:
 ```
 
 A `--file <path>` argument overrides the default. Keep one workflow per file, named for what it does
-(`approval.yaml`, `import-file.yaml`), not for its mode. The canonical example
-(`basic.yaml`) lives here; copy real schema shapes from it rather than from a
-half-remembered snippet.
+(`approval.yaml`, `import-file.yaml`), not for its mode. Copy real schema shapes from a
+retained definition such as `task-pipeline.yaml` rather than from a half-remembered
+snippet.
 
 ## Sub-procedure: mode-selection gate
 

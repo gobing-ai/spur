@@ -95,7 +95,7 @@ and orders capabilities, it does not contain them** (ADR-069).
       between them are one judgment step.
 - [ ] **Soft status-file probe over repeated probing.** Run the expensive check once in an action
       that always exits 0 and writes its verdict to a run-scoped file; branch with ordered cheap
-      guards that read that file. One subprocess instead of one per branch — the `basic.yaml` and
+      guards that read that file. One subprocess instead of one per branch — the
       `task-pipeline.yaml` quality-gate idiom.
 - [ ] **Order guards cheapest-discriminating-first.** The first passing guard wins, so a `test -f`
       ahead of a `spur … --json` parse skips the expensive call on the common path.
