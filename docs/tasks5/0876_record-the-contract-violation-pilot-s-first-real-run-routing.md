@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Record the contract-violation pilot's first real-run routing decision
-status: todo
+status: testing
 template: feature-impl
 created_at: 2026-09-17T00:46:12.717Z
-updated_at: "2026-09-17T06:39:28.917Z"
+updated_at: "2026-09-17T15:50:28.781Z"
 feature_id: D62
 
 dependencies: ["0871", "0873"]
@@ -23,9 +23,9 @@ This task closes the accrual. The evidence path is already wired by 0871 and 087
 
 - [ ] R1. At least one real (non-dry, non-fixture) `wrapup-pipeline` run recorded after 0871 landed (2026-09-17T00:46Z) shows the pilot edge taken: transition trigger `contract-violation` on the `doc-sync` to `repair` edge.
 - [ ] R2. The recorded evidence names the violated contract, the observed value, and the transition trigger, taken from the run log (`.spur/run/<run-id>.log`) and the structured trace (`action_runs.result_json`, `system_events`), not from a regression fixture.
-- [ ] R3. The recorded evidence shows the executor-failure path was NOT taken for that run, so the two outcomes remain distinguishable on real data.
-- [ ] R4. The measurement is fed to the ADR-076 promotion gate as its real-run input: for each graph change that spreads the contract-first pattern to another `agent.run` stage, register a candidate in `config/workflow-candidates.json` (schema enforced by `validateCandidate`, `scripts/commands/workflow-promotion.ts:91`; `deadline` named at creation) citing this task's finding in `rationale`, then produce the verdict with `bun scripts/spur-dev.ts promotion evaluate <id>`. `promotion check` is only the repo-wide catalogue gate wired into `spur-check-feature`; it consumes no measurement.
-- [ ] R5. Absence is recorded, never fabricated: if post-landing wrapup traffic exists but shows no contract violation, record the measured absence (run count and observation window) as the finding and take the promotion decision on it. If no post-landing run exists at all, the task is not yet observable and stays open — a vacuous absence is not a measurement.
+- [x] R3. The recorded evidence shows the executor-failure path was NOT taken for that run, so the two outcomes remain distinguishable on real data.
+- [x] R4. The measurement is fed to the ADR-076 promotion gate as its real-run input: for each graph change that spreads the contract-first pattern to another `agent.run` stage, register a candidate in `config/workflow-candidates.json` (schema enforced by `validateCandidate`, `scripts/commands/workflow-promotion.ts:91`; `deadline` named at creation) citing this task's finding in `rationale`, then produce the verdict with `bun scripts/spur-dev.ts promotion evaluate <id>`. `promotion check` is only the repo-wide catalogue gate wired into `spur-check-feature`; it consumes no measurement.
+- [x] R5. Absence is recorded, never fabricated: if post-landing wrapup traffic exists but shows no contract violation, record the measured absence (run count and observation window) as the finding and take the promotion decision on it. If no post-landing run exists at all, the task is not yet observable and stays open — a vacuous absence is not a measurement.
 
 ### Acceptance Criteria
 
@@ -72,34 +72,45 @@ Observe, do not fabricate. The pilot edge only fires when an `agent.run` exits c
 
 ### Solution
 
-**Outcome: NOT YET OBSERVABLE — Plan step 0 stop, honestly recorded (R5).** As of 2026-09-17T06:39:06Z, ~5.9h after 0871 landed (2026-09-17T00:46:46Z, confirmed by `docs/tasks5/0871_*.md:132` done transition), the main-tree database `/Users/robin/xprojects/spur-new/.spur/spur.db` (queried strictly read-only via `file:...?mode=ro`) holds **zero** `wrapup-pipeline` runs created after the landing. Readiness query: `SELECT count(*) FROM runs WHERE workflow_name='wrapup-pipeline' AND created_at > 1789606006000` (epoch-ms for 2026-09-17T00:46:46Z) → `0`. Latest wrapup run is `6c11f7e9-4f2b-4d57-b00f-11b01ead1faf` (done, 2026-09-15T01:05:51Z) — pre-landing. With no post-landing run of any status, terminal or otherwise, the pilot edge's real-run behaviour is structurally unobservable in this window; per R5 a vacuous absence is not a measurement, so this task stays open.
+**Outcome: MEASURED — the pilot's first real-run routing decision is recorded (R5 measured-absence branch, taken on real traffic).** The prior record below (run `2a50a0aa`, 2026-09-17T06:39Z window: zero post-landing wrapup runs, NOT YET OBSERVABLE) is superseded: its named resume condition was met when wrapup-pipeline run `fadca099-25a7-4884-a4ae-923cd0239775` (wrap of task 0871 itself) landed at 2026-09-17T15:14:46Z — the only terminal non-dry `wrapup-pipeline` run created after 0871 landed (2026-09-17T00:46:46.342Z), an observation window of ≈14h28m (readiness query: `SELECT count(*) FROM runs WHERE workflow_name='wrapup-pipeline' AND created_at > 1789606006000` → `1`; mode `state-machine`, `$.dryRun` null, status `done`).
 
-**Evidence surfaces cross-checked (all read-only, no fabrication):**
+**Routing decision (R1): no contract violation on the first real run — the pilot edge was not taken.** Transition trace (read-only `transition_runs`): `start→task-resolve→doc-sync→learnings-append→metrics-record→done`; `doc-sync→learnings-append` at 2026-09-17T15:23:13Z with no transition trigger — the default edge. No `doc-sync→repair` transition exists for the run.
 
-- `runs` table: 99 wrapup runs total (68 done / 31 failed, all `mode='state-machine'`, i.e. non-dry), matching the refinement Q&A figures; max `created_at` 2026-09-15T01:05:51Z.
-- DB freshness control: the database does record post-landing data — exactly one run after the threshold (a `task-lifecycle` row at 2026-09-17T05:51:42Z, this task's own backlog→todo). Zero wrapup rows is therefore a measured fact, not a stale-import artifact.
-- Run logs: no `*.log` under `/Users/robin/xprojects/spur-new/.spur/run/` modified after 2026-09-17T00:46Z.
-- Structured trace: zero `workflow.agent.contract-violation` rows in `system_events` and zero `contract-violation` matches in `action_runs.result_json` across all history — nothing exists that could be misread as a real routing decision.
+**Guard non-fire mechanism (why the pilot stayed inert):** doc-sync's `agent.run` (`config/workflows/wrapup-pipeline.yaml:181`) declares `expectFile: .spur/run/<runId>-wrapup-learnings.md` as its post-condition with `onError: continue`, so transition guards read the result after a clean exit. `ContractViolationGuardRunner` (`packages/app/src/workflow/guards/contract-violation.ts:26`) passes iff `lastActionResult.data.outcome === 'contract-violation'`; on this run the agent (executor `pi-zai`, tier standard, exitCode 0) produced the declared capture (`.spur/run/fadca099-…-wrapup-learnings.md` exists), `data.outcome` is absent (success carries no outcome discriminator — 0870), so the guard returned `passed:false` and the default edge ran. The capture was appended to `.spur/memory/learnings.md` by `learnings-append`.
 
-**Discriminator status (R1–R3):** with zero post-landing runs there is no `contract-violation` routing on the `doc-sync`→`repair` edge and no executor-failure path taken — both remain unmet on real data and stay open with the task. No run id / contract / observed value can be recorded because none was produced.
+**Discriminator status (R2/R3): executor-failure path not taken; nothing fabricated.** All 8 `action_runs` rows for the run have `ok=1` (doc-sync `agent.run` included); zero `workflow.agent.contract-violation` events in `system_events` across all history; no `.spur/run/fadca099-…-wrapup-repair.status` file (the repair state never ran); the run log carries no `[contract-violation]` trigger line. The trace triple `outcome`/`contract`/`observed` remains unexercised on real data — a genuine violation is still unobserved; this record is the honest absence on the traffic that exists, with run count and window as the measurement.
 
-**Deliberately not done:**
+**Promotion decision taken (R4): candidate `wrapup-contract-violation-pilot-routing` registered and evaluated.** `config/workflow-candidates.json` gains the ADR-118 pilot graph change as a candidate conforming to `validateCandidate` (`scripts/commands/workflow-promotion.ts:91`): `canonical: wrapup-pipeline`, `deadline: 2026-10-17`, `measurement.runIds: [fadca099-…]` (the real-run replay input), `delta.agentRunCount: 1` — the repair edge adds no model hop (shell-only repair, ADR-118 forbids re-dispatch), so the projected total equals the canonical's declared count (1 `agent.run`, `config/workflows/wrapup-pipeline.yaml:181`). Verdict from `bun scripts/spur-dev.ts promotion evaluate` (measured read-only from the main-tree DB via the `--db` flag; `readAgentRunHistory` opens `bun:sqlite` `{readonly:true}`, `scripts/commands/workflow-promotion.ts:197`): **delete** — "candidate projects 1 agent.run action(s), not fewer than the canonical wrapup-pipeline count of 1 (1 real run(s), median 1 agent.run action(s)/run, median 505937 ms/run) — ADR-076 rejected a graph adding a model hop". Reading: the ADR-076 cost bar does not reward the pilot; its continued presence rests on ADR-118's routing-correctness rationale, now carried in the candidate `rationale` with this measurement; disposition (resolve per the verdict, or hold as the pattern-spread precedent for 0873's gate) belongs to the D62 owner before the deadline. The promotion decision is thereby taken and recorded rather than left implicit.
 
-- No promotion candidate written to `config/workflow-candidates.json` and no `promotion evaluate` run: R4 consumes a real-run measurement as its input; none exists yet (Plan step 4 presupposes the step 0 gate passed).
-- Plan step 5 (0871 R5 status note) not written: its purpose is that 0871's PARTIAL conjunct "reads as closed-by-0876", which has not happened; the conjunct legitimately remains PARTIAL until real traffic accrues. Resume condition: re-run this observation once the next terminal non-dry `wrapup-pipeline` run lands after 2026-09-17T00:46:46Z.
+**Change map:**
+- `config/workflow-candidates.json` — one candidate appended (`verdict` filled by `evaluate` at 2026-09-17T15:33:27Z); no other file touched outside the corpus record.
+- `docs/tasks5/0876_record-the-contract-violation-pilot-s-first-real-run-routing.md` — this Solution/Testing record (CLI-gated, body-only).
+- No production code changed: this is an observation task; the deliverable is the measured record plus the taken promotion decision.
 
 ### Testing
 
-- **Measurement query validated:** first threshold computation produced epoch **seconds** (1789606006) against an epoch-**ms** column, which would have returned all 99 rows as false post-landing hits; caught on inspection, re-run with `1789606006000` → count 0. Unit correction documented so the zero is not a unit artifact.
-- **Triangulated across three independent surfaces:** (1) `runs` SQL count post-threshold = 0; (2) filesystem: `find /Users/robin/xprojects/spur-new/.spur/run -name '*.log' -newermt '2026-09-17 00:46:00'` → empty; (3) `system_events` (`workflow.agent.contract-violation` = 0 rows ever) and `action_runs.result_json` (`contract-violation` = 0 matches ever). All three agree with the NOT-OBSERVABLE reading.
-- **DB-freshness control:** confirmed the database records post-landing data (one `task-lifecycle` run at 2026-09-17T05:51:42Z), ruling out a stale-import explanation for the zero.
-- **Observation-set sanity:** all 99 wrapup runs are `mode='state-machine'` (non-dry), terminal statuses 68 done / 31 failed — matches the refinement Q&A (99 recorded / 60 engine-run), so the readiness query targets the same set the task's Plan defines.
-- **Read-only discipline:** every query used `file:/Users/robin/xprojects/spur-new/.spur/spur.db?mode=ro`; no writes to the main tree; the only working-tree change is this task's corpus sections (written via `task update --section --from-file`).
-- **No code path changed** → no targeted tests required (observation task; `mutationPolicy` effectively none — the corpus record is the deliverable).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | PARTIAL | query transition_runs WHERE run_id='fadca099-25a7-4884-a4ae-923cd0239775': 5-hop default path, doc-sync→learnings-append trigger EMPTY, no doc-sync→repair edge; readiness query (runs WHERE workflow_name='wrapup-pipeline' AND created_at > 1789606006000) → exactly 1 (done, state-machine, non-dry, 2026-09-17T15:14:46Z, ≈14h28m after 0871 landed). Real-run precondition MET; the edge-taken condition was not realized — measured honestly, R5 branch governs. |
+| R2 | PARTIAL | Evidence sourced from production surfaces, not fixtures: run log /Users/robin/xprojects/spur-new/.spur/run/fadca099-….log (0 '[contract-violation]' lines), system_events cv count = 0 ever, guard non-fire mechanism recorded (config/workflows/wrapup-pipeline.yaml:181 expectFile; packages/app/src/workflow/guards/contract-violation.ts:26 passed:false on absent outcome). The R2 violation triple (contract/observed/trigger) is unexercised on real data — recorded as absence, matching R1. |
+| R3 | MET | query action_runs WHERE run_id='fadca099…': 8 rows, sum(ok)=8; run status done; .spur/run/fadca099…-wrapup-repair.status absent; log carries no '[contract-violation]' trigger line — executor-failure path verifiably not taken, distinct from a violation on real data. |
+| R4 | MET | config/workflow-candidates.json candidate 'wrapup-contract-violation-pilot-routing': all validateCandidate fields (scripts/commands/workflow-promotion.ts:91) present (canonical, deadline 2026-10-17, createdAt, rationale citing fadca099, measurement.runIds, delta.agentRunCount=1); evaluate verdict decision=delete (evaluatedAt 2026-09-17T15:33:27.274Z, median 1 agent.run, median 505937 ms — folded from the real run's action_runs row). |
+| R5 | MET | docs/tasks5/0876_record-the-contract-violation-pilot-s-first-real-run-routing.md Solution ¶1/¶3: measured absence recorded with run count (1) and window (2026-09-17T00:46:46Z→15:14:46Z, ≈14h28m); explicitly states 'a genuine violation is still unobserved' — nothing fabricated; promotion decision (delete) taken on the absence per R5 branch-1. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
 
 ### References
 
@@ -114,4 +125,6 @@ Observe, do not fabricate. The pilot edge only fires when an `agent.run` exits c
 ### History
 
 - 2026-09-17T05:51:42.010Z backlog → todo (system)
+- 2026-09-17T15:36:03.809Z todo → wip (system)
+- 2026-09-17T15:50:28.781Z wip → testing (system)
 
