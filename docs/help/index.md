@@ -120,6 +120,12 @@ limitations.
 — the board is a module hub: add a self-contained React view with one directory and zero
 wiring. Covers the `WebModule` contract, the RPC/UI seams, and what not to wire by hand.
 
+**Environment variables (the complete wired-in inventory):**
+➡️ **[Environment Variables](./environment_variables.md)**
+— every env var the product reads, grouped by contract type (deployment plane, config overrides,
+execution policy, agent selection, invocation contracts, parent→child), the retired names, and
+the ADR-120 gate for adding a new one.
+
 **End-to-end pipeline architecture (canonical reference):**
 ➡️ **[`docs/design/e2e-workflow-for-system-development.md`](../design/e2e-workflow-for-system-development.md)**
 — the 8 workflow YAMLs, the 26-step linear map, the HITL/auto-mode taxonomy, the gate

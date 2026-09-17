@@ -1806,3 +1806,32 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Retains:** ADR-072 (one canonical pipeline per lifecycle boundary — the feature-scoped pass owns
   a boundary no existing pipeline owns, rather than duplicating one).
 - **Detail:** [workflow execution economy](design/workflow-execution-economy.md) §4.
+
+## ADR-120: Environment Variables Are a Restricted External Surface Behind the ts-utils Gateway
+
+- **Status:** Accepted · **Date:** 2026-09-16
+- **Decision:** Treat environment variables as a managed external surface, not a free config plane.
+  A new variable is added **only** when a real external contract requires one — the deployment plane
+  (`DATABASE_URL`, `PORT`, `HOST`, `NODE_ENV`, CORS), host-tool / parent→child process contracts set
+  by tooling, or CI invocation contracts — and the reason is recorded where the variable is defined.
+  Design-time and development-time options are **constants in source**; runtime options belong in the
+  **spur project config** (`.spur/config.yaml`, `bootstrap.options`) or the **spur global config
+  file**, resolved by the single loader (ADR-027) — never in the process environment. Every access
+  **MUST** go through the `@gobing-ai/ts-utils` utility functions (`getEnvVar` / `getEnvVars` /
+  `setEnvVar` / `removeEnvVar`), re-exported via `@gobing-ai/spur-config`; direct `process.env` /
+  `Bun.env` access is forbidden everywhere else. Raw access is confined to two gateway zones:
+  `packages/config/src/**` (the sole application owner) and the dependency-free plugin mirror
+  `plugins/sp/scripts/env.ts`. The user-settable set is documented in `.env.example`.
+- **Why:** Environment access bypasses types, layering, and test isolation, and unmanaged growth
+  turns the process environment into a shadow config plane that races the canonical config files and
+  leaks into spawned children. A hard gateway with a single owner makes the surface auditable — one
+  rule (`env-var-hygiene`, error severity, zero exclusions) fails any read outside the zones — while
+  ts-utils ownership keeps the gateway identical across Spur and every ts-libs consumer.
+- **Consequence:** knobs migrate from env to config/constants as their need changes (e.g. the 0902
+  timeout family moved from `SPUR_*_TIMEOUT_MS` to `bootstrap.options`), tool-set contracts stay
+  documented but unset by hand, and `.env.example` carries only genuinely user-settable variables.
+- **Retains:** ADR-027 (one loader owns config resolution); ADR-091 (the `SPUR_JSON_ENVELOPE`
+  flag+env contract remains a sanctioned process contract); ADR-112 (deadlines are upstream config
+  policy, not env).
+- **Detail:** `packages/utils/src/env.ts` (gateway); `packages/config/src` (re-export);
+  `config/rules/boundary/env-var-hygiene.yaml`; `.env.example`.
