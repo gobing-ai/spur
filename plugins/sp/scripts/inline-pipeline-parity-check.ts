@@ -101,14 +101,14 @@ function checkTaskDependencyEdges(root: string, errors: string[]): number {
         }
         for (const e of entries) {
             const m = /^(\d+)_.*\.md$/.exec(e);
-            if (!m || !m[1]) continue;
+            if (!m?.[1]) continue;
             wbss.add(m[1]);
             const raw = readFileSync(join(abs, e), 'utf8');
             const fm = /^---\n([\s\S]*?)\n---/.exec(raw);
-            if (!fm || !fm[1]) continue;
+            if (!fm?.[1]) continue;
             const deps: string[] = [];
             const inline = /^dependencies:\s*\[(.*)\]/m.exec(fm[1]);
-            if (inline && inline[1]) {
+            if (inline?.[1]) {
                 for (const part of inline[1].split(',')) {
                     const w = part.trim().replace(/["']/g, '');
                     if (w !== '') deps.push(w);
@@ -118,7 +118,7 @@ function checkTaskDependencyEdges(root: string, errors: string[]): number {
                 if (block) {
                     for (const line of fm[1].split('\n')) {
                         const item = /^\s*-\s*["']?(\d+)["']?\s*$/.exec(line);
-                        if (item && item[1]) deps.push(item[1]);
+                        if (item?.[1]) deps.push(item[1]);
                     }
                 }
             }
