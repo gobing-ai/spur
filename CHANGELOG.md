@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.3.86] - 2026-09-17
+
+### Added
+
+- sp: I12/0887 — idea-pipeline robustness: verbatim idea artifact, requirement inventory + coverage gate, task-check-aware stage prompts, --from-file, inline trace startedAt (ac17dfa72)
+- ac: number task AC items AC<n> and bind via (req: R<n>) (8f6a5d6f4)
+- sp: H13 dev-refactor command — coordinator skill, taste contracts, surfaces, dogfood (e2dbbbc63)
+- parity-harness: 0881 — enumerate both reference sets (constant + driver markdown) and catch spurious dependencies[] edges (0895f1f35)
+- feature-verification: 0880 — wire the verifying-entry caller into feature-lifecycle, drop the settled-tree precondition, sync design docs same-commit (9ad794990)
+
+### Fixed
+
+- sp: surface idea-coverage reason beside status and fail closed on checker crash (883512164)
+- satisfy pre-check rules and workflow validator caps from 0887 implement diff (b1773494a)
+- sp: I12/0887 — idea-pipeline robustness: verbatim idea artifact, requirement inventory, coverage gate, checker-aware stage prompts (ea05c0c09)
+- parity-harness: 0881 — apply useOptionalChain lint fixes failing bun run lint (1e89b3a05)
+- inline-trace: 0879 — add orphan-action-row to the progress diagnostic union and cover it with a test (547deb9e8)
+- sp: fix issues with idea pipeline (4fdd1f71d)
+- inline-trace: 0879 — unify trace-failure stamp/stdout shapes, done|failed finalize vocabulary, orphan-action-row diagnostic, last-start attribution fallback, compile-time writer type link; ADR-117 system_events half out of scope (7c686761e)
+- promotion: 0878 — ADR-076 gate refuses zero-run promote, resolve reads the evaluated verdict, duration fold counts folded durations, drop unused resolve --now; pilot candidate resolved delete through the gate (ff169bfa3)
+
+### Changed
+
+- docs: accept ADR-121 session-pinned dispatch decision and add features B6/B7/B8/G66 + tasks 0888-0897 (cf44cbefa)
+- task: record 0887 pipeline evidence and sync feature I12 to active (fcdf17295)
+- tasks: refresh verification evidence for refactor tasks 0883-0886 (6fc040a71)
+- design: clarify task-local AC numbering binding in planning records (14eab2d3e)
+- scripts: capture workflow-promotion cli console output in tests (94f440543)
+- sp: record H13 batch learnings and wrapup metrics (20d1c85c3)
+- sp: wrap feature H13 — §1.3.3 stub, dogfood ledger row, status transitions (d907440f1)
+- merge 'sp/runall-h13-604b08' — feature H13 dev-refactor (4 tasks done) into main (ea2c58eed)
+- tasks: D62 verifyall --force — re-verify all 17 tasks PASS, refresh feature table (67bceb808)
+- builtins: sweep the leaked failed-agent partial artifact after the e2e (9579d74f4)
+- sp: 0877 R8 — stop pointing readers at retired basic.yaml (883077b15)
+- tasks: attach feature I12 to task 887 (9cf16ff2f)
+- tasks: close D62 parent tracker 0877 — evidence table for R1–R9 across 0878–0882; 0882 testing traceability note (fe4dfc149)
+- tasks: add new tasks to close D62 and to add H13 (8f8f6c4a7)
+- tasks: 0877 disposition — remainder split into D62 children 0878-0882 (4854eec03)
+
 ## [0.3.85] - 2026-09-16
 
 ### Added
