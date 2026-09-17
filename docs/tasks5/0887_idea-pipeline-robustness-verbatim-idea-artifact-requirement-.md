@@ -4,8 +4,9 @@ name: "idea-pipeline robustness: verbatim idea artifact, requirement inventory +
 status: todo
 template: issue
 created_at: 2026-09-17T18:10:46.487Z
-updated_at: "2026-09-17T18:11:20.403Z"
+updated_at: "2026-09-17T18:19:34.425Z"
 
+feature_id: I12
 ---
 
 ## 0887. idea-pipeline robustness: verbatim idea artifact, requirement inventory + coverage gate, task-check-aware stage prompts, --from-file, inline trace startedAt
@@ -39,12 +40,15 @@ Evidence of the remaining defects (all read-only checks in the review session):
 
 ### Acceptance Criteria
 
-- [ ] Given a long multi-ask idea, when `/sp:dev-idea` runs inline or headless, then `.spur/run/<runId>-idea-input.md` equals the input byte-for-byte and every stage prompt names that file.
-- [ ] Given an idea with N explicit asks, when discovery completes, then the eval report's `## Requirement inventory` lists N `I<n>` items with source fragments.
-- [ ] Given an AC set that leaves an inventory item uncovered and not deferred, when the coverage gate runs under `profile=auto`, then the run routes back to ac-generate within the retry cap and the status file names the uncovered item.
-- [ ] Given `/sp:dev-idea --from-file draft.md`, when the command starts, then the idea text is the file body and `--from-file` is documented in the glossary and § idea.
-- [ ] Given an inline `--action --duration-ms 120000` record, when `spur workflow trace --json` renders it, then `completedAt - startedAt` equals 120000 ms.
-- [ ] Given the YAML change, when `build:bundle`, the contract baseline refresh, `inline-pipeline-parity-check`, `validate-commands` and the plugin tests run, then all pass.
+- [ ] R1 — Idea text persists verbatim as a run artifact in both drivers
+- [ ] R2 — Discovery emits a numbered requirement inventory
+- [ ] R3 — Coverage gate routes uncovered inventory items back to ac-generate
+- [ ] R4 — Stage prompts carry the checker rules and the create envelope
+- [ ] R5 — dev-idea accepts --from-file
+- [ ] R6 — Inline trace action rows carry a consistent span
+- [ ] R7 — Generated bundle and baselines stay green
+
+Task-local checks: `spur task check` on a freshly created batch shows no L4 gate-language or uncovered-scenario findings; `spur workflow trace <run> --json` action rows satisfy `completedAt - startedAt == durationMs`.
 
 ### Q&A
 
