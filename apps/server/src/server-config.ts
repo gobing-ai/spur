@@ -1,3 +1,4 @@
+import { buildConfigFromEnv, getAppOptions, type SpurConfig } from '@gobing-ai/spur-config';
 import type { LoggingOptions } from '@gobing-ai/ts-infra/application';
 
 /**
@@ -16,23 +17,34 @@ export interface ServerBootConfig {
 }
 
 /**
- * Build the portable application configuration from environment bindings.
+ * Build the portable application configuration from environment bindings plus the
+ * `bootstrap.options` runtime-option bag from `.spur/config.yaml` (task 0902).
+ *
+ * Option keys (all optional, under `bootstrap.options`):
+ * - `diagnosticEvents: boolean` — persist diagnostic-tier system events (was `SPUR_DIAGNOSTIC_EVENTS`)
+ * - `eventRetentionDefault: number` — default ledger quota (was `SPUR_EVENT_RETENTION_DEFAULT`)
+ * - `eventRetentionPrefixes: Record<string, number>` — per-prefix quotas (was `SPUR_EVENT_RETENTION_<NS>`)
+ *
+ * Log level comes from the config schema's own `logging.level` (gateway env
+ * `SPUR_LOG_LEVEL`, zod-validated with default `info`) — not a bootstrap option.
  */
-export function serverBootstrapConfig(env: Record<string, string | undefined>): ServerBootConfig {
+export function serverBootstrapConfig(
+    env: Record<string, string | undefined>,
+    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined = null,
+): ServerBootConfig {
     const isTest = env.NODE_ENV === 'test';
-    const diagnosticEvents = env.SPUR_DIAGNOSTIC_EVENTS === '1' || env.SPUR_DIAGNOSTIC_EVENTS === 'true';
-    const retentionDefault = parseRetentionNumber(env.SPUR_EVENT_RETENTION_DEFAULT);
-    const retentionPrefixes = parseRetentionPrefixes(env);
+    const retentionDefault = readNonNegativeIntOption(spurConfig, 'eventRetentionDefault');
+    const retentionPrefixes = readRetentionPrefixes(spurConfig);
 
     return {
-        logging: { enabled: !isTest, level: (env.SPUR_LOG_LEVEL as LoggingOptions['level']) ?? 'info', console: false },
+        logging: { enabled: !isTest, level: buildConfigFromEnv(env).logging.level, console: false },
         telemetry: { enabled: false },
         events: {
             enabled: true,
-            diagnostic: diagnosticEvents,
+            diagnostic: readBooleanOption(spurConfig, 'diagnosticEvents', false),
             retention: {
                 ...(retentionDefault !== undefined ? { default: retentionDefault } : {}),
-                ...(Object.keys(retentionPrefixes).length > 0 ? { prefixes: retentionPrefixes } : {}),
+                ...(retentionPrefixes !== undefined ? { prefixes: retentionPrefixes } : {}),
             },
         },
         jobqueue: { enabled: !isTest },
@@ -40,22 +52,43 @@ export function serverBootstrapConfig(env: Record<string, string | undefined>): 
     };
 }
 
-function parseRetentionNumber(raw: string | undefined): number | undefined {
-    if (raw === undefined || raw.trim() === '') return undefined;
-    const value = Number(raw);
-    if (!Number.isInteger(value) || value < 0) return undefined;
-    return value;
+function readBooleanOption(
+    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined,
+    key: string,
+    fallback: boolean,
+): boolean {
+    const raw = getAppOptions(spurConfig, key, undefined);
+    if (raw === undefined) return fallback;
+    if (typeof raw === 'boolean') return raw;
+    throw new Error(`bootstrap.options.${key} must be a boolean; received ${JSON.stringify(raw)}`);
 }
 
-function parseRetentionPrefixes(env: Record<string, string | undefined>): Record<string, number> {
+function readNonNegativeIntOption(
+    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined,
+    key: string,
+): number | undefined {
+    const raw = getAppOptions(spurConfig, key, undefined);
+    if (raw === undefined) return undefined;
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) return raw;
+    throw new Error(`bootstrap.options.${key} must be a non-negative integer; received ${JSON.stringify(raw)}`);
+}
+
+function readRetentionPrefixes(
+    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined,
+): Record<string, number> | undefined {
+    const raw = getAppOptions<Record<string, unknown> | undefined>(spurConfig, 'eventRetentionPrefixes', undefined);
+    if (raw === undefined) return undefined;
+    if (typeof raw !== 'object' || Array.isArray(raw)) {
+        throw new Error(`bootstrap.options.eventRetentionPrefixes must be an object; received ${JSON.stringify(raw)}`);
+    }
     const prefixes: Record<string, number> = {};
-    for (const [key, value] of Object.entries(env)) {
-        const match = /^SPUR_EVENT_RETENTION_(.+)$/.exec(key);
-        if (!match || match[1] === 'DEFAULT') continue;
-        const prefix = match[1];
-        if (!prefix) continue;
-        const quota = parseRetentionNumber(value);
-        if (quota !== undefined) prefixes[prefix.toLowerCase()] = quota;
+    for (const [prefix, quota] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof quota !== 'number' || !Number.isInteger(quota) || quota < 0) {
+            throw new Error(
+                `bootstrap.options.eventRetentionPrefixes.${prefix} must be a non-negative integer; received ${JSON.stringify(quota)}`,
+            );
+        }
+        prefixes[prefix.toLowerCase()] = quota;
     }
     return prefixes;
 }

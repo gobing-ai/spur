@@ -34,6 +34,7 @@ function schedulerCustomActiveConflict(jobName: string): Error {
     });
 }
 
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import type { CreateServerContextOptions, ServerContext, ServerScheduler } from '../src/context';
 import { createServerContext } from '../src/context';
 import {
@@ -273,13 +274,13 @@ describe('startServer', () => {
     test('0848: materializes the fleet before serving and preserves its registered mailbox prefix', async () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
         const originalCwd = process.cwd();
-        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
-        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const originalRegistry = getEnvVar('SPUR_PROJECTS_FILE');
+        const originalSkipGlobal = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
         const root = mkdtempSync(join(tmpdir(), 'spur-fleet-start-'));
         const project = join(root, 'project');
         mkdirSync(join(project, '.spur'), { recursive: true });
-        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        setEnvVar('SPUR_PROJECTS_FILE', join(root, 'registry.json'));
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
@@ -335,10 +336,10 @@ describe('startServer', () => {
             ).rejects.toThrow('agent.fleet.strategy');
         } finally {
             process.chdir(originalCwd);
-            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
-            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
-            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
-            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            if (originalRegistry === undefined) removeEnvVar('SPUR_PROJECTS_FILE');
+            else setEnvVar('SPUR_PROJECTS_FILE', originalRegistry);
+            if (originalSkipGlobal === undefined) removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+            else setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', originalSkipGlobal);
             db.close();
             rmSync(root, { recursive: true, force: true });
         }
@@ -347,13 +348,13 @@ describe('startServer', () => {
     test('0858 R4: agent.fleet.enabled false materializes and autostarts nothing', async () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
         const originalCwd = process.cwd();
-        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
-        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const originalRegistry = getEnvVar('SPUR_PROJECTS_FILE');
+        const originalSkipGlobal = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
         const root = mkdtempSync(join(tmpdir(), 'spur-fleet-disabled-'));
         const project = join(root, 'project');
         mkdirSync(join(project, '.spur'), { recursive: true });
-        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        setEnvVar('SPUR_PROJECTS_FILE', join(root, 'registry.json'));
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
         const autostarted: string[] = [];
@@ -393,10 +394,10 @@ describe('startServer', () => {
             await exitCalled;
         } finally {
             process.chdir(originalCwd);
-            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
-            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
-            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
-            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            if (originalRegistry === undefined) removeEnvVar('SPUR_PROJECTS_FILE');
+            else setEnvVar('SPUR_PROJECTS_FILE', originalRegistry);
+            if (originalSkipGlobal === undefined) removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+            else setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', originalSkipGlobal);
             db.close();
             rmSync(root, { recursive: true, force: true });
         }
@@ -405,8 +406,8 @@ describe('startServer', () => {
     test('0859 R2/R3: the declared agent.fleet.strategy reconciles into project_strategy once, silently on restart', async () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
         const originalCwd = process.cwd();
-        const originalRegistry = process.env.SPUR_PROJECTS_FILE;
-        const originalSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        const originalRegistry = getEnvVar('SPUR_PROJECTS_FILE');
+        const originalSkipGlobal = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
         const root = mkdtempSync(join(tmpdir(), 'spur-strategy-reconcile-'));
         // The projects must exist BEFORE normalization: `normalizeProjectPath` realpaths an
         // existing directory, and the runtime keys its rows by that normalized path.
@@ -415,8 +416,8 @@ describe('startServer', () => {
         }
         const declared = normalizeProjectPath(join(root, 'declared'));
         const undeclared = normalizeProjectPath(join(root, 'undeclared'));
-        process.env.SPUR_PROJECTS_FILE = join(root, 'registry.json');
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        setEnvVar('SPUR_PROJECTS_FILE', join(root, 'registry.json'));
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
         const strategies = new ProjectStrategyDao(db);
@@ -477,10 +478,10 @@ describe('startServer', () => {
             sigHandlers.SIGINT?.();
         } finally {
             process.chdir(originalCwd);
-            if (originalRegistry === undefined) delete process.env.SPUR_PROJECTS_FILE;
-            else process.env.SPUR_PROJECTS_FILE = originalRegistry;
-            if (originalSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
-            else process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobal;
+            if (originalRegistry === undefined) removeEnvVar('SPUR_PROJECTS_FILE');
+            else setEnvVar('SPUR_PROJECTS_FILE', originalRegistry);
+            if (originalSkipGlobal === undefined) removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+            else setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', originalSkipGlobal);
             db.close();
             rmSync(root, { recursive: true, force: true });
         }
@@ -834,8 +835,8 @@ describe('startServer', () => {
         } = {};
         // Isolate from the host global config layer so B's config is the ONLY layer:
         // the loaded spurConfig executor must come from B, never the host.
-        const prevSkipGlobal = process.env.SPUR_SKIP_GLOBAL_CONFIG;
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const prevSkipGlobal = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const, console: false },
@@ -862,8 +863,8 @@ describe('startServer', () => {
         try {
             await startServer({ port: 5004, host: '127.0.0.1', openBrowser: false, keepAlive: false, cwd: b }, deps);
         } finally {
-            if (prevSkipGlobal === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
-            else process.env.SPUR_SKIP_GLOBAL_CONFIG = prevSkipGlobal;
+            if (prevSkipGlobal === undefined) removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+            else setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', prevSkipGlobal);
             rmSync(b, { recursive: true, force: true });
         }
 
@@ -907,8 +908,8 @@ describe('startServer', () => {
         expect(readFileSync(join(projectRoot, '.spur', 'config.yaml'), 'utf8')).not.toContain('disabled: true');
 
         const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
-        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
-        process.env.SPUR_PROJECTS_FILE = join(projectRoot, 'projects.json');
+        const prevProjectsFile = getEnvVar('SPUR_PROJECTS_FILE');
+        setEnvVar('SPUR_PROJECTS_FILE', join(projectRoot, 'projects.json'));
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const, console: false },
@@ -957,8 +958,8 @@ describe('startServer', () => {
             const paused = await workflow.latestPausedRun();
             expect(paused).toBeNull(); // empty DB, no paused runs — boundary ran once
         } finally {
-            if (prevProjectsFile === undefined) delete process.env.SPUR_PROJECTS_FILE;
-            else process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+            if (prevProjectsFile === undefined) removeEnvVar('SPUR_PROJECTS_FILE');
+            else setEnvVar('SPUR_PROJECTS_FILE', prevProjectsFile);
             quotaDb.close();
             rmSync(projectRoot, { recursive: true, force: true });
         }
@@ -985,8 +986,8 @@ describe('startServer', () => {
         expect(await new AgentExecutorUpdateDao(quotaDb).pendingUpdates()).toHaveLength(0);
 
         const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
-        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
-        process.env.SPUR_PROJECTS_FILE = join(projectRoot, 'projects.json');
+        const prevProjectsFile = getEnvVar('SPUR_PROJECTS_FILE');
+        setEnvVar('SPUR_PROJECTS_FILE', join(projectRoot, 'projects.json'));
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const, console: false },
@@ -1019,8 +1020,8 @@ describe('startServer', () => {
             expect(drainLog?.data?.failed).toBe(0);
             expect(logMessages.some((m) => m.msg === 'Agent quota update startup drain failed')).toBe(false);
         } finally {
-            if (prevProjectsFile === undefined) delete process.env.SPUR_PROJECTS_FILE;
-            else process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+            if (prevProjectsFile === undefined) removeEnvVar('SPUR_PROJECTS_FILE');
+            else setEnvVar('SPUR_PROJECTS_FILE', prevProjectsFile);
             quotaDb.close();
             rmSync(projectRoot, { recursive: true, force: true });
         }
@@ -1062,8 +1063,8 @@ describe('startServer', () => {
         mkdirSync(tmpBlocker);
 
         const logMessages: { msg: string; data?: Record<string, unknown> }[] = [];
-        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
-        process.env.SPUR_PROJECTS_FILE = join(projectRoot, 'projects.json');
+        const prevProjectsFile = getEnvVar('SPUR_PROJECTS_FILE');
+        setEnvVar('SPUR_PROJECTS_FILE', join(projectRoot, 'projects.json'));
         const deps = makeDeps({
             serverBootstrapConfig: () => ({
                 logging: { enabled: false, level: 'info' as const, console: false },
@@ -1101,8 +1102,8 @@ describe('startServer', () => {
             expect(row?.attempts).toBe(3);
             expect(row?.last_error).toContain('failed to commit project config update');
         } finally {
-            if (prevProjectsFile === undefined) delete process.env.SPUR_PROJECTS_FILE;
-            else process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+            if (prevProjectsFile === undefined) removeEnvVar('SPUR_PROJECTS_FILE');
+            else setEnvVar('SPUR_PROJECTS_FILE', prevProjectsFile);
             quotaDb.close();
             rmSync(projectRoot, { recursive: true, force: true });
         }
@@ -1930,7 +1931,7 @@ describe('startServer', () => {
         expect(String(skipPayload?.reason)).toContain('live-1');
     });
 
-    test('SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS resolves once at boot and bounds both child handlers (task 0803 R1)', async () => {
+    test('bootstrap.options timeouts resolve once at boot and bound both child handlers (task 0803 R1)', async () => {
         const { sigHandlers, exitCalled } = installProcessMocks();
         const order: string[] = [];
 
@@ -1985,11 +1986,13 @@ describe('startServer', () => {
         });
 
         // Task 0806 R3: the history refresh watchdog is decoupled from the scheduler budget —
-        // each handler is bounded by its own env name.
-        const prevTimeout = process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
-        const prevHistoryTimeout = process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS;
-        process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS = '300';
-        process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS = '300';
+        // each handler is bounded by its own bootstrap option (task 0902: env names retired).
+        const configDir = mkdtempSync(join(tmpdir(), 'spur-0803-'));
+        mkdirSync(join(configDir, '.spur'), { recursive: true });
+        writeFileSync(
+            join(configDir, '.spur/config.yaml'),
+            'bootstrap:\n  options:\n    schedulerCustomTimeoutMs: 300\n    historyRefreshTimeoutMs: 300\n',
+        );
         // A hermetic long-running script for the history handler: the handler appends
         // `--no-logo history daily` to the invocation, and macOS BSD `sleep` rejects
         // unknown args, so idle in bun instead (ignores argv, runs until the kill).
@@ -2002,6 +2005,7 @@ describe('startServer', () => {
         try {
             await startServer(
                 {
+                    cwd: configDir,
                     port: 5003,
                     host: '127.0.0.1',
                     openBrowser: false,
@@ -2023,11 +2027,8 @@ describe('startServer', () => {
                 }),
             ).rejects.toThrow(/history refresh child timed out after 300ms \(killed after \d+ms elapsed/);
         } finally {
-            if (prevTimeout === undefined) delete process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS;
-            else process.env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS = prevTimeout;
-            if (prevHistoryTimeout === undefined) delete process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS;
-            else process.env.SPUR_HISTORY_REFRESH_TIMEOUT_MS = prevHistoryTimeout;
             rmSync(sleeper, { force: true });
+            rmSync(configDir, { recursive: true, force: true });
             // The captured pre-spawn reference — sigHandlers.SIGINT may now hold an
             // executor-registered forwarder, and invoking that would re-raise a real SIGINT.
             shutdownSigint?.();
@@ -2421,8 +2422,8 @@ describe('startServer', () => {
 
         const tempDir = mkdtempSync(join(tmpdir(), 'spur-serve-registry-'));
         const projectsFile = join(tempDir, 'projects.json');
-        const prevProjectsFile = process.env.SPUR_PROJECTS_FILE;
-        process.env.SPUR_PROJECTS_FILE = projectsFile;
+        const prevProjectsFile = getEnvVar('SPUR_PROJECTS_FILE');
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
 
         const listenPort = 5555;
         Bun.serve = (() => ({
@@ -2459,9 +2460,9 @@ describe('startServer', () => {
             expect(stopped?.port).toBe(0);
         } finally {
             if (prevProjectsFile === undefined) {
-                delete process.env.SPUR_PROJECTS_FILE;
+                removeEnvVar('SPUR_PROJECTS_FILE');
             } else {
-                process.env.SPUR_PROJECTS_FILE = prevProjectsFile;
+                setEnvVar('SPUR_PROJECTS_FILE', prevProjectsFile);
             }
             rmSync(tempDir, { recursive: true, force: true });
         }
@@ -2552,37 +2553,54 @@ describe('startServer', () => {
     });
 });
 
-describe('serverBootstrapConfig retention env parsing', () => {
-    test('parses SPUR_EVENT_RETENTION_DEFAULT as the default quota', () => {
-        const config = serverBootstrapConfig({ ...{}, NODE_ENV: 'test', SPUR_EVENT_RETENTION_DEFAULT: '5000' });
+describe('serverBootstrapConfig bootstrap.options parsing (task 0902)', () => {
+    test('reads eventRetentionDefault as the default quota', () => {
+        const config = serverBootstrapConfig(
+            { NODE_ENV: 'test' },
+            {
+                bootstrap: { options: { eventRetentionDefault: 5000 } },
+            },
+        );
         expect(config.events.retention?.default).toBe(5000);
     });
 
-    test('parses SPUR_EVENT_RETENTION_<PREFIX> overrides, lowercasing the suffix', () => {
-        const config = serverBootstrapConfig({
-            ...{},
-            NODE_ENV: 'test',
-            SPUR_EVENT_RETENTION_TASK: '2000',
-            SPUR_EVENT_RETENTION_FEATURE: '3000',
-        });
+    test('reads eventRetentionPrefixes overrides, lowercasing the keys', () => {
+        const config = serverBootstrapConfig(
+            { NODE_ENV: 'test' },
+            {
+                bootstrap: { options: { eventRetentionPrefixes: { TASK: 2000, Feature: 3000 } } },
+            },
+        );
         expect(config.events.retention?.prefixes).toEqual({ task: 2000, feature: 3000 });
     });
 
-    test('drops malformed retention values (non-integer, negative, empty)', () => {
-        const config = serverBootstrapConfig({
-            ...{},
-            NODE_ENV: 'test',
-            SPUR_EVENT_RETENTION_DEFAULT: 'abc',
-            SPUR_EVENT_RETENTION_TASK: '-5',
-            SPUR_EVENT_RETENTION_FEATURE: '',
-        });
-        expect(config.events.retention?.default).toBeUndefined();
-        expect(config.events.retention?.prefixes).toBeUndefined();
+    test('rejects malformed option values instead of silently dropping them', () => {
+        expect(() =>
+            serverBootstrapConfig({ NODE_ENV: 'test' }, { bootstrap: { options: { eventRetentionDefault: 'abc' } } }),
+        ).toThrow(/eventRetentionDefault/);
+        expect(() =>
+            serverBootstrapConfig(
+                { NODE_ENV: 'test' },
+                { bootstrap: { options: { eventRetentionPrefixes: { task: -5 } } } },
+            ),
+        ).toThrow(/eventRetentionPrefixes\.task/);
+        expect(() =>
+            serverBootstrapConfig({ NODE_ENV: 'test' }, { bootstrap: { options: { diagnosticEvents: 'yes' } } }),
+        ).toThrow(/diagnosticEvents/);
     });
 
-    test('omits retention fields entirely when no env vars are set', () => {
-        const config = serverBootstrapConfig({ ...{}, NODE_ENV: 'test' });
+    test('omits retention fields entirely when no options are set', () => {
+        const config = serverBootstrapConfig({ NODE_ENV: 'test' });
         expect(config.events.retention).toEqual({});
+        expect(config.events.diagnostic).toBe(false);
+    });
+
+    test('diagnosticEvents option enables diagnostic-tier persistence', () => {
+        const config = serverBootstrapConfig(
+            { NODE_ENV: 'test' },
+            { bootstrap: { options: { diagnosticEvents: true } } },
+        );
+        expect(config.events.diagnostic).toBe(true);
     });
 });
 
@@ -2607,15 +2625,9 @@ describe('configured scheduler jobs round-trip through the real queue (task 0734
         });
         const db = await ctx.getDb();
         const dao = new SystemEventDao(db);
-        // scheduler.job.executed and queue.job.completed are diagnostic-tier.
-        const tap = registerSystemEventTap(
-            bus as never,
-            dao,
-            { warn: () => {}, debug: () => {} },
-            {
-                diagnosticEnabled: true,
-            },
-        );
+        // Promoted to default tier: the round-trip must persist without the
+        // diagnostic toggle (D62 regression guard).
+        const tap = registerSystemEventTap(bus as never, dao, { warn: () => {}, debug: () => {} });
 
         const registered: Array<{ cron: string; action: ScheduledAction }> = [];
         const scheduler = {

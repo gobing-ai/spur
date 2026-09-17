@@ -14,6 +14,7 @@ import {
     MIN_SAFE_PI_BASH_IMPORTER_VERSION,
     parseImporterVersion,
 } from '@gobing-ai/spur-app';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
     type CoverageEntry,
     type DbAdapter,
@@ -639,7 +640,7 @@ describe('history command', () => {
     });
 
     test('daily consumes the queued refresh context and stamps child-owned events', async () => {
-        const previous = process.env[HISTORY_REFRESH_CONTEXT_ENV];
+        const previous = getEnvVar(HISTORY_REFRESH_CONTEXT_ENV);
         const spy = spyOn(HistoryService.prototype, 'daily').mockResolvedValueOnce({
             fanOut: {
                 entries: [makeCoverageEntry()],
@@ -665,13 +666,16 @@ describe('history command', () => {
             },
         });
         const cwd = makeTmpCwd();
-        process.env[HISTORY_REFRESH_CONTEXT_ENV] = JSON.stringify({
-            trigger: 'manual',
-            triggerId: 'refresh-1',
-            windowStart: 10,
-            windowEnd: 20,
-            importMode: 'full',
-        });
+        setEnvVar(
+            HISTORY_REFRESH_CONTEXT_ENV,
+            JSON.stringify({
+                trigger: 'manual',
+                triggerId: 'refresh-1',
+                windowStart: 10,
+                windowEnd: 20,
+                importMode: 'full',
+            }),
+        );
 
         try {
             const { output } = capturingOutput();
@@ -701,8 +705,8 @@ describe('history command', () => {
                 }
             }
         } finally {
-            if (previous === undefined) delete process.env[HISTORY_REFRESH_CONTEXT_ENV];
-            else process.env[HISTORY_REFRESH_CONTEXT_ENV] = previous;
+            if (previous === undefined) removeEnvVar(HISTORY_REFRESH_CONTEXT_ENV);
+            else setEnvVar(HISTORY_REFRESH_CONTEXT_ENV, previous);
             spy.mockRestore();
             rmSync(cwd, { recursive: true, force: true });
         }
@@ -1257,8 +1261,8 @@ describe('history CLI usage-error coverage (0813 R3)', () => {
         const cwd = makeTmpCwd();
         const emptyRoot = join(cwd, 'empty-history');
         mkdirSync(emptyRoot, { recursive: true });
-        const previous = process.env.SPUR_HISTORY_REFRESH_CONTEXT;
-        process.env.SPUR_HISTORY_REFRESH_CONTEXT = 'not-json{';
+        const previous = getEnvVar('SPUR_HISTORY_REFRESH_CONTEXT');
+        setEnvVar('SPUR_HISTORY_REFRESH_CONTEXT', 'not-json{');
         try {
             const { output, lines } = capturingOutput();
             const exitCode = await main(['history', 'daily', '--root', emptyRoot, '--source-timeout', 'none'], {
@@ -1269,8 +1273,8 @@ describe('history CLI usage-error coverage (0813 R3)', () => {
             expect(exitCode).toBe(1);
             expect(lines.join('')).toContain('history daily failed:');
         } finally {
-            if (previous === undefined) delete process.env.SPUR_HISTORY_REFRESH_CONTEXT;
-            else process.env.SPUR_HISTORY_REFRESH_CONTEXT = previous;
+            if (previous === undefined) removeEnvVar('SPUR_HISTORY_REFRESH_CONTEXT');
+            else setEnvVar('SPUR_HISTORY_REFRESH_CONTEXT', previous);
         }
     });
 

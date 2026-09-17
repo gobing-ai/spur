@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema } from '@gobing-ai/spur-contracts';
 import { z } from 'zod';
 import {
@@ -20,12 +21,12 @@ const raw = (value: unknown): string => JSON.stringify(value, null, 2);
 
 let previous: string | undefined;
 beforeEach(() => {
-    previous = process.env.SPUR_JSON_ENVELOPE;
-    delete process.env.SPUR_JSON_ENVELOPE;
+    previous = getEnvVar('SPUR_JSON_ENVELOPE');
+    removeEnvVar('SPUR_JSON_ENVELOPE');
 });
 afterEach(() => {
-    if (previous === undefined) delete process.env.SPUR_JSON_ENVELOPE;
-    else process.env.SPUR_JSON_ENVELOPE = previous;
+    if (previous === undefined) removeEnvVar('SPUR_JSON_ENVELOPE');
+    else setEnvVar('SPUR_JSON_ENVELOPE', previous);
 });
 
 describe('envelopeEnabled precedence (explicit > env > raw)', () => {
@@ -34,19 +35,19 @@ describe('envelopeEnabled precedence (explicit > env > raw)', () => {
     });
 
     test('SPUR_JSON_ENVELOPE=1 enables it with no explicit flag', () => {
-        process.env.SPUR_JSON_ENVELOPE = '1';
+        setEnvVar('SPUR_JSON_ENVELOPE', '1');
         expect(envelopeEnabled()).toBe(true);
     });
 
     test('any other env value is not an opt-in', () => {
-        process.env.SPUR_JSON_ENVELOPE = 'true';
+        setEnvVar('SPUR_JSON_ENVELOPE', 'true');
         expect(envelopeEnabled()).toBe(false);
     });
 
     test('an explicit flag wins over the env in both directions', () => {
-        process.env.SPUR_JSON_ENVELOPE = '1';
+        setEnvVar('SPUR_JSON_ENVELOPE', '1');
         expect(envelopeEnabled(false)).toBe(false);
-        delete process.env.SPUR_JSON_ENVELOPE;
+        removeEnvVar('SPUR_JSON_ENVELOPE');
         expect(envelopeEnabled(true)).toBe(true);
     });
 });
@@ -155,7 +156,7 @@ describe('writeJsonError routes by mode', () => {
     });
 
     test('without --json the env var alone never diverts to stdout', () => {
-        process.env.SPUR_JSON_ENVELOPE = '1';
+        setEnvVar('SPUR_JSON_ENVELOPE', '1');
         const s = sink();
         writeJsonError(s, {}, 'boom');
         expect(s.out).toEqual([]);

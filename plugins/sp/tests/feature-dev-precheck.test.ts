@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { parse as parseYaml } from 'yaml';
 import {
     FEATURE_DEV_PRECHECK_USAGE,
@@ -54,7 +55,7 @@ function installStub(dir: string): string {
 function spawnScript(dir: string, script: string, env: Record<string, string>, args: string[] = []): SpawnOutcome {
     const proc = Bun.spawnSync(['bun', script, ...args], {
         cwd: dir,
-        env: { ...process.env, ...env, spurBin: env.spurBin ?? join(dir, 'spur-stub'), STUB_DIR: dir },
+        env: { ...getEnvVars(), ...env, spurBin: env.spurBin ?? join(dir, 'spur-stub'), STUB_DIR: dir },
         stdout: 'pipe',
         stderr: 'pipe',
     });
@@ -123,7 +124,7 @@ describe('feature-dev-precheck script (0825 d)', () => {
             seed(dir, { id: 'F1' }, MIXED_ROSTER);
             const proc = Bun.spawnSync(['node', TWIN], {
                 cwd: dir,
-                env: { ...process.env, ...ENV, spurBin: join(dir, 'spur-stub'), STUB_DIR: dir },
+                env: { ...getEnvVars(), ...ENV, spurBin: join(dir, 'spur-stub'), STUB_DIR: dir },
                 stdout: 'pipe',
                 stderr: 'pipe',
             });
@@ -304,7 +305,7 @@ describe('feature-dev-precheck script (0825 d)', () => {
             writeFileSync(badSuperskill, '#!/bin/sh\nexit 64\n', { mode: 0o755 });
             const proc = Bun.spawnSync(['bash', '-c', command], {
                 cwd: dir,
-                env: { ...process.env, __runId: RUN_ID, featureId: 'F1', PATH: `${bin}:${process.env.PATH ?? ''}` },
+                env: { ...getEnvVars(), __runId: RUN_ID, featureId: 'F1', PATH: `${bin}:${getEnvVar('PATH') ?? ''}` },
                 stdout: 'pipe',
                 stderr: 'pipe',
             });
@@ -448,7 +449,7 @@ describe('feature-dev-precheck in-process error paths (0825 d)', () => {
     test('main with no argv: precheck runs against the caller cwd and still exits 0 (soft-fail)', () => {
         const { dir, cleanup } = scratch('spur-fdp-main-');
         try {
-            // Baked-path stub variant: process.env mutations do not reach spawned children under
+            // Baked-path stub variant: getEnvVars() mutations do not reach spawned children under
             // Bun, so the STUB_DIR indirection is replaced with absolute fixture paths.
             const stub = join(dir, 'spur-stub-baked');
             writeFileSync(stub, SPUR_STUB.split('$STUB_DIR').join(dir), { mode: 0o755 });

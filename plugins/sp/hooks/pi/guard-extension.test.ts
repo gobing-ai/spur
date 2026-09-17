@@ -18,6 +18,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
 import guardExtension from './guard-extension';
 
 // ─── Harness ─────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ guardExtension({
 } as unknown as Parameters<typeof guardExtension>[0]);
 
 const ORIGINAL_CWD = process.cwd();
-const ORIGINAL_SPUR_BIN = process.env.SPUR_BIN;
+const ORIGINAL_SPUR_BIN = getEnvVar('SPUR_BIN');
 const tempDirs: string[] = [];
 
 function makeTempDir(prefix: string): string {
@@ -109,8 +110,8 @@ function readLedger(projectDir: string): Array<Record<string, unknown>> {
 
 afterAll(() => {
     process.chdir(ORIGINAL_CWD);
-    if (ORIGINAL_SPUR_BIN === undefined) delete process.env.SPUR_BIN;
-    else process.env.SPUR_BIN = ORIGINAL_SPUR_BIN;
+    if (ORIGINAL_SPUR_BIN === undefined) removeEnvVar('SPUR_BIN');
+    else setEnvVar('SPUR_BIN', ORIGINAL_SPUR_BIN);
     for (const dir of tempDirs) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -130,14 +131,14 @@ describe('tool_call — task-write-guard', () => {
     test('allows writes to ordinary source files without consulting spur', async () => {
         const dir = makeTempDir('spur-pi-g1-');
         // A failing SPUR_BIN proves the subprocess is skipped for non-corpus paths.
-        process.env.SPUR_BIN = makeFakeSpur(dir, 3);
+        setEnvVar('SPUR_BIN', makeFakeSpur(dir, 3));
         try {
             const ctx = makeCtx();
             const res = await callTool({ toolName: 'write', input: { path: join(dir, 'src', 'a.ts') } }, ctx);
             expect(res.block).toBeUndefined();
             expect(ctx.notes).toHaveLength(0);
         } finally {
-            delete process.env.SPUR_BIN;
+            removeEnvVar('SPUR_BIN');
         }
     });
 
@@ -161,7 +162,7 @@ describe('tool_call — task-write-guard', () => {
 
     test('blocks a corpus-shaped path when spur reports owned', async () => {
         const dir = makeTempDir('spur-pi-g5-');
-        process.env.SPUR_BIN = makeFakeSpur(dir, 0);
+        setEnvVar('SPUR_BIN', makeFakeSpur(dir, 0));
         try {
             const ctx = makeCtx();
             const target = join(dir, 'docs', 'tasks', '0001_x.md');
@@ -170,13 +171,13 @@ describe('tool_call — task-write-guard', () => {
             expect(res.reason).toContain('spur task update');
             expect(ctx.notes.some((n) => n.level === 'error')).toBe(true);
         } finally {
-            delete process.env.SPUR_BIN;
+            removeEnvVar('SPUR_BIN');
         }
     });
 
     test('allows a corpus-shaped path when spur reports unowned', async () => {
         const dir = makeTempDir('spur-pi-g6-');
-        process.env.SPUR_BIN = makeFakeSpur(dir, 1);
+        setEnvVar('SPUR_BIN', makeFakeSpur(dir, 1));
         try {
             const res = await callTool(
                 { toolName: 'write', input: { path: join(dir, 'docs', 'tasks', '0001_x.md') } },
@@ -184,7 +185,7 @@ describe('tool_call — task-write-guard', () => {
             );
             expect(res.block).toBeUndefined();
         } finally {
-            delete process.env.SPUR_BIN;
+            removeEnvVar('SPUR_BIN');
         }
     });
 
@@ -193,7 +194,7 @@ describe('tool_call — task-write-guard', () => {
         // On machines with a real spur install it resolves the temp path as unowned;
         // on machines without one the result is 'unknown'. Both must allow the write.
         const dir = makeTempDir('spur-pi-g7-');
-        process.env.SPUR_BIN = makeFakeSpur(dir, 3);
+        setEnvVar('SPUR_BIN', makeFakeSpur(dir, 3));
         try {
             const res = await callTool(
                 { toolName: 'write', input: { path: join(dir, 'docs', 'tasks', '0001_x.md') } },
@@ -201,7 +202,7 @@ describe('tool_call — task-write-guard', () => {
             );
             expect(res.block).toBeUndefined();
         } finally {
-            delete process.env.SPUR_BIN;
+            removeEnvVar('SPUR_BIN');
         }
     });
 });

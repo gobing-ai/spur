@@ -25,6 +25,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 // ── Input shapes (a subset of the live `spur workflow trace --json` payload) ─────────────
 
@@ -321,7 +322,7 @@ export interface StepProfileCliArgs {
  * --spur-bin > SPUR_BIN > monorepo-local CLI entry > PATH `spur`.
  */
 export function defaultSpurBin(): string {
-    if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
+    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
     if (existsSync(local)) return `bun ${local}`;
     return 'spur';

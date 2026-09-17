@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from '
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
     createEvalRun,
     describeBreakdown,
@@ -329,8 +330,8 @@ describe('nesting guard', () => {
     });
 
     test('refuses to run when already inside an eval-pipeline run, without forking anything', async () => {
-        const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
-        process.env.SPUR_EVAL_PIPELINE_ACTIVE = '1';
+        const prior = getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+        setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', '1');
         try {
             // --dry would still create a worktree if the guard did not fire first.
             expect(await evalPipeline(['--dry', '--label', 'nesting-guard-test'])).toBe(1);
@@ -339,8 +340,8 @@ describe('nesting guard', () => {
             expect(refusal).toContain('REFUSING to run');
             expect(refusal).toContain('SPUR_EVAL_PIPELINE_ACTIVE=1');
         } finally {
-            if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
-            else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;
+            if (prior === undefined) removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+            else setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', prior);
         }
     });
 
@@ -349,14 +350,14 @@ describe('nesting guard', () => {
     test(
         'a first-level run sets the flag so children inherit it',
         async () => {
-            const prior = process.env.SPUR_EVAL_PIPELINE_ACTIVE;
-            delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
+            const prior = getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+            removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
             try {
                 await evalPipeline(['--dry', '--label', 'nesting-guard-sets-flag']);
-                expect(process.env.SPUR_EVAL_PIPELINE_ACTIVE).toBe('1');
+                expect(getEnvVar('SPUR_EVAL_PIPELINE_ACTIVE')).toBe('1');
             } finally {
-                if (prior === undefined) delete process.env.SPUR_EVAL_PIPELINE_ACTIVE;
-                else process.env.SPUR_EVAL_PIPELINE_ACTIVE = prior;
+                if (prior === undefined) removeEnvVar('SPUR_EVAL_PIPELINE_ACTIVE');
+                else setEnvVar('SPUR_EVAL_PIPELINE_ACTIVE', prior);
             }
         },
         SPAWN_TIMEOUT_MS,

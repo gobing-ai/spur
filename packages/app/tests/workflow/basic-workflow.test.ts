@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 
 /**
@@ -36,7 +37,7 @@ function checkCommand(): string {
 function runSh(command: string, dir: string, env: Record<string, string>): Promise<number> {
     const proc = Bun.spawn(['/bin/sh', '-c', command], {
         cwd: dir,
-        env: { ...env, PATH: process.env.PATH ?? '' },
+        env: { ...env, PATH: getEnvVar('PATH') ?? '' },
         stdout: 'pipe',
         stderr: 'pipe',
     });

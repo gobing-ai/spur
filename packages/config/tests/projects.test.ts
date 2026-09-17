@@ -2,16 +2,17 @@ import { afterEach, describe, expect, it } from 'bun:test';
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '../src/index';
 import { getProjectsFilePath, projectEntrySchema, projectsFileSchema } from '../src/projects';
 
 describe('packages/config projects schemas and path resolution', () => {
-    const originalEnv = process.env.SPUR_PROJECTS_FILE;
+    const originalEnv = getEnvVar('SPUR_PROJECTS_FILE');
 
     afterEach(() => {
         if (originalEnv !== undefined) {
-            process.env.SPUR_PROJECTS_FILE = originalEnv;
+            setEnvVar('SPUR_PROJECTS_FILE', originalEnv);
         } else {
-            delete process.env.SPUR_PROJECTS_FILE;
+            removeEnvVar('SPUR_PROJECTS_FILE');
         }
     });
 
@@ -60,12 +61,12 @@ describe('packages/config projects schemas and path resolution', () => {
 
     describe('getProjectsFilePath', () => {
         it('returns SPUR_PROJECTS_FILE env override when set', () => {
-            process.env.SPUR_PROJECTS_FILE = '/custom/projects.json';
+            setEnvVar('SPUR_PROJECTS_FILE', '/custom/projects.json');
             expect(getProjectsFilePath()).toBe('/custom/projects.json');
         });
 
         it('returns default ~/.config/spur/projects.json when SPUR_PROJECTS_FILE is unset', () => {
-            delete process.env.SPUR_PROJECTS_FILE;
+            removeEnvVar('SPUR_PROJECTS_FILE');
             const expected = join(homedir(), '.config', 'spur', 'projects.json');
             expect(getProjectsFilePath()).toBe(expected);
         });

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { main } from '../../src';
 import { createCapturedOutput, createTempProject, createTempProjectStackNeutral } from '../helpers';
 
@@ -12,7 +13,7 @@ describe('CLI init/status', () => {
         const output = createCapturedOutput();
         const dbUrl = join(cwd, '.spur', 'test.db');
         // Isolate the global rules seed from the developer's real ~/.config.
-        const env = { ...process.env, SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) };
+        const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) };
 
         expect(await main(['init', '--name', 'fixture'], { cwd, output, dbUrl, env })).toBe(0);
         expect(existsSync(join(cwd, '.spur', 'config.yaml'))).toBe(true);
@@ -37,7 +38,7 @@ describe('CLI status stack-neutral (task 0313)', () => {
         const cwd = await createTempProjectStackNeutral();
         const output = createCapturedOutput();
         const dbUrl = join(cwd, '.spur', 'test.db');
-        const env = { ...process.env, SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) };
+        const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) };
 
         // No package.json — init should still succeed
         expect(await main(['init', '--name', 'blank-repo'], { cwd, output, dbUrl, env })).toBe(0);
@@ -66,7 +67,7 @@ describe('CLI status stack-neutral (task 0313)', () => {
         const cwd = await createTempProjectStackNeutral();
         const output = createCapturedOutput();
         const dbUrl = join(cwd, '.spur', 'test.db');
-        const env = { ...process.env, SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) };
+        const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) };
 
         // No init — no .spur/config.yaml
         const code = await main(['status', '--json'], { cwd, output, dbUrl, env });

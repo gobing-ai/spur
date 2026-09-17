@@ -15,6 +15,7 @@
 import { execSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { resolveAgentHint, resolveModelHint } from './agent-hint';
 import { checkContextFreshness } from './context-post-tool';
 
@@ -82,7 +83,7 @@ interface SessionFileBody {
  * a stale file is only reachable from inside a live agent run, where reusing it is the correct
  * answer anyway.
  */
-export function resolveActiveSession(dir: string, now: Date, env: NodeJS.ProcessEnv = process.env): string | null {
+export function resolveActiveSession(dir: string, now: Date, env: NodeJS.ProcessEnv = getEnvVars()): string | null {
     let raw: string;
     try {
         raw = readFileSync(join(dir, '.session.json'), 'utf-8');
@@ -123,7 +124,7 @@ export function resolveActiveSession(dir: string, now: Date, env: NodeJS.Process
  */
 export function recordSessionStart(
     dir: string,
-    env: NodeJS.ProcessEnv = process.env,
+    env: NodeJS.ProcessEnv = getEnvVars(),
     now: () => Date = () => new Date(),
 ): string | null {
     try {
@@ -195,7 +196,7 @@ export function recordSessionStart(
 // Entrypoint — kept minimal so unit coverage focuses on pure helpers above.
 if (import.meta.main) {
     try {
-        recordSessionStart(join(process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), '.spur', 'context'));
+        recordSessionStart(join(getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd(), '.spur', 'context'));
     } catch {
         /* fail-open */
     }

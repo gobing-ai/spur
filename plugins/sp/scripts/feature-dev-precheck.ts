@@ -27,6 +27,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 
 /** Statuses that must be refined/resumed through their own pipelines before batching. */
 export const BLOCKING_STATUSES = ['backlog', 'wip', 'testing', 'blocked'] as const;
@@ -44,7 +45,7 @@ export interface FeatureDevPrecheckEnv {
 export interface FeatureDevPrecheckOptions {
     /** Base directory for `.spur/run`; defaults to the process cwd (CLI behavior). */
     cwd?: string;
-    /** Extra environment for the spawned CLI reads (merged over process.env). */
+    /** Extra environment for the spawned CLI reads (merged over getEnvVars()). */
     env?: Record<string, string>;
 }
 
@@ -168,7 +169,7 @@ export function runFeatureDevPrecheck(
         const result = spawnSync(cmd, [...prefix, ...args], {
             cwd,
             encoding: 'utf8',
-            ...(options.env ? { env: { ...process.env, ...options.env } } : {}),
+            ...(options.env ? { env: { ...getEnvVars(), ...options.env } } : {}),
         });
         if (result.error !== undefined) {
             writeFileSync(abs(target), `spawn failed: ${result.error.message}\n`);
@@ -224,7 +225,7 @@ export function runFeatureDevPrecheck(
 export const FEATURE_DEV_PRECHECK_USAGE =
     'usage: feature-dev-precheck.ts  (env: featureId, __runId, optional spurBin) — no subcommands';
 
-export function main(argv: string[], env: FeatureDevPrecheckEnv = process.env): number {
+export function main(argv: string[], env: FeatureDevPrecheckEnv = getEnvVars()): number {
     if (argv.length > 0) {
         process.stderr.write(`${FEATURE_DEV_PRECHECK_USAGE}\n`);
         return 2;

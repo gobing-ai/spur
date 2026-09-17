@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { WbsCollisionError } from '@gobing-ai/spur-app';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { ConflictError, NotFoundError, ValidationError } from '@gobing-ai/ts-utils';
@@ -227,8 +228,8 @@ describe('globalErrorHandler', () => {
     });
 
     test('production non-500 envelopes use status-appropriate messages (R2)', async () => {
-        const prev = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'production';
+        const prev = getEnvVar('NODE_ENV');
+        setEnvVar('NODE_ENV', 'production');
         try {
             const a404 = app();
             a404.get('/n', () => {
@@ -256,7 +257,7 @@ describe('globalErrorHandler', () => {
             expect(r500.status).toBe(500);
             expect((await json(r500)).error.message).toBe('Internal server error');
         } finally {
-            process.env.NODE_ENV = prev;
+            setEnvVar('NODE_ENV', prev);
         }
     });
     // ── F7: api.request.error system event emission (task 0226) ──────────

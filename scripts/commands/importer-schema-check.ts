@@ -25,7 +25,7 @@ export async function importerSchemaCheck(
 ): Promise<number> {
     const opts = typeof dbPathOrOptions === 'object' ? dbPathOrOptions : { dbPath: dbPathOrOptions, ...options };
     const quiet = opts.quiet ?? false;
-    const targetDb = opts.dbPath ?? process.env.SPUR_DB_PATH ?? join(process.cwd(), '.spur', 'spur.db');
+    const targetDb = opts.dbPath ?? join(process.cwd(), '.spur', 'spur.db');
 
     if (!existsSync(targetDb)) {
         if (!quiet) {

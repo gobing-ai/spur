@@ -5,8 +5,15 @@
 import { spawnSync } from "child_process";
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
+
+// ../ts-libs/packages/utils/dist/env.js
+function getEnvVars() {
+  return process.env;
+}
+
+// plugins/sp/scripts/pr-reviewing.ts
 var spawnRunner = (cmd) => {
-  const proc = spawnSync(cmd[0] ?? "", [...cmd.slice(1)], { encoding: "utf8", env: process.env });
+  const proc = spawnSync(cmd[0] ?? "", [...cmd.slice(1)], { encoding: "utf8", env: getEnvVars() });
   return {
     code: proc.status ?? 1,
     stdout: proc.stdout ?? "",

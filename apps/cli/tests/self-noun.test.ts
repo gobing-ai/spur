@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { main } from '../src/index';
 import type { CommandOutput } from '../src/output';
 
@@ -88,7 +89,7 @@ describe('self noun (task 0616)', () => {
         try {
             const legacy = captureOutput();
             const viaSelf = captureOutput();
-            const isolatedEnv = (globalDir: string) => ({ ...process.env, SPUR_GLOBAL_RULES_DIR: globalDir });
+            const isolatedEnv = (globalDir: string) => ({ ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir });
 
             const legacyExit = await main(['init', '--json'], {
                 cwd: legacyCwd,

@@ -9,8 +9,12 @@ import {
     DEFAULT_AGENT_ROLES,
     DEFAULT_FEATURES_DIR,
     DEFAULT_TASKS_DIR,
+    getEnvVar,
+    getEnvVars,
     RedactionConfigSchema,
     RulesConfigSchema,
+    removeEnvVar,
+    setEnvVar,
     spurConfigSchema,
     WorkflowConfigSchema,
     WorkflowsConfigSchema,
@@ -31,17 +35,17 @@ let tmpCwd: string;
 let originalSkipGlobalConfig: string | undefined;
 
 beforeEach(async () => {
-    originalSkipGlobalConfig = process.env.SPUR_SKIP_GLOBAL_CONFIG;
-    process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+    originalSkipGlobalConfig = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+    setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
     tmpCwd = await mkdtemp(join(tmpdir(), 'spur-cfg-'));
 });
 
 afterEach(async () => {
     await rm(tmpCwd, { recursive: true, force: true });
     if (originalSkipGlobalConfig === undefined) {
-        delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
     } else {
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobalConfig;
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', originalSkipGlobalConfig);
     }
 });
 
@@ -363,10 +367,10 @@ describe('resolveConfigFile', () => {
     });
 
     test('returns undefined when project config is missing and global is skipped', () => {
-        const orig = process.env.SPUR_SKIP_GLOBAL_CONFIG;
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        const orig = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
         const result = resolveConfigFile(tmpCwd);
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = orig;
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', orig);
         expect(result).toBeUndefined();
     });
 });
@@ -447,7 +451,7 @@ describe('resolveConfigFile global fallback', () => {
             // suite off the operator's real ~/.config. This test exercises the global
             // fallback on purpose, so clear that flag for the hermetic subprocess
             // (HOME is already redirected to a temp dir).
-            env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
+            env: { ...getEnvVars(), HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
             stdout: 'pipe',
             stderr: 'pipe',
         });
@@ -473,7 +477,7 @@ describe('resolveConfigFile global fallback', () => {
             process.stdout.write(config.name ?? 'undefined');
         `;
         const proc = Bun.spawn(['bun', '-e', script], {
-            env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
+            env: { ...getEnvVars(), HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
             stdout: 'pipe',
             stderr: 'pipe',
         });
@@ -792,7 +796,7 @@ describe('retired agent.team guard', () => {
             }
         `;
         const proc = Bun.spawn(['bun', '-e', script], {
-            env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
+            env: { ...getEnvVars(), HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
             stdout: 'pipe',
             stderr: 'pipe',
         });
@@ -923,15 +927,15 @@ const CLI_BOOT_TIMEOUT_MS = 30_000;
 describe('SPUR_SKIP_PROJECT_CONFIG hermeticity (task 0817 R1)', () => {
     /** Set the skip env, run `body`, then restore the ambient value. */
     async function withSkipEnv<T>(body: () => Promise<T>): Promise<T> {
-        const saved = process.env.SPUR_SKIP_PROJECT_CONFIG;
-        process.env.SPUR_SKIP_PROJECT_CONFIG = 'true';
+        const saved = getEnvVar('SPUR_SKIP_PROJECT_CONFIG');
+        setEnvVar('SPUR_SKIP_PROJECT_CONFIG', 'true');
         try {
             return await body();
         } finally {
             if (saved === undefined) {
-                delete process.env.SPUR_SKIP_PROJECT_CONFIG;
+                removeEnvVar('SPUR_SKIP_PROJECT_CONFIG');
             } else {
-                process.env.SPUR_SKIP_PROJECT_CONFIG = saved;
+                setEnvVar('SPUR_SKIP_PROJECT_CONFIG', saved);
             }
         }
     }
@@ -1017,7 +1021,7 @@ describe('retired fleet carrier guard (0858 R2)', () => {
             }
         `;
         const proc = Bun.spawn(['bun', '-e', script], {
-            env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
+            env: { ...getEnvVars(), HOME: fakeHome, USERPROFILE: fakeHome, SPUR_SKIP_GLOBAL_CONFIG: '' },
             stdout: 'pipe',
             stderr: 'pipe',
         });

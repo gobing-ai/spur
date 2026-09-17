@@ -32,6 +32,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 // ─── CLI (same spur-bin chain as task-evidence-precheck.ts) ─────────────────
 
@@ -41,7 +42,7 @@ function usage(): never {
 }
 
 function defaultSpurBin(): string {
-    if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
+    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
     if (existsSync(local)) return `bun ${local}`;
     return 'spur';

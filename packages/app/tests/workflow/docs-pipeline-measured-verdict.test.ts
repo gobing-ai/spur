@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 
 // Task 0704: docs-pipeline must certify documentation with MEASURED verification, not a
@@ -60,7 +61,7 @@ function runGuard(command: string, env: Record<string, string>, files: Record<st
         }
         const proc = Bun.spawnSync(['bash', '-c', command], {
             cwd: dir,
-            env: { ...process.env, ...env },
+            env: { ...getEnvVars(), ...env },
             stdout: 'pipe',
             stderr: 'pipe',
         });

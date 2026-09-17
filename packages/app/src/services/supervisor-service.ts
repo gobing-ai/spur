@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import type { AgentSpec } from '@gobing-ai/ts-ai-runner';
 import type { EventBus } from '@gobing-ai/ts-infra';
 import {
@@ -208,7 +209,7 @@ export class SupervisorService {
             source: 'supervisor',
             agentId,
             env: {
-                ...Object.fromEntries(Object.entries(process.env).filter(([, v]) => v !== undefined)),
+                ...Object.fromEntries(Object.entries(getEnvVars()).filter(([, v]) => v !== undefined)),
                 // Caller identity env (ADR-057 wave 1 R3): inject the spec id so the
                 // supervised loop (and its `executeRun` calls) know their occupant.
                 // SPUR_RUN_ID is the process-generation id; per-invoke runId is minted
@@ -216,8 +217,8 @@ export class SupervisorService {
                 // when the supervisor itself was launched with it.
                 SPUR_SPEC_ID: agentId,
                 SPUR_RUN_ID: crypto.randomUUID(),
-                ...((this.serveUrl ?? process.env.SPUR_SERVE_URL) !== undefined
-                    ? { SPUR_SERVE_URL: (this.serveUrl ?? process.env.SPUR_SERVE_URL) as string }
+                ...((this.serveUrl ?? getEnvVar('SPUR_SERVE_URL')) !== undefined
+                    ? { SPUR_SERVE_URL: (this.serveUrl ?? getEnvVar('SPUR_SERVE_URL')) as string }
                     : {}),
             } as Record<string, string>,
         };

@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test';
+import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 
 /**
  * `sanitize-env` is an import-side-effect module: it strips proto's shim-launch markers from
- * `process.env` once, at CLI start, so no descendant process inherits them and misreads them as
+ * `getEnvVars()` once, at CLI start, so no descendant process inherits them and misreads them as
  * `proto::commands::run::fallback_loop`. The module body runs on first import and the module cache
  * makes that unrepeatable — so the fixture is planted, the environment is snapshotted either side of
  * the single import, and every case is asserted against those two snapshots.
@@ -23,21 +24,21 @@ const NEAR_MISSES = {
 };
 
 const planted = { ...MARKERS, ...NEAR_MISSES };
-const saved = new Map(Object.keys(planted).map((key) => [key, process.env[key]]));
-Object.assign(process.env, planted);
+const saved = new Map(Object.keys(planted).map((key) => [key, getEnvVar(key)]));
+Object.assign(getEnvVars(), planted);
 
-const before = { ...process.env };
+const before = { ...getEnvVars() };
 await import('../src/sanitize-env');
-const after = { ...process.env };
+const after = { ...getEnvVars() };
 
 for (const [key, value] of saved) {
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
+    if (value === undefined) removeEnvVar(key);
+    else setEnvVar(key, value);
 }
 // The runner itself may be shim-launched, so the module can have deleted real markers too; put
 // them back rather than leaking a sanitized environment into the rest of the suite.
 for (const [key, value] of Object.entries(before)) {
-    if (!(key in after) && !(key in planted)) process.env[key] = value;
+    if (!(key in after) && !(key in planted)) setEnvVar(key, value);
 }
 
 test('importing sanitize-env deletes the proto shim-launch markers', () => {

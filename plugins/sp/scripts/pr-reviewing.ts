@@ -22,6 +22,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -118,7 +119,7 @@ export type CommandRunner = (cmd: readonly string[]) => CmdResult;
 /** Real execution: resolve the binary from PATH and capture its output. The default runner. */
 export const spawnRunner: CommandRunner = (cmd) => {
     // Pass env explicitly so both Node and Bun resolve git/gh against the caller's PATH.
-    const proc = spawnSync(cmd[0] ?? '', [...cmd.slice(1)], { encoding: 'utf8', env: process.env });
+    const proc = spawnSync(cmd[0] ?? '', [...cmd.slice(1)], { encoding: 'utf8', env: getEnvVars() });
     return {
         code: proc.status ?? 1,
         stdout: proc.stdout ?? '',

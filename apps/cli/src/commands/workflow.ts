@@ -40,7 +40,7 @@ import {
     evaluateCapabilities,
     parseRequiresCapabilities,
 } from '@gobing-ai/spur-app/capability-attestation';
-import type { SpurConfig } from '@gobing-ai/spur-config';
+import { getAppOptions, getEnvVar, getEnvVars, removeEnvVar, type SpurConfig, setEnvVar } from '@gobing-ai/spur-config';
 import type { ActionCost } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
@@ -77,7 +77,7 @@ function shQuote(value: string): string {
 export const WORKFLOW_RUN_ACTIVE_ENV = 'SPUR_WORKFLOW_RUN_ACTIVE';
 
 function markWorkflowRunActive(): void {
-    process.env[WORKFLOW_RUN_ACTIVE_ENV] = '1';
+    setEnvVar(WORKFLOW_RUN_ACTIVE_ENV, '1');
 }
 
 /**
@@ -87,7 +87,7 @@ function markWorkflowRunActive(): void {
  * leaks across in-process tests).
  */
 function clearWorkflowRunActive(): void {
-    delete process.env[WORKFLOW_RUN_ACTIVE_ENV];
+    removeEnvVar(WORKFLOW_RUN_ACTIVE_ENV);
 }
 
 /**
@@ -101,7 +101,7 @@ async function spawnAsyncWorkflowWorker(
 ): Promise<void> {
     const line = [spurBin, ...cmd].map(shQuote).join(' ');
     const env: Record<string, string> = {};
-    for (const [key, value] of Object.entries(process.env)) {
+    for (const [key, value] of Object.entries(getEnvVars())) {
         if (value !== undefined) env[key] = value;
     }
     env.SPUR_ASYNC_WORKER = '1';
@@ -127,14 +127,18 @@ async function spawnAsyncWorkflowWorker(
 /**
  * Registration-confirmation budget in ms. 5s is ample for a local worker to write its
  * run row, but a heavily loaded host can legitimately start slower — and a false
- * negative here reports a working run as failed. `SPUR_ASYNC_REGISTER_TIMEOUT_MS`
+ * negative here reports a working run as failed. `bootstrap.options.asyncRegisterTimeoutMs`
  * raises the ceiling on such hosts (and lets tests drive the failure branch without
- * paying the full wait). Invalid or non-positive values fall back to the default
- * rather than disabling the check (task 0484 R2).
+ * paying the full wait). A malformed value throws — config drift must not silently
+ * disable the check (task 0484 R2; env origin replaced in task 0902 wave 2).
  */
-function asyncRegisterTimeoutMs(): number {
-    const raw = Number(process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS);
-    return Number.isFinite(raw) && raw > 0 ? raw : 5000;
+export function asyncRegisterTimeoutMs(spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined): number {
+    const raw = getAppOptions(spurConfig, 'asyncRegisterTimeoutMs', undefined);
+    if (raw === undefined) return 5000;
+    if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) return raw;
+    throw new Error(
+        `bootstrap.options.asyncRegisterTimeoutMs must be a positive integer number of milliseconds; received ${JSON.stringify(raw)}`,
+    );
 }
 
 /**
@@ -196,8 +200,9 @@ export function formatWorkflowVersion(version: unknown): string {
 }
 
 /**
- * Wait up to `timeoutMs` for the async worker to register `runId`, returning true
- * once `spur workflow trace <runId>` resolves. The nohup + `&` wrapper in
+ * Wait up to `timeoutMs` (required; callers pass {@link asyncRegisterTimeoutMs} so the
+ * `bootstrap.options` chain applies) for the async worker to register `runId`, returning
+ * true once `spur workflow trace <runId>` resolves. The nohup + `&` wrapper in
  * `spawnAsyncWorkflowWorker` makes a dead-on-arrival worker invisible on every
  * channel (the shell exits 0, output is discarded, `rejectOnError: false`), so a
  * failed spawn otherwise reports a phantom run id that a caller polls forever. Only
@@ -206,7 +211,7 @@ export function formatWorkflowVersion(version: unknown): string {
 export async function waitForRunRegistration(
     service: Pick<WorkflowAppService, 'trace'>,
     runId: string,
-    timeoutMs = asyncRegisterTimeoutMs(),
+    timeoutMs: number,
     pollMs = 250,
 ): Promise<boolean> {
     const deadline = Date.now() + timeoutMs;
@@ -529,7 +534,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
 
             // Nested-run refusal (task 0610 R4). Refuse BEFORE any side effect — no run record, no
             // worktree, no agent spawn.
-            if (process.env[WORKFLOW_RUN_ACTIVE_ENV] === '1') {
+            if (getEnvVar(WORKFLOW_RUN_ACTIVE_ENV) === '1') {
                 writeJsonError(
                     context.output,
                     options,
@@ -649,7 +654,13 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 // wrapper in spawnAsyncWorkflowWorker makes a dead-on-arrival worker invisible on
                 // every channel, so a failed spawn would otherwise print a phantom run id that
                 // `spur workflow trace` cannot resolve and the caller would poll forever (0484 R2).
-                if (!(await waitForRunRegistration(makeSvc(options.json), runId))) {
+                if (
+                    !(await waitForRunRegistration(
+                        makeSvc(options.json),
+                        runId,
+                        asyncRegisterTimeoutMs(context.spurConfig),
+                    ))
+                ) {
                     // Deliberately omit runId from BOTH payloads: this handle is precisely the
                     // phantom R2 exists to suppress, and a machine caller reading `.runId`
                     // without checking `.status` would poll it forever — the exact failure the
@@ -742,7 +753,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             // As WORKER (SPUR_EXPECTED_DEFINITION_DIGEST set), resolution is NOT
             // advisory: the launcher's expected digest must match this process's own
             // resolution before any action starts (0768 R2).
-            const expectedDigest = process.env.SPUR_EXPECTED_DEFINITION_DIGEST;
+            const expectedDigest = getEnvVar('SPUR_EXPECTED_DEFINITION_DIGEST');
             let resolvedDefinition: ResolvedWorkflowDefinition | undefined;
             if (options.plan !== false || expectedDigest !== undefined) {
                 try {
@@ -921,7 +932,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     dryRun: options.dryRun || undefined,
                     // Async worker self-records its pid so `spur workflow cancel` can
                     // signal the live process group (set by the --async launcher).
-                    recordSelfPid: process.env.SPUR_ASYNC_WORKER === '1',
+                    recordSelfPid: getEnvVar('SPUR_ASYNC_WORKER') === '1',
                     ...(steeringController !== undefined ? { steeringController } : {}),
                     // 0768 R1: plan preview, identity stamp, and engine share the one
                     // resolution made above (resolve-once).

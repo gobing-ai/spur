@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 import { extractResolvedWorkflowFacts } from '../../src/workflow/composition-baseline';
 
@@ -360,7 +361,7 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
     const runSh = (script: string, cwd: string, env?: Record<string, string>): { code: number; stderr: string } => {
         const proc = Bun.spawnSync(['sh', '-c', script], {
             cwd,
-            env: env === undefined ? { ...process.env } : { ...process.env, ...env },
+            env: env === undefined ? { ...getEnvVars() } : { ...getEnvVars(), ...env },
             stdout: 'pipe',
             stderr: 'pipe',
         });

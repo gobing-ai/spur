@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/spur-config';
 import {
     createDefaultWorkflowEngineHost,
     MemoryWorkflowPersistenceAdapter,
@@ -299,7 +300,7 @@ const REVIEWER_TS = `// Test stub for pr-reviewing.ts: request returns a canned 
 const args = process.argv.slice(2);
 const mode = args[0];
 import { appendFileSync, writeFileSync } from 'node:fs';
-const log = process.env.STUB_DIR + '/review-calls.log';
+const log = __STUB_LOG__;
 appendFileSync(log, mode + '\\n');
 const statusIdx = args.indexOf('--status-file');
 if (mode === 'request') {
@@ -319,7 +320,10 @@ async function makeHarness(): Promise<ExecHarness> {
     mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
     writeFileSync(join(bin, 'spur'), SPUR_STUB, { mode: 0o755 });
     writeFileSync(join(bin, 'superskill'), SUPER_SKILL_STUB, { mode: 0o755 });
-    writeFileSync(join(workdir, 'reviewer.ts'), REVIEWER_TS);
+    writeFileSync(
+        join(workdir, 'reviewer.ts'),
+        REVIEWER_TS.replace('__STUB_LOG__', JSON.stringify(join(workdir, 'review-calls.log'))),
+    );
     // 0825 (d): the precheck wrapper resolves the repo script relative to the workdir —
     // expose the plugin tree via a symlink so the source branch of the wrapper fires.
     symlinkSync(REPO_PLUGINS_DIR, join(workdir, 'plugins'), 'dir');
@@ -349,7 +353,7 @@ async function makeHarness(): Promise<ExecHarness> {
                 spurBin: join(bin, 'spur'),
                 stepTimeoutMs: '30000',
                 STUB_DIR: workdir,
-                PATH: `${bin}:${process.env.PATH ?? ''}`,
+                PATH: `${bin}:${getEnvVar('PATH') ?? ''}`,
                 ...vars,
             },
         });

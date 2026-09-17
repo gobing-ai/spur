@@ -4,6 +4,7 @@ import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveWorkflowFile } from '@gobing-ai/spur-app';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import { TASK_VARIANTS } from '@gobing-ai/spur-domain';
 import { SCAFFOLD_MANIFEST } from '../../src/config/scaffold-manifest';
@@ -18,7 +19,7 @@ function nullOutput(): CommandOutput {
 /** Build main() options with the global rules seed redirected to an isolated temp dir. */
 async function isolatedOptions(cwd: string) {
     const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
-    const env = { ...process.env, SPUR_GLOBAL_RULES_DIR: globalDir };
+    const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
     return { options: { cwd, env, output: nullOutput(), dbUrl: ':memory:' as const }, globalDir };
 }
 
@@ -186,7 +187,7 @@ describe('init command', () => {
         const messages: string[] = [];
         const options = {
             cwd,
-            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) },
+            env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: await mkdtemp(join(tmpdir(), 'spur-glob-')) },
             output: { write: (m: string) => messages.push(m), error: () => {} },
             dbUrl: ':memory:' as const,
         };
@@ -262,7 +263,7 @@ describe('init command', () => {
         const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
         const options = {
             cwd,
-            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: globalDir },
+            env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir },
             output: { write: (m: string) => messages.push(m), error: () => {} },
             dbUrl: ':memory:' as const,
         };
@@ -284,7 +285,7 @@ describe('init command', () => {
         const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
         const options = {
             cwd,
-            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: globalDir },
+            env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir },
             output: { write: (m: string) => messages.push(m), error: () => {} },
             dbUrl: ':memory:' as const,
         };

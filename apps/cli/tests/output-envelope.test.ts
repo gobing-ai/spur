@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema } from '@gobing-ai/spur-contracts';
 import { z } from 'zod';
 import { main } from '../src/index';
@@ -81,22 +82,22 @@ describe('envelopeEnabled precedence', () => {
     const ENV = 'SPUR_JSON_ENVELOPE';
 
     test('explicit true wins over a disabling env', () => {
-        process.env[ENV] = '1';
+        setEnvVar(ENV, '1');
         expect(envelopeEnabled(true)).toBe(true);
         expect(envelopeEnabled(false)).toBe(false);
     });
 
     test('undefined defers to the env', () => {
-        process.env[ENV] = '1';
+        setEnvVar(ENV, '1');
         expect(envelopeEnabled(undefined)).toBe(true);
-        process.env[ENV] = '0';
+        setEnvVar(ENV, '0');
         expect(envelopeEnabled(undefined)).toBe(false);
-        delete process.env[ENV];
+        removeEnvVar(ENV);
         expect(envelopeEnabled(undefined)).toBe(false);
     });
 
     test('raw default when neither flag nor env is set', () => {
-        delete process.env[ENV];
+        removeEnvVar(ENV);
         expect(JSON.parse(toEnvelopeJson({ a: 1 }))).toEqual({ a: 1 });
     });
 });
@@ -164,7 +165,7 @@ const SERVICE_VERBS: Array<{ label: string; argv: string[]; assertExit: boolean 
 describe('service-emitting verbs honor --json-envelope end-to-end (0697 AC2)', () => {
     for (const { label, argv, assertExit } of SERVICE_VERBS) {
         test(`${label}: flag and SPUR_JSON_ENVELOPE=1 produce the identical {ok:true,data} document`, async () => {
-            delete process.env[ENVELOPE_ENV];
+            removeEnvVar(ENVELOPE_ENV);
             // Fresh cwd per invocation: doctor's cache read would flip hit/ageMs between runs.
             const byFlag = captureSink();
             const flagCode = await main([...argv, '--json', '--json-envelope'], {
@@ -175,7 +176,7 @@ describe('service-emitting verbs honor --json-envelope end-to-end (0697 AC2)', (
             const flagDoc = JSON.parse(byFlag.text) as unknown;
             expect(apiSuccessSchema(z.unknown()).safeParse(flagDoc).success).toBe(true);
 
-            process.env[ENVELOPE_ENV] = '1';
+            setEnvVar(ENVELOPE_ENV, '1');
             try {
                 const byEnv = captureSink();
                 const envCode = await main([...argv, '--json'], {
@@ -185,7 +186,7 @@ describe('service-emitting verbs honor --json-envelope end-to-end (0697 AC2)', (
                 if (assertExit) expect(envCode).toBe(0);
                 expect(byEnv.text).toBe(byFlag.text);
             } finally {
-                delete process.env[ENVELOPE_ENV];
+                removeEnvVar(ENVELOPE_ENV);
             }
         }, 30000);
     }
@@ -200,7 +201,7 @@ const RUN_ENV_FAIL_ARGV = ['agent', 'run', '--json', '--cwd', '/nonexistent-0697
 
 describe('agent run honors SPUR_JSON_ENVELOPE end-to-end (0697 F-R1)', () => {
     test('env opt-in envelops, explicit flag wins with env off, default stays raw', async () => {
-        delete process.env[ENVELOPE_ENV];
+        removeEnvVar(ENVELOPE_ENV);
         const raw = captureSink();
         const rawCode = await main([...RUN_ENV_FAIL_ARGV], {
             cwd: mkdtempSync(join(tmpdir(), 'spur-run-raw-')),
@@ -210,7 +211,7 @@ describe('agent run honors SPUR_JSON_ENVELOPE end-to-end (0697 F-R1)', () => {
         const rawDoc = JSON.parse(raw.text) as { ok?: unknown };
         expect(rawDoc.ok).toBeUndefined(); // failure pseudo-envelope, not the {ok:false} envelope
 
-        process.env[ENVELOPE_ENV] = '1';
+        setEnvVar(ENVELOPE_ENV, '1');
         try {
             const byEnv = captureSink();
             const envCode = await main([...RUN_ENV_FAIL_ARGV], {
@@ -220,7 +221,7 @@ describe('agent run honors SPUR_JSON_ENVELOPE end-to-end (0697 F-R1)', () => {
             expect(envCode).toBe(2);
             expect(apiErrorSchema.safeParse(JSON.parse(byEnv.text)).success).toBe(true);
         } finally {
-            delete process.env[ENVELOPE_ENV];
+            removeEnvVar(ENVELOPE_ENV);
         }
 
         const byFlag = captureSink();
@@ -250,12 +251,12 @@ describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
     const REPO_RULES_DIR = join(import.meta.dir, '..', '..', '..', 'config', 'rules');
 
     test('rule run --json emits the captured pre-change fixture bytes', async () => {
-        delete process.env[ENVELOPE_ENV];
+        removeEnvVar(ENVELOPE_ENV);
         const out = captureSink();
         const code = await main(['rule', 'run', '--json'], {
             cwd: mkdtempSync(join(tmpdir(), 'spur-baseline-')),
             output: out,
-            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: REPO_RULES_DIR },
+            env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: REPO_RULES_DIR },
         });
         expect(code).toBe(0);
         const fixture = readFileSync(join(fixtureDir, 'rule-run.json'), 'utf8');
@@ -263,12 +264,12 @@ describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
     }, 20000);
 
     test('rule validate --json --kind preset emits the captured pre-change fixture bytes', async () => {
-        delete process.env[ENVELOPE_ENV];
+        removeEnvVar(ENVELOPE_ENV);
         const out = captureSink();
         const code = await main(['rule', 'validate', '--json', '--kind', 'preset', 'recommended-pre-check'], {
             cwd: mkdtempSync(join(tmpdir(), 'spur-baseline-')),
             output: out,
-            env: { ...process.env, SPUR_GLOBAL_RULES_DIR: REPO_RULES_DIR },
+            env: { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: REPO_RULES_DIR },
         });
         expect(code).toBe(0);
         const fixture = readFileSync(join(fixtureDir, 'rule-validate-preset.json'), 'utf8');
@@ -276,7 +277,7 @@ describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
     }, 20000);
 
     test('agent list --json raw bytes equal toJson of the enveloped document data', async () => {
-        delete process.env[ENVELOPE_ENV];
+        removeEnvVar(ENVELOPE_ENV);
         const enveloped = captureSink();
         await main(['agent', 'list', '--json', '--json-envelope'], {
             cwd: mkdtempSync(join(tmpdir(), 'spur-raw-')),
@@ -291,7 +292,7 @@ describe('raw default byte-identity vs pre-change baseline (0697 AC3)', () => {
     }, 30000);
 
     test('agent doctor --json raw bytes equal toJson of the enveloped document data', async () => {
-        delete process.env[ENVELOPE_ENV];
+        removeEnvVar(ENVELOPE_ENV);
         const enveloped = captureSink();
         await main(['agent', 'doctor', '--json', '--json-envelope'], {
             cwd: mkdtempSync(join(tmpdir(), 'spur-raw-')),
@@ -404,18 +405,18 @@ function captureBoth(): CommandOutput & { out: string; err: string } {
 describe('writeJsonError code/details capability (0699 R2)', () => {
     test('default code stays INTERNAL_ERROR with no details', () => {
         const sink = captureBoth();
-        process.env[ENVELOPE_ENV] = '1';
+        setEnvVar(ENVELOPE_ENV, '1');
         try {
             writeJsonError(sink, { json: true }, 'boom');
             expect(JSON.parse(sink.out)).toEqual({ ok: false, error: { code: 'INTERNAL_ERROR', message: 'boom' } });
         } finally {
-            delete process.env[ENVELOPE_ENV];
+            removeEnvVar(ENVELOPE_ENV);
         }
     });
 
     test('explicit code and details pass through to the envelope', () => {
         const sink = captureBoth();
-        process.env[ENVELOPE_ENV] = '1';
+        setEnvVar(ENVELOPE_ENV, '1');
         try {
             writeJsonError(sink, { json: true }, 'Task 9999 not found', 'INTERNAL_ERROR', { cliCode: 'NOT_FOUND' });
             expect(JSON.parse(sink.out)).toEqual({
@@ -423,20 +424,20 @@ describe('writeJsonError code/details capability (0699 R2)', () => {
                 error: { code: 'INTERNAL_ERROR', message: 'Task 9999 not found', details: { cliCode: 'NOT_FOUND' } },
             });
         } finally {
-            delete process.env[ENVELOPE_ENV];
+            removeEnvVar(ENVELOPE_ENV);
         }
     });
 
     test('a leading "Error: " is stripped in the enveloped branch only', () => {
         const sink = captureBoth();
-        process.env[ENVELOPE_ENV] = '1';
+        setEnvVar(ENVELOPE_ENV, '1');
         try {
             writeJsonError(sink, { json: true }, 'Error: Task 9999 not found in any registered task folder');
             expect((JSON.parse(sink.out) as { error: { message: string } }).error.message).toBe(
                 'Task 9999 not found in any registered task folder',
             );
         } finally {
-            delete process.env[ENVELOPE_ENV];
+            removeEnvVar(ENVELOPE_ENV);
         }
     });
 
@@ -523,8 +524,8 @@ const FAILURE_CASES: Array<{
 describe('enveloped failure surface is honest end-to-end (0699 R1/R2)', () => {
     for (const { label, argv, exit, code, cliCode, viaEnv } of FAILURE_CASES) {
         test(`${label}: {ok:false,error:{code,message}} on stdout, exit ${exit}`, async () => {
-            delete process.env[ENVELOPE_ENV];
-            if (viaEnv) process.env[ENVELOPE_ENV] = '1';
+            removeEnvVar(ENVELOPE_ENV);
+            if (viaEnv) setEnvVar(ENVELOPE_ENV, '1');
             try {
                 const sink = captureBoth();
                 const exitCode = await main([...argv, ...(viaEnv ? [] : ['--json', '--json-envelope'])], {
@@ -550,13 +551,13 @@ describe('enveloped failure surface is honest end-to-end (0699 R1/R2)', () => {
                 }
                 expect(sink.err).toBe(''); // no bare stderr line standing in for the envelope
             } finally {
-                delete process.env[ENVELOPE_ENV];
+                removeEnvVar(ENVELOPE_ENV);
             }
         }, 30000);
     }
 
     test('raw --json failure path stays byte-identical: bare stderr, no envelope (AC4)', async () => {
-        delete process.env[ENVELOPE_ENV];
+        removeEnvVar(ENVELOPE_ENV);
         const sink = captureBoth();
         const exitCode = await main(['task', 'path', '9999', '--json'], { cwd: REPO_ROOT, output: sink });
         expect(exitCode).toBe(1);

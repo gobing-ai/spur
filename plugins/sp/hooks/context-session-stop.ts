@@ -17,6 +17,7 @@
 
 import { appendFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 interface LedgerEvent {
     session: string;
@@ -53,7 +54,7 @@ function exitOk(): never {
 }
 
 async function main(): Promise<void> {
-    const dir = join(process.env.CLAUDE_PROJECT_DIR ?? process.cwd(), '.spur', 'context');
+    const dir = join(getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd(), '.spur', 'context');
 
     const sessionFile = join(dir, '.session.json');
     if (!existsSync(sessionFile)) exitOk();

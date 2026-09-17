@@ -3,7 +3,14 @@ import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AGENT_ROLE_NAMES, type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
+import {
+    AGENT_ROLE_NAMES,
+    getEnvVar,
+    removeEnvVar,
+    type SpurConfig,
+    setEnvVar,
+    spurConfigSchema,
+} from '@gobing-ai/spur-config';
 import * as loaderModule from '@gobing-ai/spur-config/loader';
 import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { parse as yamlParse } from 'yaml';
@@ -1847,8 +1854,8 @@ terminalStates:
             // Config resolution layers project → user (`~/.config/spur/config.yaml`), so a
             // developer's own global default would otherwise decide this test's outcome.
             const { dir } = await seedWorkflow('spur-wf-agent-nocfg-');
-            const previous = process.env.SPUR_SKIP_GLOBAL_CONFIG;
-            process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+            const previous = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+            setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
             try {
                 const svc = new WorkflowAppService(makeCtx(dir));
 
@@ -1857,8 +1864,8 @@ terminalStates:
                 expect(result.status, `run failed: ${String(result.reason ?? '')}`).toBe('done');
                 expect(await capturedAgent(dir)).toBe('omp');
             } finally {
-                if (previous === undefined) delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
-                else process.env.SPUR_SKIP_GLOBAL_CONFIG = previous;
+                if (previous === undefined) removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+                else setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', previous);
             }
             await rm(dir, { recursive: true, force: true });
         });

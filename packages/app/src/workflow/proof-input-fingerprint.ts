@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import {
     createNodeFileSystem,
@@ -254,7 +255,7 @@ export async function createGitAlternateTree(
     try {
         await fs.ensureDir(dirname(indexFile));
         const env = Object.fromEntries(
-            Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+            Object.entries(getEnvVars()).filter((entry): entry is [string, string] => entry[1] !== undefined),
         );
         env.GIT_INDEX_FILE = indexFile;
         const common = { cwd, env, forceBuffered: true, rejectOnError: false } as const;

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, resolve } from 'node:path';
-import { DEFAULT_DATABASE_URL } from '@gobing-ai/spur-config';
+import { DEFAULT_DATABASE_URL, getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import type { StartServerOptions } from '@gobing-ai/spur-server';
 import {
     type RegisterServeOptions,
@@ -110,16 +110,16 @@ describe('registerServeCommand', () => {
         const { ctx, writes } = makeCtx();
         const { action } = captureServe(ctx);
 
-        const prevPort = process.env.PORT;
-        process.env.PORT = '8080';
+        const prevPort = getEnvVar('PORT');
+        setEnvVar('PORT', '8080');
         try {
             // Flag set to 9090 while env says 8080 — flag must win.
             await action({ port: 9090, host: 'localhost', json: true });
             const payload = JSON.parse(writes.at(-1) ?? '{}');
             expect(payload.port).toBe(9090);
         } finally {
-            if (prevPort === undefined) delete process.env.PORT;
-            else process.env.PORT = prevPort;
+            if (prevPort === undefined) removeEnvVar('PORT');
+            else setEnvVar('PORT', prevPort);
         }
     });
 
@@ -127,15 +127,15 @@ describe('registerServeCommand', () => {
         const { ctx, writes } = makeCtx();
         const { action } = captureServe(ctx);
 
-        const prevPort = process.env.PORT;
-        process.env.PORT = '8080';
+        const prevPort = getEnvVar('PORT');
+        setEnvVar('PORT', '8080');
         try {
             await action({ host: 'localhost', json: true });
             const payload = JSON.parse(writes.at(-1) ?? '{}');
             expect(payload.port).toBe(8080);
         } finally {
-            if (prevPort === undefined) delete process.env.PORT;
-            else process.env.PORT = prevPort;
+            if (prevPort === undefined) removeEnvVar('PORT');
+            else setEnvVar('PORT', prevPort);
         }
     });
 
@@ -241,8 +241,8 @@ describe('serve --cwd project root (task 0805 R2)', () => {
 
     test('explicit DATABASE_URL retains precedence over the --cwd default DB', async () => {
         const b = mkdtempSync(join(tmpdir(), 'spur-serve-cwd-dburl-'));
-        const prev = process.env.DATABASE_URL;
-        process.env.DATABASE_URL = 'custom.db';
+        const prev = getEnvVar('DATABASE_URL');
+        setEnvVar('DATABASE_URL', 'custom.db');
         const { ctx } = makeCtx({ cwd: '/tmp/project-a' });
         const { action, launched } = captureServe(ctx);
         try {
@@ -251,8 +251,8 @@ describe('serve --cwd project root (task 0805 R2)', () => {
             expect(launched[0]?.cwd).toBe(b);
             expect(launched[0]?.dbUrl).toBe('custom.db');
         } finally {
-            if (prev === undefined) delete process.env.DATABASE_URL;
-            else process.env.DATABASE_URL = prev;
+            if (prev === undefined) removeEnvVar('DATABASE_URL');
+            else setEnvVar('DATABASE_URL', prev);
         }
     });
 

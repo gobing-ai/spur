@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { parse as parseYaml } from 'yaml';
 
 interface Guard {
@@ -528,7 +529,7 @@ describe('idea-pipeline definition — regression invariants and no-surface guar
             const result = spawnSync('sh', ['-c', finalizeCmd], {
                 cwd,
                 encoding: 'utf8',
-                env: { ...process.env, __runId: 'r-fc', featureId: 'F1', PATH: `${cwd}:${process.env.PATH ?? ''}` },
+                env: { ...getEnvVars(), __runId: 'r-fc', featureId: 'F1', PATH: `${cwd}:${getEnvVar('PATH') ?? ''}` },
             });
             expect(result.status).toBe(1);
             expect(result.stderr).toContain('failed closed');

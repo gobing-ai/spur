@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
 import { createApp } from '../../src/bootstrap';
@@ -55,8 +56,8 @@ describe('mountMiddleware', () => {
             throw new Error('onerror test');
         });
 
-        const prevEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'development';
+        const prevEnv = getEnvVar('NODE_ENV');
+        setEnvVar('NODE_ENV', 'development');
         try {
             const res = await app.request('/fail');
             expect(res.status).toBe(500);
@@ -65,7 +66,7 @@ describe('mountMiddleware', () => {
             expect(body.error).toBeDefined();
             expect((body.error as Record<string, unknown>).code).toBe('INTERNAL_ERROR');
         } finally {
-            process.env.NODE_ENV = prevEnv;
+            setEnvVar('NODE_ENV', prevEnv);
         }
     });
 });
@@ -112,8 +113,8 @@ describe('health endpoints', () => {
 
     test('CORS default is same-origin: a foreign Origin is NOT echoed (R2)', async () => {
         // Default (no SPUR_CORS_ORIGINS) must not blanket-allow cross-origin.
-        const prev = process.env.SPUR_CORS_ORIGINS;
-        delete process.env.SPUR_CORS_ORIGINS;
+        const prev = getEnvVar('SPUR_CORS_ORIGINS');
+        removeEnvVar('SPUR_CORS_ORIGINS');
         try {
             const res = await createApp().request('/api/health', {
                 headers: { origin: 'https://evil.example.com' },
@@ -124,22 +125,22 @@ describe('health endpoints', () => {
             expect(acao).not.toBe('*');
             expect(acao).not.toBe('https://evil.example.com');
         } finally {
-            if (prev === undefined) delete process.env.SPUR_CORS_ORIGINS;
-            else process.env.SPUR_CORS_ORIGINS = prev;
+            if (prev === undefined) removeEnvVar('SPUR_CORS_ORIGINS');
+            else setEnvVar('SPUR_CORS_ORIGINS', prev);
         }
     });
 
     test('CORS echoes an explicitly allowlisted origin (SPUR_CORS_ORIGINS)', async () => {
-        const prev = process.env.SPUR_CORS_ORIGINS;
-        process.env.SPUR_CORS_ORIGINS = 'https://board.example.com, https://ops.example.com';
+        const prev = getEnvVar('SPUR_CORS_ORIGINS');
+        setEnvVar('SPUR_CORS_ORIGINS', 'https://board.example.com, https://ops.example.com');
         try {
             const res = await createApp().request('/api/health', {
                 headers: { origin: 'https://board.example.com' },
             });
             expect(res.headers.get('access-control-allow-origin')).toBe('https://board.example.com');
         } finally {
-            if (prev === undefined) delete process.env.SPUR_CORS_ORIGINS;
-            else process.env.SPUR_CORS_ORIGINS = prev;
+            if (prev === undefined) removeEnvVar('SPUR_CORS_ORIGINS');
+            else setEnvVar('SPUR_CORS_ORIGINS', prev);
         }
     });
 
@@ -163,14 +164,14 @@ describe('csrf middleware', () => {
     }
 
     const withCorsEnv = async (value: string | undefined, fn: () => Promise<void>) => {
-        const prev = process.env.SPUR_CORS_ORIGINS;
-        if (value === undefined) delete process.env.SPUR_CORS_ORIGINS;
-        else process.env.SPUR_CORS_ORIGINS = value;
+        const prev = getEnvVar('SPUR_CORS_ORIGINS');
+        if (value === undefined) removeEnvVar('SPUR_CORS_ORIGINS');
+        else setEnvVar('SPUR_CORS_ORIGINS', value);
         try {
             await fn();
         } finally {
-            if (prev === undefined) delete process.env.SPUR_CORS_ORIGINS;
-            else process.env.SPUR_CORS_ORIGINS = prev;
+            if (prev === undefined) removeEnvVar('SPUR_CORS_ORIGINS');
+            else setEnvVar('SPUR_CORS_ORIGINS', prev);
         }
     };
 
@@ -325,8 +326,8 @@ describe('pipeline integration', () => {
             throw new Error('pipeline test');
         });
 
-        const prevEnv = process.env.NODE_ENV;
-        process.env.NODE_ENV = 'development';
+        const prevEnv = getEnvVar('NODE_ENV');
+        setEnvVar('NODE_ENV', 'development');
         try {
             const res = await app.request('/fail');
             const body = (await res.json()) as Record<string, unknown>;
@@ -335,7 +336,7 @@ describe('pipeline integration', () => {
                 ((body.error as Record<string, unknown>).details as Record<string, unknown>)?.requestId,
             ).toBeDefined();
         } finally {
-            process.env.NODE_ENV = prevEnv;
+            setEnvVar('NODE_ENV', prevEnv);
         }
     });
 });

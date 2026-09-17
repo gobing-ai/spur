@@ -16,6 +16,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const HOOK = join(import.meta.dir, 'task-write-guard.ts');
@@ -55,7 +56,7 @@ async function runGuard(payload: unknown, env: Record<string, string> = {}, stdi
         env: {
             CLAUDE_PROJECT_DIR: REPO_ROOT,
             SPUR_BIN: LOCAL_SPUR,
-            PATH: `${join(process.execPath, '..')}:${process.env.PATH ?? ''}`,
+            PATH: `${join(process.execPath, '..')}:${getEnvVar('PATH') ?? ''}`,
             ...env,
         },
     });
@@ -108,7 +109,7 @@ describe('task-write-guard — fail-open contract', () => {
                 stdout: 'pipe',
                 stderr: 'pipe',
                 // PATH = only the bun dir → `bun` works, but `spur` is not found → fail open.
-                env: { CLAUDE_PROJECT_DIR: REPO_ROOT, PATH: bunDir, HOME: process.env.HOME ?? '' },
+                env: { CLAUDE_PROJECT_DIR: REPO_ROOT, PATH: bunDir, HOME: getEnvVar('HOME') ?? '' },
             });
             const out = await new Response(proc.stdout).text();
             await proc.exited;

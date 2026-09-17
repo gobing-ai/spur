@@ -5,6 +5,14 @@
 import { spawnSync } from "child_process";
 import { existsSync } from "fs";
 import { fileURLToPath } from "url";
+
+// ../ts-libs/packages/utils/dist/env.js
+function getEnvVar(name, fallback) {
+  const raw = process.env[name];
+  return raw === undefined ? fallback : raw;
+}
+
+// plugins/sp/scripts/workflow-step-profile.ts
 var DEFAULT_LAST = 20;
 var DEFAULT_WINDOW_SEC = 300;
 function nearestRankP50(values) {
@@ -168,8 +176,8 @@ function formatStepProfileHuman(profile) {
 `;
 }
 function defaultSpurBin() {
-  if (process.env.SPUR_BIN)
-    return process.env.SPUR_BIN;
+  if (getEnvVar("SPUR_BIN"))
+    return getEnvVar("SPUR_BIN");
   const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
   if (existsSync(local))
     return `bun ${local}`;

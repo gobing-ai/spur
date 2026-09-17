@@ -31,6 +31,7 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/ts-utils';
 
 export interface WrapupStepsEnv {
     __runId?: string;
@@ -449,7 +450,7 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
 export const WRAPUP_STEPS_USAGE =
     'usage: wrapup-steps.ts <resolve|metrics|feature-transition>  (env: __runId, tasks, feature, featureGateCmd, spurBin)';
 
-export function main(argv: string[], env: WrapupStepsEnv = process.env, options: WrapupStepsOptions = {}): number {
+export function main(argv: string[], env: WrapupStepsEnv = getEnvVars(), options: WrapupStepsOptions = {}): number {
     const sub = argv[0];
     if (sub === 'resolve') return resolveTasks(env, options).exitCode;
     if (sub === 'metrics') {

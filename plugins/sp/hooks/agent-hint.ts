@@ -1,3 +1,4 @@
+import { getEnvVars } from '@gobing-ai/ts-utils';
 /**
  * Shared host-agent identification helpers — the **only** host-agent detection path
  * in the sp plugin hooks.
@@ -22,11 +23,11 @@
  * 3. `TERM_PROGRAM` — terminal identifier (e.g. `claude`, `ghostty`)
  * 4. `SPUR_DEFAULT_AGENT` — configured default agent
  *
- * @param env - environment record (defaults to `process.env`)
+ * @param env - environment record (defaults to `getEnvVars()`)
  * @param fallback - value returned when no candidate matches (defaults to `undefined`)
  */
 export function resolveAgentHint(
-    env: NodeJS.ProcessEnv = process.env,
+    env: NodeJS.ProcessEnv = getEnvVars(),
     fallback: string | undefined = undefined,
 ): string | undefined {
     const candidates = [env.SPUR_AGENT, env.CLAUDE_CODE_ENTRYPOINT, env.TERM_PROGRAM, env.SPUR_DEFAULT_AGENT];
@@ -45,11 +46,11 @@ export function resolveAgentHint(
  * 3. `OPENAI_MODEL` — OpenAI API model
  * 4. `CLAUDE_MODEL` — Claude Code model setting
  *
- * @param env - environment record (defaults to `process.env`)
+ * @param env - environment record (defaults to `getEnvVars()`)
  * @param fallback - value returned when no candidate matches (defaults to `undefined`)
  */
 export function resolveModelHint(
-    env: NodeJS.ProcessEnv = process.env,
+    env: NodeJS.ProcessEnv = getEnvVars(),
     fallback: string | undefined = undefined,
 ): string | undefined {
     const candidates = [env.SPUR_MODEL, env.ANTHROPIC_MODEL, env.OPENAI_MODEL, env.CLAUDE_MODEL];

@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVars } from '@gobing-ai/spur-config';
 import { loadWorkflowDefFromText } from '@gobing-ai/ts-dual-workflow-engine';
 import { evaluateWrapupRoute, type RouteInput, safetyFloorHolds } from '../../../../config/proportional-route-table';
 import { computeDefinitionDigest } from '../../src/workflow/composition-baseline';
@@ -208,7 +209,7 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
         const scaffold = join(cwd, 'plugins/sp/scripts');
         if (!existsSync(scaffold)) symlinkSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts'), scaffold);
         for (const cmd of command) {
-            const res = spawnSync('sh', ['-c', cmd], { cwd, env: { ...process.env, ...vars, spurBin } });
+            const res = spawnSync('sh', ['-c', cmd], { cwd, env: { ...getEnvVars(), ...vars, spurBin } });
             expect(res.status).toBe(0);
         }
     };

@@ -30,7 +30,7 @@ import {
     type TaskActionJob,
     terminateJobChildren,
 } from '@gobing-ai/spur-app';
-import { IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
+import { getEnvVars, IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
 import {
     bundledConfigRoot,
     loadSpurConfig,
@@ -181,7 +181,7 @@ export interface SchedulerTickOptions {
     timeoutMs?: TimeoutPolicyMs;
     /**
      * Task 0806 R3: environment for per-job budget resolution. Defaults to
-     * `process.env` so a per-job override agrees between the handler deadline
+     * `getEnvVars()` so a per-job override agrees between the handler deadline
      * and the tick's stale sweep without an explicit double-configuration.
      */
     env?: Record<string, string | undefined>;
@@ -211,10 +211,11 @@ export function registerSchedulerEntries(
     jobs: readonly SchedulerJobConfig[] = [],
     options: SchedulerTickOptions = {},
 ): void {
-    const env = options.env ?? (process.env as Record<string, string | undefined>);
+    const env = options.env ?? getEnvVars();
     // 0813 R2: `!== undefined`, never `??` — explicit `null` is unlimited and
     // must survive; `??` would silently restore the env/default policy.
-    const timeoutMs = options.timeoutMs !== undefined ? options.timeoutMs : resolveSchedulerCustomTimeoutMs(env);
+    const timeoutMs =
+        options.timeoutMs !== undefined ? options.timeoutMs : resolveSchedulerCustomTimeoutMs(ctx.spurConfig ?? null);
     const registrations: SchedulerScheduleRegistration[] = [];
     const now = Date.now();
 
@@ -287,7 +288,7 @@ export function registerSchedulerEntries(
         // (Native lease-based recovery stays deferred on the unreleased ts-infra
         // consumer/lease work, task 0812.)
         const jobPolicy = resolveSchedulerJobTimeoutMs(job.name, env, timeoutMs, job.timeoutMs);
-        const sweepThresholdMs = jobPolicy === null ? null : jobPolicy + resolveKillGraceMs(env);
+        const sweepThresholdMs = jobPolicy === null ? null : jobPolicy + resolveKillGraceMs(ctx.spurConfig ?? null);
         register(schedule, `${SCHEDULER_CUSTOM_JOB}:${job.name}`, async () => {
             const queue = await ctx.jobQueue();
             // Task 0863: single-flight is the DATABASE's job — the enqueue IS the
@@ -619,14 +620,18 @@ export async function resolveWebDistPath(
  * `deps` is injectable for testing; production callers pass only `options`.
  */
 export async function startServer(options: StartServerOptions, deps: StartServerDeps = defaultDeps): Promise<void> {
-    const env = process.env as Record<string, string | undefined>;
+    const env = getEnvVars();
     // One coherent project root for every project-scoped surface (task 0805 R2):
     // config/bootstrap loading, filesystem/context creation, planning folders,
     // project asset lookup, DB defaults and scheduled/child work. The CLI resolves
     // `serve --cwd` against the invocation directory; embedding callers omit it and
     // keep the previous process.cwd() behavior.
     const projectRoot = options.cwd ?? process.cwd();
-    const bootConfig = deps.serverBootstrapConfig(env);
+    // Load the merged global+project config BEFORE boot so `bootstrap.options` (task 0902)
+    // reaches serverBootstrapConfig. A load failure degrades to null (env-only), same
+    // tolerance as the CLI root; the same value is reused for the server context below.
+    const spurConfig = await loadSpurConfig(projectRoot).catch(() => null);
+    const bootConfig = deps.serverBootstrapConfig(env, spurConfig);
     const configFile = deps.resolveConfigFile(projectRoot);
 
     await deps.runNodeApplication({
@@ -656,9 +661,8 @@ export async function startServer(options: StartServerOptions, deps: StartServer
 
             // Load the merged global+project config ONCE (A5/ADR-082) and thread
             // it into the server context so Team/Workflow services + the history-
-            // refresh job (J8 R2) never re-read the config per slice. A load failure
-            // degrades to null (env-only) here, same tolerance as the CLI root.
-            const spurConfig = await loadSpurConfig(projectRoot).catch(() => null);
+            // refresh job (J8 R2) never re-read the config per slice. Loaded above
+            // so bootstrap.options reaches the boot config (task 0902).
 
             const ctx: ServerContext = deps.createServerContext(appRt, {
                 cwd: projectRoot,
@@ -670,7 +674,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
                 bootConfig,
-                ...(spurConfig !== undefined ? { spurConfig } : {}),
+                ...(spurConfig ? { spurConfig } : {}),
             });
             let jobWorker: JobWorkerService<unknown> | undefined;
             let jobProcessRegistry: ProcessRegistry | undefined;
@@ -839,7 +843,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
             // daemon boot and threads into both child-spawning queue handlers and the
             // tick's stale-row sweep threshold, so env, kill deadline, and sweep agree
             // on one policy.
-            const schedulerCustomTimeoutMs = resolveSchedulerCustomTimeoutMs(env);
+            const schedulerCustomTimeoutMs = resolveSchedulerCustomTimeoutMs(spurConfig);
 
             // Sep 2026 slowness fix: job work is never on the boot path — this
             // whole setup (orphan sweep + worker start, and every SQLite write
@@ -877,8 +881,9 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                             invocation: options.spurInvocation ?? '',
                             executor: childExecutor,
                             // Task 0806 R3: the refresh watchdog is decoupled from the
-                            // scheduler.custom default so its budget is tuned on its own env.
-                            timeoutMs: resolveHistoryRefreshTimeoutMs(env),
+                            // scheduler.custom default so its budget is tuned on its own
+                            // `bootstrap.options` key.
+                            timeoutMs: resolveHistoryRefreshTimeoutMs(spurConfig),
                         },
                         job,
                     );

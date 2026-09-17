@@ -5,6 +5,13 @@
 import { spawnSync } from "child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { join } from "path";
+
+// ../ts-libs/packages/utils/dist/env.js
+function getEnvVars() {
+  return process.env;
+}
+
+// plugins/sp/scripts/feature-dev-precheck.ts
 var BLOCKING_STATUSES = ["backlog", "wip", "testing", "blocked"];
 var KNOWN_STATUSES = ["todo", "done", "cancelled", ...BLOCKING_STATUSES];
 function identityRc(featureId, runId) {
@@ -77,7 +84,7 @@ function runFeatureDevPrecheck(env, options = {}) {
     const result = spawnSync(cmd, [...prefix, ...args], {
       cwd,
       encoding: "utf8",
-      ...options.env ? { env: { ...process.env, ...options.env } } : {}
+      ...options.env ? { env: { ...getEnvVars(), ...options.env } } : {}
     });
     if (result.error !== undefined) {
       writeFileSync(abs(target), `spawn failed: ${result.error.message}
@@ -118,7 +125,7 @@ function runFeatureDevPrecheck(env, options = {}) {
   return { status: "PASS", featureFile, rosterFile, tasksFile, statusFile, tasks };
 }
 var FEATURE_DEV_PRECHECK_USAGE = "usage: feature-dev-precheck.ts  (env: featureId, __runId, optional spurBin) \u2014 no subcommands";
-function main(argv, env = process.env) {
+function main(argv, env = getEnvVars()) {
   if (argv.length > 0) {
     process.stderr.write(`${FEATURE_DEV_PRECHECK_USAGE}
 `);

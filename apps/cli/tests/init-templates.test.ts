@@ -3,11 +3,12 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { main } from '../src/index';
 import type { CommandOutput } from '../src/output';
 import { createTempProject } from './helpers';
 
-const REPO_ROOT = process.env.SPUR_REPO_ROOT ?? join(import.meta.dir, '..', '..', '..');
+const REPO_ROOT = getEnvVar('SPUR_REPO_ROOT') ?? join(import.meta.dir, '..', '..', '..');
 
 function nullOutput(): CommandOutput {
     return { write: () => {}, error: () => {} };
@@ -16,7 +17,7 @@ function nullOutput(): CommandOutput {
 /** Build main() options with the global rules seed redirected to an isolated temp dir. */
 async function isolatedOptions(cwd: string) {
     const globalDir = await mkdtemp(join(tmpdir(), 'spur-glob-'));
-    const env = { ...process.env, SPUR_GLOBAL_RULES_DIR: globalDir };
+    const env = { ...getEnvVars(), SPUR_GLOBAL_RULES_DIR: globalDir };
     return { options: { cwd, env, output: nullOutput(), dbUrl: ':memory:' as const }, globalDir };
 }
 

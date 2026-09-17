@@ -37,6 +37,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 /** Exact task-content declaration that activates the live-evidence gate (0726 R2). */
 const DECLARATION_PREFIX = 'evidence-channel:';
@@ -58,7 +59,7 @@ function usage(): never {
 }
 
 function defaultSpurBin(): string {
-    if (process.env.SPUR_BIN) return process.env.SPUR_BIN;
+    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
     if (existsSync(local)) return `bun ${local}`;
     return 'spur';

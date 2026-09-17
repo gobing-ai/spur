@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { StructuredConfigSchemaError } from '@gobing-ai/ts-runtime';
+import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '../src/index';
 import {
     enrichSchemaViolationError,
     loadSpurConfig,
@@ -53,7 +54,7 @@ async function runLoaderScript(
     `;
     const proc = Bun.spawn(['bun', '-e', script], {
         env: {
-            ...process.env,
+            ...getEnvVars(),
             HOME: dirs.fakeHome,
             USERPROFILE: dirs.fakeHome,
             SPUR_SKIP_GLOBAL_CONFIG: '',
@@ -76,15 +77,15 @@ beforeEach(() => {
     // Hermetic regardless of preload: root tests/setup.ts sets this too, but standalone
     // runs from packages/config skip the preload and would leak the operator's real
     // ~/.config/spur/config.yaml into every in-process assertion.
-    originalSkipGlobalConfig = process.env.SPUR_SKIP_GLOBAL_CONFIG;
-    process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+    originalSkipGlobalConfig = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+    setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
 });
 
 afterEach(async () => {
     if (originalSkipGlobalConfig === undefined) {
-        delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
     } else {
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = originalSkipGlobalConfig;
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', originalSkipGlobalConfig);
     }
 
     while (dirsToClean.length > 0) {

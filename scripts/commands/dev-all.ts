@@ -33,7 +33,6 @@ function freePort(port: number, label: string): void {
 function spawnManaged(label: string, args: string[]): ManagedProcess {
     const child = spawn('bun', args, {
         stdio: 'inherit',
-        env: process.env,
     });
 
     child.on('error', (error) => {

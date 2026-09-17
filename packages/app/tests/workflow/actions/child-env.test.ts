@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { childProcessEnv } from '../../../src/workflow/actions/child-env';
 
 /**
@@ -13,14 +14,14 @@ const MARKERS = ['PROTO_SHIM_NAME', 'PROTO_INTERNAL_RUN_FALLBACK'];
 
 /** Set keys for one call and restore whatever was there before. */
 function withEnv<T>(vars: Record<string, string>, run: () => T): T {
-    const saved = new Map(Object.keys(vars).map((key) => [key, process.env[key]]));
-    Object.assign(process.env, vars);
+    const saved = new Map(Object.keys(vars).map((key) => [key, getEnvVar(key)]));
+    Object.assign(getEnvVars(), vars);
     try {
         return run();
     } finally {
         for (const [key, value] of saved) {
-            if (value === undefined) delete process.env[key];
-            else process.env[key] = value;
+            if (value === undefined) removeEnvVar(key);
+            else setEnvVar(key, value);
         }
     }
 }
@@ -51,7 +52,7 @@ describe('childProcessEnv', () => {
             for (const [key, value] of Object.entries(kept)) {
                 expect(env[key], `${key} must survive`).toBe(value);
             }
-            expect(env.PATH).toBe(process.env.PATH);
+            expect(env.PATH).toBe(getEnvVar('PATH'));
         });
     });
 
@@ -75,11 +76,11 @@ describe('childProcessEnv', () => {
         expect(env).not.toHaveProperty('SPUR_TEST_UNDEFINED');
     });
 
-    test('does not mutate process.env', () => {
+    test('does not mutate getEnvVars()', () => {
         withEnv({ PROTO_SHIM_NAME: 'bun' }, () => {
             childProcessEnv({ SPUR_TEST_ONLY_IN_CHILD: 'x' });
-            expect(process.env.PROTO_SHIM_NAME).toBe('bun');
-            expect(process.env.SPUR_TEST_ONLY_IN_CHILD).toBeUndefined();
+            expect(getEnvVar('PROTO_SHIM_NAME')).toBe('bun');
+            expect(getEnvVar('SPUR_TEST_ONLY_IN_CHILD')).toBeUndefined();
         });
     });
 });

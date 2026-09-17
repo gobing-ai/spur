@@ -1,0 +1,40 @@
+# Environment-variable hygiene — env access funnels through the config gateway (task 0902).
+#
+# Contract:
+# - `@gobing-ai/ts-utils` (`packages/utils/src/env.ts` in ts-libs) is the single
+#   implementation source; `packages/config/src/index.ts` re-exports `getEnvVar` /
+#   `getEnvVars` / `setEnvVar` / `removeEnvVar` / `getAppOptions` as the app-side funnel,
+#   and NO file in this repo touches `process.env` directly — packages/config included.
+#   Env flows into the app as typed config or injected `env` records (ADR-027). Runtime
+#   options belong in `.spur/config.yaml` `bootstrap.options` via `getAppOptions`;
+#   dev-only knobs belong in consts.
+# - Plugin scripts/hooks import the same functions from `@gobing-ai/ts-utils`; the
+#   `superskill script convert` `.mjs` twins bundle them in (self-contained on any
+#   install target).
+# - `apps/web` uses `import.meta.env` (Vite browser plane) — not process env, never matches.
+# - Which variables exist and who consumes them is documented in `.env.example`.
+#   (The former per-var lease table moved there; the rule now enforces the funnel,
+#   not a file-by-var inventory.)
+#
+# Scope: apps/**, packages/**, scripts/**, plugins/sp/** — src AND tests. No exclusions:
+# even the gateway package itself is free of direct access.
+include:
+  - "apps/**/src/**/*.{ts,tsx}"
+  - "apps/**/tests/**/*.{ts,tsx}"
+  - "packages/**/src/**/*.{ts,tsx}"
+  - "packages/**/tests/**/*.{ts,tsx}"
+  - "scripts/**/*.ts"
+  - "plugins/sp/**/*.ts"
+rules:
+  - id: env-var-hygiene
+    description: >
+      No direct `process.env` or `Bun.env` access outside the packages/config gateway.
+      Read via `getEnvVar` (single var, undefined-only fallback), seed/compose via
+      `getEnvVars()` (live record — also the sanctioned form for setting/deleting
+      parent→child contract markers), or take an injected `env` record parameter.
+      Aliasing (`const env = process.env`) is caught too — it must touch `process.env`.
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "process\\.env|\\bBun\\.env\\b"

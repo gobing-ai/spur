@@ -8,6 +8,7 @@ import {
     setDetachedServeSpawnForTests,
     setPortProbeForTests,
 } from '@gobing-ai/spur-app';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { stringify } from 'yaml';
 import { main } from '../../src/index';
 
@@ -22,14 +23,14 @@ describe('spur projects CLI command', () => {
         tempDir = mkdtempSync(join(tmpdir(), 'spur-projects-cli-test-'));
         projectsFile = join(tempDir, 'projects.json');
         projectPath = mkdtempSync(join(tmpdir(), 'spur-sample-project-'));
-        process.env.SPUR_PROJECTS_FILE = projectsFile;
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
     });
 
     afterEach(() => {
         setPortProbeForTests(undefined);
         ProjectRegistry.prototype.list = origList;
         ProjectRegistry.prototype.allocatePort = origAllocate;
-        delete process.env.SPUR_PROJECTS_FILE;
+        removeEnvVar('SPUR_PROJECTS_FILE');
         if (existsSync(tempDir)) {
             rmSync(tempDir, { recursive: true, force: true });
         }
@@ -540,8 +541,8 @@ describe('spur projects CLI command', () => {
         const fuserPath = join(binDir, 'fuser');
         writeFileSync(fuserPath, `#!/bin/sh\necho "${process.pid} 99999998"\n`);
         chmodSync(fuserPath, 0o755);
-        const origPath = process.env.PATH;
-        process.env.PATH = `${binDir}${origPath !== undefined ? `:${origPath}` : ''}`;
+        const origPath = getEnvVar('PATH');
+        setEnvVar('PATH', `${binDir}${origPath !== undefined ? `:${origPath}` : ''}`);
 
         try {
             const mock = createMockOutput();
@@ -552,8 +553,8 @@ describe('spur projects CLI command', () => {
             expect(exit).toBe(0);
             expect(mock.getText()).toContain('"stopped": "FuserStop"');
         } finally {
-            if (origPath !== undefined) process.env.PATH = origPath;
-            else delete process.env.PATH;
+            if (origPath !== undefined) setEnvVar('PATH', origPath);
+            else removeEnvVar('PATH');
             if (existsSync(binDir)) rmSync(binDir, { recursive: true, force: true });
         }
     });

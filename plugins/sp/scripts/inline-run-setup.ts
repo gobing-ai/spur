@@ -40,6 +40,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getEnvVar } from '@gobing-ai/ts-utils';
 
 /** Outcome document written to `.spur/run/<run-id>-inline-setup.json`. */
 interface SetupOutcome {
@@ -183,7 +184,7 @@ async function main(): Promise<void> {
     let fingerprint = false;
     let taskFile = '';
     let featureFile = '';
-    let spurBin = process.env.SPUR_BIN ?? '';
+    let spurBin = getEnvVar('SPUR_BIN') ?? '';
     const argv = process.argv.slice(2);
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--run-id') runId = argv[++i] ?? '';

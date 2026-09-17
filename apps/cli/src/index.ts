@@ -11,7 +11,7 @@
 import './sanitize-env';
 import '@gobing-ai/ts-db';
 import { Command } from '@commander-js/extra-typings';
-import type { SpurAppConfig, SpurConfig } from '@gobing-ai/spur-config';
+import { getEnvVar, getEnvVars, type SpurAppConfig, type SpurConfig } from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import type { ApplicationRuntime } from '@gobing-ai/ts-infra/application';
@@ -54,7 +54,7 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
     let exitCode = 0;
 
     const cwd = options.cwd ?? process.cwd();
-    const env = options.env ?? process.env;
+    const env = options.env ?? getEnvVars();
     // Task 0817 R1: forward `options.cwd` verbatim — which may be undefined — so the
     // loader's `SPUR_SKIP_PROJECT_CONFIG` gate can suppress the project layer for
     // unpinned programmatic runs. `cwd` stays materialized for the DB and context seams.
@@ -116,7 +116,9 @@ export async function main(argv = process.argv.slice(2), options: MainOptions = 
                 // from every later app.* logger (e.g. the rule engine).
                 // Outside test, enforce console off — all output goes to file.
                 config:
-                    process.env.NODE_ENV === 'test' ? { logging: { enabled: false } } : { logging: { console: false } },
+                    getEnvVar('NODE_ENV') === 'test'
+                        ? { logging: { enabled: false } }
+                        : { logging: { console: false } },
                 services: { db },
                 async start(appRt: ApplicationRuntime<SpurAppConfig>) {
                     void appRt;

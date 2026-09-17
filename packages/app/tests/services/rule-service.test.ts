@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join } from 'node:path';
+import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { createMigratedDb, type DbAdapter } from '@gobing-ai/spur-domain';
 import { type ConstraintRule, RuleEngine, type RuleEngineResult } from '@gobing-ai/ts-rule-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -30,13 +31,13 @@ beforeAll(() => {
     // Exit 1 = "no matches" / "no files" for both --json and --files-without-match.
     writeFileSync(fakeRg, '#!/bin/sh\nexit 1\n', 'utf8');
     chmodSync(fakeRg, 0o755);
-    previousPathForRg = process.env.PATH;
-    process.env.PATH = `${fakeRgDir}${delimiter}${previousPathForRg ?? ''}`;
+    previousPathForRg = getEnvVar('PATH');
+    setEnvVar('PATH', `${fakeRgDir}${delimiter}${previousPathForRg ?? ''}`);
 });
 
 afterAll(() => {
-    if (previousPathForRg === undefined) delete process.env.PATH;
-    else process.env.PATH = previousPathForRg;
+    if (previousPathForRg === undefined) removeEnvVar('PATH');
+    else setEnvVar('PATH', previousPathForRg);
     if (fakeRgDir !== undefined) rmSync(fakeRgDir, { recursive: true, force: true });
 });
 

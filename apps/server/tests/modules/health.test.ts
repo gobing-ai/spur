@@ -8,7 +8,7 @@ import {
     setDetachedServeSpawnForTests,
     setPortProbeForTests,
 } from '@gobing-ai/spur-app';
-import { spurConfigSchema } from '@gobing-ai/spur-config';
+import { removeEnvVar, setEnvVar, spurConfigSchema } from '@gobing-ai/spur-config';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { CoordinationRunDao, createMigratedDb, InboxMessageDao, ProjectStrategyDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -24,17 +24,17 @@ describe('healthModule', () => {
     beforeEach(() => {
         tempDir = mkdtempSync(join(tmpdir(), 'spur-health-test-'));
         projectsFile = join(tempDir, 'projects.json');
-        process.env.SPUR_PROJECTS_FILE = projectsFile;
+        setEnvVar('SPUR_PROJECTS_FILE', projectsFile);
         // Hermetic config load: the fleet section now comes from `.spur/config.yaml`
         // through the real loader, so the operator's global layer must not leak in.
-        process.env.SPUR_SKIP_GLOBAL_CONFIG = 'true';
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
     });
 
     afterEach(() => {
         setPortProbeForTests(undefined);
         ProjectRegistry.prototype.allocatePort = origAllocate;
-        delete process.env.SPUR_PROJECTS_FILE;
-        delete process.env.SPUR_SKIP_GLOBAL_CONFIG;
+        removeEnvVar('SPUR_PROJECTS_FILE');
+        removeEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
         if (existsSync(tempDir)) {
             rmSync(tempDir, { recursive: true, force: true });
         }

@@ -1,3 +1,4 @@
+import { getEnvVars } from '@gobing-ai/spur-config';
 import type { GuardContext, GuardEvaluationResult, GuardRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 
@@ -28,7 +29,7 @@ function arrayOption(options: Record<string, unknown>, key: string): string[] {
  * shell actions, and it is worse here: a guard's side effect fires while the comparison still
  * reports an ordinary boolean, so nothing in the run output signals that anything executed.
  *
- * This runner passes `context.vars` (merged over the inherited `process.env`) to the subprocess,
+ * This runner passes `context.vars` (merged over the inherited `getEnvVars()`) to the subprocess,
  * so guard commands reference vars by name (`$profile`) and a variable-expansion result is never
  * re-parsed for metacharacters — the value is data, not code.
  *
@@ -49,7 +50,7 @@ export class EnvShellGuardRunner implements GuardRunner {
         const spawn = usesShell ? { command: '/bin/sh', args: ['-c', command] } : { command, args: explicitArgs };
         const cwd = options.cwd === undefined ? context.workdir : stringOption(options, 'cwd');
         const env: Record<string, string> = {};
-        for (const [key, value] of Object.entries({ ...process.env, ...context.vars })) {
+        for (const [key, value] of Object.entries({ ...getEnvVars(), ...context.vars })) {
             if (value !== undefined) env[key] = String(value);
         }
         const result = await this.processExecutor.run({
