@@ -101,7 +101,7 @@
         "history-surface-freeze-check": "bun scripts/commands/history-surface-freeze-check.ts"
     },
     "dependencies": {
-        "@gobing-ai/spur-config": "workspace:0.3.85",
+        "@gobing-ai/spur-config": "workspace:0.3.87",
         "@gobing-ai/ts-ai-runner": "0.4.67",
         "@gobing-ai/ts-db": "0.4.67",
         "@gobing-ai/ts-dual-workflow-engine": "0.4.67",
