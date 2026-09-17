@@ -57,6 +57,39 @@ describe('projectWorkflowProgress', () => {
         db.close();
     });
 
+    // 0879 R2: an action row matching no declared state action surfaces as a
+    // diagnostic instead of persisting invisibly (invisible-orphan failure mode).
+    test('returns orphan-action-row diagnostic for an unmatched action row', async () => {
+        const db = await setupDb();
+        const now = Date.now();
+        const digest = computeDefinitionDigest(testWorkflowDef);
+        await db.run(
+            "INSERT INTO runs (id, workflow_name, status, started_at, metadata_json, created_at, updated_at) VALUES ('r1', 'test-pipeline', 'done', '2026-08-19T00:00:00Z', ?, ?, ?)",
+            JSON.stringify({ definitionDigest: digest }),
+            now,
+            now,
+        );
+        await db.run(
+            "INSERT INTO action_runs (id, run_id, node, kind, status, ok, duration_ms, started_at, completed_at, created_at) VALUES ('a1', 'r1', 'precheck', 'shell', 'success', 1, 100, '2026-08-19T00:00:01Z', '2026-08-19T00:00:02Z', ?)",
+            now + 10,
+        );
+        await db.run(
+            "INSERT INTO action_runs (id, run_id, node, kind, status, ok, duration_ms, started_at, completed_at, created_at) VALUES ('a2', 'r1', 'ghost', 'shell', 'success', 1, 10, '2026-08-19T00:00:03Z', '2026-08-19T00:00:04Z', ?)",
+            now + 20,
+        );
+
+        const projection = await projectWorkflowProgress('r1', { db, workflowDef: testWorkflowDef });
+        const orphan = projection.diagnostics.find((d) => d.code === 'orphan-action-row');
+        expect(orphan).toBeDefined();
+        expect(orphan?.message).toContain('a2');
+        expect(orphan?.message).toContain('ghost');
+        // The matched row is not flagged.
+        expect(projection.diagnostics.some((d) => d.code === 'orphan-action-row' && d.message.includes('a1'))).toBe(
+            false,
+        );
+        db.close();
+    });
+
     test('returns definition-unavailable and definition-digest-missing when definition not found and no digest', async () => {
         const db = await setupDb();
         const now = Date.now();

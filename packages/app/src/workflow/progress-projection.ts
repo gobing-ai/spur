@@ -139,6 +139,7 @@ export interface WorkflowProgressDiagnostic {
         | 'definition-digest-missing'
         | 'definition-drift'
         | 'orphan-row'
+        | 'orphan-action-row'
         | 'ambiguous-action';
     /** Human-readable explanation. */
     message: string;
