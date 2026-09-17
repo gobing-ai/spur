@@ -84,8 +84,8 @@ surface that can open a run owes the row that ends it.
 - `agent.invoke.*` events carry the dispatching run's non-null id.
 - Emission is best-effort **at the boundary only**. A failed write is recorded and the run continues
   to its declared terminal state; observation never wedges the thing observed.
-- `projectWorkflowProgress` (`packages/app/src/workflow/progress-projection.ts`, 506 lines, no CLI
-  consumer today) is exposed read-only as `spur workflow progress <run-id> --json`. The command
+- `projectWorkflowProgress` (`packages/app/src/workflow/progress-projection.ts`, 506 lines, which had
+  no CLI consumer) is exposed read-only as `spur workflow progress <run-id> --json`. The command
   renders; it adds no projection logic. The existing observability modules — `observability.ts`,
   `step-reporter.ts`, `steering.ts`, `escalation-packet.ts`, `tripwire.ts`, `trace-writer.ts` — are
   wired, not rebuilt.

@@ -132,7 +132,7 @@ describe('AC4 — no CLI verb advertises --json-envelope and ignores it', () => 
  *
  * R1's property is behavioral: no verb declaring `--json-envelope` may exit non-zero while
  * writing a bare stderr line and no JSON. `tests/output-envelope.test.ts` drives a sample of
- * them end-to-end; this is the static census over **all 69**, so the guarantee is a property of
+ * them end-to-end; this is the static census over **all 67**, so the guarantee is a property of
  * the source rather than of whichever verbs someone remembered to probe.
  *
  * A `context.output.error(...)` site is a *failure* site when a non-zero exit follows it
