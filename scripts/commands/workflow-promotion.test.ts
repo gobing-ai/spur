@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -223,6 +223,21 @@ describe('evaluateCandidate (0873 R2 verdict)', () => {
 });
 
 describe('resolve CLI (0878 R6)', () => {
+    // `runWorkflowPromotion` writes refusals/results to stdout/stderr; capture both so the dots
+    // reporter output stays clean (same pattern as eval-pipeline.test.ts nesting guard).
+    let logSpy: ReturnType<typeof spyOn>;
+    let errSpy: ReturnType<typeof spyOn>;
+
+    beforeEach(() => {
+        logSpy = spyOn(console, 'log').mockImplementation(() => {});
+        errSpy = spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        logSpy.mockRestore();
+        errSpy.mockRestore();
+    });
+
     const verdict = (decision: 'promote' | 'delete'): WorkflowCandidateVerdict => ({
         decision,
         evaluatedAt: '2026-09-16T00:00:00Z',
