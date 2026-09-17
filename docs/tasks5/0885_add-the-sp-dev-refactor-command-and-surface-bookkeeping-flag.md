@@ -4,7 +4,7 @@ name: "Add the /sp:dev-refactor command and surface bookkeeping: flag glossary, 
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:49:42.539Z
-updated_at: "2026-09-17T20:41:28.460Z"
+updated_at: "2026-09-17T22:50:06.738Z"
 feature_id: H13
 priority: P1
 tags:
@@ -80,17 +80,17 @@ Implemented 2026-09-17 (H13, pipeline implement state).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | plugins/sp/commands/dev-refactor.md:1-33 (frontmatter :3-5; H1 :7; wrap :9; flag table :11-22; glossary link :24; Usage :26; Implementation :30-33) |
-| R2 | MET | plugins/sp/skills/spur-dev/references/flag-glossary.md:167 (--check), :176 (--focus), :186 (--scope), :264-265 (--fix); :38-44/:113-119 (--agent/--auto structural, no parenthetical); validator exit 0 at 74 surfaces |
-| R3 | MET | plugins/sp/references/roles.md:61 (reviewer commands list); roles.test.ts closure green (146/146 attested) |
-| R4 | MET | plugins/sp/README.md:137 (command row), :203 (skills tree), :321 (skills table, pre-existing from 0883); plugins/sp/skills/spur-dev/references/dev-operations.md:89 (row 17), :360-366 (§17 refactor) |
-| R5 | MET | docs/design/dev-refactor-command.md:8 (status: built, H13 0883-0885); docs/04_DESIGN.md:201-211 (§1.3 lacks command-family enumeration → conditional not triggered), :51 (H13 satellite indexed) |
-| R6 | MET | Supervisor-attested: validate-commands.ts exit 0 (40 commands), validate-flag-contracts.ts exit 0 (74 surfaces), roles.test.ts + skill-structure.test.ts 146/146, spur-check PASS |
+| R1 | MET | `plugins/sp/commands/dev-refactor.md:1-40` — frontmatter `role: reviewer`, operator-accepted `argument-hint`, `allowed-tools`; body "Wraps the **sp:code-refactoring** skill.", `## Argument Flags` table, glossary link, `## Usage`, `## Implementation` with `Skill(skill="sp:code-refactoring", args="$ARGUMENTS")` — all re-read this run |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/flag-glossary.md:163-167` `### \`--check <cmd>\`` entry declaring dev-simplify + dev-refactor; `:176` `--focus` lens values on dev-refactor; `:186` `--scope` declaring list; `:264-265` `--fix` verify-family + refactor-coordinator wording; validator exit 0 (below) |
+| R3 | MET | `plugins/sp/references/roles.md:61` reviewer commands list contains `dev-refactor`; `cd plugins/sp && bun test tests/roles.test.ts` — 22 pass / 0 fail (re-run 2026-09-17) |
+| R4 | MET | `plugins/sp/README.md` `dev-refactor` command row + `code-refactoring` skills-tree and skills-table rows (≥2 matches re-read); `plugins/sp/skills/spur-dev/references/dev-operations.md` operation-map row 17 + `### 17. refactor` dispatching to `sp:code-refactoring` |
+| R5 | MET | `docs/design/dev-refactor-command.md:8` status line built (H13, 0883-0885); `docs/04_DESIGN.md` §1.3 does not enumerate command family → conditional edit not triggered (confirmed against Solution) |
+| R6 | MET | `bun plugins/sp/scripts/validate-commands.ts` → "40 commands pass all 5 thin-wrapper gates." exit 0; `bun plugins/sp/scripts/validate-flag-contracts.ts` → "All 74 contract surfaces agree across all claims." exit 0; roles.test.ts 22/0; skill-structure.test.ts 84/0 — all re-run 2026-09-17 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R7 — dev-refactor command passes the wrapper and flag validators | MET | test | validate-commands.ts gates a–e exit 0 (40 commands, 39→40 sanctioned ratchet) + validate-flag-contracts.ts C1/C2 exit 0 (74 surfaces, 73→74 sanctioned ratchet) — supervisor-run |
-| R8 — Surface bookkeeping is complete | MET | test | roles.test.ts command-closure ratchet green (146/146) + flag-contract 74-surface validator exit + static cross-check of glossary/roles/README/dev-operations/design-status references above |
+| R7 — dev-refactor command passes the wrapper and flag validators | MET | test | `validate-commands.ts` exit 0 (40 commands, gates a–e) + `validate-flag-contracts.ts` exit 0 (74 surfaces, C1/C2), both re-run 2026-09-17 |
+| R8 — Surface bookkeeping is complete | MET | test | `cd plugins/sp && bun test tests/roles.test.ts` 22 pass / 0 fail re-run 2026-09-17 + static cross-check of glossary (`flag-glossary.md:163-167,176,186,264-265`), roles (`roles.md:61`), README rows, dev-operations `### 17. refactor`, and satellite status line — all present |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -103,7 +103,6 @@ Implemented 2026-09-17 (H13, pipeline implement state).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:a9317d03c91411e4cca7b60877afcfdbfdab3e3914805b92f783055b9d9a505a |
 
 ### References
 

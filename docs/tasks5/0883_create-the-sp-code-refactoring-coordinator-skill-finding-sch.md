@@ -4,7 +4,7 @@ name: "Create the sp:code-refactoring coordinator skill: finding schema, severit
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:49:42.534Z
-updated_at: "2026-09-17T18:49:16.825Z"
+updated_at: "2026-09-17T22:47:27.978Z"
 feature_id: H13
 priority: P1
 tags:
@@ -87,21 +87,22 @@ Checks: `bun test tests/skill-structure.test.ts` in `plugins/sp` — 84 pass / 0
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `refactor-finding.schema.json:1-85` (draft-07, bare array, 11 required fields, `RF-<focus>-<nnn>` id pattern, evidence minItems 1); `finding-schema.md:10-24` = design §4; map at `finding-schema.md:29-40` = design §5; `bun -e` check at `finding-schema.md:41-63`, no new dependency |
-| R2 | MET | `fix-ladder.md:8-18` rungs = design §6; `:19-23` hard rules (auto never weakens tests; cutting/breaking never auto/below P2); `:25-31` policies (`blockers-first` = P1/P2 + auto at :30); `:33-45` loop (green baseline, one finding, re-check, scoped revert + `reverted`); `SKILL.md:123-127` |
-| R3 | MET | `focus-detection.md:11-18` ordered globs = design §8; first-match/union rules `:22-24`; `--focus` single/comma/auto `:26-32`; report-before-run `:34-42`; enforced at `SKILL.md:63-66` |
-| R4 | MET | `SKILL.md:1-23` frontmatter = sibling shape (`code-simplification/SKILL.md:1-20`), `see_also` lists the four lenses; phases at `SKILL.md:60,70,97,105,123,129`; dispatch `:75-78`; merge `:99-103` |
-| R5 | MET | `SKILL.md:131-142` (findings JSON validated by R1 check :129,134; report with lens set, P1–P4 table, preservation summary, applied/reverted/deferred(+rejected) :135-141; run-id :137-140); no-edit default `SKILL.md:18-19,127` |
-| R6 | MET | `SKILL.md:105-121`: objective gates skipped by `--auto`/headless `:110-112`; cutting/breaking always pause `:107-109,116-118`; headless → `deferred` + SUGGEST, never applied `:117-118`; declined → `rejected` `:120-121`; red baseline hard stop `:67-68,119` |
-| R7 | MET | `SKILL.md:49-55` = design §11 word-for-word; `.spur/run/0883-test-gate.status` PASS (lint+typecheck+tests, trusted); README row `plugins/sp/README.md:319` satisfies structure-test R43 (`tests/skill-structure.test.ts:1137-1206`) |
+| R1 | MET | `plugins/sp/skills/code-refactoring/references/refactor-finding.schema.json:1-85` (draft-07, bare array, 11 required fields, evidence minItems 1); field table `references/finding-schema.md:10-24`; severity map `finding-schema.md:29-40`; `bun -e` check `finding-schema.md:41-69` |
+| R2 | MET | `plugins/sp/skills/code-refactoring/references/fix-ladder.md:8-18` rungs; `:19-23` hard rules (auto never weakens tests; cutting/breaking never auto/below P2); `:25-31` policies (`blockers-first` = P1/P2 auto); `:33-45` apply loop (green baseline, one finding, scoped revert + `reverted`) |
+| R3 | MET | `plugins/sp/skills/code-refactoring/references/focus-detection.md:11-18` ordered globs tests→ui→api→architect; first-match/union `:22-24`; `--focus` single/comma/auto `:26-32`; report-before-run `:34-42` |
+| R4 | MET | `plugins/sp/skills/code-refactoring/SKILL.md:1-23` sibling frontmatter with `see_also` four lenses; six phases at `SKILL.md:60,70,97,105,123,129`; lens dispatch `:75-78`; merge dedupe by file+span+rung `:99-103` |
+| R5 | MET | `plugins/sp/skills/code-refactoring/SKILL.md:129-142` findings JSON validated by R1 check; report with lens set, P1–P4 table, preservation summary, applied/reverted/deferred lists; `--fix none` no-edit default `SKILL.md:18-19,127` |
+| R6 | MET | `plugins/sp/skills/code-refactoring/SKILL.md:105-121` gate matrix: objective gates skipped by `--auto`/headless `:110-112`; cutting/breaking always pause `:107-109,116-118`; headless → `deferred` + SUGGEST `:117-118`; declined → `rejected` `:120-121`; red baseline hard stop `:67-68,119` |
+| R7 | MET | `plugins/sp/skills/code-refactoring/SKILL.md:49-55` stop rules (design §11 invariants); `cd plugins/sp && bun test tests/skill-structure.test.ts` — 84 pass / 0 fail (re-run 2026-09-17, incl. R43 README index row check) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Shared refactor-finding schema and P1–P4 severity map | MET | command | structural-check fixtures run 2026-09-17 per `finding-schema.md:44-63`: valid array → VALID (exit 0); `severity:"P0"` → REJECTED:severity (exit 1); cutting+auto → REJECTED:cutting-auto (exit 1); schema at `refactor-finding.schema.json`, map at `finding-schema.md:29-40` |
-| R2 — Fix ladder with per-rung eligibility and apply loop [docs-only] | MET | static-ref | `fix-ladder.md:8-45` (rungs, `blockers-first` = P1/P2 auto :30, revert rule :41-42, test-never-weakened :21-23) = design §6 verbatim |
-| R3 — Focus auto-detection classifies by path [docs-only] | MET | static-ref | `focus-detection.md:11-42` (glob table, union, `--focus` forms, report-before-run) = design §8 verbatim |
-| R5 — Coordinator skill sp:code-refactoring dispatches lenses and writes artifacts [docs-only] | MET | static-ref | `SKILL.md:70-95` dispatch, `:129-142` both `.spur/run/<run-id>-refactor-findings.json` + `-refactor-report.md`, `--fix none` writes both with no edit |
-| R6 — Cutting and breaking findings always pause for an operator answer [docs-only] | MET | static-ref | `SKILL.md:105-121` gate matrix = design §7; `--auto` skips only objective gates |
+| R1 — Shared refactor-finding schema and P1–P4 severity map | MET | command | Re-ran documented `bun -e` structural check 2026-09-17: valid fixture → `refactor-findings: 1 finding(s) structurally valid` (exit 0); `severity:"P0"` → `severity="P0" not in P1 |
+| R2 — Fix ladder with per-rung eligibility and apply loop [docs-only] | MET | static-ref | `plugins/sp/skills/code-refactoring/references/fix-ladder.md:8-45` — anchors re-read this run, all live |
+| R3 — Focus auto-detection classifies by path [docs-only] | MET | static-ref | `plugins/sp/skills/code-refactoring/references/focus-detection.md:11-42` — anchors re-read this run, all live |
+| R5 — Coordinator skill sp:code-refactoring dispatches lenses and writes artifacts [docs-only] | MET | static-ref | `plugins/sp/skills/code-refactoring/SKILL.md:70-95` dispatch, `:129-142` both artifacts, `--fix none` writes both with no edit |
+| R6 — Cutting and breaking findings always pause for an operator answer [docs-only] | MET | static-ref | `plugins/sp/skills/code-refactoring/SKILL.md:105-121` gate matrix; `--auto` skips only objective gates |
+| Plugin structure tests + spur-check | MET | test | `cd plugins/sp && bun test tests/skill-structure.test.ts` 84 pass / 0 fail, re-run 2026-09-17 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -114,7 +115,6 @@ Checks: `bun test tests/skill-structure.test.ts` in `plugins/sp` — 84 pass / 0
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:b89eecdc0f218e7b5fefbe965c527a9dd4e3bd3e40c405a88164262ab601dd14 |
 
 ### References
 

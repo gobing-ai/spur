@@ -4,7 +4,7 @@ name: "Refine the four taste-refactoring skills: Spur contract sections, standar
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:49:42.538Z
-updated_at: "2026-09-17T19:38:23.515Z"
+updated_at: "2026-09-17T22:48:37.008Z"
 feature_id: H13
 priority: P1
 tags:
@@ -79,15 +79,15 @@ Additive edits only; no native section, principle, or pass order changed.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | taste-refactoring-api/SKILL.md:4-16, architect/SKILL.md:4-16, tests/SKILL.md:4-16, ui/SKILL.md:4-16 — `license: Apache-2.0` (:4) + metadata author/version "1.0"/platforms/category/interactions/operations/openclaw; plugins/sp/README.md:344-347 all four rows show `1.0` |
-| R2 | MET | Headings: api SKILL.md:348, architect SKILL.md:485, tests SKILL.md:496, ui SKILL.md:304; sections 29/30/24/26 lines (≤40); inputs+read-first api:353-355, architect:490-492, tests:499-501, ui:309-311; mapping incl. P1 fix tests:504 (`Why it matters` → `title`), architect:494-497 (all native fields per architect SKILL.md:426-427,441), ui:313-316 (Observation/Refactor/System rule per ui:190-193), api:357-361; severity rows api:363-365, architect:500-501, tests:507, ui:318-319; native sections above headings untouched (contract appended at EOF, self-scoped api:350-351) |
-| R3 | MET | Inventory-before-proposals: api:367-369 (consumer contract), architect:503-505 (Preservation Contract table), tests:509-511 (Confidence Contract), ui:321-323 (controls/interactions); preservation classes: api:370-372 (additive→preserving, risky/breaking→breaking, endpoint removal→cutting), architect:507-510, tests:516-518, ui:325-327 (control/interaction removal→cutting); stop rules "never below P2, never fix_eligibility auto" api:374-376, architect:512-514, tests:517-519, ui:327-329 |
-| R4 | MET | taste-refactoring-api/references/protocol-modes.md:80-109 `## CLI mode` with all six topics: noun/verb grammar (:86-88), flag vocabulary consistency (:90-93), exit codes (:95-98), --json envelope stability (:100-103), help-text parity (:105-106), additive-vs-breaking (:107-109); referenced from taste-refactoring-api/SKILL.md:189 |
-| R5 | MET | 84 `test(` blocks statically counted in plugins/sp/tests/skill-structure.test.ts (matches supervisor re-run 84/84 via `cd plugins/sp && bun test tests/skill-structure.test.ts`); R44 baselines 'taste-refactoring-architect': 20_360 (:866) and 'taste-refactoring-tests': 21_106 (:867) with 0884 rationale :862-865 and growth ratchet :869-886; spur-check PASS on post-remediation tree per supervisor; mutation set = 4 taste skill dirs + README:344-347 + documented baseline exception (task Solution); Solution section records all decisions |
+| R1 | MET | `plugins/sp/skills/taste-refactoring-api/SKILL.md:1-16`, `taste-refactoring-architect/SKILL.md:1-16`, `taste-refactoring-tests/SKILL.md:1-16`, `taste-refactoring-ui/SKILL.md:1-16` — `license: Apache-2.0` + metadata (author/version/platforms/category/interactions) re-read this run; README version cells `plugins/sp/README.md:344-347` show `1.0` |
+| R2 | MET | `## Spur contract` headings confirmed at `taste-refactoring-api/SKILL.md:348`, `taste-refactoring-architect/SKILL.md:485`, `taste-refactoring-tests/SKILL.md:496`, `taste-refactoring-ui/SKILL.md:304`; measured 30/30/29/30 lines (≤40 cap); each contains inputs/read-first, native→schema field mapping, and the design §5 severity row; contract appended at EOF, native sections untouched |
+| R3 | MET | Preserved-behavior inventory rule present in all four contracts (api consumer contract, architect Preservation Contract table, tests Confidence Contract, ui controls/interactions); preservation classes per contract incl. api endpoint removal = `cutting`, ui control/interaction removal = `cutting`; stop rules "never below P2, never fix_eligibility auto" present in all four |
+| R4 | MET | `plugins/sp/skills/taste-refactoring-api/references/protocol-modes.md:80-109` `## CLI mode` covers noun/verb grammar, flag vocabulary consistency, exit codes, `--json` envelope stability, help-text parity, additive-vs-breaking; referenced from `taste-refactoring-api/SKILL.md` (CLI mode mention re-read this run) |
+| R5 | MET | `cd plugins/sp && bun test tests/skill-structure.test.ts` — 84 pass / 0 fail (re-run 2026-09-17); R44 baselines `20_360`/`21_106` with 0884 rationale comment in `plugins/sp/tests/skill-structure.test.ts`; mutation set confined to the four taste skill dirs + README cells + documented baseline exception |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R4 — Taste skills carry a Spur contract, metadata, and preserved-behavior inventory | MET | test | Structure tests: 84/84 pass on post-remediation tree (supervisor-run `cd plugins/sp && bun test tests/skill-structure.test.ts`; 84 test blocks statically verified in plugins/sp/tests/skill-structure.test.ts) + full `bun run spur-check` PASS; static: contract+metadata+inventory sections at api SKILL.md:348-376, architect SKILL.md:485-514, tests SKILL.md:496-519, ui SKILL.md:304-329; README.md:344-347; task AC checklist has exactly one scenario row (task file, Acceptance Criteria) |
+| R4 — Taste skills carry a Spur contract, metadata, and preserved-behavior inventory | MET | test | `cd plugins/sp && bun test tests/skill-structure.test.ts` 84 pass / 0 fail re-run 2026-09-17 (R43 README index, R44 budgets green); static re-read: contracts + inventory + severity rows at api `SKILL.md:348-377`, architect `SKILL.md:485-514`, tests `SKILL.md:496-525`, ui `SKILL.md:304-333`; README.md:344-347 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -100,7 +100,6 @@ Additive edits only; no native section, principle, or pass order changed.
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:dc00b12e7df1f8e9b2b70728d6fe9eeceb47015f7295481ebf56b236546ef31f |
 
 ### References
 

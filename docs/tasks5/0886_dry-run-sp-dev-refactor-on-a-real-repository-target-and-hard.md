@@ -4,7 +4,7 @@ name: Dry-run /sp:dev-refactor on a real repository target and harden the contra
 status: done
 template: feature-impl
 created_at: 2026-09-17T17:49:42.540Z
-updated_at: "2026-09-17T21:03:41.898Z"
+updated_at: "2026-09-17T22:55:44.340Z"
 feature_id: H13
 priority: P2
 tags:
@@ -76,16 +76,16 @@ Inline dogfood of `/sp:dev-refactor` per the coordinator contract (design §4/§
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | focus-detection.md:8-16 globs vs plugins/sp/scripts tree — zero tests/ui/api matches, all files architect fallback; report.md:11 lens line emitted before analysis |
-| R2 | MET | Host-run `git status --short` post-run: no scope-file change; run-1 policy `--fix none` structurally cannot edit; report.md:37-39 narrative matches observed tree |
-| R3 | MET | `.spur/run/c7581e1b-…-refactor-findings.json` — documented structural check exit 0 (VALID, 4 findings); P0 and cutting+auto rejection probes exit 1; all 6 evidence files inside scope |
-| R4 | MET | report.md:11 (lens set), :20-26 (P1–P4 table), :34 (preservation summary), :38-42 (applied/reverted/deferred); architect lens has 4 findings |
-| R5 | MET | report.md:40-42 — run 2 `--fix blockers-first --auto` eligible batch = ∅ → "nothing eligible"; no cutting/breaking findings to defer; no target edits to revert |
-| R6 | MET | fix-ladder.md:41-46 + SKILL.md:123-127 reverse-apply revert rule (shared-file satisfiable); docs/design/dev-refactor-command.md §6 authority contradiction remediated; `.spur/run/0886-test-gate.status` = PASS post-fix; Solution records run id/target/lens/counts/fixes |
+| R1 | MET | Re-run 2026-09-17 (`reverify-0886-20260917`): lens set reported before analysis = architect (27 files); deterministic re-derivation against `plugins/sp/skills/code-refactoring/references/focus-detection.md:12-15` globs — zero tests/ui/api matches in `plugins/sp/scripts`, row-4 fallback classifies all 27 |
+| R2 | MET | `git status --short -- plugins/sp/scripts/ plugins/sp/skills/ plugins/sp/commands/ config/` → empty post-run (re-run 2026-09-17); `--fix none` policy structurally cannot edit |
+| R3 | MET | `.spur/run/reverify-0886-20260917-refactor-findings.json` — documented `bun -e` structural check (`finding-schema.md:41-69`) exit 0, "2 finding(s) structurally valid", re-run 2026-09-17; both findings carry in-scope `file:line` evidence, P4 severity, `preserving` class, `suggest` eligibility (no cutting/breaking+auto) |
+| R4 | MET | `.spur/run/reverify-0886-20260917-refactor-report.md` — lens set line, P1–P4 findings table with `file:line`, preservation summary (preserving 2 / cutting 0 / breaking 0), applied/reverted/deferred lists; architect lens has 2 findings (≥1 required) |
+| R5 | MET | Run 2 `--fix blockers-first --auto` on same scope: eligible batch P1/P2 ∩ auto = ∅ → "nothing eligible" branch (report § Run 2); no cutting/breaking findings to defer; no target edits to revert — matches original dogfood outcome |
+| R6 | MET | Contract fixes re-verified live: `plugins/sp/skills/code-refactoring/references/fix-ladder.md:41-46` reverse-apply-the-finding's-own-hunks rule (explicit "Never `git checkout -- <file>`" on shared evidence files); aligned apply-loop wording `plugins/sp/skills/code-refactoring/SKILL.md:123-127`; plugin structure tests 84 pass / 0 fail re-run 2026-09-17 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R9 — Dry run on a real target produces a report without edits | MET | command | Host-run documented structural check exit 0 on `.spur/run/c7581e1b-…-refactor-findings.json` + report artifact present; host-run `git status --short` clean of scope edits after both runs; run-2 nothing-eligible branch; `bun run spur-check` PASS post-remediation (8410 tests / 476 files) |
+| R9 — Dry run on a real target produces a report without edits | MET | command | Live re-run 2026-09-17 on `plugins/sp/scripts` (27 files): findings JSON structural check exit 0; report written; `git status --short` empty of scope edits; run-2 nothing-eligible branch. Original 2026-09-17 run artifacts (`c7581e1b-…`) were gitignored and no longer on disk — evidence regenerated this run rather than trusted |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
