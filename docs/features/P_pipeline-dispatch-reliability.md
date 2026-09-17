@@ -2,11 +2,11 @@
 schema_version: 1
 id: "P"
 name: "pipeline-dispatch-reliability"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-06T14:38:52.248Z"
-updated_at: "2026-09-06T14:41:01.173Z"
+updated_at: "2026-09-17T23:04:26.937Z"
 ---
 
 # P: pipeline-dispatch-reliability
@@ -53,3 +53,6 @@ _No linked tasks._
 ## Notes
 
 ## History
+
+- 2026-09-17T23:04:26.937Z backlog → active (system)
+

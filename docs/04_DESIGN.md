@@ -36,6 +36,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Observability and HTTP read contracts | [observability-contracts](design/observability-contracts.md) |
 | Essential workflow checks and observable execution | [essential-workflow-checks.md](design/essential-workflow-checks.md) |
 | Executor availability | [executor-availability.md](design/executor-availability.md) |
+| Session-pinned headless dispatch and executor availability lifecycle (B6/B7/B8/G66) | [session-pinned-dispatch.md](design/session-pinned-dispatch.md) |
 | rd3 Migration — System Design | [rd3-migration-design.md](design/rd3-migration-design.md) |
 | Server-Side Adjustment — Design | [server-side-adjustment-design.md](design/server-side-adjustment-design.md) |
 | Server-Side Adjustment — Finalized Feature List | [server-side-adjustment-feature-finalized.md](design/server-side-adjustment-feature-finalized.md) |

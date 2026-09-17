@@ -1840,3 +1840,34 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   policy, not env).
 - **Detail:** `packages/utils/src/env.ts` (gateway); `packages/config/src` (re-export);
   `config/rules/boundary/env-var-hygiene.yaml`; `.env.example`.
+
+## ADR-121: Coding Agents Stay Headless; Dispatch Is Session-Pinned Per Run, Not One-Shot Per Stage
+
+- **Status:** Accepted · **Date:** 2026-09-17
+- **Decision:** Spur drives coding agents only through their headless surfaces (`-p` / `exec` one-shot,
+  and long-lived stdin-fed processes where an agent supports multi-turn input). Interactive TTY/PTY
+  sessions are not a dispatch surface. Within headless, the unit of dispatch becomes the **run**, not
+  the stage: a pipeline run resolves one executor per role once (precheck), pins it, and reuses that
+  executor's session across the stages a declared per-stage policy allows (coder-role stages reuse;
+  reviewer/verify stages are fresh unless declared otherwise). Agent capabilities that decide the
+  warmest available mode (`resumeById`, `sessionDir`, `persistentStdin`, `structuredOutput`) are
+  declared by the runner per agent and read by Spur, never hard-coded per agent name. Executor
+  availability becomes a lifecycle with **ownership** (`operator | quota | probe`): automatic writers
+  may recover what automation disabled and never what the operator disabled; availability changes may
+  target the global config layer; the only proactive producer is an explicit run-once command scheduled
+  outside `spur serve`.
+- **Why:** Measured cost sits in per-stage cold subprocesses (`agent.run` = 96% of machine time), not
+  in resolution; the ladder degrades monotonically because B5 has no recovery and no global writer;
+  fleet members are one-shot loops that forget between messages. TTY mode would trade structured
+  output, exit semantics and unattended permission handling for a benefit (watch/steer) the process
+  stream API already provides, and would require the terminal scraping ADR-057 forbids.
+- **Consequence:** stage isolation is a policy, not a side effect of fresh processes — reviewer
+  stages must stay fresh by default; a wrong ownership rule can re-enable an operator-disabled
+  executor, so ownership lands before any automatic recovery; two upstream runner releases sit on the
+  critical path (capability record, session gaps); `implementAgent=auto` semantics (feature P F5)
+  are defined by the pin.
+- **Retains:** ADR-047 (affinity precedence: an explicit session pin never emits a global continue);
+  ADR-057 (durable artifacts and identity-pinned waits, no terminal transport); ADR-087 (`inline`
+  is the host session; substitution on headless surfaces); ADR-111 (durable quota updates, serial
+  drain); ADR-116 (`agent.fleet` declaration); ADR-118/119 (stage outcomes, gate scope).
+- **Detail:** `docs/design/session-pinned-dispatch.md`; features B6, B7, B8, G66.
