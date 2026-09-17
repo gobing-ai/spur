@@ -853,3 +853,10 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - `spur task record` rewrites the task file (Solution/Testing/Review) and is not byte-idempotent → capture the binding digest AFTER record; bind stable post-record capture (twice-captured equality).
 - DD-09 subset rule blocks `--as done` when task AC scenarios aren't feature AC titles; `spur task update --ac-altitude task-local` is the designed escape for task-slice scenarios of a feature clause (G64 R5 here).
 - T3: Board Work-section changes sync `docs/design/project-switcher.md` (Work embed + test-attributes bullets).
+
+## 2026-09-17 — H13 dev-refactor batch (0883–0886, runall inline+worktree)
+- verify-answer-lint demands the human-readable `Verdict:` + Req/AC table format; raw reviewer JSON fails lint — always convert subagent JSON before `task verdict --from-answer`.
+- Read-only reviewer resume messages must use review phrasing; mutation-flavored wording trips the tool-allowlist guard.
+- Count-ratchet test bumps (task-tagged comments, zero-violations assertions kept) are the sanctioned gate repair for added command/skill surfaces.
+- Contract fix = fix the authority doc row too (fix-ladder reverse-apply rule had to be re-fixed in design §6 after the verifier caught the residue).
+- Main moves during long batches: expect merge (not FF); pre-check `git log branch..main --name-only` overlap before choosing.
