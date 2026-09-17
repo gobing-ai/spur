@@ -160,13 +160,21 @@ Scope the operation to all tasks under a feature id (`^[A-Z][1-9]*$`). On featur
 commands (`dev-wrapall`) it also advances the feature through legal lifecycle edges with guards
 honored.
 
+### `--check <cmd>` — validation command for iterate-and-check loops
+
+**Anchor:** `#flag-check`.
+
+Verification command a command iterates against (`dev-simplify`, `dev-refactor`). The command
+establishes a baseline with it before the first change and re-runs it after each change.
+
 ### `--focus <dims>` — constrain the operation to specific dimensions
 
 **Anchor:** `#flag-focus`.
 
 Constrain the operation to a named subset of dimensions — review dimensions on `dev-review`/
 `dev-verify`/`dev-verifyall` (`all|stack|dependencies|data|flows|api|security|quality|performance`),
-a refine focus mode on `dev-refine`/`dev-refineall`, or a reconstruction lens on `dev-reverse`.
+a refactor lens set on `dev-refactor` (`api|architect|tests|ui|auto`), a refine focus mode on
+`dev-refine`/`dev-refineall`, or a reconstruction lens on `dev-reverse`.
 Narrowing reduces token cost; omitting runs
 all dimensions.
 
@@ -175,7 +183,7 @@ all dimensions.
 **Anchor:** `#flag-scope`.
 
 Limit the operation to a file or directory path (`dev-arch`, `dev-debug`, `dev-fixall`,
-`dev-gitmsg`, `dev-gtd`, `dev-simplify`) to bound the working set.
+`dev-gitmsg`, `dev-gtd`, `dev-refactor`, `dev-simplify`) to bound the working set.
 
 ### `--all` — widen the operation to everything in its domain
 
@@ -253,7 +261,8 @@ tasks by `updated_at >= date`).
 
 **Anchor:** `#flag-fix`.
 
-Remediation policy on verify-family commands (`dev-verify`, `dev-verifyall`):
+Remediation policy on verify-family commands (`dev-verify`, `dev-verifyall`) and the refactor
+coordinator (`dev-refactor`):
 `none|blockers-first|all`. `none` reports findings without fixing; `blockers-first` fixes only P1/P2;
 `all` fixes everything found. Deprecated on `dev-review` (routes to `dev-verify --fix`).
 

@@ -77,3 +77,34 @@ For mutation races, prefer explicit optimistic concurrency such as ETags / `If-M
 - Make consumers tolerant of additive fields.
 - Do not use events as disguised synchronous RPC responses when the caller needs an immediate result.
 
+## CLI mode
+
+A command-line interface is a contract surface with consumers (scripts, other agents, CI), not a
+collection of convenience shortcuts. Review it with the same compatibility discipline as REST or
+gRPC. Spur's own `apps/cli` is the first target.
+
+**Noun/verb grammar:** keep one noun per domain and verbs per action (`spur task show`, not
+`spur showTaskForTask`). Do not introduce a second grammar for the same concept — one spelling per
+noun, one verb per operation, consistent object order.
+
+**Flag vocabulary consistency:** shared flags (`--json`, `--scope`, `--agent`, `--fix`) keep the
+same name, arity, and semantics everywhere they appear. A flag that means something new per
+command is a defect; declare a new flag instead.
+
+**Exit codes:** `0` = success, nonzero = failure, deterministic and machine-checkable. Never
+swallow failures into `0`; never return nonzero for advisory output. Validation errors and
+runtime failures should be distinguishable from output where practical.
+
+**`--json` envelope stability:** `--json` output is a public schema. Add fields additively; never
+remove or rename existing fields, never change a field's type, and emit no human decoration
+(banners, progress text) on the JSON stream. Machine consumers parse the documented envelope only.
+
+**Help-text parity:** every accepted flag appears in `--help` with its real arity and default;
+every documented example runs as printed. A flag that works but is not documented, or documented
+but rejected, is a parity break.
+
+**Additive vs breaking:** adding a noun, verb, flag, or output field is additive. Renaming or
+removing any of them, re-purposing a flag, changing a default, or altering existing output shape
+is breaking — it requires a migration path and a deprecation window, and it never rides in a
+patch release.
+

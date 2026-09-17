@@ -1,6 +1,18 @@
 ---
 name: taste-refactoring-ui
 description: Design, review, and refactor UI hierarchy, layout, typography, spacing, color, and interactions.
+license: Apache-2.0
+metadata:
+  author: spur
+  version: "1.0"
+  platforms: "claude-code,codex,openclaw,opencode,antigravity"
+  category: execution
+  interactions:
+    - technique
+  operations:
+    - refactor-ui
+  openclaw:
+    emoji: "🎨"
 ---
 
 # taste-refactoring-ui
@@ -288,3 +300,34 @@ For deeper reasoning and daily use, read:
 - `references/refactoring-ui-playbook.md` — chapter-by-chapter distilled guidance.
 - `checklists/daily-ui-review.md` — fast audit and ship checklist.
 - `examples/review-template.md` — reusable UI critique response structure.
+
+## Spur contract
+
+Machine-facing adapter for `sp:code-refactoring` dispatch (feature H13). Everything above is the
+lens's native output and is unchanged; this section only maps it to the shared finding schema.
+
+**Inputs received:** a scope path, an optional change description, and the `ui` focus. Read
+first: the refactoring protocol and output contract above, then
+`../code-refactoring/references/finding-schema.md` for shared field semantics.
+
+**Native finding → schema mapping:** each issue → `id` as `RF-ui-<nnn>`; the pass that owns it
+(hierarchy, spacing, typography, color, states) → `rung`; `Observation` + `Refactor` → `title`
+and `proposal` (imperative); the cited component/file and line → `evidence` as `{file, line}`
+entries inside scope; the `System rule` → folded into `proposal`; new findings start at
+`status: open`.
+
+**Severity mapping (design §5):** native P0 (task failure) → `P1`; P1 (hierarchy/structure) →
+`P2`; P2 (system inconsistency) → `P3`; P3 (polish) → `P4`.
+
+**Preserved-behavior inventory (required before proposals):** emit the controls and interactions
+in scope — primary/secondary actions, navigation, form semantics, accessible names, states —
+before the first finding.
+
+**Preservation class:** token normalization and layout/typography consolidation with identical
+function → `preserving`; adding a missing state or a11y attribute → `preserving`; removing or
+merging a control or interaction → `cutting`; changes to user-visible flows or behavior →
+`breaking`.
+
+**Stop rules:** meaning is never carried by color alone; preserve component semantics and
+accessibility; a `cutting`/`breaking` finding is never `fix_eligibility: auto` and never below
+`P2`; anything outside the scope path is not a finding.

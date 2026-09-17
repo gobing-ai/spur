@@ -1,0 +1,95 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "https://spur.gobing.ai/schemas/refactor-finding.schema.json",
+    "title": "Refactor findings artifact (bare array of findings, design H13 §4)",
+    "description": "One JSON object per refactoring finding; the artifact written to .spur/run/<run-id>-refactor-findings.json is a bare array of these objects.",
+    "type": "array",
+    "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+            "id",
+            "focus",
+            "severity",
+            "rung",
+            "title",
+            "evidence",
+            "preservation",
+            "fix_eligibility",
+            "proposal",
+            "verify",
+            "status"
+        ],
+        "properties": {
+            "id": {
+                "type": "string",
+                "pattern": "^RF-(api|architect|tests|ui)-[0-9]{3}$",
+                "description": "RF-<focus>-<nnn>, e.g. RF-api-001."
+            },
+            "focus": {
+                "type": "string",
+                "enum": ["api", "architect", "tests", "ui"],
+                "description": "The lens that produced the finding."
+            },
+            "severity": {
+                "type": "string",
+                "enum": ["P1", "P2", "P3", "P4"],
+                "description": "Repository-authority severity after the lens-native → P1–P4 map (finding-schema.md §5). P0 is outside the map."
+            },
+            "rung": {
+                "type": "string",
+                "description": "Lens-native rung kept verbatim: architect A0–A7, tests T0–T7, api compatibility class, ui pass name."
+            },
+            "title": {
+                "type": "string",
+                "minLength": 1,
+                "description": "One line."
+            },
+            "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["file", "line"],
+                    "properties": {
+                        "file": {
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "line": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    }
+                },
+                "description": "At least one file:line inside --scope."
+            },
+            "preservation": {
+                "type": "string",
+                "enum": ["preserving", "cutting", "breaking"],
+                "description": "preserving: behavior identical; cutting: a user-visible feature/test/endpoint/control is removed; breaking: contract or behavior changes for a consumer."
+            },
+            "fix_eligibility": {
+                "type": "string",
+                "enum": ["auto", "confirm", "suggest"],
+                "description": "auto: mechanical, behavior-preserving, checkable; confirm: needs an operator answer; suggest: report only."
+            },
+            "proposal": {
+                "type": "string",
+                "minLength": 1,
+                "description": "What to change, imperative."
+            },
+            "verify": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Command or check that proves the fix; defaults to the --check command."
+            },
+            "status": {
+                "type": "string",
+                "enum": ["open", "applied", "reverted", "deferred", "rejected"],
+                "description": "Lifecycle of the finding through the gate/apply loop."
+            }
+        }
+    }
+}

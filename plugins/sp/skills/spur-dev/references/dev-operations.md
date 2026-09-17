@@ -86,6 +86,7 @@ each would be scope creep for one-liner procedures.
 | 14  | wrap       | `dev-wrap`          | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `<wbs> [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                                                                 |
 | 15  | wrapall    | `dev-wrapall`       | `Skill()`         | `spur workflow run` (wrapup-pipeline)                                              | `[--since <iso>] [--feature <id>] [--status <s>] [--agent <inline\|auto\|name>] [--auto] [--merge] [--dry-run]`                                                                                        |
 | 16  | idea       | `dev-idea`          | `Skill()`         | inline driver (`idea-pipeline`) or async workflow                                  | `"<idea>" [--auto] [--skip-design] [--approve-taste] [--agent <inline\|auto\|name>]`                                                                                                                                                  |
+| 17  | refactor   | `dev-refactor`      | `Skill()`         | `sp:code-refactoring` skill (thin wrapper, ADR-032)                                | `[<description>] [--scope <path>] [--focus <api\|architect\|tests\|ui\|auto>] [--fix <none\|blockers-first\|all>] [--check <cmd>] [--agent <inline\|auto\|name>] [--auto]`                                                                                          |
 
 ## Skill-backed operations
 
@@ -355,6 +356,14 @@ must not be changed without updating the backing skill.
   unless `--skip-design`. Plan path uses the same package contract (no `--design` force flag).
 
 - **Taste pre-clear (`--approve-taste`):** owned with design-approval var semantics in [cross-cutting.md](cross-cutting.md) § "Design Approval Gate"; idea-eval uses the parallel `idea_approved` var. One CLI flag sets both.
+
+### 17. refactor
+
+- **Purpose:** Lens-routed refactoring with a preservation contract — route a scope through taste lenses (api / architect / tests / ui, auto-detected by path), classify findings on the shared `refactor-finding` schema, and apply via the fix ladder without breaking preserved behavior.
+- **Inputs:** `[<description>]` free-text steering, `--scope <path>` (default: working tree), `--focus <lens>` (default: auto), `--fix <policy>` (default: none), `--check <cmd>` (default: project gate), `--agent <selector>` (default: inline), `--auto` (default: off).
+- **Backing:** `sp:code-refactoring` skill — the command carries zero orchestration logic (ADR-032); the skill owns focus auto-detection, lens dispatch, the P1–P4 severity map, objective/taste gates, and the fix ladder with revert-on-regression.
+- **Behavior:** Green `--check` baseline → focus detection → lens dispatch → findings to `.spur/run/<run-id>-refactor-findings.json` + human report `.spur/run/<run-id>-refactor-report.md` (lens set, P1–P4 table, preservation summary, applied/reverted/deferred). `--fix blockers-first` auto-applies P1/P2 `auto`-eligible findings; `--fix all` extends to `operator`-eligible P3/P4; every fix re-runs `--check` and reverts on regression. Tests are never removed or weakened by an `auto` fix.
+- **Operator taste gates:** every `cutting` or `breaking` finding pauses for an explicit operator answer in every mode — even `--auto` skips only objective gates. `--fix none` (the default) writes both artifacts with no edits.
 
 ---
 
