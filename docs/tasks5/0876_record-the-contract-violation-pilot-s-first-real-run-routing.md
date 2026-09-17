@@ -4,7 +4,7 @@ name: Record the contract-violation pilot's first real-run routing decision
 status: todo
 template: feature-impl
 created_at: 2026-09-17T00:46:12.717Z
-updated_at: "2026-09-17T05:51:42.010Z"
+updated_at: "2026-09-17T06:39:28.917Z"
 feature_id: D62
 
 dependencies: ["0871", "0873"]
@@ -72,11 +72,30 @@ Observe, do not fabricate. The pilot edge only fires when an `agent.run` exits c
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+**Outcome: NOT YET OBSERVABLE — Plan step 0 stop, honestly recorded (R5).** As of 2026-09-17T06:39:06Z, ~5.9h after 0871 landed (2026-09-17T00:46:46Z, confirmed by `docs/tasks5/0871_*.md:132` done transition), the main-tree database `/Users/robin/xprojects/spur-new/.spur/spur.db` (queried strictly read-only via `file:...?mode=ro`) holds **zero** `wrapup-pipeline` runs created after the landing. Readiness query: `SELECT count(*) FROM runs WHERE workflow_name='wrapup-pipeline' AND created_at > 1789606006000` (epoch-ms for 2026-09-17T00:46:46Z) → `0`. Latest wrapup run is `6c11f7e9-4f2b-4d57-b00f-11b01ead1faf` (done, 2026-09-15T01:05:51Z) — pre-landing. With no post-landing run of any status, terminal or otherwise, the pilot edge's real-run behaviour is structurally unobservable in this window; per R5 a vacuous absence is not a measurement, so this task stays open.
+
+**Evidence surfaces cross-checked (all read-only, no fabrication):**
+
+- `runs` table: 99 wrapup runs total (68 done / 31 failed, all `mode='state-machine'`, i.e. non-dry), matching the refinement Q&A figures; max `created_at` 2026-09-15T01:05:51Z.
+- DB freshness control: the database does record post-landing data — exactly one run after the threshold (a `task-lifecycle` row at 2026-09-17T05:51:42Z, this task's own backlog→todo). Zero wrapup rows is therefore a measured fact, not a stale-import artifact.
+- Run logs: no `*.log` under `/Users/robin/xprojects/spur-new/.spur/run/` modified after 2026-09-17T00:46Z.
+- Structured trace: zero `workflow.agent.contract-violation` rows in `system_events` and zero `contract-violation` matches in `action_runs.result_json` across all history — nothing exists that could be misread as a real routing decision.
+
+**Discriminator status (R1–R3):** with zero post-landing runs there is no `contract-violation` routing on the `doc-sync`→`repair` edge and no executor-failure path taken — both remain unmet on real data and stay open with the task. No run id / contract / observed value can be recorded because none was produced.
+
+**Deliberately not done:**
+
+- No promotion candidate written to `config/workflow-candidates.json` and no `promotion evaluate` run: R4 consumes a real-run measurement as its input; none exists yet (Plan step 4 presupposes the step 0 gate passed).
+- Plan step 5 (0871 R5 status note) not written: its purpose is that 0871's PARTIAL conjunct "reads as closed-by-0876", which has not happened; the conjunct legitimately remains PARTIAL until real traffic accrues. Resume condition: re-run this observation once the next terminal non-dry `wrapup-pipeline` run lands after 2026-09-17T00:46:46Z.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- **Measurement query validated:** first threshold computation produced epoch **seconds** (1789606006) against an epoch-**ms** column, which would have returned all 99 rows as false post-landing hits; caught on inspection, re-run with `1789606006000` → count 0. Unit correction documented so the zero is not a unit artifact.
+- **Triangulated across three independent surfaces:** (1) `runs` SQL count post-threshold = 0; (2) filesystem: `find /Users/robin/xprojects/spur-new/.spur/run -name '*.log' -newermt '2026-09-17 00:46:00'` → empty; (3) `system_events` (`workflow.agent.contract-violation` = 0 rows ever) and `action_runs.result_json` (`contract-violation` = 0 matches ever). All three agree with the NOT-OBSERVABLE reading.
+- **DB-freshness control:** confirmed the database records post-landing data (one `task-lifecycle` run at 2026-09-17T05:51:42Z), ruling out a stale-import explanation for the zero.
+- **Observation-set sanity:** all 99 wrapup runs are `mode='state-machine'` (non-dry), terminal statuses 68 done / 31 failed — matches the refinement Q&A (99 recorded / 60 engine-run), so the readiness query targets the same set the task's Plan defines.
+- **Read-only discipline:** every query used `file:/Users/robin/xprojects/spur-new/.spur/spur.db?mode=ro`; no writes to the main tree; the only working-tree change is this task's corpus sections (written via `task update --section --from-file`).
+- **No code path changed** → no targeted tests required (observation task; `mutationPolicy` effectively none — the corpus record is the deliverable).
 
 ### Review
 
