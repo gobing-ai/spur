@@ -134,6 +134,7 @@ list this README is checked against.
 | `dev-find-next`     | Prompt-first feature frontier prioritizer — ranks the open feature frontier by derived importance/urgency with per-candidate evidence; gates unactionable features; emits tree defects as proposals only     |
 | `dev-fixall`        | Fix all lint, type, and test errors systematically across the working tree                                                                                                                        |
 | `dev-simplify`      | Simplify recently-changed code for clarity without changing behavior — incremental, test-after-each, revert on regression                                                                         |
+| `dev-refactor`      | Lens-routed refactoring with a preservation contract — taste lenses (api/architect/tests/ui) classify findings on the shared schema; cutting/breaking changes pause for operator approval; forwards to sp:code-refactoring |
 | `dev-arch`          | Survey a codebase (or module tree) for shallow modules and deepening opportunities — emit a ranked MARKDOWN candidate report that feeds the planning half; never auto-refactors                   |
 | `dev-reverse`       | Reverse-engineer a codebase — analyze unfamiliar repos, generate HLD/architecture docs, audit quality/security, and produce onboarding documentation                                              |
 | `dev-gitmsg`        | Generate conventional commit message(s) from the current change set via one bounded diff capture, optionally commit                                                                                         |
@@ -199,6 +200,7 @@ plugins/sp/
 │   ├── code-review/                 # Pre-commit self-review + SECUA review lenses
 │   │   └── references/{review-lenses, self-review-checklist}.md
 │   ├── code-simplification/         # Behavior-preserving simplification
+│   ├── code-refactoring/            # Lens-routed refactoring coordinator (shared finding schema, P1–P4 severity map, fix ladder, focus detection)
 │   ├── code-testing/                # Testing / coverage competency
 │   │   └── references/{unit-testing.md, stacks/{bun-ts, go, python}.md}
 │   ├── code-verification/           # Verify + SECUA review
@@ -316,6 +318,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `code-review`               | 1.0   | Pre-commit self-review checklist (6 categories, catches 60-80% of issues) + SECUA review lenses + findings processing                                                                                                                      |
 | `code-simplification`       | 1.0   | Behavior-preserving simplification — Chesterton's Fence, signal tables, incremental change + test-after-each, scope-to-changed                                                                                                             |
 | `code-improvement`          | 1.0   | Architectural deepening — surface shallow/tightly-coupled modules and propose refactors that make them deep, testable, AI-navigable; backs `/sp:dev-arch`                                                                                  |
+| `code-refactoring`          | 1.0   | Lens-routed refactoring coordinator with a preservation contract — focus auto-detection, taste-lens dispatch, shared finding schema, P1–P4 severity map, objective/taste gates, fix ladder with revert-on-regression; backs `/sp:dev-refactor`  |
 | `functional-review`         | 1.0   | Requirements-traceability assessment — per-requirement verdicts with file:line evidence that the implementation satisfies ALL task requirements; pipeline Phase 8b gate                                                                    |
 | `doubt-driven-development`  | 1.0   | In-flight adversarial review of a non-trivial decision before committing it — hand artifact + contract to a fresh-context skeptic, reconcile, stop at 3 cycles                                                                             |
 | `source-driven-development` | 1.0   | Source-first verification — verify framework/API/library facts against primary sources before generating code; separates "the API exists" from "used correctly under its contract"                                                         |
@@ -340,10 +343,10 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `spur-composer`             | 1.0   | Cross-noun composition — workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning; applies accepted `spur-doctor` proposals through `spur` verbs; never judges its own output and never runs a recurring loop                                              |
 | `spur-doctor`               | 1.0   | Cross-noun evaluation — read-only CLI evidence per noun (task/feature/rule/workflow/agent spec), reflection over `history-anatomy` findings through a closed action-class map, and a proposal table; writes nothing; diagnoses artifacts, not runtime environments (`spur agent doctor`'s job)                |
 | `redesign-web-ui`           | 1.0   | Existing-UI visual upgrade — audit generic AI fingerprints, apply in-stack polish against `DESIGN.md` / live tokens, verify behavior and viewports; does not migrate frameworks                                                                                                                            |
-| `taste-refactoring-api`     | —     | API design and refactoring for REST/HTTP, RPC/gRPC, GraphQL, and event contracts; compatibility, security, and migration review |
-| `taste-refactoring-ui`      | —     | UI design and refactoring with visual hierarchy, typography, spacing, color, and interaction review |
-| `taste-refactoring-architect` | —   | Architecture review, simplification, and refactoring; boundary modeling, dependency reduction, and migration planning |
-| `taste-refactoring-tests`   | —     | Test suite refactoring for failure sensitivity, regression detection, and assertion strength; eliminates brittle mocks |
+| `taste-refactoring-api`     | 1.0   | API design and refactoring for REST/HTTP, RPC/gRPC, GraphQL, event contracts, and CLI surfaces; compatibility, security, and migration review |
+| `taste-refactoring-ui`      | 1.0   | UI design and refactoring with visual hierarchy, typography, spacing, color, and interaction review |
+| `taste-refactoring-architect` | 1.0 | Architecture review, simplification, and refactoring; boundary modeling, dependency reduction, and migration planning |
+| `taste-refactoring-tests`   | 1.0   | Test suite refactoring for failure sensitivity, regression detection, and assertion strength; eliminates brittle mocks |
 
 #### Bounded coexistence and retirement gate — `sp:issue-finding` (HA-S1 0661)
 

@@ -1,6 +1,18 @@
 ---
 name: taste-refactoring-tests
 description: Refactor unit tests for failure sensitivity, deterministic confidence, and regression protection without mock-heavy brittle tests or vanity coverage. Backs test suite quality audits.
+license: Apache-2.0
+metadata:
+  author: spur
+  version: "1.0"
+  platforms: "claude-code,codex,openclaw,opencode,antigravity"
+  category: execution
+  interactions:
+    - technique
+  operations:
+    - refactor-tests
+  openclaw:
+    emoji: "🧪"
 ---
 
 # taste-refactoring-tests
@@ -480,3 +492,33 @@ A test refactor is complete only when:
 - delivery speed is not degraded without a justified risk trade-off.
 
 The goal is **earned confidence**: green means something because the suite has demonstrated that it can turn red when the product is wrong.
+
+## Spur contract
+
+Machine-facing adapter for `sp:code-refactoring` dispatch (feature H13). Everything above is the
+lens's native output and is unchanged; this section only maps it to the shared finding schema.
+
+**Inputs received:** a scope path, an optional change description, and the `tests` focus. Read
+first: the intervention ladder, Confidence Contract, and review severity above, then
+`../code-refactoring/references/finding-schema.md` for shared field semantics.
+
+**Native finding → schema mapping:** `ID` → `id` as `RF-tests-<nnn>`; `Action` (T0–T7) → `rung`
+verbatim; `Severity` → `severity` via the map below; `Evidence` → `evidence` as `{file, line}`
+entries inside scope; `Why it matters` → `title`; `Proposed change` → `proposal` (imperative);
+`Expected regression-detection improvement` → folded into `proposal`; new findings start at
+`status: open`.
+
+**Severity mapping (design §5):** native P0 → `P1`; P1 → `P2`; P2 → `P3`; P3 → `P4`.
+
+**Preserved-behavior inventory (required before proposals):** emit the Confidence Contract —
+critical business rules, compatibility contracts, authorization/security decisions, data
+integrity invariants, error semantics, and incident regressions the suite must keep protecting —
+before the first finding.
+
+**Preservation class:** T0 and rungs that keep or add protection (fixture cleanup, adding a
+missing test) → `preserving`; removing a test or test file (T1) → `cutting`; weakening or
+semantically changing existing assertions → `breaking`.
+
+**Stop rules:** unknown protection is a risk, never permission to delete; a `cutting`/`breaking`
+finding is never `fix_eligibility: auto` and never below `P2`; tests are never removed or
+weakened by an `auto` fix; anything outside the scope path is not a finding.

@@ -858,6 +858,12 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
             'issue-finding': 27_060,
+            // 0884 R2/R4: the `## Spur contract` adapter (+~1.5–2.6KB) must live in
+            // SKILL.md per task AC (≤40 lines, coordinator reads it from the skill);
+            // splitting it into references would break the contract. Not permanent —
+            // revisit if the lenses are ever physically split.
+            'taste-refactoring-architect': 20_360,
+            'taste-refactoring-tests': 21_106,
         };
 
         const overBudget: string[] = [];

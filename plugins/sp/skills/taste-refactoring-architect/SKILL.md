@@ -1,6 +1,18 @@
 ---
 name: taste-refactoring-architect
 description: Review, simplify, and refactor system architecture toward minimum sufficient architecture while preserving required capabilities, quality attributes, delivery safety, and data invariants. Backs architectural refactoring and boundary reviews.
+license: Apache-2.0
+metadata:
+  author: spur
+  version: "1.0"
+  platforms: "claude-code,codex,openclaw,opencode,antigravity"
+  category: execution
+  interactions:
+    - technique
+  operations:
+    - refactor-architecture
+  openclaw:
+    emoji: "🏛️"
 ---
 
 # taste-refactoring-architect
@@ -469,3 +481,34 @@ Do not block on perfect documentation. Produce:
 - decisions that can safely proceed now.
 
 Use A7 DEFER/OBSERVE when evidence is too weak for a structural change.
+
+## Spur contract
+
+Machine-facing adapter for `sp:code-refactoring` dispatch (feature H13). Everything above is the
+lens's native output and is unchanged; this section only maps it to the shared finding schema.
+
+**Inputs received:** a scope path, an optional change description, and the `architect` focus.
+Read first: the intervention ladder and workflow above, then
+`../code-refactoring/references/finding-schema.md` for shared field semantics.
+
+**Native finding → schema mapping:** `ID` → `id` as `RF-architect-<nnn>`; `Action` (A0–A7) →
+`rung` verbatim; `Observation`/`Why it matters` → `title` plus `proposal` (imperative); `Evidence`
+→ `evidence` as `{file, line}` entries inside scope; `Fitness functions` → `verify`; new findings
+start at `status: open`. ADR candidates and migration plans stay prose findings with
+`fix_eligibility: suggest`.
+
+**Severity mapping (design §5):** any axis ≤1 with a correctness/safety consequence → `P1`; axis
+≤2 or A5–A7 seam problems → `P2`; A3–A4 → `P3`; A0–A2, ADR candidates, deferred questions → `P4`.
+
+**Preserved-behavior inventory (required before proposals):** emit the Preservation Contract
+table — capabilities, quality attributes, data invariants, and their thresholds — for everything
+in scope before the first finding.
+
+**Preservation class:** A0/A3/A4 mechanical consolidations with identical behavior →
+`preserving`; A1/A2 removal of a live service, endpoint, queue, or code path with callers →
+`cutting`; A5–A7 seam or behavior changes → `breaking`; migration plans and ADR candidates →
+`preserving` prose with `fix_eligibility: suggest`.
+
+**Stop rules:** no removal without dependency/traffic/contract evidence; `cutting`/`breaking` is
+never below `P2` and never `fix_eligibility: auto`; multi-task migrations are `suggest`, applied
+only after an explicit operator answer; anything outside the scope path is not a finding.

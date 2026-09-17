@@ -193,7 +193,8 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
         const agentCommands = [...allDevHints.keys()].filter((n) =>
             extractFlags(allDevHints.get(n) ?? '').has('--agent'),
         );
-        expect(agentCommands.length).toBe(25);
+        // 0885: dev-refactor joins the mode-aware set (references the inline-default contract).
+        expect(agentCommands.length).toBe(26);
     });
 
     // ---------- compatibility alias owning-contract assertions ----------

@@ -58,7 +58,7 @@ roles:
     stages: [implement, test, wrap]
   - id: reviewer
     tier: capable-1
-    commands: [dev-verify, dev-verifyall, dev-review, dev-review-session, dev-pr-review, dev-dogfood, rule-scan, dev-find-conflict, dev-find-issue]
+    commands: [dev-verify, dev-verifyall, dev-review, dev-review-session, dev-pr-review, dev-dogfood, dev-refactor, rule-scan, dev-find-conflict, dev-find-issue]
     stages: [verify, review, dogfood]
   - id: planner
     tier: capable-2

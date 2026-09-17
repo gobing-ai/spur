@@ -1,6 +1,18 @@
 ---
 name: taste-refactoring-api
 description: Design, review, and refactor REST/HTTP, RPC/gRPC, GraphQL, and event API contracts safely.
+license: Apache-2.0
+metadata:
+  author: spur
+  version: "1.0"
+  platforms: "claude-code,codex,openclaw,opencode,antigravity"
+  category: execution
+  interactions:
+    - technique
+  operations:
+    - refactor-apis
+  openclaw:
+    emoji: "🔌"
 ---
 
 # taste-refactoring-api
@@ -174,7 +186,7 @@ The goal is to eliminate repeated low-level API decisions, not to create bureauc
 
 ## Protocol-specific review
 
-After classifying the API, read the matching REST/HTTP, RPC/gRPC, GraphQL, or event/webhook section in [references/protocol-modes.md](references/protocol-modes.md). Apply that checklist before continuing with the refactoring strategy.
+After classifying the API, read the matching REST/HTTP, RPC/gRPC, GraphQL, or event/webhook section in [references/protocol-modes.md](references/protocol-modes.md). Apply that checklist before continuing with the refactoring strategy. For command-line surface work (designing or reviewing a CLI), read the [CLI mode](references/protocol-modes.md) section instead — a CLI is a contract surface with the same compatibility duties as any wire protocol.
 
 ## Refactoring strategy
 
@@ -332,3 +344,34 @@ Specify the tests/checks needed: contract tests, schema validation, compatibilit
 ## Decision rule
 
 A “better” API is not the one with the prettiest route names. It is the one that makes common client code obvious, predictable, safe under failure, compatible over time, secure by default, and operable in production.
+
+## Spur contract
+
+Machine-facing adapter for `sp:code-refactoring` dispatch (feature H13). Everything above is the
+lens's native output and is unchanged; this section only maps it to the shared finding schema.
+
+**Inputs received:** a scope path, an optional change description, and the `api` focus. Read
+first: the classification and protocol section above (plus [references/protocol-modes.md](references/protocol-modes.md)),
+then `../code-refactoring/references/finding-schema.md` for shared field semantics.
+
+**Native finding → schema mapping:** each “Highest-impact refactor” item → `id` as
+`RF-api-<nnn>`; the item's compatibility label → `rung` verbatim (`additive` | `risky` |
+`breaking`); consumer impact → `title` and `proposal` (imperative); cited routes/lines →
+`evidence` as `{file, line}` entries inside scope; `Verification` items → `verify`; the
+“Proposed contract” snippets stay in `proposal`; new findings start at `status: open`.
+
+**Severity mapping (design §5):** a `breaking` change already shipped, or contract ambiguity that
+corrupts data → `P1`; a `risky` inconsistency across ≥2 endpoints → `P2`; `additive` cleanups →
+`P3`; naming/docs → `P4`.
+
+**Preserved-behavior inventory (required before proposals):** emit the consumer contract —
+audience (public/partner/internal/service-to-service), endpoints/operations in scope, existing
+clients that must remain compatible, and the compatibility promise — before the first finding.
+
+**Preservation class (reuses the native classification):** `additive` → `preserving`; `risky`
+and `breaking` → `breaking`; removal of an endpoint, field, or code path with callers →
+`cutting` even when the change reads additive to remaining consumers.
+
+**Stop rules:** an established style guide or public compatibility promise is a constraint, not
+suggestion; `cutting`/`breaking` is never below `P2` and never `fix_eligibility: auto`; risky and
+breaking changes carry a migration strategy; anything outside the scope path is not a finding.

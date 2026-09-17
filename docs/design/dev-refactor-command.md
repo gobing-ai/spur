@@ -5,7 +5,7 @@ Decision: no new ADR — composes ADR-028 (spine dispatches competencies), ADR-0
 wrappers), ADR-054 (spine vs facade ownership).  
 Working evidence: [`2026-09-17-dev-refactor-brainstorm.md`](../plans/2026-09-17-dev-refactor-brainstorm.md)
 (skill review G1–G9, approach comparison).  
-Status: proposed design; not yet built.
+Status: built — command, coordinator skill, taste-lens contracts, and surface bookkeeping landed in H13 (tasks 0883–0885).
 
 ## 1. Problem
 
@@ -100,8 +100,9 @@ Rule: a `cutting` or `breaking` finding is never below P2 and never `fix_eligibi
 | Architectural migration plan | A6–A7, ADR candidates | — | `suggest` |
 
 Apply loop (mirrors `dev-simplify`): baseline `--check` must be green before any edit; apply one
-finding; run `--check`; on failure revert that finding (`git checkout -- <files>` limited to the
-finding's evidence files), mark `reverted`, continue. Tests are never deleted or weakened by an
+finding; run `--check`; on failure revert that finding by reverse-applying its own hunks (never a
+file-level `git checkout --` — a later finding may share the file with an earlier applied finding),
+mark `reverted`, continue. Tests are never deleted or weakened by an
 `auto` fix. `--fix blockers-first` applies P1/P2 with `auto`; `--fix all` applies every `auto`
 finding and queues every `confirm` finding for the taste gate.
 
