@@ -195,8 +195,10 @@ running it, which the shadow run deliberately does not.
 verifies the canonical definition now declares the candidate's projected `agent.run` count and then
 removes it, refusing (exit 1) until the canonical change has actually landed. `promotion check` —
 wired into `spur-check-feature` as the repo-wide catalogue check — fails (R3/R4) on any candidate
-still present past its named deadline and on any unreferenced `<name>2.yaml`-style parallel
-definition in `config/workflows/`.
+still present past its named deadline, on any unreferenced `<name>2.yaml`-style parallel
+definition in `config/workflows/`, and (0877 R8, 0866 review finding 6) on any definition retired
+with real non-dry terminal runs but no recorded retirement decision in the candidate record's
+`retirements[]` (scoped to names ever tracked in git history; dry-only history does not block).
 
 ## 6. Sequence
 

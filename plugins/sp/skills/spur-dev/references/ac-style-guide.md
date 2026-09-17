@@ -73,6 +73,10 @@ scenario, it matches by title. Rules:
   Registered user can log in with email and password" is traceable.
 - **No synonyms in cross-references.** The title in the feature file and the title in the
   task's AC reference must be byte-identical.
+- **Avoid gate vocabulary in titles.** `spur task check` (L4.gate-language) rejects task sections
+  containing `HITL`, `approval`/`approved`, `merged`/`merge event`, `content-gate`, `GATED`, or
+  `capstone` as standalone words; task AC bullets copy scenario titles verbatim, so a title using
+  them fails every child task. Write "pause for an operator answer" instead of "HITL approval".
 
 ## Verdict AC ↔ feature scenario linkage
 

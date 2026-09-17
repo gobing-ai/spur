@@ -19,8 +19,10 @@
  * evidence-backed without spending a single live model call.
  *
  * Subcommands:
- *   check                the catalogue check — exit 1 on an expired candidate or a parallel
- *                        definition (repo-wide; runs in `spur-check-feature`)
+ *   check                the catalogue check — exit 1 on an expired candidate, a parallel
+ *                        definition, or a retired definition with real (non-dry) terminal
+ *                        runs and no recorded retirement decision (0877 R8); runs in
+ *                        `spur-check-feature`
  *   evaluate <id>        shadow-run the candidate against recorded run history and record its verdict
  *   resolve <id>         apply the decision: delete removes the candidate; promote verifies the
  *                        canonical definition now carries the candidate's agent.run count and then
@@ -30,9 +32,10 @@
  * Repo-internal dev-script, NOT a new public `spur` noun/verb (ADR-051).
  */
 import { Database } from 'bun:sqlite';
-import { readdirSync, readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace link
 // for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
@@ -105,13 +108,31 @@ export interface WorkflowCandidate {
 export interface WorkflowCandidatesConfig {
     schemaVersion: 1;
     candidates: WorkflowCandidate[];
+    /** Recorded retirement decisions; absent on pre-0882 configs (no retirements yet). */
+    retirements?: WorkflowRetirementRecord[];
 }
 
 /** One catalogue-check failure, naming its candidate (when applicable) and the violation. */
 export interface PromotionCheckFinding {
-    kind: 'expired-candidate' | 'parallel-definition';
+    kind: 'expired-candidate' | 'parallel-definition' | 'unrecorded-retirement';
     candidateId: string | null;
     detail: string;
+}
+
+/**
+ * Recorded retirement decision for a definition removed from `config/workflows/`
+ * (0877 R8, 0866 review finding 6): a definition with real (non-dry) terminal runs
+ * may only be retired when a decision is recorded here. Schema mirrors the
+ * candidate record's philosophy — evidence lives in config, not in a task table.
+ */
+export interface WorkflowRetirementRecord {
+    /** Definition name (basename without `.yaml`). */
+    name: string;
+    /** Task/feature that made and recorded the decision (e.g. `0866`). */
+    recordedBy: string;
+    /** Decision date (YYYY-MM-DD). */
+    date: string;
+    rationale: string;
 }
 
 // ── Load / save ────────────────────────────────────────────────────────────
@@ -397,7 +418,83 @@ export function checkWorkflowPromotion(
     return findings;
 }
 
-// ── CLI ────────────────────────────────────────────────────────────────────
+/**
+ * Real (non-dry) terminal run counts per workflow name, from `runs ×
+ * metadata_json.dryRun` — the column 0866's verdict table used. dryRun absent,
+ * 0, or 'false' counts as real (0866: a `done` row carrying `dryRun: 1` is not a
+ * real completion).
+ */
+export function countRealTerminalRuns(db: Database): Map<string, number> {
+    const rows = db
+        .query(
+            `SELECT workflow_name, COUNT(*) AS n FROM runs
+             WHERE status IN ('done', 'failed', 'cancelled')
+               AND (json_extract(metadata_json, '$.dryRun') IS NULL
+                    OR json_extract(metadata_json, '$.dryRun') IN (0, '0', 'false'))
+             GROUP BY workflow_name`,
+        )
+        .all() as Array<{ workflow_name: string; n: number }>;
+    return new Map(rows.map((r) => [r.workflow_name ?? '', r.n]).filter(([name]) => name !== ''));
+}
+
+/**
+ * Definition names ever tracked under `config/workflows/` (git history) — the set
+ * of names a retirement is possible for. Ad-hoc `workflow run` names that never
+ * had a standing definition are excluded from the guard's scope.
+ */
+export function everTrackedDefinitionNames(repoRoot: string): Set<string> {
+    try {
+        const out = execSync('git log --name-only --pretty=format: -- config/workflows', {
+            cwd: repoRoot,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        return new Set(
+            out
+                .split('\n')
+                .filter((p) => /config\/workflows\/.+\.ya?ml$/.test(p))
+                .map((p) => basename(p).replace(/\.ya?ml$/, '')),
+        );
+    } catch {
+        return new Set();
+    }
+}
+
+/**
+ * The retirement guard (0877 R8, 0866 review finding 6): a definition absent from
+ * `config/workflows/` whose name still has real non-dry terminal runs is retired —
+ * refuse unless a decision is recorded in `config.retirements[]`. Only names ever
+ * tracked as definitions are in scope; definitions still present are untouched;
+ * dry-only history does not block retirement.
+ */
+export function checkRetirementGuard(
+    db: Database,
+    config: WorkflowCandidatesConfig,
+    workflowsDir: string,
+    everTracked: Set<string> = everTrackedDefinitionNames(REPO_ROOT),
+): PromotionCheckFinding[] {
+    const findings: PromotionCheckFinding[] = [];
+    let present: Set<string>;
+    try {
+        present = new Set(
+            readdirSync(workflowsDir)
+                .filter((e) => /\.ya?ml$/.test(e))
+                .map((e) => e.replace(/\.ya?ml$/, '')),
+        );
+    } catch {
+        return findings; // no workflows dir — nothing is retired
+    }
+    const recorded = new Set((config.retirements ?? []).map((r) => r.name));
+    for (const [name, n] of countRealTerminalRuns(db)) {
+        if (!everTracked.has(name) || present.has(name) || recorded.has(name)) continue;
+        findings.push({
+            kind: 'unrecorded-retirement',
+            candidateId: null,
+            detail: `definition ${name} is retired from config/workflows/ but has ${n} real (non-dry) terminal run(s) and no recorded retirement decision in workflow-candidates.json`,
+        });
+    }
+    return findings;
+}
 
 /** Format one finding as a stable human line (mirrors pipeline-budgets' naming discipline). */
 export function formatFinding(f: PromotionCheckFinding): string {
@@ -440,6 +537,7 @@ interface CheckArgs {
     workflowsDir: string;
     nowIso: string;
     configPath: string;
+    dbPath: string;
 }
 
 function parseCheckArgs(argv: string[]): CheckArgs {
@@ -447,6 +545,7 @@ function parseCheckArgs(argv: string[]): CheckArgs {
         workflowsDir: WORKFLOWS_DIR,
         nowIso: new Date().toISOString(),
         configPath: CANDIDATES_PATH,
+        dbPath: DB_PATH,
     };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
@@ -458,6 +557,7 @@ function parseCheckArgs(argv: string[]): CheckArgs {
         if (a === '--workflows-dir') args.workflowsDir = next();
         else if (a === '--now') args.nowIso = next();
         else if (a === '--config') args.configPath = next();
+        else if (a === '--db') args.dbPath = next();
         else throw new Error(`workflow-promotion: unknown argument ${a}`);
     }
     return args;
@@ -471,6 +571,15 @@ export async function runWorkflowPromotion(argv: string[]): Promise<number> {
         const args = parseCheckArgs(rest);
         const config = await loadWorkflowCandidates(args.configPath);
         const findings = checkWorkflowPromotion(config, args.workflowsDir, args.nowIso);
+        // Retirement guard (0882): only when a project DB exists (fixture roots skip).
+        if (statSync(args.dbPath, { throwIfNoEntry: false })) {
+            const db = new Database(args.dbPath, { readonly: true });
+            try {
+                findings.push(...checkRetirementGuard(db, config, args.workflowsDir));
+            } finally {
+                db.close();
+            }
+        }
         for (const f of findings) console.error(`PROMOTION GATE: ${formatFinding(f)}`);
         console.log(
             findings.length === 0

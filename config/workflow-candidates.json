@@ -1,5 +1,19 @@
 {
     "schemaVersion": 1,
-    "note": "Workflow graph-change promotion candidates (task 0873, feature D62; ADR-076 amendment). A candidate is shadow-run against recorded real-run inputs and is promoted into the canonical definition or deleted by its named deadline — never left as a standing parallel <name>2.yaml. `verdict` is null while pending and is filled by `bun scripts/spur-dev.ts promotion evaluate <id>`; `promotion check` (spur-check-feature) fails any candidate still present past its deadline and any unreferenced parallel definition in config/workflows/.",
-    "candidates": []
+    "note": "Workflow graph-change promotion candidates (task 0873, feature D62; ADR-076 amendment). A candidate is shadow-run against recorded real-run inputs and is promoted into the canonical definition or deleted by its named deadline — never left as a standing parallel <name>2.yaml. `verdict` is null while pending and is filled by `bun scripts/spur-dev.ts promotion evaluate <id>`; `promotion check` (spur-check-feature) fails any candidate still present past its deadline, any unreferenced parallel definition in config/workflows/, and (0877 R8) any retired definition with real (non-dry) terminal runs lacking a recorded decision in `retirements[]`.",
+    "candidates": [],
+    "retirements": [
+        {
+            "name": "planning-pipeline",
+            "recordedBy": "0872 (ADR-072/075 composition-baseline pass 2dc86579a)",
+            "date": "2026-08-19",
+            "rationale": "Planning pipeline superseded by the task-pipeline planning stages; 3 real terminal runs retained in history."
+        },
+        {
+            "name": "task-pipeline2",
+            "recordedBy": "ADR-076 (commit 017ac7a30)",
+            "date": "2026-08-20",
+            "rationale": "Standing parallel definition deleted with the D5-N fixture promotion bar; 5 real terminal runs retained in history."
+        }
+    ]
 }

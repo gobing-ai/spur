@@ -58,6 +58,9 @@ spur feature create "Planning layer" --parent H      # → H<n>
 spur feature create "Task CLI" --parent H1            # → H1<n>
 ```
 
+`create --json` returns `{ ref: { kind, id, filePath, folder }, content }` — read the id from
+`.ref.id`, not a top-level `.id`.
+
 To restructure, use `move` — never hand-edit an ID. `move <id> --parent <new>` re-parents the
 subtree and **cascade-renames** every descendant; omit `--parent` to lift it to a top-level group.
 

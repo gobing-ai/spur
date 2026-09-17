@@ -45,5 +45,7 @@ vars as subsets of `--approve-taste` (`idea_approved` / `design_approved`). Pref
 - Omitted/`inline`: drive `idea-pipeline.yaml` through the [inline pipeline driver](../skills/spur-dev/references/inline-pipeline-driver.md). Do not launch `spur workflow run`, `spur agent run`, or a native subagent unless the operator explicitly requests delegation.
 - `auto`/name: launch `spur workflow run idea-pipeline.yaml --async`, observe with one `workflow trace --follow`, and only report cancellation as stopped when `workflow cancel --json` returns `killed: true`.
 - `Skill(skill="sp:spur-dev", args="idea $ARGUMENTS")`
+- Pass the idea text through every hop **verbatim** — never paraphrase or shorten it in the nested
+  `Skill` call or stage prompts; long ideas lose their trailing asks when summarized at the hop.
 - Stage contract (discovery → idea-eval → feature-create → AC → feature-check → system-design →
   decompose → batch-create → ready-prepare → handoff): `plugins/sp/skills/spur-dev/references/dev-operations.md` § idea.

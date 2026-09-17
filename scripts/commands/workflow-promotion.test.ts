@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
     type AgentRunMeasurement,
+    checkRetirementGuard,
     checkWorkflowPromotion,
     countAgentRunActions,
     evaluateCandidate,
@@ -380,6 +381,76 @@ describe('checkWorkflowPromotion (0873 R3/R4 catalogue check)', () => {
             expect(findings[0]).toMatchObject({ kind: 'parallel-definition', candidateId: null });
             expect(findings[0]?.detail).toContain('task-pipeline2.yaml');
         } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('checkRetirementGuard (0882 R8, 0866 review finding 6)', () => {
+    /** Mixed-history seed: `with-real` has one non-dry + one dry terminal run; `dry-only` has two dry runs. */
+    async function seedRetirementDb(): Promise<{ db: Database; close: () => Promise<void> }> {
+        const dir = await mkdtemp(join(tmpdir(), 'retirement-guard-'));
+        const db = new Database(join(dir, 'test.db'));
+        db.run('CREATE TABLE runs (id TEXT, workflow_name TEXT, status TEXT, metadata_json TEXT)');
+        const ins = db.query('INSERT INTO runs VALUES (?, ?, ?, ?)');
+        ins.run('wr1', 'with-real', 'done', '{}');
+        ins.run('wr2', 'with-real', 'done', '{"dryRun":true}');
+        ins.run('do1', 'dry-only', 'done', '{"dryRun":1}');
+        ins.run('do2', 'dry-only', 'done', '{"dryRun":true}');
+        ins.run('wp1', 'still-present', 'done', '{}');
+        return {
+            db,
+            close: async () => {
+                db.close();
+                await rm(dir, { recursive: true, force: true });
+            },
+        };
+    }
+
+    async function seedWorkflowsDir(names: string[]): Promise<string> {
+        const dir = await mkdtemp(join(tmpdir(), 'retirement-workflows-'));
+        for (const n of names) {
+            await writeFile(join(dir, `${n}.yaml`), 'kind: state-machine\n');
+        }
+        return dir;
+    }
+
+    test('refuses retiring a definition with real non-dry terminal runs absent a recorded decision', async () => {
+        const { db, close } = await seedRetirementDb();
+        const dir = await seedWorkflowsDir(['still-present']);
+        try {
+            const findings = checkRetirementGuard(db, config([]), dir, new Set(['with-real', 'still-present']));
+            expect(findings).toHaveLength(1);
+            expect(findings[0]?.kind).toBe('unrecorded-retirement');
+            expect(findings[0]?.detail).toContain('with-real');
+            expect(findings[0]?.detail).toContain('1 real (non-dry)');
+        } finally {
+            await close();
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a recorded decision and dry-only history pass; present definitions are untouched', async () => {
+        const { db, close } = await seedRetirementDb();
+        const dir = await seedWorkflowsDir(['still-present']);
+        try {
+            const withRecord = checkRetirementGuard(
+                db,
+                {
+                    schemaVersion: 1,
+                    candidates: [],
+                    retirements: [
+                        { name: 'with-real', recordedBy: '0882', date: '2026-09-17', rationale: 'recorded decision' },
+                    ],
+                },
+                dir,
+                new Set(['with-real', 'still-present']),
+            );
+            expect(withRecord).toHaveLength(0); // recorded decision + dry-only + still-present all pass
+            const neverTracked = checkRetirementGuard(db, config([]), dir, new Set(['still-present']));
+            expect(neverTracked).toHaveLength(0); // ad-hoc run names without a standing definition are out of scope
+        } finally {
+            await close();
             await rm(dir, { recursive: true, force: true });
         }
     });

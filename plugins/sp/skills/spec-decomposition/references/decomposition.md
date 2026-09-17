@@ -559,6 +559,12 @@ fields and normal default planning fills them from your analysis; the per-task r
 batch-create still deepens them when a task needs more detail. Validate locally against the
 schema before emitting.
 
+**Pass the deterministic task check.** Each `acceptance_criteria` bullet must be an exact feature
+scenario title (L4.uncovered-task-scenario); add task-local checks as prose after the bullets, not
+as extra bullets. No section body may use `HITL`, `approval`/`approved`, `merged`/`merge event`,
+`content-gate`, `GATED`, or `capstone` as standalone words (L4.gate-language) — say "operator
+answer" / "accepted" instead, and keep enum values out of that list too.
+
 **The order sidecar.** Also emit the private task-order sidecar at
 `.spur/run/<runId>-idea-task-order.json`: a JSON array (one entry per batch item) of
 `{ name: <exact batch item name>, depends_on_names: [<batch item names>] }` declaring
