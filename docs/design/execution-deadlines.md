@@ -60,20 +60,26 @@ Use upstream-validated `bootstrap.scheduler.timeoutMs` as the configured-job def
 per-attempt policy through the native enqueue contract. Completion-triggered refresh uses the same
 queue policy API and the history handler's application default; no second scheduler is added.
 
-Explicit canonical options, including null, beat legacy environment controls. When canonical
-configuration is absent, preserve the existing inputs:
+Canonical configuration is the only control plane for the global budgets (task 0902: the legacy
+`SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`, `SPUR_HISTORY_REFRESH_TIMEOUT_MS`, and
+`SPUR_SCHEDULER_KILL_GRACE_MS` environment variables were removed in favor of `bootstrap.options`
+keys). The chain is:
 
 - Configured job: `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` → `bootstrap.scheduler.jobs[].timeoutMs` →
-  `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` → 600,000 ms. The declared per-job value is a real layer at
-  the handler, not only at the tick: it is resolved for the child policy, the stale-row sweep
-  threshold, and the unlimited-row exemption from one call (`resolveSchedulerJobTimeoutMs`).
-- Completion refresh: `SPUR_HISTORY_REFRESH_TIMEOUT_MS` → 600,000 ms; the custom-job global does not widen it.
+  `bootstrap.options.schedulerCustomTimeoutMs` → 600,000 ms. The declared per-job env contract is a
+  real layer at the handler, not only at the tick: it is resolved for the child policy, the
+  stale-row sweep threshold, and the unlimited-row exemption from one call
+  (`resolveSchedulerJobTimeoutMs`).
+- Completion refresh: `bootstrap.options.historyRefreshTimeoutMs` → 600,000 ms; the custom-job
+  global does not widen it.
 - Source import: explicit CLI value → propagated history job policy → 600,000 ms for standalone calls.
-- Termination grace: `SPUR_SCHEDULER_KILL_GRACE_MS` → 5,000 ms, resolved once and passed to actual native termination.
+- Termination grace: `bootstrap.options.schedulerKillGraceMs` → 5,000 ms, resolved once and passed
+  to actual native termination.
 
-Legacy environment `none` maps to null. Invalid legacy environment values retain their documented
-safe fallback; malformed explicit CLI/canonical configuration fails with a usage/configuration
-error. Help defaults are rendered from the application constant, not repeated literals. Resolve
+The option value `'none'` maps to null (unlimited). Malformed option values (negative, zero,
+fractional, non-numeric) fail loud at boot with a configuration error naming the option key; there
+is no silent fallback. Help defaults are rendered from the application constant, not repeated
+literals. Resolve
 the daemon configuration once; injected environment is authoritative. Recovery observes the same
 attempt policy/ownership as execution. Persist effective policy with queued work so a restart or
 different consumer does not reinterpret an in-flight attempt under changed environment.

@@ -395,11 +395,12 @@ describe('registerSystemEventTap', () => {
         const bus = new EventBus<Record<string, (event: unknown) => void>>();
         const tap = registerSystemEventTap(bus, dao, new CapturingLogger());
 
-        // The three self-observation heartbeat events are demoted to the
-        // diagnostic tier; without the toggle they must not persist.
-        await bus.emit('queue.job.enqueued', { jobId: 'j1' });
-        await bus.emit('queue.job.completed', { jobId: 'j1' });
-        await bus.emit('scheduler.job.executed', { jobId: 'j1' });
+        // The bus self-observation heartbeat events stay diagnostic-tier;
+        // without the toggle they must not persist. (queue/scheduler job
+        // lifecycle events were promoted to the default tier by D62.)
+        await bus.emit('bus.emit.done', { event: 'queue.job.enqueued' });
+        await bus.emit('bus.emit.noop', { event: 'queue.job.completed' });
+        await bus.emit('workflow.transition.requested', { from: 'a', to: 'b' });
         // A default-tier event still persists, proving the tap is wired.
         await bus.emit('task.created', { entityId: '0001' });
         await tap.flush();

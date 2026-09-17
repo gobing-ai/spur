@@ -254,16 +254,19 @@ const BASE_CATALOG = [
 
     baseEvent('queue.consumer.started', 'queue', 'queue'),
     baseEvent('queue.consumer.stopped', 'queue', 'queue'),
-    baseEvent('queue.job.enqueued', 'queue', 'queue', 'metadata-only', 'diagnostic'),
+    // Queue/scheduler job lifecycle persists by default (bounded by the
+    // per-prefix retention quota) — diagnostic gating left the System Events
+    // tab blind to completions/enqueues that the ts-infra file log captures.
+    baseEvent('queue.job.enqueued', 'queue', 'queue'),
     // Task 0806 R5: terminal events alone leave a gap between enqueue and exit;
     // the started event anchors the handler phase so queued→started→terminal
     // correlate in the normal observability ledger.
-    baseEvent('queue.job.started', 'queue', 'queue', 'metadata-only', 'diagnostic'),
-    baseEvent('queue.job.completed', 'queue', 'queue', 'metadata-only', 'diagnostic'),
+    baseEvent('queue.job.started', 'queue', 'queue'),
+    baseEvent('queue.job.completed', 'queue', 'queue'),
     baseEvent('queue.job.failed', 'queue', 'queue'),
     baseEvent('queue.job.retrying', 'queue', 'queue'),
     baseEvent('queue.stats', 'queue', 'queue'),
-    baseEvent('scheduler.job.executed', 'scheduler', 'scheduler', 'metadata-only', 'diagnostic'),
+    baseEvent('scheduler.job.executed', 'scheduler', 'scheduler'),
 
     // Message events are metadata-only. Message bodies stay in inbox storage.
     baseEvent('message.sent', 'message', 'message'),

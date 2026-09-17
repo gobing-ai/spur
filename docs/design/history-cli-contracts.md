@@ -562,9 +562,10 @@ refresh producers share `max_retries = 3`; this intentionally replaces the old s
 The server queue visibility timeout is two hours because `history daily` can spend ten minutes on each
 of six sequential sources before analysis; the generic 30-second default would duplicate a live child.
 A native execution deadline additionally bounds each child (task 0813, ADR-112): the daemon resolves
-the policy once at boot — `SPUR_HISTORY_REFRESH_TIMEOUT_MS` for `history.refresh`,
-`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` / `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` (default 600,000 ms) for
-`scheduler.custom`, explicit `none` for unlimited — and forwards `timeout`/`killGraceMs` to the
+the policy once at boot — `bootstrap.options.historyRefreshTimeoutMs` for `history.refresh`,
+`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` per job / `bootstrap.options.schedulerCustomTimeoutMs` globally
+(default 600,000 ms) for `scheduler.custom`, explicit `'none'` for unlimited — and forwards
+`timeout`/`killGraceMs` to the
 `ProcessExecutor`, which owns containment and reports a truthful timed-out outcome. A wedged child
 can no longer hold the queue row, and the WAL write lock its imports take, for the full visibility
 window; explicit-unlimited jobs impose no deadline and are exempt from age sweeping.
@@ -572,7 +573,7 @@ window; explicit-unlimited jobs impose no deadline and are exempt from age sweep
 **Containment hardening (task 0806).** Four bounded knobs close the residual gaps:
 
 - **Group kill (R1; task 0813).** Containment is native: Spur forwards the resolved deadline and
-  `killGraceMs` (`SPUR_SCHEDULER_KILL_GRACE_MS`, default 5,000 ms) to the `ProcessExecutor`, which
+  `killGraceMs` (`bootstrap.options.schedulerKillGraceMs`, default 5,000 ms) to the `ProcessExecutor`, which
   runs each child in an isolated process group and escalates SIGTERM→SIGKILL so descendants that
   ignore SIGTERM cannot outlive the deadline — no caller-side watchdog races the executor. The
   per-source import deadline is enforced by the same native policy: the loser is abandoned
@@ -581,8 +582,8 @@ window; explicit-unlimited jobs impose no deadline and are exempt from age sweep
   and the queue run fails (distinct `source-timeout` warning code).
 - **Per-job budgets (R3).** Configured scheduler jobs resolve an effective deadline via
   `SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` (upper-snake of the configured name), falling back to the
-  global `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` on absent/invalid values; the `history.refresh`
-  deadline is decoupled via `SPUR_HISTORY_REFRESH_TIMEOUT_MS` so raising the chain budget cannot
+  global `bootstrap.options.schedulerCustomTimeoutMs`; the `history.refresh`
+  deadline is decoupled via `bootstrap.options.historyRefreshTimeoutMs` so raising the chain budget cannot
   lengthen the completion-triggered refresh.
 - **Single history producer (R6).** The completion-triggered `history.refresh` job holds an
   in-process exclusive key (`history-daily`); a configured `scheduler.custom` job whose command

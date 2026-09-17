@@ -153,7 +153,7 @@ passed, so provenance denied first and Review L3 denied on the retry.
 (answer file + `spur task verdict`) writes the standard `.spur/run/<wbs>-verdict.json` artifact
 under proof-input digest bracketing; missing or non-PASS evidence is a refusal, never a synthetic
 PASS stub. |
-| 2 | **Provenance guard** (`lifecycle-adapter.ts`) | No pipeline-kind run link exists for `<wbs>`. | Run `/sp:dev-run <wbs>` through the full pipeline, use `/sp:dev-run <wbs> --mode implement --auto --next` for the explicit step chain, or record the audited bypass with `SPUR_PROVENANCE_OVERRIDE=1`. |
+| 2 | **Provenance guard** (`lifecycle-adapter.ts`) | No pipeline-kind run link exists for `<wbs>`. | Run `/sp:dev-run <wbs>` through the full pipeline, use `/sp:dev-run <wbs> --mode implement --auto --next` for the explicit step chain, or record the audited bypass with `--provenance-bypass` on `spur task update`. |
 | 3 | **Review L3** (`task-check.ts`) | `### Review` is empty, placeholder-only, or lacks a populated P1–P4 findings table. | Run `/sp:dev-review <wbs>`; verify cannot write Review because of the Step 10 prohibition above. |
 
 When the verdict is **PARTIAL/FAIL**, or any gate layer fails: stop as review-pending — surface

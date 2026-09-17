@@ -433,7 +433,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 '(`spur task check --as done`) — each guard evaluates the transition target (F92 R3).',
                 'A GuardDeniedError on `testing → done` means no pipeline run is recorded for the',
                 'task: run `/sp:dev-verify <wbs> --next` to PASS it, or record the audited bypass with',
-                '`SPUR_PROVENANCE_OVERRIDE=1 spur task update <wbs> done --force-done --reason "…"`.',
+                '`spur task update <wbs> done --force-done --provenance-bypass --reason "…"`.',
                 'See the gate checklist (spur-dev/references/gate-checklists.md).',
                 'Valid section names (no failed write): `spur task sections <wbs> list`.',
                 'Sections replace, with one exception: `--section "Q&A"` APPENDS a timestamped',
@@ -469,12 +469,22 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             '--reason <text>',
             'Rationale for a forced-done override (paired with --force-done; persisted as done_reason)',
         )
+        .option(
+            '--provenance-bypass',
+            'Record an audited provenance-bypass link when no pipeline run exists (replaces the SPUR_PROVENANCE_OVERRIDE env var; pair with --force-done)',
+            false,
+        )
         .option('--verdict-dir <path>', 'Directory holding <wbs>-verdict.json artifacts (default: .spur/run)')
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, status, options) => {
-            const svc = await makeService(context, options.folder, options.lifecycle === false);
+            const svc = await makeService(
+                context,
+                options.folder,
+                options.lifecycle === false,
+                options.provenanceBypass === true,
+            );
             try {
                 // `--assignee` runs AgentCoordinationService.assignTask (frontmatter write +
                 // task.assigned ledger event), validated at this boundary
@@ -1709,11 +1719,14 @@ export async function makeService(
     context: CliContext,
     folderOverride?: string,
     noLifecycle = false,
+    provenanceBypass = false,
 ): Promise<TaskService> {
     const foldersConfig = (await resolvePlanningFolders(context.fs)).foldersConfig;
     // Normalize the override: relative and absolute spellings are the same folder (0522 R2).
     const tasksDir = context.fs.resolve(folderOverride ?? foldersConfig.active_folder);
-    const lifecycle = noLifecycle ? undefined : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
+    const lifecycle = noLifecycle
+        ? undefined
+        : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE, { provenanceBypass });
     const writeService = new PlanningWriteService({
         fs: context.fs,
         ...(lifecycle ? { lifecycle } : {}),

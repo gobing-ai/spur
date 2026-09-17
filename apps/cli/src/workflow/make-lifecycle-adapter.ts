@@ -3,6 +3,12 @@ import { TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context.js';
 import { resolveSpurBin } from './resolve-spur-bin.js';
 
+/** Forwarded construction options for the lifecycle adapter (task 0902 wave 2). */
+export interface MakeLifecycleAdapterOptions {
+    /** Opt-in audited bypass of the P2 provenance gate (see {@link LifecycleAdapterOptions}). */
+    provenanceBypass?: boolean;
+}
+
 /**
  * Build the engine-backed lifecycle port (0055) for a given profile. Status
  * transitions then go through the profile's state-machine with real guard
@@ -14,7 +20,11 @@ import { resolveSpurBin } from './resolve-spur-bin.js';
  * neither tier contains the YAML — callers fall back to the schema-only port
  * (P3 backstop, task 0130).
  */
-export function makeLifecycleAdapter(context: CliContext, profile: LifecycleProfile): LifecycleAdapter | undefined {
+export function makeLifecycleAdapter(
+    context: CliContext,
+    profile: LifecycleProfile,
+    options: MakeLifecycleAdapterOptions = {},
+): LifecycleAdapter | undefined {
     const resolved = resolveWorkflowFile(context.cwd, profile.workflowName);
     if (resolved.path === null) return undefined;
     const workflowPath = resolved.path;
@@ -29,5 +39,6 @@ export function makeLifecycleAdapter(context: CliContext, profile: LifecycleProf
         workflowPath,
         cwd: context.cwd,
         spurBin,
+        ...(options.provenanceBypass === true ? { provenanceBypass: true } : {}),
     });
 }

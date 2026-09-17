@@ -627,19 +627,22 @@ describe('enqueueHistoryRefresh explicit policy (task 0813 R2/R3)', () => {
     });
 });
 
-describe('resolveHistoryRefreshTimeoutMs canonical precedence (task 0813 R3)', () => {
-    test('a canonical value (finite or null) beats the legacy env chain', () => {
-        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: '777' }, 5_000)).toBe(5_000);
-        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: '777' }, null)).toBeNull();
+describe('resolveHistoryRefreshTimeoutMs canonical precedence (task 0813 R3 / 0902 wave 2)', () => {
+    test('a canonical value (finite or null) beats the bootstrap.options chain', () => {
+        const cfg = { bootstrap: { options: { historyRefreshTimeoutMs: 777 } } };
+        expect(resolveHistoryRefreshTimeoutMs(cfg, 5_000)).toBe(5_000);
+        expect(resolveHistoryRefreshTimeoutMs(cfg, null)).toBeNull();
     });
 
-    test('absent canonical falls through to the legacy env chain and the ten-minute default', () => {
-        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: '777' })).toBe(777);
-        expect(resolveHistoryRefreshTimeoutMs({ SPUR_HISTORY_REFRESH_TIMEOUT_MS: 'none' })).toBeNull();
-        expect(resolveHistoryRefreshTimeoutMs({})).toBe(SCHEDULER_CUSTOM_TIMEOUT_MS);
+    test('absent canonical falls through to bootstrap.options.historyRefreshTimeoutMs and the ten-minute default', () => {
+        expect(resolveHistoryRefreshTimeoutMs({ bootstrap: { options: { historyRefreshTimeoutMs: 777 } } })).toBe(777);
+        expect(
+            resolveHistoryRefreshTimeoutMs({ bootstrap: { options: { historyRefreshTimeoutMs: 'none' } } }),
+        ).toBeNull();
+        expect(resolveHistoryRefreshTimeoutMs(null)).toBe(SCHEDULER_CUSTOM_TIMEOUT_MS);
     });
 
     test('a malformed canonical value throws instead of falling back', () => {
-        expect(() => resolveHistoryRefreshTimeoutMs({}, -1)).toThrow(/invalid canonical timeout/);
+        expect(() => resolveHistoryRefreshTimeoutMs(null, -1)).toThrow(/invalid canonical timeout/);
     });
 });

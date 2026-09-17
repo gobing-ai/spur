@@ -99,9 +99,10 @@ or a log line — only the job `name` is. Spur adds no per-job `cwd`, `env`, `en
 concurrency knob; a job that needs those wraps them in the script it invokes.
 
 **Execution bounds** (`handleSchedulerCustomJob`): buffered output capped at 1,000,000 bytes, a
-native execution deadline of 600,000 ms (task 0813) — overridable per job/environment via
-`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` and `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS` (positive-integer
-milliseconds; `'none'` removes the deadline; anything else falls back to the default), deliberately
+native execution deadline of 600,000 ms (task 0813) — overridable per job via
+`SPUR_SCHEDULER_TIMEOUT_<NAME>_MS` (env) and globally via `bootstrap.options.schedulerCustomTimeoutMs`
+(positive-integer milliseconds; `'none'` removes the deadline; invalid values fail loud at boot),
+deliberately
 under the server queue's two-hour visibility timeout so the queue never reclaims a still-running
 command — and the child's exit outcome as the only success verdict (a deadline kill yields a
 truthful timed-out failure). A non-zero exit, signal, or spawn failure

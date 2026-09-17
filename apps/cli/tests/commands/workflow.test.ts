@@ -14,11 +14,13 @@ import {
     WorkflowSteeringController,
     type WorkflowTraceTimeline,
 } from '@gobing-ai/spur-app';
+import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import type { ActionCost, ActionCostAttribution } from '@gobing-ai/spur-domain';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import { loadWorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
+    asyncRegisterTimeoutMs,
     followRunLog,
     followTrace,
     formatActionCost,
@@ -256,8 +258,8 @@ describe('workflow command (main)', () => {
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
         const output = createCapturedOutput();
-        const prior = process.env.SPUR_WORKFLOW_RUN_ACTIVE;
-        process.env.SPUR_WORKFLOW_RUN_ACTIVE = '1';
+        const prior = getEnvVar('SPUR_WORKFLOW_RUN_ACTIVE');
+        setEnvVar('SPUR_WORKFLOW_RUN_ACTIVE', '1');
         try {
             const exitCode = await main(['workflow', 'run', workflowFile], { output, cwd: dir, dbUrl: ':memory:' });
 
@@ -267,8 +269,8 @@ describe('workflow command (main)', () => {
             // Refusal precedes execution: nothing was run, so no summary line was emitted.
             expect(output.messages.join('\n')).not.toContain('workflow');
         } finally {
-            if (prior === undefined) delete process.env.SPUR_WORKFLOW_RUN_ACTIVE;
-            else process.env.SPUR_WORKFLOW_RUN_ACTIVE = prior;
+            if (prior === undefined) removeEnvVar('SPUR_WORKFLOW_RUN_ACTIVE');
+            else setEnvVar('SPUR_WORKFLOW_RUN_ACTIVE', prior);
             await rm(dir, { recursive: true, force: true });
         }
     });
@@ -1395,22 +1397,22 @@ failureStates:
             error: (message) => errors.push(message),
         };
 
-        const originalPath = process.env.PATH;
-        process.env.PATH = `${binDir}:${originalPath ?? ''}`;
+        const originalPath = getEnvVar('PATH');
+        setEnvVar('PATH', `${binDir}:${originalPath ?? ''}`);
         try {
             expect(
                 await main(['workflow', 'run', '--steer', '--run-id', 'steer-run', workflowFile], {
                     output,
                     cwd: dir,
-                    env: { ...process.env },
+                    env: { ...getEnvVars() },
                     dbUrl: ':memory:',
                 }),
             ).toBe(0);
         } finally {
             // Assigning undefined stringifies to "undefined" and breaks later tests'
             // shell PATH (mkdir not found → workflow status failed on CI).
-            if (originalPath === undefined) delete process.env.PATH;
-            else process.env.PATH = originalPath;
+            if (originalPath === undefined) removeEnvVar('PATH');
+            else setEnvVar('PATH', originalPath);
         }
         expect(messages.some((message) => message.includes('agent=claude'))).toBe(true);
         expect(messages.some((message) => message.includes('stdout> live-one'))).toBe(true);
@@ -2347,23 +2349,21 @@ describe('waitForRunRegistration', () => {
         await expect(waitForRunRegistration({ trace } as never, 'r', 120, 30)).resolves.toBe(false);
     });
 
-    test('SPUR_ASYNC_REGISTER_TIMEOUT_MS overrides the default budget; junk falls back', async () => {
-        // The default is only reachable via the CLI branch, so assert the parser directly
-        // through the exported helper: a tiny override must return false fast rather than
-        // waiting the built-in 5s, and an unparseable value must not disable the check.
+    test('bootstrap.options.asyncRegisterTimeoutMs overrides the default budget; junk throws', async () => {
+        // The default is only reachable via the CLI branch, so assert the resolver
+        // directly through the exported helper: a tiny override must return false fast
+        // rather than waiting the built-in 5s, and a malformed value must fail loud.
         const trace = async () => {
             throw new Error('Run not found: r');
         };
-        const prev = process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
-        try {
-            process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = '60';
-            const started = Date.now();
-            await expect(waitForRunRegistration({ trace } as never, 'r', undefined, 20)).resolves.toBe(false);
-            expect(Date.now() - started).toBeLessThan(2000);
-        } finally {
-            if (prev === undefined) delete process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
-            else process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = prev;
-        }
+        const started = Date.now();
+        await expect(waitForRunRegistration({ trace } as never, 'r', 60, 20)).resolves.toBe(false);
+        expect(Date.now() - started).toBeLessThan(2000);
+        expect(asyncRegisterTimeoutMs(null)).toBe(5000);
+        expect(asyncRegisterTimeoutMs({ bootstrap: { options: { asyncRegisterTimeoutMs: 60 } } })).toBe(60);
+        expect(() => asyncRegisterTimeoutMs({ bootstrap: { options: { asyncRegisterTimeoutMs: 'junk' } } })).toThrow(
+            /asyncRegisterTimeoutMs/,
+        );
     });
 });
 
@@ -2373,66 +2373,59 @@ describe('async launcher failure branch (0484 R2)', () => {
     // name the sync fallback, and above all emit no run id. A phantom id in the JSON
     // payload would let a machine caller poll a run that never existed, which is the
     // whole failure R2 removes; it shipped unnoticed precisely because this gap existed.
-    const withFastTimeout = async (fn: () => Promise<void>) => {
-        const prev = process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
-        process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = '80';
-        try {
-            await fn();
-        } finally {
-            if (prev === undefined) delete process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS;
-            else process.env.SPUR_ASYNC_REGISTER_TIMEOUT_MS = prev;
-        }
+    // 80ms register budget via the project config: no seeded run row → the detached
+    // worker never registers → failure branch fires fast instead of at the 5s default.
+    const withFastTimeout = async (dir: string) => {
+        await Bun.write(join(dir, '.spur/config.yaml'), 'bootstrap:\n  options:\n    asyncRegisterTimeoutMs: 80\n');
     };
 
     test('an unregistered async run exits non-zero with a sync-fallback hint and no run id', async () => {
-        await withFastTimeout(async () => {
-            const dir = await createTempProject();
-            const workflowFile = join(dir, 'workflow.yaml');
-            await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
-            const output = createCapturedOutput();
-            // No seeded run row → the detached worker never registers → failure branch.
-            const db = await createMigratedDb({ url: ':memory:' });
-            const runId = 'phantom-run-text';
+        const dir = await createTempProject();
+        await withFastTimeout(dir);
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+        // No seeded run row → the detached worker never registers → failure branch.
+        const db = await createMigratedDb({ url: ':memory:' });
+        const runId = 'phantom-run-text';
 
-            const exitCode = await main(['workflow', 'run', '--async', '--run-id', runId, workflowFile], {
-                output,
-                cwd: dir,
-                db,
-            });
-
-            expect(exitCode).toBe(1);
-            const text = output.messages.join('\n');
-            expect(text).toContain('async spawn failed');
-            expect(text).toContain('omit --async');
-            expect(text, 'must not hand back a run id trace cannot resolve').not.toContain(runId);
-            expect(text).not.toMatch(/^Started async run:/m);
-            await rm(dir, { recursive: true, force: true });
+        const exitCode = await main(['workflow', 'run', '--async', '--run-id', runId, workflowFile], {
+            output,
+            cwd: dir,
+            db,
         });
+
+        expect(exitCode).toBe(1);
+        const text = output.messages.join('\n');
+        expect(text).toContain('async spawn failed');
+        expect(text).toContain('omit --async');
+        expect(text, 'must not hand back a run id trace cannot resolve').not.toContain(runId);
+        expect(text).not.toMatch(/^Started async run:/m);
+        await rm(dir, { recursive: true, force: true });
     });
 
     test('--json failure payload carries status + hint and omits the phantom run id', async () => {
-        await withFastTimeout(async () => {
-            const dir = await createTempProject();
-            const workflowFile = join(dir, 'workflow.yaml');
-            await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
-            const output = createCapturedOutput();
-            const db = await createMigratedDb({ url: ':memory:' });
-            const runId = 'phantom-run-json';
+        const dir = await createTempProject();
+        await withFastTimeout(dir);
+        const workflowFile = join(dir, 'workflow.yaml');
+        await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
+        const output = createCapturedOutput();
+        const db = await createMigratedDb({ url: ':memory:' });
+        const runId = 'phantom-run-json';
 
-            const exitCode = await main(['workflow', 'run', '--async', '--json', '--run-id', runId, workflowFile], {
-                output,
-                cwd: dir,
-                db,
-            });
-
-            expect(exitCode).toBe(1);
-            const parsed = JSON.parse(output.messages[0] ?? '{}');
-            expect(parsed.status).toBe('failed');
-            expect(parsed.reason).toContain('failed to start or register');
-            expect(parsed.hint).toContain('omit --async');
-            expect(parsed, 'a machine caller reading .runId would poll a phantom run').not.toHaveProperty('runId');
-            await rm(dir, { recursive: true, force: true });
+        const exitCode = await main(['workflow', 'run', '--async', '--json', '--run-id', runId, workflowFile], {
+            output,
+            cwd: dir,
+            db,
         });
+
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(output.messages[0] ?? '{}');
+        expect(parsed.status).toBe('failed');
+        expect(parsed.reason).toContain('failed to start or register');
+        expect(parsed.hint).toContain('omit --async');
+        expect(parsed, 'a machine caller reading .runId would poll a phantom run').not.toHaveProperty('runId');
+        await rm(dir, { recursive: true, force: true });
     });
 });
 

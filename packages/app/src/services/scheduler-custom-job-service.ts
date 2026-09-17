@@ -1,3 +1,4 @@
+import type { SpurConfig } from '@gobing-ai/spur-config';
 import type { Job } from '@gobing-ai/ts-infra';
 import type { ProcessExecutor } from '@gobing-ai/ts-runtime';
 import {
@@ -6,7 +7,7 @@ import {
     describeBoundedFailure,
     runBoundedChild,
 } from './bounded-child-run';
-import { normalizeLegacyTimeoutMs, type TimeoutPolicyMs } from './execution-policy';
+import { normalizeLegacyTimeoutMs, resolveTimeoutOption, type TimeoutPolicyMs } from './execution-policy';
 import { acquireExclusiveJob, releaseExclusiveJob } from './job-exclusion-guard';
 
 export type { BoundedChildResult };
@@ -123,15 +124,17 @@ export interface SchedulerCustomJobDeps {
 export const SCHEDULER_CUSTOM_TIMEOUT_MS = 600_000;
 
 /**
- * Resolve the scheduler.custom child execution policy from the environment (task 0803 R1;
- * `none` → explicit unlimited since task 0813 R2). Accepted: a positive integer number of
- * milliseconds, or `none`. Absent or invalid values fall back to
- * {@link SCHEDULER_CUSTOM_TIMEOUT_MS} — a bad override must never disable the deadline by
- * accident. Resolved once at daemon boot; follows the ad-hoc env convention
- * (`SPUR_SKIP_GLOBAL_CONFIG`, `SPUR_CHILD_KILL_GRACE_MS`).
+ * Resolve the scheduler.custom child execution policy from
+ * `bootstrap.options.schedulerCustomTimeoutMs` (task 0803 R1; env origin replaced
+ * in task 0902 wave 2; `none` → explicit unlimited since task 0813 R2). Accepted:
+ * a positive integer number of milliseconds, or `'none'`. Absent falls back to
+ * {@link SCHEDULER_CUSTOM_TIMEOUT_MS}; a malformed value throws. Resolved once at
+ * daemon boot.
  */
-export function resolveSchedulerCustomTimeoutMs(env: Record<string, string | undefined>): TimeoutPolicyMs {
-    return normalizeLegacyTimeoutMs(env.SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS, SCHEDULER_CUSTOM_TIMEOUT_MS);
+export function resolveSchedulerCustomTimeoutMs(
+    spurConfig: Pick<SpurConfig, 'bootstrap'> | null | undefined,
+): TimeoutPolicyMs {
+    return resolveTimeoutOption(spurConfig, 'schedulerCustomTimeoutMs', SCHEDULER_CUSTOM_TIMEOUT_MS);
 }
 
 /**

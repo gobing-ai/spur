@@ -129,7 +129,7 @@ retain their existing multiplicity.
   schedule ticks; unifying the producer changes the old scheduler-only value of 1 intentionally.
 - The server queue visibility timeout is two hours, covering six sequential ten-minute source bounds
   plus analysis. The upstream 30-second default must not reset and reclaim a live refresh row.
-- Task 0803 watchdog: the child runs under the daemon-resolved `SPUR_SCHEDULER_CUSTOM_TIMEOUT_MS`
+- Task 0803 watchdog: the child runs under the daemon-resolved `bootstrap.options.schedulerCustomTimeoutMs`
   (default 600,000 ms); `handleHistoryRefreshJob` passes `timeout: deps.timeoutMs ??
   SCHEDULER_CUSTOM_TIMEOUT_MS` into its `executor.run`, and a kill at the deadline throws the
   timeout-labelled `history refresh child timed out after <n>ms (killed)` instead of the generic
