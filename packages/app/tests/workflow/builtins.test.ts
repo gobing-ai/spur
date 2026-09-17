@@ -263,6 +263,13 @@ describe('registerSpurBuiltins', () => {
         );
         await Promise.resolve();
 
+        // The agent.run action preserves failed output at `.spur/run/<runId>-invoke-partial.md`
+        // relative to the process cwd — sweep it so the artifact cannot trip the repo's
+        // sp-runtime-path pre-check on the next gate run.
+        rmSync(join(process.cwd(), '.spur', 'run', 'failed-agent-output-e2e-1-invoke-partial.md'), {
+            force: true,
+        });
+
         expect(result.status).toBe('done');
         const traceJson = persistence.actionRuns[0]?.resultJson ?? '';
         expect(traceJson).not.toContain(secret);
