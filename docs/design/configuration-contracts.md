@@ -215,10 +215,13 @@ dependency graph stays Workers-safe:
 - `resolvePlanningFolders(fs)` derives the active + registered task/feature folders, degrading to
   defaults on any error (a broken config must not wedge folder resolution). `@gobing-ai/spur-app`
   re-exports it so app/CLI consumers import from the application layer, not the config package.
-- `setProjectExecutorDisabled(projectRoot, executorName, disabled)` (0797/ADR-111; ownership
-  widened 0890) writes one existing `agent.executors[]` entry's `disabled` in
-  `<projectRoot>/.spur/config.yaml` via the yaml document model (comments, ordering,
-  unrelated values, file mode preserved). `disabled` is `false` (recovery) or
+- `setExecutorAvailability({layer, projectRoot, executor, disabled})` (0797/ADR-111; generalized
+  from the 0797 `setProjectExecutorDisabled` in B6 0891, wrapper deleted 0892) writes one existing
+  `agent.executors[]` entry's `disabled` in the declaring layer via the yaml document model
+  (comments, ordering, unrelated values, file mode preserved): `layer: 'project'` targets
+  `<projectRoot>/.spur/config.yaml`; `layer: 'global'` targets `~/.config/spur/config.yaml`
+  unless a project fragment also declares the name (project wins). The untouched layer is left
+  byte-identical. `disabled` is `false` (recovery) or
   `{owner: 'quota'|'probe', since: RFC3339, reason}` — the automatic-writer object form
   (B6 0890 R2); `operator` is human-only and rejected. Exact case-sensitive match; absent
   flag is written explicitly; an already-matching explicit value is a byte-stable no-op

@@ -2,8 +2,8 @@
 title: Executor availability and quota-driven disabling
 feature: B5
 status: implemented
-version: 1.1.0
-updated_at: 2026-09-07
+version: 1.2.0
+updated_at: 2026-09-18
 ---
 
 # Executor availability
@@ -12,13 +12,16 @@ Feature B5 owns acceptance criteria. Robin approved this design on 2026-09-07. T
 are implemented (0796 routing/doctor respect for `disabled`; 0797 `setProjectExecutorDisabled`
 filesystem updater; 0798 upstream quota-observation producer handoff; 0799 durable application,
 server consumer, and runtime refresh).
-ADR-111 (Accepted) records the persistence decision; `03 §25` holds the mechanism.
+ADR-111 (Accepted) records the persistence decision; `03 §25` holds the mechanism. Feature B6
+(ADR-121, tasks 0890–0893) extends the lifecycle: availability ownership
+(`operator | quota | probe`), layer-targeted writes (project fragment wins), ownership-scoped
+quota recovery, and the run-once `spur agent usage` producer.
 
 ## 1. Ownership and contracts
 
 | Owner | Responsibility |
 | --- | --- |
-| `packages/config` | Boolean schema, merged defaults, named-reference guard, project YAML update and loader invalidation |
+| `packages/config` | Availability schema (`boolean \| {owner, since, reason}`) with a single normalizer, merged defaults, named-reference guard, project and global YAML update, loader invalidation |
 | `packages/app` | Selection/doctor policy, quota event subscription, asynchronous application and runtime refresh |
 | `packages/domain` | Durable pending update records in the existing project SQLite database |
 | `apps/cli`, local `apps/server` | Attach the same event subscription and flush it before exit; server additionally drains pending writes |
@@ -26,13 +29,18 @@ ADR-111 (Accepted) records the persistence decision; `03 §25` holds the mechani
 
 Configuration remains the source used for execution eligibility. Pending update records are a
 delivery mechanism; they do not introduce a second availability override or account health model.
-No public CLI noun, verb, flag, new dependency, or Cloudflare filesystem path is introduced.
+B5 introduced no public CLI surface, new dependency, or Cloudflare filesystem path; B6 added the
+consented run-once `spur agent usage` verb (harness-surface-governance §4, ADR-051) and the
+`~/.config/spur/agent-usage.json` snapshot path.
 
 ## 2. Configuration and eligibility
 
-`agent.executors[].disabled` accepts only booleans and defaults to false after raw global/project
-merge. A project omission inherits global true; explicit project false overrides it. Update the
-Zod schema, `apps/cli/schemas/spur-config.schema.json`, and the existing config example together.
+`agent.executors[].disabled` accepts `boolean | {owner, since, reason}` and defaults to false after
+raw global/project merge. A bare `true` is operator-owned; automatic writers must pass the object
+form with `owner: quota|probe` (0890). A project omission inherits global true; explicit project
+false overrides it. Code reads availability only through the single normalizer
+(`normalizeExecutorAvailability`) — never raw truthiness. Update the Zod schema,
+`apps/cli/schemas/spur-config.schema.json`, and the existing config example together.
 
 Keep disabled entries in configuration and reference validation. Exclude them at the shared
 `cheapestEligibleExecutors` funnel and the independent escalation filters. Guard explicit names
@@ -49,22 +57,29 @@ Doctor renders disabled inventory and matching role-ladder entries as `disabled`
 `disabled: true`, `usable: false`, and no elected roles. Do not probe disabled entries. Preserve
 the enabled elected row at `agents[0]` for successful role checks. Inventory health ignores
 intentional disables; explicit-disabled and no-enabled-role checks fail. Include disabled state
-in the doctor fingerprint and never reuse stale eligibility from a cached probe.
+in the doctor fingerprint and never reuse stale eligibility from a cached probe. Since 0893,
+disabled rows also render provenance (`OWNER`/`SINCE`/`REASON` columns; JSON
+`availability {disabled, owner, since, reason}`) and the doctor reports the `agent usage` snapshot
+age (`usage` in JSON; `usage: none` when absent — informational, never a warning; ≥6 h renders
+`stale`).
 
-## 3. Project YAML updater
+## 3. Availability updater (project + global)
 
-Proposed Bun-only export from `@gobing-ai/spur-config/loader`:
+Exported from `@gobing-ai/spur-config/loader` (0797; generalized 0891):
 
 ```ts
 type ExecutorUpdateResult =
     | { status: 'updated' }
     | { status: 'unchanged'; reason: 'already-set' | 'missing-file' | 'missing-executors' | 'missing-executor' };
 
-function setProjectExecutorDisabled(
-    projectRoot: string,
-    executorName: string,
-    disabled: boolean,
-): Promise<ExecutorUpdateResult>;
+type ExecutorConfigLayer = 'project' | 'global';
+
+function setExecutorAvailability(request: {
+    layer: ExecutorConfigLayer; // requested; the declaring layer wins (project fragment > global)
+    projectRoot: string;
+    executor: string; // exact name; the updater never creates entries
+    disabled: boolean | { owner: 'quota' | 'probe'; since: string; reason: string };
+}): Promise<ExecutorUpdateResult>;
 ```
 
 Errors reject with stable codes `INVALID_CONFIG`, `CONFIG_CONFLICT`, or `CONFIG_WRITE_FAILED`.
@@ -76,7 +91,11 @@ effective merged object without writing the merged object back.
 Use the installed YAML document model to set just `disabled` in the matching explicit mapping.
 Reject duplicate names, parse errors, aliases/merge structures that would mutate another entry,
 and unsupported shapes. Preserve comments, ordering, permissions, and unrelated values. Explicit
-false is written when the attribute is absent; an already matching explicit boolean is a no-op.
+false (recovery) or the object form (automatic disable) is written when the attribute is absent;
+an already matching explicit value is a byte-stable no-op (scalar equality for booleans,
+owner/since/reason equality for objects). A `layer: 'global'` write to a project-declared
+executor targets the project fragment and leaves the untouched layer byte-identical. The former
+`setProjectExecutorDisabled` wrapper was deleted once 0892 removed its last caller.
 
 Serialize updater calls by the project config path with an exclusive lock. Do not import planning
 entity locks into config: `packages/domain/src/planning/locks.ts` restricts that lock domain to
@@ -117,8 +136,11 @@ Streaming errors must reach the same classifier without buffering the complete t
 
 Produce one event per observation; preserve the original return/error behavior. Health inspection
 remains read-only by default: explicit opt-in health observations can emit exhaustion; ordinary
-doctor does not acquire a new config-writing side effect. Recovery gets a type and consumer only.
-No provider polling, timer, or synthetic recovery event is introduced.
+doctor does not acquire a config-writing side effect. B5 scoped recovery to "type and consumer
+only"; B6 supersedes that clause (0891–0892): recovery is ownership-scoped —
+`agent.quota.recovered` re-enables only quota/probe-owned disables, never operator-owned — and the
+only proactive producer is the explicit run-once `spur agent usage` command (ADR-121), never a
+serve-side poller or timer.
 
 ## 5. Durable application: accepted adjustment to the evaluation
 
@@ -147,9 +169,13 @@ Add one project database table through the next available migration (allocate it
 implementation time), with a domain DAO and schema export:
 
 `agent_executor_updates(project_id, executor_name, observation_id, observed_at, agent, model,
-disabled, applied_observation_id, applied_at, attempts, retry_after, last_error)`.
+disabled, applied_observation_id, applied_at, attempts, retry_after, last_error)` — extended by
+migration 0048 with `owner` (`operator | quota | probe`), `layer` (`project | global`), and
+`skipped_reason` (classified no-op class).
 
-Primary key is `(project_id, executor_name)`. `disabled` is a constrained boolean. Retain the
+Primary key is `(project_id, executor_name)`. `disabled` remains a constrained boolean desired
+state; drain precedence is ownership-scoped (an operator-owned disable is never auto-re-enabled;
+quota/probe updates record their classified skip instead). Retain the
 latest row after application so older/duplicate observations cannot recreate pending work. Only
 trusted executor-attributed events can create rows; missing project-local targets return a
 classified no-op without growing a record for arbitrary names. Retain the latest row for removed
@@ -158,7 +184,8 @@ growth. No general-purpose queue or event-replay framework is added.
 
 An observation order is `(observedAt, observationId)` with deterministic lexical ID tie-breaking.
 For the same local producer clock, older/equal observations do not replace newer ones. This is not
-a distributed causal clock; remote producers and automatic recovery remain outside scope. A
+a distributed causal clock; remote producers remain outside scope (automatic recovery is
+ownership-scoped since B6 0891). A
 profile binding mismatch is reported and acknowledged as a no-op, never applied to its replacement.
 
 The shared app subscription validates both events and upserts the latest observation. Install it

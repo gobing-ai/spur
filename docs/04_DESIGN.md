@@ -131,6 +131,10 @@ See [contract detail](design/cli-contracts.md#spur-agent-list---json---specs).
 
 See [contract detail](design/cli-contracts.md#spur-agent-doctor-agent---json---probe-health---force-refresh).
 
+#### `spur agent usage [--dry-run] [--source <name>] [--json] [--json-envelope]`
+
+See [contract detail](design/cli-contracts.md#spur-agent-usage---dry-run---source-name---json---json-envelope).
+
 #### `spur agent wait [<specId>] [--role <name>] [--run <runId>] [--until <state>...] [--timeout <ms>] [--json]` · `spur message send (--to <id>|--role <name>) <body> [--from <id>] [--wait] [--until injected|invoke-exit] [--timeout <ms>] [--json]`
 
 See [contract detail](design/cli-contracts.md#spur-agent-wait-specid---role-name---run-runid---until-state---timeout-ms---json--spur-message-send---to-id--role-name-body---from-id---wait---until-injectedinvoke-exit---timeout-ms---json).

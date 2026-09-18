@@ -984,21 +984,26 @@ zero. Detailed trust, proof, checkpoint and attestation contracts:
 
 ## 25. Executor Availability
 
-Merged YAML is the availability authority: `agent.executors[].disabled` is boolean-only (false
-after raw global/project merge), and routing/doctor exclude disabled profiles — explicit pins fail
-pre-spawn, never substitute, and doctor synthesizes non-probed disabled rows (0796).
+Merged YAML is the availability authority: `agent.executors[].disabled` accepts
+`boolean | {owner, since, reason}` (a bare `true` is operator-owned; automatic writers pass the
+object form; one normalizer is the single reader, 0890), and routing/doctor exclude disabled
+profiles — explicit pins fail pre-spawn, never substitute, and doctor synthesizes non-probed
+disabled rows with owner/since/reason provenance (0796, 0893).
 
 Upstream `ts-ai-runner` (≥0.4.57) emits `agent.quota.exhausted` / `agent.quota.recovered` carrying
 Spur's exact dispatch attribution into a shared app subscription
 (`attachAgentQuotaUpdates`, packages/app). The subscription validates trusted shape (Zod,
 `@gobing-ai/spur-config/agent-quota-events`), attributes project/executor/profile, and applies the
-update through the config package's exact-name updater
-(`setProjectExecutorDisabled`, per-path lock + atomic same-dir commit + loader-cache invalidation,
-0797).
+update through the config package's exact-name availability updater
+(`setExecutorAvailability({layer, projectRoot, executor, disabled})`: layer-targeted project/global
+writes with project-fragment precedence, per-path lock + atomic same-dir commit + loader-cache
+invalidation on both layers; 0797, generalized 0891).
 
 The durable record is one pending row per project/executor in the existing SQLite database —
-`agent_executor_updates` (migration 0040, `AgentExecutorUpdateDao`) with a conditional
-latest-observation upsert and version-specific ack; it survives event-history pruning and restart,
+`agent_executor_updates` (migration 0040 + ownership columns from 0048: `owner`, `layer`,
+`skipped_reason`; `AgentExecutorUpdateDao`) with a conditional latest-observation upsert and
+version-specific ack; drain precedence is ownership-scoped (operator-owned disables survive quota
+updates as classified skips); it survives event-history pruning and restart,
 and coalesces superseded observations. The Bun server starts one project-scoped consumer before
 autostart/dispatch (drain + bus wake-up feed the same serialized drain) and detaches + drains it
 before DB close; the CLI attaches the same subscription to agent/workflow/team run buses with
@@ -1006,9 +1011,12 @@ flush-before-exit (0799). Long-lived dispatch paths reload effective agent confi
 selection/launch boundary; current-invocation exhaustion stays in memory so fallback never waits
 for persistence.
 
-Recovery is a reserved explicit contract — `agent.quota.recovered` maps through the same updater
-to `disabled: false`; there is no automatic producer, poller, or timer. The two quota events are
-bus-consumed, not catalog-registered (board presentation awaits ADR-110 catalog-open ingestion).
+Recovery is ownership-scoped (0891): `agent.quota.recovered` maps through the same updater to
+`disabled: false` only when the current owner is `quota`/`probe` — operator-owned disables are
+never auto-re-enabled. The only proactive producer is the explicit run-once `spur agent usage`
+command (0892; an external scheduler owns invocation, `spur serve` never runs it) — no poller or
+timer. The two quota events are bus-consumed, not catalog-registered (board presentation awaits
+ADR-110 catalog-open ingestion).
 
 ADR-111 records this delivery choice. Shapes, failure contracts, and rejected alternatives live
 in [executor availability](design/executor-availability.md).

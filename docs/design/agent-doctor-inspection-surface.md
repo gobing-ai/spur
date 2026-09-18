@@ -116,6 +116,16 @@ tier) stays — it still backs the exit code. **`authenticated` is removed** (§
 `packages/app/src/workflow/actions/doctor-probe.ts` parses `.agents[0]`; widening the array from one
 entry to the ladder must not move the elected executor off index 0.
 
+### 3.5 Availability provenance + usage snapshot (feature B6 / 0893)
+
+Table mode adds `OWNER`/`SINCE`/`REASON` columns on disabled rows only (`—` otherwise), carrying
+the availability ownership recorded in config (`agent.executors[].disabled: {owner, since,
+reason}`; a bare `true` is operator-owned). `--json` adds `availability {disabled, owner|null,
+since|null, reason|null}` per entry and a top-level `usage` report for the `spur agent usage`
+snapshot — `{capturedAt, age, stale}` (stale at ≥6 h), or `usage: none` when no snapshot exists.
+The report is informational: it never warns, never gates the exit code, and doctor stays
+read-only — refresh belongs to the `spur agent usage` producer verb.
+
 ## 4. Removing the auth signal
 
 The `authenticated` field leaves the doctor surface entirely: no table column (already gone, 0621),

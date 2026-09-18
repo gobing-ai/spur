@@ -424,9 +424,10 @@ server falls back to all `stopped` with a stderr warning.
 #### `spur agent doctor [agent] [--json] [--probe-health] [--force-refresh]`
 
 Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an aligned table —
-`<✓|✗> <usable|missing> <executor-name> <agent-binary> <pinned-model> <capability-tier> <version> <caps>` with a
-`STATUS EXECUTOR AGENT MODEL TIER VERSION CAPS ROLES` header and an `N usable, M missing` footer
-(feature B4 / 0681; CAPS column feature B8 / 0889). Details per column:
+`<✓|✗> <usable|missing> <executor-name> <agent-binary> <pinned-model> <capability-tier> <version> <caps> [<owner> <since> <reason>]` with a
+`STATUS EXECUTOR AGENT MODEL TIER VERSION CAPS ROLES OWNER SINCE REASON` header and an `N usable, M missing` footer
+(feature B4 / 0681; CAPS column feature B8 / 0889; OWNER/SINCE/REASON columns feature B6 / 0893 —
+rendered on `disabled` rows only, `—` otherwise). Details per column:
 
 - **EXECUTOR** carries the configured `agent.executors[].name`; the **AGENT** cell carries the underlying
   binary (`omp`, `pi`, …) so aliasing is visible; rows outside any executor config fall back to the agent name.
@@ -437,7 +438,9 @@ Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an al
   no network/model check runs. The MODEL column always reflects config either way.
 - **STATUS** shows `disabled` for a profile with `agent.executors[].disabled: true` (feature B5 / 0796):
 such rows are synthesized from config without a probe (`usable: false`, error `disabled by config`), a
-full-set inventory still exits 0, and naming a disabled executor directly exits 1 with its row.
+full-set inventory still exits 0, and naming a disabled executor directly exits 1 with its row. Since
+feature B6 / 0893, `disabled` accepts `boolean | {owner, since, reason}` (a bare `true` is
+operator-owned) and disabled rows render their provenance in the OWNER/SINCE/REASON columns.
 - **TIER** renders the executor's capability tier (`cheap|standard|capable-*`), distinct from support tier 1/2/3
   (routing introspection only — the task-pipeline size precheck stopped consuming it in 0723), which never appears
   in the table. Declared `agent.executors[].tier`
@@ -462,15 +465,37 @@ Arg semantics: a bare **agent/exec name** prints that executor's detail block; a
 agent with the ELECTED marker and per-row failure reasons plus an `N eligible, M usable, elected: X`
 summary. `--json` emits `{ agents: [...], cache? }`, each entry adding `capabilityTier`, `model` (pinned or null),
 `roles`, and `elected`; each entry also carries `disabled` (feature B5 / 0796, config state) and, feature B8 / 0889,
-`capabilities` + `capabilityStale`; a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
+`capabilities` + `capabilityStale`; feature B6 / 0893 adds `availability {disabled, owner|null, since|null, reason|null}`
+per entry plus a top-level `usage` snapshot report (`{capturedAt, age, stale}`; `usage: none` when no
+`~/.config/spur/agent-usage.json` exists — informational only, never a warning, never gating; ≥6 h
+renders text `stale` and sets `usage.stale: true`); a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
 60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier/disabled), served
 only on an exact fresh match, and corrupted/stale/unwritable states degrade silently to a live run; text
 mode prints a dated footer note on a hit; `--probe-health` never reads or writes the cache and
 `--force-refresh` skips the read, re-runs detection live, and rewrites the file. Under a role selector,
 entries are ordered elected-first then resolution order (`agents[0]` is the electee). Auth is neither table column nor surfaced shape (liveness-only gate,
-ADR/0127). For **grok**, liveness is tri-state from `XAI_API_KEY` and/or non-empty `~/.grok/auth.json`
+[agent-doctor-inspection-surface](agent-doctor-inspection-surface.md) §4). For **grok**, liveness is tri-state from `XAI_API_KEY` and/or non-empty `~/.grok/auth.json`
 (no CLI auth-status verb). Exit 1 if any **tier-1** agent is not usable. Backed by `ts-ai-runner` `DoctorRunner`.
 Selector precedence inside the arg: exact executor/agent name first, role id second.
+
+<a id="spur-agent-usage---dry-run---source-name---json---json-envelope"></a>
+
+#### `spur agent usage [--dry-run] [--source <name>] [--json] [--json-envelope]`
+
+Run-once quota-usage producer (feature B6 / 0892, ADR-121; consent row in
+[harness-surface-governance](harness-surface-governance.md) §4): executes the external `codexbar`
+capture once (`--source <name>`, default `codexbar`), writes the snapshot to
+`~/.config/spur/agent-usage.json` (`{captured_at, source, providers, raw}`;
+`SPUR_AGENT_USAGE_SNAPSHOT` overrides the path for tests), maps providers to executors per
+[session-pinned-dispatch](session-pinned-dispatch.md) §3.4, and drains the resulting observations
+as `owner: quota` events through the single availability writer. `--dry-run` prints the would-be
+executor changes and writes nothing. A missing/failing capture exits non-zero and changes nothing;
+per-provider error entries are skipped and reported while healthy entries still apply. An external
+scheduler (cron/launchd) owns invocation — `spur serve` never runs it (asserted by test), keeping
+the no-hidden-automation posture: no poller, no timer, no serve-side loop. Mapping rules and the
+recorded rejected shape (`spur agent doctor --refresh-usage`) live in
+[harness-surface-governance](harness-surface-governance.md) §4 and
+[session-pinned-dispatch](session-pinned-dispatch.md) §3.
 
 <a id="agent-specs"></a>
 
