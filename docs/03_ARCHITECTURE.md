@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.48.0
+version: 1.49.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-16
+updated_at: 2026-09-18
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -770,6 +770,17 @@ executor name when the spec records one (0537), restoring the operator's `{ agen
 specs without an executor field fall back to `type` (shim `spec-without-executor-field`), and a
 dangling executor reference fails loudly at drain, spawning nothing.
 
+**Run-scoped dispatch (ADR-121; B6 tasks 0890–0893, B7 tasks 0894/0895).** Within a workflow run,
+Layer-2 resolution happens once per role: the pipeline's `precheck` (task-pipeline) or `start`
+(idea-pipeline) resolves every declared role and pins it in run vars (`__executor.<role>`,
+`__session.<role>.{dir,id}`); `agent.run` reads the pin, checks the pinned executor's availability
+before each dispatch, and on a mid-run disable re-resolves that role once per run (`pin-reresolved`,
+with the owner/reason). Stage isolation is a policy: coder stages reuse the role's session,
+reviewer/planner/scribe stages dispatch fresh, an explicit `session: reuse | fresh` stage option
+overrides the default, and the runner's `resumeById` capability record gates resume emission
+(`freshSession: true` stays the action-level hard guarantee). Each `agent.run` trace row records
+`executor`, `sessionId`, and `session: reused | fresh`.
+
 **Invariants (enforceable)**
 
 1. `--agent` accepts only a Layer-1 role, a configured executor name, a bare binary name (shim), or
@@ -780,9 +791,20 @@ dangling executor reference fails loudly at drain, spawning nothing.
    missing executor; it never silently downgrades to a bare binary (0537 R5).
 4. The prompt text never derives a stage or role (`extractPhase` retired); undeclared callers land
    on the default role visibly.
+5. An automatic availability writer recovers only executors it could have disabled — `quota` or
+   `probe` ownership; an operator-disabled executor (`owner: operator`) is recoverable only by the
+   operator (ADR-121, tasks 0890–0893).
+6. A workflow run resolves each declared role's executor once — `precheck`/`start` writes
+   `__executor.<role>` and `__session.<role>.{dir,id}`; the per-stage path reads the pin and never
+   re-resolves except on a mid-run disable, which re-resolves that role once per run and records
+   `pin-reresolved` with the owner/reason (ADR-121, tasks 0894/0895).
+7. Stage session policy defaults by role — `coder` reuses the role's session, every other role
+   dispatches fresh; a declared `session: reuse | fresh` is recorded in trace, and a resume-only
+   step against a runner record without `resumeById` fails pre-spawn (ADR-118/121).
 
 Shapes: `04 §2.1` (`agent.roles`); `packages/config/src/index.ts` (`DEFAULT_AGENT_ROLES`,
-`AgentRoleConfigSchema`); `config/config.global.yaml` (the ADR-078 SSOT); `plugins/sp/references/roles.md` (projection).
+`AgentRoleConfigSchema`); `config/config.global.yaml` (the ADR-078 SSOT); `plugins/sp/references/roles.md` (projection);
+`packages/app/src/services/agent-service.ts` (run-scoped pins, session slots, availability check).
 
 ## 20. Workflow Composition and Canonical Pipelines (ADR-069/072 accepted; ADR-071 accepted design)
 
