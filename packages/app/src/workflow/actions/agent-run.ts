@@ -252,8 +252,10 @@ export class AgentRunActionRunner implements ActionRunner {
         // (the B6 drain invalidates the loader cache, so this sees a mid-run
         // disable). Disabled → re-resolve the role ONCE per run: the fresh pin is
         // written back for later stages and THIS stage starts fresh (design §4).
-        // A second disable means the role's ladder is exhausted for the run — the
-        // stage fails loudly (ADR-118 outcome) instead of hunting executors.
+        // A second disable exhausts the role's ladder for the run — the stage
+        // fails as an executor failure (ADR-118 reserves its third
+        // contract-violation outcome for declared post-conditions) instead of
+        // hunting executors.
         let pinReresolved: ExecutorAvailability | undefined;
         let disabledPinName: string | undefined;
         if (pin !== undefined && roleValid && typeof this.agentService?.executorAvailability === 'function') {
@@ -268,8 +270,8 @@ export class AgentRunActionRunner implements ActionRunner {
                         ok: false,
                         error:
                             `agent.run: pinned executor '${pin.name}' for role '${role}' was disabled again after ` +
-                            `re-resolution (${availabilityNote}); the run-scoped ladder is exhausted (ADR-118). ` +
-                            'Restore executor availability or abort the run.',
+                            `re-resolution (${availabilityNote}); the run-scoped re-resolution ladder is exhausted ` +
+                            'for this run. Restore executor availability or abort the run.',
                     };
                 }
                 const rerolled =
@@ -375,7 +377,9 @@ export class AgentRunActionRunner implements ActionRunner {
         // path, whose behavior is unchanged.
         const sessionDirVar = roleValid ? `__session.${role}.dir` : '__agentSessionDir';
         const sessionIdVar = roleValid ? `__session.${role}.id` : '__agentSessionId';
-        let sessionDir = freshSession ? undefined : asOptionalString(context.vars[sessionDirVar]);
+        // 0895 P2: a cleared slot reads as '' — treat it as absent, never as a
+        // resumable session of the previous executor.
+        let sessionDir = freshSession ? undefined : asOptionalString(context.vars[sessionDirVar]) || undefined;
         if (affinityOn) {
             if (!sessionDir || (prevAgent && prevAgent !== targetAgentDir)) {
                 sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
@@ -401,7 +405,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 `fresh-${context.stateOrNodeId}`,
             );
         }
-        const storedSessionId = freshSession ? undefined : asOptionalString(context.vars[sessionIdVar]);
+        const storedSessionId = freshSession ? undefined : asOptionalString(context.vars[sessionIdVar]) || undefined;
 
         // Session latch (Q8): auto-determine continue from vars.__agentSession
         // unless the step author set `continue` explicitly.
@@ -1062,6 +1066,22 @@ export class AgentRunActionRunner implements ActionRunner {
                 if (pinReresolved.owner !== undefined) resultData.pinReresolvedOwner = pinReresolved.owner;
                 if (pinReresolved.reason !== undefined) resultData.pinReresolvedReason = pinReresolved.reason;
             }
+            // B7 R6 (0895): the re-resolve writeback — fresh pin, the
+            // once-per-run marker, and the ABANDONED session slot of the
+            // previous executor (a later reuse stage must not pair the
+            // re-resolved executor with the old session id; '' reads as
+            // absent). Persisted even on stage failure: the ladder spend is a
+            // run-level fact, not a success reward — re-running it would
+            // re-pay a doctor walk and could re-resolve a second time.
+            const reresolvedVars: Record<string, string> | undefined =
+                pinReresolved !== undefined && roleValid
+                    ? {
+                          [`__executor.${role}`]: JSON.stringify(pin),
+                          [`__executorReresolved.${role}`]: 'true',
+                          [sessionDirVar]: '',
+                          [sessionIdVar]: '',
+                      }
+                    : undefined;
             return {
                 ok,
                 data: resultData,
@@ -1093,15 +1113,10 @@ export class AgentRunActionRunner implements ActionRunner {
                           // B7 R5 (0894): the one-per-run no-resume notice latches here so
                           // later stages of the same run stay silent.
                           ...(noResumeNotYetWarned ? { __executorNoResumeWarned: 'true' } : {}),
-                          // B7 R6 (0895): persist the fresh pin + the once-per-run marker
-                          // so later stages dispatch on the re-resolved executor and a
-                          // SECOND disable fails loudly instead of hunting again.
-                          ...(pinReresolved !== undefined && roleValid
-                              ? {
-                                    [`__executor.${role}`]: JSON.stringify(pin),
-                                    [`__executorReresolved.${role}`]: 'true',
-                                }
-                              : {}),
+                          // B7 R6 (0895): the re-resolve writeback (pin, marker,
+                          // abandoned slot clear) lives in `reresolvedVars` and is
+                          // shared by the success and failure outcomes.
+                          ...(reresolvedVars ?? {}),
                           // 0710 R3: bounded routing evidence for later independence checks.
                           [`__agentRouting_${context.stateOrNodeId}`]: JSON.stringify({
                               agent: resolvedAgent,
@@ -1109,7 +1124,7 @@ export class AgentRunActionRunner implements ActionRunner {
                           }),
                           ...(steeringNote !== undefined ? { __steeringNote: steeringNote } : {}),
                       }
-                    : undefined,
+                    : (reresolvedVars ?? undefined),
             };
         } finally {
             if (diffBaseline !== undefined) await deleteSnapshotIndex(diffBaseline);

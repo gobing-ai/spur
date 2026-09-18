@@ -3118,7 +3118,10 @@ describe('AgentRunActionRunner pin invalidation + trace columns (0895)', () => {
     const PIN_A = JSON.stringify({ name: 'claude-a', agent: 'claude', tier: 2 });
 
     /** Fake service: pinned executor reads as disabled; fresh re-resolve lands on claude-b. */
-    function svcWithDisabledPin(availability: { disabled: boolean; owner?: string; reason?: string } | undefined) {
+    function svcWithDisabledPin(
+        availability: { disabled: boolean; owner?: string; reason?: string } | undefined,
+        dispatchExitCode = 0,
+    ) {
         let capturedFlags: Record<string, string | boolean> = {};
         const svc = {
             executorAvailability: async () => availability,
@@ -3133,7 +3136,7 @@ describe('AgentRunActionRunner pin invalidation + trace columns (0895)', () => {
             }),
             runTraced: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
                 capturedFlags = flags;
-                return { exitCode: 0, stdout: '', invocation: invocation({ agent: 'claude' }) };
+                return { exitCode: dispatchExitCode, stdout: '', invocation: invocation({ agent: 'claude' }) };
             },
             flags: () => capturedFlags,
         } as unknown as AgentService & { flags: () => Record<string, string | boolean> };
@@ -3172,9 +3175,55 @@ describe('AgentRunActionRunner pin invalidation + trace columns (0895)', () => {
         const newPin = JSON.parse((result.setVars as Record<string, string>)['__executor.coder'] as string);
         expect(newPin.name).toBe('claude-b');
         expect(result.setVars?.['__executorReresolved.coder']).toBe('true');
+        // P2: the previous executor's session slot is abandoned — a later reuse
+        // stage must not pair claude-b with claude-a's session.
+        expect(result.setVars?.['__session.coder.dir']).toBe('');
+        expect(result.setVars?.['__session.coder.id']).toBe('');
     });
 
-    test('second disable after re-resolution fails the stage loudly (ADR-118 outcome, R1)', async () => {
+    test('cleared session slot never resumes the abandoned executor session (P2 follow-up)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-895b',
+            vars: {
+                '__executor.coder': JSON.stringify({ name: 'claude-b', agent: 'claude', tier: 3 }),
+                // Slot cleared by the re-resolved stage — must read as absent.
+                '__session.coder.dir': '',
+                '__session.coder.id': '',
+                __agentSessionAgent: 'claude',
+            },
+        });
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionId).toBeUndefined();
+        const data = result.data as Record<string, unknown>;
+        expect(data.session).toBe('fresh');
+    });
+
+    test('re-resolve writeback persists even when the re-resolved dispatch fails (P2 follow-up)', async () => {
+        const svc = svcWithDisabledPin({ disabled: true, owner: 'drain' }, 3);
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-895c',
+            vars: { '__executor.coder': PIN_A },
+        });
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(false);
+        // The ladder spend is a run-level fact: pin + marker survive the failure
+        // so the next stage does not re-run the doctor walk.
+        const newPin = JSON.parse((result.setVars as Record<string, string>)['__executor.coder'] as string);
+        expect(newPin.name).toBe('claude-b');
+        expect(result.setVars?.['__executorReresolved.coder']).toBe('true');
+        expect(result.setVars?.['__session.coder.id']).toBe('');
+    });
+
+    test('second disable after re-resolution fails the stage loudly (executor failure, not contract-violation — R1)', async () => {
         const svc = svcWithDisabledPin({ disabled: true, owner: 'drain', reason: 'quota exhausted' });
         const runner = new AgentRunActionRunner(svc);
         const ctx = makeCtx({
@@ -3190,6 +3239,9 @@ describe('AgentRunActionRunner pin invalidation + trace columns (0895)', () => {
         expect(result.error).toContain('ladder is exhausted');
         expect(result.error).toContain('claude-a');
         expect(result.error).toContain('drain');
+        // ADR-118's third outcome is reserved for declared post-conditions;
+        // ladder exhaustion stays a plain executor failure.
+        expect((result.data as Record<string, unknown> | undefined)?.outcome).toBeUndefined();
     });
 
     test('resumed pinned stage records executor + sessionId + session=reused and maps E6 by run id (R2/R3)', async () => {
