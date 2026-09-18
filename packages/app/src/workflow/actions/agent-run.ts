@@ -1,5 +1,6 @@
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
+import type { ExecutorAvailability } from '@gobing-ai/spur-config';
 import { AGENT_ROLE_NAMES, getEnvVars } from '@gobing-ai/spur-config';
 import { getAgentSessionCapability, resolveAgentName } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
@@ -16,6 +17,7 @@ import {
     evaluateSessionCapabilities,
     parseRequiresCapabilities,
     SESSION_CAPABILITY_AXES,
+    type SessionCapabilityRecord,
 } from '../../services/capability-attestation';
 import { permissionFailureEvidence } from '../../services/failure-classification';
 import type { AgentRoutingIdentity } from '../../services/review-independence';
@@ -51,6 +53,35 @@ export interface AgentRunAgentConfig {
      * Defaults to `['docs/tasks3/*', 'docs/features/*']` when absent.
      */
     excludeGlobs?: string[];
+}
+
+/** Run-scoped executor pin written by precheck/start (B7 R1 / task 0894). */
+export interface ExecutorPin {
+    /** Executor name — the dispatch selector for every stage of the role. */
+    name: string;
+    /** Canonical agent binary, when the resolution surfaced it. */
+    agent?: string;
+    /** Model override captured at resolution. */
+    model?: string;
+    /** Capability tier of the resolved executor (tier id or tier name — display metadata). */
+    tier?: number | string;
+    /** Runner session-capability record (B8) — Spur reads whichever fields exist. */
+    capabilities?: SessionCapabilityRecord;
+}
+
+/**
+ * Parse the `__executor.<role>` run var. An absent or corrupt pin degrades to
+ * unpinned dispatch (the stage resolves the way it always did) — a malformed pin
+ * must never hard-fail a run that precheck already certified.
+ */
+export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
+    if (typeof raw !== 'string' || raw.trim() === '') return undefined;
+    try {
+        const parsed = JSON.parse(raw) as ExecutorPin;
+        return typeof parsed?.name === 'string' && parsed.name !== '' ? parsed : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 /**
@@ -202,10 +233,77 @@ export class AgentRunActionRunner implements ActionRunner {
         // Declared step role (0538 R2): threaded onto the underlying `spur agent run`
         // so the resolution records the reason even when the `agent:` pin beats it.
         const role = asOptionalString(options.role);
+        // B7 R3 (0894): optional stage session policy — 'reuse' | 'fresh'. An
+        // invalid value fails the step here; `spur workflow validate` rejects it
+        // earlier at the definition gate.
+        const sessionOption = asOptionalString(options.session);
+        if (sessionOption !== undefined && sessionOption !== 'reuse' && sessionOption !== 'fresh') {
+            return { ok: false, error: `agent.run: session must be 'reuse' or 'fresh' (got '${sessionOption}')` };
+        }
+        // B7 R4 (0894): the declaration source rides the action result — a reviewer
+        // stage that opted into reuse explicitly is distinguishable from a default.
+        const sessionDeclared = sessionOption !== undefined;
+        // B7 R1 (0894): run-scoped executor pin. Precheck/start resolved every
+        // declared role once into `__executor.<role>`; the per-stage path reads the
+        // pin and performs no doctor/detection call.
+        const roleValid = role !== undefined && (AGENT_ROLE_NAMES as readonly string[]).includes(role);
+        let pin = roleValid ? parseExecutorPin(context.vars[`__executor.${role}`]) : undefined;
+        // B7 R6 (0895): pre-spawn pin availability read through the config loader
+        // (the B6 drain invalidates the loader cache, so this sees a mid-run
+        // disable). Disabled → re-resolve the role ONCE per run: the fresh pin is
+        // written back for later stages and THIS stage starts fresh (design §4).
+        // A second disable means the role's ladder is exhausted for the run — the
+        // stage fails loudly (ADR-118 outcome) instead of hunting executors.
+        let pinReresolved: ExecutorAvailability | undefined;
+        let disabledPinName: string | undefined;
+        if (pin !== undefined && roleValid && typeof this.agentService?.executorAvailability === 'function') {
+            const availability = await this.agentService.executorAvailability(pin.name);
+            if (availability?.disabled === true) {
+                const availabilityNote = `owner=${availability.owner ?? 'operator'}${
+                    availability.reason !== undefined ? ` reason=${availability.reason}` : ''
+                }`;
+                disabledPinName = pin.name;
+                if (context.vars[`__executorReresolved.${role}`] === 'true') {
+                    return {
+                        ok: false,
+                        error:
+                            `agent.run: pinned executor '${pin.name}' for role '${role}' was disabled again after ` +
+                            `re-resolution (${availabilityNote}); the run-scoped ladder is exhausted (ADR-118). ` +
+                            'Restore executor availability or abort the run.',
+                    };
+                }
+                const rerolled =
+                    typeof this.agentService.resolveRoleFresh === 'function'
+                        ? await this.agentService.resolveRoleFresh({ role })
+                        : undefined;
+                if (rerolled === undefined || !rerolled.ok) {
+                    const reason = rerolled !== undefined ? rerolled.message : 'no agent service for re-resolution';
+                    return {
+                        ok: false,
+                        error:
+                            `agent.run: pinned executor '${pin.name}' for role '${role}' was disabled mid-run ` +
+                            `(${availabilityNote}) and role re-resolution failed: ${reason}`,
+                    };
+                }
+                const rerolledCapabilities = getAgentSessionCapability(rerolled.agent);
+                pin = {
+                    name: rerolled.executor ?? rerolled.agent,
+                    agent: rerolled.agent,
+                    ...(rerolled.model !== undefined ? { model: rerolled.model } : {}),
+                    ...(rerolled.tier !== undefined ? { tier: rerolled.tier } : {}),
+                    ...(rerolledCapabilities !== undefined ? { capabilities: rerolledCapabilities } : {}),
+                };
+                pinReresolved = availability;
+            }
+        }
+        // B7 R3 (0894): policy defaults by role — coder stages carry implement
+        // context forward; reviewer/planner/scribe dispatch fresh so a review
+        // never inherits the implementer's context (design §4, operator-confirmed).
+        const sessionPolicy = sessionOption ?? (role === 'coder' ? 'reuse' : 'fresh');
         // R1 (0451): config is injected at composition root, not read from a fake cast.
         // Affinity config via this.agentConfig below.
-        const dispatchAgent = agent;
-        const model = asOptionalString(options.model);
+        const dispatchAgent = pin !== undefined ? pin.name : agent;
+        const model = asOptionalString(options.model) ?? pin?.model;
         const mode = asOptionalString(options.mode) ?? 'text';
         const cwd = asOptionalString(options.cwd) ?? context.workdir ?? '.';
 
@@ -218,10 +316,11 @@ export class AgentRunActionRunner implements ActionRunner {
         const affinityOn = !affinityDisabled;
 
         // 0710 R1: `freshSession: true` bypasses the inherited workflow session —
-        // the action never reads __agentSessionDir / __agentSessionId / the latch,
-        // and never publishes affinity vars back. Review/verify stages declare it
-        // so they certify a state with no implementation-session contamination.
-        const freshSession = options.freshSession === true;
+        // the action never reads the role session slot or the latch, and never
+        // publishes affinity vars back. Review/verify stages declare it (or the
+        // role default applies — 0894 R3) so they certify a state with no
+        // implementation-session contamination.
+        const freshSession = options.freshSession === true || sessionPolicy === 'fresh' || pinReresolved !== undefined;
         // 0710 R4/R5: declarative risk-policy inputs. `priority` comes from the
         // task frontmatter via a pipeline var; `compareExecutorWith` names the
         // node whose routing evidence the distinctness check compares against.
@@ -236,11 +335,33 @@ export class AgentRunActionRunner implements ActionRunner {
         // the 0406 fresh-retry fallback as the safety net.
         const affinityAgent = dispatchAgent ?? this.agentConfig.default;
         const canonicalAffinityAgent = affinityAgent !== undefined ? resolveAgentName(affinityAgent) : undefined;
+        // B7 R1 (0894): the pin carries the capability record captured at precheck;
+        // the live runner record is the fallback (pin.agent, then the resolved
+        // selector) so a pin that predates capability capture still gates correctly.
+        const pinCanonical = pin?.agent !== undefined ? resolveAgentName(pin.agent) : undefined;
         const sessionCaps =
-            canonicalAffinityAgent !== undefined ? getAgentSessionCapability(canonicalAffinityAgent) : undefined;
+            pin?.capabilities ??
+            (pinCanonical !== undefined ? getAgentSessionCapability(pinCanonical) : undefined) ??
+            (canonicalAffinityAgent !== undefined ? getAgentSessionCapability(canonicalAffinityAgent) : undefined);
         // R2: a `false` resume-by-id record means no resume flag of any kind is
         // emitted — the dispatch is fresh and the result records `session: 'fresh'`.
         const resumeSupported = sessionCaps?.supportsResumeById !== false;
+        // B7 R5 (0894): a record without resume-by-id dispatches every stage fresh;
+        // the notice is emitted ONCE per run (guarded by the run var), not per stage.
+        const noResumeNotYetWarned = !resumeSupported && context.vars.__executorNoResumeWarned !== 'true';
+        if (noResumeNotYetWarned) {
+            void this.observabilityBus?.emit('workflow.executor-no-resume', {
+                schemaVersion: 1,
+                eventId: crypto.randomUUID(),
+                sequence: 0,
+                runId: context.runId,
+                at: new Date().toISOString(),
+                severity: 'warning',
+                kind: KIND,
+                node: context.stateOrNodeId,
+                executor: pin?.name ?? agentLabel,
+            });
+        }
         // Session-dir label. Never a literal agent name as the fallback: this directory
         // names the source the history importer attributes the run's sessions to
         // (`history-service.ts` maps `.spur/run/<id>/agent-sessions/<agent>/` back to a
@@ -249,7 +370,12 @@ export class AgentRunActionRunner implements ActionRunner {
         const targetAgentDir = dispatchAgent ?? this.agentConfig.default ?? 'default';
         const prevAgent = freshSession ? undefined : asOptionalString(context.vars.__agentSessionAgent);
 
-        let sessionDir = freshSession ? undefined : asOptionalString(context.vars.__agentSessionDir);
+        // B7 R2 (0894): session state is role-scoped — `__session.<role>.{dir,id}`.
+        // The legacy global keys remain only for the (pre-dispatch-fatal) role-less
+        // path, whose behavior is unchanged.
+        const sessionDirVar = roleValid ? `__session.${role}.dir` : '__agentSessionDir';
+        const sessionIdVar = roleValid ? `__session.${role}.id` : '__agentSessionId';
+        let sessionDir = freshSession ? undefined : asOptionalString(context.vars[sessionDirVar]);
         if (affinityOn) {
             if (!sessionDir || (prevAgent && prevAgent !== targetAgentDir)) {
                 sessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', targetAgentDir);
@@ -275,7 +401,7 @@ export class AgentRunActionRunner implements ActionRunner {
                 `fresh-${context.stateOrNodeId}`,
             );
         }
-        const storedSessionId = freshSession ? undefined : asOptionalString(context.vars.__agentSessionId);
+        const storedSessionId = freshSession ? undefined : asOptionalString(context.vars[sessionIdVar]);
 
         // Session latch (Q8): auto-determine continue from vars.__agentSession
         // unless the step author set `continue` explicitly.
@@ -332,10 +458,16 @@ export class AgentRunActionRunner implements ActionRunner {
 
         const flags: Record<string, string | boolean> = {};
         if (dispatchAgent !== undefined) flags.agent = dispatchAgent;
+        // B7 R1 (0894): tell the service the executor was resolved at precheck so
+        // its per-stage resolution skips the usability probe.
+        if (pin !== undefined) flags.pinResolved = 'true';
         if (role !== undefined) flags.role = role;
         if (model !== undefined) flags.model = model;
         flags.mode = mode as string;
         if (cwd !== '') flags.cwd = cwd as string;
+        // B7 R7 (0895): the E6 run→session mapping and per-step cost attribution
+        // join on this id — the workflow run id, not a freshly minted one.
+        flags['run-id'] = context.runId;
 
         if (sessionDir) {
             flags.sessionDir = sessionDir;
@@ -382,14 +514,19 @@ export class AgentRunActionRunner implements ActionRunner {
         // runner attests nothing — requirements fail closed (0706 R2 rule).
         if (SESSION_CAPABILITY_AXES.some((axis) => requiresCapabilities.requires[axis] !== undefined)) {
             let capabilityAgent: string | undefined;
-            try {
-                const resolveFlags: Record<string, string> = { role: role as string };
-                if (dispatchAgent !== undefined) resolveFlags.agent = dispatchAgent;
-                if (model !== undefined) resolveFlags.model = model;
-                const resolved = await this.agentService.resolve(resolveFlags);
-                if (resolved.ok) capabilityAgent = resolved.executor ?? resolved.agent;
-            } catch {
-                capabilityAgent = undefined;
+            if (pin !== undefined) {
+                // B7 R1 (0894): the pin IS the precheck resolution — no per-stage call.
+                capabilityAgent = pin.agent ?? pin.name;
+            } else {
+                try {
+                    const resolveFlags: Record<string, string> = { role: role as string };
+                    if (dispatchAgent !== undefined) resolveFlags.agent = dispatchAgent;
+                    if (model !== undefined) resolveFlags.model = model;
+                    const resolved = await this.agentService.resolve(resolveFlags);
+                    if (resolved.ok) capabilityAgent = resolved.executor ?? resolved.agent;
+                } catch {
+                    capabilityAgent = undefined;
+                }
             }
             const canonicalCapabilityAgent =
                 capabilityAgent !== undefined ? resolveAgentName(capabilityAgent) : undefined;
@@ -422,14 +559,19 @@ export class AgentRunActionRunner implements ActionRunner {
         if (requireDistinct) {
             const prior = parseAgentRoutingIdentity(context.vars[`__agentRouting_${compareExecutorWith}`]);
             let current: AgentRoutingIdentity | undefined;
-            try {
-                const resolveFlags: Record<string, string> = { role: role as string };
-                if (dispatchAgent !== undefined) resolveFlags.agent = dispatchAgent;
-                if (model !== undefined) resolveFlags.model = model;
-                const resolved = await this.agentService.resolve(resolveFlags);
-                current = resolved.ok ? { agent: resolved.executor ?? resolved.agent } : undefined;
-            } catch {
-                current = undefined;
+            if (pin !== undefined) {
+                // B7 R1 (0894): the pin is the precheck resolution — no per-stage call.
+                current = { agent: pin.name };
+            } else {
+                try {
+                    const resolveFlags: Record<string, string> = { role: role as string };
+                    if (dispatchAgent !== undefined) resolveFlags.agent = dispatchAgent;
+                    if (model !== undefined) resolveFlags.model = model;
+                    const resolved = await this.agentService.resolve(resolveFlags);
+                    current = resolved.ok ? { agent: resolved.executor ?? resolved.agent } : undefined;
+                } catch {
+                    current = undefined;
+                }
             }
             const verdict = checkExecutorIndependence({
                 priority: priority as string,
@@ -852,7 +994,7 @@ export class AgentRunActionRunner implements ActionRunner {
             // R2 (0451): key __agentSessionAgent off the resolved invocation.agent
             const resolvedAgent = invocation?.agent ?? targetAgentDir;
             let resolvedSessionDir = sessionDir;
-            if (ok && affinityOn && resolvedAgent !== targetAgentDir && !context.vars.__agentSessionDir) {
+            if (ok && affinityOn && resolvedAgent !== targetAgentDir && !context.vars[sessionDirVar]) {
                 resolvedSessionDir = join(cwd, '.spur', 'run', context.runId, 'agent-sessions', resolvedAgent);
             }
 
@@ -899,8 +1041,27 @@ export class AgentRunActionRunner implements ActionRunner {
                 ok ? undefined : (traced.stderr ?? undefined),
                 this.agentConfig.secretValues,
             );
-            // B8 R2: a record-declared fresh dispatch is recorded in the action result.
-            if (!resumeSupported) resultData.session = 'fresh' as const;
+            // B8 R2 + B7 R2/R3/R4 (0894): the result records the session outcome
+            // (`reused` when the role slot actually resumed, `fresh` otherwise) and
+            // whether the policy was declared on the step or applied by role default.
+            const resumedDispatch =
+                ok && affinityOn && !freshSession && resumeSupported && storedSessionId !== undefined;
+            resultData.session = resumedDispatch ? ('reused' as const) : ('fresh' as const);
+            resultData.sessionSource = sessionDeclared ? ('declared' as const) : ('default' as const);
+            // B7 R1 (0894): record the actually dispatched model (pin or step override).
+            if (model !== undefined) resultData.model = model;
+            // B7 R6/R7 (0895): trace columns — the dispatched executor, the session
+            // the stage is associated with (accepted resume id, else the discovered
+            // id), and the pin re-resolution outcome with its owner/reason.
+            resultData.executor = dispatchAgent;
+            const tracedSessionId = resumedDispatch ? storedSessionId : discoveredSessionId;
+            if (tracedSessionId !== undefined) resultData.sessionId = tracedSessionId;
+            if (pinReresolved !== undefined) {
+                resultData.pinReresolved = true;
+                if (disabledPinName !== undefined) resultData.pinReresolvedFrom = disabledPinName;
+                if (pinReresolved.owner !== undefined) resultData.pinReresolvedOwner = pinReresolved.owner;
+                if (pinReresolved.reason !== undefined) resultData.pinReresolvedReason = pinReresolved.reason;
+            }
             return {
                 ok,
                 data: resultData,
@@ -922,13 +1083,25 @@ export class AgentRunActionRunner implements ActionRunner {
                                     __agentSession:
                                         resumeRetried || !resumeSupported ? ('no-resume' as const) : ('open' as const),
                                     ...(affinityOn && resolvedSessionDir
-                                        ? { __agentSessionDir: resolvedSessionDir }
+                                        ? { [sessionDirVar]: resolvedSessionDir }
                                         : {}),
                                     ...(affinityOn && resumeSupported && (discoveredSessionId || storedSessionId)
-                                        ? { __agentSessionId: discoveredSessionId || storedSessionId }
+                                        ? { [sessionIdVar]: discoveredSessionId || storedSessionId }
                                         : {}),
                                     ...(affinityOn ? { __agentSessionAgent: resolvedAgent } : {}),
                                 }),
+                          // B7 R5 (0894): the one-per-run no-resume notice latches here so
+                          // later stages of the same run stay silent.
+                          ...(noResumeNotYetWarned ? { __executorNoResumeWarned: 'true' } : {}),
+                          // B7 R6 (0895): persist the fresh pin + the once-per-run marker
+                          // so later stages dispatch on the re-resolved executor and a
+                          // SECOND disable fails loudly instead of hunting again.
+                          ...(pinReresolved !== undefined && roleValid
+                              ? {
+                                    [`__executor.${role}`]: JSON.stringify(pin),
+                                    [`__executorReresolved.${role}`]: 'true',
+                                }
+                              : {}),
                           // 0710 R3: bounded routing evidence for later independence checks.
                           [`__agentRouting_${context.stateOrNodeId}`]: JSON.stringify({
                               agent: resolvedAgent,

@@ -1847,6 +1847,14 @@ function collectAgentRunRoleViolations(def: WorkflowDef): string[] {
                 `agent.run step at ${location} declares unknown role: '${role}' (accepted: ${AGENT_ROLE_NAMES.join(', ')}; 0538 R2)`,
             );
         }
+        // B7 R3 (0894): the session-policy vocabulary is closed — validate rejects
+        // anything but reuse | fresh before a run can start.
+        const session = action.options?.session;
+        if (session !== undefined && session !== 'reuse' && session !== 'fresh') {
+            violations.push(
+                `agent.run step at ${location} declares invalid session: '${String(session)}' (accepted: reuse, fresh; 0894 R3)`,
+            );
+        }
     };
 
     if (def.kind === 'transition-flow' || def.kind === undefined) {
@@ -2389,7 +2397,19 @@ function rowToTraceEntry(
 }
 
 const TRACE_IDENTIFIER = /^[A-Za-z0-9._:-]+$/;
-const TRACE_RESULT_FIELDS = ['agent', 'exitCode'] as const;
+// B7 R6/R7 (task 0895): trace gains the dispatched executor, the stage's session
+// id, the reuse/fresh outcome, and the pin re-resolution columns.
+const TRACE_RESULT_FIELDS = [
+    'agent',
+    'exitCode',
+    'executor',
+    'sessionId',
+    'session',
+    'pinReresolved',
+    'pinReresolvedFrom',
+    'pinReresolvedOwner',
+    'pinReresolvedReason',
+] as const;
 const TRACE_INVOCATION_FIELDS = [
     'agent',
     'source',

@@ -3029,3 +3029,46 @@ transitions:
         await rm(dir, { recursive: true, force: true });
     });
 });
+
+describe('formatTraceTimeline executor/session columns (task 0895 R2)', () => {
+    function timeline(events: TimelineEvent[]): WorkflowTraceTimeline {
+        return {
+            run: {
+                runId: 'r1',
+                workflowName: 'wf',
+                mode: 'sync',
+                status: 'done',
+                startedAt: '2026-01-15T10:00:00.000Z',
+                completedAt: '2026-01-15T10:05:00.000Z',
+                isDryRun: false,
+                project: { name: 'project', root: '/project' },
+                durationMs: 300000,
+                outcome: 'success',
+            },
+            events,
+        };
+    }
+
+    test('renders the executor, session id, session mode, and pin re-resolution on the action row', () => {
+        const event = makeActionEvent() as Extract<TimelineEvent, { kind: 'action' }>;
+        event.result = {
+            agent: 'claude',
+            exitCode: 0,
+            executor: 'claude-b',
+            sessionId: 'sess-1',
+            session: 'fresh',
+            pinReresolved: true,
+            pinReresolvedFrom: 'claude-a',
+            pinReresolvedOwner: 'drain',
+            pinReresolvedReason: 'quota exhausted',
+        };
+        const out = formatTraceTimeline(timeline([event]));
+        expect(out).toContain('executor=claude-b');
+        expect(out).toContain('sessionId=sess-1');
+        expect(out).toContain('session=fresh');
+        expect(out).toContain('pinReresolved=true');
+        expect(out).toContain('pinReresolvedFrom=claude-a');
+        expect(out).toContain('pinReresolvedOwner=drain');
+        expect(out).toContain('pinReresolvedReason=quota exhausted');
+    });
+});

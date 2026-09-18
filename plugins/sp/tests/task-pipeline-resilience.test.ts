@@ -106,7 +106,15 @@ describe('0503 task-pipeline resilience', () => {
         const precheck = PIPELINE.states.find((state) => state.id === 'precheck');
         const commands = precheck?.onEnter?.map((action) => action.options?.command ?? '') ?? [];
 
-        expect(precheck?.onEnter?.some((action) => action.kind === 'doctor.probe')).toBe(false);
+        // 0723's doctor-free clause is superseded in a bounded way by 0894 R1: exactly ONE
+        // soft role-resolution probe is allowed at precheck (roles coder+reviewer, resultFile
+        // run-scoped, never aborting the run). Any other doctor.probe, and any `agent doctor`
+        // shell invocation, stays forbidden — per-stage detection remains doctor-free.
+        const probes = (precheck?.onEnter ?? []).filter((action) => action.kind === 'doctor.probe');
+        expect(probes).toHaveLength(1);
+        const probe = probes[0]?.options as { roles?: Record<string, string>; resultFile?: string } | undefined;
+        expect(Object.keys(probe?.roles ?? {}).sort()).toEqual(['coder', 'reviewer']);
+        expect(probe?.resultFile).toContain('.spur/run/');
         expect(commands.join('\n')).not.toContain('agent doctor');
         const size = commandFor('precheck', 2);
         expect(size).toContain('task-size-precheck.ts');

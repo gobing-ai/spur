@@ -241,6 +241,20 @@ export interface WorkflowTripwireFiredEvent {
     readonly nextDecision: string;
 }
 
+/**
+ * One-per-run notice that the pinned executor cannot resume by id, so every
+ * stage in the run dispatches fresh (B7 R5 / task 0894). Emitted once — guarded
+ * by the `__executorNoResumeWarned` run var — never per stage.
+ */
+export interface WorkflowExecutorNoResumeEvent extends WorkflowEventBase {
+    /** Emitting action kind (`agent.run`). */
+    kind: string;
+    /** State/node that first observed the no-resume record. */
+    node: string;
+    /** Pinned executor name whose runner record declares no resume-by-id. */
+    executor: string;
+}
+
 /** One live stdout/stderr chunk emitted by a non-agent action (e.g. `shell`) during execution. */
 export interface WorkflowActionOutputEvent extends WorkflowEventBase {
     /** The action kind (e.g. `shell`). */
@@ -278,6 +292,8 @@ export type WorkflowObservabilityEventMap = {
     'workflow.escalation.projection_failed': (event: WorkflowEscalationProjectionFailedEvent) => void;
     /** Unified agent lifecycle emitted by both direct and workflow dispatch paths. */
     'workflow.agent': (event: AgentExecutionEvent) => void;
+    /** One-per-run notice: pinned executor lacks resume-by-id, every stage runs fresh (0894 R5). */
+    'workflow.executor-no-resume': (event: WorkflowExecutorNoResumeEvent) => void;
     'workflow.steering': (event: SteeringAck) => void;
 };
 

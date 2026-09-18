@@ -94,6 +94,10 @@ states:
           agent: "${vars.agent}"
           role: planner
           resolvedAgentVar: planningAgent
+          # B7 R1 (0894): also pin the role once — __executor.planner feeds stage
+          # dispatch so no later idea stage re-walks the doctor ladder.
+          roles:
+            planner: "${vars.agent}"
       - kind: shell
         options:
           command: >-
@@ -122,6 +126,9 @@ states:
           input: "The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md — idea persisted verbatim at start; authoritative, read it first (${vars.idea} is a convenience echo). Run sp:brainstorm. The skill owns the approach-generation, design summary, and `needs_design` signal criteria; emit .spur/run/${vars.__runId}-idea-needs-design.json ({\"needs_design\": true|false}) plus the design summary per its `Design Approval Gate` / `The needs_design signal` sections. Also emit the idea-evaluation report to .spur/run/${vars.__runId}-idea-eval-report.md per the `sp:spur-dev` skill's `idea-evaluation` reference (urgency/necessity 0–5, premises, pros/cons, alternatives, enhanced idea, recommendation, plus mandatory `## Requirement inventory`: numbered I<n> items quoting/paraphrasing idea-input lines; `[unclear: ...]` marks ambiguity, `[deferred: <reason>]` marks out-of-scope). End with this exact footer: `---\\nrun_id: ${vars.__runId}\\ngenerated_at: <RFC3339>\\n---` (omit if run_id is empty)."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
+          # B7 R6 (0894): planner stages declare fresh — the role default is stated
+          # explicitly so the definition is self-documenting.
+          session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-eval-report.md
           timeoutMs: ${vars.stepTimeoutMs}
 
@@ -158,6 +165,8 @@ states:
           input: 'Create a feature for the idea. The operator''s ask of record is .spur/run/${vars.__runId}-idea-input.md — the idea argument persisted verbatim at start; treat it as the authoritative ask. Read .spur/run/${vars.__runId}-idea-eval-report.md if present for the enhanced idea and scores. Use ''spur feature create "<name>" --json'' to create it; with --json the feature id is returned under the .ref.id envelope (n), not a top-level .id — read it from there. Write the feature id to .spur/run/${vars.__runId}-idea-feature-id.txt. If an existing feature is appropriate, use its id instead. Also write two body-only intent artifacts: .spur/run/${vars.__runId}-idea-goal.md with concise Goal intent only (a short statement of what the feature achieves; never task breakdowns, checklists, or how-to steps), and .spur/run/${vars.__runId}-idea-scope.md with explicit in-scope and out-of-scope boundary bullets.'
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
+          # B7 R6 (0894): declared fresh policy (planner default).
+          session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-feature-id.txt
           timeoutMs: ${vars.stepTimeoutMs}
       - kind: file.read.into-var
@@ -202,6 +211,8 @@ states:
           input: "Generate acceptance criteria for feature ${vars.featureId}. The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md — idea persisted verbatim at start; authoritative. Read the feature file and author R-numbered BDD Gherkin scenarios per ac-style-guide.md. Tie every scenario to the `## Requirement inventory` of .spur/run/${vars.__runId}-idea-eval-report.md: under each `Scenario:` heading add a comment `# covers: I1, I3` listing covered ids — every non-`[deferred: ...]` item needs at least one covering scenario. Two `spur task check` rules bind AC text: (1) AC bullets copy scenario titles verbatim — the title is the byte-identical identity key of its bullet; (2) gate-language words (HITL, approval/approved, merged/merge event, content-gate, GATED, capstone standalone) are forbidden in titles, bodies, and enum values (L4.gate-language) — rephrase around them. Output only the Acceptance Criteria section body (gherkin fence included), no commentary, no heading."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
+          # B7 R6 (0894): declared fresh policy (planner default).
+          session: fresh
           answerFile: .spur/run/${vars.__runId}-idea-ac-content.md
           expectFile: .spur/run/${vars.__runId}-idea-ac-content.md
           timeoutMs: ${vars.stepTimeoutMs}
@@ -298,6 +309,8 @@ states:
           input: 'The operator''s ask of record is .spur/run/${vars.__runId}-idea-input.md (idea persisted verbatim at start; authoritative). Run sp:sys-architecture for feature ${vars.featureId}. Read the brainstorm artifact, feature AC, and .spur/run/${vars.__runId}-idea-design-review.md. Produce ADR entries, architecture updates, and design satellites (docs/design/<slug>.md) per the constitution edit rules; never write task or feature corpus files directly. Design-review contract (fixed headings `## Proposed design`, `## Operator feedback`, `## Reconciliation`): first pass — write the proposed summary under `## Proposed design`, leave `## Operator feedback` empty; retry after operator feedback — revise the design/ADR artifacts, document changes under `## Reconciliation`, and when feedback invalidates an Acceptance Criteria scenario write the revised AC section body to a file, persist via `$spurBin feature update "$featureId" --section "Acceptance Criteria" --from-file <file>`.'
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
+          # B7 R6 (0894): declared fresh policy (planner default).
+          session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-design-review.md
           timeoutMs: ${vars.stepTimeoutMs}
       # expectFile proves existence only, and the onEnter skeleton pre-creates the file — so an
@@ -365,6 +378,8 @@ states:
           input: "The operator's ask of record is .spur/run/${vars.__runId}-idea-input.md (the idea argument persisted verbatim at start; authoritative). Run sp:spec-decomposition for feature ${vars.featureId} per skill references/decomposition.md § Idea-pipeline emission: sizing first, then the batch JSON at .spur/run/${vars.__runId}-idea-task-batch.json and the private task-order sidecar at .spur/run/${vars.__runId}-idea-task-order.json."
           # Declared Layer-1 role (0538 R2): routing reason beside the agent: pin.
           role: planner
+          # B7 R6 (0894): declared fresh policy (planner default).
+          session: fresh
           expectFile: .spur/run/${vars.__runId}-idea-task-batch.json
           timeoutMs: ${vars.stepTimeoutMs}
       # R1 (0518): the task-order sidecar is the ordering contract for handoff-finalize.
@@ -448,6 +463,8 @@ states:
           agent: ${vars.planningAgent}
           # Declared Layer-1 role (0538 R2), same planner executor as decompose.
           role: planner
+          # B7 R6 (0894): declared fresh policy (planner default).
+          session: fresh
           timeoutMs: ${vars.stepTimeoutMs}
           # (warn) non-slash pointer: the 0788 checklist is per-checkout (digest via the
           # project's own computePlanningDigest), so the bounded prompt pins the skill

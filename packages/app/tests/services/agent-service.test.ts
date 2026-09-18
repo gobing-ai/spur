@@ -1927,6 +1927,22 @@ describe('AgentService.resolve', () => {
         const result = await svc.resolve({}, deps);
         expect(result.ok).toBe(true);
     });
+
+    test('0894 R1: run-scoped pin (pinResolved=true) skips the doctor walk; unpinned probes', async () => {
+        // The precheck/start doctor walk already established usability for this
+        // run — the per-stage resolution must not re-probe, or the pin saves
+        // nothing (every stage would re-run the same doctor call).
+        const svc = makeService({}, nullOutput(), {
+            executors: [{ name: 'omp-zai', agent: 'omp', model: 'zai/glm-5.2', disabled: false }],
+        });
+        const { deps, doctor } = mockDeps();
+        const pinned = await svc.resolve({ agent: 'omp-zai', pinResolved: 'true' }, deps);
+        expect(pinned.ok).toBe(true);
+        expect(doctor.runOne.mock.calls.length).toBe(0);
+        const unpinned = await svc.resolve({ agent: 'omp-zai' }, deps);
+        expect(unpinned.ok).toBe(true);
+        expect(doctor.runOne.mock.calls.length).toBeGreaterThan(0);
+    });
 });
 
 // ---------------------------------------------------------------------------

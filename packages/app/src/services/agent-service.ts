@@ -452,6 +452,71 @@ export class AgentService {
         return this.resolveAgent(flags, doctorRunner);
     }
 
+    /**
+     * Current availability of one executor, read through the config loader
+     * (B7 R6 / task 0895). The loader cache is keyed on config mtimes and
+     * invalidated by the B6 drain's availability write, so this read sees a
+     * mid-run disable without any event plumbing. No live loader (tests, old
+     * compositions) → falls back to the construction-time roster. Unknown
+     * executor or no roster → undefined (treated as enabled by callers).
+     */
+    async executorAvailability(executorName: string): Promise<ExecutorAvailability | undefined> {
+        const fresh = this.ctx.reloadAgentConfig !== undefined ? await this.ctx.reloadAgentConfig() : null;
+        const executors = fresh?.agent?.executors ?? this.ctx.agentConfig?.executors;
+        const entry = executors?.find((e) => e.name === executorName);
+        return entry !== undefined ? normalizeExecutorAvailability(entry.disabled) : undefined;
+    }
+
+    /**
+     * Transient executors override for a fresh-roster re-resolve (B7 R6 /
+     * task 0895). Set only inside {@link withRosterOverride}; never persisted.
+     */
+    private rosterOverride?: AgentExecutorConfig[];
+
+    /**
+     * Run `fn` with the executors roster temporarily replaced by `executors`.
+     * Scoped + always restored, so no other dispatch on this service instance
+     * observes the override.
+     */
+    private async withRosterOverride<T>(
+        executors: AgentExecutorConfig[] | undefined,
+        fn: () => Promise<T>,
+    ): Promise<T> {
+        const prev = this.rosterOverride;
+        this.rosterOverride = executors;
+        try {
+            return await fn();
+        } finally {
+            this.rosterOverride = prev;
+        }
+    }
+
+    /**
+     * Re-resolve a role against a FRESH roster (B7 R6 / task 0895): the same
+     * resolveRole walk dispatch uses, but availability comes from a live loader
+     * read so an executor disabled mid-run is skipped by the eligibility
+     * filter. No live loader → identical to {@link resolve} (degradation, never
+     * a hard failure — the pin check is the safety net, not the roster).
+     */
+    async resolveRoleFresh(flags: Record<string, string | boolean>): Promise<AgentResolveResult> {
+        const fresh = this.ctx.reloadAgentConfig !== undefined ? await this.ctx.reloadAgentConfig() : null;
+        const freshExecutors = fresh?.agent?.executors;
+        if (freshExecutors === undefined) return this.resolve(flags);
+        const runner = new AiRunner({
+            processExecutor: new NodeProcessExecutor({
+                output: { mode: 'buffered' },
+                ...(this.ctx.processRegistry !== undefined ? { registry: this.ctx.processRegistry } : {}),
+            }),
+        });
+        const doctorRunner = new DoctorRunner({
+            agentDetector: new AgentDetector({ runner }),
+            runner,
+            env: this.ctx.env,
+            probeAuth: false,
+        });
+        return this.withRosterOverride(freshExecutors, () => this.resolveAgent(flags, doctorRunner));
+    }
+
     // -------------------------------------------------------------------------
     // Public: list
     // -------------------------------------------------------------------------
@@ -1751,7 +1816,7 @@ export class AgentService {
                 if (stageRes !== undefined) return stageRes;
             }
         }
-        const base = await this.resolveExecutorSelector(selector, doctorRunner, 'explicit');
+        const base = await this.resolveExecutorSelector(selector, doctorRunner, 'explicit', undefined, flags);
         if (!base.ok) return base;
         // Role attribution (0538 R2 / 0551 R2): the pin beats role routing, but a
         // declared role is still recorded on the resolution so the --json envelope
@@ -1923,7 +1988,13 @@ export class AgentService {
 
         // No phase/stage mapping: try the default executor selector, then priority.
         if (config?.default !== undefined) {
-            const viaDefault = await this.resolveExecutorSelector(config.default, doctorRunner, 'default');
+            const viaDefault = await this.resolveExecutorSelector(
+                config.default,
+                doctorRunner,
+                'default',
+                undefined,
+                flags,
+            );
             if (viaDefault.ok) return viaDefault;
             // R2 (0542): agent.default's value domain is roles — an unknown value
             // must fail loudly naming both accepted sets, never silently fall to
@@ -2136,6 +2207,9 @@ export class AgentService {
         doctorRunner: DoctorRunner,
         source: 'phase' | 'default' | 'explicit',
         phase?: string,
+        // Dispatch flags ride down so the precheck pin marker (0894 R1) reaches
+        // the executor branch and skips the per-stage usability probe.
+        flags: Record<string, string | boolean> = {},
     ): Promise<AgentResolveResult> {
         // Role branch (0536 R1): a role selects the *starting* tier and resolution
         // starts from that tier's cheapest eligible executor. Role-first match —
@@ -2183,17 +2257,24 @@ export class AgentService {
                     message: `Executor '${executor.name}'${phaseSuffix} maps to unknown agent '${executor.agent}'`,
                 };
             }
-            const usable = await this.checkUsable(canonical, doctorRunner);
-            if (!usable.ok) {
-                // A configured phase mapping must fail fast (R7); a default-path miss falls through.
-                if (phase !== undefined) {
-                    return {
-                        ok: false,
-                        exitCode: 1,
-                        message: `Executor '${executor.name}'${phaseSuffix} agent '${canonical}' is not usable — ${usable.reason} (spur agent doctor)`,
-                    };
+            // B7 R1 (task 0894): a run-scoped pin was resolved by the precheck/start
+            // doctor walk, which already established usability for this run. The
+            // marker skips the per-stage probe — without it the pin would save
+            // nothing: every stage would re-run the same doctor call.
+            const pinPreresolved = stringFlag(flags, 'pinResolved', '') === 'true';
+            if (!pinPreresolved) {
+                const usable = await this.checkUsable(canonical, doctorRunner);
+                if (!usable.ok) {
+                    // A configured phase mapping must fail fast (R7); a default-path miss falls through.
+                    if (phase !== undefined) {
+                        return {
+                            ok: false,
+                            exitCode: 1,
+                            message: `Executor '${executor.name}'${phaseSuffix} agent '${canonical}' is not usable — ${usable.reason} (spur agent doctor)`,
+                        };
+                    }
+                    return usable.result;
                 }
-                return usable.result;
             }
             // R2 (0536): an explicit executor name is a permanent pin, not a shim —
             // no deprecation warning. The name is carried for the --json envelope,
@@ -2284,7 +2365,10 @@ export class AgentService {
         // stays distinguishable in attribution.
         source: AgentResolveSource = 'role',
     ): Promise<AgentResolveResult> {
-        const executors = this.ctx.agentConfig?.executors;
+        // B7 R6 (task 0895): a fresh-roster re-resolve temporarily overrides the
+        // construction-time executors so the eligibility walk sees a mid-run
+        // disable; see {@link withRosterOverride}.
+        const executors = this.rosterOverride ?? this.ctx.agentConfig?.executors;
         if (executors === undefined || executors.length === 0) {
             return {
                 ok: false,

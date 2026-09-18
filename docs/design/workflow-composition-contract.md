@@ -268,7 +268,11 @@ posture. This section owns the composition rules those numbers serve.
 5. **One model step per judgment.** Merge adjacent `agent.run` steps when they share a role and an
    executor and nothing between them must stay separate: a deterministic gate, a HITL state or an
    independence boundary. Never merge an author step with the review or verify step that
-   certifies it; those keep `freshSession: true`. A new model step in a shared workflow raises its
+   certifies it; those keep `freshSession: true`. Per-stage session policy (ADR-121, tasks
+   0894/0895) declares `session: reuse | fresh` on `agent.run`: a `coder` stage reuses its role's
+   session by default, every other role dispatches fresh, and the declaration is recorded in trace.
+   `freshSession: true` remains the action-level hard guarantee and wins over a declared
+   `session: reuse`. A new model step in a shared workflow raises its
    `pipeline-budgets` `modelQueries`, which needs a recorded decision, and every shared workflow
    with a model query carries a budget entry.
 6. **Every step leaves a checked result.** An `agent.run` declares `expectFile` or `requireDiff`,
