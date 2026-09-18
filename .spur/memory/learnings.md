@@ -1943,3 +1943,137 @@ Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/cad76019-a5e7-478
 - Phantom token gotcha: `docs/design/session-pinned-dispatch.md` described a per-run warning `executor-no-resume` that exists **nowhere in source** (`rg` across `packages/ apps/ config/` → doc-only hit). Detection-before-repair: grep the token before documenting/repairing around it. Bullet rewritten to shipped behavior: fresh dispatch with `session: 'fresh'` + `__agentSession: 'no-resume'` sentinel; resume-only `continue` fails pre-spawn as the ADR-118 violation.
 - Frontmatter staleness is real drift: commit cf44cbefa added ADR-121 (00, 31 lines) and a 04 index row on 09-17 but left `updated_at: 2026-09-16` — §4.3 requires refreshing `updated_at` and bumping the minor version when content changes. Check `git log -1 -- <doc>` against frontmatter dates at wrapup.
 - Authority ordering held: `planning-workflow-contracts.md` (agent.run contracts owner) was already correct from the same-commit T3 edit; only the conflicting projection (`session-pinned-dispatch.md:80`) and the metadata blocks (00, 04) needed repair. `docs/03_ARCHITECTURE.md` clean — its ADR-118 invariant block and dated frontmatter needed no edit; unchanged owners get no ceremonial edit.
+Doc-evolve wrapup complete. Drift report (detection: `rg` doc mentions vs code surface, satellite §8 obligations, frontmatter vs `git log`):
+
+| Doc | Finding | Repair |
+| --- | --- | --- |
+| `docs/03_ARCHITECTURE.md` §19 | Satellite §8 obligates resolve-once + ownership invariants "when B6/B7 ship" — shipped in abb745673, §19 silent | Added run-scoped dispatch paragraph + invariants 5–7 (ownership, resolve-once/single re-resolve, session policy + capability gate); Shapes line cites `agent-service.ts`; frontmatter 1.49.0 / 2026-09-18 |
+| `docs/design/workflow-composition-contract.md` | Shipped `session: reuse \| fresh` stage option absent from rule 5 | Documented role defaults + declaration-in-trace + `freshSession: true` precedence (verified against `agent-run.ts:323`) |
+| `docs/00_ADR.md` | Clean — ADR-121 matches shipped reality; task completion never justifies an ADR entry (§5/§6.1) | None |
+| `docs/04_DESIGN.md` | Clean — index pointer unchanged ⇒ synchronized (§5) | None |
+| `docs/design/session-pinned-dispatch.md` | Clean — updated same-commit as B7 (abb745673) | None |
+
+Committed `5de7e6ee6` (conventional hooks passed). No task/feature corpus written. Learnings artifact written from tasks 0894/0895 (normalized capture, WBS ids only — no raw-input re-parse). Learnings follow.
+
+# Working learnings — B7 run-scoped executor session pins (batch wrapup, run f0d3a226)
+
+## 2026-09-18 — task 0894 (run-scoped executor pins, coder-reuse / reviewer-fresh policy)
+
+- Convention — run vars are the pin store: `__executor.<role>` and `__session.<role>.{dir,id}` live in workflow run vars because they already survive pause/resume and are visible in `workflow trace`; no new store was created (reuse-before-create). Legacy `__agentSessionDir`/`__agentSessionId` remain only for invalid roles.
+- Convention — stage isolation is declared policy, not a process side effect: `session: reuse | fresh` on `agent.run`, defaults by role (coder → `reuse`; reviewer/planner/scribe → `fresh`); a reviewer stage may explicitly declare `session: reuse`. `spur workflow validate` rejects any other value (closed vocabulary). The trace records the declaration source (`default | declared`).
+- Pattern — resolve once at the pipeline seam: task-pipeline `precheck` / idea-pipeline `start` resolve every declared role exactly once (doctor.probe with an injected `agentService` writes the pins); the per-stage path performs no doctor/detection call. The test asserting doctor invocation count == 1 after precheck is the guard worth copying.
+- Pattern — capability gate: a runner record with `supportsResumeById: false` gets fresh dispatch with no `--resume`/`--session-id` flag emitted; one warning `workflow.executor-no-resume` per run (not per stage) via the `__executorNoResumeWarned` latch; a resume-only step (`continue: true`, no `input`) against such a record fails pre-spawn per the ADR-118 `requiresCapabilities` contract.
+- Error fixed (P0) — roles-mode wiring: `DoctorProbeActionRunner` needed `agentService` threaded through `builtins.ts`; without the injection, precheck-time pin resolution silently fell back to per-stage behavior. When adding constructor deps to action runners, check the builtins registration seam.
+- Gotcha — workflow YAML is bundled: edits to `config/workflows/*.yaml` are not live until `bun run --filter @gobing-ai/spur build:bundle` regenerates `apps/cli/config/`; verify the regenerated output is byte-identical to intent.
+- Gotcha — corpus token vs code name: design/task token `pin-reresolved` is implemented as camelCase `pinReresolved` end-to-end; consistent, cosmetic — do not "fix" one side.
+- Invariant kept — ADR-047 precedence: an explicit session pin never emits a global continue; role-slot write-back via `discoverSessionId` preserves this.
+
+## 2026-09-18 — task 0895 (pin invalidation, trace columns, exact E6 mapping)
+
+- Pattern — invalidation is a read, not a subscription: before each `agent.run` the pinned executor's availability is read through the same loader the drain invalidates (`reloadAgentConfig` cache invalidation); one cheap read per stage beats event plumbing.
+- Pattern — re-resolve exactly once per run per role: first mid-run disable re-resolves (records `pinReresolved` + owner/reason, forces the stage fresh via `pinReresolved !== undefined`); a second disable means the tier ladder is exhausted and the stage fails loudly with the ADR-118 outcome instead of hunting.
+- Pattern — trace fields go end to end or not at all: `executor`, `sessionId`, `session: reused | fresh` flow action result → `TRACE_RESULT_FIELDS` (workflow-service) → projection copy loop → CLI `workflow trace --json` envelope + k=v table rendering. `sessionId` is omitted (never falsified) when a stage has no session id yet.
+- Pattern — E6 exact mapping by construction: dispatch supplies `flags['run-id'] = context.runId` and the agent-accepted `flags.sessionId`; a supplied id skips watermark observation and the observer writes `exactness: 'exact', mechanism: 'supplied'` — heuristic matching never enters the resumed-stage path. One observer per dispatch ⇒ one mapped row.
+- Convention — gate receipts: `bun run spur-check` exit 0 (8540 tests / 484 files); verify is verdict-based PASS with per-requirement file:line evidence; coverage is N/A in this pipeline (say so, don't fake it).
+
+## 2026-09-18 — wrapup doc-evolve (drift audit + repairs, commit 5de7e6ee6)
+
+- Detection pattern — audit T3 drift against the design satellite's own §8 same-commit obligations: `rg` the obligation lines ("add … when B6/B7 ship", "when the tasks land"), cross-check doc mentions vs the real code surface (`rg "session:|freshSession|__executor\." code`), and compare frontmatter `updated_at` vs `git log -1 -- <doc>`. This turned two candidate drifts into confirmed findings with zero prose guessing.
+- Repair 1 — `docs/03_ARCHITECTURE.md` §19 gained the run-scoped dispatch paragraph + enforceable invariants 5–7 (ownership recovery limited to `quota | probe`; resolve-once with single re-resolve; role-default session policy with capability gate) and the Shapes line now cites `agent-service.ts`. Frontmatter bumped to 1.49.0 / 2026-09-18 per §6.4.
+- Repair 2 — `docs/design/workflow-composition-contract.md` rule 5 now documents `session: reuse | fresh` (role defaults, declaration recorded in trace) and pins the precedence: `freshSession: true` remains the action-level hard guarantee and wins over a declared `session: reuse` (verified in `agent-run.ts`: `freshSession = options.freshSession === true || sessionPolicy === 'fresh' || pinReresolved !== undefined`).
+- Audited clean (no edit justified) — `docs/00_ADR.md`: ADR-121 matches shipped reality and tasks completing an accepted decision never justify an ADR entry (§5/§6.1); `docs/04_DESIGN.md`: satellite index pointer unchanged ⇒ synchronized (§5); `session-pinned-dispatch.md` was already updated same-commit (abb745673).
+Wrapup complete.
+
+**Doc-evolve audit verdict: clean.** Tasks 0894/0895's surface was already synced by the same-session wrapup commit `5de7e6ee6` (03 §19 invariants + composition-contract rule 5). My audit verified all four owners against code with zero new deltas: `docs/00_ADR.md` ADR-121 consistent (no reversal, decision-level text stands), `docs/03_ARCHITECTURE.md` §19 matches implementation (pins, once-per-run re-resolve, role defaults, capability gate, trace fields), `docs/04_DESIGN.md` index pointer current, and `docs/design/session-pinned-dispatch.md` §4 verified true against verify evidence — including the E6 claim (run-id join, `exactness: 'exact', mechanism: 'supplied'`, agent-run.ts:470 → agent-service.ts:1740). Detection commands: `rg` of YAMLs/code vs docs, frontmatter + `git log` recency. No task/feature corpus writes.
+
+**Artifact written:** `.spur/run/7312879d-5288-4538-bbad-286c23f67cee-wrapup-learnings.md`
+
+# Working learnings — B7 run-scoped executor session pins (tasks 0894, 0895)
+
+Scope: feature B7 (ADR-121 / docs/design/session-pinned-dispatch.md §4), batch run 7312879d. Extracted from task records 0894/0895 (docs/tasks5/), commit abb745673, and the doc-evolve wrapup audit.
+
+## 2026-09-18
+
+### 0894 — run-scoped executor pins, per-role session slots, stage session policy
+
+Conventions
+
+- The run var store is the pin store: `__executor.<role>` (JSON `{name, agent, model, tier, capabilities}`), `__session.<role>.{dir,id}`, written once by the pipeline's `precheck` (task-pipeline) / `start` (idea-pipeline) `doctor.probe` step via `roles:` map + `setVars`. No new persistence layer — run vars already survive pauses/resumes and are visible in `workflow trace`.
+- Role-scoped state keeps a legacy fallback: `roleValid ? '__session.<role>.dir' : '__agentSessionDir'` — undeclared callers still get global-var behavior instead of breaking.
+- Workflow YAML edits go to `config/workflows/*.yaml` (SSOT), then `bun run --filter @gobing-ai/spur build:bundle` regenerates `apps/cli/config/workflows/*`; verify bundle identity after every YAML change.
+- Stage policy is declared, not inferred: `session: reuse | fresh` option on `agent.run`; default is `coder → reuse`, every other role `fresh`; `spur workflow validate` rejects other values.
+
+Errors fixed
+
+- P0 wiring gap: roles-mode `doctor.probe` had no `agentService` injected (`builtins.ts`), so the one-time resolution at precheck couldn't resolve roles at all. Fix: thread `agentService` through `DoctorProbeActionRunner` registration + a seam test (`agent-service.test.ts:1931-1942`, pinResolved=true skips the doctor walk). Lesson: a new constructor dependency on an action runner needs a `builtins.ts` wiring change AND a test that fails on the missing injection — stub-based tests alone pass with the broken wiring.
+- Doctor-per-stage cost removed: after precheck pins, the per-stage path performs zero doctor/detection calls (asserted by a test that fails on any doctor invocation after precheck, `session-pinned-dispatch.test.ts:475-516`, `calls).toHaveLength(1)`).
+
+Patterns
+
+- Once-per-run semantics = run-var latch flag: `__executorNoResumeWarned` gates the single `workflow.executor-no-resume` event (0894 R5); the same pattern returned as `__executorReresolved.<role>` in 0895. Cheap, visible in trace, survives stage boundaries.
+- Capability gate before affinity: `supportsResumeById: false` ⇒ no `--resume`/`--session-id` flag emitted, result records `session: 'fresh'`, `freshSession: true` remains the action-level hard guarantee; a resume-only step (`continue: true`, no input) against such a record fails pre-spawn as the ADR-118 `requiresCapabilities` violation.
+
+Gotchas
+
+- `sessionSource: declared | default` is recorded in trace (R4) so an explicit reviewer `session: reuse` is auditable — don't collapse the two sources.
+- Task record process miss: the implement step never wrote `## Solution` (plan step 6), so the change-map was auto-generated at verify. `spur task update <wbs> --section Solution --from-file` should run inside the implement step, not be left to the verifier.
+
+### 0895 — pin invalidation, per-stage trace columns, exact E6 mapping
+
+Conventions
+
+- Pin invalidation is a read of the same loader the drain invalidates (`executorAvailability` → `reloadAgentConfig`), not an event subscription — one cheap pin check per stage beats event plumbing.
+- New agent.run result fields must be added to `TRACE_RESULT_FIELDS` (`workflow-service.ts:2402-2412`) to surface in `spur workflow trace <run> --json`; the copy loop projects them into timeline events and the CLI table renders all result fields as k=v. Adding a result field without the TRACE list silently hides it from trace.
+
+Errors fixed
+
+- Mid-run executor disable left stages dispatching on a stale pin. Fix: pre-spawn availability check → `resolveRoleFresh` live-roster walk → fresh pin + `__executorReresolved.<role>` marker persisted via setVars; the stage is forced fresh (`pinReresolved !== undefined` ⇒ freshSession) even if it declared `session: reuse`; trace records the hop with owner/reason.
+- Second disable now fails loudly (ADR-118-cited) instead of silently hunting — the re-resolve ladder is once per run per role by design.
+
+Patterns
+
+- Exact E6 run→session mapping via identity, not heuristic: `flags['run-id'] = context.runId` (never let agent-service mint a fresh UUID when a run id is supplied) + `flags.sessionId = storedSessionId` ⇒ run-session-observer writes `exactness: 'exact', mechanism: 'supplied'`; one observer per dispatch = one mapped row per resumed stage.
+- `sessionId` is omitted (not falsified) on a stage with no session id yet; resumed stages always carry the accepted id.
+
+Gotchas
+
+- Naming drift between task tokens and code is acceptable only when consistent end-to-end: design/task token `pin-reresolved` is implemented as `pinReresolved` (cosmetic, noted in verify evidence, not a gap).
+- Compose-check scope: when a reviewer brief scopes exact-row writer behavior as pre-existing covered behavior (`run-session-observer.test.ts:149-161`), the new-task tests only assert the join inputs (`run-id`/`sessionId`) — don't duplicate the writer's own tests.
+
+### doc-evolve wrapup audit (this run)
+
+- Drift audit clean across the four owners; checks: `rg` of workflow YAMLs + `agent-run.ts`/`agent-service.ts`/`observability.ts` vs docs; frontmatter/`updated_at` vs `git log -1`.
+- `docs/03_ARCHITECTURE.md` §19 and `docs/design/workflow-composition-contract.md` rule 5 were repaired in the same-session wrapup commit 5de7e6ee6 (satellite §8 T3 obligations: resolve-once + ownership + session-policy invariants land in 03 only when B6/B7 ship, not at design time).
+- `docs/00_ADR.md` ADR-121 needed no edit — shipped implementation matches the decision text (no reversal); implementation receipts belong in tasks, not the ADR.
+- `docs/04_DESIGN.md` index pointer unchanged and correct — a satellite edit with an unchanged index pointer is synchronized (constitution §5).
+- Satellite §4's E6 claim ("exact mapping by construction for resumed stages") verified true against R3 evidence: join inputs are the workflow run id + accepted session id (`exactness: 'exact', mechanism: 'supplied'`).
+Wrapup complete. Drift report: **zero findings** across all four targets — detection commands (`rg` for `__executor`/`pin-reresolved`/`session` option/trace fields vs. `agent-run.ts`/`observability.ts`; frontmatter `updated_at` vs. `git log`; 04 index pointer check) confirm the T3 repairs already landed in wrapup commit `5de7e6ee6` (03 §19 invariants 6–7 + workflow-composition-contract rule 5), ADR-121 is consistent with shipped behavior (no reversal), 04's unchanged index pointer is synchronized per §5. No repairs needed; no task/feature corpus written. Learnings artifact written to `.spur/run/8bd5eb1e-c472-440f-8a3e-7ea7b4e8b4b3-wrapup-learnings.md`.
+
+# Working Learnings — B7 run-scoped executor pins (tasks 0894, 0895)
+
+## 2026-09-18
+
+### Task 0894 — run-scoped executor pins, per-role session slots, stage session policy
+
+- Conventions — Run vars are the pin store; do not invent a new one. `__executor.<role> = { name, agent, model, tier, capabilities }` and `__session.<role>.{dir,id}` survive pause/resume and are already visible in `workflow trace`; a dedicated store would duplicate that. Role-keyed slots (`__session.<role>`) replace the global `__agentSessionDir`/`__agentSessionId` pair.
+- Conventions — Stage isolation is a declared policy, never inferred: `session: reuse | fresh` is an optional `agent.run` stage option; defaults are role-based (coder → `reuse`, reviewer/planner/scribe → `fresh`); `spur workflow validate` rejects any other value; trace records the declaration source (`sessionSource: 'declared' | 'default'`, `agent-run.ts:244`) so an explicit reviewer `reuse` is distinguishable from a default.
+- Patterns — Capability-gated degradation: when the runner record says `supportsResumeById: false`, every stage dispatches fresh (no resume flags emitted), the result records `session: 'fresh'`, and exactly one `executor-no-resume` warning is emitted per run via a latch (`noResumeNotYetWarned` + `__executorNoResumeWarned` run var), not one per stage. ADR-047 precedence is preserved: an explicit role pin never emits a global continue.
+- Patterns — Enforce "no per-stage resolution" with a test, not a comment: R1 is asserted by a test that fails on any doctor invocation after precheck (`session-pinned-dispatch.test.ts:475-516` asserts the resolver `toHaveLength(1)`; `agent-service.test.ts:1931-1942` asserts `pinResolved=true` skips the doctor walk). `agentService` is threaded through `builtins.ts` so `doctor.probe` resolves roles at precheck with an injectable stub.
+- Gotchas — Workflow YAML SSOT is `config/workflows/`; after editing `task-pipeline.yaml` / `idea-pipeline.yaml` you must run `bun run --filter @gobing-ai/spur build:bundle` and verify the regenerated `apps/cli/config/workflows/*` are identical (R6 evidence did exactly this).
+- Verification — `bun run spur-check` exit 0 (8536 tests / 484 files, verdict-artifact PASS).
+
+### Task 0895 — pin invalidation, trace columns, exact E6 mapping
+
+- Patterns — Pin invalidation is a read, not a subscription: one pre-spawn availability read through the same loader the B6 drain cache-invalidates (`agent-run.ts:259-263` → `executorAvailability` → `reloadAgentConfig`). No event plumbing; the per-stage cost is a cached config re-read.
+- Error-handling convention — Re-resolve a stale pin exactly once per run per role; a second mid-run disable means the ladder is exhausted for that tier and the stage fails loudly with the ADR-118 outcome (`agent-run.ts:266-274`), never hunts further. The re-resolve writes a fresh pin + marker via setVars (`agent-run.ts:1094-1104`) and forces the stage fresh (`pinReresolved !== undefined`, `agent-run.ts:323`).
+- Conventions — Token naming: the task/design token `pin-reresolved` is implemented as camelCase `pinReresolved` consistently from action result through trace projection; treat kebab design tokens as camel in code (cosmetic, but pick one and stay consistent end to end).
+- Patterns — New trace result fields need the full chain, or they silently don't surface: action result → `TRACE_RESULT_FIELDS` (`workflow-service.ts:2402-2412`) → `projectActionTraceResult` copy loop (`:2499-2504`) → timeline event `result` (`:1531,1551`) → CLI JSON envelope (`workflow.ts:1384-1387`) + k=v table render (`:1557-1620`). Adding the field to the action result alone is not enough. `executor`, `sessionId`, `session: reused|fresh` were added through all five hops.
+- Gotchas — Omit, never falsify, absent data: `sessionId` is omitted on a stage that has no session id yet; resumed stages always carry the id the agent actually accepted.
+- Patterns — Exact E6 run→session mapping by construction: dispatch passes `flags['run-id'] = context.runId` (join on the workflow run id, never a minted one) plus `flags.sessionId = storedSessionId` (`agent-run.ts:468-477`); a supplied id skips watermark observation and the observer writes `exactness: 'exact', mechanism: 'supplied'` (`run-session-observer.ts:136-161`). One observer per dispatch ⇒ one mapped row; no heuristic matching anywhere.
+- Verification — `bun run spur-check` exit 0 (8540 tests / 484 files); mid-run disable paths covered at `agent-run.test.ts:3143-3193` (re-resolve once + second-disable loud failure), trace fields at `:3143-3219` and CLI `workflow.test.ts:3039-3073`.
+
+### Wrapup / docs (both tasks)
+
+- T3 sync executed via wrapup commit `5de7e6ee6`: `03_ARCHITECTURE` §19 gained the resolve-once / ownership / session-policy invariants (new invariants 6–7) and `docs/design/workflow-composition-contract.md` rule 5 documents the `session: reuse | fresh` option; `00_ADR` ADR-121 was audited consistent (no reversal ⇒ no superseding decision needed); `04_DESIGN` index pointer unchanged is synchronized per constitution §5 (an unchanged pointer is not drift).
+- Gotcha — `docs/design/*` satellite frontmatter is not uniform: `executor-availability.md` carries YAML frontmatter, `session-pinned-dispatch.md` and `workflow-composition-contract.md` do not. Constitution §4.3 governs key docs (00–05, 99, AGENTS) only; satellites have no enforced frontmatter contract — don't "fix" this unsolicited.
+- Drift-audit method that worked: diff doc claims against code mechanically first (`rg` for `__executor`, `pin-reresolved`, `session` option validation, trace fields in `observability.ts`/`agent-run.ts`), then judge. Zero-finding conclusions must cite the commands that produced zero.
