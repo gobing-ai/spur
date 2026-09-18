@@ -4,7 +4,7 @@ name: "Add spur agent usage: run-once codexbar usage producer with snapshot file
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.554Z
-updated_at: "2026-09-17T23:22:20.013Z"
+updated_at: "2026-09-18T01:07:57.766Z"
 feature_id: B6
 priority: P1
 tags:
@@ -22,13 +22,22 @@ dependencies: ["0891"]
 
 ### Background
 
-The operator's original design: an external scheduler runs a command that dumps `codexbar usage --format json --provider all` and refreshes executor availability. Authority: `docs/design/session-pinned-dispatch.md` §3.4, AC R5/R6/R7/R9; ADR-051 consent for the new verb `spur agent usage` granted at design-approval 2026-09-17 (rejected shape: `spur agent doctor --refresh-usage`). Premise P1 of the idea-eval report: the codexbar JSON shape is unverified — the design session's sandbox could not run codexbar (cookie-cache lock EPERM). The first plan step captures a real sample outside the sandbox and pins it as a test fixture before any adapter code.
+The operator's original design: an external scheduler runs a command that dumps `codexbar usage --format json --provider all` and refreshes executor availability. Authority: `docs/design/session-pinned-dispatch.md` §3.4, AC R5/R6/R7/R9; ADR-051 consent for the new verb `spur agent usage` granted at design-approval 2026-09-17 (rejected shape: `spur agent doctor --refresh-usage`).
+
+Premise P1 (codexbar JSON shape) was partially verified on 2026-09-17 with CodexBar 0.60.4, run inside the sandbox:
+
+- The command prints a JSON array of per-provider entries and **exits 1 whenever any provider fails**, even when the array is valid. The exit code alone is therefore not a failure signal.
+- A failing entry is `{ "provider", "source", "error": { "code", "message", "kind" } }`.
+- A healthy entry is `{ "provider", "source", "usage": { "primary", "secondary", "tertiary", "extraRateWindows", "updatedAt", "identity", ... } }`. Each rate window carries `usedPercent`, `resetsAt`, `windowMinutes` and an optional `resetDescription`; `tertiary` may be `null`.
+- Only `antigravity` was healthy in the sandbox (cookie-cache lock EPERM and missing CLIs broke the rest). A redacted sample is at `/Users/robin/xprojects/spur-new/.spur/run/3fc16af1-f2e7-4afd-9f05-59fc6ce555c5-codexbar-sample.redacted.json`. Plan step 1 still captures a sample with healthy `claude`/`codex` entries outside the sandbox before any adapter code.
+
+Exhaustion rule (fixed at readiness, not left to the implementer): a provider is exhausted when any non-null `primary|secondary|tertiary` window has `usedPercent >= 100`, and has headroom when every non-null window is below 100. `extraRateWindows` stays in `raw` only. Known ceiling: a provider whose windows split by model family (antigravity: Gemini vs Claude/GPT) is judged as a whole; per-family mapping is a later item if it misfires.
 
 ### Requirements
 
-- [ ] R1. `spur agent usage [--dry-run] [--source codexbar] [--json]` exists under the `agent` noun; it runs `codexbar usage --format json --provider all`, writes `~/.config/spur/agent-usage.json` (`captured_at`, `source`, `providers[]`, `raw`) atomically, maps providers to executors via `agent.executors[].agent` + model/provider prefix, and emits `owner: quota` availability observations through the task-4 updater path; unmapped providers are listed in the output and never guessed.
+- [ ] R1. `spur agent usage [--dry-run] [--source codexbar] [--json]` exists under the `agent` noun; it runs `codexbar usage --format json --provider all`, writes `~/.config/spur/agent-usage.json` (`captured_at`, `source`, `providers[]`, `raw`) atomically, maps providers to executors via `agent.executors[].agent` + model/provider prefix, and emits `owner: quota` availability observations through the task-4 updater path using the Background exhaustion rule (`resetsAt` and the window name go into the observation reason); unmapped providers are listed in the output and never guessed.
 - [ ] R2. `--dry-run` prints the would-be changes (executor, from → to, owner, reason) and writes neither the snapshot nor any config file.
-- [ ] R3. A missing codexbar binary, a non-zero exit, or unparsable JSON exits non-zero with the cause on stderr and changes nothing; the snapshot from the previous run is left intact.
+- [ ] R3. A missing codexbar binary, or output that is not a parsable JSON array of provider entries (whatever the exit code), exits non-zero with the cause on stderr and changes nothing; the previous snapshot is left intact. A non-zero exit with a parsable array is not a failure: each `{ "error": … }` entry is skipped for its provider (listed in the output, no observation emitted, never treated as recovery) while healthy entries are still applied.
 - [ ] R4. `spur serve` contains no scheduler, timer or hook that invokes the producer (asserted by a test that greps the serve module for the command and by the design's R9 scenario); the `agent.md` reference documents the external-scheduler pattern (cron/launchd, same as `spur history daily`).
 - [ ] R5. The codexbar adapter is a small `UsageSource` interface with one implementation and a fixture captured from a real `codexbar` run (redacted), used by the tests.
 - [ ] R6. `docs/design/harness-surface-governance.md` gains the consent row (date, task WBS, verb + flags, rationale, rejected shape); `plugins/sp/skills/spur-cli/references/agent.md` documents the verb; the `setProjectExecutorDisabled` wrapper from task 4 is deleted.

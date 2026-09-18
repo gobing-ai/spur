@@ -61,12 +61,12 @@ One command, run by cron/launchd like `spur history daily`, never by `spur serve
 1. Run `codexbar usage --format json --provider all` (adapter behind a small `UsageSource` interface so a second source can be added without touching the mapping).
 2. Write `~/.config/spur/agent-usage.json` (`{ captured_at, source, providers: [...] , raw }`).
 3. Map provider → executors via `agent.executors[].agent` + model/provider prefix; unmapped providers are reported, never guessed.
-4. Emit synthetic `agent.quota.exhausted|recovered` observations with `owner: quota` into the same durable path (§3.2); `--dry-run` prints the diff and writes nothing.
-5. codexbar missing / non-zero / unparsable ⇒ exit non-zero naming the cause, no writes.
+4. Emit synthetic `agent.quota.exhausted|recovered` observations with `owner: quota` into the same durable path (§3.2); `--dry-run` prints the diff and writes nothing. A provider is exhausted when any non-null `usage.primary|secondary|tertiary` window has `usedPercent >= 100`, and has headroom when every non-null window is below 100; `extraRateWindows` is kept in `raw` only.
+5. codexbar missing, or output that is not a parsable array of provider entries ⇒ exit non-zero naming the cause, no writes. A non-zero exit alone is not a failure: codexbar exits 1 whenever any provider fails. Per-provider `error` entries are skipped and reported; healthy entries still apply.
 
 **Public surface (ADR-051 consent given 2026-09-17):** `spur agent usage [--dry-run] [--source codexbar]` under the existing `agent` noun. The rejected alternative was `spur agent doctor --refresh-usage` (mixes an inspection verb with a write). Consent row: [harness-surface-governance.md](harness-surface-governance.md).
 
-**Unverified premise:** the codexbar JSON shape could not be captured in the design session (sandbox blocks its cookie-cache lock). Task 1 of B6 captures it out-of-sandbox and pins a fixture before the adapter is written.
+**Partially verified premise (2026-09-17, CodexBar 0.60.4):** the error-entry and healthy-entry shapes were captured in-sandbox, but only one provider was healthy there (cookie-cache lock EPERM). Task 0892 step 1 captures a sample with healthy `claude`/`codex` entries out-of-sandbox and pins it as a fixture before the adapter is written.
 
 ### 3.5 Doctor
 

@@ -6,7 +6,7 @@ status: backlog
 priority: P2
 tags: []
 created_at: "2026-09-17T23:02:01.980Z"
-updated_at: "2026-09-17T23:03:27.815Z"
+updated_at: "2026-09-18T01:02:14.277Z"
 ---
 
 # B6: Executor availability lifecycle: disable ownership, recovery, global-config persistence, and an explicit usage producer
@@ -70,6 +70,7 @@ Feature: Executor availability lifecycle
     Then a snapshot file is written with the raw usage and a captured_at timestamp
     And each provider is mapped to its executors through the executor config
     And quota-owned disable and enable changes are applied through the shared updater
+    And a provider entry that reports an error is skipped without changing its executors
 
   @core
   Scenario: R6 — The usage producer supports a dry run
@@ -80,7 +81,7 @@ Feature: Executor availability lifecycle
 
   @core
   Scenario: R7 — A missing or failing codexbar changes nothing
-    Given codexbar is not installed or exits non-zero
+    Given codexbar is not installed or its output is not a parsable array of provider entries
     When the operator runs the usage producer command
     Then the command exits non-zero naming the cause
     And no executor availability is changed
