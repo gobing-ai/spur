@@ -1,5 +1,5 @@
 ---
-description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report; optional implement-ready depth
+description: Refine a batch of tasks via structured Q&A — resolve a set (feature or selector), refine each in dependency-correct order, emit a batch report; --depth ready audits, corrects and promotes each task
 role: planner
 argument-hint: "--feature <id> | --tasks <selector> [--focus <mode>] [--description <text>] [--depth <standard|ready>] [--agent <inline|auto|name>] [--auto] [--keep-going] [--status <s>] [--json] [--worktree [<name>]]"
 allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
@@ -9,7 +9,9 @@ allowed-tools: ["Bash", "Read", "Skill", "AskUserQuestion"]
 
 Wraps the **sp:spur-dev** skill. Batch counterpart of `/sp:dev-refine` — same per-task refine
 operation, applied to a resolved set (typically every task under a feature). Pass
-`--depth ready` to force an implement-ready freeze on every task (does not L3-SKIP).
+`--depth ready` to force an implement-ready freeze on every task (does not L3-SKIP). Each task's
+existing claims are audited against the current tree and corrected, and passing tasks are promoted
+`backlog → todo`. Use it to re-audit a feature's filed or stale tasks as well as before handoff.
 
 ## Argument Flags
 
@@ -17,8 +19,8 @@ operation, applied to a resolved set (typically every task under a feature). Pas
 | --- | --- | --- |
 | `--feature` `<id>` | Refine all tasks in a feature. | required (one of `--feature` / `--tasks`) |
 | `--tasks` `<selector>` | Task selector to refine (alternative to `--feature`). | required (one of `--feature` / `--tasks`) |
-| `--focus` `<mode>` | Refinement focus mode. | omitted |
-| `--description` `<text>` | Override description for each task. | omitted |
+| `--focus` `<mode>` | Gap-analysis focus: `all\|requirements\|background\|constraints\|acceptance\|quick`. | `all` |
+| `--description` `<text>` | Operator framing injected into each task's Q&A/synthesis. | omitted |
 | `--depth` `<standard\|ready>` | Spec depth bar (see flag glossary). | `standard` |
 | `--agent` `<inline\|auto\|name>` | Who runs the model-bearing refinement. | omit |
 | `--auto` | Skip objective HITL gates. | off |
@@ -50,8 +52,9 @@ worktree copy; your main tree still shows pre-run statuses until the FF-merge on
 not a bug.
 
 **Depth:** default `standard` keeps the cheap L3 SKIP gate under `--auto`. Use
-`--depth ready` when handing a feature to another implementer (frozen Design/Requirements/Plan);
-thread `--depth` into each per-task refine.
+`--depth ready` when handing a feature to another implementer (frozen Design/Requirements/Plan),
+or when the tasks' existing content is in doubt; thread `--depth` into each per-task refine. Ready
+report rows add corrections count, status before → after, and failed checklist ids.
 
 > **`--next` dropped** (feature H8, 2026-07-31). Batch-level chaining was a token bomb — each refine
 > hop is an LLM call, and a large feature means N refine chains fanned out at once. For batch

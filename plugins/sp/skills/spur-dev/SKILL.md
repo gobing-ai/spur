@@ -1,6 +1,6 @@
 ---
 name: spur-dev
-description: "The thin orchestration spine for the planning→execution lifecycle: intake, feature-check/batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), HITL gating. Dispatches competency skills; never inlines them. Triggers: \"run the pipeline\", \"drive this task\", \"plan a feature end to end\", \"continue the pipeline run\", or operating the full lifecycle."
+description: 'The thin orchestration spine for the planning→execution lifecycle: intake, feature-check/batch-create gates, the execution pipeline (precheck→implement→test→review→verify→record→done), HITL gating. Dispatches competency skills; never inlines them. Triggers: "run the pipeline", "drive this task", "plan a feature end to end", "continue the pipeline run", or operating the full lifecycle.'
 license: Apache-2.0
 metadata:
   author: spur
@@ -36,11 +36,11 @@ metadata:
 # Spur Dev — The Orchestration Spine
 
 `sp:spur-dev` is the **thin orchestration spine** that drives the full planning→execution lifecycle.
-It converts vague intent into shipped work by *orchestrating*, not by doing the work itself: it runs
+It converts vague intent into shipped work by _orchestrating_, not by doing the work itself: it runs
 the gates (feature-check, batch-create) and the execution pipeline with human-in-the-loop control,
 and **dispatches deep competency skills** for each unit of work — it never inlines them. Every write
-to the corpus goes through a CLI verb that validates before writing — the spine knows *how to drive
-the lifecycle*; the competency skills know *how to do each job*; the CLI knows *what is valid*.
+to the corpus goes through a CLI verb that validates before writing — the spine knows _how to drive
+the lifecycle_; the competency skills know _how to do each job_; the CLI knows _what is valid_.
 
 The skill was decomposed **by function** (ADR-028): design, decomposition, implementation, testing,
 and verification each became a standalone competency skill, leaving this spine to orchestrate them.
@@ -51,14 +51,14 @@ status-transition verbs, are the facade's (`sp:spur-cli`), never this skill's.
 
 **The competencies the spine dispatches:**
 
-| Unit of work | Competency skill |
-| -------------- | ------------------ |
-| Design / ADR judgment (shape a task) | `sp:sys-architecture` |
-| Feature/spec → task batch | `sp:spec-decomposition` |
-| Implement to spec | `sp:code-implementation` |
-| Coverage / test extension | `sp:code-testing` |
-| Review (multi-dimensional) | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` |
-| Test-first discipline (composed in) | `sp:test-driven-development` |
+| Unit of work                         | Competency skill                                                        |
+| ------------------------------------ | ----------------------------------------------------------------------- |
+| Design / ADR judgment (shape a task) | `sp:sys-architecture`                                                   |
+| Feature/spec → task batch            | `sp:spec-decomposition`                                                 |
+| Implement to spec                    | `sp:code-implementation`                                                |
+| Coverage / test extension            | `sp:code-testing`                                                       |
+| Review (multi-dimensional)           | `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` |
+| Test-first discipline (composed in)  | `sp:test-driven-development`                                            |
 
 CLI verb usage for any `spur` noun lives in the `sp:spur-cli` facade. This spine owns only the
 lifecycle, the gates, and the section-write contract (`cross-cutting.md`).
@@ -103,26 +103,26 @@ Host-session procedure: **[references/inline-pipeline-driver.md](references/inli
 Each step delegates to a CLI verb and is documented in exactly one reference file. Read the
 reference for the half you're operating; do not duplicate its content here.
 
-| Step | Half | CLI gate | Reference |
-| ------ | ------ | ---------- | ----------- |
-| Intake | planning | — (prompt work) | [planning-workflow.md](references/planning-workflow.md) · [product-planning.md](references/product-planning.md) |
-| Feature create + AC | planning | `spur feature create` | [planning-workflow.md](references/planning-workflow.md) · [ac-style-guide.md](references/ac-style-guide.md) |
-| Feature check gate | planning | `spur feature check` | [planning-workflow.md](references/planning-workflow.md) |
-| Decomposition (dispatch) | planning | `task-batch.schema.json` | `sp:spec-decomposition` competency — the spine dispatches, does not inline |
-| Batch-create gate | planning | `spur task batch-create` | [planning-workflow.md](references/planning-workflow.md) |
-| Design doc | planning | — (prompt work; §4.5/T9) | [planning-workflow.md](references/planning-workflow.md) |
-| Refine | planning | `spur task update --section` | [planning-workflow.md](references/planning-workflow.md) |
-| Batch refine | planning | `sp:dev-refineall` → per-task `refine` | [dev-operations.md](references/dev-operations.md) § refineall · [planning-workflow.md](references/planning-workflow.md) |
-| Task selection | execution | `spur task list` | [execution-workflow.md](references/execution-workflow.md) |
-| Pipeline run | execution | inline YAML driver or `spur workflow run` | [execution-workflow.md](references/execution-workflow.md) · [inline-pipeline-driver.md](references/inline-pipeline-driver.md) |
-| Implement (dispatch) | execution | `sp:code-implementation` | competency skill — the spine dispatches, does not inline |
-| Test (dispatch) | execution | `sp:code-testing` | competency skill — the spine dispatches, does not inline |
-| Review / verify (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline |
-| Operation catalog | execution | `sp:dev-*` operations | [dev-operations.md](references/dev-operations.md) (spine dispatch table) |
-| Continue | execution | `spur feature update` / `refresh` | [execution-workflow.md](references/execution-workflow.md) |
-| Batch run | execution | `sp:super-planner` + `spur workflow run` | [execution-batch.md](references/execution-batch.md) |
-| Parallel fan-out | execution | `sp:parallel-execution` decision framework | [execution-batch.md](references/execution-batch.md) |
-| All writes (both halves) | — | CLI-gated section editing | [cross-cutting.md](references/cross-cutting.md) · [section-batching.md](references/section-batching.md) (one-writer protocol, F92 0593) |
+| Step                       | Half      | CLI gate                                                                                  | Reference                                                                                                                               |
+| -------------------------- | --------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Intake                     | planning  | — (prompt work)                                                                           | [planning-workflow.md](references/planning-workflow.md) · [product-planning.md](references/product-planning.md)                         |
+| Feature create + AC        | planning  | `spur feature create`                                                                     | [planning-workflow.md](references/planning-workflow.md) · [ac-style-guide.md](references/ac-style-guide.md)                             |
+| Feature check gate         | planning  | `spur feature check`                                                                      | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
+| Decomposition (dispatch)   | planning  | `task-batch.schema.json`                                                                  | `sp:spec-decomposition` competency — the spine dispatches, does not inline                                                              |
+| Batch-create gate          | planning  | `spur task batch-create`                                                                  | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
+| Design doc                 | planning  | — (prompt work; §4.5/T9)                                                                  | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
+| Refine                     | planning  | `spur task update --section`                                                              | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
+| Batch refine               | planning  | `sp:dev-refineall` → per-task `refine`                                                    | [dev-operations.md](references/dev-operations.md) § refineall · [planning-workflow.md](references/planning-workflow.md)                 |
+| Task selection             | execution | `spur task list`                                                                          | [execution-workflow.md](references/execution-workflow.md)                                                                               |
+| Pipeline run               | execution | inline YAML driver or `spur workflow run`                                                 | [execution-workflow.md](references/execution-workflow.md) · [inline-pipeline-driver.md](references/inline-pipeline-driver.md)           |
+| Implement (dispatch)       | execution | `sp:code-implementation`                                                                  | competency skill — the spine dispatches, does not inline                                                                                |
+| Test (dispatch)            | execution | `sp:code-testing`                                                                         | competency skill — the spine dispatches, does not inline                                                                                |
+| Review / verify (dispatch) | execution | `sp:dev-review` → `sp:code-verification` + `sp:functional-review` + `sp:code-improvement` | competency skills — the spine dispatches, does not inline                                                                               |
+| Operation catalog          | execution | `sp:dev-*` operations                                                                     | [dev-operations.md](references/dev-operations.md) (spine dispatch table)                                                                |
+| Continue                   | execution | `spur feature update` / `refresh`                                                         | [execution-workflow.md](references/execution-workflow.md)                                                                               |
+| Batch run                  | execution | `sp:super-planner` + `spur workflow run`                                                  | [execution-batch.md](references/execution-batch.md)                                                                                     |
+| Parallel fan-out           | execution | `sp:parallel-execution` decision framework                                                | [execution-batch.md](references/execution-batch.md)                                                                                     |
+| All writes (both halves)   | —         | CLI-gated section editing                                                                 | [cross-cutting.md](references/cross-cutting.md) · [section-batching.md](references/section-batching.md) (one-writer protocol, F92 0593) |
 
 ## When to use
 
@@ -180,7 +180,7 @@ CLI does.
    section.
 3. **Resolve task IDs through the CLI.** Read a known WBS with `spur task show <wbs> --json`; it
    returns metadata, full content, and `filePath` across configured task folders. Use `spur task
-   path <wbs> --json` only when another tool needs the absolute path. Never search `docs/tasks*` or
+path <wbs> --json` only when another tool needs the absolute path. Never search `docs/tasks*` or
    guess `--folder`; reuse the first `show` response throughout the run.
 4. **Check before every write.** Run `spur task check <wbs> --json` to know what sections
    the task needs at its current status. Guessing produces matrix violations.

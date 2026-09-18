@@ -59,7 +59,9 @@ readiness: {
 Preparation failure exits 1. Existing usage, dedupe and collision exit mappings remain unchanged.
 Error details identify the failed stage and `recoveryCommand`; after a single capture commits,
 the result also carries its existing WBS/path. The recovery action is
-`/sp:dev-refine <wbs> --auto --depth ready`. JSON stdout is exactly one parseable result;
+`/sp:dev-refine <wbs> --auto --depth ready`; on a passing checklist it runs the same `todo`
+post-check and promotes `backlog → todo` itself, so no separate status step follows. Creation's own
+promotion is skipped when the refine has already promoted. JSON stdout is exactly one parseable result;
 captured agent output cannot corrupt it. No automatic second create, implementation dispatch,
 or fabricated Solution/Testing/Review evidence is part of creation.
 

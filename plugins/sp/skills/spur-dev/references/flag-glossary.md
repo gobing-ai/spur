@@ -174,7 +174,8 @@ establishes a baseline with it before the first change and re-runs it after each
 Constrain the operation to a named subset of dimensions — review dimensions on `dev-review`/
 `dev-verify`/`dev-verifyall` (`all|stack|dependencies|data|flows|api|security|quality|performance`),
 a refactor lens set on `dev-refactor` (`api|architect|tests|ui|auto`), a refine focus mode on
-`dev-refine`/`dev-refineall`, or a reconstruction lens on `dev-reverse`.
+`dev-refine`/`dev-refineall` (`all|requirements|background|constraints|acceptance|quick` —
+[dev-operations.md](dev-operations.md) § refine), or a reconstruction lens on `dev-reverse`.
 Narrowing reduces token cost; omitting runs
 all dimensions.
 
@@ -372,10 +373,12 @@ Orthogonal to `--focus` (which _narrows_ domains) and to `--mode` on other comma
 | Value (refine family)             | Bar                                                                                                                                                                                | `--auto` SKIP behavior                                                                             |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | `standard` (default when omitted) | L3 structural completeness (not empty/placeholder; check-clean for target sections)                                                                                                | **SKIP** when no L3 findings on target sections                                                    |
-| `ready`                           | **Implement-ready** freeze: another agent can implement without inventing design (frozen names/APIs or explicit "no new API", anti-patterns, file targets, handoffs, out-of-scope) | **Do not SKIP** on L3-clean alone — run the ready checklist; rewrite sections until the bar is met |
+| `ready`                           | **Implement-ready** freeze: another agent can implement without inventing design (frozen names/APIs or explicit "no new API", anti-patterns, file targets, handoffs, out-of-scope) | **Do not SKIP** on L3-clean alone — audit existing claims, run the ready checklist, rewrite sections until the bar is met, then promote `backlog → todo` |
 
 Default for refine stays `standard` so ordinary `refineall --auto` remains cheap. Use `ready` for
-multi-package / multi-agent handoffs and flaky-pipeline features where a wrong implement is costly.
+multi-package / multi-agent handoffs, flaky-pipeline features where a wrong implement is costly, and
+evaluating/correcting an existing task (review-triage filing, stale backlog) whose claims may no
+longer hold.
 Full checklist: [dev-operations.md](dev-operations.md) § refine (depth ready).
 
 ### `--bdd` — use BDD scenarios as the verification lens
