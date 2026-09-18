@@ -366,11 +366,11 @@ describe('AgentService.doctor', () => {
         const tableLines = lines.join('').split('\n');
         const header = tableLines.find((l) => l.includes('STATUS'));
         expect(header).toBeDefined();
-        expect(header?.split(/\s{2,}/).filter(Boolean)).toHaveLength(7); // STATUS|EXECUTOR|AGENT|MODEL|TIER|VERSION|ROLES
+        expect(header?.split(/\s{2,}/).filter(Boolean)).toHaveLength(8); // STATUS|EXECUTOR|AGENT|MODEL|TIER|VERSION|CAPS|ROLES (B8 R3 added CAPS)
         const row = tableLines.find((l) => l.includes('claude'));
         expect(row).toBeDefined();
-        // glyph+state share the first cell, so the row has the same 7 cells as the header
-        expect(row?.split(/\s{2,}/).filter(Boolean)).toHaveLength(7);
+        // glyph+state share the first cell, so the row has the same 8 cells as the header
+        expect(row?.split(/\s{2,}/).filter(Boolean)).toHaveLength(8);
         // Tier-1 summary footer unchanged (R3).
         expect(tableLines.some((l) => /^\d+ usable, \d+ missing/.test(l))).toBe(true);
 
@@ -4407,4 +4407,105 @@ test('fleet spec execution validates actual launch context and requires the mana
         await db.close();
         rmSync(project, { recursive: true, force: true });
     }
+});
+
+// ---------------------------------------------------------------------------
+// Tests: doctor capability surface (B8 / task 0889 R3/R5)
+// ---------------------------------------------------------------------------
+
+describe('AgentService.doctor session capability surface (B8 / task 0889)', () => {
+    test('R3: --json carries the runner capability record per executor row', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [
+                { name: 'codex-exec', agent: 'codex', disabled: false },
+                { name: 'mystery-exec', agent: 'mystery-bin', disabled: false },
+            ],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([
+                    mockDoctorResult({ agent: 'codex-exec', version: '0.154.0' }),
+                    mockDoctorResult({ agent: 'mystery-exec', version: '1.2.3' }),
+                ]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        const exitCode = await svc.doctor({ json: true }, { doctorRunner });
+        expect(exitCode).toBe(0);
+
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        // Known binary → the record is surfaced verbatim (read, never re-declared).
+        expect(parsed.agents[0].capabilities).toEqual({
+            supportsResumeById: true,
+            supportsSessionDir: false,
+            supportsPersistentStdin: false,
+            supportsStructuredOutput: true,
+            verifiedAgainst: '0.154.0',
+            note: 'no session-dir flag — sessionDir is ignored; `exec` carries one prompt arg (stdin `-` is one-shot), so no multi-turn stdin',
+        });
+        // Fresh version → no staleness.
+        expect(parsed.agents[0].capabilityStale).toBeNull();
+        // Binary unknown to the runner → no record to surface.
+        expect(parsed.agents[1].capabilities).toBeNull();
+        expect(parsed.agents[1].capabilityStale).toBeNull();
+    });
+
+    test('R5: detected version drifting from verifiedAgainst is reported in --json', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'codex-exec', agent: 'codex', disabled: false }],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'codex-exec', version: '0.999.0' })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        await svc.doctor({ json: true }, { doctorRunner });
+
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        expect(parsed.agents[0].capabilityStale).toEqual({ verifiedAgainst: '0.154.0', detected: '0.999.0' });
+    });
+
+    test('R5: stale executor warns on stderr and marks the CAPS cell in text mode', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'codex-exec', agent: 'codex', disabled: false }],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'codex-exec', version: '0.999.0' })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        const exitCode = await svc.doctor({ json: false }, { doctorRunner });
+        expect(exitCode).toBe(0);
+
+        const table = lines.join('\n');
+        expect(table).toContain('CAPS');
+        // codex record: resume ✓, dir ✗, stdin ✗, structured ✓ — plus the stale marker.
+        expect(table).toContain('r✓d✗s✗o✓⚠');
+        expect(errors.some((e) => e.includes('capability-declaration-stale'))).toBe(true);
+        expect(errors.some((e) => e.includes('codex-exec') && e.includes('0.999.0') && e.includes('0.154.0'))).toBe(
+            true,
+        );
+    });
+
+    test('R3: text table renders the CAPS cell without a stale marker when fresh', async () => {
+        const { lines, errors, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'pi-exec', agent: 'pi', disabled: false }],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'pi-exec', version: '0.85.1' })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        await svc.doctor({ json: false }, { doctorRunner });
+
+        const table = lines.join('\n');
+        expect(table).toContain('r✓d✓s✓o✓');
+        expect(table).not.toContain('⚠');
+        expect(errors.some((e) => e.includes('capability-declaration-stale'))).toBe(false);
+    });
 });

@@ -260,6 +260,19 @@ level below the requirement fails closed (exit 2) with an axis-by-axis diagnosti
 vs. actual state and provenance. Missing data resolves to `unknown`, never permissive; tier is
 never a capability signal. Satisfied gates record a bounded, redacted per-axis evidence payload
 (axis/state/provenance only — no config blobs) on `routing.capabilities` in the run trace.
+
+**Session capability axes (feature B8 / task 0889).** The requirement vocabulary extends with four
+runner-declared axes — `resumeById|sessionDir|persistentStdin|structuredOutput`
+(`SESSION_CAPABILITY_AXES`, `AGENT_RUN_CAPABILITY_AXES`) — accepted at the same level scale but
+attested by the runner's per-agent capability record (`getAgentSessionCapability`), not operator
+config: a `true` record satisfies both levels; `false` or a missing record satisfies neither
+(fail closed). `agent.run` evaluates session requirements pre-spawn against the RESOLVED executor
+agent (guarded `resolve()`) and an unmet requirement is the ADR-118 contract-violation outcome
+(`contract: 'requiresCapabilities'`, naming executor + missing axis), while `AgentService` re-checks
+the axes on each escalation hop (exit 2). The same record drives the affinity path: a
+`supportsResumeById: false` record emits no `--resume`/`--session-id` flag at all, records
+`session: 'fresh'` in the action result, and writes `__agentSession: 'no-resume'` so downstream
+latches never arm.
 `AgentRunActionRunner` re-validates the option shape at the action boundary. Shipped reference
 workflows attest the two unattended tree-mutating stages (`implement`, `test-fix` in
 `task-pipeline.yaml`); observe-only stages stay undeclared.

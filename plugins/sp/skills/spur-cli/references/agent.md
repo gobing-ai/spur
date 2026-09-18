@@ -161,9 +161,15 @@ spur agent doctor --json     # machine-readable (role selector: elected-first or
 ```
 
 Checks whether each agent is installed and ready to run. Text mode renders a capability table —
-`STATUS EXECUTOR AGENT MODEL TIER VERSION ROLES` where TIER is the executor's *capability* tier
-(`cheap|standard|capable-*`), MODEL the pinned config model (`—` when undeclared), and ROLES lists
-candidate pipeline roles with `*` on the elected one. Exit `1` if any checked agent is not ready.
+`STATUS EXECUTOR AGENT MODEL TIER VERSION CAPS ROLES` where TIER is the executor's *capability* tier
+(`cheap|standard|capable-*`), MODEL the pinned config model (`—` when undeclared), ROLES lists
+candidate pipeline roles with `*` on the elected one, and CAPS is the runner-declared session
+capability for the underlying agent binary (`r`esume/`d`ir/`s`tdin/`o`utput as ✓/✗; `—` when the
+binary is unknown to the runner; a trailing `⚠` when the detected version differs from the
+record's `verifiedAgainst`). A stale executor also emits a `capability-declaration-stale` warning
+on stderr in text mode; `--json` stays stderr-clean and carries `capabilities` plus
+`capabilityStale: {verifiedAgainst, detected}` per agent row instead. Exit `1` if any checked
+agent is not ready.
 
 ## `start` - start a supervised process
 

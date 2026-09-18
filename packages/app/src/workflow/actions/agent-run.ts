@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join } from 'node:path';
 import { AGENT_ROLE_NAMES, getEnvVars } from '@gobing-ai/spur-config';
+import { getAgentSessionCapability, resolveAgentName } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { type AgentExecutionObserver, redactAndBound } from '../../observability/agent-execution';
@@ -11,7 +12,11 @@ import {
     parseAgentBudget,
     unavailableAgentUsage,
 } from '../../services/agent-usage';
-import { parseRequiresCapabilities } from '../../services/capability-attestation';
+import {
+    evaluateSessionCapabilities,
+    parseRequiresCapabilities,
+    SESSION_CAPABILITY_AXES,
+} from '../../services/capability-attestation';
 import { permissionFailureEvidence } from '../../services/failure-classification';
 import type { AgentRoutingIdentity } from '../../services/review-independence';
 import {
@@ -33,7 +38,7 @@ export const AGENT_RUN_PROGRESS_INTERVAL_MS = 30_000;
 const KIND = 'agent.run';
 
 /** A declared `agent.run` post-condition (ADR-118). */
-type ContractName = 'answerFile' | 'expectFile' | 'requireDiff';
+type ContractName = 'answerFile' | 'expectFile' | 'requireDiff' | 'requiresCapabilities';
 
 /** Config slice injected at composition root for agent.run steps (R1, task 0451). */
 export interface AgentRunAgentConfig {
@@ -224,6 +229,18 @@ export class AgentRunActionRunner implements ActionRunner {
         const compareExecutorWith = asOptionalString(options.compareExecutorWith) ?? 'implement';
 
         const agentLabel = dispatchAgent ?? '<default>';
+        // B8 R1: the runner's capability record drives every resume/session-dir
+        // decision on this path — no agent-name conditional below. The record is
+        // keyed by canonical agent (aliases resolved); a binary unknown to the
+        // runner leaves `sessionCaps` undefined and keeps legacy behavior with
+        // the 0406 fresh-retry fallback as the safety net.
+        const affinityAgent = dispatchAgent ?? this.agentConfig.default;
+        const canonicalAffinityAgent = affinityAgent !== undefined ? resolveAgentName(affinityAgent) : undefined;
+        const sessionCaps =
+            canonicalAffinityAgent !== undefined ? getAgentSessionCapability(canonicalAffinityAgent) : undefined;
+        // R2: a `false` resume-by-id record means no resume flag of any kind is
+        // emitted — the dispatch is fresh and the result records `session: 'fresh'`.
+        const resumeSupported = sessionCaps?.supportsResumeById !== false;
         // Session-dir label. Never a literal agent name as the fallback: this directory
         // names the source the history importer attributes the run's sessions to
         // (`history-service.ts` maps `.spur/run/<id>/agent-sessions/<agent>/` back to a
@@ -268,7 +285,10 @@ export class AgentRunActionRunner implements ActionRunner {
         // Track whether the latch (not an explicit step flag) set continue so
         // the dispatch loop can fall back to a fresh dispatch if the agent's
         // resume mode rejects a new prompt (task 0406 — codex incompatibility).
-        const latchAutoContinued = continueFlag === undefined && latch === 'open';
+        // B8 R2: when the capability record declares resume-by-id false, the
+        // latch never arms at all — the fresh dispatch is decided up front by
+        // the record instead of after a failed resume attempt.
+        const latchAutoContinued = continueFlag === undefined && latch === 'open' && resumeSupported;
         if (latchAutoContinued) {
             // R3 (0451): affinity on → resume via sessionDir/sessionId only, not bare continue.
             // Affinity off → restore Q8: latch open sets continue:true.
@@ -305,7 +325,9 @@ export class AgentRunActionRunner implements ActionRunner {
 
         if (sessionDir) {
             flags.sessionDir = sessionDir;
-            if (affinityOn && storedSessionId) {
+            // B8 R2: no `--resume`/`--session-id` style flag when the record
+            // declares resume-by-id false — the dir (log capture) stays, the id goes.
+            if (affinityOn && storedSessionId && resumeSupported) {
                 flags.sessionId = storedSessionId;
             }
         }
@@ -318,7 +340,9 @@ export class AgentRunActionRunner implements ActionRunner {
             };
         }
         if (timeoutMs !== undefined) flags.timeout = String(timeoutMs);
-        if (continueFlag !== undefined) flags.continue = continueFlag;
+        // B8 R2: an explicit or latch-derived continue on a resume-incapable agent
+        // is suppressed — the record decides, the stage gets a fresh dispatch.
+        if (continueFlag !== undefined && resumeSupported) flags.continue = continueFlag;
 
         // `answerFile` implies capture: persist the agent's stdout to a file a
         // downstream shell step can read (the engine only propagates setVars, not
@@ -335,6 +359,45 @@ export class AgentRunActionRunner implements ActionRunner {
         const requiresCapabilities = parseRequiresCapabilities(options.requiresCapabilities);
         if (!requiresCapabilities.ok) {
             return { ok: false, error: `agent.run: ${requiresCapabilities.error}` };
+        }
+
+        // B8 R4: session-capability requirements compare against the runner's
+        // capability record for the RESOLVED executor agent, BEFORE any subprocess
+        // spawn. An unmet requirement is the ADR-118 contract-violation outcome,
+        // naming the executor and the missing capability. A binary unknown to the
+        // runner attests nothing — requirements fail closed (0706 R2 rule).
+        if (SESSION_CAPABILITY_AXES.some((axis) => requiresCapabilities.requires[axis] !== undefined)) {
+            let capabilityAgent: string | undefined;
+            try {
+                const resolveFlags: Record<string, string> = { role: role as string };
+                if (dispatchAgent !== undefined) resolveFlags.agent = dispatchAgent;
+                if (model !== undefined) resolveFlags.model = model;
+                const resolved = await this.agentService.resolve(resolveFlags);
+                if (resolved.ok) capabilityAgent = resolved.executor ?? resolved.agent;
+            } catch {
+                capabilityAgent = undefined;
+            }
+            const canonicalCapabilityAgent =
+                capabilityAgent !== undefined ? resolveAgentName(capabilityAgent) : undefined;
+            const capabilityRecord =
+                canonicalCapabilityAgent !== undefined
+                    ? getAgentSessionCapability(canonicalCapabilityAgent)
+                    : undefined;
+            const sessionGate = evaluateSessionCapabilities(
+                requiresCapabilities.requires,
+                capabilityRecord,
+                capabilityAgent ?? agentLabel,
+            );
+            if (!sessionGate.ok) {
+                return this.contractViolation(
+                    context,
+                    agentLabel,
+                    'requiresCapabilities',
+                    sessionGate.observed,
+                    `agent.run (${agentLabel}) requiresCapabilities unmet before spawn (ADR-118): ${sessionGate.reason}`,
+                    {},
+                );
+            }
         }
 
         // 0710 R4/R5: executor-distinctness policy — evaluated AFTER the reviewer
@@ -780,7 +843,9 @@ export class AgentRunActionRunner implements ActionRunner {
             }
 
             let discoveredSessionId = storedSessionId;
-            if (ok && affinityOn && resolvedSessionDir && !discoveredSessionId) {
+            // B8 R2: no session discovery on a resume-incapable agent — the id
+            // would never be consumed (no resume flag is ever emitted for it).
+            if (ok && affinityOn && resolvedSessionDir && !discoveredSessionId && resumeSupported) {
                 discoveredSessionId = await discoverSessionId(resolvedSessionDir);
             }
 
@@ -808,25 +873,30 @@ export class AgentRunActionRunner implements ActionRunner {
                 }
             }
 
+            const resultData = buildResultData(
+                exitCode,
+                agentLabel,
+                capture,
+                answer,
+                invocation,
+                usage,
+                // 0485 R6: carry stream tails on failure records only.
+                ok ? undefined : traced.stdout,
+                ok ? undefined : (traced.stderr ?? undefined),
+                this.agentConfig.secretValues,
+            );
+            // B8 R2: a record-declared fresh dispatch is recorded in the action result.
+            if (!resumeSupported) resultData.session = 'fresh' as const;
             return {
                 ok,
-                data: buildResultData(
-                    exitCode,
-                    agentLabel,
-                    capture,
-                    answer,
-                    invocation,
-                    usage,
-                    // 0485 R6: carry stream tails on failure records only.
-                    ok ? undefined : traced.stdout,
-                    ok ? undefined : (traced.stderr ?? undefined),
-                    this.agentConfig.secretValues,
-                ),
+                data: resultData,
                 error,
                 // Latch: mark the session open after the first successful agent.run so later
                 // steps auto-continue (Q8). When we fell back to a fresh dispatch because
                 // the agent's resume mode rejected continue (task 0406), write 'no-resume'
                 // so subsequent steps skip the latch and avoid repeating the wasted dispatch.
+                // B8 R2: the record declaring resume-by-id false writes 'no-resume' up front —
+                // downstream steps skip the latch without a failed resume attempt.
                 // 0710: fresh-session actions publish ONLY routing evidence — never their
                 // own session identity — so a review/verify hop cannot leak its session into
                 // a subsequent implement/test-fix resume.
@@ -835,11 +905,12 @@ export class AgentRunActionRunner implements ActionRunner {
                           ...(freshSession
                               ? {}
                               : {
-                                    __agentSession: resumeRetried ? ('no-resume' as const) : ('open' as const),
+                                    __agentSession:
+                                        resumeRetried || !resumeSupported ? ('no-resume' as const) : ('open' as const),
                                     ...(affinityOn && resolvedSessionDir
                                         ? { __agentSessionDir: resolvedSessionDir }
                                         : {}),
-                                    ...(affinityOn && (discoveredSessionId || storedSessionId)
+                                    ...(affinityOn && resumeSupported && (discoveredSessionId || storedSessionId)
                                         ? { __agentSessionId: discoveredSessionId || storedSessionId }
                                         : {}),
                                     ...(affinityOn ? { __agentSessionAgent: resolvedAgent } : {}),

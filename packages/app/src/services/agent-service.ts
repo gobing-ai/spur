@@ -26,6 +26,7 @@ import {
     AiRunner,
     type DoctorResult,
     DoctorRunner,
+    getAgentSessionCapability,
     getAgentShim,
     isClaudeStyleSlashCommand,
     loadAgentSpecs,
@@ -59,8 +60,10 @@ import {
     capabilityDiagnostic,
     capabilityEvidence,
     evaluateCapabilities,
+    evaluateSessionCapabilities,
     parseRequiresCapabilities,
     type RequiresCapabilities,
+    SESSION_CAPABILITY_AXES,
 } from './capability-attestation';
 import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
@@ -596,6 +599,7 @@ export class AgentService {
                         ),
                     );
                 } else {
+                    this.warnCapabilityStale(ladderRows);
                     this.ctx.output.error(renderRoleLadder(args.agent, roleDef.tier, ladderRows, undefined));
                 }
                 return resolved.exitCode;
@@ -617,6 +621,9 @@ export class AgentService {
                         roles: row.roles,
                         elected: row.elected,
                         disabled: row.disabled,
+                        // B8 R3/R5: runner-declared session capability + staleness.
+                        capabilities: row.capabilities,
+                        capabilityStale: row.capabilityStale,
                     };
                 });
                 this.ctx.output.write(
@@ -627,6 +634,7 @@ export class AgentService {
                 );
                 return 0;
             }
+            this.warnCapabilityStale(ladderRows);
             this.ctx.output.write(renderRoleLadder(args.agent, roleDef.tier, ladderRows, electedName));
             this.appendCacheNote(cacheInfo, args.json);
             return 0;
@@ -662,6 +670,21 @@ export class AgentService {
         this.ctx.output.write(
             `· cached ${Math.round(cache.ageMs / 1000)}s ago (${cache.path}) — --force-refresh to re-detect`,
         );
+    }
+
+    /**
+     * B8 R5: warn once per executor (one row per executor in every rowset passed
+     * here) whose detected CLI version differs from the capability record's
+     * `verifiedAgainst`. Text surfaces only — JSON carries the same fact
+     * structurally as `capabilityStale` and must stay stderr-clean.
+     */
+    private warnCapabilityStale(rows: readonly DoctorRow[]): void {
+        for (const row of rows) {
+            if (row.capabilityStale === null) continue;
+            this.ctx.output.error(
+                `Warning: capability-declaration-stale: executor ${row.executor} (${row.agentBinary}) detects ${row.agentBinary} ${row.capabilityStale.detected}, but the runner record was verified against ${row.capabilityStale.verifiedAgainst} — session capability flags may have drifted.`,
+            );
+        }
     }
 
     private renderDoctor(
@@ -704,6 +727,9 @@ export class AgentService {
                     roles: row.roles,
                     elected: row.elected,
                     disabled: row.disabled,
+                    // B8 R3/R5: runner-declared session capability + staleness.
+                    capabilities: row.capabilities,
+                    capabilityStale: row.capabilityStale,
                 };
             });
             const cacheField: DoctorCacheInfo = cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL };
@@ -715,6 +741,7 @@ export class AgentService {
             );
         } else {
             const rows = buildDoctorRows(results, executors, this.ctx.roles);
+            this.warnCapabilityStale(rows);
             // Single-executor mode keeps the detail view; full mode renders the table.
             this.ctx.output.write(agent !== undefined ? renderDoctorDetail(rows[0] ?? null) : renderDoctorTable(rows));
             this.appendCacheNote(cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL }, false);
@@ -1245,6 +1272,21 @@ export class AgentService {
                         const diagnostic = capabilityDiagnostic(selector, evaluation);
                         this.ctx.output.error(diagnostic);
                         return { ok: false, exitCode: 2, message: diagnostic };
+                    }
+                    // B8 R4 (defense-in-depth): session axes are runner-declared, not
+                    // operator-attested — evaluate them against the capability record
+                    // for THIS attempt's canonical agent, so an escalation to a
+                    // different executor cannot land on an incapable agent. Still
+                    // pre-spawn: exit 2 before any subprocess is created.
+                    if (SESSION_CAPABILITY_AXES.some((axis) => requiresCapabilities[axis] !== undefined)) {
+                        const canonical = resolveAgentName(agent);
+                        const record = canonical !== undefined ? getAgentSessionCapability(canonical) : undefined;
+                        const sessionEvaluation = evaluateSessionCapabilities(requiresCapabilities, record, agent);
+                        if (!sessionEvaluation.ok) {
+                            const diagnostic = `agent dispatch blocked by session capability (B8 R4): ${sessionEvaluation.reason}. Stage requiresCapabilities names a session axis the runner record does not declare; pick a capable executor or drop the requirement.`;
+                            this.ctx.output.error(diagnostic);
+                            return { ok: false, exitCode: 2, message: diagnostic };
+                        }
                     }
                     // 0706 R7: bounded redacted attestation evidence rides the
                     // routing attribution onto started/invoke events. The first
@@ -2693,6 +2735,17 @@ type DoctorRow = {
     modelStatus?: ModelHealthResult | null;
     /** 111 R5: profile disabled by config — inventoried, never probed or elected. */
     disabled: boolean;
+    /** B8 R3: runner-declared session capability for the row's agent binary; null when the binary is unknown to the runner. */
+    capabilities: {
+        supportsResumeById: boolean;
+        supportsSessionDir: boolean;
+        supportsPersistentStdin: boolean;
+        supportsStructuredOutput: boolean;
+        verifiedAgainst: string;
+        note?: string;
+    } | null;
+    /** B8 R5: detected CLI version differs from the record's `verifiedAgainst`; null when fresh or unverifiable. */
+    capabilityStale: { verifiedAgainst: string; detected: string } | null;
 };
 
 /**
@@ -2741,7 +2794,26 @@ function buildDoctorRows(
         version: result.version,
         error: result.error,
         modelStatus: result.modelStatus,
+        // B8 R3/R5: read (never re-declare) the runner's capability record for the
+        // row's canonical agent binary; string-compare the detected version against
+        // `verifiedAgainst` — any mismatch warns (agent CLIs are not all semver).
+        ...sessionCapabilityFor(result.version, executorByName.get(result.agent)?.agent ?? result.agent),
     }));
+}
+
+/** B8 R3/R5: capability record + staleness for a doctor row's agent binary. */
+function sessionCapabilityFor(
+    detectedVersion: string | null,
+    agentBinary: string,
+): Pick<DoctorRow, 'capabilities' | 'capabilityStale'> {
+    const canonical = resolveAgentName(agentBinary);
+    if (canonical === undefined) return { capabilities: null, capabilityStale: null };
+    const capabilities = getAgentSessionCapability(canonical);
+    const capabilityStale =
+        detectedVersion !== null && detectedVersion !== capabilities.verifiedAgainst
+            ? { verifiedAgainst: capabilities.verifiedAgainst, detected: detectedVersion }
+            : null;
+    return { capabilities, capabilityStale };
 }
 
 /** ROLES cell: `—` when the executor can serve no role (or is unusable), starred ids otherwise. */
@@ -2795,8 +2867,23 @@ function withoutAuthenticated<T extends { authenticated?: unknown }>(row: T): Om
  * and keeps no auth field at all (0621 removed the column; 0682 dropped `authenticated`).
  * Columns (B4/0681): EXECUTOR holds the executor name, AGENT the underlying
  * binary, MODEL the pinned config model (`—` when undeclared), TIER the
- * capability tier, ROLES the eligible roles with `*` marking election.
+ * capability tier, ROLES the eligible roles with `*` marking election. B8 R3:
+ * CAPS renders the runner-declared session capability (`r`esume/`d`ir/`s`tdin/
+ * `o`utput, ✓/✗), `—` when the binary is unknown to the runner, `⚠` appended
+ * when the detected version is stale against `verifiedAgainst` (B8 R5).
  */
+function renderCapsFlags(row: DoctorRow): string {
+    if (row.capabilities === null) return '—';
+    const caps = row.capabilities;
+    return `r${caps.supportsResumeById ? '✓' : '✗'}d${caps.supportsSessionDir ? '✓' : '✗'}s${caps.supportsPersistentStdin ? '✓' : '✗'}o${caps.supportsStructuredOutput ? '✓' : '✗'}`;
+}
+
+function renderCapsCell(row: DoctorRow): string {
+    return row.capabilityStale !== null && row.capabilities !== null
+        ? `${renderCapsFlags(row)}⚠`
+        : renderCapsFlags(row);
+}
+
 function renderDoctorTable(results: DoctorRow[]): string {
     const dash = '—';
     const rows = results.map((result) => {
@@ -2809,6 +2896,7 @@ function renderDoctorTable(results: DoctorRow[]): string {
             model: result.model ?? dash,
             tier: String(result.capabilityTier),
             version: result.version ?? dash,
+            caps: renderCapsCell(result),
             roles: renderRolesCell(result),
         };
     });
@@ -2821,6 +2909,7 @@ function renderDoctorTable(results: DoctorRow[]): string {
         model: 'MODEL',
         tier: 'TIER',
         version: 'VERSION',
+        caps: 'CAPS',
         roles: 'ROLES',
     };
     const all = [header, ...rows];
@@ -2831,9 +2920,10 @@ function renderDoctorTable(results: DoctorRow[]): string {
     const wModel = width('model');
     const wTier = width('tier');
     const wVersion = width('version');
+    const wCaps = width('caps');
 
     const line = (row: (typeof all)[number]) =>
-        `${row.glyph} ${row.state.padEnd(wState)}  ${row.executor.padEnd(wExecutor)}  ${row.agentBinary.padEnd(wAgent)}  ${row.model.padEnd(wModel)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.roles}`.trimEnd();
+        `${row.glyph} ${row.state.padEnd(wState)}  ${row.executor.padEnd(wExecutor)}  ${row.agentBinary.padEnd(wAgent)}  ${row.model.padEnd(wModel)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.caps.padEnd(wCaps)}  ${row.roles}`.trimEnd();
 
     const usableCount = rows.filter((row) => row.state === 'usable').length;
     // 111 R6: intentional disables are reported separately, not folded into the
@@ -2904,6 +2994,20 @@ function renderDoctorDetail(result: DoctorRow | null): string {
     lines.push(`  version:    ${result.version ?? '—'}`);
     // Pinned config model — distinct from the probed model health below.
     lines.push(`  pinned:     ${result.model ?? '—'}`);
+    // B8 R3/R5: runner-declared session capability with provenance, plus a
+    // staleness note when the detected CLI version drifted from the record.
+    if (result.capabilities === null) {
+        lines.push('  caps:       — (binary unknown to the runner; session capabilities unattested)');
+    } else {
+        const caps = result.capabilities;
+        lines.push(`  caps:       ${renderCapsFlags(result)}`);
+        lines.push(`  verified:   ${caps.verifiedAgainst}${caps.note !== undefined ? ` — ${caps.note}` : ''}`);
+    }
+    if (result.capabilityStale !== null) {
+        lines.push(
+            `  stale:      capability-declaration-stale — detects ${result.capabilityStale.detected}, record verified against ${result.capabilityStale.verifiedAgainst} (capability flags may have drifted)`,
+        );
+    }
     if (result.modelStatus) {
         lines.push(`  health:     ${result.modelStatus.status}`);
         lines.push(`  checked:    ${result.modelStatus.checkedAt}`);

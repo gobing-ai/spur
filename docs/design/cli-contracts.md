@@ -424,9 +424,9 @@ server falls back to all `stopped` with a stderr warning.
 #### `spur agent doctor [agent] [--json] [--probe-health] [--force-refresh]`
 
 Readiness check per agent (same `DISPLAY_ORDER` as list). Text mode prints an aligned table —
-`<✓|✗> <usable|missing> <executor-name> <agent-binary> <pinned-model> <capability-tier> <version>` with a
-`STATUS EXECUTOR AGENT MODEL TIER VERSION ROLES` header and an `N usable, M missing` footer
-(feature B4 / 0681). Details per column:
+`<✓|✗> <usable|missing> <executor-name> <agent-binary> <pinned-model> <capability-tier> <version> <caps>` with a
+`STATUS EXECUTOR AGENT MODEL TIER VERSION CAPS ROLES` header and an `N usable, M missing` footer
+(feature B4 / 0681; CAPS column feature B8 / 0889). Details per column:
 
 - **EXECUTOR** carries the configured `agent.executors[].name`; the **AGENT** cell carries the underlying
   binary (`omp`, `pi`, …) so aliasing is visible; rows outside any executor config fall back to the agent name.
@@ -445,12 +445,20 @@ full-set inventory still exits 0, and naming a disabled executor directly exits 
 - **ROLES** lists pipeline roles this executor could serve (`cheap→scribe`; standard adds coder/reviewer/planner),
   with `*` marking roles where it is the elected (cheapest-usable-by-tier, resolution-order-tiebreak) executor;
   a footer legend explains the star when any row has one.
+- **CAPS** (feature B8 / 0889) renders the runner-declared session capability of the underlying agent binary as
+  `r✓d✗s✓o✗` (`r`esume-by-id, session `d`ir, persistent `s`tdin, structured `o`utput), `—` when the binary is
+  unknown to the runner. Spur reads the record from `@gobing-ai/ts-ai-runner` `getAgentSessionCapability` — it
+  never re-declares capabilities. When the detected CLI version differs from the record's `verifiedAgainst`, a
+  trailing `⚠` marks the cell and text mode emits a `capability-declaration-stale` stderr warning; `--json`
+  stays stderr-clean and carries the same facts per agent entry as `capabilities` (the record, `note` included)
+  and `capabilityStale: {verifiedAgainst, detected}` (`null` when fresh or unverifiable).
 
 Arg semantics: a bare **agent/exec name** prints that executor's detail block; a **pipeline role id**
 (`coder`, `reviewer`, …) instead renders the full eligible ladder for that role — one line per eligible
 agent with the ELECTED marker and per-row failure reasons plus an `N eligible, M usable, elected: X`
 summary. `--json` emits `{ agents: [...], cache? }`, each entry adding `capabilityTier`, `model` (pinned or null),
-`roles`, and `elected`; each entry also carries `disabled` (feature B5 / 0796, config state); a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
+`roles`, and `elected`; each entry also carries `disabled` (feature B5 / 0796, config state) and, feature B8 / 0889,
+`capabilities` + `capabilityStale`; a full-set run adds `cache: {hit, ageMs, path}` — detection results are cached for
 60 s at `.spur/run/agent-doctor.json` keyed by an executor-set fingerprint (name/agent/model/tier/disabled), served
 only on an exact fresh match, and corrupted/stale/unwritable states degrade silently to a live run; text
 mode prints a dated footer note on a hit; `--probe-health` never reads or writes the cache and

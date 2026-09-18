@@ -226,6 +226,24 @@ export const EXECUTION_CAPABILITY_AXES = [
 export type ExecutionCapabilityAxis = (typeof EXECUTION_CAPABILITY_AXES)[number];
 
 /**
+ * Session-capability axes (B8 R4): per-agent dispatch abilities declared by the
+ * runner's capability record (`@gobing-ai/ts-ai-runner` `getAgentSessionCapability`),
+ * not attested by operator config. Unlike execution axes there is no `enforced`
+ * state to observe — a `true` record satisfies both requirement levels, `false`
+ * or a missing record satisfies neither (fail-closed).
+ */
+export const SESSION_CAPABILITY_AXES = ['resumeById', 'sessionDir', 'persistentStdin', 'structuredOutput'] as const;
+
+/** A session-capability axis id. */
+export type SessionCapabilityAxis = (typeof SESSION_CAPABILITY_AXES)[number];
+
+/** Closed axis vocabulary an `agent.run` stage may require (execution + session axes). */
+export const AGENT_RUN_CAPABILITY_AXES = [...EXECUTION_CAPABILITY_AXES, ...SESSION_CAPABILITY_AXES] as const;
+
+/** Any capability axis id a stage requirement may name. */
+export type AgentRunCapabilityAxis = (typeof AGENT_RUN_CAPABILITY_AXES)[number];
+
+/**
  * Observed enforcement state of one axis (0706 R2). The ordering that matters
  * is monotonic satisfaction: `enforced` satisfies any requirement, `available`
  * satisfies availability-only requirements, `unavailable`/`unknown` satisfy
@@ -277,9 +295,9 @@ export const EXECUTION_CAPABILITY_REQUIREMENTS = ['available', 'enforced'] as co
 /** A stage-side capability requirement level. */
 export type ExecutionCapabilityRequirement = (typeof EXECUTION_CAPABILITY_REQUIREMENTS)[number];
 
-/** `agent.run` `requiresCapabilities` option shape (0706 R4) — axis → minimum state. Partial: an action declares only the axes it requires. */
+/** `agent.run` `requiresCapabilities` option shape (0706 R4, B8 R4) — axis → minimum state. Partial: an action declares only the axes it requires. Session axes (B8) compare against the runner's capability record instead of executor attestation. */
 export const RequiresCapabilitiesSchema = z.partialRecord(
-    z.enum(EXECUTION_CAPABILITY_AXES),
+    z.enum(AGENT_RUN_CAPABILITY_AXES),
     z.enum(EXECUTION_CAPABILITY_REQUIREMENTS),
 );
 

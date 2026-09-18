@@ -9,10 +9,13 @@ import {
     type ExecutionCapabilityState,
     type RequiresCapabilities,
     RequiresCapabilitiesSchema,
+    SESSION_CAPABILITY_AXES,
+    type SessionCapabilityAxis,
 } from '@gobing-ai/spur-config';
 
 /** Re-exported for service/action call sites typing the parsed requirement map. */
-export type { RequiresCapabilities };
+export type { RequiresCapabilities, SessionCapabilityAxis };
+export { SESSION_CAPABILITY_AXES };
 
 /**
  * Executor capability attestation (task 0706): the shared comparison layer
@@ -136,6 +139,74 @@ export function capabilityEvidence(evaluation: CapabilityEvaluation): Capability
 }
 
 /**
+ * Runner-declared session capability for one agent (B8 R4): the four booleans
+ * the record carries. Structural twin of `AgentSessionCapability` minus the
+ * provenance fields — keeps this module process-free and decoupled from the
+ * runner import so evaluation stays pure.
+ */
+export interface SessionCapabilityRecord {
+    readonly supportsResumeById: boolean;
+    readonly supportsSessionDir: boolean;
+    readonly supportsPersistentStdin: boolean;
+    readonly supportsStructuredOutput: boolean;
+    /** Recorded reason for a `false` (runner record carries it; surfaced in diagnostics). */
+    readonly note?: string;
+}
+
+/** Session axis id → the record flag that attests it. */
+const SESSION_AXIS_FLAG: Record<SessionCapabilityAxis, keyof SessionCapabilityRecord> = {
+    resumeById: 'supportsResumeById',
+    sessionDir: 'supportsSessionDir',
+    persistentStdin: 'supportsPersistentStdin',
+    structuredOutput: 'supportsStructuredOutput',
+};
+
+/** Result of comparing stage session-axis requirements against a runner record. */
+export interface SessionCapabilityEvaluation {
+    /** False when a required axis is `false` in the record or the record is missing. */
+    ok: boolean;
+    /** Bounded fail-closed reason naming the executor agent and each missing capability. */
+    reason: string;
+    /** Machine-readable observed value for the ADR-118 contract-violation payload. */
+    observed: string;
+}
+
+/**
+ * Compare stage session-axis requirements against the runner's capability
+ * record (B8 R4). A `true` record satisfies both requirement levels; `false`
+ * or a missing record satisfies neither — unknown never satisfies (0706 R2
+ * rule applied to runner-declared axes). Pure and process-free: callers gate
+ * BEFORE spawn.
+ */
+export function evaluateSessionCapabilities(
+    requires: Partial<RequiresCapabilities>,
+    record: SessionCapabilityRecord | undefined,
+    agentName: string,
+): SessionCapabilityEvaluation {
+    const required = SESSION_CAPABILITY_AXES.filter((axis) => requires[axis] !== undefined) as [
+        SessionCapabilityAxis,
+        ...SessionCapabilityAxis[],
+    ];
+    if (required.length === 0) return { ok: true, reason: '', observed: 'no session-axis requirement' };
+    const missing = required.filter((axis) => record === undefined || record[SESSION_AXIS_FLAG[axis]] !== true);
+    if (missing.length === 0) {
+        return { ok: true, reason: '', observed: `session capabilities verified for ${agentName}` };
+    }
+    const detail = missing
+        .map((axis) =>
+            record === undefined
+                ? `${axis}: no capability record for agent '${agentName}'`
+                : `${axis}: declared false${record.note !== undefined ? ` (${record.note})` : ''}`,
+        )
+        .join('; ');
+    return {
+        ok: false,
+        reason: `agent '${agentName}' cannot satisfy session capability requirements — ${detail}`,
+        observed: `missing: ${missing.join(', ')}`,
+    };
+}
+
+/**
  * Parse + validate a `requiresCapabilities` option value (0706 R4/R8). Accepts
  * the object shape at the action boundary and returns a closed-vocabulary
  * error naming the offending axis/level otherwise.
@@ -151,6 +222,6 @@ export function parseRequiresCapabilities(
         .join('; ');
     return {
         ok: false,
-        error: `invalid requiresCapabilities (axes: ${EXECUTION_CAPABILITY_AXES.join('|')}; levels: available|enforced) — ${issues}`,
+        error: `invalid requiresCapabilities (axes: ${[...EXECUTION_CAPABILITY_AXES, ...SESSION_CAPABILITY_AXES].join('|')}; levels: available|enforced) — ${issues}`,
     };
 }

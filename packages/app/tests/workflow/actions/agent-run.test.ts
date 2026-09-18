@@ -2155,7 +2155,9 @@ describe('R2 — resolved-agent session keying (task 0451)', () => {
         const runner = new AgentRunActionRunner(svc, undefined, undefined, {
             sessionAffinity: true,
         });
-        // Second hop explicitly selects the same agent so targetAgentDir matches prevAgent
+        // Second hop explicitly selects the same agent so targetAgentDir matches prevAgent.
+        // B8: the runner record (ts-ai-runner 0.4.68) declares codex resume-by-id TRUE
+        // (`exec resume <id> <prompt>`, verified 0.154.0) — the id still flows.
         const result = await runner.execute({ role: 'coder', input: 'continue', agent: 'codex' }, ctx);
 
         expect(result.ok).toBe(true);
@@ -2853,5 +2855,179 @@ describe('AgentRunActionRunner contract violations (task 0870)', () => {
         expect(result.data?.contract).toBeUndefined();
         expect(result.data?.observed).toBeUndefined();
         expect(events).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: B8 task 0889 — runner capability record drives session dispatch
+// ---------------------------------------------------------------------------
+
+describe('AgentRunActionRunner session capability gating (B8 / task 0889)', () => {
+    function recordingContractBus(): {
+        bus: WorkflowObservabilityBus;
+        events: import('../../../src/workflow/observability').WorkflowAgentContractViolationEvent[];
+    } {
+        const bus = new EventBus<WorkflowObservabilityEventMap>();
+        const events: import('../../../src/workflow/observability').WorkflowAgentContractViolationEvent[] = [];
+        bus.on('workflow.agent.contract-violation', (event) => events.push(event));
+        return { bus, events };
+    }
+
+    /** Inherited affinity vars simulating a mid-workflow session for the named agent. */
+    function affinityCtx(agent: string): ActionRunContext {
+        return makeCtx({
+            runId: 'run-b8',
+            workdir: '/tmp/wb8',
+            vars: {
+                __agentSession: 'open',
+                __agentSessionDir: `/tmp/wb8/.spur/run/run-b8/agent-sessions/${agent}`,
+                __agentSessionAgent: agent,
+                __agentSessionId: 'sess-inherited',
+            },
+        });
+    }
+
+    test('R2: resume-incapable agent (gemini record) emits no resume flag and records session: fresh', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, { sessionAffinity: true });
+        const result = await runner.execute(
+            { role: 'coder', input: 'continue the work', agent: 'gemini', continue: true },
+            affinityCtx('gemini'),
+        );
+
+        expect(result.ok).toBe(true);
+        // The dir stays (Spur-side log capture); every resume-style flag goes.
+        expect(capturedFlags.sessionDir).toBe('/tmp/wb8/.spur/run/run-b8/agent-sessions/gemini');
+        expect(capturedFlags.sessionId).toBeUndefined();
+        expect(capturedFlags.continue).toBeUndefined();
+        expect(result.data).toMatchObject({ session: 'fresh' });
+        // Downstream steps learn the session cannot resume — the latch never arms.
+        expect(result.setVars).toMatchObject({ __agentSession: 'no-resume' });
+        expect((result.setVars as Record<string, unknown>).__agentSessionId).toBeUndefined();
+        expect((result.setVars as Record<string, unknown>).__agentSessionDir).toBeDefined();
+    });
+
+    test('R2: latch stays unarmed for a resume-incapable agent (no failed-resume dispatch first)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, { sessionAffinity: true });
+        const result = await runner.execute(
+            { role: 'coder', input: 'next step', agent: 'gemini' },
+            affinityCtx('gemini'),
+        );
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionId).toBeUndefined();
+        expect(capturedFlags.continue).toBeUndefined();
+        expect(result.data).toMatchObject({ session: 'fresh' });
+    });
+
+    test('R2: capable agent (claude record) keeps affinity resume behavior unchanged', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc, undefined, undefined, { sessionAffinity: true });
+        const result = await runner.execute(
+            { role: 'coder', input: 'continue', agent: 'claude' },
+            affinityCtx('claude'),
+        );
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.sessionId).toBe('sess-inherited');
+        expect(
+            result.data && typeof result.data === 'object'
+                ? (result.data as Record<string, unknown>).session
+                : undefined,
+        ).toBeUndefined();
+        expect(result.setVars).toMatchObject({ __agentSession: 'open', __agentSessionId: 'sess-inherited' });
+    });
+
+    test('R4: unmet session requirement → ADR-118 contract-violation BEFORE spawn, naming executor + axis', async () => {
+        const runTraced = mock(() => Promise.resolve({ exitCode: 0, stdout: '' }));
+        const { bus, events } = recordingContractBus();
+        const svc = {
+            resolve: async () => ({ ok: true, agent: 'gemini', executor: 'gemini' }),
+            runTraced,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute(
+            {
+                role: 'coder',
+                input: 'structured work',
+                agent: 'gemini',
+                requiresCapabilities: { resumeById: 'available' },
+            },
+            makeCtx(),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.data).toMatchObject({
+            outcome: 'contract-violation',
+            contract: 'requiresCapabilities',
+        });
+        expect(String(result.error)).toContain('gemini');
+        expect(String(result.error)).toContain('resumeById');
+        // Pre-spawn gate: no subprocess was ever created.
+        expect(runTraced).not.toHaveBeenCalled();
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({ contract: 'requiresCapabilities', kind: 'agent.run' });
+    });
+
+    test('R4: met session requirement dispatches with the requirement serialized', async () => {
+        const capturedFlags: Array<Record<string, string | boolean>> = [];
+        const runTraced = mock((_input: string, flags: Record<string, string | boolean>) => {
+            capturedFlags.push(flags);
+            return Promise.resolve({ exitCode: 0, stdout: '' });
+        });
+        const svc = {
+            resolve: async () => ({ ok: true, agent: 'pi', executor: 'pi' }),
+            runTraced,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            {
+                role: 'coder',
+                input: 'structured work',
+                agent: 'pi',
+                requiresCapabilities: { structuredOutput: 'available', resumeById: 'available' },
+            },
+            makeCtx(),
+        );
+
+        expect(result.ok).toBe(true);
+        expect(JSON.parse(String(capturedFlags[0]?.requiresCapabilities))).toEqual({
+            structuredOutput: 'available',
+            resumeById: 'available',
+        });
+    });
+
+    test('R4: binary unknown to the runner fails closed on session requirements', async () => {
+        const runTraced = mock(() => Promise.resolve({ exitCode: 0, stdout: '' }));
+        const svc = {
+            resolve: async () => ({ ok: true, agent: 'mystery-bin', executor: 'mystery-bin' }),
+            runTraced,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            {
+                role: 'coder',
+                input: 'work',
+                agent: 'mystery-bin',
+                requiresCapabilities: { structuredOutput: 'available' },
+            },
+            makeCtx(),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.data).toMatchObject({ outcome: 'contract-violation', contract: 'requiresCapabilities' });
+        expect(String(result.error)).toContain('mystery-bin');
+        expect(String(result.error)).toContain('no capability record');
+        expect(runTraced).not.toHaveBeenCalled();
     });
 });

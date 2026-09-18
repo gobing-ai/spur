@@ -166,8 +166,8 @@ export interface WorkflowAgentContractViolationEvent {
     readonly kind: string;
     /** Resolved executor label. */
     readonly agent: string;
-    /** The violated contract: `answerFile` | `expectFile` | `requireDiff`. */
-    readonly contract: 'answerFile' | 'expectFile' | 'requireDiff';
+    /** The violated contract: `answerFile` | `expectFile` | `requireDiff` | `requiresCapabilities` (B8 R4). */
+    readonly contract: 'answerFile' | 'expectFile' | 'requireDiff' | 'requiresCapabilities';
     /** What was observed (`missing`, `empty`, `out-of-scope: <files>`…). */
     readonly observed: string;
     /** Correlation: the task wbs, when known. */
