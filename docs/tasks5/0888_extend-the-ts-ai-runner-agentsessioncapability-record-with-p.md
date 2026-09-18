@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Extend the ts-ai-runner AgentSessionCapability record with persistentStdin, structuredOutput and verifiedAgainst, verify every agent row, and release
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.548Z
-updated_at: "2026-09-18T03:07:25.444Z"
+updated_at: "2026-09-18T04:16:56.836Z"
 feature_id: B8
 priority: P1
 tags:
@@ -127,4 +127,5 @@ Follow-ups (out of scope, no code written): wire opencode `-s/--session <id>` an
 
 - 2026-09-18T01:43:56.070Z todo → wip (system)
 - 2026-09-18T03:07:25.444Z wip → testing (system)
+- 2026-09-18T04:16:56.836Z testing → done (system)
 
