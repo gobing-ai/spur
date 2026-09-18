@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentCoordinationService, DeliveryReconciler, FleetService, ProjectRegistry } from '@gobing-ai/spur-app';
 import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
-import type { DoctorResult } from '@gobing-ai/ts-ai-runner';
+import type { AgentProcessOptions, DoctorResult } from '@gobing-ai/ts-ai-runner';
 import { RequestKeyConflictError } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { main } from '../../src';
-import { type AgentRunDeps, runAgentLoop, runAgentRun } from '../../src/commands/agent';
+import { type AgentRunDeps, type MemberAgentProcess, runAgentLoop, runAgentRun } from '../../src/commands/agent';
 import { type CliContext, createCliContext } from '../../src/context';
 import { createCapturedOutput } from '../helpers';
 
@@ -23,6 +23,40 @@ async function makeCtx(env: Record<string, string | undefined> = {}): Promise<{
     const out = createCapturedOutput();
     const ctx = createCliContext({ cwd, output: out, env, dbUrl: ':memory:' });
     return { ctx, cwd, out, cleanup: async () => rm(cwd, { recursive: true, force: true }) };
+}
+
+/**
+ * In-memory fake of the runner's `TeamAgentProcess` (0896 R2 test seam) —
+ * records every interaction without spawning a real agent CLI. `sendOk`
+ * models a member whose stdin send never reaches the agent (0831
+ * not-started).
+ */
+class FakeMemberProcess implements MemberAgentProcess {
+    readonly sends: string[] = [];
+    started = 0;
+    stopped = 0;
+    status: 'running' | 'stopped' | 'errored' = 'running';
+    constructor(
+        readonly options: AgentProcessOptions,
+        private readonly sendOk = true,
+    ) {}
+    async start(): Promise<void> {
+        this.started++;
+    }
+    async stop(): Promise<void> {
+        this.stopped++;
+        this.status = 'stopped';
+    }
+    async send(message: string): Promise<{ ok: boolean }> {
+        this.sends.push(message);
+        return { ok: this.sendOk };
+    }
+    getStatus(): 'running' | 'stopped' | 'errored' {
+        return this.status;
+    }
+    getExitCode(): number | null {
+        return this.status === 'errored' ? 1 : null;
+    }
 }
 
 describe('spur agent list --specs', () => {
@@ -252,19 +286,29 @@ describe('spur agent run --drain', () => {
     // ── agent loop — the persistent self-draining wrapper (0258 R6) ──
 
     test('loop drains the inbox, runs the agent, and consumes the message (idempotent)', async () => {
-        const { ctx, cleanup } = await makeCtx();
-        const accepted = captureInvokeStart();
+        // 0896 with the upstream-wired shims: claude's persistent argv passes the
+        // argv-shape gate, so the drained prompt rides the member process seam
+        // (fixture factory — no real CLI). A successful send IS delivery
+        // acceptance (0831): the row settles `delivered`, so the follow-up drain
+        // is empty — once-consumed stays once-delivered.
+        const { ctx, out, cleanup } = await makeCtx();
+        const started = captureInvokeStart();
         try {
             const team = new AgentCoordinationService(ctx);
             await team.createAgentSpec({ id: 'planner', type: 'claude' });
             await team.sendMessage('operator', 'planner', 'loop message');
 
-            let receivedInput = '';
+            const processes: FakeMemberProcess[] = [];
+            let runs = 0;
             const deps = {
                 runner: {
-                    runPromptCommand: async (_agent: unknown, opts: { input?: string }) => {
-                        receivedInput = opts.input ?? '';
-                        accepted.fire();
+                    runPromptCommand: async () => {
+                        runs++;
+                        // The real runner emits `agent.invoke.start` at spawn
+                        // time; the fake fires the same seam (0896 Review P2:
+                        // the member runs the resume path after the argv-gate
+                        // degradation, so acceptance rides the run lifecycle).
+                        started.fire();
                         return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
                     },
                 } as MockRunner,
@@ -272,17 +316,34 @@ describe('spur agent run --drain', () => {
                 doctorRunner: fakeDoctor() as MockDoctor,
             } as unknown as AgentRunDeps;
 
-            const code = await runAgentLoop(ctx, { spec: 'planner', poll: '10' }, { maxIterations: 1 }, deps);
+            const code = await runAgentLoop(
+                ctx,
+                { spec: 'planner', poll: '10' },
+                {
+                    maxIterations: 1,
+                    memberProcessFactory: (options) => {
+                        const process = new FakeMemberProcess(options);
+                        processes.push(process);
+                        return process;
+                    },
+                },
+                deps,
+            );
             expect(code).toBe(0);
-            expect(receivedInput).toContain('loop message');
+            // Persistent engaged: the fixture process took the drained prompt
+            // over stdin; the run path never ran.
+            expect(processes).toHaveLength(1);
+            expect(processes[0]?.sends[0]).toContain('loop message');
+            expect(runs).toBe(0);
+            expect(out.errors.join('\n')).not.toContain('member-persistent-stdin-unwired');
 
-            // The started invocation settles the message `delivered`: a follow-up
+            // The started delivery settles the message `delivered`: a follow-up
             // drain is empty — the loop won't re-run the same message next
             // iteration (once-consumed stays once-delivered).
             const after = await team.drainPending('planner');
             expect(after.count).toBe(0);
         } finally {
-            accepted.restore();
+            started.restore();
             await cleanup();
         }
     });
@@ -452,8 +513,24 @@ describe('G61 delivery settle regressions (0831)', () => {
                 detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
                 doctorRunner: g6Doctor() as G6MockDoctor,
             } as unknown as AgentRunDeps;
-            if (mode === 'run') await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
-            else await runAgentLoop(ctx, { spec: 'planner', poll: '1' }, { maxIterations: 1 }, deps);
+            if (mode === 'run') {
+                await runAgentRun('work', ctx, { agent: 'planner', drain: true, json: true }, deps);
+            } else {
+                // 0896: the loop member is persistent-stdin (claude capability
+                // record), so the loop has no spawn/probe step — the same 0831
+                // invariant applies at its acceptance boundary: a drain whose
+                // stdin send never reaches the member (`send` not ok) is NOT a
+                // delivery and must release the row for redelivery.
+                await runAgentLoop(
+                    ctx,
+                    { spec: 'planner', poll: '1' },
+                    {
+                        maxIterations: 1,
+                        memberProcessFactory: (options) => new FakeMemberProcess(options, false),
+                    },
+                    deps,
+                );
+            }
             expect(await new InboxMessageDao(await ctx.getDb()).getById(sent.msgId)).toMatchObject({
                 status: 'queued',
                 injectAttempts: 1,
@@ -544,23 +621,29 @@ describe('G61 delivery settle regressions (0831)', () => {
     });
 
     test('a never-started invocation in the loop is redelivered within the budget, then rests failed (R3, R4)', async () => {
-        // maxIterations=3, the runner always throws: claims 1 and 2 release for
-        // the next iteration; claim 3 exhausts MAX_INJECT_ATTEMPTS and rests the
-        // row at failed with a queryable reason. The loop keeps iterating — no
-        // iteration is lost, and the message is not consumed-without-execution.
+        // maxIterations=3, the member's invocation never starts (0896 Review
+        // P2: the installed claude shim cannot dispatch persistent stdin, so
+        // the member runs the resume path and never-started surfaces at the
+        // invocation boundary): claims 1 and 2 release for the next iteration;
+        // claim 3
+        // exhausts MAX_INJECT_ATTEMPTS and rests the row at failed with a
+        // queryable reason. The loop keeps iterating — no iteration is lost, and
+        // the message is not consumed-without-execution.
         const { ctx, out, cleanup } = await makeCtx();
         try {
             const team = new AgentCoordinationService(ctx);
-            await team.createAgentSpec({ id: 'planner', type: 'claude' });
-            await team.sendMessage('operator', 'planner', 'will crash');
+            await team.createAgentSpec({ id: 'planner', type: 'codex' }); // resume path — no persistent-stdin claim
+            await team.sendMessage('operator', 'planner', 'will never start');
             const db = await ctx.getDb();
 
-            let calls = 0;
+            let runs = 0;
             const deps = {
                 runner: {
                     runPromptCommand: async () => {
-                        calls++;
-                        throw new Error('injected invocation failure');
+                        runs++;
+                        // NO `agent.invoke.start` — the invocation never starts
+                        // (the fake models the real runner's pre-spawn crash).
+                        return { exitCode: 0, stdout: '', stderr: '', durationMs: 1 };
                     },
                 } as G6MockRunner,
                 detector: { detectOne: async () => ({ version: '1' }) } as G6MockDetector,
@@ -569,8 +652,10 @@ describe('G61 delivery settle regressions (0831)', () => {
 
             const code = await runAgentLoop(ctx, { spec: 'planner', poll: '10' }, { maxIterations: 3 }, deps);
             expect(code).toBe(0);
-            expect(calls).toBe(3);
-            expect(out.errors.join('\n')).toContain('injected invocation failure');
+            // Three drains, three never-started invocations — one per redelivery.
+            expect(runs).toBe(3);
+            // The member kept resume mode: no degradation was reported.
+            expect(out.errors.join('\n')).not.toContain('member-persistent-stdin-unwired');
 
             const dao = new InboxMessageDao(db);
             let rows = await dao.inbox('planner', 10);
