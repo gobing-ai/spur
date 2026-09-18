@@ -129,6 +129,7 @@ spur.js
 /apps/**/.spur/
 /packages/**/.spur/
 /docs/**/.spur/
+/plugins/**/.spur/
 /.spur/run
 /.spur/backups/
 # Team-generated specs are runtime scratch materialized by `spur team up` (ADR-086);
