@@ -4,7 +4,7 @@ name: Harden capability gating boundaries and coverage from B8 review findings
 status: done
 template: feature-impl
 created_at: 2026-09-18T04:26:57.446Z
-updated_at: "2026-09-18T06:01:20.884Z"
+updated_at: "2026-09-18T06:53:10.862Z"
 feature_id: B8
 
 priority: P3
@@ -194,16 +194,10 @@ Verification (targeted, per implement scope): `packages/app` — `bun test tests
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Gate at `packages/app/src/workflow/actions/agent-run.ts:301-313` — explicit `continue: true` + no input + `!resumeSupported` returns the ADR-118 contract violation (`contract: 'requiresCapabilities'`, observed `missing: resumeById`, error names the agent + ADR-118); `runTraced` unreached (asserted `packages/app/tests/workflow/actions/agent-run.test.ts:3038`, incl. bus event). Only reachable on explicit continue: latch requires `resumeSupported` (`agent-run.ts:291`), strict `continueFlag === true` excludes `continue: false`. Regression guards: continue-with-input stays fresh `agent-run.test.ts:3067`, resume-capable claude keeps flag `:3083`, runner-unknown agent keeps legacy `:3095`. Re-run this session: `bun test tests/workflow/actions/agent-run.test.ts tests/services/capability-attestation.test.ts` → 176 pass / 0 fail, 490 expects. |
-| R2 | MET | Decision table `packages/app/tests/services/capability-attestation.test.ts:183-267`: no-session-axis/execution-only → ok; all axes true → ok; declared-false with note → fail with note + axis; missing record → fail naming agent; multi-miss joined `; ` in `SESSION_CAPABILITY_AXES` order; `parseRequiresCapabilities` accepts all four session axes at `:250`. Literals byte-match implementation `packages/app/src/services/capability-attestation.ts:181-207` (re-read this run). Covered by the same re-run: 176 pass / 0 fail. |
-| R3 | MET | Real-CLI subprocess harness `apps/cli/tests/config-layering.test.ts:224-246` (text mode: CAPS header-located, `coder-exec` cell starts `r✓` ends `⚠`) and `:248-268` (JSON: `capabilities.verifiedAgainst` non-empty, `supportsResumeById === true`, `capabilityStale = { verifiedAgainst, detected: '1.0.0…' }`, `stderr === ''`). Re-run this session: `bun test tests/config-layering.test.ts` → 9 pass / 0 fail, 34 expects. Frozen R7 two-line stderr assertion untouched (diff adds lines only). |
-| R4 | MET | `bun run spur-check` re-run this session: 8460 pass / 0 fail across 477 files (34454 expects), post-check "All 2 rules passed — no violations found". Reviewer-verified fresh evidence, not inherited. |
-
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/workflow/actions/agent-run.test.ts:3038` (pre-spawn contract violation, no dispatch) + evaluator table `packages/app/tests/services/capability-attestation.test.ts:183`; suites re-run this session, 176 pass / 0 fail. |
-| AC2 | MET | test | `apps/cli/tests/config-layering.test.ts:248` — per-agent `capabilities` object (`verifiedAgainst`, `supportsResumeById`) via real CLI `agent doctor coder --json`; re-run 9 pass / 0 fail. |
-| AC3 | MET | test | `apps/cli/tests/config-layering.test.ts:224` (text CAPS cell ends `⚠` for 1.0.0 stub vs record) + `:248` (JSON `capabilityStale`); re-run 9 pass / 0 fail. |
+| R1 | MET | agent-run.ts:301-312 pre-spawn requiresCapabilities contract violation via evaluateSessionCapabilities + contractViolation |
+| R2 | MET | capability-attestation.test.ts:183-268 decision table; :250 parseRequiresCapabilities four session axes |
+| R3 | MET | config-layering.test.ts:224 CAPS cell + :248 doctor --json capabilities/capabilityStale clean stderr, real subprocess |
+| R4 | MET | bun run spur-check EXIT 0: biome 1016 files clean, typecheck clean, 46+2 rules passed, 8515 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

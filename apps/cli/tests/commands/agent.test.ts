@@ -900,6 +900,8 @@ describe('agent doctor — availability provenance (0893)', () => {
         expect(missing.stdout.join('\n')).toContain('usage: none');
         // R3 scope: the missing producer snapshot itself is silent. Unrelated text-mode
         // warnings (e.g. B8 capability-declaration-stale) may legitimately appear.
+        // 0899 R4: narrowed form kept deliberately — post-normalization a host with REAL
+        // version drift still warns, so a broad no-warning assertion would be host-dependent.
         expect(missing.stderr.join('\n')).not.toMatch(/usage|snapshot|codexbar/i);
     });
 

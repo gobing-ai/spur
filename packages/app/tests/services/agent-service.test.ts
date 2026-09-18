@@ -4509,6 +4509,72 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         expect(table).not.toContain('⚠');
         expect(errors.some((e) => e.includes('capability-declaration-stale'))).toBe(false);
     });
+
+    test('0899 R1/R3: branding-decorated detected versions matching verifiedAgainst emit no staleness', async () => {
+        // Regression: pre-0899 exact compare false-positived on every real install
+        // (`2.1.274 (Claude Code)`, `codex-cli 0.154.0`, `OpenClaw 2026.6.11 (e085fa1)`).
+        const cases = [
+            { name: 'claude-exec', agent: 'claude', version: '2.1.274 (Claude Code)' },
+            { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.154.0' },
+            { name: 'openclaw-exec', agent: 'openclaw', version: 'OpenClaw 2026.6.11 (e085fa1)' },
+        ] as const;
+        for (const c of cases) {
+            const { lines, output } = captureOutput();
+            const svc = makeService({}, output, {
+                executors: [{ name: c.name, agent: c.agent, disabled: false }],
+            } as AgentConfig);
+            const doctorRunner = {
+                runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: c.name, version: c.version })])),
+                runOne: mock(() => Promise.resolve(mockDoctorResult())),
+            } as unknown as AgentRunDeps['doctorRunner'];
+
+            await svc.doctor({ json: true }, { doctorRunner });
+
+            const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+            expect(parsed.agents[0].capabilityStale).toBeNull();
+        }
+    });
+
+    test('0899 R1: unextractable record core falls back to exact compare (drift unknowable still warns)', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'agy-exec', agent: 'antigravity-cli', disabled: false }],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'agy-exec', version: '1.2.3' })])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        await svc.doctor({ json: true }, { doctorRunner });
+
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        // antigravity-cli record is `unverified (CLI not installed)` — no core to
+        // compare, so an installed CLI against it must still surface as stale.
+        expect(parsed.agents[0].capabilityStale).toEqual({
+            verifiedAgainst: 'unverified (CLI not installed)',
+            detected: '1.2.3',
+        });
+    });
+
+    test('0899 R2: the stale warning quotes raw values and names the normalized cores', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'codex-exec', agent: 'codex', disabled: false }],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([mockDoctorResult({ agent: 'codex-exec', version: 'codex-cli 0.999.0' })]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        await svc.doctor({ json: false }, { doctorRunner });
+
+        const warning = errors.find((e) => e.includes('capability-declaration-stale'));
+        expect(warning).toBeDefined();
+        expect(warning).toContain('"codex-cli 0.999.0" (core 0.999.0)');
+        expect(warning).toContain('"0.154.0" (core 0.154.0)');
+    });
 });
 
 // Tests: AgentService.doctor — availability provenance + usage snapshot (0893)

@@ -4,7 +4,7 @@ name: "Consume the runner capability record in Spur: agent-run affinity branches
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.552Z
-updated_at: "2026-09-18T04:14:10.605Z"
+updated_at: "2026-09-18T06:53:10.692Z"
 feature_id: B8
 priority: P1
 tags:
@@ -98,19 +98,12 @@ Task 0889 consumes the runner capability record released by 0888 (`@gobing-ai/ts
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/actions/agent-run.ts:239-243` — `sessionCaps` read via `getAgentSessionCapability(resolveAgentName(...))`, `resumeSupported = sessionCaps?.supportsResumeById !== false`; repo grep of `agent-run.ts` for agent-name literals (`codex/gemini/claude/pi/...`) returns zero matches; regression test `packages/app/tests/workflow/actions/agent-run.test.ts:2913-2932` (claude record pass-through unchanged), gemini suppression `:2882-2911`; 0406 exit-2 fallback retained as documented safety net (`agent-run.ts:815-823`, `:909`) |
-| R2 | MET | `packages/app/src/workflow/actions/agent-run.ts:326-333` (`flags.sessionId` emitted only when `resumeSupported`), `:345` (`flags.continue` suppressed), `:848-849` (no session discovery), `:889` (`resultData.session = 'fresh'`), `:909` (`__agentSession: 'no-resume'` written without `__agentSessionId`); tests `packages/app/tests/workflow/actions/agent-run.test.ts:2882-2911` assert no `sessionId`/`continue` flag, `session: 'fresh'`, `no-resume` writeback |
-| R3 | MET | `packages/app/src/services/agent-service.ts:2739-2748` (`DoctorRow.capabilities` with 4 booleans + `verifiedAgainst` + `note`, `capabilityStale`), `:2799-2816` (`sessionCapabilityFor` reads record per canonical binary, null when unknown), `:731-732` + `:625-626` (both JSON entry builders carry `capabilities`/`capabilityStale`, stderr-clean), `:2876-2916` (compact `CAPS` table column `r✓d✗s✗o✓` / `—` / `⚠`); tests `packages/app/tests/services/agent-service.test.ts:4417-4453` (record verbatim per executor, unknown binary → null), `:4493-4510` (fresh table, no marker), `:369` (header now 8 columns incl. CAPS) |
-| R4 | MET | `packages/config/src/index.ts:235-241` (`SESSION_CAPABILITY_AXES` = resumeById/sessionDir/persistentStdin/structuredOutput; `AGENT_RUN_CAPABILITY_AXES` union) + `:299-301` (`RequiresCapabilitiesSchema` admits all eight axes over `available |
-| R5 | MET | `packages/app/src/services/agent-service.ts:681-690` (`warnCapabilityStale` — one `capability-declaration-stale` stderr warning per executor, text surfaces incl. role-ladder modes `:602`, `:637`, `:744`; JSON stays stderr-clean and carries `capabilityStale` structurally `:731-732`), `:2812-2815` (exact string-compare vs `verifiedAgainst`, no semver parsing per Design), `:2882-2885` (`⚠` cell marker); tests `packages/app/tests/services/agent-service.test.ts:4455-4491` (drift in JSON, stderr warning + `r✓d✗s✗o✓⚠` cell), `apps/cli/tests/config-layering.test.ts:89-91` (CLI-layer text-mode warning through real config stack) |
-| R6 | MET | `packages/app/tests/workflow/actions/agent-run.test.ts:2865-3034` — B8 describe: 7 tests covering R2 (gemini suppression, latch unarmed, claude unchanged) and R4 (unmet pre-spawn, met serialization, unknown fail-closed) against stubbed dispatch/probe seams; R5 covered by `packages/app/tests/services/agent-service.test.ts:4416-4510` (4 tests, stubbed doctor probes) + CLI-layer `apps/cli/tests/config-layering.test.ts:89-91`; fresh driver-run gate `bun run spur-check` exit 0 — 8448 tests across 477 files, 0 fails (run ce44b029, host mu69mcqe-vtoqiq12, post-remediation) + `bun run lint` exit 0. Note: R5 CLI coverage landed in `apps/cli/tests/` (config-layering) and the service suite rather than `apps/cli/tests/commands/` — commands-layer doctor tests (`apps/cli/tests/commands/agent.test.ts:202-220`) remain pass-through; substance (hermetic R2/R4/R5 coverage, green gate) fully evidenced; advisory note below |
-
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| AC1 | MET | test | test `packages/app/tests/workflow/actions/agent-run.test.ts:2882-2932` — record drives resume decisions (gemini `supportsResumeById: false` → no flags, claude record → unchanged affinity); static anchor `packages/app/src/workflow/actions/agent-run.ts:239-243`; command: fresh `bun run spur-check` exit 0, 8448 tests / 477 files / 0 fails (run ce44b029, host mu69mcqe-vtoqiq12) |
-| AC2 | MET | test | test `packages/app/tests/services/agent-service.test.ts:4417-4453` — doctor `--json` carries the record per executor (`verifiedAgainst`/`note` verbatim; unknown binary → null) + `:4493-4510` CAPS table cell; anchors `packages/app/src/services/agent-service.ts:2739-2748`, `:2799-2816`, `:2876-2916`; command: `bun run spur-check` exit 0 (run ce44b029) incl. `packages/app/tests/fixtures/json-raw-baseline.json` baseline carrying the new fields |
-| AC3 | MET | test | test `packages/app/tests/workflow/actions/agent-run.test.ts:2951-3034` — unmet session requirement → ADR-118 contract-violation naming executor + axis with `runTraced` never called; met requirement → serialized into dispatch flags; unknown binary fails closed; anchors `packages/app/src/workflow/actions/agent-run.ts:369-397`, `packages/app/src/services/capability-attestation.ts:181-211`, `packages/config/src/index.ts:299-301`; command: `bun run spur-check` exit 0 (run ce44b029) |
-| AC4 | MET | test | test `packages/app/tests/services/agent-service.test.ts:4455-4491` — drift reported in `--json` (`capabilityStale: {verifiedAgainst, detected}`), stderr `capability-declaration-stale` warning + `⚠` cell in text mode, fresh rows unmarked; CLI-layer `apps/cli/tests/config-layering.test.ts:89-91`; anchors `packages/app/src/services/agent-service.ts:681-690`, `:2812-2815`; command: `bun run spur-check` exit 0 (run ce44b029) |
+| R1 | MET | agent-run.ts:233-243 record-driven sessionCaps; zero agent-name literals on affinity path |
+| R2 | MET | agent-run.ts:243,291-303,359,862,903,923-927 resume-false fresh dispatch + writeback gating |
+| R3 | MET | agent-service.ts:2839-2848 DoctorRow capabilities+capabilityStale; :640-641/:759-760 JSON builders; :2991 CAPS column |
+| R4 | MET | agent-service.ts:1186-1204,1308 gate; capability-attestation.ts:148-158 axis vocabulary |
+| R5 | MET | agent-service.ts:707-711 warnCapabilityStale exact-compare warning; JSON stderr-clean |
+| R6 | MET | fresh runs: 231 pass app services + 150 pass agent-run action / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -121,14 +114,7 @@ Task 0889 consumes the runner capability record released by 0888 (`@gobing-ai/ts
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | design-conformance | — | 6/6 design claims DONE; 1 documented deviation: Design paragraph "two enum members" superseded by R4's four session axes — resolved R4-wins and recorded in `## Solution` (config vocabulary `packages/config/src/index.ts:235-241`), CHANGED + PASS-acceptable |
-| P4 | evidence-rule-pass | — | all 4 AC rows carry `test` + `command` executable evidence |
-| P4 | tests-pass | — | driver-run `bun run spur-check` exit 0 — 8448 tests / 477 files / 0 fails (run ce44b029, host mu69mcqe-vtoqiq12, post-remediation); remediation hop (stale doctor baselines ×4, stale generated bundle) fixed to root cause: `packages/app/tests/fixtures/json-raw-baseline.json` regen, `apps/cli/tests/config-layering.test.ts:89-91` exact-two-line R7 assertion, `bun run build:plugin-lib` regen |
-| P4 | lint-clean | — | driver-run `bun run lint` exit 0 (biome + typecheck all workspaces, run ce44b029) |
-| P4 | docs-t3 | — | `docs/design/cli-contracts.md:428-461` (CAPS column + JSON fields + stderr-clean JSON), `docs/design/planning-workflow-contracts.md:252-271` (session-axis paragraph), `plugins/sp/skills/spur-cli/references/agent.md:164-171` (doctor rows) — all re-read this run |
-| P4 | scope-creep | — | all diff hunks map to R1–R6 / Design / remediation (baseline regen + R7 assertion were fixall gate repairs, not feature scope) |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | — | — | No P1–P3 findings; verify verdict PASS |
 
 ### References
 

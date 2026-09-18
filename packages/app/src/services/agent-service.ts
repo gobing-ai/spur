@@ -700,15 +700,20 @@ export class AgentService {
 
     /**
      * B8 R5: warn once per executor (one row per executor in every rowset passed
-     * here) whose detected CLI version differs from the capability record's
-     * `verifiedAgainst`. Text surfaces only — JSON carries the same fact
-     * structurally as `capabilityStale` and must stay stderr-clean.
+     * here) whose detected CLI version core differs from the capability record's
+     * `verifiedAgainst` core (0899 R1 — branding decorations are not drift). Text
+     * surfaces only — JSON carries the same fact structurally as `capabilityStale`
+     * and must stay stderr-clean. 0899 R2: raw values are quoted and the
+     * normalized cores are named so suffix-only differences never read as
+     * adjacent duplicates.
      */
     private warnCapabilityStale(rows: readonly DoctorRow[]): void {
         for (const row of rows) {
             if (row.capabilityStale === null) continue;
+            const detectedCore = versionCore(row.capabilityStale.detected) ?? 'unparseable';
+            const verifiedCore = versionCore(row.capabilityStale.verifiedAgainst) ?? 'unparseable';
             this.ctx.output.error(
-                `Warning: capability-declaration-stale: executor ${row.executor} (${row.agentBinary}) detects ${row.agentBinary} ${row.capabilityStale.detected}, but the runner record was verified against ${row.capabilityStale.verifiedAgainst} — session capability flags may have drifted.`,
+                `Warning: capability-declaration-stale: executor ${row.executor} (${row.agentBinary}) detects version "${row.capabilityStale.detected}" (core ${detectedCore}), but the runner record was verified against "${row.capabilityStale.verifiedAgainst}" (core ${verifiedCore}) — session capability flags may have drifted.`,
             );
         }
     }
@@ -2903,10 +2908,21 @@ function buildDoctorRows(
         error: result.error,
         modelStatus: result.modelStatus,
         // B8 R3/R5: read (never re-declare) the runner's capability record for the
-        // row's canonical agent binary; string-compare the detected version against
-        // `verifiedAgainst` — any mismatch warns (agent CLIs are not all semver).
+        // row's canonical agent binary; compare the detected version's extracted
+        // core against `verifiedAgainst` (0899 R1 — branding is not drift).
         ...sessionCapabilityFor(result.version, executorByName.get(result.agent)?.agent ?? result.agent),
     }));
+}
+
+/**
+ * 0899 R1: first semver-shaped token in a CLI version string; null when none.
+ * Detected versions carry branding/build decorations (`2.1.274 (Claude Code)`,
+ * `codex-cli 0.154.0`, `omp/18.2.3`, `OpenClaw 2026.6.11 (e085fa1)`); the record's
+ * `verifiedAgainst` is the bare core, so staleness compares cores, not raw strings.
+ */
+function versionCore(raw: string): string | null {
+    const match = /\d+\.\d+(?:\.\d+)?(?:[-+][0-9A-Za-z.-]+)?/.exec(raw);
+    return match === null ? null : match[0];
 }
 
 /** B8 R3/R5: capability record + staleness for a doctor row's agent binary. */
@@ -2917,10 +2933,17 @@ function sessionCapabilityFor(
     const canonical = resolveAgentName(agentBinary);
     if (canonical === undefined) return { capabilities: null, capabilityStale: null };
     const capabilities = getAgentSessionCapability(canonical);
-    const capabilityStale =
-        detectedVersion !== null && detectedVersion !== capabilities.verifiedAgainst
-            ? { verifiedAgainst: capabilities.verifiedAgainst, detected: detectedVersion }
-            : null;
+    // 0899 R1: normalize-then-compare — branding suffix/prefix is not drift. When
+    // either side has no extractable core (e.g. record `unverified …`), fall back
+    // to exact compare: drift is unknowable and an installed CLI SHOULD still warn.
+    const detectedCore = detectedVersion === null ? null : versionCore(detectedVersion);
+    const verifiedCore = versionCore(capabilities.verifiedAgainst);
+    const stale =
+        detectedVersion !== null &&
+        (detectedCore !== null && verifiedCore !== null
+            ? detectedCore !== verifiedCore
+            : detectedVersion !== capabilities.verifiedAgainst);
+    const capabilityStale = stale ? { verifiedAgainst: capabilities.verifiedAgainst, detected: detectedVersion } : null;
     return { capabilities, capabilityStale };
 }
 
