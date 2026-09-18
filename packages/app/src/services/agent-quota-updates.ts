@@ -6,7 +6,7 @@
  * latest-observation delivery record (independent of the prunable
  * `system_events` ledger), and a serial drain applies each pending
  * observation to the project YAML through
- * {@link setProjectExecutorDisabled} — the single disable writer (0797),
+ * {@link setExecutorAvailability} — the single availability writer (0797, generalized 0891),
  * never a re-implementation. Validation order per event:
  *
  * 1. trusted shape (Zod, `@gobing-ai/spur-config/agent-quota-events`),
@@ -22,7 +22,7 @@
  * observation can never be marked applied by an older in-flight write.
  */
 
-import type { SpurConfig } from '@gobing-ai/spur-config';
+import { normalizeExecutorAvailability, type SpurConfig } from '@gobing-ai/spur-config';
 import {
     type AgentQuotaObservationInput,
     type AgentQuotaRecoveryInput,
@@ -32,7 +32,7 @@ import {
     type QuotaExecutorProfileBinding,
     resolveQuotaExecutorBinding,
 } from '@gobing-ai/spur-config/agent-quota-events';
-import { setProjectExecutorDisabled } from '@gobing-ai/spur-config/loader';
+import { type ExecutorDisabledUpdate, setExecutorAvailability } from '@gobing-ai/spur-config/loader';
 import { AgentExecutorUpdateDao, type AgentExecutorUpdateRow, type DbAdapter } from '@gobing-ai/spur-domain';
 import type { EventBus } from '@gobing-ai/ts-infra';
 
@@ -76,6 +76,8 @@ export interface AgentQuotaDrainSummary {
     skippedBindingReplaced: number;
     /** Rows acknowledged as no-ops because the executor entry no longer exists. */
     skippedUnknownExecutor: number;
+    /** Rows acknowledged as classified no-ops because availability is operator-owned (B6 0890 R3). */
+    skippedOperatorOwned: number;
     /** Rows left pending after a bounded failed write (retried on the next activation). */
     failed: number;
     /** Rows skipped this activation — per-activation retry bound reached. */
@@ -156,6 +158,8 @@ export async function recordAgentQuotaEvent(
         agent: attribution.agent ?? null,
         model: attribution.model ?? null,
         disabled: desiredDisabled,
+        owner: 'quota',
+        layer: 'project',
     });
 }
 
@@ -214,11 +218,13 @@ export function attachAgentQuotaUpdates(
 /**
  * Apply every pending delivery row for the serving project, oldest
  * observation first. Per row: reload the effective config, verify the exact
- * profile binding, invoke {@link setProjectExecutorDisabled} (updater
- * idempotency makes replays `unchanged`), then acknowledge
- * version-specifically — a newer arrival during the write keeps the row
- * pending through the conditional ack. A failed write is recorded visibly
- * (attempts + last_error) and retried up to
+ * profile binding, apply ownership precedence (B6 0890 R3 — operator-owned
+ * availability is never overridden, acknowledged as a classified no-op),
+ * invoke {@link setExecutorAvailability} (updater idempotency makes replays
+ * `unchanged`; automatic disables carry the quota/probe ownership object,
+ * R2), then acknowledge version-specifically — a newer arrival during the
+ * write keeps the row pending through the conditional ack. A failed write is
+ * recorded visibly (attempts + last_error) and retried up to
  * {@link MAX_QUOTA_DRAIN_ATTEMPTS_PER_ACTIVATION} within this drain; the row
  * stays pending so a later restart or poll retries it. Never is a failed
  * write acknowledged.
@@ -231,6 +237,7 @@ export async function drainPendingAgentQuotaUpdates(
         applied: 0,
         skippedBindingReplaced: 0,
         skippedUnknownExecutor: 0,
+        skippedOperatorOwned: 0,
         failed: 0,
         deferred: 0,
     };
@@ -239,14 +246,19 @@ export async function drainPendingAgentQuotaUpdates(
     const projectId = normalizeRootPath(context.projectRoot);
     const rows = await dao.pendingUpdates(projectId);
     if (rows.length === 0) return summary;
-    let config: SpurConfig | undefined;
     for (const row of rows) {
+        // Reloaded per row (B6 0890 R3): an earlier row's write changes the
+        // effective availability its successors are precedence-checked against.
+        // The loader cache is invalidated by each successful write, so this is
+        // cheap when nothing changed and correct when it did.
+        let config: SpurConfig | undefined;
         let lastError: string | undefined;
         for (let attempt = 0; attempt < MAX_QUOTA_DRAIN_ATTEMPTS_PER_ACTIVATION; attempt += 1) {
             let effectiveConfig: SpurConfig;
             try {
-                // Memoized across rows; a `null` accessor result normalizes to a
-                // throw so the caller's single failure path records it visibly.
+                // Memoized across this row's attempts; a `null` accessor result
+                // normalizes to a throw so the caller's single failure path
+                // records it visibly.
                 effectiveConfig = config ?? (await requireAgentConfig(context));
             } catch (error) {
                 lastError = `effective agent config unavailable: ${errorText(error)}`;
@@ -282,8 +294,54 @@ export async function drainPendingAgentQuotaUpdates(
                 lastError = undefined;
                 break;
             }
+            // B6 0890 R3: ownership precedence — a quota/probe update (disable or
+            // recovery) never overrides an operator-owned disable (bare `true`
+            // included). Acknowledged as a classified no-op, never a failure.
+            const executorEntry = effectiveConfig.agent?.executors?.find((entry) => entry.name === row.executor_name);
+            const availability = normalizeExecutorAvailability(executorEntry?.disabled ?? false);
+            if (availability.disabled && availability.owner === 'operator') {
+                await dao.ackSkipped(
+                    projectId,
+                    row.executor_name,
+                    row.observation_id,
+                    'operator-owned',
+                    appliedAtNow(options),
+                );
+                summary.skippedOperatorOwned += 1;
+                context.warn(
+                    `quota update for "${row.executor_name}" acknowledged as a classified no-op: availability is operator-owned${
+                        availability.since !== undefined ? ` since ${availability.since}` : ''
+                    }`,
+                );
+                lastError = undefined;
+                break;
+            }
             try {
-                await setProjectExecutorDisabled(context.projectRoot, row.executor_name, row.disabled === 1);
+                // B6 0890 R2/R3: automatic disables write the ownership object
+                // (quota/probe + observed-at + cause); recoveries write bare
+                // `false` — provenance stays on the row. B6 0891 R1/R4: the row's
+                // layer routes the write, and the updater re-selects the declaring
+                // layer (a project fragment wins over the requested global layer).
+                const rowOwner = row.owner === 'probe' ? 'probe' : 'quota';
+                const eventName = row.disabled === 1 ? 'agent.quota.exhausted' : 'agent.quota.recovered';
+                const desired: boolean | ExecutorDisabledUpdate =
+                    row.disabled === 1
+                        ? {
+                              owner: rowOwner,
+                              since: row.observed_at,
+                              reason: `${eventName} ${row.executor_name}`,
+                          }
+                        : false;
+                // 0891 review fix: always enter through the global entry point — the
+                // updater's declaring-layer selection routes to the file where the
+                // executor is actually declared (project fragment wins), so a global-only
+                // quota disable is not silently dropped as a missing project entry.
+                await setExecutorAvailability({
+                    layer: 'global',
+                    projectRoot: context.projectRoot,
+                    executor: row.executor_name,
+                    disabled: desired,
+                });
                 await dao.ackApplied(projectId, row.executor_name, row.observation_id, appliedAtNow(options));
                 summary.applied += 1;
                 lastError = undefined;

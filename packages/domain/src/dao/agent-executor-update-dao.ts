@@ -22,6 +22,12 @@ export interface AgentExecutorUpdateRow {
     model: string | null;
     /** Desired value: 1 = disable, 0 = explicit recovery. Constrained by CHECK at DDL level. */
     disabled: 0 | 1;
+    /** Writer provenance (B6 0890): `quota`/`probe`. NULL only for pre-0890 rows — drains read them as `quota`. */
+    owner: string | null;
+    /** Config layer the update applies to (B6 0890): `project`. */
+    layer: string | null;
+    /** Classified no-op cause (B6 0890), e.g. `operator-owned`. NULL = applied normally; never carries failures. */
+    skipped_reason: string | null;
     /** Observation last confirmed applied to the project YAML; null while pending. */
     applied_observation_id: string | null;
     applied_at: string | null;
@@ -42,6 +48,10 @@ export interface RecordAgentExecutorUpdateInput {
     agent: string | null;
     model: string | null;
     disabled: boolean;
+    /** Writer provenance (B6 0890): `quota`/`probe`; defaults to `quota` when omitted. */
+    owner?: string | null;
+    /** Config layer the update applies to (B6 0890); defaults to `project` when omitted. */
+    layer?: string | null;
 }
 
 /** Outcome of a conditional latest-observation upsert. */
@@ -92,14 +102,18 @@ export class AgentExecutorUpdateDao {
         await this.db.run(
             `INSERT INTO agent_executor_updates (
                  project_id, executor_name, observation_id, observed_at, agent, model, disabled,
+                 owner, layer, skipped_reason,
                  applied_observation_id, applied_at, attempts, retry_after, last_error
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, 0, NULL, NULL)
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, NULL, 0, NULL, NULL)
              ON CONFLICT (project_id, executor_name) DO UPDATE SET
                  observation_id = excluded.observation_id,
                  observed_at = excluded.observed_at,
                  agent = excluded.agent,
                  model = excluded.model,
                  disabled = excluded.disabled,
+                 owner = excluded.owner,
+                 layer = excluded.layer,
+                 skipped_reason = NULL,
                  applied_observation_id = NULL,
                  applied_at = NULL,
                  attempts = 0,
@@ -120,6 +134,8 @@ export class AgentExecutorUpdateDao {
             input.agent,
             input.model,
             disabled,
+            input.owner ?? 'quota',
+            input.layer ?? 'project',
         );
         // The guard may have rejected the write under concurrency; re-read so
         // the returned outcome reflects the retained row, never the stale read.
@@ -156,6 +172,41 @@ export class AgentExecutorUpdateDao {
             executorName,
             observationId,
             appliedAt,
+        );
+        const changed = await this.db.queryFirst<{ n: number }>('SELECT changes() AS n');
+        return (changed?.n ?? 0) > 0;
+    }
+
+    /**
+     * Acknowledge exactly `observation_id` as a classified no-op (B6 0890 R3):
+     * the row leaves the pending set through the same `applied_observation_id`
+     * resolution marker, but `skipped_reason` records WHY nothing was applied
+     * (operator ownership) while `last_error` stays NULL — a skip is never a
+     * failure. Returns true when this call performed the acknowledgement.
+     */
+    async ackSkipped(
+        projectId: string,
+        executorName: string,
+        observationId: string,
+        skippedReason: string,
+        at: string,
+    ): Promise<boolean> {
+        await this.db.run(
+            `UPDATE agent_executor_updates
+             SET applied_observation_id = ?3,
+                 applied_at = ?5,
+                 skipped_reason = ?4,
+                 attempts = 0,
+                 retry_after = NULL,
+                 last_error = NULL
+             WHERE project_id = ?1
+               AND executor_name = ?2
+               AND observation_id = ?3`,
+            projectId,
+            executorName,
+            observationId,
+            skippedReason,
+            at,
         );
         const changed = await this.db.queryFirst<{ n: number }>('SELECT changes() AS n');
         return (changed?.n ?? 0) > 0;
@@ -235,7 +286,7 @@ export class AgentExecutorUpdateDao {
 
 /** Column list every projection returns, in row order. */
 const AGENT_EXECUTOR_UPDATE_COLUMNS =
-    'project_id, executor_name, observation_id, observed_at, agent, model, disabled, applied_observation_id, applied_at, attempts, retry_after, last_error';
+    'project_id, executor_name, observation_id, observed_at, agent, model, disabled, owner, layer, skipped_reason, applied_observation_id, applied_at, attempts, retry_after, last_error';
 
 /**
  * Deterministic observation order: `(observed_at, observation_id)` lexical —

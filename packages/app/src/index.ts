@@ -97,6 +97,24 @@ export type {
     AgentServiceOutput,
 } from './services/agent-service';
 export { _resetAgentServiceShimsForTest, AgentService } from './services/agent-service';
+export {
+    type AgentUsageChange,
+    type AgentUsageProducerContext,
+    AgentUsageProducerError,
+    type AgentUsageProviderSummary,
+    type AgentUsageRunResult,
+    classifyProviderUsage,
+    mapProvidersToExecutors,
+    type ProviderUsageClassification,
+    type ProviderUsageStatus,
+    type RunAgentUsageOptions,
+    runAgentUsageProducer,
+} from './services/agent-usage-producer';
+export {
+    type UsageCapture,
+    type UsageSource,
+    UsageSourceError,
+} from './services/agent-usage-source';
 export type {
     AnchorFileReport,
     AnchorQualifyReport,

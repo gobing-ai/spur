@@ -215,16 +215,26 @@ dependency graph stays Workers-safe:
 - `resolvePlanningFolders(fs)` derives the active + registered task/feature folders, degrading to
   defaults on any error (a broken config must not wedge folder resolution). `@gobing-ai/spur-app`
   re-exports it so app/CLI consumers import from the application layer, not the config package.
-- `setProjectExecutorDisabled(projectRoot, executorName, disabled)` (0797/ADR-111) flips one existing
-  `agent.executors[]` entry's `disabled` flag in `<projectRoot>/.spur/config.yaml` via the yaml
-  document model (comments, ordering, unrelated values, file mode preserved). Exact case-sensitive
-  match; absent flag is written explicitly; an already-matching explicit value is a byte-stable
-  no-op. Returns `{status:'updated'}` or `{status:'unchanged',reason}` (`already-set`,
-  `missing-file`, `missing-executors`, `missing-executor`) — nothing is ever created. Errors:
-  `INVALID_CONFIG` (bad args, malformed/ambiguous YAML, aliases/merge keys, symlinked config),
-  `CONFIG_CONFLICT` (external change detected pre-commit), `CONFIG_WRITE_FAILED` (lock/atomic-write
-  failure). Writes serialize under a per-path lock (dead owners reclaimed, live ones never), commit
-  via same-dir temp + fsync + rename, and invalidate the loader cache on success.
+- `setProjectExecutorDisabled(projectRoot, executorName, disabled)` (0797/ADR-111; ownership
+  widened 0890) writes one existing `agent.executors[]` entry's `disabled` in
+  `<projectRoot>/.spur/config.yaml` via the yaml document model (comments, ordering,
+  unrelated values, file mode preserved). `disabled` is `false` (recovery) or
+  `{owner: 'quota'|'probe', since: RFC3339, reason}` — the automatic-writer object form
+  (B6 0890 R2); `operator` is human-only and rejected. Exact case-sensitive match; absent
+  flag is written explicitly; an already-matching explicit value is a byte-stable no-op
+  (scalar equality for booleans, owner/since/reason equality for objects). Returns
+  `{status:'updated'}` or `{status:'unchanged',reason}` (`already-set`, `missing-file`,
+  `missing-executors`, `missing-executor`) — nothing is ever created. Errors:
+  `INVALID_CONFIG` (bad args — non-RFC-3339 `since`, empty `reason`, `owner: operator` —
+  malformed/ambiguous YAML, aliases/merge keys, symlinked config), `CONFIG_CONFLICT`
+  (external change detected pre-commit), `CONFIG_WRITE_FAILED` (lock/atomic-write
+  failure). Writes serialize under a per-path lock (dead owners reclaimed, live ones
+  never), commit via same-dir temp + fsync + rename, and invalidate the loader cache on
+  success. `agent.executors[].disabled` accepts `boolean | {owner, since, reason}`; code
+  reads availability only through `normalizeExecutorAvailability` (single reader, B6
+  0890 R1 — a bare `true` is operator-owned). Drain-side precedence (operator-owned
+  disable never auto-re-enabled; quota/probe rows carry `owner`/`layer` and the
+  `skipped_reason` no-op class) is specified in `executor-availability.md`.
 - **Type ownership.** `TaskFoldersConfig`/`TaskFolderEntry` are defined once in the loader; services
   re-export, never redefine, so the loader↔service seam shares one identity.
 - **Guardrail.** `config/rules/boundary/config-loading-ownership.yaml` blocks `loadStructuredConfig`

@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { isatty } from 'node:tty';
-import type { SpurConfig } from '@gobing-ai/spur-config';
+import {
+    type ExecutorAvailability,
+    type ExecutorDisabledValue,
+    normalizeExecutorAvailability,
+    type SpurConfig,
+} from '@gobing-ai/spur-config';
 import {
     type CapabilityTier,
     type CoordinationArtifactRef,
@@ -109,7 +114,7 @@ export interface AgentExecutorConfig {
     model?: string;
     tier?: CapabilityTier;
     /** 111: routing kill-switch; validated/merged at the config boundary. */
-    disabled: boolean;
+    disabled: ExecutorDisabledValue;
 }
 
 /**
@@ -483,12 +488,17 @@ export class AgentService {
             probeHealth?: boolean;
             /** B4/0683 R5: bypass the detection cache, re-run, rewrite it. */
             forceRefresh?: boolean;
+            /** 0893 R2: absolute path of the agent-usage snapshot to report; absent → `usage: none`. */
+            usageSnapshotPath?: string;
         },
         deps?: AgentRunDeps,
     ): Promise<number> {
         const executors = this.ctx.agentConfig?.executors;
         const now = deps?.now ?? ((): number => Date.now());
         const fileSystem = deps?.fileSystem ?? createNodeFileSystem(this.ctx.cwd);
+        // 0893 R2: report-only read of the usage snapshot — age/staleness are rendered,
+        // never turned into an availability mutation (doctor is read-only by design).
+        const usage = readUsageSnapshot(fileSystem, args.usageSnapshotPath, now);
         // R1 (0622 F2/F4 residue): a Layer-1 role (`coder`, `planner`, …) is not an
         // executor. Resolve it through the SAME ranked doctor-walk dispatch uses
         // (`resolveRole`): cheapest eligible → most expensive, checking each until
@@ -506,7 +516,7 @@ export class AgentService {
         // runner. renderDoctor keeps reading the UNMODIFIED config array (R2).
         // 111 R5: disabled profiles are stripped too — they get synthesized rows
         // (no install/liveness/auth probe) instead of real ones.
-        const enabledExecutors = executors?.filter((e) => e.disabled !== true);
+        const enabledExecutors = executors?.filter((e) => !normalizeExecutorAvailability(e.disabled).disabled);
         const runnerExecutors = args.probeHealth
             ? enabledExecutors
             : enabledExecutors?.map(({ name, agent }) => ({ name, agent }));
@@ -535,6 +545,7 @@ export class AgentService {
                     undefined,
                     cacheInfo,
                     args.enveloped,
+                    usage,
                 );
             }
             const probeResults = await doctorRunner.runAll();
@@ -546,7 +557,7 @@ export class AgentService {
                     this.ctx.output.error(`Warning: could not update ${DOCTOR_CACHE_REL}: ${writeErr}`);
                 }
             }
-            return this.renderDoctor(results, executors, args.json, undefined, cacheInfo, args.enveloped);
+            return this.renderDoctor(results, executors, args.json, undefined, cacheInfo, args.enveloped, usage);
         }
         const roleDef = this.ctx.roles?.get(args.agent);
         if (roleDef !== undefined) {
@@ -570,7 +581,11 @@ export class AgentService {
             // tier-eligible profiles are appended after the enabled rungs.
             const executorsConfigured = this.ctx.agentConfig?.executors ?? [];
             const disabledLadderRows = executorsConfigured
-                .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleDef.tier))
+                .filter(
+                    (e) =>
+                        normalizeExecutorAvailability(e.disabled).disabled &&
+                        isTierEligible(getExecutorTier(e), roleDef.tier),
+                )
                 .map((e) => rowByName.get(e.name))
                 .filter((row): row is DoctorRow => row !== undefined);
             const ladderRows = [
@@ -643,7 +658,9 @@ export class AgentService {
         // covers the name; on a miss run only what the selector needs and write nothing.
         // 111 R6: a targeted check of a disabled profile fails (exit 1) without probing —
         // before the cache/runner paths so the disable is authoritative.
-        const disabledEntry = (executors ?? []).find((e) => e.name === args.agent && e.disabled === true);
+        const disabledEntry = (executors ?? []).find(
+            (e) => e.name === args.agent && normalizeExecutorAvailability(e.disabled).disabled,
+        );
         if (disabledEntry !== undefined) {
             this.renderDoctor(
                 syntheticDisabledRows([disabledEntry]),
@@ -652,16 +669,25 @@ export class AgentService {
                 args.agent,
                 cacheInfo,
                 args.enveloped,
+                usage,
             );
             return 1;
         }
         const cachedSelectorRow = serveCached?.results.find((r) => r.agent === args.agent);
         if (cachedSelectorRow !== undefined) {
             cacheInfo = { hit: true, ageMs: serveCached?.ageMs ?? null, path: DOCTOR_CACHE_REL };
-            return this.renderDoctor([cachedSelectorRow], executors, args.json, args.agent, cacheInfo, args.enveloped);
+            return this.renderDoctor(
+                [cachedSelectorRow],
+                executors,
+                args.json,
+                args.agent,
+                cacheInfo,
+                args.enveloped,
+                usage,
+            );
         }
         const results = [await doctorRunner.runOne(args.agent)];
-        return this.renderDoctor(results, executors, args.json, args.agent, cacheInfo, args.enveloped);
+        return this.renderDoctor(results, executors, args.json, args.agent, cacheInfo, args.enveloped, usage);
     }
 
     /** R4: a cache hit prints its age — text surfaces get a trailing line, JSON carries it structurally. */
@@ -695,6 +721,8 @@ export class AgentService {
         cache?: DoctorCacheInfo,
         /** ADR-091 opt-in envelope decision threaded from `--json-envelope` (undefined → env). */
         enveloped?: boolean,
+        /** 0893 R2: parsed usage snapshot; null → `usage: none` (the producer is optional, R3). */
+        usage?: DoctorUsageInfo | null,
     ): number {
         // R6/AC5: warn (not block) when an executor's model is quota_exhausted or unavailable.
         const modelByExecutor = new Map(
@@ -730,12 +758,25 @@ export class AgentService {
                     // B8 R3/R5: runner-declared session capability + staleness.
                     capabilities: row.capabilities,
                     capabilityStale: row.capabilityStale,
+                    // 0893 R1: the normalized availability object — owner/since/reason
+                    // survive even for a bare-boolean `disabled: true` (owner `operator`).
+                    availability: {
+                        disabled: row.availability.disabled,
+                        owner: row.availability.owner ?? null,
+                        since: row.availability.since ?? null,
+                        reason: row.availability.reason ?? null,
+                    },
                 };
             });
             const cacheField: DoctorCacheInfo = cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL };
             this.ctx.output.write(
                 toEnvelopeJson(
-                    { agents: entries, rolesSource: this.ctx.rolesSource ?? 'config', cache: cacheField },
+                    {
+                        agents: entries,
+                        rolesSource: this.ctx.rolesSource ?? 'config',
+                        cache: cacheField,
+                        usage: usage ?? null,
+                    },
                     { enveloped },
                 ),
             );
@@ -743,7 +784,9 @@ export class AgentService {
             const rows = buildDoctorRows(results, executors, this.ctx.roles);
             this.warnCapabilityStale(rows);
             // Single-executor mode keeps the detail view; full mode renders the table.
-            this.ctx.output.write(agent !== undefined ? renderDoctorDetail(rows[0] ?? null) : renderDoctorTable(rows));
+            this.ctx.output.write(
+                agent !== undefined ? renderDoctorDetail(rows[0] ?? null) : renderDoctorTable(rows, usage),
+            );
             this.appendCacheNote(cache ?? { hit: false, ageMs: null, path: DOCTOR_CACHE_REL }, false);
         }
         return results.some((result) => !result.usable && result.tier === 1) ? 1 : 0;
@@ -2020,7 +2063,7 @@ export class AgentService {
         const eligible = executors.filter((e) => {
             const canonical = resolveAgentName(e.agent);
             return (
-                e.disabled !== true &&
+                !executorDisabled(e) &&
                 isTierEligible(getExecutorTier(e), targetTier) &&
                 !(exclude?.has(e.name) ?? false) &&
                 (canonical === undefined || !(exhaustedAgents?.has(canonical) ?? false))
@@ -2120,11 +2163,11 @@ export class AgentService {
             // 111 R3/R4: a pinned (or default-named, or phase-mapped) disabled
             // profile is never silently substituted — routing fails naming the
             // profile and the fix, before any probe or spawn.
-            if (executor.disabled === true) {
+            if (executorDisabled(executor)) {
                 return {
                     ok: false,
                     exitCode: 2,
-                    message: `Executor '${executor.name}'${phaseSuffix} is disabled (agent.executors.${executor.name}.disabled: true) — enable it or select another executor`,
+                    message: `Executor '${executor.name}'${phaseSuffix} is disabled (agent.executors.${executor.name}.disabled) — enable it or select another executor`,
                 };
             }
             const canonical = resolveAgentName(executor.agent);
@@ -2289,7 +2332,7 @@ export class AgentService {
         // the fix (re-enable one) is actionable instead of "none eligible".
         if (eligible.length === 0 && executors !== undefined) {
             const disabledEligible = executors
-                .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleTier))
+                .filter((e) => executorDisabled(e) && isTierEligible(getExecutorTier(e), roleTier))
                 .map((e) => e.name);
             if (disabledEligible.length > 0) tried = `disabled: ${disabledEligible.join(', ')}`;
         }
@@ -2494,6 +2537,23 @@ export class AgentService {
 const DOCTOR_CACHE_REL = '.spur/run/agent-doctor.json';
 const DOCTOR_CACHE_TTL_MS = 60_000;
 
+/**
+ * 0893 R2: a usage snapshot older than this renders `stale`. A constant because
+ * nothing in the design varies it; promote to config only when a second consumer
+ * needs a different threshold.
+ */
+const USAGE_SNAPSHOT_STALE_MS = 6 * 60 * 60 * 1000;
+
+/** Parsed usage-snapshot view for doctor (0893 R2). Null when the snapshot is absent or unusable. */
+export interface DoctorUsageInfo {
+    /** RFC 3339 `captured_at` from the snapshot. */
+    capturedAt: string;
+    /** Milliseconds between capture and the doctor run's clock. */
+    age: number;
+    /** True when {@link age} reached {@link USAGE_SNAPSHOT_STALE_MS} (6 h). */
+    stale: boolean;
+}
+
 interface DoctorCacheInfo {
     hit: boolean;
     ageMs: number | null;
@@ -2513,17 +2573,57 @@ interface DoctorCacheFile {
  * invalidates when inference changes; including the disabled flag (111 R5) invalidates
  * cached eligibility when an operator flips the kill-switch. Exported for direct unit pins.
  */
+/**
+ * Single classified reader for executor availability (0890 review remediation):
+ * every eligibility/probe/inventory site branches on this instead of comparing
+ * the raw `disabled` field, so the 0890 object form (`{owner,since,reason}`)
+ * and the legacy boolean are classified identically.
+ */
+function executorDisabled(executor?: AgentExecutorConfig): boolean {
+    return executor !== undefined && normalizeExecutorAvailability(executor.disabled).disabled;
+}
+
+/**
+ * Stable fingerprint of the executor roster for the doctor cache; classifies
+ * availability via {@link executorDisabled} so a quota disable invalidates the
+ * cached roster instead of rendering as 'enabled' (0890 review remediation).
+ */
 export function executorFingerprint(executors: readonly AgentExecutorConfig[] | undefined): string {
     const lines = [...(executors ?? [])]
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(
             (e) =>
-                `${e.name}|${e.agent}|${e.model ?? ''}|${getExecutorTier(e)}|${e.disabled === true ? 'disabled' : 'enabled'}`,
+                `${e.name}|${e.agent}|${e.model ?? ''}|${getExecutorTier(e)}|${executorDisabled(e) ? 'disabled' : 'enabled'}`,
         );
     return createHash('sha256').update(lines.join('\n')).digest('hex');
 }
 
 /** Any read failure, malformed payload, wrong schema/fingerprint, or expired entry → miss (R6). */
+/**
+ * Read the agent-usage snapshot for doctor (0893 R2). Absent or malformed → null
+ * (R3: the producer is optional, so a missing snapshot is a silent `none`, never
+ * a warning). Doctor only REPORTS the snapshot — it never derives an enable from
+ * it (read-only, docs/design/session-pinned-dispatch.md §3.5).
+ */
+function readUsageSnapshot(
+    fileSystem: FileSystem,
+    path: string | undefined,
+    now: () => number,
+): DoctorUsageInfo | null {
+    if (path === undefined) return null;
+    try {
+        if (fileSystem.exists(path) !== true) return null;
+        const parsed = JSON.parse(fileSystem.readFile(path) as string) as { captured_at?: unknown } | null;
+        if (parsed === null || typeof parsed !== 'object' || typeof parsed.captured_at !== 'string') return null;
+        const capturedMs = Date.parse(parsed.captured_at);
+        if (!Number.isFinite(capturedMs)) return null;
+        const age = Math.max(0, now() - capturedMs);
+        return { capturedAt: parsed.captured_at, age, stale: age >= USAGE_SNAPSHOT_STALE_MS };
+    } catch {
+        return null;
+    }
+}
+
 function readFreshDoctorCache(
     fileSystem: FileSystem,
     fingerprint: string,
@@ -2746,6 +2846,8 @@ type DoctorRow = {
     } | null;
     /** B8 R5: detected CLI version differs from the record's `verifiedAgainst`; null when fresh or unverifiable. */
     capabilityStale: { verifiedAgainst: string; detected: string } | null;
+    /** 0893 R1: normalized availability ownership — the only shape rendering may read. */
+    availability: ExecutorAvailability;
 };
 
 /**
@@ -2769,7 +2871,12 @@ function buildDoctorRows(
             agent: result.agent,
             disabled: false,
         };
-        return { result, capabilityTier: getExecutorTier(executor), model: executor.model ?? (null as string | null) };
+        return {
+            result,
+            capabilityTier: getExecutorTier(executor),
+            model: executor.model ?? (null as string | null),
+            availability: normalizeExecutorAvailability(executor.disabled),
+        };
     });
     // Election: roleId -> winning executor name. Usable lookup across all rows
     // so a role elects exactly one star carrier (no star when none usable).
@@ -2781,14 +2888,15 @@ function buildDoctorRows(
             if (winner !== undefined) elections.set(roleId, winner.name);
         }
     }
-    return joined.map(({ result, capabilityTier, model }) => ({
+    return joined.map(({ result, capabilityTier, model, availability }) => ({
         executor: result.agent,
         agentBinary: executorByName.get(result.agent)?.agent ?? result.agent,
         usable: result.usable,
         tier: result.tier,
         capabilityTier,
         model,
-        disabled: executorByName.get(result.agent)?.disabled === true,
+        disabled: executorDisabled(executorByName.get(result.agent)),
+        availability,
         roles: roles ? [...roles].filter(([, rd]) => isTierEligible(capabilityTier, rd.tier)).map(([id]) => id) : [],
         elected: [...elections].filter(([, executorName]) => executorName === result.agent).map(([id]) => id),
         version: result.version,
@@ -2822,6 +2930,13 @@ function renderRolesCell(row: DoctorRow): string {
     return row.roles.map((id) => (row.elected.includes(id) ? `${id}*` : id)).join(',');
 }
 
+/** 0893 R2: compact human age for the doctor table footer — minutes below an hour, hours above. */
+function formatUsageAge(ageMs: number): string {
+    if (ageMs < 60_000) return '<1m';
+    if (ageMs < 3_600_000) return `${Math.floor(ageMs / 60_000)}m`;
+    return `${Math.floor(ageMs / 3_600_000)}h`;
+}
+
 /**
  * 111 R5: a disabled profile is inventoried without any probe — the row is
  * synthesized (never run through install/liveness/auth checks) with usable
@@ -2829,18 +2944,16 @@ function renderRolesCell(row: DoctorRow): string {
  * aggregation from reading an intentional disable as a health failure (R6).
  */
 function syntheticDisabledRows(executors: readonly AgentExecutorConfig[] | undefined): DoctorResult[] {
-    return (executors ?? [])
-        .filter((e) => e.disabled === true)
-        .map((e) => ({
-            agent: e.name,
-            installed: false,
-            version: null,
-            authenticated: 'unknown' as const,
-            usable: false,
-            tier: 2 as const,
-            channels: [],
-            error: `disabled by config (agent.executors.${e.name}.disabled: true)`,
-        }));
+    return (executors ?? []).filter(executorDisabled).map((e) => ({
+        agent: e.name,
+        installed: false,
+        version: null,
+        authenticated: 'unknown' as const,
+        usable: false,
+        tier: 2 as const,
+        channels: [],
+        error: `disabled by config (agent.executors.${e.name}.disabled)`,
+    }));
 }
 
 /** Append synthesized disabled rows that the probe/cached rowset does not already carry. */
@@ -2884,10 +2997,11 @@ function renderCapsCell(row: DoctorRow): string {
         : renderCapsFlags(row);
 }
 
-function renderDoctorTable(results: DoctorRow[]): string {
+function renderDoctorTable(results: DoctorRow[], usage?: DoctorUsageInfo | null): string {
     const dash = '—';
     const rows = results.map((result) => {
         const usable = result.usable;
+        const availability = result.availability;
         return {
             glyph: usable ? '✓' : '✗',
             state: result.disabled ? 'disabled' : usable ? 'usable' : 'missing',
@@ -2898,6 +3012,10 @@ function renderDoctorTable(results: DoctorRow[]): string {
             version: result.version ?? dash,
             caps: renderCapsCell(result),
             roles: renderRolesCell(result),
+            // 0893 R1: ownership provenance renders on disabled rows only.
+            owner: availability.disabled ? (availability.owner ?? dash) : dash,
+            since: availability.disabled ? (availability.since ?? dash) : dash,
+            reason: availability.disabled ? (availability.reason ?? dash) : dash,
         };
     });
 
@@ -2911,6 +3029,9 @@ function renderDoctorTable(results: DoctorRow[]): string {
         version: 'VERSION',
         caps: 'CAPS',
         roles: 'ROLES',
+        owner: 'OWNER',
+        since: 'SINCE',
+        reason: 'REASON',
     };
     const all = [header, ...rows];
     const width = (key: keyof typeof header) => Math.max(...all.map((row) => row[key].length));
@@ -2921,9 +3042,11 @@ function renderDoctorTable(results: DoctorRow[]): string {
     const wTier = width('tier');
     const wVersion = width('version');
     const wCaps = width('caps');
+    const wOwner = width('owner');
+    const wSince = width('since');
 
     const line = (row: (typeof all)[number]) =>
-        `${row.glyph} ${row.state.padEnd(wState)}  ${row.executor.padEnd(wExecutor)}  ${row.agentBinary.padEnd(wAgent)}  ${row.model.padEnd(wModel)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.caps.padEnd(wCaps)}  ${row.roles}`.trimEnd();
+        `${row.glyph} ${row.state.padEnd(wState)}  ${row.executor.padEnd(wExecutor)}  ${row.agentBinary.padEnd(wAgent)}  ${row.model.padEnd(wModel)}  ${row.tier.padEnd(wTier)}  ${row.version.padEnd(wVersion)}  ${row.caps.padEnd(wCaps)}  ${row.roles}  ${row.owner.padEnd(wOwner)}  ${row.since.padEnd(wSince)}  ${row.reason}`.trimEnd();
 
     const usableCount = rows.filter((row) => row.state === 'usable').length;
     // 111 R6: intentional disables are reported separately, not folded into the
@@ -2937,6 +3060,9 @@ function renderDoctorTable(results: DoctorRow[]): string {
             : `${usableCount} usable, ${missing} missing`;
     const footerLines = [
         usableFooter,
+        // 0893 R2/R3: snapshot provenance is always reported; a missing producer
+        // snapshot is a plain `usage: none`, never a warning.
+        `usage: ${usage === null || usage === undefined ? 'none' : `${usage.capturedAt} (${usage.stale ? 'stale' : formatUsageAge(usage.age)})`}`,
         ...(results.some((result) => result.elected.length > 0) ? ['(* = elected executor for that role)'] : []),
     ];
 
@@ -3085,7 +3211,7 @@ export function cheapestEligibleExecutors(
     minTier: CapabilityTier,
 ): AgentExecutorConfig[] {
     return executors
-        .filter((e) => e.disabled !== true)
+        .filter((e) => !executorDisabled(e))
         .filter((e) => isTierEligible(getExecutorTier(e), minTier))
         .sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
 }

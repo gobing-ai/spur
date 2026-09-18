@@ -7,6 +7,7 @@ import {
     ExecutorDisabledError,
     type MemberIdentity,
     memberLocalId,
+    normalizeExecutorAvailability,
     type ResolvedExecutor,
     resolveExecutor,
     type SpurConfig,
@@ -224,7 +225,10 @@ export function resolveMemberExecutor(params: ResolveMemberExecutorParams): {
         // 111 R3: distinguish "nothing at that tier" from "all tier-eligible
         // profiles are disabled" so the fix is actionable in one read.
         const disabledEligible = (agentConfig?.executors ?? [])
-            .filter((e) => e.disabled === true && isTierEligible(getExecutorTier(e), roleTier))
+            .filter(
+                (e) =>
+                    normalizeExecutorAvailability(e.disabled).disabled && isTierEligible(getExecutorTier(e), roleTier),
+            )
             .map((e) => e.name);
         if (disabledEligible.length > 0) {
             throw new Error(

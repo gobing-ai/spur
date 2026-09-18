@@ -279,8 +279,9 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // Verb-count history: 70 → 71 (0847, projects-noun conversion verb), 71 → 73 for
         // `agent start` / `agent stop` (0848), 73 → 67 (G64 cutover: `spur team` noun +
         // `agent create`), 67 → 66 (G65 0856: one retired projects-noun verb),
-        // 66 → 67 (0867: `workflow progress` declares `--json-envelope`).
-        expect(advertising.length).toBe(67);
+        // 66 → 67 (0867: `workflow progress` declares `--json-envelope`),
+        // 67 → 68 (0892: `agent usage` declares `--json-envelope`).
+        expect(advertising.length).toBe(68);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

@@ -5,6 +5,8 @@ import {
     AgentCoordinationService,
     type AgentRunDeps,
     AgentService,
+    AgentUsageProducerError,
+    type AgentUsageRunResult,
     DeliveryReconciler,
     FINDING_CODES,
     FleetService,
@@ -12,11 +14,15 @@ import {
     followSystemEventsAfter,
     MAX_INJECT_ATTEMPTS,
     normalizeProjectPath,
+    type RunAgentUsageOptions,
     resolveAgentSelector,
     resolvePlanningFolders,
+    runAgentUsageProducer,
     StrategyRuntime,
     type SystemEventBus,
     type TeamStatusEntry,
+    type UsageSource,
+    UsageSourceError,
     WaitError,
     type WaitUntil,
     waitForOccupant,
@@ -34,6 +40,7 @@ import { EventBus } from '@gobing-ai/ts-infra';
 import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
+import { CodexbarUsageSource, defaultAgentUsageSnapshotPath } from '../services/agent-usage-source';
 import { attachSystemEventLedger } from '../system-event-ledger';
 import { SHARED_OPTIONS } from './shared-options';
 import { makeCheckService, makeService } from './task';
@@ -55,6 +62,131 @@ export function resetAgentServerFetchForTesting(): void {
 
 /** Default server API URL for agent start/stop and live `list --specs` status (requires spur serve). */
 const DEFAULT_SERVER = 'http://localhost:3000/api';
+
+/** Injectable seams for `runAgentUsage` tests (source stub, snapshot override). */
+export interface AgentUsageDeps {
+    source?: UsageSource;
+    snapshotPath?: string;
+}
+
+// ── Injectable usage-source seam for the `agent usage` command tests ──
+let _testUsageDeps: AgentUsageDeps | undefined;
+
+/** Replace the usage source + snapshot path for the current test (reset in cleanup). */
+export function setAgentUsageSourceForTesting(deps: AgentUsageDeps | undefined): void {
+    _testUsageDeps = deps;
+}
+
+/** Restore the default codexbar source after a test. */
+export function resetAgentUsageSourceForTesting(): void {
+    _testUsageDeps = undefined;
+}
+
+/**
+ * Run the `spur agent usage` producer once (B6 0892 R1–R3). Fail-closed
+ * capture/parse/config errors exit 1 with the cause on stderr and change
+ * nothing; per-provider error entries are listed while healthy entries still
+ * apply. `--dry-run` prints would-be changes and writes nothing.
+ */
+export async function runAgentUsage(
+    context: CliContext,
+    flags: { dryRun: boolean; source: string; json: boolean; enveloped?: boolean },
+    deps?: AgentUsageDeps,
+): Promise<number> {
+    if (flags.source !== 'codexbar') {
+        const message = `unknown usage source "${flags.source}" — only "codexbar" is implemented`;
+        if (flags.json) {
+            context.output.write(
+                toEnvelopeJson(
+                    { error: { code: 'unknown_source', message } },
+                    {
+                        enveloped: flags.enveloped,
+                        error: {
+                            code: 'VALIDATION_FAILED',
+                            message,
+                            details: { source: flags.source, reason: 'unknown_source' },
+                        },
+                    },
+                ),
+            );
+        } else {
+            context.output.error(`agent usage: ${message}`);
+        }
+        return 2;
+    }
+    const options: RunAgentUsageOptions = {
+        // Spawn-capable source + HOME-derived snapshot default live in this (CLI) layer.
+        source: deps?.source ?? _testUsageDeps?.source ?? new CodexbarUsageSource(),
+        snapshotPath: deps?.snapshotPath ?? _testUsageDeps?.snapshotPath ?? defaultAgentUsageSnapshotPath(),
+        // 0892 R2: the CLI flag must reach the producer or --dry-run silently
+        // degrades to a full run (snapshot write + drain).
+        dryRun: flags.dryRun === true,
+    };
+    let result: AgentUsageRunResult;
+    try {
+        result = await runAgentUsageProducer(
+            {
+                getDb: () => context.getDb(),
+                projectRoot: context.cwd,
+                loadAgentConfig: context.loadAgentConfig,
+                warn: (message) => context.output.error(`Warning: ${message}`),
+            },
+            options,
+        );
+    } catch (error) {
+        if (!(error instanceof UsageSourceError) && !(error instanceof AgentUsageProducerError)) throw error;
+        const message = error.message;
+        if (flags.json) {
+            context.output.write(
+                toEnvelopeJson(
+                    { error: { code: 'usage_capture_failed', message } },
+                    {
+                        enveloped: flags.enveloped,
+                        error: { code: 'INTERNAL_ERROR', message, details: { reason: 'usage_capture_failed' } },
+                    },
+                ),
+            );
+        } else {
+            context.output.error(`agent usage: ${message}`);
+        }
+        return 1;
+    }
+    if (flags.json) {
+        context.output.write(
+            toEnvelopeJson(result, {
+                enveloped: flags.enveloped,
+                error: { code: 'INTERNAL_ERROR', message: 'unreachable' },
+            }),
+        );
+    } else {
+        const applied = result.changes.filter((c) => c.action !== 'no-op');
+        const snapshotNote =
+            result.snapshotPath !== null ? `\nSnapshot: ${result.snapshotPath}` : '\nDry run: nothing written';
+        context.output.write(
+            [
+                `Usage captured ${result.capturedAt} via ${result.source} (${applied.length} change${applied.length === 1 ? '' : 's'}).`,
+                ...applied.map((c) => `  ${c.executor}: ${c.from} → ${c.to} [${c.action}] — ${c.reason}`),
+                ...(result.erroredProviders.length > 0
+                    ? [
+                          `Errored providers (skipped, never treated as recovery): ${result.erroredProviders
+                              .map((e) => e.provider)
+                              .join(', ')}`,
+                      ]
+                    : []),
+                ...(result.unmappedProviders.length > 0
+                    ? [`Unmapped providers (never guessed): ${result.unmappedProviders.join(', ')}`]
+                    : []),
+                ...(result.drain !== null
+                    ? [
+                          `Drain: ${result.drain.applied} applied, ${result.drain.skippedOperatorOwned} operator-skipped, ${result.drain.failed} failed.`,
+                      ]
+                    : []),
+                snapshotNote,
+            ].join('\n'),
+        );
+    }
+    return 0;
+}
 
 /** Register `spur agent` commands on the CLI program. */
 export function registerAgentCommand(program: Command, context: CliContext): void {
@@ -79,6 +211,25 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         });
 
     agent
+        .command('usage')
+        .description(
+            'Run-once provider usage capture (codexbar) that refreshes quota-owned executor availability. Schedule it externally (cron/launchd); spur serve never runs it.',
+        )
+        .option(...SHARED_OPTIONS.dryRunAgentUsage)
+        .option(...SHARED_OPTIONS.sourceAgentUsage)
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            const code = await runAgentUsage(context, {
+                dryRun: options.dryRun === true,
+                source: options.source ?? 'codexbar',
+                json: options.json === true,
+                enveloped: options.jsonEnvelope,
+            });
+            context.setExitCode(code);
+        });
+
+    agent
         .command('doctor')
         .description('Check agent readiness.')
         .option(...SHARED_OPTIONS.json)
@@ -95,6 +246,8 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
                     agent: agentName,
                     probeHealth: options.probeHealth === true,
                     forceRefresh: options.forceRefresh === true,
+                    // 0893 R2: report the producer snapshot (optional — missing renders `usage: none`).
+                    usageSnapshotPath: defaultAgentUsageSnapshotPath(context.env),
                 },
                 undefined,
             );

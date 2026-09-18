@@ -1,15 +1,18 @@
 /**
- * Task 0797 / ADR-111: safely flip one existing project executor's `disabled`
- * flag. Narrower than config loading by design — the updater mutates ONLY the
- * existing project entry via the yaml document model (comments, ordering,
+ * Task 0797 / ADR-111: safely flip one existing executor's `disabled` flag.
+ * Narrower than config loading by design — the updater mutates ONLY the existing
+ * `agent.executors[<name>]` entry via the yaml document model (comments, ordering,
  * unrelated values and file mode survive), never serializes merged config,
- * never creates paths or overrides, and never touches the global layer.
+ * never creates paths or overrides. Since 0891 it spans both layers: a `global`
+ * write targets the layer that actually declares the executor (project fragment
+ * wins); project writes stay project-scoped.
  */
 
 import { chmod, lstat, open, readFile, rename, stat, unlink } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { isAlias, isMap, isScalar, isSeq, parseDocument, type YAMLMap } from 'yaml';
-import { invalidateSpurConfig } from './loader';
+import { invalidateSpurConfig, resolveConfigLayers } from './loader';
+import { isRfc3339Timestamp } from './rfc3339';
 
 /** Stable rejection codes for {@link ExecutorUpdateError}; callers branch on these, never on prose. */
 export type ExecutorUpdateErrorCode = 'INVALID_CONFIG' | 'CONFIG_CONFLICT' | 'CONFIG_WRITE_FAILED';
@@ -25,37 +28,127 @@ export class ExecutorUpdateError extends Error {
     }
 }
 
-/** Outcome of {@link setProjectExecutorDisabled}: `updated`, or a structured no-op with the reason. */
-export type SetProjectExecutorDisabledResult =
+/** Result of {@link setExecutorAvailability} — `updated`, or a structured no-op with the reason. */
+export type SetExecutorAvailabilityResult =
     | { status: 'updated' }
     | { status: 'unchanged'; reason: 'already-set' | 'missing-file' | 'missing-executors' | 'missing-executor' };
+
+/** Config layer an availability write targets (B6 0891 R1). */
+export type ExecutorConfigLayer = 'project' | 'global';
+
+/** Request shape for {@link setExecutorAvailability}. */
+export interface SetExecutorAvailabilityRequest {
+    /** Requested layer; the actual target is where the executor is declared — a project fragment wins when both layers declare the name (B6 0891 R1). */
+    layer: ExecutorConfigLayer;
+    /** Project root used for project-path resolution and layer discovery. */
+    projectRoot: string;
+    /** Exact executor entry name — the updater never creates entries. */
+    executor: string;
+    /** `false` for a recovery, or an {@link ExecutorDisabledUpdate} object for an automatic disable. */
+    disabled: boolean | ExecutorDisabledUpdate;
+}
+
+/**
+ * Ownership object an AUTOMATIC caller writes for a disable (B6 0890 R2).
+ * `operator` is human-only — bare booleans — and never valid here.
+ */
+export interface ExecutorDisabledUpdate {
+    owner: 'quota' | 'probe';
+    /** RFC 3339 timestamp carried from the observation. */
+    since: string;
+    /** Cause label, e.g. `agent.quota.exhausted <executor>`. */
+    reason: string;
+}
 
 const LOCK_RETRY_MS = 50;
 const LOCK_MAX_ATTEMPTS = 40;
 
 /**
- * Flip `agent.executors[<exact name>].disabled` in `<projectRoot>/.spur/config.yaml`.
+ * Flip `agent.executors[<exact name>].disabled` in the layer where the executor is
+ * declared (B6 0891 R1): `layer: 'project'` targets the project fragment only;
+ * `layer: 'global'` targets the global file (`~/.config/spur/config.yaml`, per the
+ * loader's path resolution) unless a project fragment also declares the name —
+ * the project layer wins when both declare it. Global writes ride the identical
+ * backup/atomic-rename/conflict-detection path (B6 0891 R2); the untouched layer's
+ * file is left byte-identical.
  *
- * Absent attribute is written explicitly (an absent flag inherits, stored false does
- * not); an already-matching explicit value is a byte-stable no-op. Missing targets
- * return a structured no-op — nothing is created. Errors: `INVALID_CONFIG` (malformed
- * / ambiguous YAML, symlinked config, broken effective config, bad arguments),
- * `CONFIG_CONFLICT` (the file changed underneath the read-modify-write),
- * `CONFIG_WRITE_FAILED` (lock or atomic write failure).
+ * Errors are the {@link ExecutorUpdateError} codes documented on
+ * {@link applyExecutorAvailabilityAtPath}; a missing target is a structured no-op,
+ * never a created file.
  */
-export async function setProjectExecutorDisabled(
-    projectRoot: string,
-    executorName: string,
-    disabled: boolean,
-): Promise<SetProjectExecutorDisabledResult> {
-    if (executorName.length === 0) {
+export async function setExecutorAvailability(
+    request: SetExecutorAvailabilityRequest,
+): Promise<SetExecutorAvailabilityResult> {
+    if (request.executor.length === 0) {
         throw new ExecutorUpdateError('INVALID_CONFIG', 'executor name must be a non-empty string');
     }
-    if (typeof disabled !== 'boolean') {
-        throw new ExecutorUpdateError('INVALID_CONFIG', `disabled must be a boolean, received ${typeof disabled}`);
+    assertDisabledArgument(request.disabled);
+    const projectPath = join(request.projectRoot, '.spur', 'config.yaml');
+    let targetPath: string;
+    if (request.layer === 'project') {
+        targetPath = projectPath;
+    } else {
+        // Explicit `cwd` keeps the project layer even under SPUR_SKIP_PROJECT_CONFIG
+        // (0817); SPUR_SKIP_GLOBAL_CONFIG suppresses the global layer (hermetic tests).
+        const layers = resolveConfigLayers(request.projectRoot);
+        if (layers.project !== undefined && (await declaresExecutor(layers.project, request.executor))) {
+            targetPath = layers.project;
+        } else if (layers.global !== undefined) {
+            targetPath = layers.global;
+        } else if (layers.project !== undefined) {
+            // Global suppressed/absent and the name is not declared in the project layer.
+            return { status: 'unchanged', reason: 'missing-executor' };
+        } else {
+            return { status: 'unchanged', reason: 'missing-file' };
+        }
     }
-    const configPath = join(projectRoot, '.spur', 'config.yaml');
+    return applyExecutorAvailabilityAtPath(targetPath, request.executor, request.disabled);
+}
 
+/**
+ * Cheap declaration probe: does this config file's `agent.executors` sequence name
+ * `executorName`? Parse errors surface to the caller only when this layer becomes
+ * the write target; a broken OTHER layer must not block a legitimate global write.
+ */
+async function declaresExecutor(configPath: string, executorName: string): Promise<boolean> {
+    let content: string;
+    try {
+        content = await readFile(configPath, 'utf8');
+    } catch (error) {
+        // ENOENT race after existsSync in resolveConfigLayers: the layer vanished
+        // between listing and read — treat as not declaring rather than surfacing
+        // a raw fs error from a probe (0891 review fix).
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+        throw error;
+    }
+    const doc = parseDocument(content);
+    if (doc.errors.length > 0) return false;
+    const executors = doc.get('agent');
+    if (!isMap(executors)) return false;
+    const seq = executors.get('executors');
+    if (!isSeq(seq)) return false;
+    return seq.items.some((item) => {
+        if (isAlias(item) || !isMap(item)) return false;
+        const nameNode = item.get('name', true);
+        return isScalar(nameNode) && nameNode.value === executorName;
+    });
+}
+
+/**
+ * Shared write core for both layers: mutate ONLY the existing
+ * `agent.executors[<name>]` entry via the yaml document model (comments, ordering,
+ * unrelated values and file mode survive), under a per-path lock with external-edit
+ * conflict detection, committed by atomic rename, then cache-invalidated.
+ *
+ * Errors: `INVALID_CONFIG` (malformed / ambiguous YAML, symlinked config, bad
+ * arguments), `CONFIG_CONFLICT` (the file changed underneath the read-modify-write),
+ * `CONFIG_WRITE_FAILED` (lock or atomic write failure).
+ */
+async function applyExecutorAvailabilityAtPath(
+    configPath: string,
+    executorName: string,
+    disabled: boolean | ExecutorDisabledUpdate,
+): Promise<SetExecutorAvailabilityResult> {
     let original: Awaited<ReturnType<typeof stat>>;
     try {
         original = await stat(configPath);
@@ -66,7 +159,7 @@ export async function setProjectExecutorDisabled(
     if (link.isSymbolicLink()) {
         throw new ExecutorUpdateError(
             'INVALID_CONFIG',
-            `project config is a symlink — refusing to edit through it: ${configPath}`,
+            `config is a symlink — refusing to edit through it: ${configPath}`,
         );
     }
 
@@ -78,7 +171,7 @@ export async function setProjectExecutorDisabled(
         if (doc.errors.length > 0) {
             throw new ExecutorUpdateError(
                 'INVALID_CONFIG',
-                `project config is not valid YAML: ${doc.errors[0]?.message ?? 'unknown parse error'}`,
+                `config is not valid YAML: ${doc.errors[0]?.message ?? 'unknown parse error'}`,
             );
         }
         const agent = doc.get('agent');
@@ -110,7 +203,7 @@ export async function setProjectExecutorDisabled(
             if (prior !== undefined) {
                 throw new ExecutorUpdateError(
                     'INVALID_CONFIG',
-                    `duplicate executor name "${name}" in project config — ambiguous update target`,
+                    `duplicate executor name "${name}" in config — ambiguous update target`,
                 );
             }
             seen.set(name, item);
@@ -119,10 +212,15 @@ export async function setProjectExecutorDisabled(
         if (target === undefined) return { status: 'unchanged', reason: 'missing-executor' };
 
         const current = target.get('disabled', true);
-        if (current !== undefined && isScalar(current) && current.value === disabled) {
+        if (disabledMatches(current, disabled)) {
             return { status: 'unchanged', reason: 'already-set' };
         }
-        target.set('disabled', disabled);
+        target.set(
+            'disabled',
+            typeof disabled === 'boolean'
+                ? disabled
+                : { owner: disabled.owner, since: disabled.since, reason: disabled.reason },
+        );
 
         // Validation lives at the document level (parse + entry shapes above): a
         // name-only project fragment is a legitimate update target (0797 R1), so a
@@ -137,7 +235,7 @@ export async function setProjectExecutorDisabled(
             if (latest.mtimeMs !== baseline.mtimeMs || latest.size !== baseline.size || latest.ino !== baseline.ino) {
                 throw new ExecutorUpdateError(
                     'CONFIG_CONFLICT',
-                    `project config changed on disk while the update was prepared — re-run to reapply: ${configPath}`,
+                    `config changed on disk while the update was prepared — re-run to reapply: ${configPath}`,
                 );
             }
             const tmp = await open(tmpPath, 'wx', original.mode & 0o777);
@@ -158,12 +256,42 @@ export async function setProjectExecutorDisabled(
             if (error instanceof ExecutorUpdateError) throw error;
             throw new ExecutorUpdateError(
                 'CONFIG_WRITE_FAILED',
-                `failed to commit project config update: ${error instanceof Error ? error.message : String(error)}`,
+                `failed to commit config update: ${error instanceof Error ? error.message : String(error)}`,
             );
         }
         invalidateSpurConfig(configPath);
         return { status: 'updated' };
     });
+}
+
+/** Validate the `disabled` argument (B6 0890 R2): boolean, or quota/probe ownership object. */
+function assertDisabledArgument(disabled: boolean | ExecutorDisabledUpdate): void {
+    if (typeof disabled === 'boolean') return;
+    if (disabled.owner !== 'quota' && disabled.owner !== 'probe') {
+        throw new ExecutorUpdateError(
+            'INVALID_CONFIG',
+            `disabled.owner must be "quota" or "probe", received ${JSON.stringify(disabled.owner)}`,
+        );
+    }
+    if (typeof disabled.since !== 'string' || !isRfc3339Timestamp(disabled.since)) {
+        throw new ExecutorUpdateError('INVALID_CONFIG', 'disabled.since must be an RFC 3339 timestamp string');
+    }
+    if (typeof disabled.reason !== 'string' || disabled.reason.length === 0) {
+        throw new ExecutorUpdateError('INVALID_CONFIG', 'disabled.reason must be a non-empty string');
+    }
+}
+
+/** Byte-stable no-op test (B6 0890 R2): scalar equality for booleans, field equality for objects. */
+function disabledMatches(current: unknown, desired: boolean | ExecutorDisabledUpdate): boolean {
+    if (typeof desired === 'boolean') {
+        return current !== undefined && isScalar(current) && current.value === desired;
+    }
+    if (current === undefined || !isMap(current)) return false;
+    return (
+        current.get('owner') === desired.owner &&
+        current.get('since') === desired.since &&
+        current.get('reason') === desired.reason
+    );
 }
 
 /** Exclusive per-path lock. Recovers a lock only when its owner is confirmed dead. */
