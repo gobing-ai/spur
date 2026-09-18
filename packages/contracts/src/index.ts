@@ -1,6 +1,7 @@
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
 import { featureContract } from './feature';
+import { fleetContract, processesContract } from './fleet';
 import { historyContract } from './history';
 import { planningEventContract } from './planning-event';
 import { taskContract } from './task';
@@ -29,12 +30,17 @@ export const contract = {
     task: { ...taskContract },
     feature: { ...featureContract },
     history: { ...historyContract },
+    fleet: { ...fleetContract },
+    processes: { ...processesContract },
     ...planningEventContract,
 };
 
 /** Type-level alias for the public Spur oRPC contract. */
 export type SpurContract = typeof contract;
 export { featureCreateInputSchema, featureListResponseSchema, featureShowResponseSchema } from './feature';
+// Fleet snapshot + supervised process wire schemas (0897) — the routes are
+// Hono-served; the contracts document them for the generated OpenAPI.
+export * from './fleet';
 export * from './history';
 export * from './observability';
 // Shared transport envelope schemas (apiSuccessSchema / apiErrorSchema / pagination) —

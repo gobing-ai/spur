@@ -36,6 +36,14 @@ export interface ResolvedFleetMember {
     enabled: boolean;
     writeCapable: boolean;
     capabilityState: string;
+    /** Current agent session (0897): mode + resume id; absent when the member never ran. */
+    session?: MemberSession;
+}
+
+/** Member agent session on the wire (0897). `id` rides only `resume` mode. */
+export interface MemberSession {
+    mode: 'persistent' | 'resume' | 'one-shot';
+    id?: string;
 }
 
 /** Wire shape of GET /api/project/fleet. `path` is null only off a project cwd (CF Worker). */

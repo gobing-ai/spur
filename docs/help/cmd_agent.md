@@ -117,6 +117,23 @@ Healthy providers whose windows are exhausted disable their executors (owner
 executor are listed as unmapped, never guessed. A missing or failing codexbar
 run is fail-closed: nothing is written and the command exits non-zero.
 
+## spur agent status
+
+```
+spur agent status [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--server <url>` | Supervisor API URL for live run status and member session (default `http://localhost:3000/api`) |
+| `--json` | Output machine-readable JSON |
+
+One row per agent spec: `id`, `type`, live `status`, `pid=<n>` where a process exists, and the
+member session (`<mode>` plus `id=<8-char short>` in resume mode; `-` when none). Liveness and
+session come from the server supervisor (`GET /api/processes`); an unreachable server reports
+every spec `stopped` with a stderr warning. `--json` carries the full session object
+(`{ mode, id }`).
+
 ## spur agent list
 
 ```
@@ -129,7 +146,7 @@ spur agent list [options]
 | `--server <url>` | With `--specs`: supervisor API for live run status (default `http://localhost:3000/api`) |
 | `--json` | Output machine-readable JSON |
 
-With `--specs`, each row carries live run status merged from the server's supervisor: trailing `status` column plus `pid=<n>` where a process exists.
+With `--specs`, each row carries live run status merged from the server's supervisor: trailing `status` column plus `pid=<n>` where a process exists, then the member session (`<mode>` + `id=<8-char short>`; `-` when none).
 When `spur serve` is unreachable, the listing falls back to all `stopped` with a stderr warning.
 
 Detected agents (canonical ids from `ts-ai-runner` `DISPLAY_ORDER`, 0.4.8+): `claude`, `codex`,

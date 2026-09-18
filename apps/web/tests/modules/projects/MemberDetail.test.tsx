@@ -50,6 +50,7 @@ function entry(
             pid: status === 'not-started' ? null : 42,
             startedAt: status === 'not-started' ? null : '2026-09-12T10:00:00.000Z',
             exitCode: status === 'exited' ? 3 : null,
+            session: null,
         },
         isOrchestrator: false,
         issues,
@@ -263,5 +264,42 @@ describe('focus contract (0842 R4)', () => {
         });
         expect(closed).toBe(2);
         view.unmount();
+    });
+});
+
+describe('member session line (0897 R3)', () => {
+    const snapshot: ProjectFleetSnapshot = {
+        path: '/work/project',
+        enabled: true,
+        strategy: { name: 'gtd', version: 1 },
+        orchestrator: { state: 'bound-online' },
+        members: [],
+        capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
+    };
+    const renderDetail = (e: RosterEntry) =>
+        render(
+            <ProjectContext.Provider
+                value={{ path: '/work/project', name: 'project', fleet: snapshot, state: 'ready' }}
+            >
+                <MemberDetail entry={e} onClose={() => {}} />
+            </ProjectContext.Provider>,
+        );
+
+    test('renders the observed session as read-only text; dash when none', async () => {
+        setFetchForTesting(stubFetch());
+        const base = entry();
+        const view = renderDetail({
+            ...base,
+            observed: { ...base.observed, session: { mode: 'resume', id: 'sess-3f9c2a1d-beef' } },
+        });
+        await act(async () => {});
+        expect(view.container.querySelector('[data-member-session]')?.textContent).toContain('resume · sess-3f9');
+        view.unmount();
+
+        const plain = renderDetail(entry());
+        await act(async () => {});
+        expect(plain.container.querySelector('[data-member-session]')?.textContent).toContain('—');
+        plain.unmount();
+        cleanup();
     });
 });

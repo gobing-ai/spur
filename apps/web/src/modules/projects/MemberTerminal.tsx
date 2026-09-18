@@ -12,6 +12,8 @@ export interface ProcessStatus {
     exitCode: number | null;
     /** Owning team id — `null` when unassigned (0852: watch-list team filter). */
     teamId: string | null;
+    /** Member agent session (0897) when the served project's ledger has one. */
+    session?: { mode: 'persistent' | 'resume' | 'one-shot'; id?: string };
 }
 
 /** Status poll interval (ms). */
@@ -39,6 +41,18 @@ export function parseProcessList(value: unknown): ProcessStatus[] | null {
         // non-string value narrows to null instead of failing the poll, so the
         // accept/reject behavior existing callers see is untouched.
         const teamId = r.teamId;
+        // 0897: session is additive — a well-formed { mode } object narrows through,
+        // anything else is dropped rather than failing the poll (same posture as teamId).
+        const rawSession = r.session as { mode?: unknown; id?: unknown } | undefined;
+        const session: ProcessStatus['session'] =
+            rawSession !== null &&
+            typeof rawSession === 'object' &&
+            (rawSession.mode === 'persistent' || rawSession.mode === 'resume' || rawSession.mode === 'one-shot')
+                ? {
+                      mode: rawSession.mode,
+                      ...(typeof rawSession.id === 'string' && rawSession.id.length > 0 ? { id: rawSession.id } : {}),
+                  }
+                : undefined;
         out.push({
             agentId: r.agentId,
             pid: r.pid,
@@ -46,6 +60,7 @@ export function parseProcessList(value: unknown): ProcessStatus[] | null {
             startedAt: r.startedAt,
             exitCode: exitCode as number | null,
             teamId: typeof teamId === 'string' ? teamId : null,
+            ...(session !== undefined ? { session } : {}),
         });
     }
     return out;

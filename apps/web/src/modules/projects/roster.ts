@@ -12,7 +12,13 @@
 
 import { OPERATOR_AGENT_ID } from './conversation';
 import type { ProcessStatus } from './MemberTerminal';
-import type { ProjectFleetSnapshot, ResolvedFleetMember } from './useProjectContext';
+import type { MemberSession, ProjectFleetSnapshot, ResolvedFleetMember } from './useProjectContext';
+
+/** Read-only session text for the roster: `resume · 3f9c2a1d` / `one-shot`; null when no session. */
+export function sessionLabel(session: MemberSession | undefined): string | null {
+    if (session === undefined) return null;
+    return session.id === undefined ? session.mode : `${session.mode} · ${session.id.slice(0, 8)}`;
+}
 
 /** Observed liveness narrowed to the roster's three-state vocabulary. */
 export type MemberObservedState = 'running' | 'exited' | 'not-started';
@@ -44,6 +50,8 @@ export interface RosterEntry {
         pid: number | null;
         startedAt: string | null;
         exitCode: number | null;
+        /** Session reported by the process entry (0897); null when the process feed has none. */
+        session: MemberSession | null;
     };
     isOrchestrator: boolean;
     issues: readonly MemberIssue[];
@@ -73,6 +81,7 @@ export function buildRoster(snapshot: ProjectFleetSnapshot, processes: ProcessSt
             pid: proc?.pid ?? null,
             startedAt: proc?.startedAt ?? null,
             exitCode: proc?.exitCode ?? null,
+            session: proc?.session ?? null,
         };
         const issues: MemberIssue[] = [];
         if (member.enabled === false) issues.push('disabled');
@@ -103,6 +112,7 @@ export function buildRoster(snapshot: ProjectFleetSnapshot, processes: ProcessSt
                 pid: proc.pid,
                 startedAt: proc.startedAt,
                 exitCode: proc.exitCode,
+                session: proc.session ?? null,
             },
             isOrchestrator: isOrchestratorEntry({ instanceId: proc.agentId }, snapshot),
             issues: ['undeclared'],

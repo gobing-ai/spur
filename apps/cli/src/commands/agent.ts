@@ -31,8 +31,11 @@ import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
 import {
     CLAIM_TTL_MS,
     InboxMessageDao,
+    MEMBER_SESSION_RESET_EVENT,
+    type MemberSessionObservation,
     ProjectClaimDao,
     RunSessionDao,
+    recordMemberSession,
     SystemEventDao,
     type SystemEventRow,
 } from '@gobing-ai/spur-domain';
@@ -215,6 +218,21 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
                 json: options.json,
                 jsonEnvelope: options.jsonEnvelope,
                 specs: options.specs,
+                server: options.server,
+            });
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('status')
+        .description('Show agent specs with live process status and member session (requires spur serve).')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .option('--server <url>', 'Server API URL for live run status and member session', DEFAULT_SERVER)
+        .action(async (options) => {
+            const code = await runAgentStatus(context, {
+                json: options.json,
+                jsonEnvelope: options.jsonEnvelope,
                 server: options.server,
             });
             context.setExitCode(code);
@@ -446,6 +464,17 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
     return `Unknown agent: '${raw}'. Accepted: role (${roleList}), configured executor (${executorList}), 'inline', or 'auto'.`;
 }
 
+/** Shorten a session id for human rendering — 8 chars is enough to tell sessions apart. */
+function shortSessionId(id: string): string {
+    return id.slice(0, 8);
+}
+
+/** Human session column: `resume id=3f9c2a1d` / `one-shot`; `-` when the member has no session. */
+function formatSessionColumn(session: MemberSessionObservation | undefined): string {
+    if (session === undefined) return '-';
+    return session.id === undefined ? session.mode : `${session.mode} id=${shortSessionId(session.id)}`;
+}
+
 /** `spur agent list [--json] [--specs]` — optionally list team agent specs instead of detection. */
 async function runAgentList(
     svc: AgentService,
@@ -467,10 +496,14 @@ async function runAgentList(
             `Cannot reach server at ${server} — showing local specs as stopped. Is spur serve running?`,
         );
     }
-    const statusOf = (id: string): { status: string; pid?: number } => {
+    const specFacts = (id: string): { status: string; pid?: number; session?: MemberSessionObservation } => {
         const proc = live?.get(id);
         if (proc === undefined) return { status: 'stopped' };
-        return proc.pid !== null ? { status: proc.status, pid: proc.pid } : { status: proc.status };
+        return {
+            status: proc.status,
+            ...(proc.pid !== null ? { pid: proc.pid } : {}),
+            ...(proc.session !== undefined ? { session: proc.session } : {}),
+        };
     };
     if (opts.json) {
         context.output.write(
@@ -485,7 +518,7 @@ async function runAgentList(
                             ? { role: spec.config.role }
                             : {}),
                         ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
-                        ...statusOf(spec.id),
+                        ...specFacts(spec.id),
                         path: `.spur/agents/${spec.id}.yaml`,
                     })),
                 },
@@ -499,16 +532,65 @@ async function runAgentList(
         return 0;
     }
     // 0544 R2/R4: role and executor are distinct columns; undeclared renders `unset`.
-    // Live run status is the trailing column (`running pid=<n>` / `stopped`).
+    // Live run status is the trailing column (`running pid=<n>` / `stopped`), then the
+    // member session (0897): mode + shortened resume id, `-` when none.
     context.output.write(
         specs
             .map((spec) => {
                 const role =
                     typeof spec.config?.role === 'string' && spec.config.role.length > 0 ? spec.config.role : 'unset';
                 const executor = spec.executor ?? 'unset';
-                const { status, pid } = statusOf(spec.id);
+                const { status, pid, session } = specFacts(spec.id);
                 const pidSuffix = pid === undefined ? '' : ` pid=${pid}`;
-                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}\t${status}${pidSuffix}`;
+                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}\t${status}${pidSuffix}\t${formatSessionColumn(session)}`;
+            })
+            .join('\n'),
+    );
+    return 0;
+}
+
+/**
+ * `spur agent status [--json] [--server <url>]` — live status + member session per
+ * agent spec (0897). The CLI never owns the supervisor: liveness and session come
+ * from `GET /api/processes`; an unreachable server reports every spec `stopped`
+ * with no session (same fallback as `list --specs`).
+ */
+async function runAgentStatus(
+    context: CliContext,
+    opts: { json?: boolean; jsonEnvelope?: boolean; server?: string },
+): Promise<number> {
+    const specs = await new AgentCoordinationService(context).listAgentSpecs();
+    const live = await fetchServerProcesses(opts.server ?? DEFAULT_SERVER);
+    if (live === null) {
+        context.output.error(
+            `Cannot reach server at ${opts.server ?? DEFAULT_SERVER} — showing local specs as stopped. Is spur serve running?`,
+        );
+    }
+    const rows = specs.map((spec) => {
+        const proc = live?.get(spec.id);
+        return {
+            id: spec.id,
+            name: spec.name,
+            type: spec.type,
+            status: proc === undefined ? ('stopped' as const) : proc.status,
+            ...(proc?.pid !== undefined && proc.pid !== null ? { pid: proc.pid } : {}),
+            ...(proc?.session !== undefined ? { session: proc.session } : {}),
+            path: `.spur/agents/${spec.id}.yaml`,
+        };
+    });
+    if (opts.json) {
+        context.output.write(toEnvelopeJson({ agents: rows }, { enveloped: opts.jsonEnvelope }));
+        return 0;
+    }
+    if (rows.length === 0) {
+        context.output.write('No agent specs found in .spur/agents/');
+        return 0;
+    }
+    context.output.write(
+        rows
+            .map((row) => {
+                const pidSuffix = 'pid' in row && row.pid !== undefined ? ` pid=${row.pid}` : '';
+                return `${row.id}\t${row.type}\t${row.status}${pidSuffix}\t${formatSessionColumn(row.session)}`;
             })
             .join('\n'),
     );
@@ -520,18 +602,33 @@ async function runAgentList(
  * Returns a `Map<agentId, { status, pid }>`, or `null` when the server is
  * unreachable / returns a non-OK response — callers fall back to local specs.
  */
-async function fetchServerProcesses(
-    server: string,
-): Promise<Map<string, { status: TeamStatusEntry['status']; pid: number | null }> | null> {
+/** Live facts the server supervisor reports for one agent id (`GET /api/processes`). */
+interface LiveProcess {
+    status: TeamStatusEntry['status'];
+    pid: number | null;
+    /** Member session state (0897) when the served project's ledger has one. */
+    session?: MemberSessionObservation;
+}
+
+async function fetchServerProcesses(server: string): Promise<Map<string, LiveProcess> | null> {
     try {
         const res = await (_testFetch ?? fetch)(`${server}/processes`, { method: 'GET' });
         if (!res.ok) return null;
         const body = (await res.json()) as {
-            processes?: Array<{ agentId: string; pid: number | null; status: string }>;
+            processes?: Array<{
+                agentId: string;
+                pid: number | null;
+                status: string;
+                session?: MemberSessionObservation;
+            }>;
         };
-        const map = new Map<string, { status: TeamStatusEntry['status']; pid: number | null }>();
+        const map = new Map<string, LiveProcess>();
         for (const proc of body.processes ?? []) {
-            map.set(proc.agentId, { status: mapServerStatus(proc.status), pid: proc.pid ?? null });
+            map.set(proc.agentId, {
+                status: mapServerStatus(proc.status),
+                pid: proc.pid ?? null,
+                ...(proc.session !== undefined ? { session: proc.session } : {}),
+            });
         }
         return map;
     } catch {
@@ -893,9 +990,6 @@ interface MemberSession {
  * failed drains mark the session poisoned and reset it before the next drain.
  */
 const MAX_CONSECUTIVE_FAILED_DRAINS = 3;
-
-/** Ledger event carrying the member-session reset run record (G66 R4). */
-const MEMBER_SESSION_RESET_EVENT = 'fleet.member-session-reset';
 
 /**
  * The runner-known agent binary a member's executor resolves to (G66 R1): an
@@ -1430,6 +1524,12 @@ export async function runAgentLoop(
             );
             if (memberSpec !== undefined) {
                 memberSession.mode = resolveMemberSessionMode(memberSpec, context);
+                // 0897: mirror the resolved mode to the ledger so the fleet
+                // snapshot / process entries / CLI can show it. Observability
+                // only — a failed write never blocks the drain loop.
+                await recordMemberSession(await context.getDb(), recipient, { mode: memberSession.mode }).catch(
+                    () => undefined,
+                );
                 if (memberSession.mode === 'one-shot') {
                     // G66 R3: exactly one warning per member lifetime — the loop
                     // process IS the member's lifetime, not one per drain.
@@ -1574,7 +1674,13 @@ export async function runAgentLoop(
                     consecutiveFailedDrains = 0;
                 } else if (memberSession.mode === 'resume' && lastExitRunId !== undefined) {
                     const sessionId = await drainedSessionId(context, lastExitRunId);
-                    if (sessionId !== undefined) memberSession.id = sessionId;
+                    if (sessionId !== undefined) {
+                        memberSession.id = sessionId;
+                        await recordMemberSession(await context.getDb(), recipient, {
+                            mode: 'resume',
+                            id: sessionId,
+                        }).catch(() => undefined);
+                    }
                 }
                 // The hold that described the previous idle stretch is stale: work
                 // ran, so the next idle wake records a fresh hold row.

@@ -109,6 +109,26 @@ describe('parseProcessList', () => {
         expect(parseProcessList({ processes: 'not-array' })).toBeNull();
         expect(parseProcessList({ processes: [{ agentId: 1 }] })).toBeNull();
     });
+
+    test('0897: a well-formed session passes through; malformed sessions are dropped, not fatal', () => {
+        const list = parseProcessList({
+            processes: [
+                {
+                    agentId: 'a',
+                    pid: 1,
+                    status: 'running',
+                    startedAt: 'x',
+                    exitCode: null,
+                    session: { mode: 'resume', id: 'sess-9' },
+                },
+                { agentId: 'b', pid: 2, status: 'running', startedAt: 'x', exitCode: null, session: 'bogus' },
+                { agentId: 'c', pid: 3, status: 'running', startedAt: 'x', exitCode: null },
+            ],
+        });
+        expect(list?.[0]?.session).toEqual({ mode: 'resume', id: 'sess-9' });
+        expect(list?.[1]?.session).toBeUndefined();
+        expect(list?.[2]?.session).toBeUndefined();
+    });
 });
 
 // ── Component rendering tests ─────────────────────────────────────────

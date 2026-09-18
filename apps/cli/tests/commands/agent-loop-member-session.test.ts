@@ -22,6 +22,7 @@ import {
     type DbAdapter,
     InboxMessageDao,
     RunSessionDao,
+    readMemberSessions,
     SystemEventDao,
 } from '@gobing-ai/spur-domain';
 import { type AgentProcessOptions, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
@@ -494,6 +495,49 @@ describe('agent loop member sessions (G66, task 0896)', () => {
             expect(rig.runs).toHaveLength(0);
             expect(rig.output.stderr.join('\n')).not.toContain('member-no-session');
             expect(await resetRows(rig)).toHaveLength(0);
+        } finally {
+            rig.cleanup();
+        }
+    }, 15000);
+});
+
+describe('member session ledger rows (0897 observability)', () => {
+    test('resume mode mirrors { mode, id } mid-loop; the operator stop reset clears the id', async () => {
+        const rig = await makeSessionRig('codex');
+        try {
+            await rig.inbox.enqueue('operator', 'member', 'first request');
+            let runEntered = false;
+            rig.notifyRun = () => {
+                runEntered = true;
+            };
+            rig.holdNextRun();
+            const loop = runAgentLoop(rig.customCtx, { spec: 'member', poll: '50' }, { maxIterations: 4 });
+            await waitForCondition(() => runEntered);
+            await rig.inbox.enqueue('operator', 'member', 'second request');
+            rig.gateRun();
+            await waitForCondition(() => rig.runs.length === 2);
+            // Loop still alive: the newest mirror row carries the latest captured id.
+            expect(await readMemberSessions(rig.db, ['member']).then((m) => m.get('member'))).toEqual({
+                mode: 'resume',
+                id: 'sess-2',
+            });
+            expect(await loop).toBe(0);
+            // Shutdown reset (operator): id cleared, mode retained.
+            expect(await readMemberSessions(rig.db, ['member']).then((m) => m.get('member'))).toEqual({
+                mode: 'resume',
+            });
+        } finally {
+            rig.cleanup();
+        }
+    }, 15000);
+
+    test('one-shot mode mirrors { mode } with no id', async () => {
+        const rig = await makeSessionRig('claude-code');
+        try {
+            await rig.inbox.enqueue('operator', 'member', 'only request');
+            const code = await runAgentLoop(rig.customCtx, { spec: 'member', poll: '50' }, { maxIterations: 1 });
+            expect(code).toBe(0);
+            expect((await readMemberSessions(rig.db, ['member'])).get('member')).toEqual({ mode: 'one-shot' });
         } finally {
             rig.cleanup();
         }

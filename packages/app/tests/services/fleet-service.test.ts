@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { type SpurConfig, spurConfigSchema } from '@gobing-ai/spur-config';
-import { createMigratedDb, type DbAdapter, ProjectClaimDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb, type DbAdapter, ProjectClaimDao, recordMemberSession } from '@gobing-ai/spur-domain';
 import { type AgentSpec, loadAgentSpecs, saveAgentSpec } from '@gobing-ai/ts-ai-runner';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { parse as yamlParse } from 'yaml';
@@ -435,6 +435,61 @@ describe('FleetService resolve (0835 R1/R3/R4/R7)', () => {
 // ---------------------------------------------------------------------------
 // materialize (R2, R3, R6)
 // ---------------------------------------------------------------------------
+
+describe('FleetService session join (0897)', () => {
+    test('members carry their ledger session; members without rows omit the field', async () => {
+        const { project, slug, cleanup } = await makeProject();
+        try {
+            const adapter = await createMigratedDb({ url: ':memory:' });
+            await recordMemberSession(adapter, `${slug}-lead`, { mode: 'resume', id: 'sess-42' });
+            const ctx: FleetServiceContext = {
+                spurConfig: configFor(parseConfig(EXECUTORS_YAML), project),
+                reloadAgentConfig: async () => configFor(parseConfig(EXECUTORS_YAML), project),
+                roles: ROLES,
+                fs: createNodeFileSystem(project),
+                registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
+                openDb: async () => adapter,
+            };
+            const svc = new FleetService(ctx);
+            await writeFleet(project, {
+                members: [
+                    { id: 'lead', role: 'coder', executor: 'writer', purpose: 'orchestrator' },
+                    { role: 'reviewer', executor: 'readonly' },
+                ],
+            });
+            const fleet = await svc.resolve(project);
+            const lead = fleet.members.find((m) => m.instanceId.endsWith('-lead'));
+            const reviewer = fleet.members.find((m) => m.instanceId.endsWith('-readonly'));
+            expect(lead?.session).toEqual({ mode: 'resume', id: 'sess-42' });
+            expect(reviewer?.session).toBeUndefined();
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a failing ledger read degrades to no session (never blocks the snapshot)', async () => {
+        const { project, cleanup } = await makeProject();
+        try {
+            const ctx: FleetServiceContext = {
+                spurConfig: configFor(parseConfig(EXECUTORS_YAML), project),
+                reloadAgentConfig: async () => configFor(parseConfig(EXECUTORS_YAML), project),
+                roles: ROLES,
+                fs: createNodeFileSystem(project),
+                registry: new ProjectRegistry(join(project, '.spur', 'registry.json')),
+                openDb: async () => {
+                    throw new Error('db gone');
+                },
+            };
+            const svc = new FleetService(ctx);
+            await writeFleet(project, { members: [{ id: 'lead', role: 'coder', executor: 'writer' }] });
+            const fleet = await svc.resolve(project);
+            expect(fleet.members).toHaveLength(1);
+            expect(fleet.members[0]?.session).toBeUndefined();
+        } finally {
+            await cleanup();
+        }
+    });
+});
 
 describe('FleetService materialize (0835 R2/R3/R6)', () => {
     test('writes one generated spec per enabled member; disabled members are not materialized', async () => {
