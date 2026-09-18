@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B8"
 name: "Runner capability matrix: per-agent session and stdin capabilities declared upstream and consumed by Spur"
-status: active
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-17T23:02:02.383Z"
-updated_at: "2026-09-18T03:07:26.264Z"
+updated_at: "2026-09-18T07:13:18.869Z"
 ---
 
 # B8: Runner capability matrix: per-agent session and stdin capabilities declared upstream and consumed by Spur
@@ -95,7 +95,8 @@ Feature: Runner capability matrix
 | --- | ---- | ------ |
 | 0888 | Extend the ts-ai-runner AgentSessionCapability record with persistentStdin, structuredOutput and verifiedAgainst, verify every agent row, and release | done |
 | 0889 | Consume the runner capability record in Spur: agent-run affinity branches, doctor --json capabilities, requiresCapabilities attestation and stale-declaration warning | done |
-| 0898 | Harden capability gating boundaries and coverage from B8 review findings | todo |
+| 0898 | Harden capability gating boundaries and coverage from B8 review findings | done |
+| 0899 | Doctor capability-staleness warning fires on nearly every real install (unnormalized detected version strings) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -103,4 +104,5 @@ Feature: Runner capability matrix
 ## History
 
 - 2026-09-18T03:07:26.264Z backlog → active (system)
+- 2026-09-18T07:13:18.869Z active → verifying (system)
 
