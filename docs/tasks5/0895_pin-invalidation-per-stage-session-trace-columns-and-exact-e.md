@@ -4,7 +4,7 @@ name: Pin invalidation, per-stage session trace columns, and exact E6 run-to-ses
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.556Z
-updated_at: "2026-09-17T23:22:20.517Z"
+updated_at: "2026-09-18T01:07:58.055Z"
 feature_id: B7
 priority: P1
 tags:

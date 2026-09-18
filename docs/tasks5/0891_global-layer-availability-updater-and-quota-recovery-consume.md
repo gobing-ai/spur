@@ -4,7 +4,7 @@ name: "Global-layer availability updater and quota recovery consumer: setExecuto
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.553Z
-updated_at: "2026-09-17T23:22:19.748Z"
+updated_at: "2026-09-18T01:07:57.621Z"
 feature_id: B6
 priority: P1
 tags:

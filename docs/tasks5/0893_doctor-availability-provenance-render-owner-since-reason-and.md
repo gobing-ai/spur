@@ -4,7 +4,7 @@ name: "Doctor availability provenance: render owner, since, reason and usage-sna
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.555Z
-updated_at: "2026-09-17T23:22:20.258Z"
+updated_at: "2026-09-18T01:07:57.911Z"
 feature_id: B6
 priority: P2
 tags:

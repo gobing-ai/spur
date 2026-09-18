@@ -4,7 +4,7 @@ name: "Consume the runner capability record in Spur: agent-run affinity branches
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.552Z
-updated_at: "2026-09-17T23:22:19.292Z"
+updated_at: "2026-09-18T01:07:57.473Z"
 feature_id: B8
 priority: P1
 tags:

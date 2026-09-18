@@ -4,7 +4,7 @@ name: Expose fleet member session mode and id in the fleet snapshot, process ent
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.557Z
-updated_at: "2026-09-17T23:22:21.061Z"
+updated_at: "2026-09-18T01:07:58.345Z"
 feature_id: G66
 priority: P2
 tags:

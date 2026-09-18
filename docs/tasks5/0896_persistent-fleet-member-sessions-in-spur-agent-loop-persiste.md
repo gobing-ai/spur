@@ -4,7 +4,7 @@ name: "Persistent fleet member sessions in spur agent loop: persistent-stdin, re
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.557Z
-updated_at: "2026-09-17T23:22:20.783Z"
+updated_at: "2026-09-18T01:07:58.200Z"
 feature_id: G66
 priority: P2
 tags:

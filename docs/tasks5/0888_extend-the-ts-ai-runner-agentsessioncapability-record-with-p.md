@@ -4,7 +4,7 @@ name: Extend the ts-ai-runner AgentSessionCapability record with persistentStdin
 status: todo
 template: feature-impl
 created_at: 2026-09-17T23:19:46.548Z
-updated_at: "2026-09-17T23:21:16.565Z"
+updated_at: "2026-09-18T00:51:35.187Z"
 feature_id: B8
 priority: P1
 tags:
@@ -21,7 +21,7 @@ dependencies: []
 
 ### Background
 
-Feature B8 makes the runner the single declaration point for per-agent session and stdin capabilities. `@gobing-ai/ts-ai-runner@0.4.67` already exports `AgentSessionCapability {supportsResumeById, supportsSessionDir}` and `getAgentSessionCapability(agent)`; codex resume is interactive-only (`exec resume` picker), gemini resumes `latest` only, claude has no session dir, and nothing records which CLI version a row was checked against. Authority: `docs/design/session-pinned-dispatch.md` §5 (accepted 2026-09-17), ADR-121. Upstream source lives in `/Users/robin/xprojects/ts-libs` (ts-ai-runner package); this task edits upstream and bumps the Spur catalog pin.
+Feature B8 makes the runner the single declaration point for per-agent session and stdin capabilities. `@gobing-ai/ts-ai-runner@0.4.67` already exports `AgentSessionCapability {supportsResumeById, supportsSessionDir}` and `getAgentSessionCapability(agent)`; codex resume is interactive-only (`exec resume` picker), gemini resumes `latest` only, claude has no session dir, and nothing records which CLI version a row was checked against. Authority: `docs/design/session-pinned-dispatch.md` §5 (accepted 2026-09-17), ADR-121. Upstream source lives in `/Users/robin/xprojects/ts-libs/packages/ai-runner` (verified 2026-09-17); this task edits upstream and bumps the Spur catalog pin.
 
 ### Requirements
 
