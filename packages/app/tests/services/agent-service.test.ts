@@ -366,11 +366,12 @@ describe('AgentService.doctor', () => {
         const tableLines = lines.join('').split('\n');
         const header = tableLines.find((l) => l.includes('STATUS'));
         expect(header).toBeDefined();
-        expect(header?.split(/\s{2,}/).filter(Boolean)).toHaveLength(7); // STATUS|EXECUTOR|AGENT|MODEL|TIER|VERSION|ROLES
+        // STATUS|EXECUTOR|AGENT|MODEL|TIER|VERSION|ROLES|OWNER|SINCE|REASON (0893 R1 added the last three)
+        expect(header?.split(/\s{2,}/).filter(Boolean)).toHaveLength(10);
         const row = tableLines.find((l) => l.includes('claude'));
         expect(row).toBeDefined();
-        // glyph+state share the first cell, so the row has the same 7 cells as the header
-        expect(row?.split(/\s{2,}/).filter(Boolean)).toHaveLength(7);
+        // glyph+state share the first cell, so the row has the same 10 cells as the header (0893 adds 3 provenance columns)
+        expect(row?.split(/\s{2,}/).filter(Boolean)).toHaveLength(10);
         // Tier-1 summary footer unchanged (R3).
         expect(tableLines.some((l) => /^\d+ usable, \d+ missing/.test(l))).toBe(true);
 
@@ -4068,7 +4069,7 @@ describe('disabled executors (0796)', () => {
         const result = await svc.runTraced('prompt', { agent: 'retired' }, deps);
         expect(result.exitCode).toBe(2);
         expect(result.message).toContain("Executor 'retired' is disabled");
-        expect(result.message).toContain('agent.executors.retired.disabled: true');
+        expect(result.message).toContain('agent.executors.retired.disabled');
         expect(runner.runPromptCommand).not.toHaveBeenCalled();
     });
 
@@ -4407,4 +4408,154 @@ test('fleet spec execution validates actual launch context and requires the mana
         await db.close();
         rmSync(project, { recursive: true, force: true });
     }
+});
+
+// ---------------------------------------------------------------------------
+// Tests: AgentService.doctor — availability provenance + usage snapshot (0893)
+// ---------------------------------------------------------------------------
+
+describe('AgentService.doctor — availability provenance (0893)', () => {
+    const T0 = Date.parse('2026-09-18T06:00:00.000Z');
+
+    /** doctorRunner returning nothing (disabled profiles render as synthesized rows). */
+    function noopDoctorRunner(): AgentRunDeps['doctorRunner'] {
+        return {
+            runAll: mock(() => Promise.resolve([])),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+    }
+
+    /** fs stub: doctor cache miss + usage snapshot at `path` with `captured_at`. */
+    function usageFs(capturedAt: string | null) {
+        return {
+            resolve: (...parts: string[]) => parts.join('/'),
+            exists: (p: string) => capturedAt !== null && p.endsWith('agent-usage.json'),
+            writeFile: () => Promise.resolve(),
+            mkdir: () => Promise.resolve(),
+            rename: () => Promise.resolve(),
+            readFile: (p: string) => {
+                if (capturedAt !== null && p.endsWith('agent-usage.json')) {
+                    return JSON.stringify({ captured_at: capturedAt });
+                }
+                throw new Error(`unexpected read: ${p}`);
+            },
+        } as unknown as AgentRunDeps['fileSystem'];
+    }
+
+    function usageDeps(capturedAt: string | null, snapshotPath = '/tmp/spur-test/agent-usage.json') {
+        return {
+            doctorRunner: noopDoctorRunner(),
+            fileSystem: usageFs(capturedAt),
+            now: () => T0,
+            usageSnapshotPathOverride: snapshotPath,
+        } as AgentRunDeps & {
+            usageSnapshotPathOverride: string;
+        };
+    }
+
+    test('R1: bare-boolean disabled renders owner=operator, and --json keeps the normalized object', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [
+                { name: 'dis-bare', agent: 'omp', disabled: true },
+                { name: 'live-exec', agent: 'omp', disabled: false },
+            ],
+        } as AgentConfig);
+        const deps = usageDeps(null);
+        const exitCode = await svc.doctor({ json: true, usageSnapshotPath: deps.usageSnapshotPathOverride }, deps);
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        const bare = parsed.agents.find((a: { agent: string }) => a.agent === 'dis-bare');
+        // Bare `true` is operator-owned; since/reason are null (no provenance recorded).
+        expect(bare.availability).toEqual({ disabled: true, owner: 'operator', since: null, reason: null });
+        // Table shows the same normalized ownership on the disabled row.
+        const out2 = captureOutput();
+        const textDeps = usageDeps(null);
+        await makeService({}, out2.output, {
+            executors: [
+                { name: 'dis-bare', agent: 'omp', disabled: true },
+                { name: 'live-exec', agent: 'omp', disabled: false },
+            ],
+        } as AgentConfig).doctor({ json: false, usageSnapshotPath: textDeps.usageSnapshotPathOverride }, textDeps);
+        const table = out2.lines.join('\n');
+        expect(table).toContain('OWNER');
+        expect(table).toMatch(/dis-bare\s+.*operator/);
+    });
+
+    test('R1: object-form disabled renders owner/since/reason in table and JSON', async () => {
+        const ownership = {
+            owner: 'quota' as const,
+            since: '2026-09-17T22:10:00.000Z',
+            reason: 'agent.quota.exhausted dis-obj',
+        };
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'dis-obj', agent: 'omp', disabled: ownership }],
+        } as AgentConfig);
+        const deps = usageDeps(null);
+        await svc.doctor({ json: true, usageSnapshotPath: deps.usageSnapshotPathOverride }, deps);
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        const obj = parsed.agents.find((a: { agent: string }) => a.agent === 'dis-obj');
+        expect(obj.availability).toEqual({
+            disabled: true,
+            owner: 'quota',
+            since: '2026-09-17T22:10:00.000Z',
+            reason: 'agent.quota.exhausted dis-obj',
+        });
+
+        const out2 = captureOutput();
+        const textDeps = usageDeps(null);
+        await makeService({}, out2.output, {
+            executors: [{ name: 'dis-obj', agent: 'omp', disabled: ownership }],
+        } as AgentConfig).doctor({ json: false, usageSnapshotPath: textDeps.usageSnapshotPathOverride }, textDeps);
+        const table = out2.lines.join('\n');
+        expect(table).toContain('quota');
+        expect(table).toContain('2026-09-17T22:10:00.000Z');
+        expect(table).toContain('agent.quota.exhausted dis-obj');
+    });
+
+    test('R2: fresh snapshot reports capturedAt/age, stale:false; stale snapshot reports stale:true', async () => {
+        const fresh = captureOutput();
+        const freshDeps = usageDeps(new Date(T0 - 60_000).toISOString());
+        await makeService({}, fresh.output, { executors: [] } as AgentConfig).doctor(
+            { json: true, usageSnapshotPath: freshDeps.usageSnapshotPathOverride },
+            freshDeps,
+        );
+        const freshParsed = JSON.parse(fresh.lines.find((l) => l.includes('"agents"')) ?? '');
+        expect(freshParsed.usage).toEqual({
+            capturedAt: new Date(T0 - 60_000).toISOString(),
+            age: 60_000,
+            stale: false,
+        });
+
+        const stale = captureOutput();
+        const staleDeps = usageDeps(new Date(T0 - 7 * 3_600_000).toISOString());
+        await makeService({}, stale.output, { executors: [] } as AgentConfig).doctor(
+            { json: true, usageSnapshotPath: staleDeps.usageSnapshotPathOverride },
+            staleDeps,
+        );
+        const staleParsed = JSON.parse(stale.lines.find((l) => l.includes('"agents"')) ?? '');
+        expect(staleParsed.usage.stale).toBe(true);
+        expect(staleParsed.usage.age).toBe(7 * 3_600_000);
+    });
+
+    test('R2/R3: table renders usage footer fresh/stale/none; missing snapshot is silent', async () => {
+        const run = async (capturedAt: string | null) => {
+            const out = captureOutput();
+            const deps = usageDeps(capturedAt);
+            await makeService({}, out.output, { executors: [] } as AgentConfig).doctor(
+                { json: false, usageSnapshotPath: deps.usageSnapshotPathOverride },
+                deps,
+            );
+            return { table: out.lines.join('\n'), errors: out.errors };
+        };
+        const fresh = await run(new Date(T0 - 5 * 60_000).toISOString());
+        expect(fresh.table).toContain(`usage: ${new Date(T0 - 5 * 60_000).toISOString()} (5m)`);
+        const stale = await run(new Date(T0 - 8 * 3_600_000).toISOString());
+        expect(stale.table).toContain('(stale)');
+        const missing = await run(null);
+        expect(missing.table).toContain('usage: none');
+        // R3: the producer is optional — no warning fires for a missing snapshot.
+        expect(missing.errors.join('\n')).not.toMatch(/[Ww]arning/);
+    });
 });

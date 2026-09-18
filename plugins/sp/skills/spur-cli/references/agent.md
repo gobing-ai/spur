@@ -25,6 +25,7 @@ that before using `run` for fan-out dispatch.
 | `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
 | `list` | List detected coding agents, or agent specs with `--specs` (live run status merged from `spur serve`) | `--specs` `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
+| `usage` | Run-once provider usage capture (codexbar) → quota-owned availability refresh; scheduled externally | `--dry-run` `--source <name>` `--json` |
 | `start <spec-id>` | Start a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
 | `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
 
@@ -161,9 +162,13 @@ spur agent doctor --json     # machine-readable (role selector: elected-first or
 ```
 
 Checks whether each agent is installed and ready to run. Text mode renders a capability table —
-`STATUS EXECUTOR AGENT MODEL TIER VERSION ROLES` where TIER is the executor's *capability* tier
-(`cheap|standard|capable-*`), MODEL the pinned config model (`—` when undeclared), and ROLES lists
-candidate pipeline roles with `*` on the elected one. Exit `1` if any checked agent is not ready.
+`STATUS EXECUTOR AGENT MODEL TIER VERSION ROLES OWNER SINCE REASON` where TIER is the executor's
+*capability* tier (`cheap|standard|capable-*`), MODEL the pinned config model (`—` when
+undeclared), and ROLES lists candidate pipeline roles with `*` on the elected one. OWNER/SINCE/
+REASON (0893) show availability provenance on `disabled` rows — bare `disabled: true` renders
+owner `operator` with `—` since/reason; object-form disables render their recorded values — plus
+a `usage:` footer reporting the `agent usage` snapshot (`capturedAt (age)`, `(stale)` past 6 h,
+or `usage: none` when the producer has never run). Exit `1` if any checked agent is not ready.
 
 ## `start` - start a supervised process
 
@@ -187,6 +192,41 @@ spur agent stop worker-1 --json
 Posts to the supervisor API
 (`POST /api/agents/:id/stop`) and prints `stopped <id>`. Same server requirement and flags as
 `start`.
+
+## `usage` - run-once provider usage capture (quota-owned availability refresh)
+
+```bash
+spur agent usage            # capture, record quota observations, drain them
+spur agent usage --dry-run  # print would-be changes; write nothing
+spur agent usage --json
+```
+
+Runs `codexbar usage --format json --provider all` once, writes the snapshot to
+`~/.config/spur/agent-usage.json` (`captured_at`, `source`, `providers[]`, `raw`), maps providers
+to executors via `agent.executors[].agent` (or the model's `<provider>/` prefix), and records
+`owner: quota` availability observations that the standard drain applies — the single availability
+write path. A provider is exhausted when any `primary|secondary|tertiary` window reports
+`usedPercent >= 100`; the window name and `resetsAt` go into the observation reason. Per-provider
+`{ "error": … }` entries are skipped (listed, never treated as recovery); healthy entries still
+apply. A missing codexbar binary or an unparsable payload exits `1` and changes nothing.
+Unmapped providers are listed and never guessed.
+
+**Scheduling is external** (cron/launchd, same pattern as `spur history daily`):
+
+```bash
+# launchd/cron example — hourly
+0 * * * * /opt/homebrew/bin/spur agent usage >> /tmp/spur-agent-usage.log 2>&1
+```
+
+`spur serve` never invokes the producer (asserted by a test, design R4).
+
+### Flags
+
+| Flag | Purpose |
+| ---- | ------- |
+| `--dry-run` | Print would-be changes (executor, from → to, owner, reason); write neither the snapshot nor any config |
+| `--source <name>` | Usage source implementation; only `codexbar` exists (default) |
+| `--json` | Machine-readable result payload |
 
 ## What this skill is NOT
 

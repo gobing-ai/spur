@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Add spur agent usage: run-once codexbar usage producer with snapshot file, provider-to-executor mapping, dry run, fail-closed exit, and the ADR-051 consent row"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.554Z
-updated_at: "2026-09-18T01:07:57.766Z"
+updated_at: "2026-09-18T05:43:12.371Z"
 feature_id: B6
 priority: P1
 tags:
@@ -35,22 +35,22 @@ Exhaustion rule (fixed at readiness, not left to the implementer): a provider is
 
 ### Requirements
 
-- [ ] R1. `spur agent usage [--dry-run] [--source codexbar] [--json]` exists under the `agent` noun; it runs `codexbar usage --format json --provider all`, writes `~/.config/spur/agent-usage.json` (`captured_at`, `source`, `providers[]`, `raw`) atomically, maps providers to executors via `agent.executors[].agent` + model/provider prefix, and emits `owner: quota` availability observations through the task-4 updater path using the Background exhaustion rule (`resetsAt` and the window name go into the observation reason); unmapped providers are listed in the output and never guessed.
-- [ ] R2. `--dry-run` prints the would-be changes (executor, from → to, owner, reason) and writes neither the snapshot nor any config file.
-- [ ] R3. A missing codexbar binary, or output that is not a parsable JSON array of provider entries (whatever the exit code), exits non-zero with the cause on stderr and changes nothing; the previous snapshot is left intact. A non-zero exit with a parsable array is not a failure: each `{ "error": … }` entry is skipped for its provider (listed in the output, no observation emitted, never treated as recovery) while healthy entries are still applied.
-- [ ] R4. `spur serve` contains no scheduler, timer or hook that invokes the producer (asserted by a test that greps the serve module for the command and by the design's R9 scenario); the `agent.md` reference documents the external-scheduler pattern (cron/launchd, same as `spur history daily`).
-- [ ] R5. The codexbar adapter is a small `UsageSource` interface with one implementation and a fixture captured from a real `codexbar` run (redacted), used by the tests.
-- [ ] R6. `docs/design/harness-surface-governance.md` gains the consent row (date, task WBS, verb + flags, rationale, rejected shape); `plugins/sp/skills/spur-cli/references/agent.md` documents the verb; the `setProjectExecutorDisabled` wrapper from task 4 is deleted.
-- [ ] R7. Tests in `apps/cli/tests/commands/agent*` cover R1–R3 with the fixture and a stubbed binary; `bun run spur-check` passes.
+- [x] R1. `spur agent usage [--dry-run] [--source codexbar] [--json]` exists under the `agent` noun; it runs `codexbar usage --format json --provider all`, writes `~/.config/spur/agent-usage.json` (`captured_at`, `source`, `providers[]`, `raw`) atomically, maps providers to executors via `agent.executors[].agent` + model/provider prefix, and emits `owner: quota` availability observations through the task-4 updater path using the Background exhaustion rule (`resetsAt` and the window name go into the observation reason); unmapped providers are listed in the output and never guessed.
+- [x] R2. `--dry-run` prints the would-be changes (executor, from → to, owner, reason) and writes neither the snapshot nor any config file.
+- [x] R3. A missing codexbar binary, or output that is not a parsable JSON array of provider entries (whatever the exit code), exits non-zero with the cause on stderr and changes nothing; the previous snapshot is left intact. A non-zero exit with a parsable array is not a failure: each `{ "error": … }` entry is skipped for its provider (listed in the output, no observation emitted, never treated as recovery) while healthy entries are still applied.
+- [x] R4. `spur serve` contains no scheduler, timer or hook that invokes the producer (asserted by a test that greps the serve module for the command and by the design's R9 scenario); the `agent.md` reference documents the external-scheduler pattern (cron/launchd, same as `spur history daily`).
+- [x] R5. The codexbar adapter is a small `UsageSource` interface with one implementation and a fixture captured from a real `codexbar` run (redacted), used by the tests.
+- [x] R6. `docs/design/harness-surface-governance.md` gains the consent row (date, task WBS, verb + flags, rationale, rejected shape); `plugins/sp/skills/spur-cli/references/agent.md` documents the verb; the `setProjectExecutorDisabled` wrapper from task 4 is deleted.
+- [x] R7. Tests in `apps/cli/tests/commands/agent*` cover R1–R3 with the fixture and a stubbed binary; `bun run spur-check` passes.
 
 ### Acceptance Criteria
 
 Covers feature B6 scenarios R5, R6, R7, R9.
 
-- [ ] AC1 — The usage producer captures a snapshot and applies quota-owned changes (req: R1)
-- [ ] AC2 — The usage producer supports a dry run (req: R2)
-- [ ] AC3 — A missing or failing codexbar changes nothing (req: R3)
-- [ ] AC4 — The producer is never scheduled by spur serve (req: R4)
+- [x] AC1 — The usage producer captures a snapshot and applies quota-owned changes (req: R1)
+- [x] AC2 — The usage producer supports a dry run (req: R2)
+- [x] AC3 — A missing or failing codexbar changes nothing (req: R3)
+- [x] AC4 — The producer is never scheduled by spur serve (req: R4)
 
 ### Q&A
 
@@ -73,18 +73,59 @@ Decision: one run-once command, scheduled outside Spur, rather than a poller in 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Run-once usage producer closes the loop from codexbar rate windows to quota-owned executor availability (B6 0892).
+
+- **R1 capture + apply** — `runAgentUsageProducer` (`packages/app/src/services/agent-usage-producer.ts:225`): parses codexbar entries (`:41`), classifies exhausted/headroom (`classifyProviderUsage` `:96`), maps providers to configured executors by `agent`/model prefix (`mapProvidersToExecutors` `:118`), and records quota-owned availability via `AgentExecutorUpdateDao.recordObservation`, then drains pending updates (`drainPendingAgentQuotaUpdates`). Snapshot is written atomically (tmp+rename, `writeSnapshotAtomic`), carrying `source`, `capturedAt`, per-provider classification, `unmappedProviders`, `noUsageProviders`.
+- **R2 dry run** — `options.dryRun` (`:198`) reports would-be changes with `snapshotPath: null`, `drain: null`; writes neither snapshot nor config.
+- **R3 fail-closed** — missing/failed codexbar capture raises `UsageSourceError` (`packages/app/src/services/agent-usage-source.ts:14`) before any write; a non-zero exit with a parsable payload is NOT an error (codexbar exits 1 when any provider fails); unparsable stdout rejects the whole capture.
+- **R4 serve never schedules the producer** — no serve/workflow wiring exists; the command doc (`apps/cli/src/commands/agent.ts:213`) directs external cron/launchd scheduling, and `docs/help/cmd_agent.md` says the same.
+- **R5 CLI surface** — `spur agent usage` (`apps/cli/src/commands/agent.ts:210`) with `--dry-run`/`--source`/shared JSON flags; flags live in the shared registry (`apps/cli/src/commands/shared-options.ts` `dryRunAgentUsage`/`sourceAgentUsage`); docs/help parity rows added (`docs/help/cmd_agent.md` "spur agent usage"); json-envelope census 67→68 (`apps/cli/tests/json-envelope-inventory.test.ts:284`).
+- **Boundary remediation** — spawn/env stay in the CLI layer: `packages/app` keeps the pure seam (`UsageCapture`/`UsageSource`/`UsageSourceError`) and the producer requires injected `source`+`snapshotPath`; `apps/cli/src/services/agent-usage-source.ts` owns `CodexbarUsageSource` (buffered capture via `NodeProcessExecutor`) and `defaultAgentUsageSnapshotPath`; `agent-usage-producer.ts` fs exemption recorded in `config/rules/strict/runtime-boundaries.yaml` (atomic snapshot persistence, mirrors project-registry).
+- **Tests** — producer R1/R2/R3 (`packages/app/tests/services/agent-usage-producer.test.ts`), seam contract (`packages/app/tests/services/agent-usage-source.test.ts`), CLI capture paths incl. non-zero-exit passthrough and fail-closed launch (`apps/cli/tests/services/agent-usage-source.test.ts`); scoped suites green: executor-update 29, agent-quota-updates 28, agent.test 32.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Verb + flags: apps/cli/src/commands/agent.ts:210-228 `agent.command('usage')` with `--dry-run`/`--source`/shared JSON, registry entries `dryRunAgentUsage`/`sourceAgentUsage` in apps/cli/src/commands/shared-options.ts:102-103 (parity tests shared-option-parity.test.ts green); codexbar argv `CODEXBAR_ARGV` = `codexbar usage --format json --provider all` (apps/cli/src/services/agent-usage-source.ts); atomic snapshot tmp+rename `writeSnapshotAtomic` packages/app/src/services/agent-usage-producer.ts:214-224 writing `~/.config/spur/agent-usage.json` via `defaultAgentUsageSnapshotPath` with `source`/`capturedAt`/providers; mapping `mapProvidersToExecutors` agent-usage-producer.ts:118-136 (agent + model provider-prefix); `owner: quota` observations via `AgentExecutorUpdateDao.recordObservation` then `drainPendingAgentQuotaUpdates`; exhaustion rule puts window name + `resetsAt` in reason `observationReason` :148-158; unmapped listed never guessed (`unmappedProviders`, test agent-usage-producer.test.ts + cli capture test). Tests: agent-usage-producer.test.ts "R1: applies quota-owned…", apps/cli/tests/commands/agent-usage.test.ts (verb surface), fixture apps/cli/tests/fixtures/codexbar-usage.json captured from a real run (redacted) |
+| R2 | MET | `options.dryRun` RunAgentUsageOptions agent-usage-producer.ts:198-206: dry-run returns `snapshotPath: null`, `drain: null`, changes action `would-apply`, writes nothing. Test: agent-usage-producer.test.ts "R2: dry run reports would-be changes but writes neither snapshot nor rows" (existsSync false, getUpdate undefined) |
+| R3 | MET | Missing binary → NodeProcessExecutor yields null exit → `UsageSourceError` fail-closed (apps/cli/src/services/agent-usage-source.ts:34-46, test "fail-closed: unusable launch"); unparsable output rejects whole capture (`codexbarEntriesSchema` safeParse → UsageSourceError, producer :281-289); non-zero exit with parsable array is NOT a failure: `erroredProviders` skip per `{error}` entries (classifyProviderUsage :96-116, status 'errored' never recovery), healthy entries still applied (cli capture test "passes through non-zero exits"). Previous snapshot untouched: producer writes only after successful parse (write after classification; R3 test asserts existsSync false on failure) |
+| R4 | MET | apps/cli/tests/commands/agent-usage.test.ts:294-297 "R4: the serve module never references the producer" greps serve.ts for `codexbar`/`agent-usage` (0 hits); no scheduler/timer in serve; docs/help/cmd_agent.md "spur agent usage" section: "Schedule it externally (cron/launchd); spur serve never runs it"; plugins/sp/skills/spur-cli/references/agent.md documents the verb |
+| R5 | MET | `UsageSource` interface with one implementation: packages/app/src/services/agent-usage-source.ts:7-16 (pure seam, test agent-usage-source.test.ts pins error contract), impl `CodexbarUsageSource` apps/cli/src/services/agent-usage-source.ts:23-47 via NodeProcessExecutor; fixture apps/cli/tests/fixtures/codexbar-usage.json captured from a real codexbar run (redacted) used by apps/cli/tests/commands/agent-usage.test.ts |
+| R6 | MET | Consent row dated 2026-09-17 in docs/design/harness-surface-governance.md:121 + :134 (verb+flags, rationale, rejected shape `spur agent doctor --refresh-usage`); plugins/sp/skills/spur-cli/references/agent.md documents `agent usage`; `setProjectExecutorDisabled` deleted — grep across packages/apps: 0 matches |
+| R7 | MET | apps/cli/tests/commands/agent-usage.test.ts covers R1-R3 (verb + fixture + stubbed binary via `setAgentUsageSourceForTesting` apps/cli/src/commands/agent.ts:93); repo gate GREEN: .spur/run/0892-test-gate.status=PASS, .spur/run/0892-test-gate.log "8484 pass / 0 fail", biome clean, typecheck 7/7, 46 pre + 2 post rules |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | agent-usage-producer.test.ts "R1: applies quota-owned disable→enable for a matching executor and writes the snapshot": change action `applied` for alpha, snapshot written with `source: codexbar`, drain applied; complement R2 test proves writes only when not dry-run |
+| AC2 | MET | test | agent-usage-producer.test.ts "R2: dry run reports would-be changes but writes neither snapshot nor rows": snapshotPath null, drain null, existsSync false, no row |
+| AC3 | MET | test | agent-usage-producer.test.ts "R3: unusable capture throws UsageSourceError and touches nothing" + apps/cli agent-usage-source.test.ts "fail-closed: unusable launch" and "passes through non-zero exits" |
+| AC4 | MET | test | apps/cli/tests/commands/agent-usage.test.ts:294-297 serve-module grep test (no codexbar/agent-usage reference in serve.ts) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:a82cd1b3e30d20cb441d42698199964bff1ef6ae56c6e9a8e11d08f0474b7c76 |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-18T04:51:54.147Z todo → wip (system)
+- 2026-09-18T05:34:33.099Z wip → testing (system)
+- 2026-09-18T05:38:21.648Z testing → done (system)
+

@@ -264,8 +264,10 @@ CREATE INDEX IF NOT EXISTS idx_history_task_session_session_id ON history_task_s
  * task 0799, ADR-111). One row per `(project_id, executor_name)` in the project SQLite
  * database — independent of the prunable `system_events` ledger, which stays audit
  * history. Timestamps are UTC ISO-8601 ms so lexical comparison is chronological;
- * `disabled` is constrained to 0/1. Kept byte-compatible with
- * `drizzle/0040_spur_cli_agent_executor_updates.sql` (the regenerate-on-release mirror).
+ * `disabled` is constrained to 0/1. The 0890 owner/provenance columns (`owner`,
+ * `layer`, `skipped_reason`) extend the foundation; pre-existing databases get them
+ * via the guarded `0048` ALTERs (0044 precedent). drizzle/0040 mirrors the original
+ * CREATE; drizzle/0048 mirrors the ALTER step.
  */
 export const AGENT_EXECUTOR_UPDATES_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS agent_executor_updates (
@@ -276,6 +278,9 @@ CREATE TABLE IF NOT EXISTS agent_executor_updates (
     agent TEXT,
     model TEXT,
     disabled INTEGER NOT NULL CHECK (disabled IN (0, 1)),
+    owner TEXT,
+    layer TEXT,
+    skipped_reason TEXT,
     applied_observation_id TEXT,
     applied_at TEXT,
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -283,6 +288,23 @@ CREATE TABLE IF NOT EXISTS agent_executor_updates (
     last_error TEXT,
     PRIMARY KEY (project_id, executor_name)
 );
+`;
+
+/**
+ * B6 0890 (R3): ownership/provenance columns on `agent_executor_updates`.
+ * `owner` records who wrote the observation (`quota`/`probe`; legacy NULL rows
+ * backfill to `quota` — B5 only recorded quota events), `layer` the config
+ * layer the drain applies to (`project`), and `skipped_reason` the classified
+ * no-op cause (operator ownership) — deliberately not `last_error`, which
+ * stays failure-only. addColumnIfMissing guards with `owner`, so the ALTERs
+ * and the backfill UPDATE run together exactly once. Kept byte-compatible
+ * with `drizzle/0048_spur_cli_agent_executor_updates_owner_columns.sql`.
+ */
+export const AGENT_EXECUTOR_UPDATES_OWNER_COLUMNS_SCHEMA_SQL = `
+ALTER TABLE agent_executor_updates ADD COLUMN owner TEXT;
+ALTER TABLE agent_executor_updates ADD COLUMN layer TEXT;
+ALTER TABLE agent_executor_updates ADD COLUMN skipped_reason TEXT;
+UPDATE agent_executor_updates SET owner = 'quota', layer = 'project' WHERE owner IS NULL;
 `;
 
 /**
@@ -1492,6 +1514,16 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         // index because the job name lives in the payload JSON).
         id: '0047_spur_cli_scheduler_custom_active_unique',
         sql: SCHEDULER_CUSTOM_ACTIVE_UNIQUE_SCHEMA_SQL,
+    },
+    {
+        // 0890 (feature B6): ownership/provenance columns on agent_executor_updates —
+        // `owner` (quota|probe) + `layer` (project) written with every observation,
+        // plus `skipped_reason` for operator-owned classified no-ops (never
+        // `last_error`, which stays failure-only). addColumnIfMissing guards with
+        // `owner`; legacy NULL owners backfill to `quota` (B5 recorded quota only).
+        id: '0048_spur_cli_agent_executor_updates_owner_columns',
+        sql: AGENT_EXECUTOR_UPDATES_OWNER_COLUMNS_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'agent_executor_updates', column: 'owner' },
     },
 ];
 

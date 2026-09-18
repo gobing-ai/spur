@@ -285,10 +285,6 @@ export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions)
     return promise;
 }
 
-export type {
-    ExecutorUpdateErrorCode,
-    SetProjectExecutorDisabledResult,
-} from './executor-update';
 /**
  * Invalidate the cached {@link SpurConfig} for one config path or the entire cache.
  *
@@ -304,7 +300,15 @@ export type {
 // (Re-exported here because the package `exports` map points `./loader` at this file;
 // the import cycle executor-update → loader is safe — the shared symbols are used
 // lazily at call time, never at module init.)
-export { ExecutorUpdateError, setProjectExecutorDisabled } from './executor-update';
+export {
+    type ExecutorConfigLayer,
+    type ExecutorDisabledUpdate,
+    ExecutorUpdateError,
+    type ExecutorUpdateErrorCode,
+    type SetExecutorAvailabilityRequest,
+    type SetExecutorAvailabilityResult,
+    setExecutorAvailability,
+} from './executor-update';
 
 /** Drop cached loader entries so the next {@link loadSpurConfig} re-reads from disk. */
 export function invalidateSpurConfig(configPath?: string): void {

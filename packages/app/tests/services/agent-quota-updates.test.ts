@@ -14,7 +14,7 @@ import { loadSpurConfig } from '@gobing-ai/spur-config/loader';
 import { AgentExecutorUpdateDao, applyCliMigrations } from '@gobing-ai/spur-domain';
 import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import {
     type AgentQuotaUpdatesContext,
     attachAgentQuotaUpdates,
@@ -105,6 +105,14 @@ function recovery(overrides: Record<string, unknown> = {}): Record<string, unkno
 async function yamlDisabled(executor: string): Promise<boolean | undefined> {
     const parsed = parseYaml(readFileSync(join(root, '.spur', 'config.yaml'), 'utf8')) as {
         agent: { executors: Array<{ name: string; disabled?: boolean }> };
+    };
+    return parsed.agent.executors.find((entry) => entry.name === executor)?.disabled;
+}
+
+/** Raw stored `disabled` value of one executor entry (boolean or ownership object). */
+async function yamlRawDisabled(executor: string): Promise<unknown> {
+    const parsed = parseYaml(readFileSync(join(root, '.spur', 'config.yaml'), 'utf8')) as {
+        agent: { executors: Array<{ name: string; disabled?: unknown }> };
     };
     return parsed.agent.executors.find((entry) => entry.name === executor)?.disabled;
 }
@@ -214,7 +222,12 @@ describe('drainPendingAgentQuotaUpdates (0799 R1/R2/R5)', () => {
         await recordAgentQuotaEvent(context(), exhaustion(), true);
         const summary = await drainPendingAgentQuotaUpdates(context());
         expect(summary.applied).toBe(1);
-        expect(await yamlDisabled('alpha')).toBe(true);
+        // 0890 R2/R3: the automatic disable writes the quota ownership object.
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'quota',
+            since: '2026-02-01T10:00:00.000Z',
+            reason: 'agent.quota.exhausted alpha',
+        });
         expect(await new AgentExecutorUpdateDao(db).pendingUpdates()).toHaveLength(0);
     });
 
@@ -239,7 +252,12 @@ describe('drainPendingAgentQuotaUpdates (0799 R1/R2/R5)', () => {
         await db.run('UPDATE agent_executor_updates SET applied_observation_id = NULL, applied_at = NULL');
         const summary = await drainPendingAgentQuotaUpdates(context());
         expect(summary.applied).toBe(1);
-        expect(await yamlDisabled('alpha')).toBe(true);
+        // The quota-owned object disable replays as an updater no-op — still acked.
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'quota',
+            since: '2026-02-01T10:00:00.000Z',
+            reason: 'agent.quota.exhausted alpha',
+        });
         expect(await new AgentExecutorUpdateDao(db).pendingUpdates()).toHaveLength(0);
     });
 
@@ -305,12 +323,16 @@ describe('drainPendingAgentQuotaUpdates (0799 R1/R2/R5)', () => {
         const row = await dao.getUpdate(root, 'alpha');
         expect(row?.applied_observation_id).toBeNull();
         expect(row?.attempts).toBe(MAX_QUOTA_DRAIN_ATTEMPTS_PER_ACTIVATION);
-        expect(row?.last_error).toContain('failed to commit project config update');
+        expect(row?.last_error).toContain('failed to commit config update');
         // Remove the blocker; the retained row retries and heals.
         rmdirSync(tmpBlocker);
         const healed = await drainPendingAgentQuotaUpdates(context());
         expect(healed.applied).toBe(1);
-        expect(await yamlDisabled('alpha')).toBe(true);
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'quota',
+            since: '2026-02-01T10:00:00.000Z',
+            reason: 'agent.quota.exhausted alpha',
+        });
     });
 });
 
@@ -323,7 +345,11 @@ describe('startAgentQuotaUpdateConsumer (0799 R5)', () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
         const summary = await consumer.drain();
         expect(summary.applied).toBe(1);
-        expect(await yamlDisabled('alpha')).toBe(true);
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'quota',
+            since: '2026-02-01T10:00:00.000Z',
+            reason: 'agent.quota.exhausted alpha',
+        });
         await consumer.stop();
         bus.emit('agent.quota.exhausted', exhaustion({ observationId: 'obs-9' }));
         await new Promise((resolve) => setTimeout(resolve, 20));
@@ -434,5 +460,219 @@ describe('failure isolation branches (0799 R2/R5 coverage)', () => {
         expect(warnings.some((w) => w.includes('drain failed'))).toBe(true);
         await consumer.stop();
         expect(warnings.some((w) => w.includes('final drain failed'))).toBe(true);
+    });
+});
+
+describe('ownership precedence (0890 R3)', () => {
+    test('an operator-owned disable is never overridden — classified no-op, not a failure', async () => {
+        // Operator-owned availability: bare `true` (human write).
+        const cfg = parseYaml(readFileSync(join(root, '.spur', 'config.yaml'), 'utf8')) as {
+            agent: { executors: Array<{ name: string; disabled?: unknown }> };
+        };
+        const alpha = cfg.agent.executors.find((entry) => entry.name === 'alpha');
+        if (!alpha) throw new Error('fixture config is missing the alpha executor');
+        alpha.disabled = true;
+        writeFileSync(join(root, '.spur', 'config.yaml'), stringifyConfig(cfg));
+        await recordAgentQuotaEvent(context(), exhaustion(), true);
+        const summary = await drainPendingAgentQuotaUpdates(context(), {
+            appliedAt: () => '2026-02-01T10:05:00.000Z',
+        });
+        expect(summary.applied).toBe(0);
+        expect(summary.skippedOperatorOwned).toBe(1);
+        expect(summary.failed).toBe(0);
+        // YAML unchanged — still the operator's bare `true`.
+        expect(await yamlDisabled('alpha')).toBe(true);
+        // Row resolved with the distinct skip class; last_error stays NULL.
+        const row = await new AgentExecutorUpdateDao(db).getUpdate(root, 'alpha');
+        expect(row?.skipped_reason).toBe('operator-owned');
+        expect(row?.last_error).toBeNull();
+        expect(row?.owner).toBe('quota');
+        expect(row?.layer).toBe('project');
+        expect(await new AgentExecutorUpdateDao(db).pendingUpdates()).toHaveLength(0);
+    });
+
+    test('a quota-owned object disable accepts a later probe update in the same drain', async () => {
+        const dao = new AgentExecutorUpdateDao(db);
+        await recordAgentQuotaEvent(context(), exhaustion(), true);
+        // A strictly newer probe observation lands before the drain runs.
+        await dao.recordObservation({
+            project_id: root,
+            executor_name: 'alpha',
+            observation_id: 'obs-probe',
+            observed_at: '2026-02-01T10:30:00.000Z',
+            agent: 'omp',
+            model: 'gpt-5',
+            disabled: true,
+            owner: 'probe',
+            layer: 'project',
+        });
+        const summary = await drainPendingAgentQuotaUpdates(context());
+        expect(summary.applied).toBe(1);
+        expect(summary.skippedOperatorOwned).toBe(0);
+        // Per-row config reload: the probe write saw quota ownership and overwrote it.
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'probe',
+            since: '2026-02-01T10:30:00.000Z',
+            reason: 'agent.quota.exhausted alpha',
+        });
+        expect(await dao.pendingUpdates()).toHaveLength(0);
+    });
+
+    test('a legacy NULL-owner row drains as quota', async () => {
+        await recordAgentQuotaEvent(context(), exhaustion(), true);
+        await db.run('UPDATE agent_executor_updates SET owner = NULL, layer = NULL');
+        const summary = await drainPendingAgentQuotaUpdates(context());
+        expect(summary.applied).toBe(1);
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'quota',
+            since: '2026-02-01T10:00:00.000Z',
+            reason: 'agent.quota.exhausted alpha',
+        });
+    });
+
+    test('a recovery never re-enables an operator-owned disable', async () => {
+        const cfg = parseYaml(readFileSync(join(root, '.spur', 'config.yaml'), 'utf8')) as {
+            agent: { executors: Array<{ name: string; disabled?: unknown }> };
+        };
+        const alpha = cfg.agent.executors.find((entry) => entry.name === 'alpha');
+        if (!alpha) throw new Error('fixture config is missing the alpha executor');
+        alpha.disabled = {
+            owner: 'operator',
+            since: '2026-02-01T08:00:00.000Z',
+            reason: 'manual pause',
+        };
+        writeFileSync(join(root, '.spur', 'config.yaml'), stringifyConfig(cfg));
+        await recordAgentQuotaEvent(
+            context(),
+            recovery({ observationId: 'obs-2', recoveredAt: '2026-02-01T11:00:00.000Z' }),
+            false,
+        );
+        const summary = await drainPendingAgentQuotaUpdates(context());
+        expect(summary.applied).toBe(0);
+        expect(summary.skippedOperatorOwned).toBe(1);
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'operator',
+            since: '2026-02-01T08:00:00.000Z',
+            reason: 'manual pause',
+        });
+    });
+});
+
+/** Serialize the mutated config back to YAML (test-only; documents stay simple here). */
+function stringifyConfig(config: unknown): string {
+    return stringifyYaml(config as Record<string, unknown>);
+}
+
+describe('quota recovery consumer + layer routing (0891 R1/R4)', () => {
+    test('a quota-owned disable recovers on a recovered event — config flips to false (AC1)', async () => {
+        await recordAgentQuotaEvent(context(), exhaustion(), true);
+        await drainPendingAgentQuotaUpdates(context()); // disable lands first (object form)
+        expect(await yamlRawDisabled('alpha')).toEqual({
+            owner: 'quota',
+            since: '2026-02-01T10:00:00.000Z',
+            reason: 'agent.quota.exhausted alpha',
+        });
+        await recordAgentQuotaEvent(
+            context(),
+            recovery({ observationId: 'obs-2', recoveredAt: '2026-02-01T11:00:00.000Z' }),
+            false,
+        );
+        const summary = await drainPendingAgentQuotaUpdates(context(), {
+            appliedAt: () => '2026-02-01T11:05:00.000Z',
+        });
+        expect(summary.applied).toBe(1);
+        expect(summary.skippedOperatorOwned).toBe(0);
+        expect(await yamlDisabled('alpha')).toBe(false);
+        const row = await new AgentExecutorUpdateDao(db).getUpdate(root, 'alpha');
+        expect(row?.applied_observation_id).toBe('obs-2');
+        expect(row?.owner).toBe('quota');
+        expect(await new AgentExecutorUpdateDao(db).pendingUpdates()).toHaveLength(0);
+    });
+
+    test('an operator-owned disable is never recovered by a quota event — classified no-op', async () => {
+        // Operator sets bare `true` while the quota disable row is pending.
+        await recordAgentQuotaEvent(context(), exhaustion(), true);
+        await drainPendingAgentQuotaUpdates(context());
+        const cfg = parseYaml(readFileSync(join(root, '.spur', 'config.yaml'), 'utf8')) as {
+            agent: { executors: Array<{ name: string; disabled?: unknown }> };
+        };
+        const alpha = cfg.agent.executors.find((entry) => entry.name === 'alpha');
+        if (!alpha) throw new Error('fixture config is missing the alpha executor');
+        alpha.disabled = true;
+        writeFileSync(join(root, '.spur', 'config.yaml'), stringifyConfig(cfg));
+        await recordAgentQuotaEvent(
+            context(),
+            recovery({ observationId: 'obs-2', recoveredAt: '2026-02-01T11:00:00.000Z' }),
+            false,
+        );
+        const summary = await drainPendingAgentQuotaUpdates(context(), {
+            appliedAt: () => '2026-02-01T11:05:00.000Z',
+        });
+        expect(summary.applied).toBe(0);
+        expect(summary.skippedOperatorOwned).toBe(1);
+        expect(summary.failed).toBe(0);
+        expect(await yamlDisabled('alpha')).toBe(true); // operator ownership preserved
+        const row = await new AgentExecutorUpdateDao(db).getUpdate(root, 'alpha');
+        expect(row?.skipped_reason).toBe('operator-owned');
+        expect(row?.last_error).toBeNull();
+    });
+
+    test('a probe-owned object disable also recovers on a quota recovered event', async () => {
+        const dao = new AgentExecutorUpdateDao(db);
+        await recordAgentQuotaEvent(context(), exhaustion(), true);
+        await drainPendingAgentQuotaUpdates(context());
+        // Probe ownership supersedes quota before the recovery arrives.
+        await dao.recordObservation({
+            project_id: root,
+            executor_name: 'alpha',
+            observation_id: 'obs-probe',
+            observed_at: '2026-02-01T10:30:00.000Z',
+            agent: 'omp',
+            model: 'gpt-5',
+            disabled: true,
+            owner: 'probe',
+            layer: 'project',
+        });
+        await drainPendingAgentQuotaUpdates(context());
+        await recordAgentQuotaEvent(
+            context(),
+            recovery({ observationId: 'obs-3', recoveredAt: '2026-02-01T11:00:00.000Z' }),
+            false,
+        );
+        const summary = await drainPendingAgentQuotaUpdates(context());
+        expect(summary.applied).toBe(1);
+        expect(await yamlDisabled('alpha')).toBe(false);
+    });
+
+    test('a global-layer row for a project-declared executor writes the project fragment (project wins)', async () => {
+        // Attribution points at 'beta' (declared only in the project fixture).
+        const event = recovery({
+            observationId: 'obs-g1',
+            recoveredAt: '2026-02-01T11:00:00.000Z',
+            attribution: { projectId: root, executor: 'beta', agent: 'claude' },
+        });
+        await recordAgentQuotaEvent(context(), event, false);
+        await db.run("UPDATE agent_executor_updates SET layer = 'global'");
+        const summary = await drainPendingAgentQuotaUpdates(context(), {
+            appliedAt: () => '2026-02-01T11:05:00.000Z',
+        });
+        // Project fragment wins over the requested global layer — write landed in project.
+        expect(summary.applied).toBe(1);
+        expect(await yamlDisabled('beta')).toBe(false);
+    });
+
+    test('a global-layer row with no declaring layer anywhere is a classified no-op', async () => {
+        const event = recovery({
+            observationId: 'obs-g2',
+            recoveredAt: '2026-02-01T11:00:00.000Z',
+            attribution: { projectId: root, executor: 'ghost', agent: 'omp' },
+        });
+        await recordAgentQuotaEvent(context(), event, false);
+        await db.run("UPDATE agent_executor_updates SET layer = 'global'");
+        const warnings: string[] = [];
+        const summary = await drainPendingAgentQuotaUpdates(context((m) => warnings.push(m)));
+        expect(summary.applied).toBe(0);
+        expect(summary.failed).toBe(0);
+        expect(await new AgentExecutorUpdateDao(db).pendingUpdates()).toHaveLength(0);
     });
 });

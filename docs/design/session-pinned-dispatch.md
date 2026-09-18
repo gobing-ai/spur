@@ -59,7 +59,7 @@ agent:
 One command, run by cron/launchd like `spur history daily`, never by `spur serve`:
 
 1. Run `codexbar usage --format json --provider all` (adapter behind a small `UsageSource` interface so a second source can be added without touching the mapping).
-2. Write `~/.config/spur/agent-usage.json` (`{ captured_at, source, providers: [...] , raw }`).
+2. Write `~/.config/spur/agent-usage.json` (`{ captured_at, source, providers: [...] , raw }`). Tests and sandboxes pin the location via `SPUR_AGENT_USAGE_SNAPSHOT` (injected-env override in `defaultAgentUsageSnapshotPath`; bun's `homedir()` ignores `HOME` at runtime).
 3. Map provider → executors via `agent.executors[].agent` + model/provider prefix; unmapped providers are reported, never guessed.
 4. Emit synthetic `agent.quota.exhausted|recovered` observations with `owner: quota` into the same durable path (§3.2); `--dry-run` prints the diff and writes nothing. A provider is exhausted when any non-null `usage.primary|secondary|tertiary` window has `usedPercent >= 100`, and has headroom when every non-null window is below 100; `extraRateWindows` is kept in `raw` only.
 5. codexbar missing, or output that is not a parsable array of provider entries ⇒ exit non-zero naming the cause, no writes. A non-zero exit alone is not a failure: codexbar exits 1 whenever any provider fails. Per-provider `error` entries are skipped and reported; healthy entries still apply.

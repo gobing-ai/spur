@@ -133,9 +133,18 @@ agent:
     # A disabled profile stays visible to `spur agent doctor` but never routes
     # (no role, team, stage, or explicit selection). Flip back to enabled by
     # removing the line or setting disabled: false.
+    # Quota refresh is external: schedule `spur agent usage` (cron/launchd) to
+    # capture provider usage and record quota-owned availability observations.
+    # spur serve never runs it (B6 0892; docs/design/session-pinned-dispatch.md §3.4).
+    # A bare `true` is operator-owned (only humans write booleans). Automatic
+    # writers (quota/probe checks) emit the ownership object instead; an
+    # operator-owned disable is never auto-re-enabled (B6 0890).
     # - name: retired-profile
     #   agent: omp
     #   disabled: true
+    # - name: quota-limited
+    #   agent: omp
+    #   disabled: { owner: quota, since: 2026-02-14T09:30:00.000Z, reason: agent.quota.exhausted quota-limited }
     - name: pi-dsv4-flash-volc
       agent: pi
     #   tier: standard

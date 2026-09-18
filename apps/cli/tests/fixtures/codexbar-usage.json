@@ -1,0 +1,102 @@
+[
+    {
+        "provider": "codex",
+        "source": "oauth",
+        "usage": {
+            "updatedAt": "2026-09-18T04:18:58Z",
+            "primary": {
+                "resetsAt": "2026-09-18T09:18:58Z",
+                "windowMinutes": 300,
+                "usedPercent": 0,
+                "resetDescription": "tomorrow, 2:18 AM"
+            },
+            "secondary": {
+                "resetsAt": "2026-09-20T05:42:39Z",
+                "windowMinutes": 10080,
+                "usedPercent": 74,
+                "resetDescription": "Sep 19 at 10:42 PM"
+            },
+            "tertiary": null
+        }
+    },
+    {
+        "provider": "openai",
+        "source": "auto",
+        "error": {
+            "code": 1,
+            "kind": "provider",
+            "message": "No available fetch strategy for openai."
+        }
+    },
+    {
+        "provider": "claude",
+        "source": "web",
+        "usage": {
+            "updatedAt": "2026-09-18T04:19:01Z",
+            "primary": {
+                "resetsAt": "2026-09-18T05:39:59Z",
+                "windowMinutes": 300,
+                "usedPercent": 11,
+                "resetDescription": "Sep 17 at 10:39PM"
+            },
+            "secondary": {
+                "resetsAt": "2026-09-24T00:59:59Z",
+                "windowMinutes": 10080,
+                "usedPercent": 2,
+                "resetDescription": "Sep 23 at 5:59PM"
+            },
+            "tertiary": null
+        }
+    },
+    {
+        "provider": "antigravity",
+        "source": "cli",
+        "usage": {
+            "updatedAt": "2026-09-18T04:19:29Z",
+            "primary": {
+                "resetsAt": "2026-09-23T02:47:47Z",
+                "windowMinutes": 10080,
+                "usedPercent": 10.965496301651001,
+                "resetDescription": "You have used some of your weekly limit, it will fully refresh in 4 days, 22 hours."
+            },
+            "secondary": {
+                "resetsAt": "2026-09-20T05:26:19Z",
+                "windowMinutes": 10080,
+                "usedPercent": 67.02567934989929,
+                "resetDescription": "You have used some of your weekly limit, it will fully refresh in 2 days, 1 hour."
+            },
+            "tertiary": null
+        }
+    },
+    {
+        "provider": "zed",
+        "source": "local",
+        "usage": {
+            "updatedAt": "2026-09-18T04:19:45Z",
+            "primary": {
+                "usedPercent": 100,
+                "resetDescription": "2000 / 2000 predictions"
+            },
+            "secondary": {
+                "resetsAt": "2026-09-25T00:00:00Z",
+                "usedPercent": 78.00123635304729,
+                "resetDescription": "Cycle ends in 6d 19h"
+            },
+            "tertiary": null
+        }
+    },
+    {
+        "provider": "grok",
+        "source": "grok-cli-proxy",
+        "usage": {
+            "updatedAt": "2026-09-18T04:19:51Z",
+            "primary": {
+                "resetsAt": "2026-09-22T00:34:34Z",
+                "windowMinutes": 10080,
+                "usedPercent": 51
+            },
+            "secondary": null,
+            "tertiary": null
+        }
+    }
+]

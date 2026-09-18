@@ -1,5 +1,6 @@
 import { getEnvVars } from '@gobing-ai/ts-utils';
 import { z } from 'zod';
+import { isRfc3339Timestamp } from './rfc3339';
 
 // NOTE: this is the CF-safe CORE entry of @gobing-ai/spur-config.
 // It has ZERO runtime deps beyond zod — no `yaml`, no `node:fs`, no `node:path`.
@@ -286,6 +287,25 @@ export const RequiresCapabilitiesSchema = z.partialRecord(
 /** `agent.run` `requiresCapabilities` option. */
 export type RequiresCapabilities = z.infer<typeof RequiresCapabilitiesSchema>;
 
+/** Who last wrote an executor's `disabled` state (B6 0890 R1): humans vs automatic writers. */
+export const executorAvailabilityOwnerSchema = z.enum(['operator', 'quota', 'probe']);
+
+/**
+ * Ownership object form of `agent.executors[].disabled` (B6 0890 R1). `since`
+ * and `reason` are required so an object disable always documents when and why;
+ * a bare `true` (operator-owned) stays the human shortcut without provenance.
+ */
+export const executorDisabledObjectSchema = z.object({
+    owner: executorAvailabilityOwnerSchema,
+    /** RFC 3339 timestamp of when this state was written. */
+    since: z.string().refine(isRfc3339Timestamp, { message: 'since must be an RFC 3339 timestamp' }),
+    /** Cause label, e.g. `agent.quota.exhausted <executor>`. */
+    reason: z.string().min(1),
+});
+
+/** Stored `disabled` value: bare boolean (operator-owned when `true`) or ownership object. */
+export type ExecutorDisabledValue = boolean | z.infer<typeof executorDisabledObjectSchema>;
+
 /**
  * Schema for a single named executor profile under `agent.executors`.
  *
@@ -300,11 +320,13 @@ export type RequiresCapabilities = z.infer<typeof RequiresCapabilitiesSchema>;
  * `executionCapabilities` (0706) is orthogonal to `tier`: it attests what the
  * native platform enforces, not model quality.
  *
- * `disabled` (111 R1/R2): routing kill-switch. Only `omitted` or a boolean is
- * accepted — the zod default applies `false` AFTER the global/project raw merge,
- * so a project layer omitting the field inherits the global `true` and an
- * explicit project `false` overrides it. String/null/numeric values fail
- * validation (no `"true"`/`1` coercion).
+ * `disabled` (111 R1/R2; ownership widened B6 0890 R1): routing kill-switch.
+ * Accepts a boolean or an ownership object (`{owner, since, reason}` — see
+ * {@link executorDisabledObjectSchema}). The zod default applies `false` AFTER
+ * the global/project raw merge, so a project layer omitting the field inherits
+ * the global `true` and an explicit project `false` overrides it. Other shapes
+ * fail validation (no `"true"`/`1` coercion). Readers never inspect the raw
+ * shape — {@link normalizeExecutorAvailability} is the single reader.
  */
 export const AgentExecutorConfigSchema = z.object({
     name: z.string().min(1),
@@ -312,7 +334,7 @@ export const AgentExecutorConfigSchema = z.object({
     model: z.string().min(1).optional(),
     tier: executorCapabilityTierSchema.optional(),
     executionCapabilities: ExecutionCapabilitiesSchema.optional(),
-    disabled: z.boolean().default(false),
+    disabled: z.union([z.boolean(), executorDisabledObjectSchema]).default(false),
 });
 
 /**
@@ -323,13 +345,43 @@ export const AgentExecutorConfigSchema = z.object({
  */
 export class ExecutorDisabledError extends Error {
     constructor(name: string) {
-        super(`Executor "${name}" is disabled by config (agent.executors.${name}.disabled: true)`);
+        super(`Executor "${name}" is disabled by config (agent.executors.${name}.disabled)`);
         this.name = 'ExecutorDisabledError';
     }
 }
 
 /** A single executor profile entry. */
 export type AgentExecutorConfig = z.infer<typeof AgentExecutorConfigSchema>;
+
+/** Normalized availability view (B6 0890 R1) — the only shape code may inspect. */
+export interface ExecutorAvailability {
+    disabled: boolean;
+    /** `operator` for bare booleans, the object's owner otherwise; undefined when enabled. */
+    owner: z.infer<typeof executorAvailabilityOwnerSchema> | undefined;
+    since: string | undefined;
+    reason: string | undefined;
+}
+
+/**
+ * The single reader of the raw `agent.executors[].disabled` shape (B6 0890 R1).
+ * A bare `true` is operator-owned because only humans write booleans; automatic
+ * writers always emit the object form, which carries its own owner. A bare
+ * `false` (or an enabled entry) carries no owner at all.
+ */
+export function normalizeExecutorAvailability(raw: ExecutorDisabledValue | undefined): ExecutorAvailability {
+    // Absent `disabled` (legacy executor entries, raw fixtures built without zod
+    // parse) means enabled with no owner — the raw shape predates the 0890 object
+    // form, and absence must not crash the object fallthrough below.
+    if (raw === undefined || raw === null) {
+        return { disabled: false, owner: undefined, since: undefined, reason: undefined };
+    }
+    if (typeof raw === 'boolean') {
+        return raw
+            ? { disabled: true, owner: 'operator', since: undefined, reason: undefined }
+            : { disabled: false, owner: undefined, since: undefined, reason: undefined };
+    }
+    return { disabled: true, owner: raw.owner, since: raw.since, reason: raw.reason };
+}
 
 /**
  * Schema for one role's override under `agent.roles.<roleId>` (task 0572).
@@ -561,7 +613,7 @@ export function resolveExecutor(
         // pin to it must fail here, before any process spawns, and must not
         // fall through to a same-named bare binary (executors-first collision
         // precedence keeps the reference pointing at the profile).
-        if (exec.disabled === true) throw new ExecutorDisabledError(name);
+        if (normalizeExecutorAvailability(exec.disabled).disabled) throw new ExecutorDisabledError(name);
         return { agent: exec.agent, model: exec.model };
     }
     if (opts?.isCanonicalAgent === undefined || opts.isCanonicalAgent(name)) {

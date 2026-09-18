@@ -34,7 +34,7 @@ function schedulerCustomActiveConflict(jobName: string): Error {
     });
 }
 
-import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { getEnvVar, normalizeExecutorAvailability, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import type { CreateServerContextOptions, ServerContext, ServerScheduler } from '../src/context';
 import { createServerContext } from '../src/context';
 import {
@@ -807,9 +807,11 @@ describe('startServer', () => {
             await exitCalled;
             expect(exitCodes).toEqual([0]);
 
-            // The shutdown final drain applied the pending observation to the YAML.
+            // The shutdown final drain applied the pending observation to the YAML
+            // (0890 R2: automatic writers persist the object form). The pending
+            // quota observation's owner marker proves the applied disable.
             const yaml = readFileSync(join(projectRoot, '.spur', 'config.yaml'), 'utf8');
-            expect(yaml).toContain('disabled: true');
+            expect(yaml).toContain('owner: quota');
         } finally {
             quotaDb.close();
             rmSync(projectRoot, { recursive: true, force: true });
@@ -937,8 +939,9 @@ describe('startServer', () => {
 
             // The startup drain applied the disable synchronously — the consumer's
             // 30s poll tick cannot have fired inside startServer's composition, so
-            // this is the awaited initial drain, not a poll.
-            expect(readFileSync(join(projectRoot, '.spur', 'config.yaml'), 'utf8')).toContain('disabled: true');
+            // this is the awaited initial drain, not a poll. 0890 R2: the quota
+            // disable persists as the classified object form.
+            expect(readFileSync(join(projectRoot, '.spur', 'config.yaml'), 'utf8')).toContain('owner: quota');
             expect(await dao.pendingUpdates()).toHaveLength(0);
             const drainLog = logMessages.find((m) => m.msg === 'Agent quota update startup drain complete');
             expect(drainLog?.data?.applied).toBe(1);
@@ -948,7 +951,16 @@ describe('startServer', () => {
             // — a fresh load observes the disable without waiting for a poll tick.
             const { loadSpurConfig } = await import('@gobing-ai/spur-config/loader');
             const reloaded = await loadSpurConfig(projectRoot);
-            expect(reloaded.agent?.executors?.find((e) => e.name === 'alpha')?.disabled).toBe(true);
+            // 0890 R1/R2: read through the single availability reader — the quota
+            // disable persists as the classified object form (owner quota).
+            expect(
+                normalizeExecutorAvailability(reloaded.agent?.executors?.find((e) => e.name === 'alpha')?.disabled),
+            ).toEqual({
+                disabled: true,
+                owner: 'quota',
+                since: '2026-02-01T10:00:00.000Z',
+                reason: 'agent.quota.exhausted alpha',
+            });
 
             // Exercise the real workflow-launch boundary (createEngineService →
             // reloadAgentConfig → loadSpurConfig) through the server context: a
@@ -1100,7 +1112,7 @@ describe('startServer', () => {
             const row = await dao.getUpdate(projectRoot, 'alpha');
             expect(row?.applied_observation_id).toBeNull();
             expect(row?.attempts).toBe(3);
-            expect(row?.last_error).toContain('failed to commit project config update');
+            expect(row?.last_error).toContain('failed to commit config update');
         } finally {
             if (prevProjectsFile === undefined) removeEnvVar('SPUR_PROJECTS_FILE');
             else setEnvVar('SPUR_PROJECTS_FILE', prevProjectsFile);

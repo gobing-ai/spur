@@ -98,6 +98,25 @@ spur agent run "Work on task 0089" --agent reviewer --drain
 }
 ```
 
+## spur agent usage
+
+```
+spur agent usage [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--dry-run` | Print would-be changes; write neither the snapshot nor any config |
+| `--source <source>` | Usage source implementation |
+| `--json` | Output machine-readable JSON |
+
+Run-once provider usage capture (codexbar) that refreshes quota-owned executor
+availability. Schedule it externally (cron/launchd); `spur serve` never runs it.
+Healthy providers whose windows are exhausted disable their executors (owner
+`quota`); recovered headroom re-enables them. Providers matching no configured
+executor are listed as unmapped, never guessed. A missing or failing codexbar
+run is fail-closed: nothing is written and the command exits non-zero.
+
 ## spur agent list
 
 ```

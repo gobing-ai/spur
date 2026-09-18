@@ -203,10 +203,13 @@ agent config at each selection/launch boundary; replace captured executor snapsh
 doctor fingerprints without reparsing unrelated runtime policy in every inner loop. Keep the
 current invocation's attempted/exhausted set in memory so fallback never waits for persistence.
 
-Global-only entries cannot be persisted by this updater. Operators may predeclare name-only
-project fragments. A disable affects only its named profile, not all profiles on the same account.
-Manual YAML false remains normal recovery. A future automatic recovery producer needs disable
-ownership before it can safely override a manual disable; that state model is deferred.
+Global-only entries persist through `setExecutorAvailability` (B6 0891): a `layer: 'global'`
+request writes `~/.config/spur/config.yaml` with the same per-path lock, atomic rename and
+conflict detection as the project layer, and a project fragment still wins when both layers
+declare the name. Recovery is evidence-driven only: the `agent.quota.recovered` consumer (B6
+0891) re-enables quota- or probe-owned executors; operator ownership is never overridden and
+there is no timer and no synthetic recovery, per feature Scope. A disable affects only its
+named profile, not all profiles on the same account. Manual YAML false remains normal recovery.
 
 ## 7. Verification and implementation order
 
