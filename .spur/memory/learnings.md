@@ -1901,3 +1901,45 @@ No task/feature corpus writes. Diff: 2 files, +22/−12. Artifact written to `.s
 - Drift found and repaired: `docs/design/workflow-execution-economy.md` §3 still spoke in proposal tense ("Today … indistinguishable in the trace") after the routing shipped; rewritten to shipped state with the opt-in mechanism, pilot pointer, and 0876 handoff. Frontmatter `Status: proposed` contradicted Accepted ADR-117/118/119; updated to in-flight split (§2/§3/§4 shipped via 0870–0872; §5 promotion gate pending on 0873/0876 evidence).
 - Verified current, left untouched: `docs/00_ADR.md` ADR-118/119/120; `docs/03_ARCHITECTURE.md:1038-1041` (ADR-118 summary names `contract-violation`, the repair edge, and the wrapup pilot); `docs/04_DESIGN.md` index rows (economy, run log, composition contract); `docs/design/event-tracking.md:121` (`workflow.agent.contract-violation`, added 0870); `docs/design/workflow-run-log.md` (sink/marker-level contract, no line-kind catalogue to extend).
 - Audit method that paid off: grep the exact change surface (guard files, schema diffs via `git log -S`, task anchors) against the docs that point at them (ADR "Detail:" targets, `03` "Exact shapes live in" pointers, `04` index rows) — every finding was a code-reality vs. doc-claim contradiction with a file:line on both sides; no speculative rewrites.
+**Wrapup complete.** Batch = task 0898 only. Drift audit found 3 defects, all repaired (diff: 3 files, +5/−5):
+
+1. `docs/design/session-pinned-dispatch.md:80` — bullet described resumeById:false as unconditional "fresh per stage + `executor-no-resume` warning"; the token is phantom (source grep: doc-only hit) and 0898 made resume-only `continue` fail pre-spawn as the ADR-118 violation. Rewritten to shipped behavior (`session: 'fresh'`, `__agentSession: 'no-resume'` sentinel, pre-spawn gate, with-input carve-out).
+2. `docs/00_ADR.md` frontmatter — ADR-121 landed 09-17 (cf44cbefa) but `updated_at` said 09-16; refreshed + 1.46.0 → 1.47.0 (§4.3).
+3. `docs/04_DESIGN.md` frontmatter — same commit added the index row; refreshed + 1.76.0 → 1.77.0.
+
+**Clean:** `docs/03_ARCHITECTURE.md` (ADR-118 invariant block consistent, dates match last touch); `docs/design/planning-workflow-contracts.md` was already correct from 0898's same-commit T3 edit; 04 → satellite anchors resolve. No task/feature corpus writes. Verification: `git diff` surgical; frontmatter dates ≥ content commits; no rule owns these files.
+
+Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/cad76019-a5e7-4789-b527-0c95aba762e8-wrapup-learnings.md`:
+
+# Wrapup Learnings — run cad76019 (batch: 0898)
+
+## 2026-09-17 — Task 0898: Harden capability gating boundaries and coverage (B8)
+
+### Conventions
+
+- Reuse the B8 R4 pair (`evaluateSessionCapabilities` + `AgentRunActionRunner.contractViolation`) for any new session-capability gate — never introduce a new `ContractName` or error shape (`agent-run.ts:41` owns `'requiresCapabilities'`).
+- Capability gating stays in the action runner, not `AgentService` — boundary integrity; the service remains dispatch-only.
+- Fail closed **pre-spawn**: name the missing axis before any subprocess (`runTraced` unreached), citing ADR-118 and the agent label; carry the record's `note` in `gate.reason` for operator diagnosis.
+- Unknown-agent fail-open (`sessionCaps === undefined`) is a documented design invariant — every change to the gate carries an explicit regression guard for it.
+- Test literals byte-match implementation strings (copy-literal-strings rule): assertion literals are copied from `capability-attestation.ts`, not paraphrased.
+- T3 same-commit discipline: an `agent.run` contract behavior change ships with its owning satellite sentence in `docs/design/planning-workflow-contracts.md` (session-axis paragraph) in the same commit.
+
+### Errors fixed / gotchas
+
+- Design-to-implementation drift on the doctor selector: Design named `agent doctor coder` for text mode, but a **role** selector renders `renderRoleLadder`, which has no CAPS column — the CAPS cell with the `⚠` staleness suffix lives only in full-mode `renderDoctorTable`. Fixed by reading full mode in text tests; JSON mode keeps the role selector (returns `capabilities`/`capabilityStale` per agent).
+- Design prose drift on the happy path: pass-case `reason` was said to name the agent, but the implementation returns `reason: ''` with the agent named in `observed`. Resolved toward the implementation per the copy-literal rule; no code change.
+- Parallel-work hazard: B6/0893 owns `packages/app/src/services/agent-service.ts` in another worktree — this task kept zero diffs on that file and header-locates the CAPS column (robust to new columns) instead of fixed column indices.
+- Gate ordering matters: the pre-spawn check must precede both the input guard and the `flags.continue` suppression; strict `continueFlag === true` is load-bearing — the session latch can never reach the branch because the latch itself requires `resumeSupported` (`agent-run.ts:291`), so only explicit `continue: true` gates.
+- Red→green confirmed: R1(a) (gemini + `continue` + no input) failed before the fix and passed after — the test encodes WHY (no prompt exists to fall back to).
+
+### Patterns
+
+- Decision-table coverage for capability evaluators: no session axis / all true / declared false + note / missing record / multi-miss joined with `; ` in `SESSION_CAPABILITY_AXES` order, plus parser acceptance of all four session axes.
+- Real-CLI subprocess harness over mocks for surface tests: frozen text assertions (header-located CAPS cell, `r✓`…`⚠`) + JSON object assertions (`verifiedAgainst`, `supportsResumeById`, `capabilityStale`) + byte-identical stderr invariant (diff adds lines only).
+- Cheapest guard shape: one pure-function call on an already-failing path — zero happy-path cost, no new state.
+
+## 2026-09-17 — Doc-evolve wrapup (drift repairs over 0898's surface)
+
+- Phantom token gotcha: `docs/design/session-pinned-dispatch.md` described a per-run warning `executor-no-resume` that exists **nowhere in source** (`rg` across `packages/ apps/ config/` → doc-only hit). Detection-before-repair: grep the token before documenting/repairing around it. Bullet rewritten to shipped behavior: fresh dispatch with `session: 'fresh'` + `__agentSession: 'no-resume'` sentinel; resume-only `continue` fails pre-spawn as the ADR-118 violation.
+- Frontmatter staleness is real drift: commit cf44cbefa added ADR-121 (00, 31 lines) and a 04 index row on 09-17 but left `updated_at: 2026-09-16` — §4.3 requires refreshing `updated_at` and bumping the minor version when content changes. Check `git log -1 -- <doc>` against frontmatter dates at wrapup.
+- Authority ordering held: `planning-workflow-contracts.md` (agent.run contracts owner) was already correct from the same-commit T3 edit; only the conflicting projection (`session-pinned-dispatch.md:80`) and the metadata blocks (00, 04) needed repair. `docs/03_ARCHITECTURE.md` clean — its ADR-118 invariant block and dated frontmatter needed no edit; unchanged owners get no ceremonial edit.
