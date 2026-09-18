@@ -2933,16 +2933,13 @@ function sessionCapabilityFor(
     const canonical = resolveAgentName(agentBinary);
     if (canonical === undefined) return { capabilities: null, capabilityStale: null };
     const capabilities = getAgentSessionCapability(canonical);
-    // 0899 R1: normalize-then-compare — branding suffix/prefix is not drift. When
-    // either side has no extractable core (e.g. record `unverified …`), fall back
-    // to exact compare: drift is unknowable and an installed CLI SHOULD still warn.
+    // 0899 R1/R2: normalize-then-compare — branding suffix/prefix is not drift. No
+    // extractable core on either side (e.g. record `unverified (CLI not installed)`)
+    // is unverifiable, not stale: null, no warning (0899 R2).
     const detectedCore = detectedVersion === null ? null : versionCore(detectedVersion);
     const verifiedCore = versionCore(capabilities.verifiedAgainst);
     const stale =
-        detectedVersion !== null &&
-        (detectedCore !== null && verifiedCore !== null
-            ? detectedCore !== verifiedCore
-            : detectedVersion !== capabilities.verifiedAgainst);
+        detectedVersion !== null && detectedCore !== null && verifiedCore !== null && detectedCore !== verifiedCore;
     const capabilityStale = stale ? { verifiedAgainst: capabilities.verifiedAgainst, detected: detectedVersion } : null;
     return { capabilities, capabilityStale };
 }

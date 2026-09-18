@@ -4516,7 +4516,9 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         const cases = [
             { name: 'claude-exec', agent: 'claude', version: '2.1.274 (Claude Code)' },
             { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.154.0' },
+            { name: 'omp-exec', agent: 'omp', version: 'omp/18.2.3' },
             { name: 'openclaw-exec', agent: 'openclaw', version: 'OpenClaw 2026.6.11 (e085fa1)' },
+            { name: 'ds-exec', agent: 'deepseek', version: 'deepseek-cli 0.1.5-rc.1' },
         ] as const;
         for (const c of cases) {
             const { lines, output } = captureOutput();
@@ -4535,8 +4537,10 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         }
     });
 
-    test('0899 R1: unextractable record core falls back to exact compare (drift unknowable still warns)', async () => {
-        const { lines, output } = captureOutput();
+    test('0899 R2: no core on either side is unverifiable — null, no staleness warning', async () => {
+        // antigravity-cli's record is `unverified (CLI not installed)` — no core to
+        // compare. Pre-0899 exact compare false-positived on every such install.
+        const { lines, errors, output } = captureOutput();
         const svc = makeService({}, output, {
             executors: [{ name: 'agy-exec', agent: 'antigravity-cli', disabled: false }],
         } as AgentConfig);
@@ -4548,12 +4552,28 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         await svc.doctor({ json: true }, { doctorRunner });
 
         const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
-        // antigravity-cli record is `unverified (CLI not installed)` — no core to
-        // compare, so an installed CLI against it must still surface as stale.
-        expect(parsed.agents[0].capabilityStale).toEqual({
-            verifiedAgainst: 'unverified (CLI not installed)',
-            detected: '1.2.3',
-        });
+        expect(parsed.agents[0].capabilityStale).toBeNull();
+        expect(errors.some((e) => e.includes('capability-declaration-stale'))).toBe(false);
+    });
+
+    test('0899 R3: prerelease core drift warns with the exact normalized text', async () => {
+        const { errors, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'ds-exec', agent: 'deepseek', disabled: false }],
+        } as AgentConfig);
+        const doctorRunner = {
+            runAll: mock(() =>
+                Promise.resolve([mockDoctorResult({ agent: 'ds-exec', version: 'deepseek-cli 0.1.5-rc.2' })]),
+            ),
+            runOne: mock(() => Promise.resolve(mockDoctorResult())),
+        } as unknown as AgentRunDeps['doctorRunner'];
+
+        await svc.doctor({ json: false }, { doctorRunner });
+
+        const warning = errors.find((e) => e.includes('capability-declaration-stale'));
+        expect(warning).toBeDefined();
+        expect(warning).toContain('"deepseek-cli 0.1.5-rc.2" (core 0.1.5-rc.2)');
+        expect(warning).toContain('"0.1.5-rc.1" (core 0.1.5-rc.1)');
     });
 
     test('0899 R2: the stale warning quotes raw values and names the normalized cores', async () => {

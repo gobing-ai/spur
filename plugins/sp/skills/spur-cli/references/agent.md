@@ -166,8 +166,10 @@ Checks whether each agent is installed and ready to run. Text mode renders a cap
 (`cheap|standard|capable-*`), MODEL the pinned config model (`—` when undeclared), ROLES lists
 candidate pipeline roles with `*` on the elected one, CAPS is the runner-declared session
 capability for the underlying agent binary (`r`esume/`d`ir/`s`tdin/`o`utput as ✓/✗; `—` when the
-binary is unknown to the runner; a trailing `⚠` when the detected version differs from the
-record's `verifiedAgainst`; a stale executor also emits a `capability-declaration-stale` warning
+binary is unknown to the runner; a trailing `⚠` when the detected version core differs from the
+record's `verifiedAgainst` core — branding decorations are not drift, and a record/detection with
+no version core (e.g. `unverified (CLI not installed)`) is unverifiable and never warns; a stale
+executor also emits a `capability-declaration-stale` warning
 on stderr in text mode), and OWNER/SINCE/REASON (0893) show availability provenance on `disabled`
 rows — bare `disabled: true` renders owner `operator` with `—` since/reason; object-form disables
 render their recorded values. A `usage:` footer reports the `agent usage` snapshot (`capturedAt

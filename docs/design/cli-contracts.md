@@ -448,10 +448,13 @@ full-set inventory still exits 0, and naming a disabled executor directly exits 
 - **CAPS** (feature B8 / 0889) renders the runner-declared session capability of the underlying agent binary as
   `r✓d✗s✓o✗` (`r`esume-by-id, session `d`ir, persistent `s`tdin, structured `o`utput), `—` when the binary is
   unknown to the runner. Spur reads the record from `@gobing-ai/ts-ai-runner` `getAgentSessionCapability` — it
-  never re-declares capabilities. When the detected CLI version differs from the record's `verifiedAgainst`, a
+  never re-declares capabilities. Staleness is core-level (0899): branding prefix/suffix on the detected
+  string is not drift; the detected version's core differs from the record's `verifiedAgainst` core. When
+  it differs, a
   trailing `⚠` marks the cell and text mode emits a `capability-declaration-stale` stderr warning; `--json`
   stays stderr-clean and carries the same facts per agent entry as `capabilities` (the record, `note` included)
-  and `capabilityStale: {verifiedAgainst, detected}` (`null` when fresh or unverifiable).
+  and `capabilityStale: {verifiedAgainst, detected}` (`null` when fresh — or unverifiable: no version core on
+  either side, e.g. an `unverified (CLI not installed)` record, never warns).
 
 Arg semantics: a bare **agent/exec name** prints that executor's detail block; a **pipeline role id**
 (`coder`, `reviewer`, …) instead renders the full eligible ladder for that role — one line per eligible

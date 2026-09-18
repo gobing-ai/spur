@@ -4,7 +4,7 @@ name: Doctor capability-staleness warning fires on nearly every real install (un
 status: wip
 template: issue
 created_at: 2026-09-18T06:51:40.161Z
-updated_at: "2026-09-18T07:06:41.464Z"
+updated_at: "2026-09-18T07:23:43.731Z"
 feature_id: B8
 
 priority: P3
@@ -133,13 +133,11 @@ Reproduced 2026-09-18 on `a082d0d93`: `spur agent doctor --force-refresh` → 5 
 
 ### Solution
 
-- `packages/app/src/services/agent-service.ts:2923` — new `versionCore()` extractor (first semver-shaped token, null when none).
-- `packages/app/src/services/agent-service.ts:2929` — `sessionCapabilityFor` compares extracted cores (branding suffix/prefix no longer drift); falls back to exact compare when either side has no core (drift unknowable still warns).
-- `packages/app/src/services/agent-service.ts:710` — `warnCapabilityStale` reworded: raw values quoted, normalized cores named; JSON `capabilityStale` shape unchanged (raw values) for contract stability.
-- `packages/app/tests/services/agent-service.test.ts:4513,4538,4559` — +3 tests: branded-match no-staleness regression (claude suffix / codex prefix / openclaw prefix+suffix), unextractable-core fallback still warns (antigravity-cli), R2 warning shape (quoted raw + cores).
-- `apps/cli/tests/config-layering.test.ts:90` — `CAPABILITY_STALE_WARNING` constant updated to the reworded text (stub `1.0.0 (claude stub)` vs record `2.1.274` still genuinely stale).
-- `apps/cli/tests/commands/agent.test.ts:903` — R4 decision recorded: narrowed usage-scoped assertion kept; post-normalization a host with real drift still legitimately warns, so the broad form would be host-dependent.
-Rationale: normalize-then-compare fixes the false-positive class at the single compare site; no upstream ts-ai-runner change.
+- `packages/app/src/services/agent-service.ts` — `sessionCapabilityFor` (agent-service.ts:2929, R2 root-cause fix): staleness requires extractable cores on both sides; a missing core (record `unverified (CLI not installed)`, unparseable detection) is unverifiable → `capabilityStale: null`, no warning. Exact-compare fallback removed. (`versionCore`, core compare, and the R4 warning text already landed with the 0898 merge a082d0d93; this removes the remaining fallback branch.)
+- `packages/app/tests/services/agent-service.test.ts` — no-warn table extended to all five AC1 branded shapes (agent-service.test.ts:4515) (claude suffix, codex prefix, omp prefix, openclaw prefix+hash, deepseek prerelease-core match); the fallback-encoding test replaced with R2 behavior (antigravity-cli + detected `1.2.3` → null, no warning); new deepseek prerelease drift case (`0.1.5-rc.2` vs `0.1.5-rc.1`) asserting the exact core-named R4 text.
+- `docs/design/cli-contracts.md` + `plugins/sp/skills/spur-cli/references/agent.md` — staleness wording: core-level compare, branding decorations are not drift, token-less is unverifiable and never warns.
+- `apps/cli/tests/config-layering.test.ts` — unchanged: already asserts the R4 text for a genuine core mismatch.
+- Conflict note: this Solution's earlier "exact-compare fallback" draft was superseded by the concurrent refine (Q2/R2/Design) — implemented null-on-missing-core.
 
 ### Testing
 
