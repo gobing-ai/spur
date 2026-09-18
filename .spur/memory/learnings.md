@@ -1943,3 +1943,127 @@ Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/cad76019-a5e7-478
 - Phantom token gotcha: `docs/design/session-pinned-dispatch.md` described a per-run warning `executor-no-resume` that exists **nowhere in source** (`rg` across `packages/ apps/ config/` → doc-only hit). Detection-before-repair: grep the token before documenting/repairing around it. Bullet rewritten to shipped behavior: fresh dispatch with `session: 'fresh'` + `__agentSession: 'no-resume'` sentinel; resume-only `continue` fails pre-spawn as the ADR-118 violation.
 - Frontmatter staleness is real drift: commit cf44cbefa added ADR-121 (00, 31 lines) and a 04 index row on 09-17 but left `updated_at: 2026-09-16` — §4.3 requires refreshing `updated_at` and bumping the minor version when content changes. Check `git log -1 -- <doc>` against frontmatter dates at wrapup.
 - Authority ordering held: `planning-workflow-contracts.md` (agent.run contracts owner) was already correct from the same-commit T3 edit; only the conflicting projection (`session-pinned-dispatch.md:80`) and the metadata blocks (00, 04) needed repair. `docs/03_ARCHITECTURE.md` clean — its ADR-118 invariant block and dated frontmatter needed no edit; unchanged owners get no ceremonial edit.
+Wrapup complete.
+
+**Doc-evolve repairs** (detection-backed, §7 protocol; 2 files changed, no corpus writes):
+
+- `docs/design/session-pinned-dispatch.md` §5 — the design-time sketch table ("to be verified, LOW confidence `?`") contradicted the shipped `ts-ai-runner@0.4.68` record (sketch said codex `resumeById: false`; 0888 shipped `true` via `exec resume <id> <prompt>`). Replaced with the landed record; upstream record named SSOT.
+- `docs/design/cli-contracts.md:471` — dangling `ADR/0127` citation (no such ADR; born in renumbering commit 5f4b7a33a) → repointed to `agent-doctor-inspection-surface.md` §4, the real owner of the liveness-only auth gate.
+- Clean: `00` (ADR-121 generic and accurate — 0899 is a refinement, not a reversal), `03` (no stale statements; `≥0.4.57` floor holds), `04` (all anchor pointers resolve; unchanged index = synchronized), `cli-contracts.md` capability section (0899 wording already landed).
+- Verification: `git diff --stat` shows only the two design files; superseded strings confirmed gone.
+
+Learnings for tasks 0888/0889/0899 extracted below and written to `.spur/run/2778f031-68de-4729-be9a-6ab2f11364db-wrapup-learnings.md`:
+
+# Wrapup learnings — run 2778f031 (doc-evolve wrapup + tasks 0888/0889/0899)
+
+## 2026-09-18
+
+### 0888 — ts-ai-runner `AgentSessionCapability` extension + 0.4.68 release (B8, P1, done)
+
+Conventions / patterns:
+
+- Extend a shared type in place rather than adding a parallel type: the accessor (`getAgentSessionCapability`) and every Spur consumer already import `AgentSessionCapability`; a second type would need a second accessor and a merge rule (`docs/design/session-pinned-dispatch.md` §5).
+- Capability-matrix contract: every `false` row carries a `note`; unverifiable rows are `false` + `verifiedAgainst: 'unverified (CLI not installed)'`, never guessed `true` — the matrix exists to stop silent degradation.
+- `verifiedAgainst` is a plain raw CLI-version string, so Spur can compare it without a runner-side semver/date model.
+
+Errors fixed / gotchas:
+
+- Lockstep upstream releases: ai-runner 0.4.68 declares sibling `ts-*` packages `^0.4.68`; leaving Spur's sibling pins at 0.4.67 produced duplicate ts-infra copies and a nominal `EventBus.syncHandlers` type clash in `packages/app` typecheck. Fix: align all eight `workspaces.catalog` pins + root dep in the same change, then `bun install` to move `bun.lock`.
+- Release order that worked: upstream feat commit → release commit + npm tag `@gobing-ai/ts-ai-runner-v0.4.68` + CI green → Spur catalog pin bump → runtime smoke (`getAgentSessionCapability('codex')`, `getPromptCommand({sessionId})` argv).
+
+### 0889 — Spur consumes the record: affinity, doctor `--json`, attestation, stale warning (B8, done)
+
+Conventions / patterns:
+
+- Record-driven affinity: no agent-name conditionals on the resume path; canonicalize via `resolveAgentName`; `supportsResumeById: false` suppresses the resume latch, `flags.sessionId`, and `flags.continue`; result records `session: 'fresh'` and writes `__agentSession: 'no-resume'` with no `__agentSessionId` so downstream steps never arm a latch against an incapable agent (0406 exit-2 fallback stays as the safety net for record-unknown binaries).
+- Attestation extends in place: `SESSION_CAPABILITY_AXES` in `packages/config` (4 session + 4 execution axes = 8-token vocabulary); `evaluateSessionCapabilities` fails closed — a `false` row or missing record satisfies neither `available` nor `enforced`; gate runs BEFORE any spawn and returns the ADR-118 contract-violation outcome naming executor + axis.
+- Defense-in-depth: the per-attempt capability gate in `agent-service.ts` also evaluates session axes, so an escalation cannot land on an incapable executor (exit 2 pre-spawn).
+- Doctor surface: `DoctorRow.capabilities` (record verbatim, `note` included) + `capabilityStale`; compact `CAPS` column `r✓d✗s✓o✗` with `—` for runner-unknown binaries; JSON stays stderr-clean while text mode warns.
+
+Errors fixed / gotchas:
+
+- Task-text discrepancy rule: design prose said "two enum members" but R4 listed four session axes — requirements win; all four admitted.
+- Behavior-encoding tests must track upstream record changes: the 0451 codex second-hop test needed an annotation because codex became resume-capable post-0888.
+- Guarded resolution (`try/catch` around executor `resolve`) keeps legacy behavior for test fakes without a `resolve` method.
+- Do not assert "no warning on stderr" broadly in host-real doctor tests — any host whose installed CLI version legitimately differs from the record would warn and fail (0899 Q3 kept the narrowed usage-scoped form).
+
+### 0899 — doctor capability-staleness compares version cores (B8, P3, done)
+
+Conventions / patterns:
+
+- Compare contract: normalize both sides with `VERSION_CORE = /\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?/` and string-compare cores; no semver ordering, no semver dependency — works for date versions (`2026.6.11`). Branding decorations (`2.1.274 (Claude Code)`, `codex-cli 0.154.0`, `omp/18.2.3`) are not drift.
+- Token-less values (`unverified (CLI not installed)`) extract no core → `capabilityStale: null`, never warns: unverifiable is neither fresh nor stale, and only an upstream re-verify can act on it.
+- Root-cause fix lives in the shared `sessionCapabilityFor`, not at rendering call sites — one guard covers table, detail, role-ladder, and JSON.
+- Test versions derive from `getAgentSessionCapability` instead of hard-coded strings, so upstream re-verification doesn't break tests.
+- Supersession discipline: 0899 Q1 explicitly supersedes 0889's design line "no semver parsing — a mismatch of any kind is worth a warning" and records why (exact compare was the bug; informational-only mismatch buries real drift; token extraction is not semver ordering).
+
+Errors fixed / gotchas:
+
+- Exact string compare warned on nearly every host; the doubled binary name in the warning text was the visible symptom users reported.
+- A concurrent refine superseded this task's own earlier Solution draft ("exact-compare fallback") mid-flight — implemented null-on-missing-core instead; the conflict note is recorded in the task Solution.
+
+### doc-evolve wrapup (this run) — drift report
+
+Findings and repairs (detection: `rg` over real CLI/config surface, shipped record read from installed `@gobing-ai/ts-ai-runner@0.4.68`, anchor resolution, frontmatter vs `git log`):
+
+- `docs/design/session-pinned-dispatch.md` §5 — REPAIRED: the design-time sketch table ("Initial rows, to be verified per CLI at implementation; LOW confidence marked ?") contradicted the shipped record (sketch: codex `resumeById: false` interactive-only; shipped 0.4.68: `true` via non-interactive `exec resume <id> <prompt>`). Replaced with a landed-record paragraph naming the upstream record as SSOT — no duplicate ledger.
+- `docs/design/cli-contracts.md:471` — REPAIRED: dangling citation `ADR/0127` (no such ADR exists; born in renumbering commit 5f4b7a33a). Repointed to `agent-doctor-inspection-surface.md` §4, the actual owner of "auth removed / liveness-only gate".
+- `docs/00_ADR.md` — clean: ADR-121 stays generic and accurate; 0899 is a refinement, not a reversal, so no superseding decision; numbers/dates preserved.
+- `docs/03_ARCHITECTURE.md` — clean: attestation/quota statements still true; `ts-ai-runner ≥0.4.57` is a floor and still holds; no capability enum listed to go stale.
+- `docs/04_DESIGN.md` — clean: all doctor/cli anchor pointers resolve; satellite edits with unchanged index pointers are synchronized (§5).
+- `docs/design/cli-contracts.md` capability section — already in sync: 0899 wording landed at contract level (core compare, unverifiable ⇒ null) and no exact warning sentence is quoted.
+
+Gotchas:
+
+- Task files under `docs/tasks5/` are historical records — superseded phrasing ("mismatch of any kind") lives there and must never be rewritten.
+- Design satellites carry no YAML frontmatter (H1 + metadata bullets), so the §4.3 `updated_at` contract applies only to the numbered key docs.
+Wrapup complete. Drift repaired in 7 files, committed as `15b72e31b` (`docs(wrap)`, hooks green):
+
+- `docs/design/executor-availability.md` — ownership schema, `setExecutorAvailability` signature (§3 renamed to Availability updater), 0048 columns + owner-scoped drain precedence (§5), recovery supersession + run-once producer (§4), §1 owner table + "no public CLI" claim corrected; frontmatter 1.2.0 / 2026-09-18.
+- `docs/03_ARCHITECTURE.md` §25 — all four stale paragraphs rewritten (object form, layer-targeted updater, 0048, quota/probe-only recovery, usage producer).
+- `docs/design/cli-contracts.md` — new `spur agent usage` contract row + anchor; doctor row gains provenance columns and `availability`/`usage` JSON facts.
+- `docs/design/configuration-contracts.md` — updater bullet renamed to `setExecutorAvailability` with layer semantics (old wrapper deleted 0892).
+- `docs/design/agent-doctor-inspection-surface.md` — new §3.5 (provenance + usage snapshot).
+- `docs/design/harness-surface-governance.md` — duplicate stray consent row after §5 deleted; in-table ADR-051 row retained.
+- `docs/04_DESIGN.md` — usage pointer row. `docs/00_ADR.md` needed no edit (ADR-111 unchanged; ADR-121 already owns B6 decisions).
+
+Verification: stale-string sweep clean across scope; single consent row; anchor `spur-agent-usage---dry-run---source-name---json---json-envelope` matches between `04` and `cli-contracts`; table pipe escaped. Pre-existing uncommitted 0899-era files (`.spur/memory/*`, `session-pinned-dispatch.md`, tasks5/0888–0899, B8 feature) were left untouched — not this run's evidence. Learnings written to `.spur/run/d39d0f49-685a-4070-acae-dd676b5230a0-wrapup-learnings.md`.
+
+# Working learnings — B6 executor availability (WBS 0890–0893)
+
+## 2026-09-17
+
+### 0890 — availability ownership (widen `agent.executors[].disabled`)
+
+- Convention: `disabled` accepts `boolean | {owner: 'quota'|'probe', since: RFC3339, reason}`; a bare `true` is equivalent to `{owner: 'operator'}`. `owner: 'operator'` is human-only — never valid in automatic writes; automatic callers must pass the object form.
+- Pattern: single reader — all code reads availability through `normalizeExecutorAvailability` (packages/config); never raw truthiness on the flag.
+- Migration 0048 adds `owner`, `layer`, `skipped_reason` to `agent_executor_updates`; drain precedence: operator-owned rows survive quota updates as classified `skipped_reason` no-ops (never auto-re-enabled).
+
+### 0891 — global-layer updater + quota recovery
+
+- Pattern: `setExecutorAvailability({layer, projectRoot, executor, disabled})` targets the layer that actually DECLARES the executor — project fragment wins when both layers declare the name; `layer` in the request is a hint, not the final target.
+- Global writes hit `~/.config/spur/config.yaml` through the identical backup + atomic-rename + conflict-detection path; the untouched layer stays byte-identical; loader cache invalidation covers both layers.
+- Recovery ownership: `agent.quota.recovered` upserts `disabled: false, owner: 'quota'` and applies only when the current owner is `quota`/`probe` — operator-owned disables survive.
+
+### 0892 — `spur agent usage` run-once producer
+
+- Convention: the only proactive quota producer is a run-once public verb; an external scheduler (cron/launchd) owns invocation; `spur serve` never runs it (test-asserted) — no poller, no timer.
+- Snapshot contract: `~/.config/spur/agent-usage.json` = `{captured_at, source, providers, raw}`; `SPUR_AGENT_USAGE_SNAPSHOT` overrides the path in tests.
+- Producer observations enter the drain as synthetic quota events with `owner: 'quota'`; `--dry-run` prints would-be changes and writes nothing.
+- Gate: new public verb needs a consent row in harness-surface-governance.md §4 per ADR-051, with the rejected shape recorded (`spur agent doctor --refresh-usage` — mixing read-only inspection with a write).
+
+### 0893 — doctor provenance + usage snapshot
+
+- Doctor renders OWNER/SINCE/REASON on disabled rows only (`—` otherwise); header grew to `STATUS EXECUTOR AGENT MODEL TIER VERSION CAPS ROLES OWNER SINCE REASON`.
+- `--json` adds per-entry `availability {disabled, owner|null, since|null, reason|null}` plus top-level `usage` snapshot report (`usage: none` when absent — informational, never a warning; ≥6 h = stale). Doctor stays read-only.
+
+## 2026-09-18
+
+### Wrapup / doc-sync gotchas
+
+- Stale linked binary pitfall: `spur` on PATH lacked `agent usage` — verify CLI facts against source (`bun run apps/cli/src/index.ts`), not the installed binary, before writing contract docs.
+- Drift pattern: a duplicate consent row landed OUTSIDE the §4 table (after §5) in harness-surface-governance.md, citing ADR-121, while the correct in-table row (ADR-051) already existed — same grant recorded twice. Consent citations: ADR-051 owns public-surface consent gating; ADR-121 owns headless session-pinned dispatch (it narrates the producer but is not the consent authority).
+- Satellites go stale in both directions — content AND frontmatter (version/date). executor-availability.md drifted in §1 (owner table + "no public CLI" claim), §2 ("accepts only booleans"), §3 (old updater name/signature), §5 (column list), while §6 was already synced.
+- Deleted-wrapper sweep: `setProjectExecutorDisabled` was generalized in 0891 but the configuration-contracts.md satellite still documented the old name — "kept only while a caller exists" wrappers need a deletion pass (0892 deleted it; docs caught up only at wrapup).
+- `spur agent doctor --refresh-usage` is the canonical example of the rejected shape: refresh belongs to an explicit producer verb, doctor stays read-only.
+- GFM gotcha: escape literal pipes inside code spans in table cells (`boolean \| {owner, ...}`) or the cell splits.
