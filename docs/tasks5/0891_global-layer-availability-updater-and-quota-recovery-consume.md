@@ -4,7 +4,7 @@ name: "Global-layer availability updater and quota recovery consumer: setExecuto
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.553Z
-updated_at: "2026-09-18T04:15:32.592Z"
+updated_at: "2026-09-18T15:05:14.187Z"
 feature_id: B6
 priority: P1
 tags:
@@ -86,6 +86,8 @@ Decision: one updater with a `layer` argument instead of a second `setGlobalExec
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC2 (feature B6 scenario R4: global-only executor persisted in global config) | MET | test | executor-update.test.ts:429 "global-only executor is persisted in the global config; project file byte-identical" (subprocess, fake HOME): global `gem.disabled` = quota object, comment `# global-only executor` survives, project file byte-identical, no tmp leftovers; complement :467 (project fragment wins, global untouched) |
+| AC-3 | MET | test | Quota-owned recovery on evidence: `agent-quota-recovered` subscription `packages/app/src/services/agent-quota-updates.ts:185-205` -> `recordObservation(disabled:false, owner:'quota')`; drain `:325-344` applies `setExecutorAvailability`; loader cache invalidation `packages/config/src/loader.ts:316-327`; tests `agent-quota-updates.test.ts:566` (quota recovers), `:619` (probe recovers), `:591` (operator never recovered) |
+| AC-4 | MET | test | Global-layer persistence: `setExecutorAvailability` declaring-layer selection `packages/config/src/executor-update.ts:81-114` (project wins `:93-101`); shared write core `:160-290` (lock/symlink/conflict/tmp+fsync+rename/chmod); global path `loader.ts:177-188`; tests `executor-update.test.ts:429` (global-only executor persisted in global config, project byte-identical, no tmp leftovers), `:467` (project wins), `:496` (mode preserved) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -97,9 +99,7 @@ Decision: one updater with a `layer` argument instead of a second `setGlobalExec
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P1 | ac-row-dropped | — | 1 AC row(s) could not be parsed and were omitted from the verdict: AC1 (feature B6 scenario R3: quota-owned disable recovers on evidence) (unrecognised evidence type "test + code"). Accepted evidence types: test, command, static-ref (aliases: static, doc, docs, documentation), manual-review, llm-judge, n/a. Accepted statuses: MET, PARTIAL, UNMET, N/A. |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:98430d84fa9996a5a33feab7c2b5a58dedd92854d89abcf011342b0a91530cc7 |
 
 ### References
 

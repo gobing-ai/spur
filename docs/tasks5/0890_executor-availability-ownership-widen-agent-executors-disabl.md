@@ -4,7 +4,7 @@ name: "Executor availability ownership: widen agent.executors[].disabled to carr
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.552Z
-updated_at: "2026-09-18T03:24:54.600Z"
+updated_at: "2026-09-18T15:05:13.974Z"
 feature_id: B6
 priority: P1
 tags:
@@ -102,6 +102,9 @@ Tests: 28 pass (packages/config: executor-update + executor-availability), 23 pa
 | AC1 | MET | test | Drain writes `{owner: quota\|probe, since: observed_at, reason}` — `packages/app/src/services/agent-quota-updates.ts:323-332` (`desired` at :324, `since: row.observed_at` :328); row provenance `packages/app/src/services/agent-quota-updates.ts:153-162` (`owner: 'quota'` :161) + `packages/domain/src/dao/agent-executor-update-dao.ts:101-131`; tests `packages/app/tests/services/agent-quota-updates.test.ts:494` (YAML carries probe ownership object) and runtime `apps/server/tests/serve.test.ts:957` (persisted `owner: quota` reloads as `{disabled:true, owner:'quota', since, reason}` via the normalizer) |
 | AC2 | MET | test | `packages/app/tests/services/agent-quota-updates.test.ts:467` (operator bare `true` survives quota update: `applied=0`, `skippedOperatorOwned=1`, `skipped_reason='operator-owned'`, `last_error` NULL, YAML untouched) and `:533` (a recovery event also cannot re-enable an operator object); implementation `packages/app/src/services/agent-quota-updates.ts:300-311` |
 | AC3 | MET | test | `packages/app/tests/services/agent-quota-updates.test.ts:494` (quota-owned object accepts a strictly newer probe write in the same drain); latest-observation supersede guard `packages/domain/src/dao/agent-executor-update-dao.ts:101-131` + `:295-298` with `packages/app/tests/services/agent-quota-updates.test.ts:178` (older arrival superseded); serial ordering `agent-executor-update-dao.ts:255-266` |
+| AC-1 | MET | test | Quota-driven drain records owner/since/reason: `packages/app/src/services/agent-quota-updates.ts:323` automatic disables record classified owner (`quota`/`probe`) with since/reason; object write `packages/config/src/executor-update.ts:140-145`; bare `true` normalizes to operator `packages/config/src/index.ts:371`; tests `packages/app/tests/services/agent-quota-updates.test.ts:467,:494,:521`, `packages/config/tests/executor-availability.test.ts:40` (bare true -> operator) |
+| AC-2 | MET | test | Operator-owned disable never auto re-enabled: drain classifies operator-owned rows as `ackSkipped('operator-owned')` no-ops `packages/app/src/services/agent-quota-updates.ts:300-311` (warn, never failure, `last_error` NULL `packages/domain/src/dao/agent-executor-update-dao.ts:187-205`); tests `agent-quota-updates.test.ts:467` (operator survives quota update), `:591` (operator-owned never recovered) |
+| AC-10 | MET | test | Owner precedence under concurrent writers: single updater — drain is the only caller of the shared write core (`agent-quota-updates.ts:332` -> `packages/config/src/executor-update.ts:160-290` with per-path lock `:266`, conflict detection `:243-249`); operator-owned state never overwritten by quota-owned (`ackSkipped`, tests `:467` operator survives, `:494` quota accepts later probe) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -114,7 +117,6 @@ Tests: 28 pass (packages/config: executor-update + executor-availability), 23 pa
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:fc88efa984b088298047a02ec96db1248c8f38aaff315db744c63675b013d512 |
 
 ### References
 

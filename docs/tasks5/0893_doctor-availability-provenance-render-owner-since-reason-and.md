@@ -4,7 +4,7 @@ name: "Doctor availability provenance: render owner, since, reason and usage-sna
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.555Z
-updated_at: "2026-09-18T06:22:39.693Z"
+updated_at: "2026-09-18T15:05:14.609Z"
 feature_id: B6
 priority: P2
 tags:
@@ -236,6 +236,7 @@ Each entry cites the first changed line per file (`file:line`).
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | Doctor renders availability ownership and age (req R1): agent-service.test.ts "R1: bare-boolean…" (:4456) + "R1: object-form…" (:4485) prove owner/since/reason in BOTH --json and the text table for both config forms; age rendering proven by :4517 (fresh capturedAt/age, stale:true past 6 h) and :4543 (`usage: none` when missing); CLI E2E :871/:887 replays the same shapes through main(); 0621 header-shape test updated 7→10 columns (spec-driven shape change) |
+| AC-8 | MET | test | Doctor renders owner/since/reason + snapshot age: `DoctorRow.availability` `packages/app/src/services/agent-service.ts:2796-2797` from `normalizeExecutorAvailability` in `buildDoctorRows` `:2825,:2838-2846`; JSON `availability:{disabled,owner,since,reason}` `:735-741`; OWNER/SINCE/REASON headers `:2943-2945` (`-` on enabled rows); `readUsageSnapshot` `:2566-2579` + `USAGE_SNAPSHOT_STALE_MS` 6h stale marking; tests `agent-service.test.ts:4456,:4485,:4517,:4543`, CLI E2E `apps/cli/tests/commands/agent.test.ts:871,:887` (fresh/stale/missing legs via `SPUR_AGENT_USAGE_SNAPSHOT`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -248,7 +249,6 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:81afb5b0da53497fbda749b575f2d2ef8418f864def6321ecaccd2199a6339cb |
 
 ### References
 

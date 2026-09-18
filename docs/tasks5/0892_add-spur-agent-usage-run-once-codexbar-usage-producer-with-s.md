@@ -4,7 +4,7 @@ name: "Add spur agent usage: run-once codexbar usage producer with snapshot file
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.554Z
-updated_at: "2026-09-18T05:43:12.371Z"
+updated_at: "2026-09-18T15:05:14.397Z"
 feature_id: B6
 priority: P1
 tags:
@@ -105,6 +105,10 @@ Run-once usage producer closes the loop from codexbar rate windows to quota-owne
 | AC2 | MET | test | agent-usage-producer.test.ts "R2: dry run reports would-be changes but writes neither snapshot nor rows": snapshotPath null, drain null, existsSync false, no row |
 | AC3 | MET | test | agent-usage-producer.test.ts "R3: unusable capture throws UsageSourceError and touches nothing" + apps/cli agent-usage-source.test.ts "fail-closed: unusable launch" and "passes through non-zero exits" |
 | AC4 | MET | test | apps/cli/tests/commands/agent-usage.test.ts:294-297 serve-module grep test (no codexbar/agent-usage reference in serve.ts) |
+| AC-5 | MET | test | Snapshot + provider->executor mapping + quota-owned apply: atomic snapshot `writeSnapshotAtomic` `packages/app/src/services/agent-usage-producer.ts:214-224` (`~/.config/spur/agent-usage.json`, source/capturedAt/providers/raw); `mapProvidersToExecutors` `:118-136`; quota-owned observations via `AgentExecutorUpdateDao.recordObservation` + `drainPendingAgentQuotaUpdates`; errored providers skipped `classifyProviderUsage` `:96-116`; unmapped listed never guessed; tests `agent-usage-producer.test.ts` R1, real-run fixture `apps/cli/tests/fixtures/codexbar-usage.json` |
+| AC-6 | MET | test | Dry run: `options.dryRun` branch `agent-usage-producer.ts:198-206` returns `snapshotPath:null`, `drain:null`, change action `would-apply`, writes nothing; test `agent-usage-producer.test.ts` R2 (existsSync false, no row) |
+| AC-7 | MET | test | Fail-closed: missing binary -> `UsageSourceError` `apps/cli/src/services/agent-usage-source.ts:34-46`; unparsable output rejects whole capture (`codexbarEntriesSchema` safeParse, producer `:281-289`); non-zero exit with parsable array is not a failure (`erroredProviders` skip, healthy still applied); previous snapshot untouched (write only after successful parse); tests R3 + `agent-usage-source.test.ts` fail-closed legs; reactive B5 event path unchanged |
+| AC-9 | MET | test | Never scheduled by serve: `apps/cli/tests/commands/agent-usage.test.ts:294-297` greps serve.ts for codexbar/agent-usage (0 hits); no poller/timer in serve; docs `docs/help/cmd_agent.md` + `plugins/sp/skills/spur-cli/references/agent.md` carry external cron/launchd scheduling guidance |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -117,7 +121,6 @@ Run-once usage producer closes the loop from codexbar rate windows to quota-owne
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:a82cd1b3e30d20cb441d42698199964bff1ef6ae56c6e9a8e11d08f0474b7c76 |
 
 ### References
 
