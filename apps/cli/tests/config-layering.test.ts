@@ -220,4 +220,51 @@ describe('config layering — composition-root merged-config (A5)', () => {
         const res = await runCli(['agent', 'doctor', 'coder'], dirs.projectDir, dirs.env);
         expect(res.stderr.trim()).toBe(`${FALLBACK_NOTE}\n${CAPABILITY_STALE_WARNING}`);
     });
+
+    test('0898 R3: text-mode doctor table carries the runner-declared CAPS cell with the staleness marker', async () => {
+        const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
+        dirsToClean.push(dirs);
+        // The capability surface under test is the doctor TABLE cell (CAPS header);
+        // a role selector renders the eligible ladder, which has no CAPS column, so
+        // the table is read in full mode. The column is located by header lookup —
+        // never by exact line or fixed offset (parallel doctor-column work).
+        const res = await runCli(['agent', 'doctor'], dirs.projectDir, dirs.env);
+        expect(res.code).toBe(0);
+        const lines = res.stdout.split('\n');
+        const header = lines.find((line) => line.includes('CAPS'));
+        expect(header).toBeDefined();
+        const capsIdx = (header as string).indexOf('CAPS');
+        const row = lines.find((line) => line !== header && line.includes('coder-exec'));
+        expect(row).toBeDefined();
+        // Column start positions align across header and data rows (left-aligned
+        // padEnd columns), so the header index slices the same column in the row.
+        const capsCell = (row as string).slice(capsIdx).split(/\s{2,}/)[0] ?? '';
+        // claude record: resume-by-id true (r✓); staleness from the 1.0.0 stub vs
+        // the record's verifiedAgainst appends the ⚠ suffix.
+        expect(capsCell.startsWith('r✓')).toBe(true);
+        expect(capsCell.endsWith('⚠')).toBe(true);
+    });
+
+    test('0898 R3: doctor --json carries capabilities (verifiedAgainst) and capabilityStale with clean stderr', async () => {
+        const dirs = await makeLayerDirs(GLOBAL_EXECUTOR, 'version: "1"\nname: proj\n');
+        dirsToClean.push(dirs);
+        const res = await runCli(['agent', 'doctor', 'coder', '--json'], dirs.projectDir, dirs.env);
+        expect(res.code).toBe(0);
+        expect(res.stderr).toBe('');
+        const json = res.json as {
+            agents?: Array<{
+                agent?: string;
+                capabilities?: { supportsResumeById?: boolean; verifiedAgainst?: string } | null;
+                capabilityStale?: { verifiedAgainst?: string; detected?: string } | null;
+            }>;
+        };
+        const coderExec = json.agents?.find((a) => a.agent === 'coder-exec');
+        expect(coderExec).toBeDefined();
+        expect(typeof coderExec?.capabilities?.verifiedAgainst).toBe('string');
+        expect((coderExec?.capabilities?.verifiedAgainst ?? '').length).toBeGreaterThan(0);
+        expect(coderExec?.capabilities?.supportsResumeById).toBe(true);
+        expect(coderExec?.capabilityStale?.verifiedAgainst).toBe(coderExec?.capabilities?.verifiedAgainst);
+        expect(typeof coderExec?.capabilityStale?.detected).toBe('string');
+        expect((coderExec?.capabilityStale?.detected ?? '').startsWith('1.0.0')).toBe(true);
+    });
 });

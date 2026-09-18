@@ -272,7 +272,10 @@ agent (guarded `resolve()`) and an unmet requirement is the ADR-118 contract-vio
 the axes on each escalation hop (exit 2). The same record drives the affinity path: a
 `supportsResumeById: false` record emits no `--resume`/`--session-id` flag at all, records
 `session: 'fresh'` in the action result, and writes `__agentSession: 'no-resume'` so downstream
-latches never arm.
+latches never arm. A step that pairs an explicit `continue: true` with no `input` against such a
+record fails pre-spawn as the same ADR-118 contract violation (`missing: resumeById`) — there is
+no prompt to fall back to — while `continue` **with** `input` keeps the B8 fresh dispatch; agents
+unknown to the runner keep legacy behavior (no gate).
 `AgentRunActionRunner` re-validates the option shape at the action boundary. Shipped reference
 workflows attest the two unattended tree-mutating stages (`implement`, `test-fix` in
 `task-pipeline.yaml`); observe-only stages stay undeclared.

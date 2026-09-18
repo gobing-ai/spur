@@ -3030,4 +3030,77 @@ describe('AgentRunActionRunner session capability gating (B8 / task 0889)', () =
         expect(String(result.error)).toContain('no capability record');
         expect(runTraced).not.toHaveBeenCalled();
     });
+
+    // Task 0898 R1: an explicit `continue: true` with no input against a record
+    // that cannot resume by id has no prompt to fall back to — the step must fail
+    // pre-spawn as the ADR-118 contract violation, not die generically in the
+    // service (`Prompt is required`) after the flag was silently dropped.
+    test('0898 R1: resume-only step (continue, no input) against a resume-incapable record fails pre-spawn as a contract violation', async () => {
+        const runTraced = mock(() => Promise.resolve({ exitCode: 0, stdout: '' }));
+        const { bus, events } = recordingContractBus();
+        const svc = {
+            resolve: async () => ({ ok: true, agent: 'gemini', executor: 'gemini' }),
+            runTraced,
+        } as unknown as AgentService;
+        const runner = new AgentRunActionRunner(svc, bus);
+        const result = await runner.execute({ role: 'coder', agent: 'gemini', continue: true }, makeCtx());
+
+        expect(result.ok).toBe(false);
+        expect(result.data).toMatchObject({
+            outcome: 'contract-violation',
+            contract: 'requiresCapabilities',
+            observed: 'missing: resumeById',
+        });
+        expect(String(result.error)).toContain('gemini');
+        expect(String(result.error)).toContain('resume-by-id');
+        // Pre-spawn gate: runTraced is never reached on this path.
+        expect(runTraced).not.toHaveBeenCalled();
+        expect(events).toHaveLength(1);
+        expect(events[0]).toMatchObject({
+            contract: 'requiresCapabilities',
+            kind: 'agent.run',
+            agent: 'gemini',
+            observed: 'missing: resumeById',
+        });
+    });
+
+    test('0898 R1: continue WITH input on a resume-incapable record still dispatches fresh (B8 R2 regression guard)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            { role: 'coder', input: 'fresh work', agent: 'gemini', continue: true },
+            makeCtx(),
+        );
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.continue).toBeUndefined();
+        expect(result.data).toMatchObject({ session: 'fresh' });
+    });
+
+    test('0898 R1: resume-capable agent (claude record) keeps continue-without-input dispatching with the flag', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ role: 'coder', agent: 'claude', continue: true }, makeCtx());
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.continue).toBe(true);
+    });
+
+    test('0898 R1: agent unknown to the runner keeps legacy behavior (no gate, dispatch proceeds)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute({ role: 'coder', agent: 'custom-exec', continue: true }, makeCtx());
+
+        expect(result.ok).toBe(true);
+        expect(capturedFlags.continue).toBe(true);
+    });
 });

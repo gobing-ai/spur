@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Harden capability gating boundaries and coverage from B8 review findings
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-18T04:26:57.446Z
-updated_at: "2026-09-18T04:55:53.310Z"
+updated_at: "2026-09-18T06:01:20.884Z"
 feature_id: B8
 
 priority: P3
@@ -28,10 +28,10 @@ Already resolved elsewhere, excluded from scope: design-anchor supersession fold
 
 ### Requirements
 
-- [ ] R1. A workflow `agent.run` step with explicit `continue: true`, no `input`, and a known capability record declaring `supportsResumeById: false` fails **pre-spawn** with the ADR-118 contract-violation outcome (`contract: 'requiresCapabilities'`, observed `missing: resumeById`) naming the agent — instead of today's generic `Prompt is required` exit 2 from `agent-service.ts:975`. `runTraced` is never called on this path.
-- [ ] R2. `evaluateSessionCapabilities` has direct unit coverage of its full decision table (no session axis; all satisfied; declared false with note; missing record; multiple misses joined; execution-only axes ignored), and `parseRequiresCapabilities` accepts all four session axes.
-- [ ] R3. The doctor capability surface is asserted end-to-end through the real CLI subprocess: text-mode CAPS column carries the executor's cell, and `--json` carries `capabilities` (with `verifiedAgainst`) and `capabilityStale` for a stubbed version mismatch — with clean JSON-mode stderr.
-- [ ] R4. `bun run spur-check` is green.
+- [x] R1. A workflow `agent.run` step with explicit `continue: true`, no `input`, and a known capability record declaring `supportsResumeById: false` fails **pre-spawn** with the ADR-118 contract-violation outcome (`contract: 'requiresCapabilities'`, observed `missing: resumeById`) naming the agent — instead of today's generic `Prompt is required` exit 2 from `agent-service.ts:975`. `runTraced` is never called on this path.
+- [x] R2. `evaluateSessionCapabilities` has direct unit coverage of its full decision table (no session axis; all satisfied; declared false with note; missing record; multiple misses joined; execution-only axes ignored), and `parseRequiresCapabilities` accepts all four session axes.
+- [x] R3. The doctor capability surface is asserted end-to-end through the real CLI subprocess: text-mode CAPS column carries the executor's cell, and `--json` carries `capabilities` (with `verifiedAgainst`) and `capabilityStale` for a stubbed version mismatch — with clean JSON-mode stderr.
+- [x] R4. `bun run spur-check` is green.
 
 **Out of scope (unchanged behavior, stated so the implementer does not "fix" it):**
 
@@ -43,9 +43,9 @@ Already resolved elsewhere, excluded from scope: design-anchor supersession fold
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A stage can require a capability before spawn (req: R1; R2)
-- [ ] AC2 — Doctor exposes capabilities per executor (req: R3)
-- [ ] AC3 — A stale capability declaration is surfaced (req: R3)
+- [x] AC1 — A stage can require a capability before spawn (req: R1; R2)
+- [x] AC2 — Doctor exposes capabilities per executor (req: R3)
+- [x] AC3 — A stale capability declaration is surfaced (req: R3)
 
 ### Q&A
 
@@ -168,15 +168,97 @@ if (input === undefined && continueFlag === true && !resumeSupported) {
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+R1 — pre-spawn gate (the only source change). `packages/app/src/workflow/actions/agent-run.ts:301-312` adds one branch immediately before the input guard: an explicit `continue: true` with no `input` against a record where `resumeSupported` is false now returns the ADR-118 contract violation (`contract: 'requiresCapabilities'`, observed `missing: resumeById`, error naming the agent) by reusing `evaluateSessionCapabilities({ resumeById: 'enforced' }, …)` + `this.contractViolation` — the same pair the B8 R4 session-axis gate uses. `runTraced` is never reached; agents unknown to the runner (`sessionCaps === undefined` → `resumeSupported === true`) keep legacy behavior, and `continue` **with** `input` still dispatches fresh (B8 R2). T3: `docs/design/planning-workflow-contracts.md:274-277` extends the session-axis paragraph with the rule.
+
+| File | Change |
+| --- | --- |
+| `packages/app/src/workflow/actions/agent-run.ts:301` | R1 pre-spawn gate: resume-only step against `supportsResumeById: false` fails as `requiresCapabilities` contract violation, `runTraced` unreached |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:3038` | R1 (a) red→green: gemini + `continue` + no input → contract violation, `missing: resumeById`, no dispatch, bus event |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:3067` | R1 (b) regression guard: `continue` **with** input still dispatches fresh, flag suppressed (B8 R2) |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:3083` | R1 (c) regression guard: claude keeps `continue: true` dispatch |
+| `packages/app/tests/workflow/actions/agent-run.test.ts:3095` | R1 (d) regression guard: runner-unknown agent keeps legacy behavior |
+| `packages/app/tests/services/capability-attestation.test.ts:183` | R2: `evaluateSessionCapabilities` decision table (no session axis / all true / false+note / missing record / multi-miss join in `SESSION_CAPABILITY_AXES` order) + `parseRequiresCapabilities` accepting all four session axes |
+| `apps/cli/tests/config-layering.test.ts:224` | R3 text mode: full-mode doctor table, CAPS column located by header lookup, `coder-exec` cell starts `r✓` and ends `⚠` |
+| `apps/cli/tests/config-layering.test.ts:248` | R3 JSON mode: `capabilities.verifiedAgainst` non-empty, `supportsResumeById === true`, `capabilityStale = { verifiedAgainst, detected: '1.0.0…' }`, clean stderr |
+| `docs/design/planning-workflow-contracts.md:274` | T3: session-axis paragraph extended with the resume-only pre-spawn rule and the with-input fresh-dispatch carve-out |
+
+Deviation from Design (R3 text mode): the Design named `agent doctor coder` as the text-mode selector, but a **role** selector renders the eligible ladder (`renderRoleLadder`), which carries no CAPS column; the CAPS table cell with the `⚠` staleness suffix is the full-mode `renderDoctorTable`. The test therefore reads the table in full mode (`agent doctor`) and keeps every frozen assertion: header-located CAPS column (robust to B6/0893 parallel column work), `coder-exec` row cell starting `r✓` ending `⚠`. JSON mode uses the Design's `coder` selector, which returns `capabilities`/`capabilityStale` per agent. The byte-identical R7 two-line stderr assertion and `CAPABILITY_STALE_WARNING` are untouched.
+
+Verification (targeted, per implement scope): `packages/app` — `bun test tests/workflow/actions/agent-run.test.ts tests/services/capability-attestation.test.ts` → 176 pass / 0 fail (R1 (a) confirmed red before the fix, green after). `apps/cli` — `bun test tests/config-layering.test.ts` → 9 pass / 0 fail. Typechecks `@gobing-ai/spur-app` and `@gobing-ai/spur` exit 0. `bunx biome check` clean on all four changed code files. R4 (`bun run spur-check`) is owned by the pipeline's test hop.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Gate at `packages/app/src/workflow/actions/agent-run.ts:301-313` — explicit `continue: true` + no input + `!resumeSupported` returns the ADR-118 contract violation (`contract: 'requiresCapabilities'`, observed `missing: resumeById`, error names the agent + ADR-118); `runTraced` unreached (asserted `packages/app/tests/workflow/actions/agent-run.test.ts:3038`, incl. bus event). Only reachable on explicit continue: latch requires `resumeSupported` (`agent-run.ts:291`), strict `continueFlag === true` excludes `continue: false`. Regression guards: continue-with-input stays fresh `agent-run.test.ts:3067`, resume-capable claude keeps flag `:3083`, runner-unknown agent keeps legacy `:3095`. Re-run this session: `bun test tests/workflow/actions/agent-run.test.ts tests/services/capability-attestation.test.ts` → 176 pass / 0 fail, 490 expects. |
+| R2 | MET | Decision table `packages/app/tests/services/capability-attestation.test.ts:183-267`: no-session-axis/execution-only → ok; all axes true → ok; declared-false with note → fail with note + axis; missing record → fail naming agent; multi-miss joined `; ` in `SESSION_CAPABILITY_AXES` order; `parseRequiresCapabilities` accepts all four session axes at `:250`. Literals byte-match implementation `packages/app/src/services/capability-attestation.ts:181-207` (re-read this run). Covered by the same re-run: 176 pass / 0 fail. |
+| R3 | MET | Real-CLI subprocess harness `apps/cli/tests/config-layering.test.ts:224-246` (text mode: CAPS header-located, `coder-exec` cell starts `r✓` ends `⚠`) and `:248-268` (JSON: `capabilities.verifiedAgainst` non-empty, `supportsResumeById === true`, `capabilityStale = { verifiedAgainst, detected: '1.0.0…' }`, `stderr === ''`). Re-run this session: `bun test tests/config-layering.test.ts` → 9 pass / 0 fail, 34 expects. Frozen R7 two-line stderr assertion untouched (diff adds lines only). |
+| R4 | MET | `bun run spur-check` re-run this session: 8460 pass / 0 fail across 477 files (34454 expects), post-check "All 2 rules passed — no violations found". Reviewer-verified fresh evidence, not inherited. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/workflow/actions/agent-run.test.ts:3038` (pre-spawn contract violation, no dispatch) + evaluator table `packages/app/tests/services/capability-attestation.test.ts:183`; suites re-run this session, 176 pass / 0 fail. |
+| AC2 | MET | test | `apps/cli/tests/config-layering.test.ts:248` — per-agent `capabilities` object (`verifiedAgainst`, `supportsResumeById`) via real CLI `agent doctor coder --json`; re-run 9 pass / 0 fail. |
+| AC3 | MET | test | `apps/cli/tests/config-layering.test.ts:224` (text CAPS cell ends `⚠` for 1.0.0 stub vs record) + `:248` (JSON `capabilityStale`); re-run 9 pass / 0 fail. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0898
+
+**Scope:** uncommitted worktree diff vs `9a09ee095` on `sp/run-0898-2ddb3f15` (1 source file, 4 test files, 1 design doc + this task's Solution backfill; 247 insertions / 4 deletions)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS-with-findings (both findings P4 advisory; no blocker/major/minor — gate passes)
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | correctness | R3 text-mode cell extraction slices the data row at the header's CAPS index and splits on 2+ spaces — correct only while columns are left-aligned fixed-width (`padEnd`). Robust to new columns inserted before CAPS (the 0893 parallel-work risk), but a future right-aligned or variable-width column would break extraction with a confusing failure. Documented in-test, deterministic in the hermetic fixture; accept as-is. | `apps/cli/tests/config-layering.test.ts:236-241` |
+| 2 | P4 (advisory) | usability | Design R2 case 2 prose said the pass `reason` names the agent, but the implementation returns `reason: ''` with the agent named in `observed`; the test asserts the implementation literals per the Design's own copy-literal-strings rule. Design-wording drift, correctly resolved toward the implementation; no code impact. | `packages/app/tests/services/capability-attestation.test.ts:213` vs `packages/app/src/services/capability-attestation.ts:193` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Pre-spawn gate at `packages/app/src/workflow/actions/agent-run.ts:301-313` fires only on an explicit `continue: true` (the session latch requires `resumeSupported` at `:291`, so it can never reach the branch), returns the ADR-118 contract violation with `contract: 'requiresCapabilities'` / `observed: 'missing: resumeById'` and an error naming the agent; `runTraced` unreached. Asserted at `packages/app/tests/workflow/actions/agent-run.test.ts:3038` incl. the `workflow.agent.contract-violation` bus event; regression guards: continue-with-input stays fresh `:3067`, resume-capable claude keeps the flag `:3083`, runner-unknown agent keeps legacy `:3095`. |
+| R2 | MET | Full decision table (no session axis / execution-only; all true; declared false + note; missing record; multi-miss joined with `; ` in `SESSION_CAPABILITY_AXES` order) plus `parseRequiresCapabilities` accepting all four session axes at `packages/app/tests/services/capability-attestation.test.ts:183-268`, with literals byte-matching the implementation at `packages/app/src/services/capability-attestation.ts:181-211`. |
+| R3 | MET | Real-CLI subprocess harness: text-mode CAPS cell (`coder-exec` starts `r✓`, ends `⚠`) located by header lookup at `apps/cli/tests/config-layering.test.ts:224-246`; JSON mode asserts `capabilities.verifiedAgainst` non-empty, `supportsResumeById === true`, `capabilityStale = { verifiedAgainst, detected: '1.0.0…' }`, and empty stderr at `:248-269`. Staleness rendering source (read-only reference): `packages/app/src/services/agent-service.ts:2881-2884`. |
+| R4 | MET | Fresh `bun run spur-check` re-run during this review: lint + 8460 pass / 0 fail across 477 files, post-check rules "All 2 rules passed". Reviewer-verified, not inherited from the implementer. |
+
+| AC | Status | Evidence |
+|-----|--------|----------|
+| AC1 | MET | R1 gate + R2 evaluator coverage (above) — a stage requirement is enforced before spawn with the shared contract outcome. |
+| AC2 | MET | R3 JSON test: per-agent `capabilities` object on the doctor surface. |
+| AC3 | MET | R3 text `⚠` suffix and JSON `capabilityStale` for the 1.0.0-vs-2.1.274 stub mismatch. |
+
+##### Constraint checks
+
+- **R3 must not touch `agent-service.ts` (parallel B6/0893 owns it): CLEAN** — `git diff HEAD --name-only` has 0 matches for the file; the only source change is `agent-run.ts`.
+- Frozen invariants held: R7 two-line stderr assertion byte-identical (diff adds lines only, no removals in `config-layering.test.ts`); no new `ContractName` (reuses `'requiresCapabilities'` from `agent-run.ts:41`); no `getAgentSessionCapability` module stubbing (tests use real runner records; pin 0.4.68 confirmed); CLI `--continue` path untouched (no `apps/cli` source changes); both out-of-scope behaviors (`continue` with input → fresh dispatch; unknown agent → no gate) carry explicit regression guards.
+
+##### Dimension verdicts
+
+- **Security:** PASS — gate fails closed pre-spawn (no subprocess, `runTraced` unreached); no new injection surface (`agentLabel` / `gate.reason` are config/record-bounded); unknown-agent fail-open is the documented design invariant, unchanged.
+- **Efficiency:** PASS — the guard is one pure function call on an already-failing path; zero happy-path cost.
+- **Correctness:** PASS — guard precedes both the input guard and the `flags.continue` suppression; strict `continueFlag === true` excludes explicit `continue: false`; test literals byte-match the implementation.
+- **Usability:** PASS — error names the agent, cites ADR-118, and carries the record's `note` via `gate.reason` (e.g. gemini's "resume flags target latest session, not a session id"); bus event names contract + observed for the run log.
+- **Architecture:** PASS — reuses the B8 R4 pair (`evaluateSessionCapabilities` + `contractViolation`) instead of a new contract name or error shape; gating stays in the action runner (boundary integrity — service untouched); the R3 full-mode-selector deviation from Design is justified (`renderRoleLadder` has no CAPS column) and documented in the Solution.
+
+##### Verification evidence (fresh, this review session)
+
+- `packages/app`: `bun test tests/workflow/actions/agent-run.test.ts tests/services/capability-attestation.test.ts` → **176 pass / 0 fail**, 490 expects.
+- `apps/cli`: `bun test tests/config-layering.test.ts` → **9 pass / 0 fail**, 34 expects.
+- `bun run spur-check` → **8460 pass / 0 fail** across 477 files; post-check: "All 2 rules passed — no violations found".
+- Runner pin: `@gobing-ai/ts-ai-runner` **0.4.68** (Plan step-0 precondition holds).
+
+**Residual risk:** Low. Both advisories are test-brittleness / wording notes with no behavioral impact; the parallel 0893 rebase risk in `config-layering.test.ts` is bounded by the header-lookup approach.
+
+**Next:** No code action required — advisories accepted as-is; proceed to the pipeline approve(HITL) gate.
 
 ### References
 
@@ -190,4 +272,7 @@ if (input === undefined && continueFlag === true && !resumeSupported) {
 ### History
 
 - 2026-09-18T04:55:53.310Z backlog → todo (system)
+- 2026-09-18T05:26:01.202Z todo → wip (system)
+- 2026-09-18T06:00:48.426Z wip → testing (system)
+- 2026-09-18T06:01:20.884Z testing → done (system)
 

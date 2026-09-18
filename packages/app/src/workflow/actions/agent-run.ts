@@ -298,6 +298,20 @@ export class AgentRunActionRunner implements ActionRunner {
             // affinityOn: leave continueFlag undefined — resume via sessionDir/sessionId only.
         }
 
+        // B8 0898 R1: a resume-only step against a record that cannot resume by id has no
+        // prompt to fall back to — name the missing capability instead of failing generically.
+        if (input === undefined && continueFlag === true && !resumeSupported) {
+            const gate = evaluateSessionCapabilities({ resumeById: 'enforced' }, sessionCaps, agentLabel);
+            return this.contractViolation(
+                context,
+                agentLabel,
+                'requiresCapabilities',
+                gate.observed,
+                `agent.run (${agentLabel}) continue without input requires resume-by-id before spawn (ADR-118): ${gate.reason}`,
+                {},
+            );
+        }
+
         // Input required unless continue is effectively true on a resume-only agent.
         if (input === undefined && !continueFlag) {
             return {

@@ -4,8 +4,11 @@ import {
     capabilityDiagnostic,
     capabilityEvidence,
     evaluateCapabilities,
+    evaluateSessionCapabilities,
     executorAttestation,
     parseRequiresCapabilities,
+    SESSION_CAPABILITY_AXES,
+    type SessionCapabilityRecord,
     satisfiesRequirement,
     UNATTESTED_CAPABILITY,
 } from '../../src/services/capability-attestation';
@@ -174,6 +177,92 @@ describe('parseRequiresCapabilities (0706 R4/R8 closed vocabulary)', () => {
         const parsed = parseRequiresCapabilities({ fsWrite: 'unknown' });
         expect(parsed.ok).toBe(false);
         if (!parsed.ok) expect(parsed.error).toContain('fsWrite');
+    });
+});
+
+describe('evaluateSessionCapabilities (B8 R4)', () => {
+    // Task 0898 R2: direct unit coverage of the session-axis decision table the
+    // workflow gates (B8 R4 session gate; 0898 R1 resume-only gate) reuse.
+    const record = (overrides: Partial<SessionCapabilityRecord> = {}): SessionCapabilityRecord => ({
+        supportsResumeById: true,
+        supportsSessionDir: true,
+        supportsPersistentStdin: true,
+        supportsStructuredOutput: true,
+        ...overrides,
+    });
+
+    test('empty or execution-only requirements pass without consulting the record', () => {
+        expect(evaluateSessionCapabilities({}, record(), 'gemini')).toEqual({
+            ok: true,
+            reason: '',
+            observed: 'no session-axis requirement',
+        });
+        const executionOnly = evaluateSessionCapabilities({ fsWrite: 'available' }, record(), 'gemini');
+        expect(executionOnly.ok).toBe(true);
+        expect(executionOnly.observed).toBe('no session-axis requirement');
+    });
+
+    test('all required session axes true in the record pass and name the agent', () => {
+        const evaluation = evaluateSessionCapabilities(
+            { resumeById: 'enforced', persistentStdin: 'available' },
+            record(),
+            'claude',
+        );
+        expect(evaluation.ok).toBe(true);
+        expect(evaluation.reason).toBe('');
+        expect(evaluation.observed).toBe('session capabilities verified for claude');
+    });
+
+    test('an axis declared false fails with the note surfaced and the axis named', () => {
+        const evaluation = evaluateSessionCapabilities(
+            { resumeById: 'enforced' },
+            record({ supportsResumeById: false, note: 'gemini resume flags target latest session, not a session id' }),
+            'gemini',
+        );
+        expect(evaluation.ok).toBe(false);
+        expect(evaluation.reason).toContain('resumeById');
+        expect(evaluation.reason).toContain('declared false');
+        expect(evaluation.reason).toContain('latest session, not a session id');
+        expect(evaluation.observed).toBe('missing: resumeById');
+    });
+
+    test('a missing record fails closed naming the agent', () => {
+        const evaluation = evaluateSessionCapabilities({ resumeById: 'enforced' }, undefined, 'custom-exec');
+        expect(evaluation.ok).toBe(false);
+        expect(evaluation.reason).toContain("no capability record for agent 'custom-exec'");
+        expect(evaluation.observed).toBe('missing: resumeById');
+    });
+
+    test('multiple misses join with "; " and observed lists axes in SESSION_CAPABILITY_AXES order', () => {
+        const evaluation = evaluateSessionCapabilities(
+            { structuredOutput: 'enforced', sessionDir: 'available' },
+            record({ supportsSessionDir: false, supportsStructuredOutput: false }),
+            'gemini',
+        );
+        expect(evaluation.ok).toBe(false);
+        expect(evaluation.reason).toContain('sessionDir: declared false; structuredOutput: declared false');
+        expect(evaluation.observed).toBe('missing: sessionDir, structuredOutput');
+        expect(SESSION_CAPABILITY_AXES.indexOf('sessionDir')).toBeLessThan(
+            SESSION_CAPABILITY_AXES.indexOf('structuredOutput'),
+        );
+    });
+
+    test('parseRequiresCapabilities accepts all four session axes (0898 R2)', () => {
+        const parsed = parseRequiresCapabilities({
+            resumeById: 'enforced',
+            sessionDir: 'available',
+            persistentStdin: 'available',
+            structuredOutput: 'enforced',
+        });
+        expect(parsed.ok).toBe(true);
+        if (parsed.ok) {
+            expect(parsed.requires).toEqual({
+                resumeById: 'enforced',
+                sessionDir: 'available',
+                persistentStdin: 'available',
+                structuredOutput: 'enforced',
+            });
+        }
     });
 });
 
