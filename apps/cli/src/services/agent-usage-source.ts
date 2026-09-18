@@ -54,7 +54,7 @@ export class CodexbarUsageSource implements UsageSource {
  * so tests and sandboxes can pin it — bun's `homedir()` ignores `HOME` at runtime.
  */
 export function defaultAgentUsageSnapshotPath(env: Record<string, string | undefined> = getEnvVars()): string {
-    const override = env['SPUR_AGENT_USAGE_SNAPSHOT'];
+    const override = env.SPUR_AGENT_USAGE_SNAPSHOT;
     if (override !== undefined && override.length > 0) return override;
     return join(homedir(), '.config', 'spur', 'agent-usage.json');
 }
