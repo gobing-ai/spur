@@ -1,4 +1,5 @@
 import { normalize, resolve, sep } from 'node:path';
+import { getAgentSessionCapability } from '@gobing-ai/ts-ai-runner';
 import type { ActionResult, ActionRunContext, ActionRunner } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     createNodeFileSystem,
@@ -6,6 +7,7 @@ import {
     NodeProcessExecutor,
     type ProcessExecutor,
 } from '@gobing-ai/ts-runtime';
+import type { AgentService } from '../../services/agent-service';
 import { bounded, type WorkflowActionOutputEvent, type WorkflowObservabilityBus } from '../observability';
 import { splitLaunchCommand } from '../split-launch-command';
 
@@ -56,6 +58,9 @@ export class DoctorProbeActionRunner implements ActionRunner {
         private readonly processExecutor: ProcessExecutor = new NodeProcessExecutor(),
         private readonly fileSystem: FileSystem = createNodeFileSystem(),
         private readonly observabilityBus?: WorkflowObservabilityBus,
+        // B7 R1 (task 0894): injected so role-map mode can resolve pins in-process
+        // through the SAME resolveRole walk dispatch uses.
+        private readonly agentService?: AgentService,
     ) {}
 
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
@@ -67,10 +72,14 @@ export class DoctorProbeActionRunner implements ActionRunner {
             };
         }
         const spurBin = stringOption(options, 'spurBin', 'spur');
-        const requestedAgent = stringOption(options, 'agent');
+        // B7 R1 (0894): role-map mode — `roles` is a role → agent-selector map.
+        // In this mode the single-probe agent/role options are not required.
+        const rolesOption = options.roles;
+        const rolesMode = rolesOption !== undefined && typeof rolesOption === 'object' && !Array.isArray(rolesOption);
+        const requestedAgent = rolesMode ? stringOption(options, 'agent', '') : stringOption(options, 'agent');
         const role = stringOption(options, 'role', '');
         const agent = requestedAgent === 'inline' || requestedAgent === 'auto' ? role : requestedAgent;
-        if (agent === '') {
+        if (agent === '' && !rolesMode) {
             return { ok: false, error: 'doctor.probe: reserved agent selectors require a declared role' };
         }
         const implementAgent = stringOption(options, 'implementAgent', agent);
@@ -113,6 +122,18 @@ export class DoctorProbeActionRunner implements ActionRunner {
         };
 
         await this.fileSystem.ensureDir(allowedDir);
+
+        // B7 R1 (task 0894): role-map mode resolves every declared role ONCE and
+        // writes `__executor.<role>` pins; the per-stage path then dispatches
+        // without its own doctor call.
+        if (rolesMode) {
+            return this.resolvePins(
+                rolesOption as Record<string, unknown>,
+                normalized,
+                stringOption(options, 'resolvedAgentVar', ''),
+                emit,
+            );
+        }
 
         let status = 'PASS';
         const lines: string[] = [];
@@ -172,6 +193,68 @@ export class DoctorProbeActionRunner implements ActionRunner {
             ok: true,
             data: { status, resultFile: normalized, output: lines },
             setVars: resolvedAgentVar !== '' && electedAgent !== '' ? { [resolvedAgentVar]: electedAgent } : undefined,
+        };
+    }
+
+    /**
+     * B7 R1 (task 0894): resolve every declared role once and write
+     * `__executor.<role> = { name, agent, model, tier, capabilities }` run vars.
+     * Each entry resolves through the SAME resolveRole walk dispatch uses (an
+     * explicit selector pins; 'auto'/'inline'/'' route by role), so the pin and
+     * any unpinned fallback agree. Failures mark the status file FAIL (soft
+     * probe): the affected stages degrade to their own per-stage resolution.
+     */
+    private async resolvePins(
+        roles: Record<string, unknown>,
+        resultFile: string,
+        resolvedAgentVar: string,
+        emit: (chunk: string) => void,
+    ): Promise<ActionResult> {
+        const lines: string[] = [];
+        let failed = false;
+        const setVars: Record<string, string> = {};
+        let firstElected = '';
+        for (const [roleName, selectorRaw] of Object.entries(roles)) {
+            const role = roleName.trim();
+            if (role === '') continue;
+            const selector = typeof selectorRaw === 'string' ? selectorRaw.trim() : '';
+            const resolveFlags: Record<string, string | boolean> = { role };
+            if (selector !== '' && selector !== 'auto' && selector !== 'inline') resolveFlags.agent = selector;
+            const resolved = await this.agentService?.resolve(resolveFlags);
+            if (resolved === undefined || !resolved.ok) {
+                const reason = resolved !== undefined ? resolved.message : 'no agent service for pin resolution';
+                const line = `precheck: FAIL - role ${role} pin resolution failed: ${reason}`;
+                lines.push(line);
+                emit(line);
+                failed = true;
+                continue;
+            }
+            const executor = resolved.executor ?? resolved.agent;
+            const capabilities = getAgentSessionCapability(resolved.agent);
+            const pin = {
+                name: executor,
+                agent: resolved.agent,
+                ...(resolved.model !== undefined ? { model: resolved.model } : {}),
+                ...(resolved.tier !== undefined ? { tier: resolved.tier } : {}),
+                ...(capabilities !== undefined ? { capabilities } : {}),
+            };
+            setVars[`__executor.${role}`] = JSON.stringify(pin);
+            if (firstElected === '') firstElected = executor;
+            const modelSuffix = resolved.model !== undefined ? ` (${resolved.model})` : '';
+            const line = `precheck: role ${role} pinned to ${executor}${modelSuffix}`;
+            lines.push(line);
+            emit(line);
+        }
+        const status = failed ? 'FAIL' : 'PASS';
+        await this.fileSystem.writeFile(resultFile, `${status}\n`);
+        // Soft probe: always succeed; the status token routes, never a lifecycle abort.
+        return {
+            ok: true,
+            data: { status, resultFile, output: lines },
+            setVars: {
+                ...setVars,
+                ...(resolvedAgentVar !== '' && firstElected !== '' ? { [resolvedAgentVar]: firstElected } : {}),
+            },
         };
     }
 }

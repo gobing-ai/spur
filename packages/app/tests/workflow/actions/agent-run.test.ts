@@ -1999,7 +1999,7 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
             __agentSession: 'open',
             __agentSessionAgent: 'omp',
         });
-        expect((result.setVars as Record<string, unknown>).__agentSessionDir).toContain(
+        expect((result.setVars as Record<string, unknown>)['__session.coder.dir']).toContain(
             '.spur/run/run-123/agent-sessions/omp',
         );
     });
@@ -2032,8 +2032,9 @@ describe('Task 0448 — run-scoped session affinity and host protection', () => 
             runId: 'run-123',
             vars: {
                 __agentSession: 'open',
-                __agentSessionDir: '/tmp/sdir',
-                __agentSessionId: 'sess-456',
+                // 0894 R2: coder role slots replaced the legacy __agentSessionDir/Id keys.
+                '__session.coder.dir': '/tmp/sdir',
+                '__session.coder.id': 'sess-456',
                 __agentSessionAgent: 'omp',
             },
         });
@@ -2133,7 +2134,7 @@ describe('R2 — resolved-agent session keying (task 0451)', () => {
 
         expect(result.ok).toBe(true);
         expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('codex');
-        const dir = (result.setVars as Record<string, unknown>).__agentSessionDir as string;
+        const dir = (result.setVars as Record<string, unknown>)['__session.coder.dir'] as string;
         expect(dir).toContain('agent-sessions/codex');
     });
 
@@ -2143,9 +2144,9 @@ describe('R2 — resolved-agent session keying (task 0451)', () => {
             workdir: '/tmp/w4',
             vars: {
                 __agentSession: 'open',
-                __agentSessionDir: '/tmp/w4/.spur/run/run-321/agent-sessions/codex',
+                '__session.coder.dir': '/tmp/w4/.spur/run/run-321/agent-sessions/codex',
                 __agentSessionAgent: 'codex',
-                __agentSessionId: 'sess-abc',
+                '__session.coder.id': 'sess-abc',
             },
         });
         let capturedFlags: Record<string, string | boolean> = {};
@@ -2181,16 +2182,16 @@ describe('R2 — resolved-agent session keying (task 0451)', () => {
             workdir: '/tmp/w4',
             vars: {
                 __agentSession: 'open',
-                __agentSessionDir: '/tmp/w4/.spur/run/run-321/agent-sessions/codex',
+                '__session.coder.dir': '/tmp/w4/.spur/run/run-321/agent-sessions/codex',
                 __agentSessionAgent: 'codex',
-                __agentSessionId: 'sess-abc',
+                '__session.coder.id': 'sess-abc',
             },
         });
         const result = await runner.execute({ role: 'coder', input: 'test', agent: 'claude' }, ctx);
 
         expect(result.ok).toBe(true);
         // The step explicitly selected 'claude', so the session is under claude, not codex
-        const dir = (result.setVars as Record<string, unknown>).__agentSessionDir as string;
+        const dir = (result.setVars as Record<string, unknown>)['__session.coder.dir'] as string;
         expect(dir).toContain('agent-sessions/claude');
         expect((result.setVars as Record<string, unknown>).__agentSessionAgent).toBe('claude');
     });
@@ -2309,7 +2310,8 @@ describe('R5 — discoverSessionId prefers *.json (task 0451)', () => {
 
         expect(result.ok).toBe(true);
         // session-abc.json → discovered id = 'session-abc'
-        expect((result.setVars as Record<string, unknown>).__agentSessionId).toBe('session-abc');
+        // 0894 R2: discovery writes back to the coder role slot.
+        expect((result.setVars as Record<string, unknown>)['__session.coder.id']).toBe('session-abc');
     });
 
     test('returns undefined when session dir has only non-json files', async () => {
@@ -2489,8 +2491,9 @@ describe('AgentRunActionRunner fresh-session independence (task 0710)', () => {
         return makeCtx({
             vars: {
                 __agentSession: 'open',
-                __agentSessionDir: '/tmp/inherited',
-                __agentSessionId: 'old-session',
+                // 0894 R2: coder role slots replaced the legacy __agentSessionDir/Id keys.
+                '__session.coder.dir': '/tmp/inherited',
+                '__session.coder.id': 'old-session',
                 __agentSessionAgent: 'claude',
             },
         });
@@ -2880,9 +2883,10 @@ describe('AgentRunActionRunner session capability gating (B8 / task 0889)', () =
             workdir: '/tmp/wb8',
             vars: {
                 __agentSession: 'open',
-                __agentSessionDir: `/tmp/wb8/.spur/run/run-b8/agent-sessions/${agent}`,
+                // 0894 R2: coder role slots replaced the legacy __agentSessionDir/Id keys.
+                '__session.coder.dir': `/tmp/wb8/.spur/run/run-b8/agent-sessions/${agent}`,
                 __agentSessionAgent: agent,
-                __agentSessionId: 'sess-inherited',
+                '__session.coder.id': 'sess-inherited',
             },
         });
     }
@@ -2906,8 +2910,8 @@ describe('AgentRunActionRunner session capability gating (B8 / task 0889)', () =
         expect(result.data).toMatchObject({ session: 'fresh' });
         // Downstream steps learn the session cannot resume — the latch never arms.
         expect(result.setVars).toMatchObject({ __agentSession: 'no-resume' });
-        expect((result.setVars as Record<string, unknown>).__agentSessionId).toBeUndefined();
-        expect((result.setVars as Record<string, unknown>).__agentSessionDir).toBeDefined();
+        expect((result.setVars as Record<string, unknown>)['__session.coder.id']).toBeUndefined();
+        expect((result.setVars as Record<string, unknown>)['__session.coder.dir']).toBeDefined();
     });
 
     test('R2: latch stays unarmed for a resume-incapable agent (no failed-resume dispatch first)', async () => {
@@ -2940,12 +2944,14 @@ describe('AgentRunActionRunner session capability gating (B8 / task 0889)', () =
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.sessionId).toBe('sess-inherited');
+        // 0894 R3: the action now always records the session outcome; a resumed
+        // capable dispatch records 'reused' (was absent pre-0894).
         expect(
             result.data && typeof result.data === 'object'
                 ? (result.data as Record<string, unknown>).session
                 : undefined,
-        ).toBeUndefined();
-        expect(result.setVars).toMatchObject({ __agentSession: 'open', __agentSessionId: 'sess-inherited' });
+        ).toBe('reused');
+        expect(result.setVars).toMatchObject({ __agentSession: 'open', '__session.coder.id': 'sess-inherited' });
     });
 
     test('R4: unmet session requirement → ADR-118 contract-violation BEFORE spawn, naming executor + axis', async () => {
@@ -3102,5 +3108,113 @@ describe('AgentRunActionRunner session capability gating (B8 / task 0889)', () =
 
         expect(result.ok).toBe(true);
         expect(capturedFlags.continue).toBe(true);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: B7 R6/R7 — pin invalidation, trace columns, E6 mapping id (task 0895)
+// ---------------------------------------------------------------------------
+describe('AgentRunActionRunner pin invalidation + trace columns (0895)', () => {
+    const PIN_A = JSON.stringify({ name: 'claude-a', agent: 'claude', tier: 2 });
+
+    /** Fake service: pinned executor reads as disabled; fresh re-resolve lands on claude-b. */
+    function svcWithDisabledPin(availability: { disabled: boolean; owner?: string; reason?: string } | undefined) {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = {
+            executorAvailability: async () => availability,
+            resolveRoleFresh: async () => ({
+                ok: true,
+                agent: 'claude',
+                executor: 'claude-b',
+                model: 'sonnet',
+                tier: 3,
+                source: 'role',
+                role: 'coder',
+            }),
+            runTraced: async (_input: string | undefined, flags: Record<string, string | boolean>) => {
+                capturedFlags = flags;
+                return { exitCode: 0, stdout: '', invocation: invocation({ agent: 'claude' }) };
+            },
+            flags: () => capturedFlags,
+        } as unknown as AgentService & { flags: () => Record<string, string | boolean> };
+        return svc;
+    }
+
+    test('mid-run disable re-resolves the role once: fresh dispatch, new pin persisted, trace records the hop (R1)', async () => {
+        const svc = svcWithDisabledPin({ disabled: true, owner: 'drain', reason: 'quota exhausted' });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-895',
+            vars: {
+                '__executor.coder': PIN_A,
+                // Would resume the old pin's session if invalidation did not force fresh.
+                '__session.coder.dir': '/tmp/sdir',
+                '__session.coder.id': 'sess-old',
+                __agentSessionAgent: 'claude',
+            },
+        });
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(true);
+        const flags = (svc as unknown as { flags: () => Record<string, string | boolean> }).flags();
+        // Fresh session: the disabled pin's session slot is never resumed.
+        expect(flags.sessionId).toBeUndefined();
+        expect(flags.sessionDir).toContain('agent-sessions/claude-b');
+        expect(flags['run-id']).toBe('run-895');
+        const data = result.data as Record<string, unknown>;
+        expect(data.executor).toBe('claude-b');
+        expect(data.session).toBe('fresh');
+        expect(data.pinReresolved).toBe(true);
+        expect(data.pinReresolvedFrom).toBe('claude-a');
+        expect(data.pinReresolvedOwner).toBe('drain');
+        expect(data.pinReresolvedReason).toBe('quota exhausted');
+        // The re-resolved pin and the once-per-run marker persist for later stages.
+        const newPin = JSON.parse((result.setVars as Record<string, string>)['__executor.coder'] as string);
+        expect(newPin.name).toBe('claude-b');
+        expect(result.setVars?.['__executorReresolved.coder']).toBe('true');
+    });
+
+    test('second disable after re-resolution fails the stage loudly (ADR-118 outcome, R1)', async () => {
+        const svc = svcWithDisabledPin({ disabled: true, owner: 'drain', reason: 'quota exhausted' });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-895',
+            vars: {
+                '__executor.coder': PIN_A,
+                '__executorReresolved.coder': 'true',
+            },
+        });
+        const result = await runner.execute({ role: 'coder', input: 'hello' }, ctx);
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('ladder is exhausted');
+        expect(result.error).toContain('claude-a');
+        expect(result.error).toContain('drain');
+    });
+
+    test('resumed pinned stage records executor + sessionId + session=reused and maps E6 by run id (R2/R3)', async () => {
+        let capturedFlags: Record<string, string | boolean> = {};
+        const svc = svcCapturingFlags((f) => {
+            capturedFlags = f;
+        });
+        const runner = new AgentRunActionRunner(svc);
+        const ctx = makeCtx({
+            runId: 'run-e6',
+            vars: {
+                '__session.coder.dir': '/tmp/sdir',
+                '__session.coder.id': 'sess-456',
+                __agentSessionAgent: 'omp',
+            },
+        });
+        const result = await runner.execute({ role: 'coder', input: 'hello', agent: 'omp' }, ctx);
+
+        expect(result.ok).toBe(true);
+        // R3: the mapping joins on the workflow run id, never a minted one.
+        expect(capturedFlags['run-id']).toBe('run-e6');
+        expect(capturedFlags.sessionId).toBe('sess-456');
+        const data = result.data as Record<string, unknown>;
+        expect(data.executor).toBe('omp');
+        expect(data.sessionId).toBe('sess-456');
+        expect(data.session).toBe('reused');
     });
 });

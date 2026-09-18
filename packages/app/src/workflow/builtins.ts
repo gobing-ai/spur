@@ -94,6 +94,7 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
             options.processExecutor ?? new NodeProcessExecutor(),
             fileSystem,
             options.observabilityBus,
+            options.agentService,
         ),
         'builtin',
     );

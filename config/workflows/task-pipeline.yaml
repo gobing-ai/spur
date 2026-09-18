@@ -196,6 +196,18 @@ states:
                 command: >-
                     mkdir -p .spur/run .spur/memory; RUN_ID="$__runId"; [ -n "$RUN_ID" ] || RUN_ID="pipeline-$wbs"; case "$RUN_ID" in *'$'*|*'{'*|*'}'*|*vars.*|*/*|*'\'*|*..*) echo "route-reason: refusing unsafe run id: $RUN_ID" >&2; exit 1 ;; esac; REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"; jq -rn --arg m "$mode" '{"fast":"fast:evidence complete+consistent","":"safety:standard verification","unknown":"safety:unknown evidence quality","conflict":"safety:conflicting evidence"}[$m] // "safety:unrecognized evidence (mode=\($m))"' > "$REASON_FILE"; printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(cat "$REASON_FILE")" >> .spur/memory/task-pipeline-routes.log; exit 0
 
+          # (e) B7 R1 (0894): resolve every declared role ONCE at precheck — pins land
+          # in __executor.<role> run vars so stage dispatch performs no doctor call.
+          # Soft probe: failures mark the status file and stages degrade to their own
+          # resolution; nothing here aborts the run.
+          - kind: doctor.probe
+            options:
+                resultFile: ".spur/run/${vars.__runId}-precheck-roles.status"
+                spurBin: "${vars.spurBin}"
+                roles:
+                    coder: "${vars.implementAgent}"
+                    reviewer: "${vars.agent}"
+
     - id: implement
       description: >
           Run agent-driven implementation via /sp:dev-run --mode implement, THEN move the
@@ -216,6 +228,9 @@ states:
                 # Pure slash command only (ADR-043). Anti-recursion / implement discipline
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
+                # B7 R3/R6 (0894): coder stages reuse the role session — the test-fix hop
+                # resumes the implement session instead of re-reading the task cold.
+                session: reuse
                 # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
                 input: /sp:dev-run --mode implement ${vars.wbs} --auto
                 timeoutMs: ${vars.implementTimeoutMs}
@@ -356,6 +371,9 @@ states:
                 # R3 (0482): `--findings` names the failing anchors inline; `--gate-log` remains
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: coder
+                # B7 R3/R6 (0894): coder stages reuse the role session — the fix hop
+                # continues the implement session it is repairing.
+                session: reuse
                 # the full-context escape hatch when the digest is not enough.
                 input: /sp:dev-fixall "${vars.qualityGateCmd}" --gate-log .spur/run/${vars.wbs}-test-gate.log --findings "${vars.gateFindings}"
                 timeoutMs: ${vars.stepTimeoutMs}
@@ -417,7 +435,11 @@ states:
                 expectFile: .spur/run/${vars.__runId}-review-answer.txt
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: reviewer
+                # B7 R3/R6 (0894): declared fresh policy (reviewer default) — the action
+                # result records this as declared, not defaulted. `freshSession: true` is
+                # kept as the action-level hard guarantee (0710 R2 structural assertion).
                 freshSession: true
+                session: fresh
                 priority: ${vars.taskPriority}
                 compareExecutorWith: implement
                 timeoutMs: ${vars.stepTimeoutMs}
@@ -477,7 +499,10 @@ states:
                 input: /sp:dev-verify ${vars.wbs} --auto --fix none --focus all
                 # Declared Layer-1 role (0538 R2/0710 R7): routing reason; no executor pin — role routing feeds the distinctness gate.
                 role: reviewer
+                # B7 R3/R6 (0894): declared fresh policy (reviewer default).
+                # `freshSession: true` kept as the action-level hard guarantee (0710 R2).
                 freshSession: true
+                session: fresh
                 priority: ${vars.taskPriority}
                 compareExecutorWith: implement
                 timeoutMs: ${vars.stepTimeoutMs}
