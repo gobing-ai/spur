@@ -97,16 +97,11 @@ export interface AgentSessionCapability {
 }
 ```
 
-Initial rows (to be verified per CLI at implementation; LOW confidence marked ?):
+Landed record (`@gobing-ai/ts-ai-runner@0.4.68`, all 11 `AgentName` rows verified against installed CLIs on 2026-09-18; the upstream record — `getAgentSessionCapability` and the README capability matrix — is the single source of truth; this section records the decision, not a duplicate ledger):
 
-| Agent | resumeById | sessionDir | persistentStdin | structuredOutput |
-| --- | --- | --- | --- | --- |
-| claude | true | false | true? (`--input-format stream-json`) | true |
-| codex | false (note: `exec resume` is interactive-only) | false | false | true (`--json`) |
-| gemini | false (`-r latest` only) | false | false | true? |
-| pi / omp | true | true | ? (rpc/json mode) | true |
-| antigravity | true (`--conversation`) | false | false | ? |
-| grok | true (`--resume`) | false | false | ? |
+- The sketch predicted correctly for claude (no session-dir; structured output), gemini (`-r latest` only), pi/omp (full true) and antigravity/grok resume-by-id (`--conversation` / `--resume`).
+- Codex closed differently than sketched: `exec resume <id> <prompt>` (verified 0.154.0) is non-interactive, so `supportsResumeById: true` is wired through `getPromptCommand` instead of a `false` + note.
+- CLI-supported-but-not-yet-shim-wired flags stay `false` with notes naming them (opencode `-s/--session`, openclaw `--session-id`/`--json`); CLIs absent at verification carry `verifiedAgainst: 'unverified (CLI not installed)'` and conservative `false` rows.
 
 Spur consumers: `agent-run.ts` affinity branches, `agent doctor --json` (`capabilities` per executor), `capability-attestation` (`requiresCapabilities: [resumeById]` ⇒ contract-violation before spawn, ADR-118 outcome). Doctor warns when the detected CLI version core differs from the record's `verifiedAgainst` core — branding prefix/suffix is not drift, and no core on either side is unverifiable (never warns, 0899). Release + `bun update` recorded in the workspace catalog.
 

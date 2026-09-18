@@ -4,7 +4,7 @@ name: Doctor capability-staleness warning fires on nearly every real install (un
 status: done
 template: issue
 created_at: 2026-09-18T06:51:40.161Z
-updated_at: "2026-09-18T10:50:33.205Z"
+updated_at: "2026-09-18T11:15:55.781Z"
 feature_id: B8
 
 priority: P3
@@ -156,6 +156,7 @@ Reproduced 2026-09-18 on `a082d0d93`: `spur agent doctor --force-refresh` → 5 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | `agent-service.test.ts:4513-4538` — no-warn loop over all five branded shapes (suffix `2.1.274 (Claude Code)`, prefix `codex-cli 0.154.0`, prefix `omp/18.2.3`, prefix+hash `OpenClaw 2026.6.11 (e085fa1)`, prerelease-core match `deepseek-cli 0.1.5-rc.1`), each asserting `capabilityStale === null` (fresh pass). Genuine core mismatch warns with raw values quoted + normalized cores named: `agent-service.test.ts:4579-4596` and exact full line `apps/cli/tests/config-layering.test.ts:90-91,221`. Code: `renderCapsCell` `agent-service.ts:3014-3019` keys `⚠` off `capabilityStale`; `warnCapabilityStale` `:710-713` skips null rows, text-only call sites `:617/:652/:790`. `agent-service.test.ts:4540-4556` — unverified antigravity-cli record + detected `1.2.3` ⇒ `capabilityStale` null AND no `capability-declaration-stale` stderr (fresh pass). Code: both-cores-required compare `agent-service.ts:2941-2942` (exact-compare fallback removed — the commit's core change); detail `verified:` display untouched `:3150`. Deepseek prerelease drift `deepseek-cli 0.1.5-rc.2` vs record `0.1.5-rc.1` asserts exact fragments `'"deepseek-cli 0.1.5-rc.2" (core 0.1.5-rc.2)'` and `'"0.1.5-rc.1" (core 0.1.5-rc.1)'` (`agent-service.test.ts:4559-4576`, fresh pass); branded codex drift `codex-cli 0.999.0` vs `0.154.0` asserts `'"codex-cli 0.999.0" (core 0.999.0)'` and `'"0.154.0" (core 0.154.0)'` (`:4579-4596`); exact full R4 line end-to-end via `apps/cli/tests/config-layering.test.ts:221` (`toBe`). Code: warning text `agent-service.ts:716`. |
+| AC-7 | MET |  | normalize-then-compare (agent-service.ts:2923,2929): branded detected==verified emits no stale warning; genuine core mismatch warns with quoted raw + named cores; tests agent-service.test.ts:4513,4538,4559 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

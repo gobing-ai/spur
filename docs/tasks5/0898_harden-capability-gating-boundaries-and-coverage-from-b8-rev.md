@@ -4,7 +4,7 @@ name: Harden capability gating boundaries and coverage from B8 review findings
 status: done
 template: feature-impl
 created_at: 2026-09-18T04:26:57.446Z
-updated_at: "2026-09-18T06:53:10.862Z"
+updated_at: "2026-09-18T11:15:55.591Z"
 feature_id: B8
 
 priority: P3
@@ -198,6 +198,11 @@ Verification (targeted, per implement scope): `packages/app` — `bun test tests
 | R2 | MET | capability-attestation.test.ts:183-268 decision table; :250 parseRequiresCapabilities four session axes |
 | R3 | MET | config-layering.test.ts:224 CAPS cell + :248 doctor --json capabilities/capabilityStale clean stderr, real subprocess |
 | R4 | MET | bun run spur-check EXIT 0: biome 1016 files clean, typecheck clean, 46+2 rules passed, 8515 pass / 0 fail |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-6 | MET |  | agent-run.ts:301-312 resume-only step against resumeById:false fails pre-spawn as requiresCapabilities contract violation; decision-table tests capability-attestation.test.ts:183-268 |
+| AC-3 | MET |  | config-layering.test.ts:224,248 real-subprocess doctor CAPS cell + --json capabilities/capabilityStale, clean stderr |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

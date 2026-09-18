@@ -4,7 +4,7 @@ name: "Consume the runner capability record in Spur: agent-run affinity branches
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.552Z
-updated_at: "2026-09-18T06:53:10.692Z"
+updated_at: "2026-09-18T11:15:55.412Z"
 feature_id: B8
 priority: P1
 tags:
@@ -104,6 +104,13 @@ Task 0889 consumes the runner capability record released by 0888 (`@gobing-ai/ts
 | R4 | MET | agent-service.ts:1186-1204,1308 gate; capability-attestation.ts:148-158 axis vocabulary |
 | R5 | MET | agent-service.ts:707-711 warnCapabilityStale exact-compare warning; JSON stderr-clean |
 | R6 | MET | fresh runs: 231 pass app services + 150 pass agent-run action / 0 fail |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-2 | MET |  | agent-run.ts:233-243 record-driven sessionCaps, zero agent-name literals; resume-false → no flags, session:'fresh', gated writeback |
+| AC-3 | MET |  | agent-service.ts:2839-2848 DoctorRow capabilities+capabilityStale; :640/:759 JSON builders; :2991 CAPS column |
+| AC-6 | MET |  | agent-service.ts:1186-1204,1308 requiresCapabilities pre-spawn gate; capability-attestation.ts:148-158 axes |
+| AC-7 | MET |  | agent-service.ts:707-722 warnCapabilityStale surfaces drift on text surfaces; JSON stderr-clean |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

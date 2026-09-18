@@ -4,7 +4,7 @@ name: Extend the ts-ai-runner AgentSessionCapability record with persistentStdin
 status: done
 template: feature-impl
 created_at: 2026-09-17T23:19:46.548Z
-updated_at: "2026-09-18T06:53:10.492Z"
+updated_at: "2026-09-18T11:15:55.178Z"
 feature_id: B8
 priority: P1
 tags:
@@ -98,6 +98,13 @@ Follow-ups (out of scope, no code written): wire opencode `-s/--session <id>` an
 | R4 | MET | claude row: sessionDir false+note, persistentStdin true+note, verifiedAgainst 2.1.274 |
 | R5 | MET | fresh run 228 pass / 0 fail across 17 files (upstream bun test) |
 | R6 | MET | package.json 0.4.68; spur pin 0.4.68; catalog ^0.4.68; bun.lock resolves 0.4.68 (CI 35295923691) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-1 | MET |  | Every AgentName row (11) resolves a record with all 6 fields incl. verifiedAgainst (shims.ts:411-506) |
+| AC-4 | MET |  | codex getPromptCommand emits exec resume; record declares support, never silent degrade |
+| AC-5 | MET |  | claude row: resumeById true, sessionDir false with note; session id discovered from run output |
+| AC-8 | MET |  | @gobing-ai/ts-ai-runner@0.4.68 released (CI 35295923691); catalog+bun.lock pin 0.4.68 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

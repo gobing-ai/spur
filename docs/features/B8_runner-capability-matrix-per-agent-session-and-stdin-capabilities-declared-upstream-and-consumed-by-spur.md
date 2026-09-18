@@ -2,11 +2,11 @@
 schema_version: 1
 id: "B8"
 name: "Runner capability matrix: per-agent session and stdin capabilities declared upstream and consumed by Spur"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-17T23:02:02.383Z"
-updated_at: "2026-09-18T07:13:18.869Z"
+updated_at: "2026-09-18T11:18:48.032Z"
 ---
 
 # B8: Runner capability matrix: per-agent session and stdin capabilities declared upstream and consumed by Spur
@@ -105,4 +105,5 @@ Feature: Runner capability matrix
 
 - 2026-09-18T03:07:26.264Z backlog → active (system)
 - 2026-09-18T07:13:18.869Z active → verifying (system)
+- 2026-09-18T11:18:48.032Z verifying → done (system)
 
