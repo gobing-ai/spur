@@ -108,7 +108,7 @@ Initial rows (to be verified per CLI at implementation; LOW confidence marked ?)
 | antigravity | true (`--conversation`) | false | false | ? |
 | grok | true (`--resume`) | false | false | ? |
 
-Spur consumers: `agent-run.ts` affinity branches, `agent doctor --json` (`capabilities` per executor), `capability-attestation` (`requiresCapabilities: [resumeById]` ⇒ contract-violation before spawn, ADR-118 outcome). Doctor warns when the detected CLI version differs from `verifiedAgainst`. Release + `bun update` recorded in the workspace catalog.
+Spur consumers: `agent-run.ts` affinity branches, `agent doctor --json` (`capabilities` per executor), `capability-attestation` (`requiresCapabilities: [resumeById]` ⇒ contract-violation before spawn, ADR-118 outcome). Doctor warns when the detected CLI version core differs from the record's `verifiedAgainst` core — branding prefix/suffix is not drift, and no core on either side is unverifiable (never warns, 0899). Release + `bun update` recorded in the workspace catalog.
 
 ## 6. G66 — Persistent fleet member
 

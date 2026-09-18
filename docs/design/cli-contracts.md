@@ -449,7 +449,8 @@ full-set inventory still exits 0, and naming a disabled executor directly exits 
   `r✓d✗s✓o✗` (`r`esume-by-id, session `d`ir, persistent `s`tdin, structured `o`utput), `—` when the binary is
   unknown to the runner. Spur reads the record from `@gobing-ai/ts-ai-runner` `getAgentSessionCapability` — it
   never re-declares capabilities. Staleness is core-level (0899): branding prefix/suffix on the detected
-  string is not drift; the detected version's core differs from the record's `verifiedAgainst` core. When
+  string is not drift; drift is a detected version core that differs from the record's `verifiedAgainst`
+  core. When
   it differs, a
   trailing `⚠` marks the cell and text mode emits a `capability-declaration-stale` stderr warning; `--json`
   stays stderr-clean and carries the same facts per agent entry as `capabilities` (the record, `note` included)
