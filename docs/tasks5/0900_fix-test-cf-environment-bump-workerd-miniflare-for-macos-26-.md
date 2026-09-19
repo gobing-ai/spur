@@ -4,7 +4,7 @@ name: "Fix test-cf environment: bump workerd/miniflare for macOS 26.5 and re-ver
 status: done
 template: feature-impl
 created_at: 2026-09-18T22:34:41.215Z
-updated_at: "2026-09-19T05:55:54.410Z"
+updated_at: "2026-09-19T06:33:06.668Z"
 feature_id: G66
 
 ac_altitude: task-local
@@ -71,14 +71,15 @@ Replace the macOS-26.5-incompatible workerd with the current pool stack and unif
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 bump pool to macOS-26.5-compatible workerd/miniflare, no unrelated drift | MET | apps/server/package.json:30 pool-workers 0.16.10->0.22.0; bun.lock resolves miniflare@5.20260815.0-alpha + workerd@1.20260815.1; miniflare 4 remains only under wrangler (bun.lock:2211) and @hono/vite-dev-server (bun.lock:2081); vitest unchanged (4.1.7); drift confined to pool subtree + ts-* 0.4.69 |
-| R2 ts-* unified on published 0.4.69, overlay gone | MET | package.json:32-39 catalog + :105-112 deps all 0.4.69; grep ts-infra@0.4.68 bun.lock = 0; no file:/link: refs; consumers symlink ts-ai-runner@0.4.69+2e18240a; single ts-infra@0.4.69+4e4376cb; stale 0.4.68 real dir + orphan store dirs purged post-verify |
-| R3 test-cf green + spur-check PASS | MET | .spur/run/0900-test-gate.log: 8554 pass / 0 fail across 485 files, post-check "All 2 rules passed"; live test-cf: 1 file / 1 test passed, 790ms, no signal 11 |
+| R1 | MET | `apps/server/package.json:30` `@cloudflare/vitest-pool-workers` 0.22.0; `bun.lock` resolves `miniflare@5.20260815.0-alpha` + `workerd@1.20260815.1` (pool path). `apps/server/vitest.cf.config.ts:9` test-only `nodejs_compat`. vitest stays 4.1.7. miniflare 4 / workerd 1.20260526.1 remain only under wrangler / `@hono/vite-dev-server` (documented, not the pool). |
+| R2 | MET | [docs-only] Overlay replaced by published `@gobing-ai/ts-*` 0.4.69 (Solution / Design CHANGED): catalog `package.json:32-39`, root pins `package.json:105-112` all `0.4.69`. `rg ts-infra@0.4.68 bun.lock` → no matches. Persistent-stdin ships in published runner; G66 agent tests still pass this turn (35/35 member-session+team). |
+| R3 | MET | This turn: `cd apps/server && bun run test-cf` → Test Files 1 passed (1), Tests 1 passed (1), 2.14s, exit 0, no signal 11. `bun run spur-check` exit 0: **8577 pass / 0 fail across 486 files** + 2 post-check rules. |
+| R4 | MET | 0897 re-verified this same `--force` batch: see `.spur/run/0897-verify-answer.txt` (PASS tables). 0897 status remains `done`. AC2 on 0897 uses test-type redelivery evidence (not manual-review). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 test-cf executes + passes on macOS 26.5 host | MET | command | `cd apps/server && bun run test-cf` -> Test Files 1 passed (1), Tests 1 passed (1), 790ms (was segfault signal 11 pre-fix) |
-| AC2 0897 re-verifies PASS -> done | MET | command | .spur/run/0897-verify-answer2.txt VERDICT PASS (fresh sp-super-reviewer, test-cf 1/1); driver executed 0897 done transition |
+| AC-1 | MET | command | `cd apps/server && bun run test-cf` this turn: Test Files 1 passed (1), Tests 1 passed (1), Duration 2.14s, exit 0. |
+| AC-2 | MET | command | This verifyall re-ran 0897 with --force; answer .spur/run/0897-verify-answer.txt Verdict PASS; task 0897 status done. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

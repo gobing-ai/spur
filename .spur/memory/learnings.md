@@ -2201,3 +2201,134 @@ Wrapup complete. Drift report: **zero findings** across all four targets — det
 - T3 sync executed via wrapup commit `5de7e6ee6`: `03_ARCHITECTURE` §19 gained the resolve-once / ownership / session-policy invariants (new invariants 6–7) and `docs/design/workflow-composition-contract.md` rule 5 documents the `session: reuse | fresh` option; `00_ADR` ADR-121 was audited consistent (no reversal ⇒ no superseding decision needed); `04_DESIGN` index pointer unchanged is synchronized per constitution §5 (an unchanged pointer is not drift).
 - Gotcha — `docs/design/*` satellite frontmatter is not uniform: `executor-availability.md` carries YAML frontmatter, `session-pinned-dispatch.md` and `workflow-composition-contract.md` do not. Constitution §4.3 governs key docs (00–05, 99, AGENTS) only; satellites have no enforced frontmatter contract — don't "fix" this unsolicited.
 - Drift-audit method that worked: diff doc claims against code mechanically first (`rg` for `__executor`, `pin-reresolved`, `session` option validation, trace fields in `observability.ts`/`agent-run.ts`), then judge. Zero-finding conclusions must cite the commands that produced zero.
+Wrapup complete. Drift report (§7 shape), then the learnings capture at `.spur/run/239b58c6-f783-4a46-8e8e-2987f2888380-wrapup-learnings.md`.
+
+**Findings — 1 doc repaired**
+
+| Doc | Code/reality says | Doc said | Authority | Repair |
+| --- | --- | --- | --- | --- |
+| `docs/04_DESIGN.md:64` | `fleet-config-declaration.md` now owns G66 member-session modes/observability (0897) | Index row: "Fleet declaration in spur config — `agent.fleet` (feature G65, accepted)" | T9 (indexed facts changed → update index) | Row label now "(G65, G66) … member session modes/observability" |
+| `docs/04_DESIGN.md` frontmatter | Content last changed 09-18; this edit 09-18 | `version 1.77.0`, `updated_at: 2026-09-17` | §4.3 | `1.78.0` / `2026-09-18` |
+
+**Verified clean — no edit owed** (detection commands returned zero delta):
+
+- `docs/00_ADR.md` — G66 already retained via the session-pinned ADR detail line (`00:1873`); no T1-eligible new decision (member-session persistence was design-approved in `session-pinned-dispatch.md` §6, 2026-09-17).
+- `docs/03_ARCHITECTURE.md` — no contradictory loop/session claims; `ts-ai-runner ≥0.4.57` floor survives the 0.4.69 bump; mechanism correctly owned by the satellite, not duplicated (§6.4).
+- `docs/design/session-pinned-dispatch.md` §6 — matches shipped code (`MAX_CONSECUTIVE_FAILED_DRAINS=3` at `agent.ts:992`, mode precedence at `agent.ts:1065-1078`, reset reasons, snapshot exposure).
+- `docs/design/fleet-config-declaration.md` — updated in 0897's own commit (T3 satisfied).
+
+**Out-of-scope note (not committed):** `spur agent status` has no row in 04/cli-contracts — pre-existing gap predating G66; its session fields are documented in the satellite. File it when the agent CLI surface is next touched. No ADR/corpus writes performed, per scope.
+
+# Working Learnings — G66 wrapup (0896, 0897, 0900)
+
+Grouped by date and task WBS. Source: task records at `docs/tasks5/` (0896/0897/0900), git
+commits `70d2da96f`, `36d18e536`, `b11e20c86`, `87df2645c`, and the doc-evolve wrapup audit of
+this run (2026-09-18 PST).
+
+## 2026-09-18
+
+### 0896 — Persistent fleet member sessions in `spur agent loop`
+
+Conventions
+
+- Session continuity is an **agent-memory property; delivery state stays in the DB**. Settled
+  inbox rows are never redelivered after a resume or reset (0831/0834 invariants unchanged,
+  regression-tested). Any future session work must preserve this split.
+- Mode selection reads the **executor capability record** (`supportsPersistentStdin` →
+  `persistent`, else `supportsResumeById` → `resume`, else `one-shot`) so the loop has no
+  per-agent branches (`apps/cli/src/commands/agent.ts:1060-1079`).
+- Deliberate resets write reason-named ledger rows (`fleet.member-session-reset`, reasons
+  `restart` | `operator` | `failed-drains`) via `packages/domain/src/dao/member-session.ts`;
+  `MAX_CONSECUTIVE_FAILED_DRAINS = 3` is a constant, not config — the design gives no reason to
+  vary it.
+- Reuse before create: `TeamAgentProcess` (already in the runner, already imported by the
+  coordination service) backs persistent mode through the shared `buildAgentCommand` seam; no
+  new process wrapper.
+
+Errors fixed
+
+- **Attempt-2 blocker (P2): runner shims emitted one-shot print argv**, contradicting the
+  persistent-dispatch premise. Fixed by overlaying runner 0.4.68: claude
+  `-p --input-format stream-json`, pi/omp `--mode rpc`, per-shim `persistentStdinProtocol.frame`,
+  plus a selector-authoritative argv gate (`selectsPersistentStdinDispatch`) and an honest
+  degrade warning (`member-persistent-stdin-unwired`, one per member lifetime).
+- **Tests verified stubs, not the real path** (review finding). Closed with an omp end-to-end
+  that drives the real resolver + builder + real shim framer, and an 0831 send-failure
+  redelivery regression in `agent-team.test.ts`.
+
+Patterns
+
+- Test seam `AgentLoopRuntime.memberProcessFactory` (`agent.ts:1036`) keeps the 8-scenario
+  member-session suite (`agent-loop-member-session.test.ts`) stub-runner deterministic.
+- Multi-drain test sequencing needs a **FIFO hold/gate on the mock run**: a drain claims the
+  whole inbox and the exit-row wake races the test's enqueues — gate before asserting.
+- "A successful `send()` IS delivery acceptance" (0831) — no extra ack plumbing.
+
+Gotchas
+
+- Persistent process starts **lazily at the first drained prompt**, not loop start (avoids idle
+  agent processes for members that never drain). Accepted, documented deviation in the task
+  Solution.
+- Accepted ceiling: exit-vs-send microtask race (send into a dying process succeeds) is bounded
+  by the 3-strike reset, not solved.
+- One-shot agents warn once per member (loop-process) lifetime, not per drain.
+
+### 0897 — Session mode/id across fleet surfaces
+
+Conventions
+
+- Observability rides **existing read surfaces, no new endpoint** (ADR-057: durable artifacts,
+  no terminal scraping): `FleetService.resolve()` joins the newest session row per member so
+  `GET /api/project/fleet`, `GET /api/processes`, `spur agent status`, and
+  `spur agent list --specs` all carry `session: { mode, id? }`; members that never ran carry no
+  session field.
+- T3 done in-commit: `docs/design/fleet-config-declaration.md` gained the member-sessions
+  section (modes, reset rows, observability) in the same commit as the surface code;
+  `docs/help/cmd_agent.md` updated with it. Contracts live in `packages/contracts/src/fleet.ts`;
+  raw-baseline + json-envelope inventory tests bumped together.
+- CLI renders mode + a shortened (8-char) id in human output; the full object only under
+  `--json`. Board roster shows the mode as read-only text.
+
+Gotchas
+
+- Changing snapshot payloads touches the shared `json-raw-baseline.json` and the envelope
+  inventory test — update both in the same commit or `spur-check` fails downstream.
+- 0896 review deferred refactors (extract ~170-line member-session block from `agent.ts`,
+  document `resolveMemberSessionMode`) land as doc/JSDoc passes in 0897, not as mid-feature
+  rewrites.
+
+### 0900 — test-cf environment fix (workerd/miniflare, macOS 26.5)
+
+Errors fixed
+
+- `test-cf` segfaulted under miniflare 4.20260526.0 / old workerd on macOS 26.5. **Reproduced on
+  a clean base (`eae5c7ac6`) before blaming 0897's change** — proving it pre-existing unlocked
+  the env-fix path. Fix: bump workerd/miniflare, unify all `@gobing-ai/ts-*` catalog deps on
+  ^0.4.69 (`b11e20c86`, `87df2645c`), then re-verify 0897 R5 to done with a PASS verdict.
+
+Gotchas
+
+- Environment failures block verify verdicts: split "my change is bad" from "the environment is
+  bad" by clean-base reproduction, record the base SHA as evidence.
+- Version floors in docs (e.g. `ts-ai-runner ≥0.4.57` in `docs/03_ARCHITECTURE.md`) survive
+  catalog bumps — floors, not pins; no doc edit owed for 0.4.69.
+
+## Wrapup audit (doc-evolve, this run)
+
+- Detection before judgment: real CLI surface via `rg '.command(' apps/cli/src/commands/agent.ts`
+  vs `docs/04_DESIGN.md`/`cli-contracts.md` rows; satellite §6 claims vs code constants
+  (`MAX_CONSECUTIVE_FAILED_DRAINS=3`, mode precedence); `git log -1` per doc for `updated_at`
+  plausibility.
+- One drift found and repaired, both in `docs/04_DESIGN.md`: index row for
+  `fleet-config-declaration.md` still said G65-only although the satellite now owns G66
+  member-session modes/observability (T9 — indexed facts changed → update index), and
+  frontmatter `updated_at`/version were stale vs the 09-18 content (§4.3 → 1.78.0 / 2026-09-18).
+- Verified clean, no edit owed: `docs/00_ADR.md` (G66 already retained via the session-pinned
+  ADR detail line; no T1-eligible new decision — member-session persistence was design-approved
+  inside `session-pinned-dispatch.md` §6), `docs/03_ARCHITECTURE.md` (no contradictory runtime
+  claims; the mechanism is owned by the satellite, which 03 correctly does not duplicate),
+  `session-pinned-dispatch.md` §6 (matches shipped code), `fleet-config-declaration.md`
+  (updated in 0897's commit).
+- Out-of-scope note (not fixed): `spur agent status` has no row in the `docs/04_DESIGN.md`
+  command list or `cli-contracts.md` (pre-existing gap that predates G66; its session fields are
+  documented in the satellite). Worth a row whenever the agent CLI surface is next touched.
