@@ -121,6 +121,31 @@ describe('builder bump-ver', () => {
         expect(tags).toContain('@demo/root-v0.3.0');
     });
 
+    test('--all rewrites a root-manifest workspace pin and syncs bun.lock', async () => {
+        // Regression (0.3.88): updateWorkspacePins scanned only workspace dirs, never the root
+        // package.json — its `@demo/lib` pin stayed stale and bun.lock was never regenerated,
+        // so the publish workflow died at `bun install --frozen-lockfile`.
+        const { repo } = mkRepo();
+        const rootManifestPath = join(repo, 'package.json');
+        const rootManifest = await Bun.file(rootManifestPath).json();
+        rootManifest.dependencies = { '@demo/lib': 'workspace:0.1.0' };
+        writeFileSync(rootManifestPath, `${JSON.stringify(rootManifest, null, 4)}\n`);
+        writeFileSync(join(repo, '.gitignore'), 'node_modules\n');
+        sh(repo, ['git', 'add', '.']);
+        sh(repo, ['git', 'commit', '-m', 'root pin']);
+        sh(repo, ['bun', 'install']); // seed bun.lock
+        sh(repo, ['git', 'add', '.']);
+        sh(repo, ['git', 'commit', '-m', 'lockfile']);
+
+        await bumpVer(['--all', '0.3.0'], repo);
+
+        const root = await Bun.file(rootManifestPath).json();
+        expect(root.dependencies['@demo/lib']).toBe('workspace:0.3.0');
+        const lock = await Bun.file(join(repo, 'bun.lock')).text();
+        expect(lock).toContain('workspace:0.3.0');
+        expect(lock).not.toContain('workspace:0.1.0');
+    });
+
     test('--all includes the root-named CLI package so the aggregate tag stays consistent', async () => {
         // Mirror the monorepo: a workspace package shares the root manifest name (the CLI
         // release target, @gobing-ai/spur). The aggregate tag names it, so --all must bump it.
@@ -419,7 +444,9 @@ describe('builder edge paths', () => {
             join(repo, '.claude-plugin', 'plugins', 'sp', 'plugin.json'),
             `${JSON.stringify({ name: 'sp', version: '0.1.0' }, null, 4)}\n`,
         );
-        writeFileSync(join(repo, 'bun.lock'), '# bun lockfile\n');
+        // Real lockfile: bump-ver now gates releases on `bun install --frozen-lockfile`,
+        // so the staged lock must be one bun can actually verify.
+        sh(repo, ['bun', 'install']);
         sh(repo, ['git', 'add', '.']);
         sh(repo, ['git', 'commit', '-m', 'add release metadata']);
 

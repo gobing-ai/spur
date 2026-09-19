@@ -117,6 +117,22 @@ async function run(repoRoot: string, cmd: string[]): Promise<{ ok: boolean; stdo
 }
 
 /** Run git and return trimmed stdout; throws with context on failure. */
+/**
+ * Verify bun.lock against the bumped manifests with the publish workflow's exact gate.
+ * Fails loud before the release commit is created so a broken tag can't be cut.
+ */
+function verifyLockfile(ctx: ReleaseContext, output: CommandOutput): void {
+    const lockPath = join(ctx.repoRoot, 'bun.lock');
+    if (!existsSync(lockPath) || Bun.file(lockPath).size === 0) return;
+    const result = Bun.spawnSync(['bun', 'install', '--frozen-lockfile'], { cwd: ctx.repoRoot });
+    if (result.exitCode !== 0) {
+        throw new Error(
+            `bun install --frozen-lockfile failed after bump — bun.lock is inconsistent: ${result.stderr.toString().trim()}`,
+        );
+    }
+    output.write('  ↳ bun.lock: verified (bun install --frozen-lockfile)');
+}
+
 async function git(repoRoot: string, args: string[]): Promise<string> {
     const result = await run(repoRoot, ['git', ...args]);
     if (!result.ok) {
@@ -265,8 +281,11 @@ async function updateWorkspacePins(
     output: CommandOutput,
 ): Promise<string[]> {
     const changed: string[] = [];
-    for (const dir of workspaceDirs(ctx.repoRoot)) {
-        const relPath = `${dir}/package.json`;
+    // The root manifest can pin workspace packages too (e.g. the root `dependencies` on the
+    // CLI's config package); skipping it left a stale `workspace:<oldVersion>` pin behind
+    // (0.3.87 and 0.3.88 both shipped broken tags).
+    for (const dir of ['.', ...workspaceDirs(ctx.repoRoot)]) {
+        const relPath = dir === '.' ? 'package.json' : `${dir}/package.json`;
         const manifest = await readJson(join(ctx.repoRoot, relPath));
         if (manifest === null) continue;
         let dirty = false;
@@ -285,6 +304,19 @@ async function updateWorkspacePins(
             await Bun.write(join(ctx.repoRoot, relPath), `${JSON.stringify(manifest, null, 4)}\n`);
             output.write(`  ↳ ${relPath}: ${pkgName} workspace pin ${oldVersion} → ${newVersion}`);
             changed.push(relPath);
+        }
+    }
+    if (changed.length === 0) return changed;
+    // bun install ignores stale workspace spec strings (bun 1.3.x treats workspace deps as
+    // path-resolved), so the lock's spec lines are rewritten in lockstep with the manifests;
+    // verifyLockfile then runs the publish workflow's exact gate before the commit is made.
+    const lockPath = join(ctx.repoRoot, 'bun.lock');
+    if (existsSync(lockPath)) {
+        const lock = await Bun.file(lockPath).text();
+        const staleSpec = `"${pkgName}": "workspace:${oldVersion}"`;
+        if (lock.includes(staleSpec)) {
+            await Bun.write(lockPath, lock.split(staleSpec).join(`"${pkgName}": "workspace:${newVersion}"`));
+            output.write(`  ↳ bun.lock: ${pkgName} workspace pin ${oldVersion} → ${newVersion}`);
         }
     }
     return changed;
@@ -485,6 +517,7 @@ async function bumpVersion(
     staged.push(...(await updateWorkspacePins(ctx, config.packageName, previous, version, output)));
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
     await syncExtraCarriers(ctx, version, staged, output);
+    verifyLockfile(ctx, output);
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');
     await git(ctx.repoRoot, ['add', ...staged]);
@@ -585,7 +618,7 @@ async function bumpAll(
 
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
     await syncExtraCarriers(ctx, version, staged, output);
-
+    verifyLockfile(ctx, output);
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');
     await git(ctx.repoRoot, ['add', ...staged]);
