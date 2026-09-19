@@ -2332,3 +2332,56 @@ Gotchas
 - Out-of-scope note (not fixed): `spur agent status` has no row in the `docs/04_DESIGN.md`
   command list or `cli-contracts.md` (pre-existing gap that predates G66; its session fields are
   documented in the satellite). Worth a row whenever the agent CLI surface is next touched.
+## Wrapup report — task 0901 (WBS from `.spur/run/2e03427c…-wrapup-tasks.json`: `["0901"]`)
+
+**Drift findings & repairs** (constitution §5/§6/§7; committed as `5c4aa5129`):
+
+| Doc | Finding | Repair |
+| --- | --- | --- |
+| `docs/design/cli-contracts.md`, `workflow-run-log.md`, `workflow-observability.md`, `plugins/sp/skills/spur-cli/references/workflows.md` | Stale vs R1–R6 | **Already repaired on the feature branch** (`5747d5454`, same commit as code per T3). Not duplicated on main — that would conflict at merge. |
+| `docs/04_DESIGN.md:158,160` | `continue` index signature missing `[--async] [--no-log]`; anchor slug stale | Signature + slug updated (slug verified against the house slugger: triple-hyphen `--async---no-log---json`). |
+| `docs/03_ARCHITECTURE.md` §6.2, §10 | No mechanism statement for the delivered interruption contract; risk row claimed engine gaps "blocked" pause/continue/HITL that 0902 shipped | §6.2 states the engine-owned CAS/resume invariant (ADR-122 pointer); risk row rewritten to "recovery drifting from engine contract" with upstream-first mitigation. |
+| `docs/00_ADR.md` | Cross-module recovery-ownership decision (R2) unrecorded | **ADR-122** added (Accepted, 2026-09-19): recovery is the engine's contract; Spur claims resume at its own boundary; headless never invents gate answers. Frontmatter `00`→1.48.0, `03`→1.50.0, `04`→1.79.0, all `updated_at: 2026-09-19`. |
+
+No task/feature corpus written. Verification: all ADR claims cross-checked against the feature-branch code (`workflow-service.ts:888,1140`, `resumeOwner`, `WorkflowResumeError`) and the task record; anchor slug validated programmatically against the known-good existing anchor.
+
+**Notes:** (1) The feature branch `feat/0901-harden-workflow-engine` (code + satellites) is **not yet merged into main** — my `00/03/04` edits don't conflict with it. (2) A second writer is active in this tree (`AGENTS.md`, `package.json`, `plugins/sp/script-contract-check` files, 2 untracked scripts) — left unstaged and uncommitted.
+
+Learnings captured to `.spur/run/2e03427c-1e94-495e-a009-e3a37dc42319-wrapup-learnings.md`:
+
+## 2026-09-19 · task 0901 — Harden workflow engine: shell-output persistence, async continue, terminal-id guard (feature D3; prerequisite 0902)
+
+### Conventions
+
+- Upstream-first for engine contracts: design and release the contract in ts-libs (`@gobing-ai/ts-dual-workflow-engine` 0.5.0, upstream ADR-025) before freezing the consuming task's spec. Spur integrates at existing seams only — adapter pass-through of `claimRunOwnership`/`interruptRun`, `resumeOwner` at the driver — never node_modules patches, no spur-side recovery FSM, no status surgery.
+- Idempotency refusals are layered: CLI pre-flight check plus an engine collision backstop; never depend on one layer alone (0901 R1).
+- `--yes` means "skip the CLI confirm", never "answer a HITL gate". Headless `continue` without explicit `--answer` exits 2; shipped as a BREAKING CHANGE footer in the conventional commit (0901 R3).
+- Persisted process output ordering: redact secrets FIRST, then bound to a utf8-safe 64 KiB tail with truncation flags — bounding before redaction can keep exactly the tail that contains the secret (0901 R5).
+- Claim-then-report: `--async` continue detaches a worker and reports `started`/`failed` only after the worker actually claims the run — never optimistically (0901 R4).
+- Doc layering per constitution §5: mechanism invariant → `03` § + ADR; command surface → `04` index row + design satellite; the spur-cli facade reference (`plugins/sp/skills/spur-cli/references/*.md`) and `docs/help/` are part of the same-commit surface sync set as the code (T3).
+- `04` anchor slugs use triple hyphens between adjacent `[--flag]` tokens (`--json---no-schema`, `--yes---answer`); derive new anchors by transforming the existing anchor string, not from memory — a hand-written double-hyphen variant was wrong and caught by slugifier verification.
+
+### Patterns (testing)
+
+- Interruption/resume contracts need a real worker subprocess + migrated SQLite + action sentinel files; a mocked `continuePaused` cannot prove at-least-once re-execution or ghost-owner CAS races. Must hold for both workflow dialects.
+- Sentinel files prove durable-state-before-side-effect ordering for at-least-once semantics.
+
+### Errors fixed (found in kk dogfood 091825)
+
+- Run id silently reused a live run → duplicate-id refusal at CLI and service layers.
+- Headless resume persisted a default `no` answer without an operator decision → admission policy: exit 2 without `--answer`.
+- `clean` marked stale `running`/`pending` runs `failed` (wedged terminal) → sweep to `interrupted` (rerun-resumable), never `failed`.
+
+### Gotchas
+
+- Ghost owner: `interruptRun` preserves the stale owner row; a concurrent continue must lose the CAS claim with `WorkflowResumeError` — never blind-retry.
+- A pre-existing paused row is not startup acknowledgement: record PID at the actual resume mutation, clear only the matching owner's PID, never overwrite terminal cancellation with `paused`.
+- Comments are not evidence: the nohup launcher comment claimed process-group leadership but its code never established setsid — real subprocess tests must prove descendant cancellation.
+- No new drizzle migration for engine-side schema changes: the engine adapter runs guarded `WORKFLOW_ENGINE_MIGRATIONS_SQL` ALTERs at `ensureSchema` for pre-0.5.0 databases.
+- utf8-safe byte bounds: never split multibyte characters when tail-bounding persisted output.
+
+### Process
+
+- Blocked-on-upstream tasks: register the prerequisite as a real dependency (0902), then re-freeze requirement/design/AC against the DELIVERED contract after it ships — never implement against a draft.
+- Wrapup doc split that avoids merge conflicts: design satellites + facade reference + help ride the feature branch in the same commit as code; the ADR (cross-module invariant), `03` mechanism text, and `04` index land on main at wrapup — keep the two sets disjoint.
+- One writer per working tree is real: a second writer appeared in main mid-wrapup (`AGENTS.md`, `package.json`, `plugins/sp/scripts/script-contract-check.ts` + test, untracked rule/script files). Foreign changes were left unstaged; only the three wrapup docs files were committed (`5c4aa5129`).
