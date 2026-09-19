@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.3.87] - 2026-09-18
+
+### Added
+
+- agent-loop: persistent fleet member sessions with selector-gated stdin dispatch (0896) (70d2da96f)
+- agent: expose member session mode and id across fleet surfaces (0897) (36d18e536)
+- workflow: run-scoped executor session pins (B7 tasks 0894, 0895) (abb745673)
+- agent: merge B6 executor availability lifecycle (0890-0893) with 0898 capability surface (a082d0d93)
+- complete feature B6 - executor availability lifecycle verified done (f8f866d71)
+- agent: doctor availability provenance and usage snapshot reporting (0893) (db7e0b64b)
+- b8: runner capability matrix per agent session and stdin (b6a029d49)
+
+### Fixed
+
+- server: restore test-cf on macOS 26.5; unify ts-* deps on 0.4.69 (b11e20c86)
+- app: persist re-resolve writeback, clear abandoned session slot (07452a890)
+- agent: doctor capability staleness compares cores, token-less is unverifiable (0899) (c63c69fe3)
+- app: gate resume-only continue dispatch behind ADR-118 capability support (0898) (f0c2316d1)
+- skills: enable dev-refine and dev-refineall can fix requirements or solutions issues if any (e432c4fcf)
+
+### Changed
+
+- tasks: record G66 verify evidence, learnings, and wrapup metrics (db1da63af)
+- design: record G66 member sessions in fleet satellite index row (a6845f85d)
+- cli: document resolveMemberSessionMode, relocate orphaned JSDoc (62d89ef72)
+- merge 'sp/runall-g66-a7f4a' into main (9068155fb)
+- deps: bump @gobing-ai/ts-* catalog to ^0.4.69 (87df2645c)
+- docs: complete G66 lifecycle — feature done, dogfood report, verdict keying (dc6875f23)
+- task: record 0897 and 0900 done with PASS verdicts (705001804)
+- cli: use dot access for env var read in agent-usage-source (eae5c7ac6)
+- merge feature B7 run-scoped executor session (0894, 0895) (f8b9d65cf)
+- B7: wrap artifacts — dogfood report, L4 scenario-keyed verdict rows, feature sync to done (33c765340)
+- wrap: sync run-scoped dispatch invariants into 03 §19 and workflow satellite (0894/0895 wrapup) (5de7e6ee6)
+- memory: wrap learnings and metrics for B6 and B8 (64631eb41)
+- b8: close feature B8 — capability record verified and wrapped (d070026bd)
+- b6: record AC traceability evidence for 0890-0893 (ac85350cf)
+- wrap: sync B6 executor-availability surfaces (run d39d0f49) (15b72e31b)
+- design: apply 0899 review P4 wording reconcile from post-merge doc-sync (452bc5d6d)
+- tasks: update task status after refinement (3e4e1a007)
+- task: 0899 record review/verify/record evidence, transition to done (3d40a02f7)
+- tasks: update task status after refinement (b38b5bcbc)
+- wrap: sync capability-gate satellite + record 0898 learnings/metrics (run cad76019) (780160f22)
+- tasks: update task status after refinement (9a09ee095)
+- tasks: file 0898 from B8 session-review triage (bbfb678c1)
+- ignore nested .spur dirs under plugins/ (bb4147e99)
+- corpus: mark task 0888 done (a0d468a13)
+- tasks: refresh task corpus after b6 readiness review (4506a4df2)
+- b6: pin codexbar usage shape and exhaustion rule (cbdfd69a6)
+
 ## [0.3.86] - 2026-09-17
 
 ### Added
