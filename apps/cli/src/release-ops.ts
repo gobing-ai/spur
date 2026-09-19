@@ -121,14 +121,12 @@ async function run(repoRoot: string, cmd: string[]): Promise<{ ok: boolean; stdo
  * Verify bun.lock against the bumped manifests with the publish workflow's exact gate.
  * Fails loud before the release commit is created so a broken tag can't be cut.
  */
-function verifyLockfile(ctx: ReleaseContext, output: CommandOutput): void {
+async function verifyLockfile(ctx: ReleaseContext, output: CommandOutput): Promise<void> {
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (!existsSync(lockPath) || Bun.file(lockPath).size === 0) return;
-    const result = Bun.spawnSync(['bun', 'install', '--frozen-lockfile'], { cwd: ctx.repoRoot });
-    if (result.exitCode !== 0) {
-        throw new Error(
-            `bun install --frozen-lockfile failed after bump — bun.lock is inconsistent: ${result.stderr.toString().trim()}`,
-        );
+    const result = await run(ctx.repoRoot, ['bun', 'install', '--frozen-lockfile']);
+    if (!result.ok) {
+        throw new Error(`bun install --frozen-lockfile failed after bump — bun.lock is inconsistent: ${result.stderr}`);
     }
     output.write('  ↳ bun.lock: verified (bun install --frozen-lockfile)');
 }
@@ -517,7 +515,7 @@ async function bumpVersion(
     staged.push(...(await updateWorkspacePins(ctx, config.packageName, previous, version, output)));
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
     await syncExtraCarriers(ctx, version, staged, output);
-    verifyLockfile(ctx, output);
+    await verifyLockfile(ctx, output);
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');
     await git(ctx.repoRoot, ['add', ...staged]);
@@ -618,7 +616,7 @@ async function bumpAll(
 
     await syncMarketplaceAndPlugins(ctx, version, staged, output);
     await syncExtraCarriers(ctx, version, staged, output);
-    verifyLockfile(ctx, output);
+    await verifyLockfile(ctx, output);
     const lockPath = join(ctx.repoRoot, 'bun.lock');
     if (existsSync(lockPath) && Bun.file(lockPath).size > 0) staged.push('bun.lock');
     await git(ctx.repoRoot, ['add', ...staged]);
