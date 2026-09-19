@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 // ── Local types (match packages/app FeatureService shapes; no package import) ───────────
 

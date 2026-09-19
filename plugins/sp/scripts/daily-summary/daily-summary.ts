@@ -11,7 +11,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVar, getEnvVars } from '../../lib/env';
 
 import { logger } from './logger';
 

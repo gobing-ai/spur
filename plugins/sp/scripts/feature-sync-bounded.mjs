@@ -9,7 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// ../ts-libs/packages/utils/dist/env.js
+// plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
   const raw = process.env[name];
   return raw === undefined ? fallback : raw;

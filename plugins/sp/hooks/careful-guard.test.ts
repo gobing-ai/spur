@@ -15,7 +15,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 const HOOK = join(import.meta.dir, 'careful-guard.ts');
 

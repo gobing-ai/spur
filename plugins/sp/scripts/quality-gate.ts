@@ -41,7 +41,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVars } from '../lib/env';
 
 export const MAX_GATE_ATTEMPTS = 5;
 export const MAX_FINDINGS = 20;

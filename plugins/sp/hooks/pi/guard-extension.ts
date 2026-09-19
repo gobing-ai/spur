@@ -23,7 +23,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSy
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
-import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVar, getEnvVars } from '../../lib/env';
 import { resolveAgentHint as resolveAgentHintShared, resolveModelHint as resolveModelHintShared } from '../agent-hint';
 import { classifyCommand } from '../destructive-policy';
 import { couldBeTaskFile } from '../task-file-policy';

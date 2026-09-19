@@ -15,7 +15,7 @@
 import { execSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVar, getEnvVars } from '../lib/env';
 import { resolveAgentHint, resolveModelHint } from './agent-hint';
 import { checkContextFreshness } from './context-post-tool';
 

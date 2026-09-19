@@ -23,7 +23,7 @@
 import { execSync } from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 /** Tools recorded by this hook (must match hooks.json PostToolUse matcher). */
 export const ALLOWED_TOOLS = new Set(['Bash', 'Grep', 'Glob', 'Read', 'Write', 'Edit']);

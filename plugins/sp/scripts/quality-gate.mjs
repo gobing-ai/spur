@@ -18,7 +18,7 @@ import {
 import { tmpdir } from "os";
 import { join } from "path";
 
-// ../ts-libs/packages/utils/dist/env.js
+// plugins/sp/lib/env.ts
 function getEnvVars() {
   return process.env;
 }

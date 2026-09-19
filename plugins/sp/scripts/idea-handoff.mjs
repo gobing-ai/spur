@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // @bun
 
-// ../ts-libs/packages/utils/dist/env.js
+// plugins/sp/lib/env.ts
 function getEnvVars() {
   return process.env;
 }

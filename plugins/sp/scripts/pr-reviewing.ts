@@ -22,7 +22,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVars } from '../lib/env';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

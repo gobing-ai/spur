@@ -26,7 +26,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 // ─── Counting (sync with packages/app/src/services/task-size-precheck.ts) ────
 

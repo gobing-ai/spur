@@ -8,16 +8,18 @@
 #   Env flows into the app as typed config or injected `env` records (ADR-027). Runtime
 #   options belong in `.spur/config.yaml` `bootstrap.options` via `getAppOptions`;
 #   dev-only knobs belong in consts.
-# - Plugin scripts/hooks import the same functions from `@gobing-ai/ts-utils`; the
-#   `superskill script convert` `.mjs` twins bundle them in (self-contained on any
-#   install target).
+# - Plugin scripts/hooks import `plugins/sp/lib/env.ts` — the vendored standalone
+#   gateway — because `superskill install` bundles them on targets with no
+#   node_modules, where any `@gobing-ai/*` import fails ("Bundle failed", task
+#   0669). It mirrors the upstream semantics and is the one exempt file.
+#   The `superskill script convert` `.mjs` twins remain self-contained by inlining.
 # - `apps/web` uses `import.meta.env` (Vite browser plane) — not process env, never matches.
 # - Which variables exist and who consumes them is documented in `.env.example`.
 #   (The former per-var lease table moved there; the rule now enforces the funnel,
 #   not a file-by-var inventory.)
 #
-# Scope: apps/**, packages/**, scripts/**, plugins/sp/** — src AND tests. No exclusions:
-# even the gateway package itself is free of direct access.
+# Scope: apps/**, packages/**, scripts/**, plugins/sp/** — src AND tests. One exclusion:
+# the plugin's vendored gateway, whose sole job is direct `process.env` access.
 include:
   - "apps/**/src/**/*.{ts,tsx}"
   - "apps/**/tests/**/*.{ts,tsx}"
@@ -25,6 +27,12 @@ include:
   - "packages/**/tests/**/*.{ts,tsx}"
   - "scripts/**/*.ts"
   - "plugins/sp/**/*.ts"
+exclude:
+  # plugins/sp/lib/env.ts is the vendored standalone env gateway for plugin
+  # hooks/scripts (bundled by superskill onto targets without node_modules);
+  # direct process.env access is its entire purpose. Mirrors the upstream
+  # ts-utils gateway — keep in sync (verified 2026-09).
+  - "plugins/sp/lib/env.ts"
 rules:
   - id: env-var-hygiene
     description: >

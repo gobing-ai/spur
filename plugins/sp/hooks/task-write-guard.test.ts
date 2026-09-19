@@ -16,7 +16,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 const HOOK = join(import.meta.dir, 'task-write-guard.ts');

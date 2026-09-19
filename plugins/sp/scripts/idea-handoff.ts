@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVars } from '../lib/env';
 
 /**
  * idea-handoff — portable entrypoint for the idea-pipeline finalization (task 0824, feature I21).

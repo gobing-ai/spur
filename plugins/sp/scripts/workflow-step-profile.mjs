@@ -6,7 +6,7 @@ import { spawnSync } from "child_process";
 import { existsSync } from "fs";
 import { fileURLToPath } from "url";
 
-// ../ts-libs/packages/utils/dist/env.js
+// plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
   const raw = process.env[name];
   return raw === undefined ? fallback : raw;

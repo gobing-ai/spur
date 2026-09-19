@@ -18,7 +18,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar, removeEnvVar, setEnvVar } from '../../lib/env';
 import guardExtension from './guard-extension';
 
 // ─── Harness ─────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ import { spawn, spawnSync } from "child_process";
 import { existsSync, mkdirSync, readlinkSync, writeFileSync } from "fs";
 import { dirname, isAbsolute, join, resolve } from "path";
 
-// ../ts-libs/packages/utils/dist/env.js
+// plugins/sp/lib/env.ts
 function getEnvVar(name, fallback) {
   const raw = process.env[name];
   return raw === undefined ? fallback : raw;

@@ -20,7 +20,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 import { couldBeTaskFile } from './task-file-policy';
 
 interface ToolPayload {

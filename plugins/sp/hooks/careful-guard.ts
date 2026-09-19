@@ -22,7 +22,7 @@
  * adapter. This file owns the Claude Code payload/decision shape only.
  */
 
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 import { classifyCommand } from './destructive-policy';
 
 interface ToolPayload {

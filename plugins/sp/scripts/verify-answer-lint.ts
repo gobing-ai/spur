@@ -32,7 +32,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 // ─── CLI (same spur-bin chain as task-evidence-precheck.ts) ─────────────────
 

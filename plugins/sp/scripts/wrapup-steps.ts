@@ -31,7 +31,7 @@
 import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVars } from '../lib/env';
 
 export interface WrapupStepsEnv {
     __runId?: string;

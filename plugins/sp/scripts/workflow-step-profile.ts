@@ -25,7 +25,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 // ── Input shapes (a subset of the live `spur workflow trace --json` payload) ─────────────
 

@@ -1,4 +1,4 @@
-import { getEnvVars } from '@gobing-ai/ts-utils';
+import { getEnvVars } from '../lib/env';
 /**
  * Shared host-agent identification helpers — the **only** host-agent detection path
  * in the sp plugin hooks.

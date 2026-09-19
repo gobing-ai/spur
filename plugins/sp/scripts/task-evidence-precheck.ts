@@ -37,7 +37,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { getEnvVar } from '@gobing-ai/ts-utils';
+import { getEnvVar } from '../lib/env';
 
 /** Exact task-content declaration that activates the live-evidence gate (0726 R2). */
 const DECLARATION_PREFIX = 'evidence-channel:';
