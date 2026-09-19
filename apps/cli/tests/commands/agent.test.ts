@@ -13,7 +13,13 @@ import {
 } from '@gobing-ai/spur-app';
 import { createMigratedDb, type DbAdapter, InboxMessageDao } from '@gobing-ai/spur-domain';
 import { saveAgentSpec } from '@gobing-ai/ts-ai-runner';
-import { runAgentLoop, runAgentRun, validateAgentSelector } from '../../src/commands/agent';
+import {
+    resetAgentServerFetchForTesting,
+    runAgentLoop,
+    runAgentRun,
+    setAgentServerFetchForTesting,
+    validateAgentSelector,
+} from '../../src/commands/agent';
 import { type CliContext, createCliContext, resolveAgentRoles } from '../../src/context';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
@@ -218,6 +224,131 @@ describe('agent doctor', () => {
         const output = captureOutput();
         const exitCode = await main(['agent', 'doctor', ...flags, '--json'], { output });
         expect(typeof exitCode).toBe('number');
+    });
+});
+
+describe('member session rendering (0897)', () => {
+    let tempDir: string;
+    let db: DbAdapter;
+
+    beforeEach(async () => {
+        tempDir = mkdtempSync(join(tmpdir(), 'spur-agent-session-render-'));
+        db = await createMigratedDb({ url: ':memory:' });
+    });
+
+    afterEach(() => {
+        resetAgentServerFetchForTesting();
+        rmSync(tempDir, { recursive: true, force: true });
+    });
+
+    /** Supervisor feed stub: planner is running with a resume session, worker stopped. */
+    function stubProcessesFeed(): void {
+        setAgentServerFetchForTesting(
+            (async (_input: string | URL | Request) =>
+                new Response(
+                    JSON.stringify({
+                        processes: [
+                            {
+                                agentId: 'planner',
+                                pid: 4132,
+                                status: 'running',
+                                startedAt: new Date().toISOString(),
+                                exitCode: null,
+                                teamId: null,
+                                session: { mode: 'resume', id: 'sess-3f9c2a1d-beef' },
+                            },
+                            {
+                                agentId: 'worker',
+                                pid: null,
+                                status: 'stopped',
+                                startedAt: new Date().toISOString(),
+                                exitCode: null,
+                                teamId: null,
+                            },
+                        ],
+                    }),
+                    { status: 200 },
+                )) as typeof fetch,
+        );
+    }
+
+    async function seedSpecs(): Promise<void> {
+        const output = captureOutput();
+        const ctx = createCliContext({ cwd: tempDir, output, db });
+        const team = new AgentCoordinationService(ctx);
+        await team.createAgentSpec({ id: 'planner', type: 'claude-code', purpose: 'plans' });
+        await team.createAgentSpec({ id: 'worker', type: 'coder', purpose: 'codes' });
+    }
+
+    test('list --specs renders the session column: mode + shortened id, - when absent', async () => {
+        await seedSpecs();
+        stubProcessesFeed();
+        const output = captureOutput();
+        const exitCode = await main(['agent', 'list', '--specs'], { cwd: tempDir, output, db });
+        expect(exitCode).toBe(0);
+        const lines = output.stdout.join('\n').split('\n');
+        expect(lines.find((l) => l.startsWith('planner\t'))).toContain('resume id=sess-3f9');
+        expect(lines.find((l) => l.startsWith('worker\t'))).toMatch(/\t-$/);
+    });
+
+    test('list --specs --json carries the full session object', async () => {
+        await seedSpecs();
+        stubProcessesFeed();
+        const output = captureOutput();
+        const exitCode = await main(['agent', 'list', '--specs', '--json'], { cwd: tempDir, output, db });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(output.stdout.join('\n')) as {
+            specs: Array<{ id: string; session?: { mode: string; id?: string } }>;
+        };
+        expect(parsed.specs.find((sp) => sp.id === 'planner')?.session).toEqual({
+            mode: 'resume',
+            id: 'sess-3f9c2a1d-beef',
+        });
+        expect(parsed.specs.find((sp) => sp.id === 'worker')?.session).toBeUndefined();
+    });
+
+    test('status renders live status and session per spec; unreachable server reports stopped', async () => {
+        await seedSpecs();
+        stubProcessesFeed();
+        const output = captureOutput();
+        const exitCode = await main(['agent', 'status'], { cwd: tempDir, output, db });
+        expect(exitCode).toBe(0);
+        const lines = output.stdout.join('\n').split('\n');
+        expect(lines.find((l) => l.startsWith('planner\t'))).toContain('running pid=4132\tresume id=sess-3f9');
+        expect(lines.find((l) => l.startsWith('worker\t'))).toContain('stopped\t-');
+
+        // Unreachable server: every spec stopped, no session, warning on stderr.
+        resetAgentServerFetchForTesting();
+        const offline = captureOutput();
+        const code2 = await main(['agent', 'status', '--server', 'http://127.0.0.1:59999/api'], {
+            cwd: tempDir,
+            output: offline,
+            db,
+        });
+        expect(code2).toBe(0);
+        expect(offline.stderr.join('\n')).toContain('Cannot reach server');
+        expect(offline.stdout.join('\n')).toContain('worker\tcoder\tstopped\t-');
+    });
+
+    test('status --json carries the full session object per agent', async () => {
+        await seedSpecs();
+        stubProcessesFeed();
+        const output = captureOutput();
+        const exitCode = await main(['agent', 'status', '--json'], { cwd: tempDir, output, db });
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(output.stdout.join('\n')) as {
+            agents: Array<{ id: string; status: string; session?: { mode: string; id?: string } }>;
+        };
+        const planner = parsed.agents.find((a) => a.id === 'planner');
+        expect(planner?.status).toBe('running');
+        expect(planner?.session).toEqual({ mode: 'resume', id: 'sess-3f9c2a1d-beef' });
+    });
+
+    test('status without specs writes the empty message', async () => {
+        const output = captureOutput();
+        const exitCode = await main(['agent', 'status'], { cwd: tempDir, output, db });
+        expect(exitCode).toBe(0);
+        expect(output.stdout.join('\n')).toContain('No agent specs found');
     });
 });
 

@@ -70,6 +70,11 @@ function procRow(agentId: string, status = 'running', pid = 42) {
     return { agentId, pid, status, startedAt: '2026-09-12T10:00:00.000Z', exitCode: null };
 }
 
+/** 0897: the session rides the /processes entry; id is only carried by resume mode. */
+function procRowWithSession(agentId: string, session: Record<string, unknown>) {
+    return { ...procRow(agentId), session };
+}
+
 function stubFetch(fleetBody: unknown, processesBody: unknown): typeof fetch {
     return ((input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -272,6 +277,57 @@ describe('member detail focus restore (0842 R4)', () => {
         });
         expect(view.container.querySelector('[data-member-detail]')).toBeNull();
         expect(document.activeElement).toBe(card);
+        view.unmount();
+    });
+});
+
+// ── 0897 R3: the member session renders as read-only roster text ──
+
+describe('AgentsView member session (0897 R3)', () => {
+    test('resume sessions render mode + shortened id; members without a session render a dash', async () => {
+        setFetchForTesting(
+            stubFetch(fleet(), {
+                processes: [
+                    procRowWithSession('orch', { mode: 'resume', id: 'sess-3f9c2a1d-beef' }),
+                    procRowWithSession('a1', { mode: 'one-shot' }),
+                ],
+            }),
+        );
+        const view = harness(ctx());
+        await act(async () => {});
+        const cards = new Map(
+            [...view.container.querySelectorAll('[data-roster-entry]')].map((c) => [
+                c.getAttribute('data-roster-entry'),
+                c.querySelector('[data-roster-session]')?.textContent,
+            ]),
+        );
+        expect(cards.get('orch')).toContain('resume · sess-3f9');
+        expect(cards.get('a1')).toContain('one-shot');
+        view.unmount();
+    });
+
+    test('no session on either feed → dash, and the declared snapshot session is the fallback', async () => {
+        setFetchForTesting(
+            stubFetch(
+                fleet({
+                    members: [
+                        member({ instanceId: 'orch' }),
+                        member({ instanceId: 'a1', session: { mode: 'persistent' } }),
+                    ],
+                }),
+                { processes: [procRow('orch'), procRow('a1')] },
+            ),
+        );
+        const view = harness(ctx());
+        await act(async () => {});
+        const cards = new Map(
+            [...view.container.querySelectorAll('[data-roster-entry]')].map((c) => [
+                c.getAttribute('data-roster-entry'),
+                c.querySelector('[data-roster-session]')?.textContent,
+            ]),
+        );
+        expect(cards.get('orch')).toContain('—');
+        expect(cards.get('a1')).toContain('persistent');
         view.unmount();
     });
 });

@@ -1,7 +1,21 @@
+import { type MemberSessionObservation, readMemberSessions } from '@gobing-ai/spur-domain';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import { enqueueSseFrame, sendSseKeepalive } from '../sse/stream-helpers';
 import type { ServerModule } from '../types';
+
+/**
+ * 0897: member session state for the supervised entries, read off the project
+ * ledger (the loop's own rows). Best-effort — no db or an unreadable ledger
+ * omits `session` instead of failing the process list.
+ */
+async function sessionByAgent(ctx: ServerContext, agentIds: string[]): Promise<Map<string, MemberSessionObservation>> {
+    try {
+        return await readMemberSessions(await ctx.getDb(), agentIds);
+    } catch {
+        return new Map();
+    }
+}
 
 /** Supervised-process SSE heartbeat — delegates to the shared SSE helper (task 0241 R8). */
 export function sendHeartbeat(
@@ -39,19 +53,25 @@ export const processesModule: ServerModule = {
         // ── GET /api/processes — supervised list + ProcessRegistry snapshot ──
         // `processes` remains the supervisor-controlled list (start/stop/attach).
         // `executions` is the full ts-runtime ProcessRegistry watch list (spur#0264).
-        app.get('/api/processes', (c) => {
+        app.get('/api/processes', async (c) => {
             const supervisor = ctx.supervisor();
             // `teamId` stays on the wire with the predecessor's `null` shape (0860):
             // the grouping id is no longer written anywhere, but the Board's watch-list
             // parsers and rows still read the key — omitting it broke the poll entirely.
             // It is deliberately NOT written: the retired spec-tag group stays retired.
-            const processes = supervisor.list().map((p) => ({
+            const entries = supervisor.list();
+            const sessions = await sessionByAgent(
+                ctx,
+                entries.map((p) => p.agentId),
+            );
+            const processes = entries.map((p) => ({
                 agentId: p.agentId,
                 pid: p.pid,
                 status: p.status,
                 startedAt: p.startedAt,
                 exitCode: p.exitCode ?? null,
                 teamId: null,
+                ...(sessions.get(p.agentId) !== undefined ? { session: sessions.get(p.agentId) } : {}),
             }));
             const executions = ctx
                 .processRegistry()

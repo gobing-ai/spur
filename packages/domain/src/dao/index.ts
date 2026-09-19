@@ -21,6 +21,15 @@ export {
 } from './coordination-run-dao';
 export { InboxRecentDao, type InboxRecentRow } from './inbox-recent-dao';
 export { InboxUnfinishedDao, type InboxUnfinishedRow } from './inbox-unfinished-dao';
+export {
+    MEMBER_SESSION_EVENT,
+    MEMBER_SESSION_MODES,
+    MEMBER_SESSION_RESET_EVENT,
+    type MemberSessionMode,
+    type MemberSessionObservation,
+    readMemberSessions,
+    recordMemberSession,
+} from './member-session';
 export { type CreatePhaseRunInput, PhaseRunDao, type PhaseRunRecord } from './phase-run-dao';
 export { type CreatePlanningEventInput, PlanningEventDao, type PlanningEventRow } from './planning-event-dao';
 export {

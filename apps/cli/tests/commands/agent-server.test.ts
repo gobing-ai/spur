@@ -205,7 +205,7 @@ describe('spur agent list --specs live run-status merge', () => {
                     expect(await main(['agent', 'list', '--specs'], { cwd, output: out, dbUrl: ':memory:' })).toBe(0);
                     const lines = out.messages.at(-1)?.split('\n') ?? [];
                     expect(lines.find((l) => l.startsWith('planner\t'))).toContain('\trunning pid=4132');
-                    expect(lines.find((l) => l.startsWith('worker-1\t'))?.endsWith('\tstopped')).toBe(true);
+                    expect(lines.find((l) => l.startsWith('worker-1\t'))?.endsWith('\tstopped\t-')).toBe(true);
                     expect(out.errors).toHaveLength(0);
 
                     expect(
@@ -236,7 +236,7 @@ describe('spur agent list --specs live run-status merge', () => {
                         'Cannot reach server at http://localhost:3000/api — showing local specs as stopped.',
                     );
                     const line = (out.messages.at(-1) ?? '').split('\n').find((l) => l.startsWith('planner\t'));
-                    expect(line?.endsWith('\tstopped')).toBe(true);
+                    expect(line?.endsWith('\tstopped\t-')).toBe(true);
                 },
             );
         } finally {

@@ -12,6 +12,7 @@ import {
     featureTransitionInputSchema,
     featureTransitionResponseSchema,
 } from '../src/feature';
+import { fleetContract, memberSessionSchema, processesContract } from '../src/fleet';
 import { planningEventContract, planningEventEnvelopeSchema } from '../src/planning-event';
 import { apiErrorSchema, apiSuccessSchema, paginatedResponseSchema, paginationMetaSchema } from '../src/shared';
 import {
@@ -475,5 +476,94 @@ describe('domain-type purity', () => {
                 data: [{ id: 'a', name: 'Feature', status: 'active', wbsCount: 0 }],
             }),
         ).toThrow();
+    });
+});
+
+describe('fleet + processes wire schemas (0897)', () => {
+    test('memberSessionSchema accepts the three modes; id only rides resume payloads', () => {
+        expect(memberSessionSchema.safeParse({ mode: 'persistent' }).success).toBe(true);
+        expect(memberSessionSchema.safeParse({ mode: 'resume', id: 'sess-1' }).success).toBe(true);
+        expect(memberSessionSchema.safeParse({ mode: 'one-shot' }).success).toBe(true);
+        expect(memberSessionSchema.safeParse({ mode: 'holographic' }).success).toBe(false);
+        expect(memberSessionSchema.safeParse({}).success).toBe(false);
+    });
+
+    test('fleet snapshot output parses a full wire body and rejects unknown session modes', () => {
+        const output = fleetContract.snapshot['~orpc'].outputSchema;
+        if (!output) throw new Error('snapshot output schema missing');
+        const body = {
+            path: '/tmp/proj',
+            enabled: true,
+            strategy: { name: 'default', version: 1 },
+            orchestrator: { state: 'bound-online', instanceId: 'orch-1' },
+            members: [
+                {
+                    instanceId: 'proj-lead',
+                    executor: 'writer',
+                    enabled: true,
+                    writeCapable: true,
+                    capabilityState: 'available',
+                    session: { mode: 'resume', id: 'sess-9' },
+                },
+            ],
+            capacity: { total: 1, enabled: 1, writeCapable: 1, missing: [] },
+        };
+        expect(output.safeParse(body).success).toBe(true);
+        expect(
+            output.safeParse({
+                ...body,
+                members: [
+                    {
+                        instanceId: 'm',
+                        executor: 'writer',
+                        enabled: true,
+                        writeCapable: true,
+                        capabilityState: 'available',
+                        session: { mode: 'nope' },
+                    },
+                ],
+            }).success,
+        ).toBe(false);
+    });
+
+    test('process list output accepts supervisor entries with and without sessions', () => {
+        const output = processesContract.list['~orpc'].outputSchema;
+        if (!output) throw new Error('process list output schema missing');
+        const body = {
+            processes: [
+                {
+                    agentId: 'planner',
+                    pid: 4132,
+                    status: 'running',
+                    startedAt: '2026-09-18T00:00:00.000Z',
+                    exitCode: null,
+                    teamId: null,
+                    session: { mode: 'persistent' },
+                },
+                {
+                    agentId: 'worker',
+                    pid: null,
+                    status: 'stopped',
+                    startedAt: '2026-09-18T00:00:00.000Z',
+                    exitCode: null,
+                    teamId: null,
+                },
+            ],
+            count: 2,
+            executions: [],
+            executionsCount: 0,
+        };
+        expect(output.safeParse(body).success).toBe(true);
+        expect(
+            output.safeParse({
+                ...body,
+                processes: [{ ...body.processes[0], session: { mode: 'bogus' } }],
+            }).success,
+        ).toBe(false);
+    });
+
+    test('both contracts are mounted in the composed contract', () => {
+        expect(contract.fleet.snapshot).toBeDefined();
+        expect(contract.processes.list).toBeDefined();
     });
 });

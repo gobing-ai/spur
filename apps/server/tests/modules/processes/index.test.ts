@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ProcessEntry, ProcessFrame } from '@gobing-ai/spur-app';
+import { createMigratedDb, type DbAdapter, recordMemberSession } from '@gobing-ai/spur-domain';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import { enqueueFrame, processesModule, sendHeartbeat } from '../../../src/modules/processes';
@@ -18,6 +19,8 @@ function ctxWithStubs(opts: {
     writeStdinThrows?: Error;
     start?: (id: string) => Promise<ProcessEntry>;
     stop?: (id: string) => Promise<void>;
+    /** Ledger db exposed through ctx.getDb() (0897 session join); omitted → no getDb. */
+    db?: DbAdapter;
 }): {
     ctx: ServerContext;
     stdinCalls: Array<{ agentId: string; line: string }>;
@@ -59,6 +62,7 @@ function ctxWithStubs(opts: {
     };
     const ctx = {
         supervisor: () => supervisor,
+        ...(opts.db !== undefined ? { getDb: () => opts.db } : {}),
         // Empty registry by default — routes that read processRegistry() must not throw.
         processRegistry: () => ({
             listExecutions: () => [],
@@ -749,5 +753,46 @@ describe('enqueueFrame', () => {
         } as unknown as ReadableStreamDefaultController;
         const ok = enqueueFrame(closed, controller, new TextEncoder(), { line: 'x' });
         expect(ok).toBe(false);
+    });
+
+    describe('member session join (0897)', () => {
+        const entry = (agentId: string): ProcessEntry => ({
+            agentId,
+            pid: 1234,
+            status: 'running',
+            startedAt: '2026-07-05T00:00:00.000Z',
+            exitCode: null,
+            ringBuffer: [],
+        });
+
+        test('supervised entries carry the ledger session; entries without rows omit it', async () => {
+            const db = await createMigratedDb({ url: ':memory:' });
+            await recordMemberSession(db, 'planner', { mode: 'resume', id: 'sess-42' });
+            const { ctx } = ctxWithStubs({ list: [entry('planner'), entry('worker')], db });
+            const app = new Hono();
+            processesModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/processes'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { processes: Array<{ agentId: string; session?: unknown }> };
+            const planner = body.processes.find((p) => p.agentId === 'planner');
+            const worker = body.processes.find((p) => p.agentId === 'worker');
+            expect(planner?.session).toEqual({ mode: 'resume', id: 'sess-42' });
+            expect(worker?.session).toBeUndefined();
+        });
+
+        test('a broken ledger degrades to session-less entries (route still 200)', async () => {
+            const { ctx } = ctxWithStubs({ list: [entry('planner')] });
+            (ctx as { getDb: () => unknown }).getDb = () => {
+                throw new Error('db gone');
+            };
+            const app = new Hono();
+            processesModule.mount(app, ctx);
+
+            const res = await app.fetch(new Request('http://localhost/api/processes'));
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as { processes: Array<{ session?: unknown }> };
+            expect(body.processes[0]?.session).toBeUndefined();
+        });
     });
 });

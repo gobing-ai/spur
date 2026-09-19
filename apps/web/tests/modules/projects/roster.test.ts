@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { ProcessStatus } from '../../../src/modules/projects/MemberTerminal';
-import { buildRoster, formatUptime, isOrchestratorEntry } from '../../../src/modules/projects/roster';
+import { buildRoster, formatUptime, isOrchestratorEntry, sessionLabel } from '../../../src/modules/projects/roster';
 import type { ProjectFleetSnapshot, ResolvedFleetMember } from '../../../src/modules/projects/useProjectContext';
 
 function member(overrides: Partial<ResolvedFleetMember> = {}): ResolvedFleetMember {
@@ -51,7 +51,13 @@ describe('buildRoster declared⇄observed join (0842 R1/R2)', () => {
         expect(entries).toHaveLength(1);
         expect(entries[0]).toMatchObject({
             instanceId: 'a1',
-            observed: { status: 'running', pid: 42, startedAt: '2026-09-12T10:00:00.000Z', exitCode: null },
+            observed: {
+                status: 'running',
+                pid: 42,
+                startedAt: '2026-09-12T10:00:00.000Z',
+                exitCode: null,
+                session: null,
+            },
             issues: [],
         });
         expect(first(entries).declared?.instanceId).toBe('a1');
@@ -59,7 +65,13 @@ describe('buildRoster declared⇄observed join (0842 R1/R2)', () => {
 
     test('declared but no matching process → not-started with null pid (declared-but-not-running)', () => {
         const entries = buildRoster(snapshot({ members: [member({ instanceId: 'a1' })] }), []);
-        expect(first(entries).observed).toEqual({ status: 'not-started', pid: null, startedAt: null, exitCode: null });
+        expect(first(entries).observed).toEqual({
+            status: 'not-started',
+            pid: null,
+            startedAt: null,
+            exitCode: null,
+            session: null,
+        });
     });
 
     test('a matching process reporting an exit → observed exited with its exitCode', () => {
@@ -196,5 +208,28 @@ describe('formatUptime (0853: uptime from the process poll, no new fetch)', () =
 
     test('non-running edge: a future start time (negative age, clock skew) → null, never a negative uptime', () => {
         expect(formatUptime(start, Date.parse(start) - 1)).toBeNull();
+    });
+});
+
+describe('member session join (0897)', () => {
+    test('the observed session rides the process entry into the roster', () => {
+        const entries = buildRoster(snapshot({ members: [member({ instanceId: 'p1' })] }), [
+            proc('p1', 'running', { session: { mode: 'resume', id: 'sess-3f9c2a1d-beef' } }),
+        ]);
+        expect(first(entries).observed.session).toEqual({ mode: 'resume', id: 'sess-3f9c2a1d-beef' });
+    });
+
+    test('members without a process entry carry no session', () => {
+        const entries = buildRoster(snapshot({ members: [member({ instanceId: 'p1' })] }), []);
+        expect(first(entries).observed.session).toBeNull();
+    });
+});
+
+describe('sessionLabel (0897)', () => {
+    test('resume mode shows mode + 8-char id; others show the bare mode; absent is null', () => {
+        expect(sessionLabel({ mode: 'resume', id: 'sess-3f9c2a1d-beef' })).toBe('resume · sess-3f9');
+        expect(sessionLabel({ mode: 'persistent' })).toBe('persistent');
+        expect(sessionLabel({ mode: 'one-shot' })).toBe('one-shot');
+        expect(sessionLabel(undefined)).toBeNull();
     });
 });

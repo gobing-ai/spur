@@ -12,7 +12,14 @@ import {
     resolveExecutor,
     type SpurConfig,
 } from '@gobing-ai/spur-config';
-import { type DbAdapter, isTierEligible, type ProjectClaim, ProjectClaimDao } from '@gobing-ai/spur-domain';
+import {
+    type DbAdapter,
+    isTierEligible,
+    type MemberSessionObservation,
+    type ProjectClaim,
+    ProjectClaimDao,
+    readMemberSessions,
+} from '@gobing-ai/spur-domain';
 import {
     type AgentSpec,
     deleteAgentSpec as deleteAgentSpecFile,
@@ -76,6 +83,14 @@ export interface ResolvedFleetMember {
     writeCapable: boolean;
     /** The resolved executor's `fsWrite` axis state; missing data is `unknown` (never grants). */
     capabilityState: ExecutionCapabilityState;
+    /**
+     * The member's current agent session (0897): the newest
+     * `fleet.member-session`/`-reset` ledger row for the instance (reset rows
+     * clear the resume id). Absent when the member never ran, when no `openDb`
+     * seam is provided, or when the ledger is unreadable — observability
+     * degrades, it never fails the resolution.
+     */
+    session?: MemberSessionObservation;
 }
 
 /** A resolved project fleet (0835). `missing` names what a caller must fix (R7 — a value, not an exception). */
@@ -447,6 +462,24 @@ export class FleetService {
                 writeCapable: capabilityState === 'enforced' || capabilityState === 'available',
                 capabilityState,
             });
+        }
+
+        // 0897: join the runtime session state (ledger rows written by the
+        // member's own loop) onto the declaration-resolved roster. Best-effort:
+        // an unreadable ledger omits `session` rather than failing the snapshot.
+        if (this.ctx.openDb !== undefined && resolvedMembers.length > 0) {
+            try {
+                const sessions = await readMemberSessions(
+                    await this.ctx.openDb(normalized),
+                    resolvedMembers.map((m) => m.instanceId),
+                );
+                for (const member of resolvedMembers) {
+                    const session = sessions.get(member.instanceId);
+                    if (session !== undefined) member.session = session;
+                }
+            } catch {
+                // Degrade: no db, unreadable ledger — members keep no session field.
+            }
         }
 
         const missing: string[] = [];

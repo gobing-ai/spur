@@ -27,7 +27,7 @@
         "hono": "4.12.23"
     },
     "devDependencies": {
-        "@cloudflare/vitest-pool-workers": "0.16.10",
+        "@cloudflare/vitest-pool-workers": "0.22.0",
         "@gobing-ai/ts-ai-runner": "catalog:",
         "@hono/vite-build": "1.11.1",
         "@hono/vite-dev-server": "0.24.1",

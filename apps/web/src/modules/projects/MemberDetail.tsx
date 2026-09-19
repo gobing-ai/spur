@@ -3,7 +3,7 @@ import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { type ActivityRow, historyUrl, parseHistory } from './activity-history';
 import { type InboxMessage, parseInboxMessages } from './conversation';
 import MemberTerminal from './MemberTerminal';
-import type { RosterEntry } from './roster';
+import { type RosterEntry, sessionLabel } from './roster';
 import { useProjectContext } from './useProjectContext';
 
 const inboxUrl = (agent: string) => `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;
@@ -135,6 +135,12 @@ export default function MemberDetail({ entry, onClose }: { entry: RosterEntry; o
                         {entry.observed.status}
                         {entry.observed.pid !== null ? ` — pid ${entry.observed.pid}` : ''}
                         {entry.observed.exitCode !== null ? ` — exit ${entry.observed.exitCode}` : ''}
+                    </span>
+                </span>
+                <span className="text-spur-text-muted" data-member-session>
+                    session:{' '}
+                    <span className="font-mono text-spur-text">
+                        {sessionLabel(entry.observed.session ?? entry.declared?.session) ?? '—'}
                     </span>
                 </span>
                 <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">

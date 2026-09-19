@@ -124,6 +124,36 @@ Payloads drop `teamId`. Persisted `system_events` rows keep their old names (his
 Kept: the `agent_instances.team_id` column and index stay nullable and unwritten — a rename is a schema
 migration and is out of scope.
 
+### Member sessions (G66 / task 0897)
+
+Each member loop keeps one coding-agent session for its lifetime, in the warmest mode its agent
+supports (`docs/design/session-pinned-dispatch.md` §6):
+
+| Mode | Mechanism |
+| --- | --- |
+| `persistent` | one long-lived stdin process (`TeamAgentProcess`); each drained prompt goes through `send()` — carries no id, the live process IS the session |
+| `resume` | `AgentService.run` re-opens the previous drain's session id — carries that id |
+| `one-shot` | a fresh session per drain — carries no id |
+
+The mode resolves once per loop lifetime from the runner capability record and is mirrored to the
+project ledger as `fleet.member-session` rows (actor = member instanceId); a resume-id capture
+updates the row, and each deliberate reset writes a reason-named `fleet.member-session-reset` row:
+`restart` (persistent process exited; supervisor restart policy unchanged), `operator`
+(`spur agent stop` / serve shutdown), `failed-drains` (3 consecutive failed drains). A reset row
+clears the resume id; the next drain opens a fresh session.
+
+Observability rides the existing read surfaces — no new endpoint (ADR-057: durable artifacts, no
+terminal scraping): `FleetService.resolve()` joins the newest session row per member, so
+`GET /api/project/fleet` member entries carry `session: { mode, id? }`; the `GET /api/processes`
+supervised entries carry the same field; `spur agent status` / `spur agent list --specs` render
+mode + a shortened id (8 chars) and carry the full object under `--json`; the Board roster
+(`AgentsView` / `MemberDetail`) shows the mode as read-only text. Members that never ran carry no
+session field.
+
+**No-redelivery invariant:** delivery state lives in the DB, session continuity is agent memory
+only. Settled inbox rows are never redelivered after a session resume or reset — only never-started
+deliveries release and redeliver (0831/0834).
+
 ## 6. Deletions (R5)
 
 `spur projects migrate`, `LegacyMigrationService` (`packages/app/src/services/legacy-migration.ts`), their tests,

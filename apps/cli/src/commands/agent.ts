@@ -31,11 +31,24 @@ import { ExecutorDisabledError, resolveExecutor } from '@gobing-ai/spur-config';
 import {
     CLAIM_TTL_MS,
     InboxMessageDao,
+    MEMBER_SESSION_RESET_EVENT,
+    type MemberSessionObservation,
     ProjectClaimDao,
+    RunSessionDao,
+    recordMemberSession,
     SystemEventDao,
     type SystemEventRow,
 } from '@gobing-ai/spur-domain';
-import { type AgentSpec, isAgentName } from '@gobing-ai/ts-ai-runner';
+import {
+    type AgentProcessOptions,
+    type AgentSpec,
+    buildAgentCommand,
+    getAgentSessionCapability,
+    getAgentShim,
+    isAgentName,
+    resolveAgentName,
+    TeamAgentProcess,
+} from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
 import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import type { CliContext } from '../context';
@@ -205,6 +218,21 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
                 json: options.json,
                 jsonEnvelope: options.jsonEnvelope,
                 specs: options.specs,
+                server: options.server,
+            });
+            context.setExitCode(code);
+        });
+
+    agent
+        .command('status')
+        .description('Show agent specs with live process status and member session (requires spur serve).')
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .option('--server <url>', 'Server API URL for live run status and member session', DEFAULT_SERVER)
+        .action(async (options) => {
+            const code = await runAgentStatus(context, {
+                json: options.json,
+                jsonEnvelope: options.jsonEnvelope,
                 server: options.server,
             });
             context.setExitCode(code);
@@ -436,6 +464,17 @@ export function validateAgentSelector(flags: Record<string, string | boolean>, c
     return `Unknown agent: '${raw}'. Accepted: role (${roleList}), configured executor (${executorList}), 'inline', or 'auto'.`;
 }
 
+/** Shorten a session id for human rendering — 8 chars is enough to tell sessions apart. */
+function shortSessionId(id: string): string {
+    return id.slice(0, 8);
+}
+
+/** Human session column: `resume id=3f9c2a1d` / `one-shot`; `-` when the member has no session. */
+function formatSessionColumn(session: MemberSessionObservation | undefined): string {
+    if (session === undefined) return '-';
+    return session.id === undefined ? session.mode : `${session.mode} id=${shortSessionId(session.id)}`;
+}
+
 /** `spur agent list [--json] [--specs]` — optionally list team agent specs instead of detection. */
 async function runAgentList(
     svc: AgentService,
@@ -457,10 +496,14 @@ async function runAgentList(
             `Cannot reach server at ${server} — showing local specs as stopped. Is spur serve running?`,
         );
     }
-    const statusOf = (id: string): { status: string; pid?: number } => {
+    const specFacts = (id: string): { status: string; pid?: number; session?: MemberSessionObservation } => {
         const proc = live?.get(id);
         if (proc === undefined) return { status: 'stopped' };
-        return proc.pid !== null ? { status: proc.status, pid: proc.pid } : { status: proc.status };
+        return {
+            status: proc.status,
+            ...(proc.pid !== null ? { pid: proc.pid } : {}),
+            ...(proc.session !== undefined ? { session: proc.session } : {}),
+        };
     };
     if (opts.json) {
         context.output.write(
@@ -475,7 +518,7 @@ async function runAgentList(
                             ? { role: spec.config.role }
                             : {}),
                         ...(spec.executor !== undefined ? { executor: spec.executor } : {}),
-                        ...statusOf(spec.id),
+                        ...specFacts(spec.id),
                         path: `.spur/agents/${spec.id}.yaml`,
                     })),
                 },
@@ -489,16 +532,65 @@ async function runAgentList(
         return 0;
     }
     // 0544 R2/R4: role and executor are distinct columns; undeclared renders `unset`.
-    // Live run status is the trailing column (`running pid=<n>` / `stopped`).
+    // Live run status is the trailing column (`running pid=<n>` / `stopped`), then the
+    // member session (0897): mode + shortened resume id, `-` when none.
     context.output.write(
         specs
             .map((spec) => {
                 const role =
                     typeof spec.config?.role === 'string' && spec.config.role.length > 0 ? spec.config.role : 'unset';
                 const executor = spec.executor ?? 'unset';
-                const { status, pid } = statusOf(spec.id);
+                const { status, pid, session } = specFacts(spec.id);
                 const pidSuffix = pid === undefined ? '' : ` pid=${pid}`;
-                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}\t${status}${pidSuffix}`;
+                return `${spec.id}\t${spec.type}\t${role}\t${executor}\t${spec.purpose}\t${status}${pidSuffix}\t${formatSessionColumn(session)}`;
+            })
+            .join('\n'),
+    );
+    return 0;
+}
+
+/**
+ * `spur agent status [--json] [--server <url>]` — live status + member session per
+ * agent spec (0897). The CLI never owns the supervisor: liveness and session come
+ * from `GET /api/processes`; an unreachable server reports every spec `stopped`
+ * with no session (same fallback as `list --specs`).
+ */
+async function runAgentStatus(
+    context: CliContext,
+    opts: { json?: boolean; jsonEnvelope?: boolean; server?: string },
+): Promise<number> {
+    const specs = await new AgentCoordinationService(context).listAgentSpecs();
+    const live = await fetchServerProcesses(opts.server ?? DEFAULT_SERVER);
+    if (live === null) {
+        context.output.error(
+            `Cannot reach server at ${opts.server ?? DEFAULT_SERVER} — showing local specs as stopped. Is spur serve running?`,
+        );
+    }
+    const rows = specs.map((spec) => {
+        const proc = live?.get(spec.id);
+        return {
+            id: spec.id,
+            name: spec.name,
+            type: spec.type,
+            status: proc === undefined ? ('stopped' as const) : proc.status,
+            ...(proc?.pid !== undefined && proc.pid !== null ? { pid: proc.pid } : {}),
+            ...(proc?.session !== undefined ? { session: proc.session } : {}),
+            path: `.spur/agents/${spec.id}.yaml`,
+        };
+    });
+    if (opts.json) {
+        context.output.write(toEnvelopeJson({ agents: rows }, { enveloped: opts.jsonEnvelope }));
+        return 0;
+    }
+    if (rows.length === 0) {
+        context.output.write('No agent specs found in .spur/agents/');
+        return 0;
+    }
+    context.output.write(
+        rows
+            .map((row) => {
+                const pidSuffix = 'pid' in row && row.pid !== undefined ? ` pid=${row.pid}` : '';
+                return `${row.id}\t${row.type}\t${row.status}${pidSuffix}\t${formatSessionColumn(row.session)}`;
             })
             .join('\n'),
     );
@@ -510,18 +602,33 @@ async function runAgentList(
  * Returns a `Map<agentId, { status, pid }>`, or `null` when the server is
  * unreachable / returns a non-OK response — callers fall back to local specs.
  */
-async function fetchServerProcesses(
-    server: string,
-): Promise<Map<string, { status: TeamStatusEntry['status']; pid: number | null }> | null> {
+/** Live facts the server supervisor reports for one agent id (`GET /api/processes`). */
+interface LiveProcess {
+    status: TeamStatusEntry['status'];
+    pid: number | null;
+    /** Member session state (0897) when the served project's ledger has one. */
+    session?: MemberSessionObservation;
+}
+
+async function fetchServerProcesses(server: string): Promise<Map<string, LiveProcess> | null> {
     try {
         const res = await (_testFetch ?? fetch)(`${server}/processes`, { method: 'GET' });
         if (!res.ok) return null;
         const body = (await res.json()) as {
-            processes?: Array<{ agentId: string; pid: number | null; status: string }>;
+            processes?: Array<{
+                agentId: string;
+                pid: number | null;
+                status: string;
+                session?: MemberSessionObservation;
+            }>;
         };
-        const map = new Map<string, { status: TeamStatusEntry['status']; pid: number | null }>();
+        const map = new Map<string, LiveProcess>();
         for (const proc of body.processes ?? []) {
-            map.set(proc.agentId, { status: mapServerStatus(proc.status), pid: proc.pid ?? null });
+            map.set(proc.agentId, {
+                status: mapServerStatus(proc.status),
+                pid: proc.pid ?? null,
+                ...(proc.session !== undefined ? { session: proc.session } : {}),
+            });
         }
         return map;
     } catch {
@@ -834,6 +941,236 @@ function drainAgentSelector(spec: AgentSpec, context: CliContext): string {
     return spec.executor;
 }
 
+// ── Member session state (G66 / task 0896, design §6) ───────────────────────────
+
+/**
+ * How one fleet member keeps its coding-agent session across inbox drains
+ * (G66 R1): `persistent` feeds every drained prompt into one long-lived
+ * `TeamAgentProcess` over stdin, `resume` re-opens the previous drain's
+ * session id, and `one-shot` keeps today's fresh process per drain. The mode
+ * is chosen ONCE from the executor's runner capability record — the drain
+ * path carries no per-agent branches.
+ */
+type MemberSessionMode = 'persistent' | 'resume' | 'one-shot';
+
+/**
+ * Why a member session was deliberately reset (G66 R4): `restart` — the
+ * member's persistent agent process exited under the supervisor's unchanged
+ * restart policy; `operator` — `spur agent stop`/serve shutdown ended the
+ * loop process; `failed-drains` — {@link MAX_CONSECUTIVE_FAILED_DRAINS}
+ * consecutive drains failed. The loop's run record names the reason.
+ */
+type MemberSessionResetReason = 'restart' | 'operator' | 'failed-drains';
+
+/**
+ * Structural subset of the runner's `TeamAgentProcess` the loop drives in
+ * `persistent` mode (G66 R2). Declared as an interface so tests can stub the
+ * process without spawning a real agent CLI.
+ */
+export interface MemberAgentProcess {
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    send(message: string): Promise<{ ok: boolean }>;
+    getStatus(): 'running' | 'stopped' | 'errored';
+    getExitCode(): number | null;
+}
+
+/** Loop-lifetime member session state (G66 design §6): mode, resume id, live process. */
+interface MemberSession {
+    mode: MemberSessionMode;
+    /** Resume mode: the previous drain's session id (undefined until one is observed). */
+    id?: string;
+    /** Persistent mode: the member's agent process (undefined until the first drained prompt). */
+    process?: MemberAgentProcess;
+}
+
+/**
+ * Bounded failure budget for one member session (G66 R4/R7, constant per the
+ * design — the threshold deliberately does not vary): this many consecutive
+ * failed drains mark the session poisoned and reset it before the next drain.
+ */
+const MAX_CONSECUTIVE_FAILED_DRAINS = 3;
+
+/**
+ * The runner-known agent binary a member's executor resolves to (G66 R1): an
+ * executor entry's `agent` field names the binary; a bare spec type (legacy
+ * specs without an executor field) IS the binary.
+ */
+function memberAgentBinary(spec: AgentSpec, context: CliContext): string {
+    const executorName = spec.executor ?? spec.type;
+    const executorEntry = (context.agentConfig?.executors ?? []).find((entry) => entry.name === executorName);
+    return executorEntry?.agent ?? executorName;
+}
+
+/**
+ * Resolve the member session mode from the executor's capability record
+ * (G66 R1): `supportsPersistentStdin` wins, then `supportsResumeById`, then
+ * the one-shot fallback. An agent binary unknown to the runner has no record
+ * and degrades to one-shot.
+ */
+/**
+ * Whether the resolved member argv selects a persistent-stdin dispatch mode —
+ * a process that keeps reading dispatch turns from stdin — rather than a
+ * one-shot print argv (prompt carried in argv, process exits after its turn).
+ *
+ * The selector's presence is the honest discriminator: runner ≥ B8 wires the
+ * persistent shims as `--mode rpc` (pi/omp) and `-p --input-format stream-json`
+ * (claude — its CLI requires print for stream-json input, so `-p` alone is not
+ * a hard negative). An argv with NO stdin-dispatch selector (every legacy
+ * one-shot print argv, e.g. `--no-session -p '<preamble>' --mode text`) keeps
+ * the gate shut: a `TeamAgentProcess` spawned from it cannot accept later
+ * stdin sends (Review P2), so the mode degrades to resume instead.
+ */
+export function selectsPersistentStdinDispatch(argv: readonly string[]): boolean {
+    let stdinDispatch = false;
+    for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === '--input-format' && argv[i + 1] === 'stream-json') stdinDispatch = true;
+        else if (argv[i] === '--mode' && argv[i + 1] === 'rpc') stdinDispatch = true;
+    }
+    return stdinDispatch;
+}
+
+/**
+ * Build the member's identity-preamble dispatch command via the shared runner
+ * command seam — the argv the argv-shape gate inspects at mode resolution and
+ * the persistent spawn itself uses.
+ */
+function memberDispatchCommand(
+    spec: AgentSpec,
+    canonical: Parameters<typeof buildAgentCommand>[0],
+    persistentStdin: boolean,
+) {
+    return buildAgentCommand(
+        canonical,
+        {
+            // The persistent candidate argv (`--mode rpc` / stream-json input):
+            // both the argv-shape gate (below) and the actual member spawn must
+            // probe/drive the stdin-listener dispatch, never the one-shot print
+            // argv the shim falls back to without this flag.
+            ...(persistentStdin ? { persistentStdin: true } : {}),
+            purpose: spec.purpose,
+            ...(typeof spec.config.systemPrompt === 'string' && spec.config.systemPrompt.length > 0
+                ? { systemPrompt: spec.config.systemPrompt }
+                : {}),
+        },
+        { workspace: spec.workspace },
+    );
+}
+
+function resolveMemberSessionMode(spec: AgentSpec, context: CliContext): MemberSessionMode {
+    const binary = memberAgentBinary(spec, context);
+    const canonical = resolveAgentName(binary);
+    if (canonical === undefined) return 'one-shot';
+    const record = getAgentSessionCapability(canonical);
+    if (record.supportsPersistentStdin) {
+        const dispatch = memberDispatchCommand(spec, canonical, true);
+        if (selectsPersistentStdinDispatch([dispatch.command, ...dispatch.args])) return 'persistent';
+        // Honest degrade (Review P2): the record vouches for the agent CLI, but
+        // the installed shim dispatches a one-shot print argv — a persistent
+        // process would exit after its preamble, so later sends would either
+        // fail (3-strike reset cycle) or settle rows `delivered` unexecuted.
+        // Exactly one warning per member lifetime (the G66 R3 discipline),
+        // then the resume path.
+        context.output.error(
+            `Warning: member-persistent-stdin-unwired: agent "${binary}" declares persistent-stdin capability but the installed runner shim dispatches a one-shot print argv — member session degrades to ${record.supportsResumeById ? 'resume-by-id' : 'one-shot'} (G66; one warning per member lifetime)`,
+        );
+    }
+    if (record.supportsResumeById) return 'resume';
+    return 'one-shot';
+}
+
+/**
+ * Build the `TeamAgentProcess` options for a persistent member (G66 R2): the
+ * same shared command-build seam `TeamOrchestrator.startAgent` uses, so the
+ * long-lived member gets the runner's canonical identity-preamble argv.
+ */
+function memberProcessOptions(spec: AgentSpec, context: CliContext): AgentProcessOptions {
+    const binary = memberAgentBinary(spec, context);
+    const canonical = resolveAgentName(binary);
+    if (canonical === undefined) {
+        throw new Error(
+            `member ${spec.id}: agent binary "${binary}" is unknown to the runner — persistent stdin unavailable`,
+        );
+    }
+    const command = memberDispatchCommand(spec, canonical, true);
+    // The shim's persistent-stdin framing (rpc dialect for pi/omp, claude's
+    // stream-json envelope) wraps every sent prompt for the long-lived process.
+    const shim = getAgentShim(canonical);
+    return {
+        spec,
+        command: [command.command, ...command.args],
+        cwd: spec.workspace,
+        ...(shim.persistentStdinProtocol !== undefined ? { stdinFramer: shim.persistentStdinProtocol.frame } : {}),
+        env: Object.fromEntries(
+            Object.entries(context.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        ),
+    };
+}
+
+/**
+ * Return the member's live persistent process, resetting the session first
+ * when the previous one exited between drains (G66 R2/R4: the exit is
+ * reported and recorded under reason `restart`; the supervisor's restart
+ * policy itself stays untouched), then start a fresh process.
+ */
+async function ensureMemberProcess(
+    context: CliContext,
+    recipient: string,
+    spec: AgentSpec,
+    memberSession: MemberSession,
+    runtime: AgentLoopRuntime,
+): Promise<MemberAgentProcess> {
+    const existing = memberSession.process;
+    if (existing !== undefined) {
+        if (existing.getStatus() === 'running') return existing;
+        await resetMemberSession(context, recipient, memberSession, 'restart', { exitCode: existing.getExitCode() });
+    }
+    const factory = runtime.memberProcessFactory ?? ((options: AgentProcessOptions) => new TeamAgentProcess(options));
+    const process = factory(memberProcessOptions(spec, context));
+    await process.start();
+    memberSession.process = process;
+    return process;
+}
+
+/**
+ * Deliberately reset the member session (G66 R4): stop a still-running
+ * persistent process, clear the resume id, and write the run record — one
+ * `fleet.member-session-reset` ledger row naming the reset reason.
+ */
+async function resetMemberSession(
+    context: CliContext,
+    recipient: string,
+    memberSession: MemberSession,
+    reason: MemberSessionResetReason,
+    detail: Record<string, unknown> = {},
+): Promise<void> {
+    const process = memberSession.process;
+    if (process !== undefined && process.getStatus() === 'running') {
+        await process.stop().catch(() => undefined);
+    }
+    memberSession.process = undefined;
+    memberSession.id = undefined;
+    await new SystemEventDao(await context.getDb()).insert({
+        id: randomUUID(),
+        event_name: MEMBER_SESSION_RESET_EVENT,
+        occurred_at: new Date().toISOString(),
+        actor: recipient,
+        payload_json: JSON.stringify({ reason, mode: memberSession.mode, ...detail }),
+    });
+    context.output.error(`member session: reset for ${recipient} (reason: ${reason})`);
+}
+
+/**
+ * Read the session id one drained run produced (G66 R1, resume mode): the
+ * E6 run→session mapping the invoke boundary observed (exact rows only — an
+ * unresolved mapping carries no session id and the next drain stays fresh).
+ */
+async function drainedSessionId(context: CliContext, runId: string): Promise<string | undefined> {
+    const rows = await new RunSessionDao(await context.getDb()).getByRunId(runId);
+    const exact = rows.find((row) => row.exactness === 'exact' && row.session_id !== null);
+    return exact?.session_id ?? undefined;
+}
+
 /** Default wakeup-backstop timeout for `spur agent loop` (ms) — `--poll` (0839 R5). */
 const DEFAULT_LOOP_POLL_MS = 2000;
 
@@ -843,6 +1180,12 @@ export interface AgentLoopRuntime {
     signal?: AbortSignal;
     /** Hard cap on iterations (tests only); undefined = run until aborted. */
     maxIterations?: number;
+    /**
+     * G66 test seam: overrides the `TeamAgentProcess` persistent member mode
+     * spawns (never invoked in `resume`/`one-shot` modes). Production uses the
+     * runner's process class directly.
+     */
+    memberProcessFactory?: (options: AgentProcessOptions) => MemberAgentProcess;
 }
 
 /** Parse the `--poll` backstop timeout; falls back to the default for non-positive/non-numeric input. */
@@ -1065,6 +1408,17 @@ async function recordIdleHold(
  * attachable process — the member no longer dies after one successful drain.
  * Exits cleanly on abort (SIGINT/SIGTERM); crash-restart is the supervisor's
  * job.
+ *
+ * G66 (task 0896): the member keeps ONE coding-agent session for the loop's
+ * lifetime, in the warmest mode its agent supports — `persistent` (one
+ * `TeamAgentProcess`, prompts injected via stdin), `resume` (each drain passes
+ * the previous drain's session id), or `one-shot` (today's behavior, with one
+ * `member-no-session` warning per member lifetime). The mode comes from the
+ * executor's capability record. Sessions reset deliberately — reason-named in
+ * the run record — on persistent-process exit (`restart`), loop shutdown
+ * (`operator`), or {@link MAX_CONSECUTIVE_FAILED_DRAINS} consecutive failed
+ * drains (`failed-drains`). Delivery state stays in the DB: a resumed session
+ * never redelivers a settled message (0831/0834 guarantees untouched).
  */
 export async function runAgentLoop(
     context: CliContext,
@@ -1128,6 +1482,9 @@ export async function runAgentLoop(
                           ownershipLost = true;
                       });
               }, CLAIM_TTL_MS / 3);
+    // G66: loop-lifetime member session state — declared before the try so the
+    // shutdown path can name the operator reset on the way out.
+    const memberSession: MemberSession = { mode: 'one-shot' };
     try {
         // 0834 R2: reconcile unfinished requests and runs BEFORE the first drain —
         // ambiguous work is named (outcome-unknown, never requeued) and budget-
@@ -1154,6 +1511,45 @@ export async function runAgentLoop(
         const wakeDao = new SystemEventDao(await context.getDb());
         let cursor = await wakeDao.latestSequence();
         let lastHoldKey = '';
+
+        // G66 R1: the member's session mode resolves ONCE per loop lifetime from
+        // the executor's runner capability record — the drain path below has no
+        // per-agent branches. Orchestrator loops dispatch instead of draining and
+        // keep no member session state; a member with no spec file cannot resolve
+        // an agent binary and silently keeps one-shot behavior.
+        let memberSpec: AgentSpec | undefined;
+        if (binding?.instanceId !== recipient) {
+            memberSpec = (await new AgentCoordinationService(context).listAgentSpecs()).find(
+                (entry) => entry.id === recipient,
+            );
+            if (memberSpec !== undefined) {
+                memberSession.mode = resolveMemberSessionMode(memberSpec, context);
+                // 0897: mirror the resolved mode to the ledger so the fleet
+                // snapshot / process entries / CLI can show it. Observability
+                // only — a failed write never blocks the drain loop.
+                await recordMemberSession(await context.getDb(), recipient, { mode: memberSession.mode }).catch(
+                    () => undefined,
+                );
+                if (memberSession.mode === 'one-shot') {
+                    // G66 R3: exactly one warning per member lifetime — the loop
+                    // process IS the member's lifetime, not one per drain.
+                    context.output.error(
+                        `Warning: member-no-session: agent "${memberAgentBinary(memberSpec, context)}" declares neither persistent stdin nor resume-by-id — each inbox drain runs a fresh one-shot session (G66; one warning per member lifetime)`,
+                    );
+                }
+            }
+        }
+        // G66 R1 (resume): the run id of the drain's invoke exit keys the run→session
+        // mapping the observer writes, so the NEXT drain can resume that session.
+        let lastExitRunId: string | undefined;
+        bus.on('agent.invoke.exit', (event) => {
+            if (event === null || typeof event !== 'object') return;
+            const record = event as { correlation?: { runId?: string }; runId?: string };
+            const runId = record.correlation?.runId ?? record.runId;
+            if (runId !== undefined) lastExitRunId = runId;
+        });
+        // G66 R4/R7: consecutive failed-drain counter for the poisoned-session reset.
+        let consecutiveFailedDrains = 0;
 
         let iteration = 0;
         while (
@@ -1214,15 +1610,77 @@ export async function runAgentLoop(
             if (prompt !== undefined) {
                 // Reset per iteration: each drain is an independent delivery attempt.
                 invocationStarted = false;
+                lastExitRunId = undefined;
                 const ledger = await attachSystemEventLedger(bus, context);
+                let drainFailed: boolean;
                 try {
-                    await svc.run(prompt, rewritten, deps);
+                    if (memberSession.mode === 'persistent' && memberSpec !== undefined) {
+                        // G66 R2: one long-lived member process for the loop's
+                        // lifetime — each drained prompt is injected through its
+                        // stdin. A successful send IS the delivery acceptance
+                        // (0831): the prompt reached the agent, so the claimed
+                        // rows settle delivered, never redelivered (R5).
+                        try {
+                            const process = await ensureMemberProcess(
+                                context,
+                                recipient,
+                                memberSpec,
+                                memberSession,
+                                runtime,
+                            );
+                            const sent = await process.send(prompt);
+                            if (!sent.ok) {
+                                // 0831: a not-accepted send is a never-started
+                                // delivery — report it like the one-shot path
+                                // reports a failed spawn, then release below.
+                                context.output.error('member session: drain delivery failed: stdin send not accepted');
+                            }
+                            invocationStarted = sent.ok;
+                            drainFailed = !sent.ok;
+                        } catch (error) {
+                            drainFailed = true;
+                            context.output.error(
+                                `member session: drain delivery failed: ${error instanceof Error ? error.message : String(error)}`,
+                            );
+                        }
+                    } else {
+                        // G66 R1: resume mode re-opens the previous drain's session;
+                        // one-shot keeps today's fresh process (R3's warning already
+                        // fired once at loop start).
+                        const drainFlags =
+                            memberSession.mode === 'resume' && memberSession.id !== undefined
+                                ? { ...rewritten, 'session-id': memberSession.id }
+                                : rewritten;
+                        const exitCode = await svc.run(prompt, drainFlags, deps);
+                        drainFailed = exitCode !== 0 || !invocationStarted;
+                    }
                 } finally {
                     // 0831 R4: settle even on abort; the loop keeps iterating either
                     // way — a released row redelivers on the next drain.
                     await settleClaimedMessages(context, claimed, invocationStarted ? 'accepted' : 'not-started');
                     await ledger.flush();
                     ledger.unsubscribe();
+                }
+                // G66 R4/R7: at the bounded limit of consecutive failed drains the
+                // poisoned session resets deliberately (run record names the reason)
+                // and the counter restarts with the fresh session. Below the limit a
+                // resume drain captures the session id its run produced (R1) so the
+                // next drain resumes it.
+                consecutiveFailedDrains = drainFailed ? consecutiveFailedDrains + 1 : 0;
+                if (consecutiveFailedDrains >= MAX_CONSECUTIVE_FAILED_DRAINS) {
+                    await resetMemberSession(context, recipient, memberSession, 'failed-drains', {
+                        failedDrains: MAX_CONSECUTIVE_FAILED_DRAINS,
+                    });
+                    consecutiveFailedDrains = 0;
+                } else if (memberSession.mode === 'resume' && lastExitRunId !== undefined) {
+                    const sessionId = await drainedSessionId(context, lastExitRunId);
+                    if (sessionId !== undefined) {
+                        memberSession.id = sessionId;
+                        await recordMemberSession(await context.getDb(), recipient, {
+                            mode: 'resume',
+                            id: sessionId,
+                        }).catch(() => undefined);
+                    }
                 }
                 // The hold that described the previous idle stretch is stale: work
                 // ran, so the next idle wake records a fresh hold row.
@@ -1234,6 +1692,12 @@ export async function runAgentLoop(
         }
         return ownershipLost ? 2 : 0;
     } finally {
+        // G66 R4: the loop process is ending — `spur agent stop`, a serve
+        // shutdown/restart, or a crash. The member's session state dies with the
+        // process, so the next start opens a fresh session; name that reset.
+        if (memberSession.process !== undefined || memberSession.id !== undefined) {
+            await resetMemberSession(context, recipient, memberSession, 'operator').catch(() => undefined);
+        }
         if (ownerTimer !== undefined) clearInterval(ownerTimer);
         await renewal;
         if (owner) await claims.release(projectPath, 'orchestrator', recipient, owner.ownerEpoch);

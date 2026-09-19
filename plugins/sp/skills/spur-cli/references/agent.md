@@ -23,13 +23,14 @@ that before using `run` for fan-out dispatch.
 | ---- | ------- | --------- |
 | `run <prompt>` | Execute a prompt or slash command via a coding agent | `--agent <name>` `--spec <id>` `--model <name>` `--mode <mode>` `--continue` `--cwd <path>` `--drain` `--json` |
 | `wait [<specId>]` | Identity-pinned wait for an occupant run to reach a lifecycle state (G4 wave 2; `--role` selector per 0685) | `--role <name>` `--run <runId>` `--until <state>...` `--timeout <ms>` `--json` |
-| `list` | List detected coding agents, or agent specs with `--specs` (live run status merged from `spur serve`) | `--specs` `--server <url>` `--json` |
+| `list` | List detected coding agents, or agent specs with `--specs` (live run status + member session merged from `spur serve`) | `--specs` `--server <url>` `--json` |
+| `status` | Agent specs with live process status and member session (requires `spur serve`) | `--server <url>` `--json` |
 | `doctor [agent]` | Check agent readiness | `--json` `--probe-health` `--force-refresh` |
 | `usage` | Run-once provider usage capture (codexbar) → quota-owned availability refresh; scheduled externally | `--dry-run` `--source <name>` `--json` |
 | `start <spec-id>` | Start a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
 | `stop <spec-id>` | Stop a supervised agent process (requires `spur serve`) | `--server <url>` `--json` |
 
-`list`, `doctor`, `run`, `wait`, `start`, and `stop` accept `--json` plus `--json-envelope`. The hidden
+`list`, `status`, `doctor`, `run`, `wait`, `start`, and `stop` accept `--json` plus `--json-envelope`. The hidden
 `loop` is a supervisor-internal process surface. **Exit codes:** `0` success, `1` failure, and `2`
 invalid usage; `run` can also propagate the invoked agent's non-zero result.
 
@@ -142,15 +143,29 @@ spur agent list --json       # machine-readable
 Without `--specs`, lists coding agents detected on the host (by binary on `PATH`). With `--specs`,
 lists agent specs (`.spur/agents/*.yaml`) **with live run status merged from the server's
 supervisor**: each row carries a trailing status column
-(`running` / `stopped` / `errored` / `unknown`) and `pid=<n>` where a process exists. When `spur serve`
-is unreachable, the listing falls back to all `stopped` with a stderr warning. `--server <url>`
+(`running` / `stopped` / `errored` / `unknown`), `pid=<n>` where a process exists, and the member
+session (0897): the session mode plus a shortened resume id (`resume id=3f9c2a1d`), or `-` when the
+member has no recorded session. When `spur serve` is unreachable, the listing falls back to all
+`stopped` with a stderr warning. `--server <url>`
 (default `http://localhost:3000/api`) targets the supervisor API.
 
 ```bash
 spur agent list --specs
-# planner	claude	reviewer	claude	plans the work	running pid=4132
-# worker-1	pi	worker	pi	implements	stopped
+# planner	claude	reviewer	claude	plans the work	running pid=4132	resume id=3f9c2a1d
+# worker-1	pi	worker	pi	implements	stopped	one-shot
 ```
+
+## `status` - live status + member session per spec
+
+```bash
+spur agent status            # id, type, status, pid, session — one row per spec
+spur agent status --json     # full objects, session carried whole ({ mode, id })
+```
+
+Reads the same supervisor feed as `list --specs` (liveness **and** session come from
+`GET /api/processes`; the served project's ledger is the source of the session state). An
+unreachable server reports every spec `stopped` with no session. See
+[Member sessions](#member-sessions-g66) for what the modes mean.
 
 ## `doctor` - readiness check
 
@@ -235,6 +250,26 @@ Unmapped providers are listed and never guessed.
 | `--dry-run` | Print would-be changes (executor, from → to, owner, reason); write neither the snapshot nor any config |
 | `--source <name>` | Usage source implementation; only `codexbar` exists (default) |
 | `--json` | Machine-readable result payload |
+
+## Member sessions (G66)
+
+Every fleet member loop keeps ONE coding-agent session for its lifetime, in the warmest mode the
+agent supports (`docs/design/session-pinned-dispatch.md` §6):
+
+| Mode | Mechanism | `id` |
+| ---- | --------- | ---- |
+| `persistent` | One long-lived stdin process; each drained prompt is injected through `send()` | none — the live process IS the session |
+| `resume` | Each drain re-opens the previous drain's session id | the resume id (rendered shortened) |
+| `one-shot` | A fresh session per drain (one lifetime warning per member) | none |
+
+A session **resets** (the ledger records a reason-named `fleet.member-session-reset` row) on:
+`restart` — the persistent process exited and the supervisor's restart policy respawns it;
+`operator` — `spur agent stop` / serve shutdown ended the loop; `failed-drains` — 3 consecutive
+failed drains marked the session poisoned. The next drain opens a fresh session.
+
+**No-redelivery invariant:** delivery state lives in the DB, session continuity is agent memory
+only. A settled (delivered) inbox message is never redelivered — resuming a session or resetting
+one never re-sends settled work; only never-started deliveries release and redeliver (0831/0834).
 
 ## What this skill is NOT
 

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import MemberDetail from './MemberDetail';
 import { parseProcessList, STATUS_POLL_MS } from './MemberTerminal';
-import { buildRoster, formatUptime, type MemberIssue, type RosterEntry } from './roster';
+import { buildRoster, formatUptime, type MemberIssue, type RosterEntry, sessionLabel } from './roster';
 import type { ProjectFleetSnapshot } from './useProjectContext';
 import { useProjectContext } from './useProjectContext';
 
@@ -242,6 +242,14 @@ function RosterCard({
                     {uptime}
                 </div>
             )}
+            {/* 0897 R3: the member's agent session, read-only text — process feed
+                first, fleet snapshot member as fallback. No interaction. */}
+            <div data-roster-session className="mt-1 text-xs text-spur-text-muted">
+                session{' '}
+                <span className="font-mono text-spur-text">
+                    {sessionLabel(entry.observed.session ?? entry.declared?.session) ?? '—'}
+                </span>
+            </div>
             {entry.issues.length > 0 && (
                 <div className="mt-1 space-y-0.5">
                     {entry.issues.map((issue) => (

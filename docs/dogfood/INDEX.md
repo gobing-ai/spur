@@ -40,3 +40,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-09-15-g65-fleet-declaration-dogfood.md`
 - `2026-09-17-H13-dev-refactor-dogfood.md`
 - `2026-09-18-B7-session-pinned-dispatch-dogfood.md`
+- `2026-09-18-G66-persistent-member-session-dogfood.md`
