@@ -1003,12 +1003,6 @@ function memberAgentBinary(spec: AgentSpec, context: CliContext): string {
 }
 
 /**
- * Resolve the member session mode from the executor's capability record
- * (G66 R1): `supportsPersistentStdin` wins, then `supportsResumeById`, then
- * the one-shot fallback. An agent binary unknown to the runner has no record
- * and degrades to one-shot.
- */
-/**
  * Whether the resolved member argv selects a persistent-stdin dispatch mode —
  * a process that keeps reading dispatch turns from stdin — rather than a
  * one-shot print argv (prompt carried in argv, process exits after its turn).
@@ -1057,6 +1051,14 @@ function memberDispatchCommand(
     );
 }
 
+/**
+ * Resolve the member session mode from the executor's capability record
+ * (G66 R1): `supportsPersistentStdin` wins, then `supportsResumeById`, then
+ * the one-shot fallback. An agent binary unknown to the runner has no record
+ * and degrades to one-shot. Persistent still requires
+ * {@link selectsPersistentStdinDispatch} on the real dispatch argv; otherwise
+ * the mode degrades with one `member-persistent-stdin-unwired` warning.
+ */
 function resolveMemberSessionMode(spec: AgentSpec, context: CliContext): MemberSessionMode {
     const binary = memberAgentBinary(spec, context);
     const canonical = resolveAgentName(binary);
