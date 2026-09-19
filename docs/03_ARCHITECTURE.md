@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.49.0
+version: 1.50.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-18
+updated_at: 2026-09-19
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -222,7 +222,13 @@ workflow execution. Lifecycle, retention and streaming contracts:
 
 Resume restores persisted variables and overlays caller variables before guard evaluation.
 Guard context carries action outcomes; shell interpolation must preserve literal values at the
-process boundary. Exact variable and resume contracts:
+process boundary. Interruption recovery is the engine's contract, not Spur's (ADR-122):
+`ts-dual-workflow-engine` ≥0.5.0 owns CAS resume claiming (`owner_attempt`, `WorkflowResumeError`
+on lost races) and rerun-enter at-least-once re-execution from `interrupted`. Spur only refuses
+duplicate run ids pre-flight, claims via `resumeOwner` at the executing boundary (sync CLI or
+detached `--async` worker), admits `paused | interrupted` as resumable, and sweeps stale runs to
+`interrupted` (rerun-resumable) — never status surgery or a local recovery FSM. Exact variable
+and resume contracts:
 [planning workflows](design/planning-workflow-contracts.md) and
 [workflow commands](design/cli-contracts.md).
 
@@ -330,7 +336,7 @@ model, so table/DDL/Zod drift is structurally impossible. Five rules, enforced b
 | Old migrations reactivated | Inert under `_legacy_reference/`; loader filters `_spur_cli_` marker |
 | Engine MVP gaps mistaken for parity | Roadmap Phase 3 tracks the depth restore explicitly |
 | History raw bloat / parse errors | Raw stays in files; only validated ETL persisted (ADR-008) |
-| Lifecycle-on-workflow blocked by engine gaps (long-lived runs, pause/continue, HITL) | Stage-D ts-libs gap tasks gate the dependent waves (ADR-022); upstream-first — no local FSM fallback |
+| Long-lived-run recovery drifting from the engine contract (pause/continue, interruption, HITL) | Interruption/resume contract shipped upstream in engine 0.5.0 (0902, ADR-025); Spur claims via CAS at its own boundary — no local FSM fallback (ADR-122); lifecycle waves still track ADR-022 |
 | Legacy board writes corrupt normalized task corpora during the rd3 migration | Freeze legacy `tasks server` read-only at the A17 cutover; the spur board lands in the same batch (triage doc) |
 
 ## 11. Plugin Substrate (ADR-012, amended 2026-06-09)

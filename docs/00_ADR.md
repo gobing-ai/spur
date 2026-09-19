@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.47.0
+version: 1.48.0
 owner: Robin Min
-updated_at: 2026-09-17
+updated_at: 2026-09-19
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1871,3 +1871,12 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   is the host session; substitution on headless surfaces); ADR-111 (durable quota updates, serial
   drain); ADR-116 (`agent.fleet` declaration); ADR-118/119 (stage outcomes, gate scope).
 - **Detail:** `docs/design/session-pinned-dispatch.md`; features B6, B7, B8, G66.
+
+## ADR-122: Interrupted-Run Recovery Is an Upstream Engine Contract; Spur Claims Resume at Its Own Boundary
+
+- **Status:** Accepted · **Date:** 2026-09-19
+- **Decision:** Recovery of interrupted workflow runs is owned by `@gobing-ai/ts-dual-workflow-engine` ≥0.5.0 (upstream ADR-025, task 0902): CAS resume claiming (`owner_attempt`, `WorkflowResumeError` on lost races), rerun-enter at-least-once re-execution from `interrupted` (skip-enter from `paused`), and ghost-owner preservation. Spur integrates at existing seams only: `run`/`continue` refuse duplicate run ids (CLI pre-flight plus an engine collision backstop); a resume claims ownership via `resumeOwner { attemptId, pid }` at the executing boundary — sync CLI or detached `--async` worker, with `started` reported only after the claim lands; only `paused | interrupted` are resumable; `clean` sweeps stale `running`/`pending` runs to `interrupted` (rerun-resumable), never `failed`. Headless resumes never invent a gate answer: without a TTY or explicit `--answer`, `continue` exits 2, and `--yes` skips only the CLI confirm (task 0901).
+- **Why:** kk dogfood (091825) showed a run id silently reusing a live run and a headless resume persisting a default `no` — recovery mutated state with no operator decision, and status-only paused/pid=NULL restoration was already forbidden. The Q&A decision (2026-09-19) was upstream engine contract first: patching node_modules or adding a spur-side recovery FSM would fork the engine's state authority; the contract belongs beside the persistence it claims against.
+- **Consequence:** engine ≥0.5.0 is a hard resume dependency. Persisted shell stdout/stderr tails are secret-redacted before a 64 KiB utf8-safe bound with truncation flags, and `continue` writes the consolidated run log unless `--no-log`. Stale sweeps keep runs resumable instead of wedging them terminal.
+- **Retains:** ADR-022 (lifecycle waves stay gated on upstream gap closure — this closes the interruption gap, not the waves); ADR-047 (operator decisions stay host-owned); ADR-112 (policy lives upstream); ADR-117 (execution-surface obligations stay at surfaces).
+- **Detail:** [CLI contracts](design/cli-contracts.md); [workflow observability](design/workflow-observability.md); [workflow run log](design/workflow-run-log.md).
