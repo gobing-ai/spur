@@ -131,6 +131,30 @@ async function verifyLockfile(ctx: ReleaseContext, output: CommandOutput): Promi
     output.write('  ↳ bun.lock: verified (bun install --frozen-lockfile)');
 }
 
+/**
+ * Release gate (task 0669 class): the plugin must be installable from a bare
+ * snapshot — hooks/scripts/lib may only import node:/bun: builtins, relative
+ * paths, or `import type` (see scripts/commands/plugin-install-smoke.ts). Runs before any
+ * manifest mutation so a bad plugin can't be tagged. Skips with a visible note
+ * when the gate script itself is absent (e.g. the throwaway bump-ver test repos).
+ */
+async function assertPluginInstallable(ctx: ReleaseContext, output: CommandOutput): Promise<void> {
+    const smokePath = join(ctx.repoRoot, 'scripts', 'commands', 'plugin-install-smoke.ts');
+    if (!existsSync(smokePath)) {
+        output.write('  ↳ plugin-install-smoke: gate script not present in this repo — skipped');
+        return;
+    }
+    const result = await run(ctx.repoRoot, ['bun', 'run', 'plugin-smoke']);
+    if (!result.ok) {
+        if (result.stdout) output.write(result.stdout);
+        if (result.stderr) output.write(result.stderr);
+        throw new Error(
+            'plugin-install-smoke failed — fix the plugin surface before releasing (bun run plugin-smoke).',
+        );
+    }
+    output.write('  ↳ plugin-install-smoke: plugin surface is standalone and installs clean');
+}
+
 async function git(repoRoot: string, args: string[]): Promise<string> {
     const result = await run(repoRoot, ['git', ...args]);
     if (!result.ok) {
@@ -490,6 +514,7 @@ async function bumpVersion(
     if (await npmViewVersion(ctx.repoRoot, config.packageName, version)) {
         throw new Error(`${config.packageName}@${version} is already published on npm. Use a new version.`);
     }
+    await assertPluginInstallable(ctx, output);
     const manifestPath = join(ctx.repoRoot, config.packageDir, 'package.json');
     const manifest = await readJson(manifestPath);
     if (manifest === null) throw new Error(`missing or malformed manifest at ${config.packageDir}/package.json`);
@@ -573,6 +598,7 @@ async function bumpAll(
     for (const tag of allTags) {
         if (existingLocal.has(tag)) throw new Error(`tag already exists locally: ${tag}`);
     }
+    await assertPluginInstallable(ctx, output);
     const remoteRefs = await git(ctx.repoRoot, ['ls-remote', '--tags', 'origin']);
     for (const tag of allTags) {
         if (remoteRefs.includes(`refs/tags/${tag}`)) {
