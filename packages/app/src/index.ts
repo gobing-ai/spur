@@ -727,6 +727,11 @@ export {
 } from './workflow/actions/response-validate';
 export { RuleCheckActionRunner } from './workflow/actions/rule-check';
 export { RunArtifactActionRunner, type RunArtifactOptions } from './workflow/actions/run-artifact';
+export {
+    createShellOutputRedactor,
+    SHELL_OUTPUT_TAIL_BYTES,
+    utf8SafeByteTail,
+} from './workflow/actions/shell';
 // Workflow built-in action runners
 export { registerSpurBuiltins, type SpurWorkflowBuiltinsOptions } from './workflow/builtins';
 export {

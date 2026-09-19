@@ -46,6 +46,8 @@ export interface SpurWorkflowBuiltinsOptions {
     getDb?: () => Promise<DbAdapter>;
     /** Artifact DAO for artifact actions. */
     artifactDao?: ArtifactDao;
+    /** Configured secret values redacted from streamed shell output (0901 R5). */
+    secretValues?: readonly string[];
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
@@ -64,7 +66,11 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
     // When `createDefaultWorkflowEngineHost` supplied a processExecutor it is
     // forwarded here; otherwise a fresh default keeps the streaming contract.
     host.registerAction(
-        new StreamingShellActionRunner(options.processExecutor ?? new NodeProcessExecutor(), options.observabilityBus),
+        new StreamingShellActionRunner(
+            options.processExecutor ?? new NodeProcessExecutor(),
+            options.observabilityBus,
+            options.secretValues ?? [],
+        ),
         'builtin',
     );
     // Env-var shell guard — replaces the engine's `shell` guard by kind, so guard commands

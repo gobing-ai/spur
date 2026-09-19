@@ -71,6 +71,12 @@ the run. Errors are logged/swallowed (same contract as the current sink and the 
 
 - The log is **retained by default** after a run ends. No `--keep-log`; no delete-by-default.
 - `--no-log` on `spur workflow run` opts out of writing it.
+- 0901 R6: `spur workflow continue` writes the same consolidated log for the resumed run and
+  honors `--no-log`; the sink opens under the current checkout's `.spur/run/` (resume from another
+  checkout writes that checkout's log). 0901 R5: persisted shell `stdout`/`stderr` lines carry
+  `stdoutTail`/`stderrTail` — the last 64 KiB of each stream after secret redaction
+  (`createShellOutputRedactor`, configured secret values from the environment), with
+  `stdoutTruncated`/`stderrTruncated` booleans marking tails that were cut.
 - `spur workflow clean` (already the run housekeeping verb, today finalizing stale
   running/pending runs) gains a **log-reclamation scope**: it removes retained `<RUNID>.log` files
   whose age exceeds a retention threshold. The threshold is configurable via a

@@ -36,6 +36,7 @@ states:
           message: go
   - id: gate
     pause: true
+    resumeRerun: true # 0901 R2: allows interrupted (rerun-enter) resume; ignored by paused (skip-enter) resume
   - id: done
 transitions:
   - from: start
@@ -1157,6 +1158,48 @@ ${MINIMAL_WORKFLOW_YAML}`,
             await rm(dir, { recursive: true, force: true });
         });
 
+        // 0901 R2: an interrupted run (engine 0.5.0 owner-loss contract) is
+        // resumable — rerun-enter re-executes the interrupted node and finishes.
+        test('R2: continuePaused accepts an interrupted run (rerun-enter) and resumes', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-continue-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const db = await ctx.getDb();
+            const runResult = await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'int1' });
+            expect(runResult.status).toBe('paused');
+            // Simulate an engine owner-loss interruption (0.5.0 interruptRun CAS result).
+            await db.run("UPDATE runs SET status = 'interrupted' WHERE id = 'int1'");
+
+            // Rerun-enter re-executes the gate node, whose pause:true re-pauses —
+            // proving the interrupted node actually reran (skip-enter would be done).
+            const resumed = await svc.continuePaused('int1');
+            expect(resumed.status).toBe('paused');
+            expect(resumed.finalState).toBe('gate');
+            // Second resume is now paused → skip-enter carries through to done.
+            const again = await svc.continuePaused('int1');
+            expect(again.status).toBe('done');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        // 0901 R2: non-resumable statuses keep refusing, with the widened message.
+        test('R2: continuePaused refuses terminal and missing rows', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-continue-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const db = await ctx.getDb();
+            await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'term1' });
+            await db.run("UPDATE runs SET status = 'done' WHERE id = 'term1'");
+            expect(svc.continuePaused('term1')).rejects.toThrow('not resumable (status: done)');
+            expect(svc.continuePaused('missing-run')).rejects.toThrow('not resumable (status: missing)');
+            await rm(dir, { recursive: true, force: true });
+        });
+
         test('R1: latestPausedRun returns null when nothing is paused', async () => {
             const { svc, dir } = await seedPausing();
             expect(await svc.latestPausedRun()).toBeNull();
@@ -1179,9 +1222,7 @@ ${MINIMAL_WORKFLOW_YAML}`,
 
         test('continuePaused on a non-paused / unknown run is a clear error', async () => {
             const { svc, dir } = await seedPausing();
-            await expect(svc.continuePaused('no-such-run')).rejects.toThrow(
-                /not paused|does not exist|nothing to continue/i,
-            );
+            await expect(svc.continuePaused('no-such-run')).rejects.toThrow(/not resumable/i);
             await rm(dir, { recursive: true, force: true });
         });
     });
@@ -2168,19 +2209,28 @@ terminalStates:
             );
         }
 
-        test('finalizes stale non-terminal runs as failed, leaving recent and terminal runs intact', async () => {
+        test('marks stale claimed runs interrupted (0901 R2) and legacy pending runs failed', async () => {
             const ctx = makeCtx();
             const db = await ctx.getDb();
             await seedRun(db, 'run_stale', 'running', '2026-06-01T00:00:00.000Z');
+            await seedRun(db, 'run_pending', 'pending', '2026-06-01T00:00:00.000Z');
             await seedRun(db, 'run_done', 'done', '2026-06-01T00:00:00.000Z');
             await seedRun(db, 'run_fresh', 'running', new Date().toISOString());
 
             const result = await new WorkflowAppService(ctx).clean(30, false);
 
-            expect(result.cleaned.map((r) => r.runId)).toEqual(['run_stale']);
+            expect(result.cleaned.map((r) => r.runId)).toEqual(['run_stale', 'run_pending']);
             const stale = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_stale');
+            const pending = await db.queryFirst<{ status: string }>(
+                'SELECT status FROM runs WHERE id = ?',
+                'run_pending',
+            );
             const fresh = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', 'run_fresh');
-            expect(stale?.status).toBe('failed');
+            // 0901 R2: a stale claimed run is an owner the engine lost — interrupted
+            // (rerun-resumable), not failed (wedged). Pending rows the engine cannot
+            // interrupt keep the legacy finalize-to-failed path.
+            expect(stale?.status).toBe('interrupted');
+            expect(pending?.status).toBe('failed');
             expect(fresh?.status).toBe('running'); // too recent — untouched
         });
 

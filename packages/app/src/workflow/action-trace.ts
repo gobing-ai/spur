@@ -32,6 +32,7 @@ import { ActionRunDao, type DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionRedactor,
     DbWorkflowPersistenceAdapter,
+    type ResumeOwnership,
     type WorkflowPersistenceAdapter,
     type WorkflowRunRecord,
     type WorkflowStatus,
@@ -175,6 +176,19 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
      */
     async finalizeRun(runId: string, status: WorkflowStatus, completedAt: string): Promise<void> {
         return this.inner.finalizeRun(runId, status, completedAt);
+    }
+
+    /** Ownership/interruption CAS — straight pass-through per the class contract (ADR-025). */
+    async claimRunOwnership(
+        runId: string,
+        owner: ResumeOwnership,
+        expectedStatuses: readonly ('paused' | 'interrupted')[],
+    ): Promise<WorkflowRunRecord | undefined> {
+        return this.inner.claimRunOwnership(runId, owner, expectedStatuses);
+    }
+
+    async interruptRun(runId: string, reason: string): Promise<WorkflowRunRecord | undefined> {
+        return this.inner.interruptRun(runId, reason);
     }
 
     /**

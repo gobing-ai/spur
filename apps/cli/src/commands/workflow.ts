@@ -7,6 +7,7 @@ import type { AgentQuotaEventBus } from '@gobing-ai/spur-app';
 import {
     buildWorkflowSteps,
     configuredSecretValues,
+    createShellOutputRedactor,
     createWorkflowEventIdentity,
     decorateWorkflowEvent,
     EscalationPacketSink,
@@ -233,6 +234,55 @@ export async function waitForRunRegistration(
 /** Run-scoped plan artifact path for an async run (0768 R2). */
 export function workflowPlanArtifactPath(runId: string): string {
     return join('.spur', 'run', `${runId}-workflow-plan.json`);
+}
+
+/**
+ * 0901 R4: continue-path start confirmation. Unlike a fresh run (whose row only
+ * exists once the worker created it), a resumed run's row already exists in its
+ * pre-resume status — so the ack is the row LEAVING paused/interrupted, which
+ * only a successful ownership claim can cause. Timeout reports failed-start.
+ */
+export async function waitForResumeClaim(
+    service: Pick<WorkflowAppService, 'trace'>,
+    runId: string,
+    timeoutMs: number,
+    pollMs = 250,
+): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+        try {
+            const entry = await service.trace(runId);
+            if (entry.run.status !== 'paused' && entry.run.status !== 'interrupted') return true;
+        } catch {
+            // Transient read failures just keep polling until the deadline.
+        }
+        if (Date.now() >= deadline) return false;
+        await sleep(pollMs);
+    }
+}
+
+/**
+ * 0901 R1: existing-run check before any run-banner/plan/log mutation or worker
+ * launch. Only a genuine `Run not found` counts as absence — DB failures
+ * propagate so a broken store never silently enables an overwrite. The engine's
+ * createRun collision check remains the race backstop.
+ */
+export async function existingWorkflowRun(service: Pick<WorkflowAppService, 'trace'>, runId: string): Promise<boolean> {
+    if (runId === '') return false;
+    try {
+        await service.trace(runId);
+        return true;
+    } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Run not found:')) return false;
+        throw error;
+    }
+}
+
+/** 0901 R1 refusal message for an existing run id. */
+export function existingRunRefusal(runId: string): string {
+    return (
+        `workflow run: run id ${runId} already exists — refusing to overwrite. ` + 'Choose a fresh id with --run-id.'
+    );
 }
 
 /**
@@ -575,6 +625,13 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     context.setExitCode(1);
                     return;
                 }
+                // 0901 R1: refuse an existing id BEFORE resolving/writing the plan
+                // artifact or launching the worker.
+                if (await existingWorkflowRun(makeSvc(options.json), runId)) {
+                    writeJsonError(context.output, options, existingRunRefusal(runId), 'VALIDATION_FAILED');
+                    context.setExitCode(1);
+                    return;
+                }
                 const spurParts = resolveSpurBin().split(' ');
                 const spurBin = spurParts[0] ?? process.execPath;
                 const spurArgs = spurParts.slice(1);
@@ -636,6 +693,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                             dryRun: options.dryRun || undefined,
                             // 0768 R1: the fallback run reuses the launcher's resolution.
                             resolvedDefinition,
+                            // 0901 R5: shell streams persisted by this run pass the
+                            // secret redactor before the 64 KiB tail bound.
+                            redactor: createShellOutputRedactor(configuredSecretValues(context.env)),
                         });
                     } finally {
                         clearWorkflowRunActive();
@@ -723,6 +783,14 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         'VALIDATION_FAILED',
                     );
                 }
+                context.setExitCode(1);
+                return;
+            }
+
+            // 0901 R1: refuse an operator-supplied id that already exists BEFORE any
+            // banner/plan/log mutation. Freshly minted UUIDs cannot collide.
+            if (options.runId && (await existingWorkflowRun(makeSvc(json), runId))) {
+                writeJsonError(context.output, options, existingRunRefusal(runId), 'VALIDATION_FAILED');
                 context.setExitCode(1);
                 return;
             }
@@ -935,6 +1003,9 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     // Async worker self-records its pid so `spur workflow cancel` can
                     // signal the live process group (set by the --async launcher).
                     recordSelfPid: getEnvVar('SPUR_ASYNC_WORKER') === '1',
+                    // 0901 R5: shell streams persisted by this run pass the secret
+                    // redactor before the 64 KiB tail bound.
+                    redactor: createShellOutputRedactor(configuredSecretValues(context.env)),
                     ...(steeringController !== undefined ? { steeringController } : {}),
                     // 0768 R1: plan preview, identity stamp, and engine share the one
                     // resolution made above (resolve-once).
@@ -978,6 +1049,8 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             '--answer <yes|no|cancel>',
             'Inject a HITL gate answer before guard re-evaluation (0433). Does not imply --yes.',
         )
+        .option('--async', 'Detach: resume in a background worker and report started/failed (0901 R4).')
+        .option('--no-log', 'Opt out of appending to the consolidated .spur/run/<RUNID>.log')
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
@@ -997,6 +1070,21 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     return;
                 }
                 hitlAnswer = v;
+            }
+            // 0901 R3: a headless continue without an explicit --answer would silently
+            // take the persisted headless default (or wedge on the gate). Flat rule —
+            // the check does not inspect whether a gate is actually pending. --yes is
+            // the CLI resume confirmation and never answers gates. The detached async
+            // worker always passes --answer explicitly, so it clears this guard.
+            if ((json || !process.stdout.isTTY) && hitlAnswer === undefined) {
+                writeJsonError(
+                    context.output,
+                    options,
+                    'Refusing headless `workflow continue` without --answer: a non-interactive resume must answer the pending HITL gate explicitly (--answer yes|no|cancel). --yes only skips the CLI resume confirmation and does not answer gates.',
+                    'VALIDATION_FAILED',
+                );
+                context.setExitCode(2);
+                return;
             }
             // Resume path shares the 0370 ledger bridge so continued runs also
             // surface workflow.* rows (adapter verb-form + engine-native).
@@ -1044,10 +1132,94 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         }
                     }
                 }
-                const result = await svc.continuePaused(targetId, {
-                    hitlAnswer,
-                    force: options.force === true ? true : undefined,
-                });
+                const result = await (async () => {
+                    // 0901 R4: async resume. The target is resolved here (arg or
+                    // discovery) so the worker never re-discovers a different run;
+                    // the worker always passes --yes and forwards --answer/--force
+                    // and the JSON/no-log flags. Dead-on-arrival workers are invisible
+                    // under nohup, so only the run row leaving its paused/interrupted
+                    // state proves the resume actually claimed ownership.
+                    if (options.async === true) {
+                        const cmd = ['workflow', 'continue', targetId, '--yes'];
+                        if (hitlAnswer !== undefined) cmd.push('--answer', hitlAnswer);
+                        if (options.force === true) cmd.push('--force');
+                        if (json) cmd.push('--json');
+                        if (options.jsonEnvelope === true) cmd.push('--json-envelope');
+                        if (options.log === false) cmd.push('--no-log');
+                        await spawnAsyncWorkflowWorker(resolveSpurBin(), cmd);
+                        const started = await waitForResumeClaim(
+                            svc,
+                            targetId,
+                            asyncRegisterTimeoutMs(context.spurConfig),
+                        );
+                        if (started) {
+                            if (json) {
+                                context.output.write(
+                                    toEnvelopeJson(
+                                        { status: 'started', runId: targetId },
+                                        { enveloped: options.jsonEnvelope },
+                                    ),
+                                );
+                            } else {
+                                context.output.write(
+                                    `workflow continue ${targetId}: started in background - follow with \`spur workflow trace ${targetId}\``,
+                                );
+                            }
+                            context.setExitCode(0);
+                        } else {
+                            const reason = 'async resume worker failed to start or claim the run';
+                            const hint = 'run `workflow continue` synchronously (omit --async) to see the failure';
+                            if (json) {
+                                context.output.write(
+                                    toEnvelopeJson(
+                                        { status: 'failed', runId: targetId, reason, hint },
+                                        { enveloped: options.jsonEnvelope },
+                                    ),
+                                );
+                            } else {
+                                context.output.write(`workflow continue failed: ${reason}. ${hint}.`);
+                            }
+                            context.setExitCode(1);
+                        }
+                        return undefined;
+                    }
+                    // 0901 R6: resumed runs append to the same per-run log as fresh
+                    // runs so one file carries the full execution history.
+                    // ponytail: appended relative to the invoking cwd; a resume from a
+                    // different checkout writes that checkout's log, not the recorded
+                    // launch workdir — add a workdir lookup when that bites.
+                    const runLog =
+                        options.log === false
+                            ? undefined
+                            : new WorkflowRunLogSink({
+                                  bus,
+                                  dir: join(context.cwd, '.spur', 'run'),
+                                  runId: targetId,
+                                  ...resolveOutputLogConfig(context.spurConfig ?? null),
+                              });
+                    try {
+                        const result = await svc.continuePaused(targetId, {
+                            hitlAnswer,
+                            force: options.force === true ? true : undefined,
+                            // 0901 R5: persisted shell results keep a secret-redacted
+                            // byte tail instead of the engine's full-output default.
+                            redactor: createShellOutputRedactor(configuredSecretValues(context.env)),
+                            // 0901 R4: the detached worker claims ownership under its
+                            // own attempt identity and stamps its pid at the claim so
+                            // `workflow cancel` can reach it.
+                            ...(getEnvVar('SPUR_ASYNC_WORKER') === '1'
+                                ? {
+                                      resumeOwner: { attemptId: crypto.randomUUID(), pid: process.pid },
+                                      recordSelfPid: true,
+                                  }
+                                : {}),
+                        });
+                        return result;
+                    } finally {
+                        runLog?.close();
+                    }
+                })();
+                if (result === undefined) return; // async path already reported and set the exit code.
                 context.output.write(
                     json
                         ? toEnvelopeJson(result, { enveloped: options.jsonEnvelope })

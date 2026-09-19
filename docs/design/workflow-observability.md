@@ -113,6 +113,12 @@ roots remain read-only.
 - Steering notes are redacted before the 1,024-character bound and before acknowledgement/state mutation.
 - Other renderable strings are capped after redaction; result projection exposes only bounded error text
   and the explicit usage availability marker.
+- 0901 R5 (persisted shell tails): shell action output is redacted across the FULL stream first
+  (`redactAndBound` with an effectively unbounded char budget), then tail-bounded to 64 KiB per
+  stream (`utf8SafeByteTail`, no multi-byte splits); the persistence projection carries
+  `stdoutTail`/`stderrTail` verbatim plus `stdoutTruncated`/`stderrTruncated` booleans. The same
+  redactor shape (`ActionRedactor`) is applied by the CLI (`run` + `continue`, both sync and async
+  worker paths) from configured secret environment values.
 
 The policy is intentionally lossy. Reconstruction uses the workflow definition and protected agent
 history, not the observability projection.
