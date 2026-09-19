@@ -4,7 +4,7 @@ name: "Harden workflow engine: shell-output persistence, async continue, termina
 status: todo
 template: standard
 created_at: 2026-09-19T17:18:49.545Z
-updated_at: "2026-09-19T20:04:45.996Z"
+updated_at: "2026-09-19T20:43:38.467Z"
 
 priority: P2
 feature_id: D3
@@ -34,12 +34,18 @@ Handoff from knowledge-kit task 0148, whose 2026-09-19 Q&A identifies Spur task 
 
 Ready-depth result: **failed / review-pending**, despite a structurally complete task. R2 cannot be honestly frozen without choosing safe interruption/replay semantics. Status was already todo; retain it without claiming implementation readiness. Existing P2 and 6-hour estimate are preserved, not re-estimated for unresolved recovery scope.
 
+**Refine corrections (2026-09-19, ready refine #2 — engine 0.5.0 delivery):**
+- R2 unblocked: 0902 done; `@gobing-ai/ts-dual-workflow-engine` released as 0.5.0 (ADR-025). Requirement R2, Design R2/R3-R4 blocks, AC2, Plan steps 1/4 rewritten against the delivered contract (was: "blocked", "must be finalized together with R2", "pending the Q&A decision").
+- Correction: "Any resume claim DAO change belongs in packages/domain" — obsolete; the engine adapter owns claim/interrupt and the owner-column migration; spur's two adapter implementors pass through. No packages/domain change, no new spur drizzle migration.
+- Correction: environment notes "No dependencies currently declared" and "engine 0.4.69" — now: dependency 0902 declared+done; catalog bumps to ^0.5.0 in worktree `feat/0901-harden-workflow-engine`; lockfile refresh awaits npm publish.
+- Correction: `resumeOwner` (typed option on `WorkflowRunOptions`) supersedes the earlier CLI-only `recordSelfPid` framing for ownership; `recordSelfPid` stays for the child's self-recorded PID.
+
 ### Requirements
 
 All six upstream findings remain owned here. Requirement IDs retain their upstream meanings.
 
 - [ ] R1. Reject existing run IDs before a run banner, async spawn, or plan/log mutation; name the ID and recommend a fresh --run-id. Preserve engine collision enforcement as the race backstop. Human, raw JSON and envelope errors must agree.
-- [ ] R2. Recover interrupted continue without leaving a false live owner or silently skipping/replaying unfinished side effects. The requested paused/pid=NULL outcome requires a safe resume-point contract. **Blocked:** exact interruption classes and recovery semantics need the decision in Q&A; status-only restoration is forbidden.
+- [ ] R2. Recover interrupted continue using the delivered engine 0.5.0 interruption contract (0902/ADR-025): `interruptRun` marks the run `interrupted` while preserving the stale owner row; resume from `interrupted` defaults to rerun-enter (at-least-once for unfinished side effects) and requires a CAS ownership claim through `resumeRun`. Status-only paused/pid=NULL restoration remains forbidden.
 - [ ] R3. Refuse CLI continue before resume mutation when no explicit gate answer is supplied in a headless invocation (non-TTY, JSON, or detached). Explain --answer yes|no|cancel. --yes only selects/confirms a run; it never answers a gate. Keep application-service callers that intentionally use persisted vars compatible.
 - [ ] R4. Add workflow continue [run-id] --async using the existing worker launcher. Forward explicit answer and existing --force consent, validate the paused target, acknowledge the new resume attempt, and record the actual worker PID so cancel reaches it. Missing run-id discovery/confirmation keeps existing --yes semantics. Failed startup must not report started merely because the paused row exists.
 - [ ] R5. Persist redacted bounded shell stdout/stderr in action_runs.result_json and expose bounded shell-only tails through trace. Preserve existing streaming log output and flat .spur/run/<runId>.log retention. No promise of full output after log caps, process death, or storage failure; truncation/failure must be visible.
@@ -52,7 +58,7 @@ Non-goals: replay terminal runs, --force overwrite of existing IDs, arbitrary si
 - [ ] AC1 — Existing run IDs fail before launch (req: R1)
   Given an existing running, paused, done or failed row, when sync or async run reuses its ID, then it exits nonzero with that ID and a fresh-ID remedy, emits no started banner, and leaves row, plan and log unchanged. Exercise human, --json and --json-envelope in apps/cli/tests/commands/workflow.test.ts; retain engine/service duplicate-ID coverage.
 - [ ] AC2 — Interrupted continuation has a safe recovery point (req: R2)
-  Given a resumed workflow with a side-effecting action in progress, when its owner is interrupted, then recovery neither skips unfinished actions nor repeats completed side effects and never claims a dead owner is running. The originally requested paused/pid=NULL assertion is pending the Q&A decision. Required test layer: real worker subprocess plus migrated SQLite and action sentinel files, for both workflow dialects; a mocked continuePaused cannot prove this.
+  Given a resumed workflow with a side-effecting action in progress, when its owner is interrupted, then recovery neither skips unfinished actions nor repeats completed side effects and never claims a dead owner is running. Frozen recovery contract (0902/ADR-025, engine 0.5.0): the interrupted run keeps the ghost owner row; a concurrent continue loses the CAS claim with `WorkflowResumeError`; rerun-enter re-executes the interrupted current state's actions (at-least-once, host persists durable state before side effects). Required test layer: real worker subprocess plus migrated SQLite and action sentinel files, for both workflow dialects; a mocked continuePaused cannot prove this.
 - [ ] AC3 — Headless continue requires an explicit answer (req: R3)
   Given a paused run and no --answer, when continue is invoked without a TTY, with JSON, or with --async, then it exits before resume/spawn and names --answer; status/snapshots/actions are unchanged. With yes, no or cancel, existing branch behavior remains observable; --yes alone is insufficient. Cover CLI tests and preserve service HITL tests.
 - [ ] AC4 — Detached continue acknowledges its own worker (req: R4)
@@ -91,23 +97,27 @@ Non-goals: replay terminal runs, --force overwrite of existing IDs, arbitrary si
 - This run therefore stopped before worktree creation/implement per the Design readiness gate — no code was written.
 - Resume: 0902 shipped → bump `@gobing-ai/ts-dual-workflow-engine` here → re-run `/sp-dev-refine 0901 --depth ready` → `/sp-dev-run 0901`.
 
+#### Q&A entry — 2026-09-19T20:43:12.042Z
+
+**Resolved (2026-09-19, ready refine #2):** 0902 delivered and released — `@gobing-ai/ts-dual-workflow-engine` 0.5.0 (ADR-025: CAS ownership claim, rerun-enter default from `interrupted`, skip-enter from `paused`, ghost-owner preservation, `WorkflowResumeError` on lost races; commits 8955fc6/a50bc7b, tags `@gobing-ai/ts-*-v0.5.0`, pushed). Option A executed end-to-end: engine designed → implemented (403 tests incl. 9 interruption contract tests) → released → spur-new catalog bumped to ^0.5.0 (worktree feat/0901-harden-workflow-engine, both adapter implementors pass through claim/interrupt). R2 requirement/design/AC2/Plan refrozen against the delivered contract; no scope change.
+
 ### Design
 
-**Readiness: review-pending. R1/R3/R4/R5/R6 direction is pinned below; R2 prevents an implement-ready freeze. Do not start implementation from this spec until its open decision is resolved.**
+**Readiness: implement-ready (ready refine #2, 2026-09-19). All six requirements pinned; R2 resolved upstream by 0902/engine 0.5.0.**
 
 #### R1 — CLI refusal
 
 In apps/cli/src/commands/workflow.ts, perform an existing-row check after validateRunId and before either branch writes plan/log/banner or launches a worker. Reuse trace/RunDao through the application boundary; only a genuine not-found is absence, never swallow arbitrary DB failures. Keep the engine createRun collision check authoritative under races. Catch execution collision through writeJsonError and preserve raw/enveloped conventions. Do not add a force-overwrite flag or reject engine external-key attach semantics globally.
 
-#### R2 — recovery seam, blocked
+#### R2 — recovery seam (resolved: engine 0.5.0, ADR-025)
 
-Installed engine service.js resumeRun changes paused to running, restores state/vars, then both drivers resume with skip-on-enter. A snapshot records a state before all its actions necessarily finish. Therefore a CLI signal handler that merely restores paused and clears pid creates a false safe checkpoint. Rolling back to the pre-attach snapshot can instead repeat later side effects. The engine exposes no AbortSignal/resume-cursor contract in WorkflowRunOptions. SIGKILL cannot run a handler. Safe interruption belongs at the released engine facade, with downstream Spur integration after the upstream contract exists; do not patch node_modules or build a competing Spur execution loop. Scope/behavior must be decided before designing the dependency and runnable recovery acceptance test.
+The upstream contract shipped in `@gobing-ai/ts-dual-workflow-engine` 0.5.0 (0902): `service.interruptRun(runId, reason)` CAS-flips a paused/resumable run to `interrupted` (ts-libs service.ts:229), keeps the stale owner row (ghost owner; FSM refusals leave it intact), and emits `workflow.run.interrupted`. `resumeRun` accepts `interrupted` with default resumeMode `rerun-enter` (ts-libs service.ts:175) and atomically claims ownership in one UPDATE before executing (ts-libs service.ts:190); concurrent/lost claims throw `WorkflowResumeError`. Spur integrates at existing seams only: drivers (workflow-service continuePaused path) may pass `resumeOwner: { attemptId, pid }`; spur's two `WorkflowPersistenceAdapter` implementors (`ObservableWorkflowAdapter`, `WorkflowActionTraceWriter`) pass `claimRunOwnership`/`interruptRun` through untouched. Do not patch node_modules or build a competing Spur execution loop; do not add spur-side status surgery.
 
 #### R3/R4 — CLI admission and detached resume
 
 Keep the existing continue verb and add only --async. Perform answer/TTY/JSON validation, target selection and paused validation before mutation. Reuse spawnAsyncWorkflowWorker; worker argv is workflow continue <id> --yes --answer <value>, forwarding --force and JSON mode as needed, never --async recursively. SPUR_ASYNC_WORKER=1 identifies the child. Do not read CLI environment inside WorkflowAppService: add a typed recordSelfPid option to continuePaused and pass it explicitly from the CLI.
 
-A pre-existing paused row is not startup acknowledgement. The implementation must use an attempt identifier carried to the worker and persisted with its resume ownership claim; names and claim/cleanup protocol must be finalized together with R2, including concurrent continues and terminal-before-poll behavior. withSelfPidRecording's creation hooks cannot perform this claim. Record PID at the actual resume mutation, clear only the matching owner's PID on exit, and never overwrite terminal cancellation with paused. Preserve recorded definition source/workdir, digest/--force checks and HITL vars. Existing nohup launcher comments claim process-group leadership but its code does not itself establish setsid: real subprocess tests must prove descendant cancellation; do not treat the comment as evidence.
+A pre-existing paused row is not startup acknowledgement. Frozen protocol (0902/ADR-025): the CLI worker carries a generated attemptId, the service passes it as `resumeOwner` to engine `resumeRun`, and the engine persists `owner_attempt`/`owner_pid` inside the CAS claim (ts-libs persistence.ts:112-120) — no separate Spur DAO. Concurrent continues: exactly one claim wins; losers get `WorkflowResumeError` (never a blind retry). Terminal-before-poll: claim of a terminal row is refused (expected statuses exclude terminal) and surfaces as a loud error; `recordSelfPid` remains the typed option for the child's own PID recording. Record PID at the actual resume mutation, clear only the matching owner's PID on exit, and never overwrite terminal cancellation with paused. Preserve recorded definition source/workdir, digest/--force checks and HITL vars. Existing nohup launcher comments claim process-group leadership but its code does not itself establish setsid: real subprocess tests must prove descendant cancellation; do not treat the comment as evidence.
 
 #### R5 — bounded evidence on existing seams
 
@@ -123,18 +133,18 @@ Construct WorkflowRunLogSink on the continue bus for the resolved run ID and rec
 
 #### Owners, environment and scope
 
-Targets: apps/cli/src/commands/workflow.ts; packages/app/src/services/workflow-service.ts; packages/app/src/workflow/actions/shell.ts and builtins.ts; packages/app/src/observability/{agent-execution,workflow-run-log-sink}.ts; corresponding existing tests. Any resume claim DAO change belongs in packages/domain, not CLI SQL. No migration is selected before R2 resolution.
+Targets: apps/cli/src/commands/workflow.ts; packages/app/src/services/workflow-service.ts; packages/app/src/workflow/actions/shell.ts and builtins.ts; packages/app/src/observability/{agent-execution,workflow-run-log-sink}.ts; corresponding existing tests. No packages/domain change is required: the engine adapter owns the claim/interrupt UPDATEs and the runs-table owner columns; its guarded `WORKFLOW_ENGINE_MIGRATIONS_SQL` ALTERs (ts-libs schema-sql.ts:77) run at adapter ensureSchema for pre-0.5.0 databases, so no new Spur drizzle migration is selected.
 
 Document changed CLI behavior in docs/design/cli-contracts.md and the facade plugins/sp/skills/spur-cli/references/workflows.md; output/retention behavior belongs in docs/design/workflow-run-log.md and workflow-observability.md. Update the docs/04_DESIGN.md command index only where its signature changes, under sp-doc-evolve and the constitution. No workflow YAML or generated adapter edits.
 
-Audit environment: clean tree at b6ebe7fe2 on entry; git worktree list shows only this checkout; task list --status wip returned empty. The active-folder task listing found no other unfinished workflow task owning these fixes; this is not a claim about external repositories. D3 is active and ac_altitude remains task-local, reflecting the dogfood scenarios. No dependencies currently declared; the upstream recovery dependency is unresolved and must be registered through spur task deps after its contract/owner exists. Installed dependency and lockfile both resolve engine 0.4.69. PATH spur is an external install: use the source-local CLI for gates, then link/build:bundle only after actual CLI implementation.
+Audit environment: clean tree at b6ebe7fe2 on entry; git worktree list shows only this checkout; task list --status wip returned empty. The active-folder task listing found no other unfinished workflow task owning these fixes; this is not a claim about external repositories. D3 is active and ac_altitude remains task-local, reflecting the dogfood scenarios. Dependency `0902` is declared and done (engine contract released as 0.5.0, npm publish via CI trusted publishing in flight). Catalog pins bump 0.4.69 → 0.5.0 in the feature worktree `feat/0901-harden-workflow-engine`; lockfile refresh happens once the registry serves 0.5.0. PATH spur is an external install: use the source-local CLI for gates, then link/build:bundle only after actual CLI implementation.
 
 ### Plan
 
-1. [ ] Resolve R2 in Q&A before implementation; freeze safe interruption classes, resume-point/side-effect semantics and concurrent ownership rules. If an upstream engine change is selected, record its concrete task/release dependency through spur task deps and re-run ready refine. Do not substitute paused-row surgery.
+1. [x] Resolve R2: done upstream — 0902 shipped the engine interruption contract and it released as 0.5.0 (ADR-025); dependency registered; ready refine re-run; Design/AC2 refrozen. Not paused-row surgery.
 2. [ ] R1/R3: add early run-ID/headless-continue admission with existing JSON errors; test no launch/artifact/DB changes on refusal and explicit yes/no/cancel compatibility.
 3. [ ] R5: thread the same secret-aware bounded shell redactor to run and resume, add shell-only trace projection, and cover real engine/SQLite success/failure, both dialects, Unicode and truncation. Reuse streaming redaction at the shell event emitter and prove split-secret safety.
-4. [ ] R2/R4: implement the resolved recovery/ownership contract, attempt-specific detached acknowledgement, worker PID cleanup, flag forwarding and actual process-tree cancellation. Test real isolated subprocesses, fast terminal completion, startup failure, concurrent resume, and interruption at a side-effecting action.
+4. [ ] R2/R4: adopt the delivered 0.5.0 recovery/ownership contract (resumeOwner pass-through; interruptRun where Spur loses its owner), attempt-specific detached acknowledgement, worker PID cleanup, flag forwarding and actual process-tree cancellation. Test real isolated subprocesses, fast terminal completion, startup failure, concurrent resume, and interruption at a side-effecting action.
 5. [ ] R6: attach the existing sink to continue, preserve cumulative file bounds and test log append, unavailable disk and truncation across sessions.
 6. [ ] Update owning docs/facade and applicable CLI parity coverage. Run focused workspace tests, then bun run spur-check; run feature gate once at feature completion. After CLI edits run bun link in apps/cli and bun run --filter @gobing-ai/spur build:bundle. Verify source/bundle provenance before any real-data dogfood; never repair live DB rows during tests.
 
