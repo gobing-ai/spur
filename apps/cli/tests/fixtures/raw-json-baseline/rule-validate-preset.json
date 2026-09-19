@@ -2,7 +2,7 @@
   "valid": true,
   "kind": "preset",
   "source": "recommended-pre-check",
-  "ruleCount": 46,
+  "ruleCount": 47,
   "rules": [
     "cli-json-output",
     "cli-register-pattern",
@@ -44,6 +44,7 @@
     "require-corresponding-test",
     "rule-yaml-files-valid-structure",
     "sp-no-vendor-refs",
+    "sp-plugin-standalone",
     "sp-runtime-path",
     "spur-config-loader-only-at-composition-roots",
     "structured-config-loader-only-in-config",

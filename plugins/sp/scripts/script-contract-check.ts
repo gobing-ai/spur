@@ -178,6 +178,47 @@ export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; li
     return matches;
 }
 
+// Bare-specifier value imports in bundled surfaces break `superskill install`, which
+// bundles hooks/scripts on targets with no node_modules (task 0669; releases
+// 0.3.81–0.3.88 failed with "Bundle failed" when scripts imported @gobing-ai/ts-utils).
+// Type-only imports are erased before bundling, so they stay legal. Line-based
+// statement walk (import/export statements are column 0 under biome) — lookahead
+// regexes misbehave in Bun 1.3.x (JSC) when grouped with lazy quantifiers.
+function findGobingAiValueImports(dir: string): { file: string; line: number }[] {
+    const hits: { file: string; line: number }[] = [];
+    let entries: string[];
+    try {
+        entries = readdirSync(dir);
+    } catch {
+        return hits;
+    }
+    for (const entry of entries) {
+        const full = join(dir, entry);
+        let st: ReturnType<typeof statSync>;
+        try {
+            st = statSync(full);
+        } catch {
+            continue;
+        }
+        if (st.isDirectory()) {
+            hits.push(...findGobingAiValueImports(full));
+        } else if (entry.endsWith('.ts')) {
+            const lines = readFileSync(full, 'utf8').split('\n');
+            let stmtStart = 0;
+            for (let i = 0; i < lines.length; i++) {
+                if (/^\s*(?:import|export)\b/.test(lines[i])) stmtStart = i;
+                if (/(?:from\s*|import\s*|import\s*\(\s*)['"]@gobing-ai\//.test(lines[i])) {
+                    const opener = lines.slice(stmtStart, i + 1).join(' ');
+                    if (!/^\s*(?:import|export)\s+type\b/.test(opener)) {
+                        hits.push({ file: full, line: i + 1 });
+                    }
+                }
+            }
+        }
+    }
+    return hits;
+}
+
 export function validateContract(manifest: ScriptManifest, scriptsDir: string, pluginDir: string): Violation[] {
     const violations: Violation[] = [];
     const { tsFiles, mjsFiles } = listDiskScripts(scriptsDir);
@@ -278,6 +319,23 @@ export function validateContract(manifest: ScriptManifest, scriptsDir: string, p
             target: `${hit.file}:${hit.line}`,
             message: `shipped surface ${hit.file}:${hit.line} contains forbidden invocation 'bun plugins/sp/scripts/': ${hit.content}`,
         });
+    }
+
+    // Rule 5: bundled surfaces (scripts, hooks, lib) must not value-import @gobing-ai/*.
+    // superskill install bundles them where no node_modules exists; resolution then
+    // depends on the host superskill's private dep tree (0.3.28+ happens to carry
+    // ts-utils — an accident we do not depend on). Vendor into plugins/sp/lib/ instead.
+    for (const dir of [scriptsDir, join(pluginDir, 'hooks'), join(pluginDir, 'lib')]) {
+        for (const hit of findGobingAiValueImports(dir)) {
+            violations.push({
+                kind: 'gobing_ai_import',
+                target: `${hit.file}:${hit.line}`,
+                message:
+                    `bundled surface ${hit.file}:${hit.line} value-imports @gobing-ai/* — ` +
+                    'superskill install bundles it with no node_modules ("Bundle failed", task 0669). ' +
+                    'Vendor into plugins/sp/lib/ or use a relative import; `import type` is exempt.',
+            });
+        }
     }
 
     return violations;

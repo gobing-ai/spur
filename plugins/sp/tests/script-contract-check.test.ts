@@ -81,6 +81,40 @@ test('R1 — missing .mjs twin for a standard script fails the gate', () => {
     }
 });
 
+test('R5 — @gobing-ai value import in a bundled surface fails the gate', () => {
+    const env = createTempEnv();
+    try {
+        writeFileSync(
+            join(env.scriptsDir, 'my-tool.ts'),
+            "import { getEnvVar } from '@gobing-ai/ts-utils';\nconsole.log(getEnvVar('X'));\n",
+        );
+        const manifest: ScriptManifest = {
+            entries: [{ rel: 'my-tool.ts', contract: 'standard', twin: 'my-tool.mjs' }],
+        };
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
+        expect(violations.some((v) => v.kind === 'gobing_ai_import' && v.target.includes('my-tool.ts'))).toBe(true);
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('R5 — type-only @gobing-ai imports are exempt (erased at bundle)', () => {
+    const env = createTempEnv();
+    try {
+        writeFileSync(
+            join(env.scriptsDir, 'my-tool.ts'),
+            "import type { WorkflowActionTraceWriter } from '@gobing-ai/app';\nimport { join } from 'node:path';\nconsole.log(join('a', 'b'));\n",
+        );
+        const manifest: ScriptManifest = {
+            entries: [{ rel: 'my-tool.ts', contract: 'standard', twin: 'my-tool.mjs' }],
+        };
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
+        expect(violations.some((v) => v.kind === 'gobing_ai_import')).toBe(false);
+    } finally {
+        env.cleanup();
+    }
+});
+
 test('R1 — stale .mjs twin older than .ts source fails the gate', () => {
     const env = createTempEnv();
     try {

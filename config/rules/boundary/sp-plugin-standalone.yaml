@@ -1,0 +1,36 @@
+# Plugin standalone contract — bundled plugin surfaces import only node:* or relative paths.
+#
+# WHY: `superskill install` bundles plugins/sp hooks and scripts on targets (and from
+# marketplace snapshots) with NO node_modules. A bare `@gobing-ai/*` value import only
+# converts if the host superskill happens to carry that package in its private dep tree
+# (superskill 0.3.28+ bundles ts-utils/ts-runtime; older versions do not). When it does
+# not: "Error: Bundle failed" and the plugin cannot install — this broke releases
+# 0.3.81–0.3.88 (task 0669; regression commit 84c87a9ac).
+#
+# Contract:
+# - plugins/sp/hooks/**, plugins/sp/scripts/**, plugins/sp/lib/** may value-import
+#   only `node:*` builtins and relative paths (vendored helpers live in plugins/sp/lib/).
+# - `import type` / `export type` from any package is fine — erased before bundling
+#   (e.g. inline-run-setup.ts's type-only import from @gobing-ai/app).
+# - This rule is the author-time tripwire over DIRECT imports; the transitive closure
+#   and the real `superskill install` path are checked by `bun run plugin-smoke`, and
+#   script-contract-check Rule 5 (manifest-aware) fails the spur-check gate.
+#
+# Scope: plugins/sp bundled surfaces only. apps/packages follow the normal workspace
+# import rules and are not affected.
+include:
+  - "plugins/sp/hooks/**/*.ts"
+  - "plugins/sp/scripts/**/*.ts"
+  - "plugins/sp/lib/**/*.ts"
+rules:
+  - id: sp-plugin-standalone
+    description: >
+      No value imports of workspace packages (`@gobing-ai/*` or any bare specifier)
+      in plugin bundled surfaces — superskill bundles them onto targets with no
+      node_modules. Vendor the helper into plugins/sp/lib/ (see lib/env.ts) or use a
+      relative import. `import type` is exempt.
+    severity: error
+    evaluator:
+      type: rg
+      config:
+        pattern: "^import \\{[^}]*\\} from ['\\\"]@gobing-ai/|^import ['\\\"]@gobing-ai/|^import\\(['\\\"]@gobing-ai/|^} from ['\\\"]@gobing-ai/"
