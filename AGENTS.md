@@ -242,6 +242,7 @@ adapters.
 - **One writer per working tree.** Parallel agents use isolated branches/worktrees.
 - **Commit per task.** Start implementation from a tree clean of other tasks' changes.
 - Surgical scope only: no drive-by refactors, speculative abstractions, or unfinished redesigns.
+- Plugin standalone contract: bundled plugin surfaces (`plugins/sp` hooks/lib/scripts) import only `node:*`/`bun:*` builtins, relative paths, or `import type` — enforced by the `sp-plugin-standalone` rule and `bun run plugin-smoke` (run before releases; a bare `@gobing-ai/*` value import broke installs 0.3.81–0.3.88).
 
 ---
 
