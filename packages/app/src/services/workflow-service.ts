@@ -19,6 +19,7 @@ import { resolveAgentName } from '@gobing-ai/ts-ai-runner';
 
 import {
     type ActionDef,
+    type ActionRedactor,
     collectWorkflowExtensions,
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
@@ -28,6 +29,7 @@ import {
     type HitlResponder,
     loadWorkflowDef,
     loadWorkflowExtensionsIntoHost,
+    type ResumeOwnership,
     type StateMachineWorkflowDef,
     type TransitionFlowWorkflowDef,
     type WorkflowDef,
@@ -153,6 +155,21 @@ function withSelfPidRecording(inner: WorkflowPersistenceAdapter, db: DbAdapter):
                     const result = await target.createOrAttachRun(record);
                     await stamp(result.id);
                     return result;
+                };
+            }
+            // 0901 R4: resume claims are the continue worker's creation moment —
+            // stamp the pid at the actual resume mutation so `workflow cancel`
+            // can reach the detached resumer. A stale pid on a crashed worker
+            // row is tolerated by cancel's ESRCH handling, so no exit-clearing.
+            if (prop === 'claimRunOwnership') {
+                return async (
+                    runId: string,
+                    owner: Parameters<WorkflowPersistenceAdapter['claimRunOwnership']>[1],
+                    expectedStatuses: Parameters<WorkflowPersistenceAdapter['claimRunOwnership']>[2],
+                ) => {
+                    const claimed = await target.claimRunOwnership(runId, owner, expectedStatuses);
+                    if (claimed !== undefined) await stamp(runId);
+                    return claimed;
                 };
             }
             const value = Reflect.get(target, prop, receiver);
@@ -293,6 +310,12 @@ export interface WorkflowRunOptions {
      * the group id for a group-wide SIGTERM.
      */
     recordSelfPid?: boolean;
+    /**
+     * 0901 R5: redactor applied to persisted action results. Callers pass a
+     * shared Spur redactor (secret values + bounded shell-output tails); the
+     * engine applies it at finalize into `action_runs.result_json`.
+     */
+    redactor?: ActionRedactor;
     /** Synchronous in-process steering only; intentionally never serialized for detached runs. */
     steeringController?: WorkflowSteeringController;
     /**
@@ -737,6 +760,7 @@ export class WorkflowAppService {
             runId,
             vars: runVars,
             ...(isDry ? { dryRun: true } : {}),
+            ...(opts.redactor !== undefined ? { redactor: opts.redactor } : {}),
             ...(eventsBus !== undefined
                 ? {
                       // R3 (0601): engine-native events also carry workflow identity;
@@ -860,8 +884,25 @@ export class WorkflowAppService {
         const cutoffIso = new Date(Date.now() - olderThanMinutes * 60_000).toISOString();
         const stale = await dao.listStaleRuns(cutoffIso);
         if (!dryRun) {
+            // 0901 R2: a stale claimed run is an owner the engine lost — mark it
+            // `interrupted` (rerun-resumable) rather than `failed` (wedged).
+            // Rows the engine cannot interrupt (pending / pre-0.5.0) keep the
+            // legacy finalize-to-failed path.
+            const engine = new EngineWorkflowService(
+                createDefaultWorkflowEngineHost({}),
+                new DbWorkflowPersistenceAdapter(db),
+            );
             for (const run of stale) {
-                await dao.finalizeStale(run.id, `stale: non-terminal > ${olderThanMinutes}m (spur workflow clean)`);
+                const interrupted =
+                    run.status === 'running'
+                        ? await engine.interruptRun(
+                              run.id,
+                              `stale: owner lost > ${olderThanMinutes}m (spur workflow clean)`,
+                          )
+                        : undefined;
+                if (interrupted === undefined) {
+                    await dao.finalizeStale(run.id, `stale: non-terminal > ${olderThanMinutes}m (spur workflow clean)`);
+                }
             }
         }
         return {
@@ -1078,6 +1119,12 @@ export class WorkflowAppService {
             hitlVar?: string;
             allowDigestMismatch?: boolean;
             force?: boolean;
+            /** 0901 R5: redactor applied to persisted action results (shell tails). */
+            redactor?: ActionRedactor;
+            /** 0901 R2/R4: resume ownership claim; async workers pass their own attempt+pid. */
+            resumeOwner?: ResumeOwnership;
+            /** 0901 R4: the async continue worker stamps its pid at the resume claim. */
+            recordSelfPid?: boolean;
         },
     ): Promise<WorkflowRunResult> {
         // Same dual-bus wiring as run() (task 0370): adapter verb-form events via
@@ -1086,9 +1133,14 @@ export class WorkflowAppService {
         const eventsBus = this.ctx.events?.();
         // Locate the paused run via RunDao (no engine service needed yet) so the
         // workflow def is available for extension loading (0533 R1/R4).
+        // 0901 R2: interrupted runs are resumable too (engine 0.5.0 reclaims
+        // ownership via CAS; paused defaults to skip-enter, interrupted to
+        // rerun-enter) — the engine is the authority on resumability.
         const row = await new RunDao(await this.ctx.getDb()).traceRowById(runId);
-        if (row?.status !== 'paused') {
-            throw new Error(`Run "${runId}" is not paused (or does not exist) - nothing to continue.`);
+        if (row?.status !== 'paused' && row?.status !== 'interrupted') {
+            throw new Error(
+                `Run "${runId}" is not resumable (status: ${row?.status ?? 'missing'}) - only paused or interrupted runs can be continued.`,
+            );
         }
 
         // Parse persisted metadata FIRST (0784 R1): the recorded launch source
@@ -1246,6 +1298,7 @@ export class WorkflowAppService {
         const svc = await this.createEngineService({
             events: eventsBus,
             extensions: { workflow: resolved.workflow, file: resolved.path },
+            ...(opts?.recordSelfPid === true ? { recordSelfPid: true } : {}),
         });
         const workflow = resolved.workflow;
         // R1 of 0433: inject the operator's HITL answer into resume vars so guard
@@ -1265,6 +1318,8 @@ export class WorkflowAppService {
             // ambient service cwd), never the ambient process cwd.
             workdir: launchWorkdir,
             ...(Object.keys(resumeVars).length > 0 ? { vars: resumeVars } : {}),
+            ...(opts?.redactor !== undefined ? { redactor: opts.redactor } : {}),
+            ...(opts?.resumeOwner !== undefined ? { resumeOwner: opts.resumeOwner } : {}),
             ...(eventsBus !== undefined
                 ? {
                       // R3 (0601): engine-native resume events carry workflow identity;
@@ -1671,6 +1726,9 @@ export class WorkflowAppService {
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
             agentConfig: agentSlice,
             getDb: () => this.ctx.getDb(),
+            // 0901 R5: configured secrets redact streamed shell output at the
+            // emission boundary (bus → CLI logs + system-event ledger).
+            ...(this.ctx.secretValues !== undefined ? { secretValues: this.ctx.secretValues } : {}),
         });
         // 0533 R1/R4: register YAML-declared extensions (actions/guards) on the
         // same host run/continue use, before the service is constructed. The
@@ -2460,7 +2518,7 @@ function traceNextAction(run: WorkflowTraceEntry, outputArtifact?: string): Syst
     if (run.status === 'running' || run.status === 'pending') {
         return { label: 'Follow run', kind: 'command', value: `spur workflow trace ${run.runId} --follow` };
     }
-    if (run.status === 'paused') {
+    if (run.status === 'paused' || run.status === 'interrupted') {
         return { label: 'Continue run', kind: 'command', value: `spur workflow continue ${run.runId}` };
     }
     if (run.status === 'failed' && outputArtifact !== undefined) {
@@ -2501,6 +2559,23 @@ function projectActionTraceResult(
         const value = data[field];
         if (typeof value === 'string') resultFields[field] = redactAndBound(value, secretValues, 256);
         else if (typeof value === 'number' || typeof value === 'boolean') resultFields[field] = value;
+    }
+    // 0901 R5: shell results carry persisted byte-tails (≤ 65,536 bytes, already
+    // secret-redacted at persist time by the Spur ActionRedactor). Project them
+    // verbatim — NOT through the 256-char bound — plus the truncation flags, so
+    // trace surfaces the tail without re-reading the run log.
+    if (result.kind === 'shell') {
+        for (const [field, source] of [
+            ['stdoutTail', 'stdout'],
+            ['stderrTail', 'stderr'],
+        ] as const) {
+            const value = data[source];
+            if (typeof value === 'string') resultFields[field] = value;
+        }
+        for (const flag of ['stdoutTruncated', 'stderrTruncated'] as const) {
+            const value = data[flag];
+            if (typeof value === 'boolean') resultFields[flag] = value;
+        }
     }
     const invocation: Record<string, string | number | boolean> = {};
     if (invocationSource !== undefined) {

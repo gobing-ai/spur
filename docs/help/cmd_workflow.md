@@ -183,7 +183,9 @@ spur workflow continue [options] [run-id]
 |---|---|
 | `--yes` | Skip the CLI resume confirmation only (does **not** set the HITL gate answer) |
 | `--force` | Proceed with resume even if workflow definition drift is detected |
-| `--answer <yes\|no\|cancel>` | Inject a HITL gate answer into resume vars as `__hitlAnswer` before guards re-evaluate (0433). Does **not** imply `--yes`. Invalid values exit `2`. |
+| `--answer <yes\|no\|cancel>` | Inject a HITL gate answer into resume vars as `__hitlAnswer` before guards re-evaluate (0433). Does **not** imply `--yes`. Invalid values exit `2`. Required for headless (`--json` / non-TTY) resumes (0901 R3). |
+| `--async` | Detach the resume into a background worker process and report started/failed after the worker claims the run (0901 R4). |
+| `--no-log` | Skip writing the consolidated run log for the resumed run (0901 R6). |
 | `--json` | Output machine-readable JSON |
 
 Resume a paused (HITL) run. Omit `run-id` to discover the most-recent paused run and confirm

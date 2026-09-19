@@ -343,7 +343,12 @@ export function redactAndBound(value: string, secrets: readonly string[], maxCha
     return redacted.length <= maxChars ? redacted : `${redacted.slice(0, maxChars)}…`;
 }
 
-function redactStreamingValue(value: string, secrets: readonly string[]): { ready: string; carry: string } {
+/**
+ * Streaming redaction primitive (0901 R5): redacts what is certainly complete and
+ * carries back a suffix that could be the prefix of a configured secret. The
+ * caller holds the carry per stream and flushes it at stream end.
+ */
+export function redactStreamingValue(value: string, secrets: readonly string[]): { ready: string; carry: string } {
     const redacted = redactAndBound(value, secrets, Number.MAX_SAFE_INTEGER);
     let carryLength = 0;
     for (const secret of secrets) {

@@ -624,7 +624,7 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
 
 <a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json--spur-workflow-progress-run-id---json"></a>
 
-#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
+#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--async] [--no-log] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
 
 > **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
@@ -699,14 +699,26 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   and control boundaries:
   [`design/workflow-observability.md`](workflow-observability.md).
   `--async` starts the run in a detached background process and returns the run id immediately.
-- `continue [run-id] [--yes]` — resume a paused (HITL) run (E3, design §6 / D04). Omit `run-id` to
-  discover the most-recent paused run and confirm (skipped with `--yes`). With a recorded launch
+  0901 R1: a `--run-id` (or discovered) id whose run row already exists refuses before spawn
+  instead of silently reusing the existing run (exit 1, `Run "<id>" already exists`); the async
+  launcher performs the same pre-flight check, and `continue` reuses the guard for its target id.
+- `continue [run-id] [--yes] [--answer <yes|no|cancel>] [--async] [--no-log]` — resume a paused or
+  interrupted (0901 R2) HITL run (E3, design §6 / D04). Omit `run-id` to
+  discover the most-recent paused run and confirm (skipped with `--yes`). A headless resume
+  (`--json` or non-TTY stdout) without an explicit `--answer` is refused with exit 2 — `--yes`
+  only skips the CLI confirm and never answers gates (0901 R3); the `--async` worker forwards the
+  caller's `--answer`, so detached CI resumes must pass it too. With `--async` the launcher spawns
+  a detached worker, reports `started` once the worker has claimed the run (run-row status leaves
+  paused/interrupted, 0901 R4) or `failed` with a hint to rerun synchronously. Resumed runs
+  persist the consolidated `.spur/run/<RUNID>.log` and pass shell streams through the secret
+  redactor + 64 KiB tail (0901 R5/R6) unless `--no-log`. With a recorded launch
   source (0784 R1), resume replays that exact recorded file from the recorded launch workdir — a
   missing recorded source refuses rather than resolving a same-named replacement; pre-pin rows
   resolve by `workflow_name` with an explicit degraded-identity warning (0784 R2). Checkpoint
   freshness validates in the launch workdir; associated checkpoints must project a nonterminal
   engine state (`pending`/`running`/`approved`). Then `resumeRun`. Works for both lifecycle and
-  pipeline runs; exit 1 if no paused run, the run isn't paused, or it doesn't resolve to `done`.
+  pipeline runs; exit 1 if no resumable run, the run isn't resumable (only `paused` or
+  `interrupted` qualify), or it doesn't resolve to `done`.
   (A state pauses when it declares `pause: true`; the workspace schema supports `pause`.)
 - `cancel <run-id>` — mark a single non-terminal run failed; SIGTERM the worker process group when live. Idempotent: already-terminal runs report no change. Bulk/stale variant is `clean`.
 - `list` — list workflow YAML files by layer, in resolution order (ADR-113): `project`

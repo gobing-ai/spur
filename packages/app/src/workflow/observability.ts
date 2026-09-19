@@ -14,6 +14,7 @@
 
 import type {
     ActionRedactor,
+    ResumeOwnership,
     WorkflowDef,
     WorkflowPersistenceAdapter,
     WorkflowRunRecord,
@@ -477,6 +478,19 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
         // Do not clear correlation state here: the upstream engine deliberately
         // finalizes action rows fire-and-forget, so a late action-finished projection
         // may arrive after the run-finalized projection on the same adapter instance.
+    }
+
+    /** Ownership/interruption CAS — pass-through mirroring the read paths; the engine emits its own events (ADR-025). */
+    async claimRunOwnership(
+        runId: string,
+        owner: ResumeOwnership,
+        expectedStatuses: readonly ('paused' | 'interrupted')[],
+    ): Promise<WorkflowRunRecord | undefined> {
+        return this.inner.claimRunOwnership(runId, owner, expectedStatuses);
+    }
+
+    async interruptRun(runId: string, reason: string): Promise<WorkflowRunRecord | undefined> {
+        return this.inner.interruptRun(runId, reason);
     }
 
     async savePhase(runId: string, phase: string, status: WorkflowStatus): Promise<void> {
