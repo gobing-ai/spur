@@ -4,12 +4,13 @@ name: "Harden workflow engine: shell-output persistence, async continue, termina
 status: todo
 template: standard
 created_at: 2026-09-19T17:18:49.545Z
-updated_at: "2026-09-19T19:58:34.716Z"
+updated_at: "2026-09-19T20:04:45.996Z"
 
 priority: P2
 feature_id: D3
 ac_altitude: task-local
 estimate_hours: "6"
+dependencies: ["0902"]
 ---
 
 ## 0901. Harden workflow engine: shell-output persistence, async continue, terminal-id guard (kk dogfood 091825)
@@ -81,6 +82,14 @@ Non-goals: replay terminal runs, --force overwrite of existing IDs, arbitrary si
 - Closed: --force on continue already consents to definition drift; it is forwarded with its existing meaning, never repurposed for replay or duplicate-ID overwrite.
 - Closed: R3 is a CLI admission rule, not a ban on service resumes with persisted vars. An explicit answer is required for headless CLI execution; --yes and automatic default approval are not substitutes for overriding a persisted answer.
 - **Open / owner: Robin, workflow recovery policy.** R2's requested status restoration is unsafe with engine 0.4.69: resume skips current-state actions. Choose either (A) retain safe resumable interruption in scope and design/release an upstream engine checkpoint/interruption contract before freezing 0901, or (B) explicitly narrow R2 to fail interrupted runs with recovery guidance and require a fresh ID, accepting that this does not deliver paused restoration. SIGKILL/power loss require subsequent reconciliation, not signal cleanup. Recommendation: A if preserving expensive prior stages is the goal. This auto refine cannot silently weaken the handed-off acceptance criterion or invent exactly-once side-effect semantics.
+
+#### Q&A entry — 2026-09-19T20:04:45.995Z
+
+**Resolved (Robin, 2026-09-19, /sp-dev-run 0901 --auto HITL pause):** option **A — upstream engine contract first**. R2 retains safe resumable interruption in scope; an upstream `ts-dual-workflow-engine` checkpoint/interruption contract (ts-libs `packages/dual-workflow-engine`, installed 0.4.69) must be designed and released before 0901 freezes/implements.
+
+- Dependency task **0902** (Requirements R1–R4: pause/resume primitives, side-effect idempotency classes, concurrent-ownership rules, release path) registered and linked via `spur task deps 0901 add 0902`.
+- This run therefore stopped before worktree creation/implement per the Design readiness gate — no code was written.
+- Resume: 0902 shipped → bump `@gobing-ai/ts-dual-workflow-engine` here → re-run `/sp-dev-refine 0901 --depth ready` → `/sp-dev-run 0901`.
 
 ### Design
 
