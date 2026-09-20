@@ -1509,6 +1509,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(wayfinder).toContain('## Destination');
         expect(wayfinder).toContain('## Decisions so far');
         expect(wayfinder).toContain('spur task update');
+        // I7/0906 R1/R3: the tagging recipe is the frontmatter field write — `tags` is
+        // not a body section, and the POSIX-sh-safe form is what CLI-only consumers run.
+        expect(wayfinder).toContain('spur feature update <id> --field tags --value wayfinder-map');
+        expect(wayfinder).not.toContain('--section tags');
         expect(wayfinder).not.toContain('GitHub issue');
         expect(wayfinder).not.toContain('wayfinder:map');
         expect(wayfinder).not.toContain('issue tracker');

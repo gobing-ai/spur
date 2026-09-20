@@ -68,7 +68,7 @@ for (const pat of AUTH_PATTERNS)
 for (const f of doc.followUps ?? []) {
     if (!f.owner) errors.push(`followUp rank ${f.rank} missing owner`);
     if (f.anchor) {
-        const [p, ln] = f.anchor.split(':');
+        const [p] = f.anchor.split(':');
         if (!existsSync(join(repoRoot, p))) errors.push(`followUp ${f.rank} anchor path absent: ${p}`);
     }
 }

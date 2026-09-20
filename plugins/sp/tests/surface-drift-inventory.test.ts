@@ -26,6 +26,7 @@ import {
     backticks,
     type CliRunner,
     checkNounVerbFlags,
+    checkSectionOperand,
     executeScripts,
     flagNames,
     flattenKeys,
@@ -531,6 +532,58 @@ describe('checkNounVerbFlags — drift verdicts', () => {
         checkNounVerbFlags(['help', 'foo', 'bar', 'baz'], [], [], occ);
         checkNounVerbFlags(['alpha'], ['help'], [], occ);
         checkNounVerbFlags([], ['not-a-root-verb'], [], occ);
+        expect(rows.length).toBe(before);
+    });
+});
+
+// ─── Semantic --section operand layer (I7 / task 0906 R2) ────────────────
+
+describe('checkSectionOperand — semantic --section operand drift (task 0906 R2)', () => {
+    const occ = { file: 'fixture.md', line: 1 };
+
+    test('the wayfinder defect (I6/0594 D1) is flagged with the corrected recipe named', () => {
+        // The exact shipped prose span that tagged maps through --section tags.
+        checkSectionOperand('spur feature update <id> --section tags --from-file <(printf \'["wayfinder-map"]\')', occ);
+        const row = rowFor('spur feature update --section tags');
+        expect(row?.status).toBe('mismatch');
+        expect(row?.actual).toContain('--field tags --value');
+    });
+
+    test('metadata-only siblings from the I6 sweep are flagged on task update, quoted and = forms', () => {
+        checkSectionOperand("spur task update 0042 --section 'priority'", occ);
+        expect(rowFor('spur task update --section priority')?.status).toBe('mismatch');
+        checkSectionOperand('spur task update 0042 --section=status', occ);
+        expect(rowFor('spur task update --section status')?.status).toBe('mismatch');
+    });
+
+    test('a genuine body heading is accepted — feature Scope even though scope is in the swept set', () => {
+        // planning-workflow Step 5.6's real AC write and the historical sweep's `scope` overlap:
+        // the per-noun body-section set wins over the metadata classification.
+        checkSectionOperand('spur feature update <id> --section "Acceptance Criteria" --from-file <file>', occ);
+        checkSectionOperand('spur feature update <id> --section Scope', occ);
+        expect(rowFor('spur feature update --section Acceptance Criteria')).toBeUndefined();
+        expect(rowFor('spur feature update --section Scope')).toBeUndefined();
+        checkSectionOperand('spur task update <wbs> --section Plan --json', occ);
+        expect(rowFor('spur task update --section Plan')).toBeUndefined();
+    });
+
+    test('comparison is case-normalized but the row keeps the original operand text', () => {
+        checkSectionOperand('spur task update 0042 --section Tags.', occ);
+        expect(rowFor('spur task update --section Tags')?.status).toBe('mismatch');
+    });
+
+    test('dynamic operands stay unverified (no row) under the existing scanner convention', () => {
+        const before = rows.length;
+        checkSectionOperand('spur task update <wbs> --section <name>', occ);
+        checkSectionOperand('spur task update <wbs> --section $SECTION', occ);
+        expect(rows.length).toBe(before);
+    });
+
+    test('non-update verbs, other nouns, and prose-only mentions assert nothing', () => {
+        const before = rows.length;
+        checkSectionOperand('spur task show 0042 --section tags', occ); // only the update class is in scope
+        checkSectionOperand('spur rule update r1 --section tags', occ); // audit boundary is task/feature
+        checkSectionOperand('never pass `--section tags` here', occ); // prose, not a literal invocation
         expect(rows.length).toBe(before);
     });
 });

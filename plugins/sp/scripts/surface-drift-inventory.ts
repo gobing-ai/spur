@@ -346,6 +346,67 @@ export function checkNounVerbFlags(
     }
 }
 
+// ─── Semantic operand layer (I7 / task 0906 R2) ─────────────────────────────
+
+/**
+ * Metadata-only operands the I6 sweep classified. This is the audit boundary, not a
+ * CLI section matrix: a key that is ALSO a genuine body heading for the noun (feature
+ * `Scope`) is accepted per-noun in checkSectionOperand; anything outside this set is
+ * not statically classifiable and stays unverified.
+ */
+const SECTION_METADATA_KEYS = new Set([
+    'tags',
+    'priority',
+    'status',
+    'phase',
+    'id',
+    'parent',
+    'name',
+    'owner',
+    'scope',
+]);
+
+/** Body headings that overlap the swept metadata keys, per noun (case-insensitive). */
+const NOUN_BODY_SECTIONS: Record<string, ReadonlySet<string>> = {
+    feature: new Set(['scope']),
+};
+
+/**
+ * Semantic operand check (I7 / task 0906 R2): `--section` is a real flag on
+ * task/feature update, so existence parity passes while the operand names a
+ * metadata-only key instead of a body section. Classify literal operands only —
+ * dynamic operands (placeholders) stay unverified under the existing scanner
+ * convention, and quoted/equal forms are handled alongside the spaced form.
+ * Comparison is case-normalized; the original operand text stays in the row evidence.
+ */
+export function checkSectionOperand(spanRaw: string, occ: { file: string; line: number }): void {
+    const parsed = parseInvocation(spanRaw);
+    if (!parsed) return;
+    const noun = parsed.nouns[0];
+    if ((noun !== 'task' && noun !== 'feature') || !parsed.verbs.includes('update')) return;
+    for (const m of spanRaw.matchAll(/--section(?:=|\s+)("([^"]*)"|'([^']*)'|[^\s]+)/g)) {
+        const operand = (m[2] ?? m[3] ?? m[1] ?? '').replace(/[.,;:]+$/, '');
+        if (!operand || PLACEHOLDER.test(operand)) continue; // dynamic — unverified by convention
+        const key = operand.toLowerCase();
+        if ((NOUN_BODY_SECTIONS[noun] ?? new Set()).has(key)) continue; // genuine body heading
+        if (!SECTION_METADATA_KEYS.has(key)) continue; // outside the audit boundary — unverified
+        // P3 (0906 review): feature update owns the generic --field/--value pair; task update
+        // exposes metadata only via dedicated flags (no --field/--value, no --tags), so the hint
+        // must not suggest a pair that would fail with VALIDATION_FAILED on task rows.
+        const remediation =
+            noun === 'feature'
+                ? `use --field ${operand} --value <value>`
+                : `task update exposes metadata only via dedicated flags (e.g. --priority <value>), not --section`;
+        record(
+            `spur ${noun} update --section ${operand}`,
+            'semantic-operand(I6 metadata keys vs noun body sections)',
+            'mismatch',
+            `--section writes a body section; "${operand}" is a metadata-only ${noun} operand — ${remediation}`,
+            occ,
+        );
+    }
+}
+
 export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
     const files = [
         ...walk(join(root, 'commands'), ['.md']),
@@ -398,6 +459,7 @@ export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
                         continue;
                     }
                     checkNounVerbFlags(parsed.nouns, parsed.verbs, parsed.flags, occ);
+                    checkSectionOperand(span, occ);
                 }
                 if (file.endsWith('.ts')) return;
                 if (inVerbTable && refNoun && /^\|/.test(line)) {
@@ -430,7 +492,10 @@ export function sweepPluginTrees(root: string = PLUGIN_ROOT): void {
             } else {
                 for (const span of lineInvocationSpans(line)) {
                     const parsed = parseInvocation(span);
-                    if (parsed) checkNounVerbFlags(parsed.nouns, parsed.verbs, parsed.flags, occ);
+                    if (parsed) {
+                        checkNounVerbFlags(parsed.nouns, parsed.verbs, parsed.flags, occ);
+                        checkSectionOperand(span, occ);
+                    }
                 }
             }
         });
@@ -764,11 +829,11 @@ export function sweepWorkflows(opts: { run?: CliRunner; wfDir?: string; link?: s
             .forEach((line: string, i: number) => {
                 for (const span of lineInvocationSpans(line)) {
                     const parsed = parseInvocation(span);
-                    if (parsed)
-                        checkNounVerbFlags(parsed.nouns, parsed.verbs, parsed.flags, {
-                            file: path,
-                            line: i + 1,
-                        });
+                    if (parsed) {
+                        const occ = { file: path, line: i + 1 };
+                        checkNounVerbFlags(parsed.nouns, parsed.verbs, parsed.flags, occ);
+                        checkSectionOperand(span, occ);
+                    }
                 }
             });
     }

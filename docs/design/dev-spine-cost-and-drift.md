@@ -102,7 +102,7 @@ Both directions checked: *asserted-but-absent* and *available-but-unused*.
 
 | # | Noun | Finding | Class | CLI side | Plugin side | Status vs I2/I3 |
 | --- | --- | --- | --- | --- | --- | --- |
-| D1 | feature | `sp:wayfinder` documents `spur feature update <id> --section tags`, but `tags` is **frontmatter**, not a section; live CLI rejects a non-section `--section` and the correct route is `--field tags --value` | **semantic (flag→wrong operand)** | `apps/cli/src/commands/feature.ts` (`--section` validated against closed-world section set; `--field` for frontmatter) | `plugins/sp/skills/wayfinder/SKILL.md:123` | **NEW** — a semantic misuse existence-check parity structurally cannot catch |
+| D1 | feature | `sp:wayfinder` documents `spur feature update <id> --section tags`, but `tags` is **frontmatter**, not a section; live CLI rejects a non-section `--section` and the correct route is `--field tags --value` | **semantic (flag→wrong operand)** | `apps/cli/src/commands/feature.ts` (`--section` validated against closed-world section set; `--field` for frontmatter) | `plugins/sp/skills/wayfinder/SKILL.md:123` | **NEW** — a semantic misuse existence-check parity structurally cannot catch. **RESOLVED 2026-09-20 (task 0906/F1):** recipe corrected to `--field tags --value wayfinder-map`; F2 semantic layer (`checkSectionOperand` in `plugins/sp/scripts/surface-drift-inventory.ts`) now enforces the class |
 | D2 | feature | `spur feature get` alias for `show` shipped post-I3 (0534); plugin facade documents `get` | **parity (verb added)** | `apps/cli/src/commands/feature.ts:47` (`.alias('get')`) | `spur-cli/references/features.md` | OK (both surfaces agree) |
 | D3 | agent | role-tier SSOT **moved into `packages/config`** post-I3 (c14dc3be) | **config/reference moved** | `packages/config` (task 0572) | `spur-cli/references/agent.md` | re-aligned (facade refs still name the verbs; ownership moved) |
 | D4 | workflow | `clean`/`cancel` split (bulk vs single-run) documented in facade and matches live | **parity (verb set)** | `apps/cli/src/commands/workflow.ts` | `spur-cli/references/workflows/operations.md` | OK |
@@ -122,7 +122,8 @@ CLI claim) is confirmed still-correct.
 - **Confirmed present:** `sp:wayfinder` `--section tags` (D1, `wayfinder/SKILL.md:123`). The
   correct route (`--field tags --value …`) is documented in task 0473
   (`docs/tasks3/0473…:152,226,288`). The charting-forensics task 0534 is `done` but did **not**
-  touch this line, so it remains live.
+  touch this line, so it remains live. **Resolved 2026-09-20 (task 0906/F1)** — the line now
+  documents the `--field` route; historical finding retained above.
 - **Sibling sweep:** `rg '--section (tags|priority|status|phase|id|parent|name|owner|scope)'` over
   `plugins/` → **one hit only** (`wayfinder/SKILL.md:123`). **No siblings.** The `--section` surface
   is otherwise applied only to genuine section bodies.
@@ -133,8 +134,8 @@ CLI claim) is confirmed still-correct.
 
 | # | Finding | Size | Expected cost delta | Recommendation |
 | --- | --- | --- | --- | --- |
-| F1 | Fix `wayfinder/SKILL.md:123` to `--field tags --value wayfinder-map` | **S** | Removes a live failed-write path when users tag a map; corrects a class the parity harness cannot see | Fix now — document-only, no surface change |
-| F2 | Teach the parity harness a **semantic layer** (flag-valid-but-wrong-operand), starting with `--section <frontmatter-key>` | **M** | Catches the D1 class and future semantic drift that existence-checks miss (D3's move is the nearest trigger) | Add after F1; it is the enforcement that keeps this audit from re-drifting |
+| F1 | Fix `wayfinder/SKILL.md:123` to `--field tags --value wayfinder-map` | **S** | Removes a live failed-write path when users tag a map; corrects a class the parity harness cannot see | Fix now — document-only, no surface change. **DONE 2026-09-20 (task 0906)** |
+| F2 | Teach the parity harness a **semantic layer** (flag-valid-but-wrong-operand), starting with `--section <frontmatter-key>` | **M** | Catches the D1 class and future semantic drift that existence-checks miss (D3's move is the nearest trigger) | Add after F1; it is the enforcement that keeps this audit from re-drifting. **DONE 2026-09-20 (task 0906):** `checkSectionOperand` wired into the plugin-tree and workflow sweeps |
 | F3 | Record the **injected file list per message** in the token ledger / ETL so per-file token cost is measurable | **M–L** | Turns R1 from aggregate-only to per-file attribution — directly answers "where exactly does the bootstrap go" | High value, cross-package; file as a separate history-plane feature |
 | F4 | (Conditional) reduce cold-subagent bootstrap by reusing a warm prefix or coalescing stage reads | **L** | Bounds the confirmed 97.15 %→98.96 % cache gap in short subprocess launches | Only worth it after F3 quantifies per-file cost; do not speculatively optimize now |
 
