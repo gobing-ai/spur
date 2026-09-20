@@ -2438,3 +2438,65 @@ Learnings captured to `.spur/run/2e03427c-1e94-495e-a009-e3a37dc42319-wrapup-lea
 - A `/tmp` fixture harness that is not retained/committed leaves "reproduced deterministically" resting on recorded output only — link or commit the harness if reproduction matters.
 - H2 (`## A.`) sub-headings above the task section level are parser-safe (`MarkdownDocument` splits only at the domain level; `--section` round-trips intact) but off corpus convention — prefer `####`.
 
+Done. Drift report (§7, scoped to 00/03/04 + design/*): 8 checks run, 1 finding, repaired.
+
+**Finding (T3, fixed):** `spur builder bump-ver` gained a plugin-install-smoke refusal gate (3b53e064f, `release-ops.ts:135-156`) after the last satellite sync — undocumented. Repaired in the owning satellite `docs/design/cli-contracts.md` (abort-conditions paragraph). 04 index row untouched per §4.5 (pointer/title/state unchanged).
+
+**Zero-finding checks (commands backing them):** 04↔`docs/design/` set equality via `comm` of link targets vs disk (68/68 both ways); ADR register `rg '^## ADR-'` (000–122 contiguous, no dupes); frontmatter contract-verify 00/03/04 vs constitution §4.1/§4.3 (owns/authority/edit_rules all match); 03 recovery prose + cli-contracts recovery/continue sections vs merged 0901 code (`workflow-service.ts:1140`, `workflow.ts:1067` exit 2, sweep-to-interrupted, redacted 64 KiB tails — all in sync); post-sync commits `git show --stat` on d8ff752b2/7b957ddaa (plans/features/tasks/memory layers only — no T1/T3 obligation on scoped docs). Out-of-scope 0903 findings (stale help string, wayfinder recipe, plugin prose) stay notes — already owner-routed to backlog I7; not repaired here.
+
+No task/feature corpus writes. Artifact written to `.spur/run/4630aaa2-4589-4b42-843f-8c19b2546a46-wrapup-learnings.md`.
+
+# Wrapup learnings — run 4630aaa2 (feature I31, tasks 0903/0904)
+
+## 2026-09-20 (UTC, task-record dates)
+
+### Task 0903 — Audit post-delivery CLI-plugin-workflow contract adoption (wayfinder:research, done)
+
+Conventions
+
+- Evidence provenance convention: capture live evidence with the source-local CLI (`bun apps/cli/src/index.ts … --json`) in the worktree, never bare `spur` for evidence — bare `spur` resolves to the registered published package (0.3.90), whose `config/workflows` layer shadows the checkout.
+- Audit pattern that held: a contract matrix per surface — source assertion vs live behavior vs evidence command vs confidence — makes drift findings reproducible instead of narrative.
+- Role-routing SSOT scans only `plugins/sp/commands` + `.claude/commands` (`slash-commands-service.ts:161-188`); installed `~/.agents/skills` adapters are NOT scanned for roles.
+
+Patterns
+
+- Design satellites can carry same-commit prose obligations (e.g. B7 session-policy paragraph owed to `cross-cutting.md` per `session-pinned-dispatch.md §8`); grep the obligation, not the feature, to find adoption gaps — code shipped, prose lags silently (F3).
+- Findings routed with owner candidates + smallest slice named (F1 → backlog I7; F4 → B3+I4) keeps an audit actionable without scope creep.
+
+Gotchas
+
+- Dual-copy workflow shadowing: 9 definitions resolve from BOTH `registered` and `shared` layers, 0 project overrides — editing checkout `config/workflows/` does not affect bare-`spur` runs until the registered copy updates (ADR-113 layering; F7).
+- Stale help string vs behavior: `agent run --agent` help says "host-session-only; errors on headless" while code substitutes + warns once (`agent-service.ts:1766-1778` vs `commands/agent.ts:290`) — help strings need parity assertions, they rot independently of behavior (F2).
+- Stale recipe in skill corpus: wayfinder SKILL.md still documents `feature update --section tags --from-file`; live surface is `--field/--value` + closed-world `--section` set (F1) — already owned by backlog I7, do not re-fix ad hoc.
+- Installed superskill adapters strip `role:` frontmatter and lag source by mtime (stale-by-date, semantically equal on diff); no audited consumer reads roles from `~/.agents/skills`, so impact unproven — hypothesis, not bug (F4).
+- Partial provenance is expected, not a bug: doctor `--json` rows carry `availability{owner,since,reason}` but `since`/`reason` render null and `usage` null on a machine with no snapshot/availability event (H1 → routed to 0904, which confirmed it).
+
+### Task 0904 — Validate usage-to-availability decisions with sanitized fixtures (wayfinder:research, done)
+
+Conventions
+
+- Hermetic validation pattern: `/tmp` sandbox with own project dir + own SQLite + `SPUR_SKIP_GLOBAL_CONFIG=true`; freeze redaction rules BEFORE reading any live provider output; no auth material in fixtures; error entries carry labeled fixture text only; live codexbar quoted only as provider + `usedPercent` + `updatedAt`.
+- Dry-run write-nothing must be proven, not assumed: check no `~/.config/spur/agent-usage.json` appears, `snapshotPath: null`, `drain: null`, and diff fixture YAML before/after apply.
+- Fixture rows should map 1:1 to decision categories (exhausted / no-usage / headroom / error / stale / unmapped / ghost / operator-owned / case-variant prefix) and run against the REAL producer/consumer (`agent-usage-producer.ts`, `agent-quota-updates.ts`), never a mock — that is what made the preview-vs-drain mismatch reproducible.
+
+Gotchas (validated against live code, none fixed — investigation-only task)
+
+- Preview honesty is asymmetric: producer `changes[]` is computed before the drain and consults operator ownership only in the disable direction — recovery-direction dry-run predicts "would-apply enabled" for an operator-owned disable, the drain blocks it (`skippedOperatorOwned`, `agent-quota-updates.ts:302-315`) and the row still reads `applied`. Protection works; the preview over-promises (§C, ranked follow-up, nothing implemented).
+- No producer-side staleness gate: a 72 h-old `updatedAt` still disables an executor and the stale timestamp propagates into the written `since` (`agent-quota-updates.ts:327-331`); staleness is enforced only doctor-side (6 h, display-only, `agent-service.ts:2634`).
+- No timeout owner in the usage chain: `CodexbarUsageSource` passes no timeout (`agent-usage-source.ts:35-41`), `resolveDeadline(undefined, undefined)` arms none — a hung codexbar hangs `agent usage` indefinitely; ~113 s wall for a full 128-provider sweep is normal, not a hang.
+- Reporting honesty: idempotent re-writes count as `applied: 1` with updater result `unchanged`; `AgentQuotaDrainSummary` has no separate unchanged counter — "applied" absorbs no-ops.
+- Quota writes land in the DECLARING layer, not the requested one: consumer asks `layer: 'global'` but the updater re-selects the declaring layer (project fragment wins, `executor-update.ts:89-107`); on this machine every executor is global, so a real (non-dry) quota run would write `~/.config/spur/config.yaml` machine-wide.
+- Matching asymmetries are by design: provider equality is case-insensitive on `agent`, model prefix is `split('/')[0].toLowerCase()` (slashless model never prefix-matches), but executor lookup at drain time is case-sensitive (`agent-quota-events.ts:91-97`); `antigravity` provider does not match `agent: antigravity-cli` (equality, not substring).
+- Reason-text quirk: an all-null provider sorting alphabetically first becomes the row `driver` and renders "headroom: all usage windows below 100%" for a provider with no windows; the availability outcome was still correct in every exercised case.
+- First updater write normalizes YAML indentation (comments/ordering/values otherwise preserved) — don't mistake the reformat for content drift when diffing.
+- Per-provider elapsed time is unknowable: one buffered spawn covers all providers and the capture shape carries no per-provider timings — record as unknown, don't estimate.
+
+Testing convention
+
+- Implement-scope verification is targeted probes only (29+28+3 pass across `executor-update` / `agent-quota-updates` / `agent-usage-producer` test files); the full gate belongs to the pipeline's test hop.
+
+## 2026-09-20 — wrapup doc-evolve (this pass, run-scoped)
+
+- Drift audit (§7, scoped to 00/03/04 + design/*): 04↔`docs/design/` set equality clean both ways (68/68); ADR register contiguous ADR-000…122, no dupes; 00/03/04 frontmatter matches constitution §4.1/§4.3; ADR-122 + 03 §6.2 + cli-contracts recovery prose all match merged 0901 code (CAS resume, `paused|interrupted` resumable, sweep to `interrupted`, headless `continue` exit 2 at `workflow.ts:1067`, secret-redacted 64 KiB tails); no missed T1/T3 obligations in post-sync commits.
+- One T3 finding repaired: `spur builder bump-ver` now refuses without a passing plugin-install-smoke gate (3b53e064f, `release-ops.ts:135-156`) — documented in the owning satellite `docs/design/cli-contracts.md` bump-ver section; 04 index row unchanged (§4.5: pointer/title/state unchanged → no index edit).
+- Out-of-scope notes stay notes: F1/F2/F3 live in `plugins/sp` prose and CLI help strings, already owner-routed by 0903 (I7 etc.) — not repaired here.

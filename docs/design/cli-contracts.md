@@ -170,7 +170,11 @@ future spur-dev → public-noun promotion needs its own consent-gate entry
 
 Package ids are unscoped short names (`@gobing-ai/spur` → `spur`). Unknown ids, invalid semver, a
 dirty tree, a detached HEAD, or an existing local/origin tag abort with exit 1 and usage text
-(`releaseUsage`). Output and exit behavior are identical to the legacy `spur-dev release` path.
+(`releaseUsage`). Before any manifest mutation `bump-ver` runs the plugin-install-smoke gate
+(`bun run plugin-smoke`); a failed gate aborts with the refusal error ("fix the plugin surface
+before releasing"), and a repo without the gate script (e.g. throwaway bump-ver test repos)
+skips the gate with a visible note. Output and exit behavior are identical to the legacy
+`spur-dev release` path.
 
 **Release knobs are project config, not code (`.spur/config.yaml` `builder.bump-ver`).** The tag
 separator, publish workflow, commit type/scope, and `gh run list` limit resolve from the merged
