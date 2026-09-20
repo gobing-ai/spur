@@ -1,6 +1,6 @@
 {
     "name": "@gobing-ai/spur-config",
-    "version": "0.3.89",
+    "version": "0.3.90",
     "type": "module",
     "private": true,
     "exports": {
