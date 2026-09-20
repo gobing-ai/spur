@@ -4,7 +4,7 @@ name: Make usage preview and apply outcomes conservative and truthful
 status: done
 template: feature-impl
 created_at: 2026-09-20T15:48:46.080Z
-updated_at: "2026-09-20T19:56:29.759Z"
+updated_at: "2026-09-20T22:32:49.443Z"
 feature_id: B61
 priority: P1
 tags:
@@ -102,19 +102,15 @@ Conservative decision + truthful outcome fix, confined to the existing producer 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/services/agent-usage-producer.ts:340-343 — decisionMapping filters `status !== 'no-usage'`; :377-381 exhaustive driver merge (any exhausted wins on shared executors); errored providers stay diagnostic (test "R1 (0907): a no-usage provider drives no decision and no observation, stays diagnostic" pass; "shared executor — exhausted valid signal wins over an absent one" pass) |
-| R2 | MET | packages/app/src/services/agent-usage-producer.ts:355-367 — operator-owned short-circuit (`current.disabled && current.owner === 'operator'`) before planning, emits no-op `no observation recorded`; :153-155 operatorOwnershipReason covers bare `true`; drain re-checks fresh config (agent-quota-updates.ts unmodified). Tests "bare disabled:true survives apply — no-op with ownership reason, no row" and "an operator-owned disable is preserved even against exhaustion" pass |
-| R3 | MET | packages/app/src/services/agent-usage-producer.ts:392 — change starts `pending`, conservative until acknowledged; :451-489 recordUsageObservation tracks exact observation_id; :507-531 settleRecordings (rejected → skipped, thrown → pending, Promise.allSettled inspected); :536-570 finalizeOutcomes — :550 replaced observation_id → skipped (superseded), :553-556 applied only when applied_observation_id matches with skipped_reason null. Tests "a recording rejected as superseded is skipped, never success" and "a failed delivery is pending with the reason, never applied" pass |
-| R4 | MET | No modification: `git diff --name-only |
-| R5 | MET | apps/cli/src/commands/agent.ts:182-190 — skipped/pending targets printed as "(requested target — completion unconfirmed)", every decision listed with `[action]`; docs/design/session-pinned-dispatch.md:67 delivery-semantics paragraph; plugins/sp/skills/spur-cli/references/agent.md action glossary updated; CLI suite 6/6 pass |
+| R1 — usage decisions require a real signal and respect operator ownership | MET | R1: `packages/app/src/services/agent-usage-producer.ts:340` — `decisionMapping` filters `classification.status !== 'no-usage'` before decisions; no-usage/errored providers stay diagnostic; severity merge over signal providers (any exhausted wins, alphabetical-first driver) re-read at :371-381 this run \| R2: `packages/app/src/services/agent-usage-producer.ts:355-367` — operator pre-check (`current.disabled && current.owner === 'operator'`) emits `no-op` with `operatorOwnershipReason` (`:153-155`), no observation recorded; drain re-check untouched (`packages/app/src/services/agent-quota-updates.ts` absent from commit e2a6922f9 stat) |
+| R2 — usage actions describe acknowledged outcomes | MET | R3: `packages/app/src/services/agent-usage-producer.ts:392` — change starts `pending`; `recordUsageObservation` returns exact `{ observationId, outcome }` (:451-489); `settleRecordings` (:507-534) — rejected → `skipped`, thrown → `pending` (Promise.allSettled inspected); `finalizeOutcomes` (:536-570) — `applied` only when `applied_observation_id === observationId` and `skipped_reason === null`; replaced row → `skipped`; unacknowledged/`last_error` → `pending` \| R5: `apps/cli/src/commands/agent.ts:182-190` — every decision listed; `skipped`/`pending` render "(requested target — completion unconfirmed)"; `docs/design/session-pinned-dispatch.md:67` delivery-semantics paragraph re-read this run; `plugins/sp/skills/spur-cli/references/agent.md:235-244` action glossary re-read this run |
+| R4 — usable partial provider results remain supported | MET | R4: No drain/DAO/quota-consumer edits — `git show --stat e2a6922f9` touches no `agent-quota-updates.ts`/DAO file; existing layer-precedence/partial-error/nonzero-capture suites green this run (`bun test tests/services/agent-quota-updates.test.ts` inside packages/app: part of 39 pass / 0 fail / 166 expect) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | producer :340-343, :355, :377-381; tests 38 pass 0 fail incl. R1 (0907) no-usage/shared-executor cases |
-| AC2 | MET | test | producer :153-155, :355-367; tests "bare disabled:true survives apply", "operator-owned disable preserved" pass |
-| AC3 | MET | test | producer :392, :507-531, :536-570; tests superseded→skipped, failed→pending pass; action union documented at :376-390 |
-| AC4 | MET | test | agent-quota-updates.ts untouched (diff 0); 0892 R2/R3 tests pass; per-provider error skip behavior retained |
-| AC5 | MET | test | apps/cli/src/commands/agent.ts:182-190; design doc line 67; skill reference updated; CLI tests 6 pass 0 fail |
+| R1 — usage decisions require a real signal and respect operator ownership | MET | test | AC1: `cd packages/app && bun test tests/services/agent-usage-producer.test.ts tests/services/agent-quota-updates.test.ts` → 39 pass, 0 fail (incl. R1 no-usage + shared-executor exhausted-wins cases); source anchors :340, :371-381 \| AC2: Same run: bare `disabled:true` apply no-op + operator-object preservation cases pass; producer :355-367, :153-155 |
+| R2 — usage actions describe acknowledged outcomes | MET | test | AC3: Same run: exact-ack applied, superseded-recording → skipped, failed-delivery → pending cases pass; producer :392, :451-489, :507-534, :536-570 \| AC5: `cd apps/cli && bun test tests/commands/agent-usage.test.ts` → 6 pass, 0 fail (operator no-op, `skippedOperatorOwned === 0`, preview ownership line); CLI rendering :182-190; design doc :67; reference :235-244 |
+| R4 — usable partial provider results remain supported | MET | test | AC4: Same run: agent-quota-updates.test.ts layer precedence (project/global/shadowed), partial provider errors, nonzero parsable captures — all pass; no writer modification in commit stat |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

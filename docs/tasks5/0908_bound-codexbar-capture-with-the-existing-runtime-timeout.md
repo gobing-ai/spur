@@ -4,7 +4,7 @@ name: Bound Codexbar capture with the existing runtime timeout
 status: done
 template: feature-impl
 created_at: 2026-09-20T15:48:46.080Z
-updated_at: "2026-09-20T19:55:49.268Z"
+updated_at: "2026-09-20T22:32:49.665Z"
 feature_id: B61
 priority: P1
 tags:
@@ -102,17 +102,13 @@ No public CLI flag or config field was added; app layer stays spawn-free.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `apps/cli/src/services/agent-usage-source.ts:21` — `DEFAULT_CAPTURE_TIMEOUT_MS = 180_000`; `:36-38` — defaulted constructor `timeoutMs` test-only override, non-finite/non-positive falls back to default; `:52` — `NodeProcessExecutor.run({ timeout })`; runtime owns the boundary (`node_modules/@gobing-ai/ts-runtime/src/process-executor.ts:72,129-129` — `timeout?: number |
-| R2 | MET | `apps/cli/src/services/agent-usage-source.ts:64-75` — structured `outcome` checked before any exit-code/parsing fallback: `timeout |
-| R3 | MET | Normal nonzero pass-through preserved: `apps/cli/tests/services/agent-usage-source.test.ts:51-56` (exit 1 with parsable `[]` returns capture, only `outcome: 'exit'` reaches it per source `:76-83`); mixed healthy/provider-error entries still applied: `apps/cli/tests/commands/agent-usage.test.ts:154-155` (openai `error` skipped, grok `headroom` applied); launch-failure handling preserved: `agent-usage-source.test.ts:62-70` (missing binary fail-closed). |
-| R4 | MET | Bounded termination proven: disposable Bun child writes valid JSON then hangs; injected 2000 ms deadline ⇒ `UsageSourceError`, child pid probed with `kill(pid,0)` and not alive (`apps/cli/tests/services/agent-usage-source.test.ts:72-102`). Fail-closed writes proven: injected timed-out capture rejection leaves snapshot bytes, observation row and config ownership unchanged (`packages/app/tests/services/agent-usage-producer.test.ts:168-203`). Limit + retained partial-provider behavior documented in owning design (`docs/design/session-pinned-dispatch.md:59,63` — §3.4 steps 1 and 5). |
+| R3 — Codexbar capture has a finite deadline | MET | R1: `apps/cli/src/services/agent-usage-source.ts:24` — `DEFAULT_CAPTURE_TIMEOUT_MS = 180_000`; constructor test-only override at :38-41 with invalid-value fallback (`Number.isFinite && > 0`, else default); `NodeProcessExecutor.run({ timeout: this.timeoutMs })` at :55; no public CLI flag or config field in commit e2a6922f9 stat (no packages/config diff) \| R2: `apps/cli/src/services/agent-usage-source.ts:66-83` — structured `outcome` checked before exit-code fallback; `timeout\|cancelled` → `UsageSourceError` naming the deadline ("capture exceeded the N ms deadline and was terminated", no install advice); `signal\|error` → fail-closed unusable-capture error; launch failure keeps install-advice text (separate branch :58-62) \| R4: Hanging-child regression in `apps/cli/tests/services/agent-usage-source.test.ts` (disposable Bun child writes valid JSON then hangs; 2000 ms injected deadline; pid reaping probe) + producer fail-closed prior-state test in `packages/app/tests/services/agent-usage-producer.test.ts`; design doc §3.4 documents the 180000 ms default, runtime-owned termination, and the normally-completed-only partial-provider retention |
+| R4 — usable partial provider results remain supported | MET | R3: `apps/cli/src/services/agent-usage-source.ts:84-89` — only `outcome: 'exit'` (default when absent) reaches the exit-code pass-through preserving nonzero parsable-array captures; per-provider partial behavior retained per `docs/design/session-pinned-dispatch.md` §3.4 step 5 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Finite deadline: `agent-usage-source.ts:21,36-38,52`; hanging-child test green with injected 2 s deadline (`agent-usage-source.test.ts:72`, "hanging capture hits the deadline and the child is reaped" pass, 2131.86 ms). |
-| AC2 | MET | test | Interrupted capture cannot update availability: outcome gate before parsing (`agent-usage-source.ts:64-75`) + producer fail-closed test asserting snapshot/row/config unchanged (`agent-usage-producer.test.ts:168-203`). |
-| AC3 | MET | test | Usable partial provider results preserved: nonzero pass-through (`agent-usage-source.test.ts:51`) and mixed healthy/error entries applied (`agent-usage.command test:154-155`); only normally completed runs keep this (`agent-usage-source.ts:76`). |
-| AC4 | MET | test | Timeout regression leaves prior state intact: producer test `agent-usage-producer.test.ts:168-203` pass; design §3.4 documents the 180000 ms limit and retained partial-provider behavior (`docs/design/session-pinned-dispatch.md:59,63`). |
+| R3 — Codexbar capture has a finite deadline | MET | test | AC1: `cd apps/cli && bun test tests/services/agent-usage-source.test.ts tests/commands/agent-usage.test.ts` → 15 pass, 0 fail (incl. hanging-child deadline case); source :24, :38-41, :55 \| AC2: Same run: timeout error asserts `deadline` text and no `install codexbar` advice; injected capture rejection reaches producer as error before writes (source :66-83) \| AC4: `cd packages/app && bun test tests/services/agent-usage-producer.test.ts` → 11 pass, 0 fail (R4 0908 fail-closed case: seeded snapshot + observation row + config all unchanged after timed-out capture rejection); child-reaping probe in CLI suite |
+| R4 — usable partial provider results remain supported | MET | test | AC3: Same run: normally-completed nonzero capture with parsable array still applies; mixed healthy/provider-error entries preserved (source :84-89 + CLI command suite) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -125,8 +121,6 @@ No public CLI flag or config field was added; app layer stays spawn-free.
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:d960af7c99afc09ea29e2a30cff76e5edcd711561ec626392c87e4cb68c2016f |
-| P4 | proof-input-digest | — | sha256:d960af7c99afc09ea29e2a30cff76e5edcd711561ec626392c87e4cb68c2016f |
 
 ### References
 
