@@ -2385,3 +2385,56 @@ Learnings captured to `.spur/run/2e03427c-1e94-495e-a009-e3a37dc42319-wrapup-lea
 - Blocked-on-upstream tasks: register the prerequisite as a real dependency (0902), then re-freeze requirement/design/AC against the DELIVERED contract after it ships — never implement against a draft.
 - Wrapup doc split that avoids merge conflicts: design satellites + facade reference + help ride the feature branch in the same commit as code; the ADR (cross-module invariant), `03` mechanism text, and `04` index land on main at wrapup — keep the two sets disjoint.
 - One writer per working tree is real: a second writer appeared in main mid-wrapup (`AGENTS.md`, `package.json`, `plugins/sp/scripts/script-contract-check.ts` + test, untracked rule/script files). Foreign changes were left unstaged; only the three wrapup docs files were committed (`5c4aa5129`).
+# Working Learnings — runall-i31-20260919-180944 wrapup
+
+## 2026-09-20 — WBS 0903 (Audit post-delivery CLI-plugin-workflow contract adoption)
+
+### Conventions
+- Evidence provenance convention: capture all live evidence with the source-local CLI (`bun apps/cli/src/index.ts … --json`), never bare `spur` — bare runs resolve the published `registered` workflow layer which shadows the checkout copy (`~/node_modules/@gobing-ai/spur/config/workflows`, published 0.3.90) over `shared` (A7/F7 dual-copy shadowing).
+- Research-artifact shape that survived review: one contract matrix (source path:line + asserted shape + live behavior + evidence command + confidence), one disposition list, one owner register — reuse existing owners (I7, B1, B3, I4, D62, P, E6); never open a parallel backlog subsystem.
+- Disposition vocabulary discipline: confirmed mismatch / stale guidance / adoption gap / hypothesis — a hypothesis is never reported as a bug (AC2).
+
+### Errors fixed
+- Round-1 defect: A4/H1 misdescribed the `agent doctor --json` availability schema. Fixed by re-verifying against a fresh capture field-for-field: 16 rows, every row carries `availability{disabled,owner,since,reason}`, exactly 6 disabled rows with `owner:"operator"`, `since`/`reason` null on all, top-level `usage` null, B8 `capabilities`+`verifiedAgainst` present.
+- Four stale line anchors re-pointed after review; a second pass found two more in A3 (`session-pinned-dispatch.md` usage producer is §3.4 at :57-69, not :113-118; `agent.md` usage row is :29, not :26).
+- Dangling label "H2" referenced twice but defined nowhere — every referenced label must resolve.
+
+### Patterns
+- Runtime receipt/error vocabulary (wait-family `occupant_gone/run_replaced/wait_stalled/timeout`, `selector_unmatched/selector_ambiguous`; message hold reasons with `outcome-unknown` never auto-released) verified flag-level; runtime semantics need `spur serve` + a live occupant — declared as a named gap instead of guessed (G1/G4/G65).
+- Session-policy adoption checkable mechanically: precheck `doctor.probe` pins `__executor.<role>`; implement/fix = `role: coder` + `session: reuse` + `requireDiff` + `requiresCapabilities`; review/verify = `role: reviewer` + fresh pins (`task-pipeline.yaml:199-213, 229-241, 423-442, 494-505`).
+
+### Gotchas
+- Line anchors rot within a single session even when the claim stays true — re-verify every path:line citation against the file before publishing.
+- Installed `~/.agents/skills/sp-*` adapters (83 dirs) strip `role:` frontmatter from every SKILL.md; roles actually resolve from `config` (scan roots `plugins/sp/commands` + `.claude/commands`) — installed-copy impact unproven (F4 → B3+I4), no parallel owner.
+- `mtime` comparisons: file vs directory mtime differ (17:28 file vs 17:38 dir) — name which one you cite.
+- doctor provenance `since`/`reason` stay null until a real availability event or usage snapshot exists; a missing snapshot (`usage: null`) is operator data, not a code bug (F6) — scheduled capture is run-once by design.
+- Status/evidence questions (D62 `active` while all children `done`) are recorded as questions — never auto-closed, no status touched by research.
+- Open decisions stay open: public-surface compatibility tolerance (U1), who owns code-side help-text-vs-behavior drift (U2) — plugin parity harnesses do not see CLI help strings.
+
+## 2026-09-20 — WBS 0904 (Validate usage-to-availability decisions with sanitized fixtures)
+
+### Conventions
+- Hermetic sandbox pattern for provider/config-adjacent validation: own project dir + own SQLite DB + `SPUR_SKIP_GLOBAL_CONFIG=true`; pin snapshot path with `SPUR_AGENT_USAGE_SNAPSHOT`; freeze fixture schema and redaction rules BEFORE reading any live provider output.
+- Sanitization rules that passed security review: no auth material; error entries carry labeled fixture text only; live codexbar output quoted only as provider + `usedPercent` + `updatedAt` (stderr/diagnostic bodies unquoted).
+- Reuse the real producer/consumer against fixtures (`agent-usage-producer.ts` loop, `agent-quota-updates.ts` drain) instead of building a parallel mock classifier.
+- Read-only proof discipline: `agent usage --dry-run` writes nothing (`snapshotPath: null`, `drain: null`, no `~/.config/spur/agent-usage.json`); `agent doctor --json` writes only the gitignored `.spur/run/` cache — state these verifications explicitly.
+
+### Errors fixed
+- The observed `codex-astra` would-apply-vs-blocked mismatch explained deterministically: producer `needsRow` checks operator ownership only in the disable direction (`agent-usage-producer.ts:331-333`); the drain blocks both directions (`agent-quota-updates.ts:302-315`, `skippedOperatorOwned`); the pre-drain `changes[]` label is never reconciled — recovery-direction previews over-promise while protection itself works exactly as specified.
+- Review-caught P3s fixed: one mis-transcribed latency timestamp (113.43 s claimed vs its own 92 s window), two stale anchors (`NodeProcessExecutor()` construction at :30-35 not :35-41; codexbar entry shape at :41-68 not :69-89), one wrong mechanism clause ("slashless model never prefix-matches" — it does when the model value equals a provider slug via the same branch).
+
+### Patterns
+- Provider→executor mapping is conservative and case-insensitive: agent equality first, then `model.split('/')[0].toLowerCase()` prefix; drain-time executor lookup stays case-sensitive; unmapped providers are listed, never guessed.
+- Availability outcome correctness vs preview honesty are separable claims — report each separately (outcome correct in every exercised case; only the preview label lies in the recovery direction).
+- R4 categories for apply runs: eligible (applied) / protected (`skippedOperatorOwned`) / unchanged (idempotent re-write absorbed into `applied`) / unresolved (`skippedUnknownExecutor`, `failed`/`deferred`).
+
+### Gotchas
+- No timeout is armed anywhere in the usage chain: `CodexbarUsageSource` constructs `new NodeProcessExecutor()` with no config, so `resolveDeadline(undefined, undefined)` arms no deadline — a hung codexbar hangs `agent usage` indefinitely; ~113 s all-provider captures make that expensive. The executor already supports deadlines; the source just never passes one.
+- Producer has no staleness gate: a 72 h-old `updatedAt` still disables an executor and the stale timestamp seeds `since` (`since: row.observed_at`, `agent-quota-updates.ts:331`); doctor's 6 h staleness is snapshot-display-only.
+- A no-usage (all-null windows) provider can become an executor's alphabetically-first `driver` and render misleading "headroom" reason text for a provider with no windows; the availability outcome was still correct.
+- `AgentQuotaDrainSummary` counts idempotent re-writes as `applied` — updater result `unchanged` has no separate counter (reporting-honesty nuance).
+- Write-boundary subtlety: the consumer always requests `layer: 'global'` but the updater re-selects the declaring layer (project fragment wins) — on a machine where every executor is declared globally, a real (non-dry) quota run writes `~/.config/spur/config.yaml` machine-wide. First updater write normalizes YAML indentation (comments/order otherwise preserved).
+- Per-provider timings are structurally unknowable (one buffered spawn covers all providers; the capture shape carries no per-provider error timestamps) — record unknown as unknown rather than estimating (AC4).
+- A `/tmp` fixture harness that is not retained/committed leaves "reproduced deterministically" resting on recorded output only — link or commit the harness if reproduction matters.
+- H2 (`## A.`) sub-headings above the task section level are parser-safe (`MarkdownDocument` splits only at the domain level; `--section` round-trips intact) but off corpus convention — prefer `####`.
+
