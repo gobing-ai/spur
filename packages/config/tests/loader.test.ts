@@ -1101,3 +1101,10 @@ describe('retired fleet carrier guard (0858 R2)', () => {
         await expect(failure).rejects.toThrow(/agent\.fleet\.members\[0\]/);
     });
 });
+
+test('workflow.hitlDecisionMaker is optional, false by default policy, and boolean only', () => {
+    expect(WorkflowConfigSchema.parse({}).hitlDecisionMaker ?? false).toBe(false);
+    expect(WorkflowConfigSchema.parse({ hitlDecisionMaker: true }).hitlDecisionMaker).toBe(true);
+    expect(WorkflowConfigSchema.parse({ hitlDecisionMaker: false }).hitlDecisionMaker).toBe(false);
+    expect(WorkflowConfigSchema.safeParse({ hitlDecisionMaker: 'true' }).success).toBe(false);
+});

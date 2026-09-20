@@ -772,3 +772,37 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   already-imported history; `trace` never triggers an import. Join + math:
   `packages/domain/src/analytics/run-cost.ts`.
   Backed by `ts-dual-workflow-engine` (`WorkflowService` + `DbWorkflowPersistenceAdapter`).
+
+### Optional DecisionMaker for executed HITL actions
+
+Set the single project/global config switch through the existing merged config loader:
+
+```yaml
+workflow:
+  hitlDecisionMaker: true
+```
+
+Absent or `false` returns the existing interactive/default responder unchanged: no DecisionMaker
+construction, credentials or network calls are needed. Setting it back to `false` disables the
+integration without changing workflow YAML. Existing `hitl.confirm`, `hitl.select`, `hitl.input`
+action names, options, events, cancellation and answer variables remain authoritative.
+
+When enabled, the application-owned responder uses A2 for confirm/select and delegates free-text
+input. It supplies at most the latest 20 completed non-HITL action outcomes for the same run:
+node/kind/success plus bounded error and stdout/stderr/summary text. It excludes environment,
+workflow variables, command fields, arbitrary result fields and files; known credentials and configured
+secret values are redacted before transmission. Enabling the switch therefore authorizes sending
+these selected workflow outputs and the question/options to the configured A2 provider.
+
+The default provider uses `TYPESAFE_API_KEY` from the process environment (never project config),
+a 15-second request timeout and zero retries. Deploy with an upstream `ts-ai-runner` release that
+contains A2: the previously installed 0.5.0 artifact predates these exports, despite the local
+upstream source version also being 0.5.0. An unavailable API/export/key, missing evidence, malformed
+answer, explicit defer, or confidence/selected probability below 0.9 falls back to the same original
+responder. Other options must have strictly lower probabilities. This threshold is conservative
+policy, not calibrated proof of better judgments. The fallback retains existing policy, including
+an explicitly configured automatic confirm default; it does not force denial or invent an approval.
+
+Stock `task-pipeline.yaml` with `profile=auto` skips approval, so no responder runs there. This
+switch affects executed `hitl.*` actions only; it does not change the graph, CLI resume confirmation,
+or the requirement for an explicit answer when resuming a paused headless run (ADR-122).

@@ -15,7 +15,7 @@ import {
     TaskRunLinkDao,
     TransitionRunDao,
 } from '@gobing-ai/spur-domain';
-import { resolveAgentName } from '@gobing-ai/ts-ai-runner';
+import { type DecisionMaker, resolveAgentName } from '@gobing-ai/ts-ai-runner';
 
 import {
     type ActionDef,
@@ -55,6 +55,7 @@ import {
     parseCheckpointMetadata,
 } from '../workflow/checkpoint-contract';
 import { computeDefinitionDigest } from '../workflow/composition-baseline';
+import { createDecisionHitlResponder } from '../workflow/decision-hitl-responder';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import {
@@ -530,6 +531,8 @@ export interface WorkflowAppServiceContext {
     agentService(): AgentService;
     ruleService(): RuleService;
     hitlResponder(): HitlResponder;
+    /** Optional provider factory for the enabled DecisionMaker integration. */
+    decisionMaker?(): Promise<DecisionMaker>;
     httpRequester?(): HttpRequester;
     hostAllowlist?(): HostAllowlist;
     /** Optional ProcessExecutor override. When provided, shell actions and guards use this executor instead of default NodeProcessExecutor. */
@@ -1718,7 +1721,14 @@ export class WorkflowAppService {
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
-            hitlResponder: this.ctx.hitlResponder(),
+            hitlResponder: createDecisionHitlResponder({
+                enabled: this.ctx.spurConfig?.workflow?.hitlDecisionMaker === true,
+                fallback: this.ctx.hitlResponder(),
+                evidence: async (request) => new ActionRunDao(await this.ctx.getDb()).actionRowsByRunId(request.runId),
+                decisionMaker: this.ctx.decisionMaker,
+                secrets: this.ctx.secretValues,
+                warn: this.ctx.warn,
+            }),
             httpRequester: this.ctx.httpRequester?.(),
             hostAllowlist: this.ctx.hostAllowlist?.(),
             ...(bus !== undefined ? { observabilityBus: bus } : {}),

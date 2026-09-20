@@ -12,7 +12,8 @@ import {
     spurConfigSchema,
 } from '@gobing-ai/spur-config';
 import * as loaderModule from '@gobing-ai/spur-config/loader';
-import { createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { ActionRunDao, createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
 import { parse as yamlParse } from 'yaml';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
@@ -199,6 +200,75 @@ function makeCtx(cwd = process.cwd(), spurConfig?: SpurConfig) {
 }
 
 describe('WorkflowAppService', () => {
+    test('DecisionMaker switch composes with real builtins, persisted evidence and original variables', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'spur-wf-decision-'));
+        const file = join(dir, 'decision.yaml');
+        await writeFile(
+            file,
+            `name: decision-test
+kind: state-machine
+initialState: check
+states:
+  - id: check
+    onEnter:
+      - kind: shell
+        options:
+          command: "printf '10 tests passed'"
+  - id: review
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Did tests pass?"
+          var: approval
+  - id: done
+transitions:
+  - from: check
+    to: review
+  - from: review
+    to: done
+terminalStates: [done]
+`,
+        );
+        try {
+            for (const enabled of [false, true]) {
+                let calls = 0;
+                let evidence = '';
+                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: enabled } }));
+                const service = new WorkflowAppService({
+                    ...ctx,
+                    hitlResponder: () => ({ respond: async () => ({ value: 'legacy' }) }),
+                    decisionMaker: async () =>
+                        createDecisionMaker({
+                            driver: {
+                                name: 'fake',
+                                ask: async (req) => {
+                                    calls++;
+                                    evidence = JSON.stringify(req.state);
+                                    return {
+                                        question: {
+                                            kind: 'choice',
+                                            label: 'option_0',
+                                            confidence: 0.95,
+                                            probabilities: { option_0: 0.95, option_1: 0.03, defer: 0.02 },
+                                        },
+                                    };
+                                },
+                            },
+                        }),
+                });
+                const result = await service.run(file, { runId: `decision-${enabled}` });
+                expect(result.status).toBe('done');
+                expect(calls).toBe(enabled ? 1 : 0);
+                if (enabled) expect(evidence).toContain('"kind":"shell"');
+                const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId(`decision-${enabled}`);
+                const answer = JSON.parse(rows.find((row) => row.kind === 'hitl.confirm')?.result_json ?? '{}');
+                expect(answer.setVars).toEqual({ approval: enabled ? 'yes' : 'legacy' });
+            }
+        } finally {
+            await rm(dir, { recursive: true });
+        }
+    });
+
     describe('validate', () => {
         test('returns valid=true for a well-formed workflow YAML', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-svc-'));

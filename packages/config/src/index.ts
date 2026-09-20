@@ -766,6 +766,8 @@ export const WorkflowsConfigSchema = z.object({
  *   `--older-than` flag stays minutes and is never reused for log age.
  */
 export const WorkflowConfigSchema = z.object({
+    /** Opt-in DecisionMaker responder; false preserves existing interactive/default answers. */
+    hitlDecisionMaker: z.boolean().optional(),
     logRetentionDays: z.number().int().positive().default(30),
 });
 
