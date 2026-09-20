@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.48.0
+version: 1.49.0
 owner: Robin Min
-updated_at: 2026-09-19
+updated_at: 2026-09-20
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1880,3 +1880,12 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Consequence:** engine ≥0.5.0 is a hard resume dependency. Persisted shell stdout/stderr tails are secret-redacted before a 64 KiB utf8-safe bound with truncation flags, and `continue` writes the consolidated run log unless `--no-log`. Stale sweeps keep runs resumable instead of wedging them terminal.
 - **Retains:** ADR-022 (lifecycle waves stay gated on upstream gap closure — this closes the interruption gap, not the waves); ADR-047 (operator decisions stay host-owned); ADR-112 (policy lives upstream); ADR-117 (execution-surface obligations stay at surfaces).
 - **Detail:** [CLI contracts](design/cli-contracts.md); [workflow observability](design/workflow-observability.md); [workflow run log](design/workflow-run-log.md).
+
+## ADR-123: Optional DecisionMaker Policy Decorates Spur's Existing HITL Responder
+
+- **Status:** Accepted · **Date:** 2026-09-20
+- **Decision:** Upstream `ts-ai-runner` owns provider-neutral decision validation and drivers; upstream `ts-dual-workflow-engine` owns execution and persistence correctness. Spur owns question policy, evidence selection and activation in a separate application module at the existing `HitlResponder` seam. `workflow.hitlDecisionMaker: true` opts executed confirm/select actions into this module; absence or false preserves the original responder. No duplicate `hitl.*` runners are registered. Missing evidence, uncertainty and provider unavailability delegate to the original responder.
+- **Why:** Policy and task evidence are application concerns. Replacing action registrations duplicates events and variable semantics; decorating the responder preserves a single implementation and lets operators disable provider use without changing workflow definitions.
+- **Consequence:** This does not change workflow routing or replace explicit CLI resume answers. Stock `profile=auto` still skips its approval state. Provider probabilities are not an empirical quality guarantee; conservative confidence policy and fallback remain application-owned.
+- **Retains:** ADR-021 (application logic), ADR-027 (one config loader), ADR-122 (engine-owned recovery and explicit resume boundary).
+- **Detail:** [CLI contracts](design/cli-contracts.md#optional-decisionmaker-for-executed-hitl-actions).

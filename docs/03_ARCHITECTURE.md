@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.50.0
+version: 1.51.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-19
+updated_at: 2026-09-20
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1083,3 +1083,9 @@ workflow machine time). Four invariants now bind every execution surface:
   real-run inputs and promoted or deleted by a named deadline; no standing second YAML.
 
 Details: [workflow execution economy](design/workflow-execution-economy.md).
+
+The optional DecisionMaker integration decorates the workflow `HitlResponder` in `packages/app`;
+existing built-in actions keep ownership of events and answer variables. Spur selects/redacts prior
+run outcomes and applies fallback policy; upstream A2 supplies validated provider-neutral decisions.
+Activation and limits are defined in [CLI contracts](design/cli-contracts.md#optional-decisionmaker-for-executed-hitl-actions)
+and [ADR-123](00_ADR.md#adr-123-optional-decisionmaker-policy-decorates-spurs-existing-hitl-responder).

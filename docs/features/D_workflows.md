@@ -2,11 +2,11 @@
 schema_version: 1
 id: D
 name: Workflows
-status: done
+status: active
 priority: P2
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-08-04T06:25:21.995Z"
+updated_at: "2026-09-20T22:35:30.257Z"
 ---
 
 # D: Workflows
@@ -50,3 +50,5 @@ Feature group. Upstream engine capabilities E1–E4 are ts-libs tasks 0033–003
 - 2026-06-12 — created (rd3-migration feature finalizing)
 - 2026-08-04T06:25:03.163Z active → verifying (system)
 - 2026-08-04T06:25:21.995Z verifying → done (system)
+- 2026-09-20T22:35:30.257Z done → active (system)
+
