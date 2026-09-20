@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Measure complete-run reliability and execution cost across inline, pipeline, and fleet
-status: wip
+status: done
 template: brainstorm
 created_at: 2026-09-20T00:51:03.724Z
-updated_at: "2026-09-20T05:58:02.195Z"
+updated_at: "2026-09-20T07:13:38.856Z"
 feature_id: I31
 
 priority: P1
@@ -27,23 +27,23 @@ Type: `wayfinder:research`. This is the third investigation on map I31 and depen
 
 ### Requirements
 
-- [ ] R1. Consume completed 0903-contract-adoption.json and freeze its scenario IDs, source revision, and available evidence sources; verify the prerequisite is done before investigation.
-- [ ] R2. Build a reproducible local cohort over the 14 UTC days ending at investigation start, newest first with run-ID tie-break, at most ten terminal non-dry runs per mode (inline, pipeline, fleet); deduplicate by persisted run identity and record every exclusion.
-- [ ] R3. Measure completion/verification outcomes, failures/retries, wall duration, session reuse/freshness, executor changes, and manual interventions only where persisted evidence supports them. Distinguish process exit, workflow terminal state, and verified task success.
-- [ ] R4. Read existing cost/session joins and report token/USD coverage independently; missing values are null, never zero. Separate aggregate real-run-cost scope from the bounded cohort, and never label all-history totals as 14-day results.
-- [ ] R5. Evaluate the fixed scenario matrix and the 0903-derived additions against existing traces/local regression tests; label unobserved behavior and missing modes rather than launching new live runs.
-- [ ] R6. Deliver 0905-run-baseline.md and 0905-run-baseline.json with cohort selection, per-run metrics, scenario coverage, source/command provenance, ranked failure clusters, and owner-scoped next-batch proposals.
-- [ ] R7. Validate denominators, duplicate exclusion, nonnegative durations, null handling, trace/run identity and artifact references with a repeatable local check. A sparse baseline must explicitly delimit conclusions and list the missing evidence needed for follow-up.
+- [x] R1. Consume completed 0903-contract-adoption.json and freeze its scenario IDs, source revision, and available evidence sources; verify the prerequisite is done before investigation.
+- [x] R2. Build a reproducible local cohort over the 14 UTC days ending at investigation start, newest first with run-ID tie-break, at most ten terminal non-dry runs per mode (inline, pipeline, fleet); deduplicate by persisted run identity and record every exclusion.
+- [x] R3. Measure completion/verification outcomes, failures/retries, wall duration, session reuse/freshness, executor changes, and manual interventions only where persisted evidence supports them. Distinguish process exit, workflow terminal state, and verified task success.
+- [x] R4. Read existing cost/session joins and report token/USD coverage independently; missing values are null, never zero. Separate aggregate real-run-cost scope from the bounded cohort, and never label all-history totals as 14-day results.
+- [x] R5. Evaluate the fixed scenario matrix and the 0903-derived additions against existing traces/local regression tests; label unobserved behavior and missing modes rather than launching new live runs.
+- [x] R6. Deliver 0905-run-baseline.md and 0905-run-baseline.json with cohort selection, per-run metrics, scenario coverage, source/command provenance, ranked failure clusters, and owner-scoped next-batch proposals.
+- [x] R7. Validate denominators, duplicate exclusion, nonnegative durations, null handling, trace/run identity and artifact references with a repeatable local check. A sparse baseline must explicitly delimit conclusions and list the missing evidence needed for follow-up.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — 0903 is done and its scenario artifact/revision is recorded; absent or stale incompatible input stops execution. (req: R1)
-- [ ] AC2 — Selection is reproducible and capped at ten terminal non-dry runs per mode, with explicit exclusions and sample counts. (req: R2)
-- [ ] AC3 — Each metric distinguishes persisted fact from unknown; terminal process exit is not reported as verified success. (req: R3)
-- [ ] AC4 — Token and USD coverage have separate denominators; aggregate and cohort scopes cannot be confused. (req: R4)
-- [ ] AC5 — All fixed and inherited scenarios have observed, contradicted, or unobserved dispositions without fresh paid runs. (req: R5)
-- [ ] AC6 — Both artifacts contain an evidence-ranked follow-up batch that reuses existing owners and names data gaps. (req: R6)
-- [ ] AC7 — The local checker detects duplicate IDs, bad denominators/durations, and unsupported success claims; sparse results do not claim full coverage. (req: R7)
+- [x] AC1 — 0903 is done and its scenario artifact/revision is recorded; absent or stale incompatible input stops execution. (req: R1)
+- [x] AC2 — Selection is reproducible and capped at ten terminal non-dry runs per mode, with explicit exclusions and sample counts. (req: R2)
+- [x] AC3 — Each metric distinguishes persisted fact from unknown; terminal process exit is not reported as verified success. (req: R3)
+- [x] AC4 — Token and USD coverage have separate denominators; aggregate and cohort scopes cannot be confused. (req: R4)
+- [x] AC5 — All fixed and inherited scenarios have observed, contradicted, or unobserved dispositions without fresh paid runs. (req: R5)
+- [x] AC6 — Both artifacts contain an evidence-ranked follow-up batch that reuses existing owners and names data gaps. (req: R6)
+- [x] AC7 — The local checker detects duplicate IDs, bad denominators/durations, and unsupported success claims; sparse results do not claim full coverage. (req: R7)
 
 ### Q&A
 
@@ -79,13 +79,13 @@ Complete only the investigation, not the proposed remediations. A zero-run mode 
 
 ### Plan
 
-- [ ] Step 1 (R1, AC1): Consume completed 0903-contract-adoption.json and freeze its scenario IDs, source revision, and available evidence sources; verify the prerequisite is done before investigation.
-- [ ] Step 2 (R2, AC2): Build a reproducible local cohort over the 14 UTC days ending at investigation start, newest first with run-ID tie-break, at most ten terminal non-dry runs per mode (inline, pipeline, fleet); deduplicate by persisted run identity and record every exclusion.
-- [ ] Step 3 (R3, AC3): Measure completion/verification outcomes, failures/retries, wall duration, session reuse/freshness, executor changes, and manual interventions only where persisted evidence supports them. Distinguish process exit, workflow terminal state, and verified task success.
-- [ ] Step 4 (R4, AC4): Read existing cost/session joins and report token/USD coverage independently; missing values are null, never zero. Separate aggregate real-run-cost scope from the bounded cohort, and never label all-history totals as 14-day results.
-- [ ] Step 5 (R5, AC5): Evaluate the fixed scenario matrix and the 0903-derived additions against existing traces/local regression tests; label unobserved behavior and missing modes rather than launching new live runs.
-- [ ] Step 6 (R6, AC6): Deliver 0905-run-baseline.md and 0905-run-baseline.json with cohort selection, per-run metrics, scenario coverage, source/command provenance, ranked failure clusters, and owner-scoped next-batch proposals.
-- [ ] Step 7 (R7, AC7): Validate denominators, duplicate exclusion, nonnegative durations, null handling, trace/run identity and artifact references with a repeatable local check. A sparse baseline must explicitly delimit conclusions and list the missing evidence needed for follow-up.
+- [x] Step 1 (R1, AC1): Consume completed 0903-contract-adoption.json and freeze its scenario IDs, source revision, and available evidence sources; verify the prerequisite is done before investigation.
+- [x] Step 2 (R2, AC2): Build a reproducible local cohort over the 14 UTC days ending at investigation start, newest first with run-ID tie-break, at most ten terminal non-dry runs per mode (inline, pipeline, fleet); deduplicate by persisted run identity and record every exclusion.
+- [x] Step 3 (R3, AC3): Measure completion/verification outcomes, failures/retries, wall duration, session reuse/freshness, executor changes, and manual interventions only where persisted evidence supports them. Distinguish process exit, workflow terminal state, and verified task success.
+- [x] Step 4 (R4, AC4): Read existing cost/session joins and report token/USD coverage independently; missing values are null, never zero. Separate aggregate real-run-cost scope from the bounded cohort, and never label all-history totals as 14-day results.
+- [x] Step 5 (R5, AC5): Evaluate the fixed scenario matrix and the 0903-derived additions against existing traces/local regression tests; label unobserved behavior and missing modes rather than launching new live runs.
+- [x] Step 6 (R6, AC6): Deliver 0905-run-baseline.md and 0905-run-baseline.json with cohort selection, per-run metrics, scenario coverage, source/command provenance, ranked failure clusters, and owner-scoped next-batch proposals.
+- [x] Step 7 (R7, AC7): Validate denominators, duplicate exclusion, nonnegative durations, null handling, trace/run identity and artifact references with a repeatable local check. A sparse baseline must explicitly delimit conclusions and list the missing evidence needed for follow-up.
 
 ### Solution
 
@@ -182,7 +182,20 @@ Round-1 review correctly flagged that S5/S6 are named scenario inputs in 0903's 
 
 ### Testing
 
-Not run during charting. The eventual investigation must reuse existing eval/trace commands, record exact run identities and exit status, and distinguish measured data from inference; no production test or code fix is claimed here.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | 0903 done; 0903-check.ts exit 0; SC1-SC5 frozen in baseline |
+| R2 | MET | cohort window+caps+exclusions; checker exit 0 |
+| R3 | MET | exit/terminal/verified distinguished; verdict artifacts exist |
+| R4 | MET | tokens/usd null denominator 0; aggregate scope separate |
+| R5 | MET | S1-S7 dispositions; fleet unobserved with recorded deferral |
+| R6 | MET | docs/reports/i31/0905-run-baseline.{md,json} + 0905-check.ts exit 0 |
+| R7 | MET | checker CHECK-PASS this run; sparse delimitation present |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -257,4 +270,6 @@ Not run during charting. The eventual investigation must reuse existing eval/tra
 ### History
 
 - 2026-09-20T04:19:32.873Z todo → wip (system)
+- 2026-09-20T07:09:09.929Z wip → testing (system)
+- 2026-09-20T07:13:38.856Z testing → done (system)
 

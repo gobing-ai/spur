@@ -1,0 +1,243 @@
+{
+    "schemaVersion": 1,
+    "task": "0905",
+    "sourceCommit": "99562391f14d2118b80a189826fca0b8e2f25e4b",
+    "capturedAt": "2026-09-20T06:51:00Z",
+    "prerequisite": {
+        "task": "0903",
+        "statusVerified": "done",
+        "artifact": "docs/reports/i31/0903-contract-adoption.json",
+        "artifactCheck": "bun run docs/reports/i31/0903-check.ts exit 0",
+        "scenarioIdsFrozen": ["SC1", "SC2", "SC3", "SC4", "SC5"],
+        "evidenceSources": [
+            "task Solution §A–§F",
+            "0904 Solution §A–§H",
+            ".spur/run/ verdict artifacts",
+            ".spur/logs/spur.log",
+            "task History rows",
+            "workflow trace DB"
+        ]
+    },
+    "cohort": {
+        "window": "14 UTC days ending 2026-09-20T06:51:00Z",
+        "selection": "newest-first, run-ID tie-break, terminal non-dry runs only, dedup by persisted run identity",
+        "caps": { "inline": 10, "pipeline": 10, "fleet": 10 },
+        "counts": { "inline": 0, "pipeline": 2, "fleet": 0 },
+        "exclusions": [
+            {
+                "id": "R-0905-inline",
+                "reason": "in flight at investigation time (precheck 20:59:40, authoring 21:10) — excluded from completion numerators",
+                "mode": "inline"
+            },
+            {
+                "id": "side-runs-x3",
+                "reason": "lifecycle side-runs (2 task-lifecycle, 1 feature-lifecycle) stuck status:running post-done — not task-pipeline executions",
+                "mode": "pipeline"
+            }
+        ]
+    },
+    "runs": [
+        {
+            "id": "runall-i31-20260919-180944-0903",
+            "mode": "pipeline",
+            "task": "0903",
+            "start": "2026-09-20T01:16:32Z",
+            "end": "2026-09-20T03:00:55Z",
+            "durationSeconds": 6263,
+            "processExit": 0,
+            "workflowTerminal": "done",
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0903-verdict.json",
+            "recoveryEvents": 3,
+            "operatorInterventions": 0,
+            "sessionReuse": "coder stages reuse; review/verify fresh (A9 pins)",
+            "executorChanges": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "test stage 3787s incl. 1 fix attempt; failing gate log not retained; review+verify 1534s incl. 1 remediation + 1 verify re-round"
+        },
+        {
+            "id": "runall-i31-20260919-180944-0904",
+            "mode": "pipeline",
+            "task": "0904",
+            "start": "2026-09-20T03:01:16Z",
+            "end": "2026-09-20T03:59:16Z",
+            "durationSeconds": 3480,
+            "processExit": 0,
+            "workflowTerminal": "done",
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0904-verdict.json",
+            "recoveryEvents": 0,
+            "operatorInterventions": 0,
+            "sessionReuse": "coder stages reuse; review/verify fresh (A9 pins)",
+            "executorChanges": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "single-pass; implement 1669s; test gate floor 326.82s full-suite on docs-only diff; no record-transition artifact — binding rests on History rows"
+        }
+    ],
+    "costCoverage": {
+        "tokens": {
+            "value": null,
+            "denominator": 0,
+            "scope": "cohort",
+            "note": "history DB 0 imported records in this tree; missing values are null, never zero"
+        },
+        "usd": {
+            "value": null,
+            "denominator": 0,
+            "scope": "cohort",
+            "note": "no usage snapshot exists (run-once by design, 0903 F6)"
+        },
+        "aggregate": {
+            "scope": "all-history",
+            "records": 0,
+            "note": "history analyze totals all zero; never labeled as 14-day results"
+        },
+        "wallClockOnly": true
+    },
+    "scenarios": [
+        {
+            "id": "S1",
+            "kind": "fixed",
+            "question": "Complete pipeline success-with-recovery (0903 A9 pins; coder→test-fix continuity)",
+            "mode": "pipeline",
+            "disposition": "observed",
+            "runs": ["runall-i31-20260919-180944-0903"],
+            "refs0903": ["SC1"]
+        },
+        {
+            "id": "S2",
+            "kind": "fixed",
+            "question": "Complete pipeline single-pass success",
+            "mode": "pipeline",
+            "disposition": "observed",
+            "runs": ["runall-i31-20260919-180944-0904"],
+            "refs0903": ["SC1"]
+        },
+        {
+            "id": "S3",
+            "kind": "fixed",
+            "question": "Inline single-step implement",
+            "mode": "inline",
+            "disposition": "observed",
+            "runs": [],
+            "refs0903": ["SC3"],
+            "note": "in flight at investigation; excluded from completion numerators"
+        },
+        {
+            "id": "S4",
+            "kind": "inherited",
+            "question": "Usage-absent availability + capture latency/timeout owner",
+            "mode": "inline",
+            "disposition": "observed",
+            "runs": [],
+            "refs0903": ["SC3"],
+            "note": "consumed 0904 measured evidence (capture ~113s, no timeout armed); not re-run"
+        },
+        {
+            "id": "S5",
+            "kind": "inherited",
+            "question": "Wait/receipt runtime with live serve occupant",
+            "mode": "fleet",
+            "disposition": "unobserved",
+            "runs": [],
+            "refs0903": ["SC4"],
+            "note": "not exercisable read-only; no serve/occupant state in doctor; deferred to final I31 plan"
+        },
+        {
+            "id": "S6",
+            "kind": "inherited",
+            "question": "Registered-vs-shared divergence as run-environment variable",
+            "mode": "fleet",
+            "disposition": "unobserved",
+            "runs": [],
+            "refs0903": ["SC2"],
+            "note": "static divergence re-measured = 0 (diff -rq exit 0); run effect unobservable without forbidden config mutation; deferred"
+        },
+        {
+            "id": "S7",
+            "kind": "fixed",
+            "question": "Executor availability at run time (doctor probe)",
+            "mode": "inline",
+            "disposition": "observed",
+            "runs": [],
+            "refs0903": ["SC3"],
+            "note": "16 agents probed: 10 installed+usable tier 1, 6 registered-not-installed, usage null; registry drifted between captures — digest-pin required"
+        }
+    ],
+    "failureClusters": [
+        {
+            "rank": 1,
+            "class": "reliability/traceability",
+            "observation": "Batch pipeline executions persist no run records in the executing tree's trace DB (0/2 tasks; 3 side-runs stuck running post-done)",
+            "confidence": "high (measured)",
+            "blastRadius": "E6 correlation, D62 economy, incident forensics",
+            "owner": "P",
+            "smallestFollowUp": "Finalize run status at workflow completion; persist one run record per pipeline execution"
+        },
+        {
+            "rank": 2,
+            "class": "economy",
+            "observation": "Cost/session joins null at batch time: 0 history records, no usage snapshot, no session ids in stage artifacts",
+            "confidence": "high",
+            "blastRadius": "E6 charter; cost-aware routing impossible",
+            "owner": "E6",
+            "smallestFollowUp": "Write resolved executor + session id into stage artifacts at dispatch; run history import post-batch"
+        },
+        {
+            "rank": 3,
+            "class": "reliability/attention",
+            "observation": "0903 bounded recovery (3 extra model passes) absorbed a gate failure to PASS at ≈1.8x task time; failing-gate log not retained so cause unknown",
+            "confidence": "counts high, cause unknown",
+            "blastRadius": "multi-stage run tail latency",
+            "owner": "P",
+            "smallestFollowUp": "Retain failing-gate logs beside the fix-attempt marker + record failing check identity"
+        },
+        {
+            "rank": 4,
+            "class": "reliability/observability",
+            "observation": "8 fast-fail ai-runner invokes (5/6/6/16/6/7/7/11 ms deltas), identity unlogged, absorbed invisibly; hypothesis: periodic availability probe",
+            "confidence": "occurrence high, identity low (labeled hypothesis)",
+            "blastRadius": "structured surfaces blind to invoke failures",
+            "owner": "P",
+            "smallestFollowUp": "One structured line (agent, selector, exit code) on the ai-runner ERR path"
+        },
+        {
+            "rank": 5,
+            "class": "economy",
+            "observation": "Gate floor is the fixed full-suite test phase (282.91s/326.82s) even on docs-only diffs",
+            "confidence": "high as measured; generalization low (n=2, docs-only cohort)",
+            "blastRadius": "every pipeline run",
+            "owner": "D62",
+            "smallestFollowUp": "Re-measure on a code-change cohort before any scoped-gate change; no static-count savings claims"
+        },
+        {
+            "rank": 6,
+            "class": "attention/honesty",
+            "observation": "--auto ran 2 complete pipelines unattended (2h49m43s, 0 interventions) and shipped precision debt to record (0904's 4 P3s + unfilled R/AC boxes)",
+            "confidence": "high",
+            "blastRadius": "record-stage proof provenance",
+            "owner": "I31 close-out",
+            "smallestFollowUp": "Keep box flips inside the delivering write; precision-defects-pre-record stays a review-gate policy question"
+        }
+    ],
+    "sparseBaseline": {
+        "sparse": true,
+        "delimitation": "Conclusions cover pipeline (n=2, docs-only tasks) and inline (in-flight observation only). Fleet mode: 0 runs — no fleet conclusions drawn. Cost: all token/USD values null (denominator 0) — economy conclusions are wall-clock only.",
+        "missingEvidence": [
+            "one bounded serve session on a quiet tree exercising the A6 receipt vocabulary (S5)",
+            "a staged registered/shared divergence run (S6)",
+            "history import + usage snapshot before any token/USD claim",
+            "session identifiers in stage artifacts (follow-up rank 2) before run↔session binding"
+        ]
+    },
+    "unknowns": [
+        "per-stage sub-splits inside implement/review/verify subagents (operator-corroborated only)",
+        "identity of 0903's first-failing check (gate log not retained)",
+        "failed-invoke identities (log carries no session/agent id)",
+        "run↔session binding (E6)",
+        "all token/cost values (0 imported records)",
+        "existence of an external codexbar scheduler (0904 §H)"
+    ]
+}
