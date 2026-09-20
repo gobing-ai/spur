@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.90] - 2026-09-19
+
+### Added
+
+- release: gate bump-ver on plugin-install-smoke (3b53e064f)
+- scripts: add plugin-install-smoke release gate (bdf6106b9)
+- rules: gate plugin bundled surfaces against workspace value imports (bd8a58f66)
+- harden workflow engine surface (0901 R1-R6) (5747d5454)
+
+### Changed
+
+- record plugin standalone contract in AGENTS.md (5d9284d21)
+- merge 'feat/0901-harden-workflow-engine' into main (60c643d5b)
+- wrap-up artifacts for 0901 (learnings + metrics) (f03fd28ce)
+- record ADR-122 and sync 03/04 with the 0901 engine recovery contract (5c4aa5129)
+- record 0901 solution/testing/review, verify PASS, close done (695aeed69)
+- tasks: close 0902 (engine interruption contract released 0.5.0), refreeze 0901 ready spec (9813f514c)
+- tasks: record 0901 R2 decision (upstream engine contract first) and register prerequisite 0902 (d2d7c8ebd)
+- tasks: update task status after refinement (a1b79015c)
+
 ## [0.3.87] - 2026-09-18
 
 ### Added
