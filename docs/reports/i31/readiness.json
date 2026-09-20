@@ -1,0 +1,145 @@
+{
+    "runId": "i31-refine-ready-2026-09-19",
+    "depth": "ready",
+    "sourceCommit": "d8ff752b2",
+    "tasks": [
+        {
+            "wbs": "0903",
+            "status": "ready",
+            "planningDigest": "fcab817fc35bcb18cc886e3509b713b4ebe952a8c2e3cb55176582f8dac18f93",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md: Requirements R1-R7 freeze observable outcomes, non-goals, artifact names and bounded scope; all were checked against the current CLI/source."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md: Design freezes research-only route, no new API, source seams, artifact schemas, limits and failure dispositions. "
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md: Plan steps 1-7 each reference Rn/ACn and include verification intent."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md: AC1-AC7 each bind one Rn; ac_numbering and ac_altitude are task-local; task check --as todo passed."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md: Q&A closes local execution choices; future product policy stays with Robin and does not block research."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "No upstream dependencies; separate owned artifacts. 0903 supplies the explicitly named 0905 scenario handoff; 0904 is independent."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "Current source and references were read: wayfinder/SKILL.md:123, execution-workflow.md:278, task-pipeline.yaml:199/355, task-pipeline-resilience tests, complete-roster and sync dry-run captures. Corrections recorded in Background. No wip tasks; one worktree at audit; required execution-time drift precheck is frozen."
+                }
+            ],
+            "filePath": "/Users/robin/xprojects/spur-new/docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md",
+            "executionReady": true,
+            "dependencies": [],
+            "estimateHours": 2
+        },
+        {
+            "wbs": "0904",
+            "status": "ready",
+            "planningDigest": "365987925744b6e54d9c471a5b29eb1944970d8cbe032e3dbdf95d332539b3c5",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0904_validate-usage-to-availability-decisions-with-sanitized-fixt.md: Requirements R1-R7 freeze observable outcomes, non-goals, artifact names and bounded scope; all were checked against the current CLI/source."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0904_validate-usage-to-availability-decisions-with-sanitized-fixt.md: Design freezes research-only route, no new API, source seams, artifact schemas, limits and failure dispositions. Actual config writer and homedir-only temporary test seam are named."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0904_validate-usage-to-availability-decisions-with-sanitized-fixt.md: Plan steps 1-7 each reference Rn/ACn and include verification intent."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0904_validate-usage-to-availability-decisions-with-sanitized-fixt.md: AC1-AC7 each bind one Rn; ac_numbering and ac_altitude are task-local; task check --as todo passed."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0904_validate-usage-to-availability-decisions-with-sanitized-fixt.md: Q&A closes local execution choices; future product policy stays with Robin and does not block research."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "No upstream dependencies; separate owned artifacts. 0903 supplies the explicitly named 0905 scenario handoff; 0904 is independent."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "Current source and references were read: agent-usage-producer.ts classification/mapping/apply path, agent-quota-updates.ts owner guard, config executor-update.ts layer writer, isolated tests, aggregate UsageCapture contract. Corrections recorded in Background. No wip tasks; one worktree at audit; required execution-time drift precheck is frozen."
+                }
+            ],
+            "filePath": "/Users/robin/xprojects/spur-new/docs/tasks5/0904_validate-usage-to-availability-decisions-with-sanitized-fixt.md",
+            "executionReady": true,
+            "dependencies": [],
+            "estimateHours": 2
+        },
+        {
+            "wbs": "0905",
+            "status": "ready",
+            "planningDigest": "f8c428de1c9d21382972c6aacffb9262e99efbf635567182e0477fe04ba12b38",
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0905_measure-complete-run-reliability-and-execution-cost-across-i.md: Requirements R1-R7 freeze observable outcomes, non-goals, artifact names and bounded scope; all were checked against the current CLI/source."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0905_measure-complete-run-reliability-and-execution-cost-across-i.md: Design freezes research-only route, no new API, source seams, artifact schemas, limits and failure dispositions. "
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0905_measure-complete-run-reliability-and-execution-cost-across-i.md: Plan steps 1-7 each reference Rn/ACn and include verification intent."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0905_measure-complete-run-reliability-and-execution-cost-across-i.md: AC1-AC7 each bind one Rn; ac_numbering and ac_altitude are task-local; task check --as todo passed."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "/Users/robin/xprojects/spur-new/docs/tasks5/0905_measure-complete-run-reliability-and-execution-cost-across-i.md: Q&A closes local execution choices; future product policy stays with Robin and does not block research."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "frontmatter dependencies=[0903]; Design names the completed 0903 report/schema input and stop condition. Spec ready, execution dependency pending."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "Current source and references were read: workflow trace/progress help, real-run-cost.ts read-only DB and all-history scope, session-pinned-dispatch and fleet session tests. Corrections recorded in Background. No wip tasks; one worktree at audit; required execution-time drift precheck is frozen."
+                }
+            ],
+            "filePath": "/Users/robin/xprojects/spur-new/docs/tasks5/0905_measure-complete-run-reliability-and-execution-cost-across-i.md",
+            "executionReady": false,
+            "dependencies": ["0903"],
+            "estimateHours": 2
+        }
+    ]
+}
