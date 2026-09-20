@@ -1,0 +1,282 @@
+{
+    "schemaVersion": 1,
+    "task": "0903",
+    "sourceCommit": "99562391f14d2118b80a189826fca0b8e2f25e4b",
+    "capturedAt": "2026-09-20T06:51:00Z",
+    "surfaces": [
+        {
+            "id": "A1",
+            "path": "plugins/sp/skills/spur-cli/references/agent.md",
+            "kind": "cli-verb-set",
+            "status": "observed",
+            "reason": "agent --help exit 0: exactly list,status,usage,doctor,run,wait,start,stop; loop hidden — matches agent.md:15-27"
+        },
+        {
+            "id": "A2",
+            "path": "apps/cli/src/commands/agent.ts",
+            "kind": "cli-flag-semantics",
+            "status": "observed",
+            "reason": "run --agent substitutes tier resolution + warns (agent-service.ts:1766-1778); help string at agent.ts:290 stale — see F2"
+        },
+        {
+            "id": "A3",
+            "path": "plugins/sp/skills/spur-cli/references/agent.md",
+            "kind": "cli-verb",
+            "status": "observed",
+            "reason": "agent usage --help exit 0: --dry-run --source --json --json-envelope present; design §3.4 docs/design/session-pinned-dispatch.md:57-69"
+        },
+        {
+            "id": "A4",
+            "path": "packages/app/src/services/agent-service.ts",
+            "kind": "cli-json-shape",
+            "status": "observed",
+            "reason": "agent doctor --json exit 0: 16/16 rows carry availability{disabled,owner,since,reason}; 6 disabled rows owner=operator; since/reason null on all rows; usage null — see F6/H1"
+        },
+        {
+            "id": "A5",
+            "path": "plugins/sp/skills/spur-cli/references/message.md",
+            "kind": "cli-flag-semantics",
+            "status": "observed",
+            "reason": "message send --help exit 0: --to XOR --role, --request-key replay (0832) — matches message.md:44-63"
+        },
+        {
+            "id": "A6",
+            "path": "plugins/sp/skills/spur-cli/references/agent.md",
+            "kind": "receipt-vocabulary",
+            "status": "partial",
+            "reason": "wait-family flags match live (agent wait --help exit 0); runtime receipt behavior not reproduced — needs spur serve + occupant; deferred to 0905 SC4"
+        },
+        {
+            "id": "A7",
+            "path": "packages/app/src/workflow/workflow-resolver.ts",
+            "kind": "workflow-layering",
+            "status": "observed",
+            "reason": "workflow list --json exit 0: 9 defs resolve from BOTH registered (published 0.3.90) and shared (checkout); 0 project — dual-copy shadowing, see F7"
+        },
+        {
+            "id": "A8",
+            "path": "packages/app/src/services/slash-commands-service.ts",
+            "kind": "role-routing",
+            "status": "observed",
+            "reason": "doctor --json rolesSource=config; scan roots plugins/sp/commands + .claude/commands (slash-commands-service.ts:161-179,185-188); installed ~/.agents/skills not scanned"
+        },
+        {
+            "id": "A9",
+            "path": "config/workflows/task-pipeline.yaml",
+            "kind": "session-policy-pins",
+            "status": "observed",
+            "reason": "precheck doctor.probe pins __executor.<role> (task-pipeline.yaml:199-213); implement/fix role:coder+session:reuse (:229-241,:372-376); review/verify fresh (:423-442,:494-505); idea-pipeline.yaml:95-97,128-131"
+        },
+        {
+            "id": "A10",
+            "path": "plugins/sp/skills/spur-dev/references/cross-cutting.md",
+            "kind": "plugin-prose",
+            "status": "observed",
+            "reason": "zero matches for session: reuse|fresh / __executor. in plugins/sp prose; only pointer agent.md:257 — adoption gap F3"
+        },
+        {
+            "id": "A11",
+            "path": "plugins/sp/commands/dev-run.md",
+            "kind": "installed-adapter",
+            "status": "observed",
+            "reason": "83 sp-* dirs in ~/.agents/skills; 0/83 installed SKILL.md carry role: frontmatter (source carries it, dev-run.md:1-6); installed sp-dev-run mtime 17:28 vs source 18:09 Sep 19 — stale-by-date, not semantically drifted — see F4"
+        }
+    ],
+    "findings": [
+        {
+            "id": "F1",
+            "category": "confirmed-mismatch",
+            "assertion": "wayfinder documents feature update --section tags --from-file",
+            "observed": "live feature update exposes --field/--value for frontmatter and a closed-world --section body set; wayfinder/SKILL.md:123 unchanged",
+            "evidence": [{ "path": "plugins/sp/skills/wayfinder/SKILL.md", "line": 123 }],
+            "owner": "I7",
+            "disposition": "stale-prose"
+        },
+        {
+            "id": "F2",
+            "category": "confirmed-mismatch",
+            "assertion": "agent run --agent inline errors on headless surfaces",
+            "observed": "code substitutes tier resolution + warns, never rejects (0687 R3); help string contradicts code and two plugin SSOTs",
+            "evidence": [
+                { "path": "apps/cli/src/commands/agent.ts", "line": 290 },
+                { "path": "packages/app/src/services/agent-service.ts", "line": 1766 }
+            ],
+            "owner": "B1-candidate; class-owner decision U2",
+            "disposition": "stale-prose"
+        },
+        {
+            "id": "F3",
+            "category": "adoption-gap",
+            "assertion": "B7 design §8 requires session-policy paragraph in cross-cutting.md",
+            "observed": "no session-policy prose anywhere in plugins/sp; only agent.md:257 §6 pointer",
+            "evidence": [
+                { "path": "plugins/sp/skills/spur-dev/references/cross-cutting.md", "line": 19 },
+                { "path": "docs/design/session-pinned-dispatch.md", "line": 136 }
+            ],
+            "owner": "unowned (I31 program)",
+            "disposition": "absent-adoption"
+        },
+        {
+            "id": "F4",
+            "category": "confirmed-difference",
+            "assertion": "installed adapters preserve command frontmatter",
+            "observed": "superskill install strips role:/argument-hint/allowed-tools from every installed SKILL.md; no audited consumer reads roles from installed adapters — impact not established",
+            "evidence": [{ "path": "plugins/sp/commands/dev-run.md", "line": 1 }],
+            "owner": "B3 + I4",
+            "disposition": "unverified-behavior"
+        },
+        {
+            "id": "F5",
+            "category": "no-drift",
+            "assertion": "execution-workflow.md:278 Known diagnostic gap prose",
+            "observed": "accurate — doctor still cannot detect quota/model unavailability; B6 usage is the separate quota surface; partial-artifact resume prose (:299-317) agrees with live action split",
+            "evidence": [{ "path": "plugins/sp/skills/spur-dev/references/execution-workflow.md", "line": 278 }],
+            "owner": "none needed",
+            "disposition": "shipped-behavior"
+        },
+        {
+            "id": "F6",
+            "category": "adoption-gap",
+            "assertion": "B6 agent usage produces an operator snapshot",
+            "observed": "no agent-usage snapshot exists on this machine; doctor usage key null; producer is run-once by design",
+            "evidence": [{ "path": "packages/app/src/services/agent-service.ts", "line": 1766 }],
+            "owner": "0904",
+            "disposition": "unverified-behavior"
+        },
+        {
+            "id": "H1",
+            "category": "hypothesis",
+            "assertion": "doctor availability provenance populates since/reason",
+            "observed": "16/16 rows carry availability{disabled,owner,since,reason} but since/reason null on every row; no snapshot age — may populate only after a real availability event or usage snapshot",
+            "evidence": [{ "path": "docs/design/session-pinned-dispatch.md", "line": 71 }],
+            "owner": "0904",
+            "disposition": "unverified-behavior"
+        },
+        {
+            "id": "F7",
+            "category": "adoption-gap",
+            "assertion": "workflow layering project > registered > shared",
+            "observed": "all 9 definitions resolve from BOTH registered (published 0.3.90) and shared (checkout); registered shadows checkout for bare-spur runs; D62 active while children 0866/0874/0882 done — evidence/status question, not closed",
+            "evidence": [{ "path": "packages/app/src/workflow/workflow-resolver.ts", "line": 16 }],
+            "owner": "D62",
+            "disposition": "already-owned-work"
+        }
+    ],
+    "journeys": [
+        {
+            "id": "J1",
+            "steps": [
+                "agent doctor/list/usage inspect executor availability and provenance",
+                "selector resolution role|executor|binary|auto|inline",
+                "unknown selector errors with accepted vocabulary"
+            ],
+            "identityKeys": ["role", "tier", "executor", "agent", "source (resolved block)"],
+            "receipt": "doctor --json rows carry availability{disabled,owner,since,reason} + B8 capabilities",
+            "failures": ["unknown selector exit 2 naming accepted vocabulary"],
+            "suggestion": "none — surface adequate; F2 help-string alignment only"
+        },
+        {
+            "id": "J2",
+            "steps": [
+                "agent run selector",
+                "resolution via agent-service",
+                "occupant addressing --spec/--drain (legacy --agent <spec-id> fallback)",
+                "persisted run record under .spur/run/",
+                "--json resolved block"
+            ],
+            "identityKeys": ["run id", "spec id", "occupant key"],
+            "receipt": "run record + resolved{role,tier,executor,agent,source}",
+            "failures": ["exit 0/1/2 + propagated agent exit"],
+            "suggestion": "none new; preserve identity/idempotency constraints (U1)"
+        },
+        {
+            "id": "J3",
+            "steps": [
+                "message send --to XOR --role",
+                "--request-key idempotent replay (0832)",
+                "--wait occupant snapshot before enqueue",
+                "--until injected|invoke-exit"
+            ],
+            "identityKeys": ["--request-key", "message id"],
+            "receipt": "occupant snapshot before enqueue; wait failure never rolls back enqueue",
+            "failures": [
+                "delivery-failed",
+                "attempts-exhausted",
+                "outcome-unknown (never auto-released)",
+                "run-exit-only"
+            ],
+            "suggestion": "deduplicate wait-error vocabulary tables across agent.md/message.md (same codes, two ledgers)"
+        },
+        {
+            "id": "J4",
+            "steps": [
+                "detect interruption via run state / checkpoint",
+                "resume via spur workflow continue <run-id> in recorded launch workdir",
+                "checkpoint freshness validation (checkpointStaleness)",
+                "worktree batch resume via WT-6 marker scan"
+            ],
+            "identityKeys": ["run id", "session_id <date>-<wbs-or-feature>", "worktree marker command+selector"],
+            "receipt": "canonical checkpoint frontmatter (schema_version 1) + persisted run row authoritative",
+            "failures": [
+                "stale checkpoint refused with named reason",
+                "occupant_gone/run_replaced/wait_stalled (agent.md:129-130)",
+                "no resolvable worktree marker → loud failure, never silent main-tree run"
+            ],
+            "suggestion": "none — recovery machinery already identity-pinned; no redundant step demonstrated"
+        }
+    ],
+    "scenarios": [
+        {
+            "id": "SC1",
+            "mode": "pipeline",
+            "question": "Does reuse-vs-fresh session policy affect coder→test-fix continuity vs reviewer isolation under A9 pins?",
+            "evidenceSources": [
+                "config/workflows/task-pipeline.yaml:199-213",
+                "config/workflows/task-pipeline.yaml:229-241",
+                "config/workflows/task-pipeline.yaml:423-442"
+            ],
+            "findingIds": ["A9"]
+        },
+        {
+            "id": "SC2",
+            "mode": "pipeline",
+            "question": "Does registered-vs-shared workflow definition divergence change run behavior (published 0.3.90 vs checkout)?",
+            "evidenceSources": ["packages/app/src/workflow/workflow-resolver.ts:16-21"],
+            "findingIds": ["F7"]
+        },
+        {
+            "id": "SC3",
+            "mode": "inline",
+            "question": "How does doctor behave with no usage snapshot — do since/reason stay null and does availability provenance ever populate?",
+            "evidenceSources": [
+                "packages/app/src/services/agent-service.ts",
+                "docs/design/session-pinned-dispatch.md:71-73"
+            ],
+            "findingIds": ["F6", "H1"]
+        },
+        {
+            "id": "SC4",
+            "mode": "fleet",
+            "question": "Wait/receipt runtime semantics with a live spur serve occupant: occupant_gone, run_replaced, wait_stalled, outcome-unknown hold",
+            "evidenceSources": [
+                "plugins/sp/skills/spur-cli/references/agent.md:129-130",
+                "plugins/sp/skills/spur-cli/references/message.md:78-93"
+            ],
+            "findingIds": ["A6"]
+        },
+        {
+            "id": "SC5",
+            "mode": "pipeline",
+            "question": "Enumerate live callers for pr-review, wayfinder-resolution, history-anatomy, feature-verification definitions (0903 gap)",
+            "evidenceSources": ["packages/app/src/workflow/workflow-resolver.ts"],
+            "findingIds": ["F7"]
+        }
+    ],
+    "unknowns": [
+        "U1 — compatibility/deprecation tolerance for any agent/message simplification (map open question, unchanged)",
+        "U2 — who owns code-side help-text-vs-behavior drift (plugin parity harness does not see CLI strings)",
+        "U3 — does any live consumer resolve roles from installed adapters (F4 reproduction named in B)",
+        "U4 — capture agent doctor --json provenance with a real usage snapshot + fixture populating since/reason (H1; 0904)",
+        "U5 — content diff ~/node_modules/@gobing-ai/spur/config/workflows vs checkout config/workflows (registered copy is published 0.3.90, out-of-tree, not read this pass)"
+    ]
+}

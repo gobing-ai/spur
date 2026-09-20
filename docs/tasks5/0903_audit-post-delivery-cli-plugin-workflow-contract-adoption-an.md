@@ -4,7 +4,7 @@ name: Audit post-delivery CLI-plugin-workflow contract adoption and existing bac
 status: done
 template: brainstorm
 created_at: 2026-09-20T00:51:02.732Z
-updated_at: "2026-09-20T05:58:01.521Z"
+updated_at: "2026-09-20T07:14:15.822Z"
 feature_id: I31
 
 priority: P1
@@ -26,23 +26,23 @@ Type: `wayfinder:research`. This is the first independent investigation on map I
 
 ### Requirements
 
-- [ ] R1. Freeze an explicit surface inventory reachable from dev-run, dev-runall, dev-parallel, super-planner, super-coder, super-reviewer, spur agent, spur message, and every model-bearing workflow action. Include each directly referenced runtime contract and installed adapter target that can be located; list missing installed targets without inventing paths.
-- [ ] R2. Compare CLI flags/output/selector semantics, quota ownership, role pins, reuse/fresh sessions, capability fallback, receipt identity, and mutation policy across the frozen surfaces; each mismatch cites current source and asserted guidance.
-- [ ] R3. Capture feature sync --all --dry-run once; use its proposed statuses only in the report. Resolve archived linked tasks through task show before calling a feature empty or terminal. Cover I7, P, D62, E6, B1, B3, G1, G4, G65, and I4 without modifying them.
-- [ ] R4. Map four journeys—inspect/select executor, dispatch one task, send/wait for a request, and recover an interrupted member—to existing commands, identity keys, receipts, and failure outcomes. Propose simplification only for demonstrated redundant steps.
-- [ ] R5. Assign each confirmed finding an existing owner or explicit unowned disposition; separate shipped behavior, stale prose, absent adoption, unverified behavior, and already-owned work. No new feature/task allocation in this investigation.
-- [ ] R6. Deliver 0903-contract-adoption.md and 0903-contract-adoption.json with the schema and coverage accounting below; enumerate concrete scenarios for dependent task 0905.
-- [ ] R7. Validate row IDs, source anchors, inventory coverage, dispositions, and scenario references with a repeatable local check; report all unknowns and execution constraints.
+- [x] R1. Freeze an explicit surface inventory reachable from dev-run, dev-runall, dev-parallel, super-planner, super-coder, super-reviewer, spur agent, spur message, and every model-bearing workflow action. Include each directly referenced runtime contract and installed adapter target that can be located; list missing installed targets without inventing paths.
+- [x] R2. Compare CLI flags/output/selector semantics, quota ownership, role pins, reuse/fresh sessions, capability fallback, receipt identity, and mutation policy across the frozen surfaces; each mismatch cites current source and asserted guidance.
+- [x] R3. Capture feature sync --all --dry-run once; use its proposed statuses only in the report. Resolve archived linked tasks through task show before calling a feature empty or terminal. Cover I7, P, D62, E6, B1, B3, G1, G4, G65, and I4 without modifying them.
+- [x] R4. Map four journeys—inspect/select executor, dispatch one task, send/wait for a request, and recover an interrupted member—to existing commands, identity keys, receipts, and failure outcomes. Propose simplification only for demonstrated redundant steps.
+- [x] R5. Assign each confirmed finding an existing owner or explicit unowned disposition; separate shipped behavior, stale prose, absent adoption, unverified behavior, and already-owned work. No new feature/task allocation in this investigation.
+- [x] R6. Deliver 0903-contract-adoption.md and 0903-contract-adoption.json with the schema and coverage accounting below; enumerate concrete scenarios for dependent task 0905.
+- [x] R7. Validate row IDs, source anchors, inventory coverage, dispositions, and scenario references with a repeatable local check; report all unknowns and execution constraints.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Every frozen surface has an observed result or a named unavailable reason; installed-target coverage is explicit. (req: R1)
-- [ ] AC2 — Session, quota, selector, capability, receipt, and mutation-policy comparisons carry source-versus-guidance evidence. (req: R2)
-- [ ] AC3 — Status/ownership conclusions use one sync capture and complete roster lookup, with zero status mutations. (req: R3)
-- [ ] AC4 — All four journeys have steps, identity/receipt semantics, error paths, and evidence-backed simplification dispositions. (req: R4)
-- [ ] AC5 — Each finding has exactly one disposition and owner or unowned marker; existing deliveries are not proposed anew. (req: R5)
-- [ ] AC6 — Both named artifacts parse/read and scenario IDs provide a deterministic handoff to 0905. (req: R6)
-- [ ] AC7 — The report includes the checker command/result, provenance, unknowns, and no unsupported completion claims. (req: R7)
+- [x] AC1 — Every frozen surface has an observed result or a named unavailable reason; installed-target coverage is explicit. (req: R1)
+- [x] AC2 — Session, quota, selector, capability, receipt, and mutation-policy comparisons carry source-versus-guidance evidence. (req: R2)
+- [x] AC3 — Status/ownership conclusions use one sync capture and complete roster lookup, with zero status mutations. (req: R3)
+- [x] AC4 — All four journeys have steps, identity/receipt semantics, error paths, and evidence-backed simplification dispositions. (req: R4)
+- [x] AC5 — Each finding has exactly one disposition and owner or unowned marker; existing deliveries are not proposed anew. (req: R5)
+- [x] AC6 — Both named artifacts parse/read and scenario IDs provide a deterministic handoff to 0905. (req: R6)
+- [x] AC7 — The report includes the checker command/result, provenance, unknowns, and no unsupported completion claims. (req: R7)
 
 ### Q&A
 
@@ -76,13 +76,13 @@ Output feeds 0905 via the scenario IDs, source commit, and evidence source list.
 
 ### Plan
 
-- [ ] Step 1 (R1, AC1): Freeze an explicit surface inventory reachable from dev-run, dev-runall, dev-parallel, super-planner, super-coder, super-reviewer, spur agent, spur message, and every model-bearing workflow action. Include each directly referenced runtime contract and installed adapter target that can be located; list missing installed targets without inventing paths.
-- [ ] Step 2 (R2, AC2): Compare CLI flags/output/selector semantics, quota ownership, role pins, reuse/fresh sessions, capability fallback, receipt identity, and mutation policy across the frozen surfaces; each mismatch cites current source and asserted guidance.
-- [ ] Step 3 (R3, AC3): Capture feature sync --all --dry-run once; use its proposed statuses only in the report. Resolve archived linked tasks through task show before calling a feature empty or terminal. Cover I7, P, D62, E6, B1, B3, G1, G4, G65, and I4 without modifying them.
-- [ ] Step 4 (R4, AC4): Map four journeys—inspect/select executor, dispatch one task, send/wait for a request, and recover an interrupted member—to existing commands, identity keys, receipts, and failure outcomes. Propose simplification only for demonstrated redundant steps.
-- [ ] Step 5 (R5, AC5): Assign each confirmed finding an existing owner or explicit unowned disposition; separate shipped behavior, stale prose, absent adoption, unverified behavior, and already-owned work. No new feature/task allocation in this investigation.
-- [ ] Step 6 (R6, AC6): Deliver 0903-contract-adoption.md and 0903-contract-adoption.json with the schema and coverage accounting below; enumerate concrete scenarios for dependent task 0905.
-- [ ] Step 7 (R7, AC7): Validate row IDs, source anchors, inventory coverage, dispositions, and scenario references with a repeatable local check; report all unknowns and execution constraints.
+- [x] Step 1 (R1, AC1): Freeze an explicit surface inventory reachable from dev-run, dev-runall, dev-parallel, super-planner, super-coder, super-reviewer, spur agent, spur message, and every model-bearing workflow action. Include each directly referenced runtime contract and installed adapter target that can be located; list missing installed targets without inventing paths.
+- [x] Step 2 (R2, AC2): Compare CLI flags/output/selector semantics, quota ownership, role pins, reuse/fresh sessions, capability fallback, receipt identity, and mutation policy across the frozen surfaces; each mismatch cites current source and asserted guidance.
+- [x] Step 3 (R3, AC3): Capture feature sync --all --dry-run once; use its proposed statuses only in the report. Resolve archived linked tasks through task show before calling a feature empty or terminal. Cover I7, P, D62, E6, B1, B3, G1, G4, G65, and I4 without modifying them.
+- [x] Step 4 (R4, AC4): Map four journeys—inspect/select executor, dispatch one task, send/wait for a request, and recover an interrupted member—to existing commands, identity keys, receipts, and failure outcomes. Propose simplification only for demonstrated redundant steps.
+- [x] Step 5 (R5, AC5): Assign each confirmed finding an existing owner or explicit unowned disposition; separate shipped behavior, stale prose, absent adoption, unverified behavior, and already-owned work. No new feature/task allocation in this investigation.
+- [x] Step 6 (R6, AC6): Deliver 0903-contract-adoption.md and 0903-contract-adoption.json with the schema and coverage accounting below; enumerate concrete scenarios for dependent task 0905.
+- [x] Step 7 (R7, AC7): Validate row IDs, source anchors, inventory coverage, dispositions, and scenario references with a repeatable local check; report all unknowns and execution constraints.
 
 ### Solution
 
@@ -160,19 +160,13 @@ No duplicates created; no new backlog subsystem proposed.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Matrix rows A1-A11 at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:60-70`, each carrying source path/line, asserted shape, live behavior, evidence command, confidence; re-sampled live this run: A1 `bun apps/cli/src/index.ts agent --help` exit 0 = exactly list,status,usage,doctor,run,wait,start,stop with loop hidden (verb map re-read at `plugins/sp/skills/spur-cli/references/agent.md:15-27`); A4 fresh `agent doctor --json` exit 0 = 16 rows, 16/16 carry availability{disabled,owner,since,reason}, exactly 6 disabled rows all owner "operator", since/reason null on all rows, top-level usage null — matches remediated A4 wording field-for-field (round-1 PARTIAL driver resolved); A7 `workflow list --json` exit 0 = 18 entries = 9 defs x registered(9)+shared(9), 0 project, layer vocabulary `packages/app/src/workflow/workflow-resolver.ts:16-21`; A9 pins re-read at `config/workflows/task-pipeline.yaml:199-213`, `:229-241`, `:423-442`, `:494-505` and `config/workflows/idea-pipeline.yaml:95-97`, `:128-131` |
-| R2 | MET | Dispositions F1-F6+H1 at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:74-80`; re-confirmed live this run: F1 (`plugins/sp/skills/wayfinder/SKILL.md:123` stale --section tags recipe; Tags absent from FEATURE_CANONICAL_SECTIONS `packages/domain/src/planning/markdown-document.ts:51-57`), F2 (`apps/cli/src/commands/agent.ts:290` help string contradicts substitute+warn-never-reject at `packages/app/src/services/agent-service.ts:1766-1778`, SSOT `plugins/sp/skills/spur-dev/references/cross-cutting.md:44-46`), F3 (grep plugins/sp *.md = 0 matches for session-policy prose), F5 (`plugins/sp/skills/spur-dev/references/execution-workflow.md:278` Known diagnostic gap prose accurate); H1 (:80) labeled hypothesis and matches the fresh doctor capture |
-| R3 | MET | Section C at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:82-87`; D62 recorded as evidence/status question without change — `feature show D62` exit 0 status=active this run while children 0866/0874/0882 all done (task show exit 0 each, re-run this run); caller anchors re-read: `plugins/sp/commands/dev-run.md:67-68`, `dev-idea.md:46-47`, `dev-plan.md:46-47`; 4-definition caller gap honestly named for 0905 |
-| R4 | MET | Section D at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:89-93`; anchors re-read: `plugins/sp/skills/spur-cli/references/message.md:44-47` wait-before-enqueue + enqueue never rolled back, `:78-93` distinct durable hold reasons with outcome-unknown never auto-released; legacy `--agent <spec-id>` fallback at `plugins/sp/skills/spur-cli/references/agent.md:57`; unknown-selector accepted vocabulary at `packages/app/src/services/agent-service.ts:2334`; compatibility open at U1 :113; no new public verb proposed |
-| R5 | MET | Owner register at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:95-109`; statuses fresh-pulled via feature show exit 0 this run: I7=backlog, B1=verifying, B3=verifying, I4=verifying, D62=active, P=active, E6=active — all match the register cells; no duplicates, no new backlog subsystem (git status --porcelain lists only the task file) |
-| R6 | MET | Matrix + command provenance + U1-U5 at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:113-117` + smallest follow-up slice per confirmed finding in section B (:74-77); observe-only holds: `git status --porcelain` lists only `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md` — no source/plugin/workflow/adapter/config edits; this run wrote only the answer file, no section writes, no status transitions, no commits |
-
-| Acceptance Criteria | Status | Evidence Type | Evidence |
-|---------------------|--------|---------------|----------|
-| AC1 | MET | command | Five surfaces re-sampled live this run with path/line evidence — live CLI (agent --help, agent doctor --json, workflow list --json, agent usage --help, all exit 0), plugin source (`apps/cli/src/commands/agent.ts:290`), installed adapters (83 sp-* dirs recounted; 0/83 installed SKILL.md carry role: in frontmatter vs source `plugins/sp/commands/dev-run.md:1-6`; mtime 17:28 installed vs 18:09 source), workflow YAML (`config/workflows/task-pipeline.yaml:494-505` verify fresh pins), session policy (`docs/design/session-pinned-dispatch.md:71-73` section 3.5 Doctor provenance); round-1's A4 accuracy defect resolved and re-verified field-for-field against a fresh doctor capture |
-| AC2 | MET | command | Every finding at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:74-80` carries a disposition class; H1 (:80) explicitly "hypothesis (not a bug)" and F4 (:77) impact-hypothesis — no hypothesis reported as a bug, re-verified against fresh evidence (F1 recipe live at wayfinder:123; H1 corrected text matches the fresh doctor capture field-for-field); residual dangling "H2" token (:63, :116) is a label nit (P3 below), not a mislabeled hypothesis |
-| AC3 | MET | command | `bun apps/cli/src/index.ts message send --help` exit 0 this run: --to mutually exclusive with --role, --request-key replay wording (0832), --wait/--until injected or invoke-exit; prose re-read at `plugins/sp/skills/spur-cli/references/message.md:44-47` and `:78-93`; public-surface compatibility recorded open at U1 `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:113` |
-| AC4 | MET | command | Owner register names the next owner/follow-up per confirmed finding at `docs/tasks5/0903_audit-post-delivery-cli-plugin-workflow-contract-adoption-an.md:95-109`; D62 evidence gap recorded without status change — feature show D62 exit 0 status=active this run, children 0866/0874/0882 all done; git status shows no edits by this run |
+| R1 | MET | docs/reports/i31/0903-contract-adoption.json surfaces A1-A11; checker exit 0 |
+| R2 | MET | findings F1-F7+H1 with source-vs-guidance evidence |
+| R3 | MET | feature sync --all --dry-run exit 0: 138 evaluated, 0 applied; roster via task show |
+| R4 | MET | journeys J1-J4 complete in 0903-contract-adoption.json |
+| R5 | MET | 8 findings, exactly one R5 disposition + owner each; checker exit 0 |
+| R6 | MET | docs/reports/i31/0903-contract-adoption.{md,json} delivered; SC1-SC5 handoff |
+| R7 | MET | bun run docs/reports/i31/0903-check.ts exit 0 (CHECK-PASS) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
