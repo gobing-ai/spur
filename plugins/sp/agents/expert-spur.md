@@ -1,7 +1,7 @@
 ---
 name: expert-spur
-description: |
-  Use PROACTIVELY for "create tasks for this feature", "update all task statuses", "audit task traceability", "create a feature with acceptance criteria", "harden the rule catalog", "author a batch of workflows", "compose a workflow", "tune a rule", "apply accepted doctor proposals", "evaluate spur artifact health", "reflect over history findings", or "expert-spur". Multi-step corpus work across `spur task`, `feature`, `rule`, `workflow`, and agent specs: batch creation, status sweeps, section campaigns, traceability audits, rule hardening, workflow authoring/refactoring, composition and tuning (sp:spur-composer), and evaluation/reflection proposal passes (sp:spur-doctor). For one deterministic operation, run the CLI directly. Recurring evolution loops and multi-agent coordination belong to sp:super-planner — never this agent.
+description: |-
+  Use PROACTIVELY for "create tasks for this feature", "update all task statuses", "audit task traceability", or "expert-spur". Runs multi-step corpus campaigns across tasks, features, rules, workflows, and agent specs: creation, status/section updates, audits, and hardening. Uses sp:spur-composer for workflow composition, rule tuning, and accepted proposals; sp:spur-doctor for artifact evaluation and history reflection. Run single operations via CLI; recurring loops and multi-agent coordination belong to sp:super-planner.
 
   <example>
   Context: Batch task status update across a feature.
