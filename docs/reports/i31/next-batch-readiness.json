@@ -1,0 +1,388 @@
+{
+    "schemaVersion": 1,
+    "runId": "i31-next-batch-ready-2026-09-20",
+    "depth": "ready",
+    "sourceCommit": "1c8572339",
+    "preparation": "Inline source-audited planning; batch-create --skip-ready avoided a redundant model dispatch, followed by all seven ready checks and deterministic corpus gates.",
+    "implementationVerified": false,
+    "tasks": [
+        {
+            "wbs": "0906",
+            "featureId": "I7",
+            "status": "ready",
+            "taskStatus": "todo",
+            "planningDigest": "e220396079fdd4d52a0c55c3e18a92488b55168cfe0f624ef5162494e942718b",
+            "filePath": "/Users/robin/xprojects/spur-new/docs/tasks5/0906_fix-wayfinder-tagging-and-detect-semantic-section-operand-dr.md",
+            "estimateHours": 3,
+            "dependencies": [],
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "Requirements R1-R3 freeze observable behavior and scope; 3 task-local AC bind those requirements."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "Design names existing source seams, chosen behavior, error paths, ownership and non-goals. No new scheduler, parser framework, database table or public command is needed."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "Four ordered Plan steps tie implementation and focused verification to R/AC IDs, followed by task-local gates and per-feature verification boundaries."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "CLI task check --as todo passes with no findings. Feature scenarios are linked by matching titles; further task-local criteria cover edge behavior."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "Q&A freezes delegated implementation, exact scope, feature mappings, isolated verification and integration order. Deferred questions are outside task completion."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "No unfinished semantic prerequisite; upstream I31 investigations are done. Recommended serial order 0906,0907,0908,0909 avoids shared design/help/test conflicts. Parallel execution requires isolated worktrees."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "Current wayfinder recipe, existing invocation extractor and I6 design §R4-R5 substantiate the defect. The historical scope token is a genuine feature heading, so the spec explicitly avoids a blind denylist."
+                }
+            ],
+            "structuralGate": [
+                {
+                    "wbs": "0906",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "0907",
+            "featureId": "B61",
+            "status": "ready",
+            "taskStatus": "todo",
+            "planningDigest": "cd198dd6e1d6ed8df729a18bb73178bd0f5ff5b3e96aaa2ec214096cf6707850",
+            "filePath": "/Users/robin/xprojects/spur-new/docs/tasks5/0907_make-usage-preview-and-apply-outcomes-conservative-and-truth.md",
+            "estimateHours": 5,
+            "dependencies": [],
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "Requirements R1-R5 freeze observable behavior and scope; 5 task-local AC bind those requirements."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "Design names existing source seams, chosen behavior, error paths, ownership and non-goals. No new scheduler, parser framework, database table or public command is needed."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "Four ordered Plan steps tie implementation and focused verification to R/AC IDs, followed by task-local gates and per-feature verification boundaries."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "CLI task check --as todo passes with no findings. Feature scenarios are linked by matching titles; further task-local criteria cover edge behavior."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "Q&A freezes delegated implementation, exact scope, feature mappings, isolated verification and integration order. Deferred questions are outside task completion."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "No unfinished semantic prerequisite; upstream I31 investigations are done. Recommended serial order 0906,0907,0908,0909 avoids shared design/help/test conflicts. Parallel execution requires isolated worktrees."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "Producer classifies no-usage but includes it in healthy decision inputs, plans actions before drain, and consumes allSettled without result reconciliation. Existing DAO exposes exact observation acknowledgement and skip state. Real writer owns declaring-layer precedence."
+                }
+            ],
+            "structuralGate": [
+                {
+                    "wbs": "0907",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "0908",
+            "featureId": "B61",
+            "status": "ready",
+            "taskStatus": "todo",
+            "planningDigest": "87242c767127cb983367209964c34f1c0f4e5dee378db228ea4d00a2f6c159a7",
+            "filePath": "/Users/robin/xprojects/spur-new/docs/tasks5/0908_bound-codexbar-capture-with-the-existing-runtime-timeout.md",
+            "estimateHours": 2,
+            "dependencies": [],
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "Requirements R1-R4 freeze observable behavior and scope; 4 task-local AC bind those requirements."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "Design names existing source seams, chosen behavior, error paths, ownership and non-goals. No new scheduler, parser framework, database table or public command is needed."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "Four ordered Plan steps tie implementation and focused verification to R/AC IDs, followed by task-local gates and per-feature verification boundaries."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "CLI task check --as todo passes with no findings. Feature scenarios are linked by matching titles; further task-local criteria cover edge behavior."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "Q&A freezes delegated implementation, exact scope, feature mappings, isolated verification and integration order. Deferred questions are outside task completion."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "No unfinished semantic prerequisite; upstream I31 investigations are done. Recommended serial order 0906,0907,0908,0909 avoids shared design/help/test conflicts. Parallel execution requires isolated worktrees."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "CLI capture currently supplies no timeout. Installed ts-runtime 0.5.0 accepts timeout and returns structured outcome after process cleanup. The observed 113-second sample motivates, but does not statistically establish, the chosen 180-second cap."
+                }
+            ],
+            "structuralGate": [
+                {
+                    "wbs": "0908",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "wbs": "0909",
+            "featureId": "I32",
+            "status": "ready",
+            "taskStatus": "todo",
+            "planningDigest": "eff1e2b584be86e29f296254e66878e9b4e090c95b34c844c9ae481b3020c66a",
+            "filePath": "/Users/robin/xprojects/spur-new/docs/tasks5/0909_align-plugin-and-cli-guidance-with-shipped-dispatch-session-.md",
+            "estimateHours": 3,
+            "dependencies": [],
+            "checks": [
+                {
+                    "id": "requirements",
+                    "pass": true,
+                    "evidence": "Requirements R1-R3 freeze observable behavior and scope; 3 task-local AC bind those requirements."
+                },
+                {
+                    "id": "design",
+                    "pass": true,
+                    "evidence": "Design names existing source seams, chosen behavior, error paths, ownership and non-goals. No new scheduler, parser framework, database table or public command is needed."
+                },
+                {
+                    "id": "plan",
+                    "pass": true,
+                    "evidence": "Four ordered Plan steps tie implementation and focused verification to R/AC IDs, followed by task-local gates and per-feature verification boundaries."
+                },
+                {
+                    "id": "ac",
+                    "pass": true,
+                    "evidence": "CLI task check --as todo passes with no findings. Feature scenarios are linked by matching titles; further task-local criteria cover edge behavior."
+                },
+                {
+                    "id": "decisions",
+                    "pass": true,
+                    "evidence": "Q&A freezes delegated implementation, exact scope, feature mappings, isolated verification and integration order. Deferred questions are outside task completion."
+                },
+                {
+                    "id": "dependencies",
+                    "pass": true,
+                    "evidence": "No unfinished semantic prerequisite; upstream I31 investigations are done. Recommended serial order 0906,0907,0908,0909 avoids shared design/help/test conflicts. Parallel execution requires isolated worktrees."
+                },
+                {
+                    "id": "premises",
+                    "pass": true,
+                    "evidence": "CLI help promises an inline headless error; cross-cutting already documents fallback. Shipped design/workflow define session defaults. Execution guidance retains a doctor-auth claim that conflicts with the documented B4 removal."
+                }
+            ],
+            "structuralGate": [
+                {
+                    "wbs": "0909",
+                    "status": "todo",
+                    "findings": [],
+                    "requiredSections": ["Background", "Acceptance Criteria", "Design", "Plan"],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        }
+    ],
+    "features": [
+        {
+            "id": "I7",
+            "result": [
+                {
+                    "id": "I7",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 — wayfinder tags a map through --field, not --section\" is linked but unverified: covering task(s) 0906 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 — the parity harness flags --section on a frontmatter key\" is linked but unverified: covering task(s) 0906 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R3 — a platform without slash commands still sees the correct recipe\" is linked but unverified: covering task(s) 0906 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "B61",
+            "result": [
+                {
+                    "id": "B61",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 — usage decisions require a real signal and respect operator ownership\" is linked but unverified: covering task(s) 0907 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 — usage actions describe acknowledged outcomes\" is linked but unverified: covering task(s) 0907 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R3 — Codexbar capture has a finite deadline\" is linked but unverified: covering task(s) 0908 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R4 — usable partial provider results remain supported\" is linked but unverified: covering task(s) 0907, 0908 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "I32",
+            "result": [
+                {
+                    "id": "I32",
+                    "status": "backlog",
+                    "findings": [
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R1 — inline help matches the shipped headless fallback\" is linked but unverified: covering task(s) 0909 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R2 — plugin guidance explains shipped session and availability policy\" is linked but unverified: covering task(s) 0909 have no PASS verdict with MET requirement"
+                        },
+                        {
+                            "layer": "L4",
+                            "code": "L4.scenario-unverified",
+                            "severity": "warning",
+                            "section": "Acceptance Criteria",
+                            "message": "Feature scenario \"R3 — CLI-only readers receive the same contract\" is linked but unverified: covering task(s) 0909 have no PASS verdict with MET requirement"
+                        }
+                    ],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        },
+        {
+            "id": "I31",
+            "result": [
+                {
+                    "id": "I31",
+                    "status": "active",
+                    "findings": [],
+                    "requiredSections": [],
+                    "missingSections": [],
+                    "pass": true,
+                    "notes": [],
+                    "repairs": []
+                }
+            ]
+        }
+    ],
+    "preExistingFindings": [
+        {
+            "feature": "I3",
+            "code": "L4.dogfood-missing",
+            "disposition": "Recorded, not modified; new I32 completion requires its own dogfood evidence."
+        }
+    ]
+}
