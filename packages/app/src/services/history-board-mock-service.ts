@@ -264,6 +264,11 @@ function generateDeterministicSessions(): RawMockSession[] {
 }
 
 /**
+ * Pinned mock "now" so generated data and time-window math stay deterministic.
+ */
+const MOCK_NOW = new Date('2026-08-21T20:00:00.000Z').getTime();
+
+/**
  * Mock implementation of HistoryBoardService for testing and initial UI development.
  */
 export class MockHistoryBoardService implements HistoryBoardService {
@@ -276,7 +281,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
     private filterSessions(filter?: HistoryFilter): RawMockSession[] {
         if (!filter) return this.sessions;
 
-        const now = new Date('2026-08-21T20:00:00.000Z').getTime();
+        const now = MOCK_NOW;
         let minTime = 0;
         let maxTime = Number.POSITIVE_INFINITY;
 
@@ -675,7 +680,7 @@ export class MockHistoryBoardService implements HistoryBoardService {
             toolCalls: number;
         }>,
     ): HistoryKpiTrendPoint[] {
-        const end = new Date();
+        const end = new Date(MOCK_NOW);
         end.setUTCHours(0, 0, 0, 0);
         const byDay = new Map<
             string,
