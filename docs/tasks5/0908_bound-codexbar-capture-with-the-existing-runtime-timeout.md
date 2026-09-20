@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Bound Codexbar capture with the existing runtime timeout
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-20T15:48:46.080Z
-updated_at: "2026-09-20T15:50:09.950Z"
+updated_at: "2026-09-20T19:55:49.268Z"
 feature_id: B61
 priority: P1
 tags:
@@ -23,17 +23,17 @@ I31/0904 measured a roughly 113-second capture and found no deadline in Codexbar
 
 ### Requirements
 
-- [ ] R1. Apply a finite 180000 ms default timeout to CodexbarUsageSource through NodeProcessExecutor.run timeout; allow only an internal constructor test override, not a new public CLI flag or configuration field.
-- [ ] R2. Reject timeout/abort/signal/unusable capture outcomes as UsageSourceError before producer writes, even if partial stdout happens to parse. Error text must identify timeout rather than incorrectly recommend installing the binary.
-- [ ] R3. Preserve normally completed nonzero captures containing parsable arrays, including mixed healthy/provider-error entries, and preserve launch failure handling.
-- [ ] R4. Prove bounded termination and fail-closed writes with a disposable hanging child and a short injected test deadline; document the limit and retained partial-provider behavior in the existing owning design.
+- [x] R1. Apply a finite 180000 ms default timeout to CodexbarUsageSource through NodeProcessExecutor.run timeout; allow only an internal constructor test override, not a new public CLI flag or configuration field.
+- [x] R2. Reject timeout/abort/signal/unusable capture outcomes as UsageSourceError before producer writes, even if partial stdout happens to parse. Error text must identify timeout rather than incorrectly recommend installing the binary.
+- [x] R3. Preserve normally completed nonzero captures containing parsable arrays, including mixed healthy/provider-error entries, and preserve launch failure handling.
+- [x] R4. Prove bounded termination and fail-closed writes with a disposable hanging child and a short injected test deadline; document the limit and retained partial-provider behavior in the existing owning design.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Codexbar capture has a finite deadline (req: R1)
-- [ ] AC2 — interrupted capture cannot update availability (req: R2)
-- [ ] AC3 — usable partial provider results remain supported (req: R3)
-- [ ] AC4 — timeout regression leaves prior state intact (req: R4)
+- [x] AC1 — Codexbar capture has a finite deadline (req: R1)
+- [x] AC2 — interrupted capture cannot update availability (req: R2)
+- [x] AC3 — usable partial provider results remain supported (req: R3)
+- [x] AC4 — timeout regression leaves prior state intact (req: R4)
 
 ### Q&A
 
@@ -67,25 +67,74 @@ Source anchors:
 
 ### Plan
 
-- [ ] 1. Confirm runtime timeout/outcome contract in the installed dependency and add a failing hanging-child capture test (R1-R2/AC1-AC2).
-- [ ] 2. Wire the default timeout and reject interrupted outcomes before parsing while keeping normal nonzero captures usable (R1-R3/AC1-AC3).
-- [ ] 3. Run capture-source and usage-command tests inside apps/cli and the producer fail-closed test inside packages/app; assert prior state and child cleanup (R4/AC4).
-- [ ] 4. Update the owning design, run task-local gates, rebuild/link CLI and verify; once both B61 tasks pass, run the B61 feature gate and wrap with one task commit.
+- [x] 1. Confirm runtime timeout/outcome contract in the installed dependency and add a failing hanging-child capture test (R1-R2/AC1-AC2).
+- [x] 2. Wire the default timeout and reject interrupted outcomes before parsing while keeping normal nonzero captures usable (R1-R3/AC1-AC3).
+- [x] 3. Run capture-source and usage-command tests inside apps/cli and the producer fail-closed test inside packages/app; assert prior state and child cleanup (R4/AC4).
+- [x] 4. Update the owning design, run task-local gates, rebuild/link CLI and verify; once both B61 tasks pass, run the B61 feature gate and wrap with one task commit.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented per Design; all changes CLI-layer capture + tests + owning design.
+
+Change map:
+
+- `apps/cli/src/services/agent-usage-source.ts:24` — `DEFAULT_CAPTURE_TIMEOUT_MS = 180_000` (bounded headroom above the ~113 s I31/0904 capture; chosen limit, not an SLA).
+- `apps/cli/src/services/agent-usage-source.ts:38` — constructor gains a defaulted `timeoutMs` test-only override; non-finite/non-positive values (0/NaN/negative/Infinity) fall back to the default so the boundary cannot be disabled accidentally (R1).
+- `apps/cli/src/services/agent-usage-source.ts:55` — `NodeProcessExecutor.run({ timeout })` passes the deadline; the runtime's group-owned containment (SIGTERM → escalate → output settlement) provides termination + cleanup; no caller-side watchdog (Design).
+- `apps/cli/src/services/agent-usage-source.ts:66` — structured `outcome` checked before the exit-code/parsing fallback: `timeout|cancelled` ⇒ `UsageSourceError` naming the deadline and explicitly not the install advice; `signal|error` ⇒ fail-closed unusable-capture error; only `outcome: 'exit'` reaches the existing nonzero pass-through (R2/R3).
+
+Tests:
+
+- `apps/cli/tests/services/agent-usage-source.test.ts` — regression: disposable Bun child writes valid JSON `[]` then hangs; injected 2000 ms deadline asserts `UsageSourceError` containing `deadline` (and not `install codexbar`), then probes the child pid with `kill(pid, 0)` to prove runtime-owned reaping (R4/AC1/AC2).
+- `packages/app/tests/services/agent-usage-producer.test.ts` — R4 (0908): seeded prior state (snapshot + observation row + config), then an injected timed-out capture rejection; asserts snapshot bytes, observation row, and config ownership all unchanged (AC4).
+
+Design:
+
+- `docs/design/session-pinned-dispatch.md` §3.4 steps 1 and 5 — documents the 180000 ms default, runtime-owned termination, and that retained partial-provider behavior applies only to normally completed runs (R4).
+
+No public CLI flag or config field was added; app layer stays spawn-free.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `apps/cli/src/services/agent-usage-source.ts:21` — `DEFAULT_CAPTURE_TIMEOUT_MS = 180_000`; `:36-38` — defaulted constructor `timeoutMs` test-only override, non-finite/non-positive falls back to default; `:52` — `NodeProcessExecutor.run({ timeout })`; runtime owns the boundary (`node_modules/@gobing-ai/ts-runtime/src/process-executor.ts:72,129-129` — `timeout?: number |
+| R2 | MET | `apps/cli/src/services/agent-usage-source.ts:64-75` — structured `outcome` checked before any exit-code/parsing fallback: `timeout |
+| R3 | MET | Normal nonzero pass-through preserved: `apps/cli/tests/services/agent-usage-source.test.ts:51-56` (exit 1 with parsable `[]` returns capture, only `outcome: 'exit'` reaches it per source `:76-83`); mixed healthy/provider-error entries still applied: `apps/cli/tests/commands/agent-usage.test.ts:154-155` (openai `error` skipped, grok `headroom` applied); launch-failure handling preserved: `agent-usage-source.test.ts:62-70` (missing binary fail-closed). |
+| R4 | MET | Bounded termination proven: disposable Bun child writes valid JSON then hangs; injected 2000 ms deadline ⇒ `UsageSourceError`, child pid probed with `kill(pid,0)` and not alive (`apps/cli/tests/services/agent-usage-source.test.ts:72-102`). Fail-closed writes proven: injected timed-out capture rejection leaves snapshot bytes, observation row and config ownership unchanged (`packages/app/tests/services/agent-usage-producer.test.ts:168-203`). Limit + retained partial-provider behavior documented in owning design (`docs/design/session-pinned-dispatch.md:59,63` — §3.4 steps 1 and 5). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Finite deadline: `agent-usage-source.ts:21,36-38,52`; hanging-child test green with injected 2 s deadline (`agent-usage-source.test.ts:72`, "hanging capture hits the deadline and the child is reaped" pass, 2131.86 ms). |
+| AC2 | MET | test | Interrupted capture cannot update availability: outcome gate before parsing (`agent-usage-source.ts:64-75`) + producer fail-closed test asserting snapshot/row/config unchanged (`agent-usage-producer.test.ts:168-203`). |
+| AC3 | MET | test | Usable partial provider results preserved: nonzero pass-through (`agent-usage-source.test.ts:51`) and mixed healthy/error entries applied (`agent-usage.command test:154-155`); only normally completed runs keep this (`agent-usage-source.ts:76`). |
+| AC4 | MET | test | Timeout regression leaves prior state intact: producer test `agent-usage-producer.test.ts:168-203` pass; design §3.4 documents the 180000 ms limit and retained partial-provider behavior (`docs/design/session-pinned-dispatch.md:59,63`). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:d960af7c99afc09ea29e2a30cff76e5edcd711561ec626392c87e4cb68c2016f |
+| P4 | proof-input-digest | — | sha256:d960af7c99afc09ea29e2a30cff76e5edcd711561ec626392c87e4cb68c2016f |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-20T19:34:30.969Z todo → wip (system)
+- 2026-09-20T19:54:56.953Z wip → testing (system)
+- 2026-09-20T19:55:49.268Z testing → done (system)
+

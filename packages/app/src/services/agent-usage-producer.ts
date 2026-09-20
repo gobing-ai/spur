@@ -21,6 +21,16 @@
  * intact. codexbar's non-zero exit with a parsable array is NOT a failure:
  * `{ "error": … }` entries are skipped per provider (listed, no observation,
  * never treated as recovery) while healthy entries still apply.
+ *
+ * Conservative decisions + truthful outcomes (0907): only providers with a
+ * real signal (exhausted/headroom) drive availability decisions — no-usage
+ * and errored providers stay diagnostic-only, so an absent window can neither
+ * imply recovery nor hide valid headroom. Operator-owned availability (bare
+ * `disabled: true` included) is preserved before planning; the drain still
+ * re-checks ownership to protect races. Change actions are delivery
+ * semantics: `applied` only after the exact observation created by this
+ * invocation is acknowledged without a skip, `skipped` when it was superseded
+ * or rejected, `pending` when delivery is unconfirmed or failed.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -28,7 +38,7 @@ import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { type AgentExecutorConfig, normalizeExecutorAvailability } from '@gobing-ai/spur-config';
 import { normalizeQuotaTimestamp, resolveQuotaExecutorBinding } from '@gobing-ai/spur-config/agent-quota-events';
-import { AgentExecutorUpdateDao, type DbAdapter } from '@gobing-ai/spur-domain';
+import { AgentExecutorUpdateDao, type DbAdapter, type RecordAgentExecutorUpdateOutcome } from '@gobing-ai/spur-domain';
 import { z } from 'zod';
 import {
     type AgentQuotaDrainSummary,
@@ -139,6 +149,11 @@ function describeAvailability(state: { disabled: boolean; owner: string | undefi
     return state.disabled ? `disabled(${state.owner ?? 'quota'})` : 'enabled';
 }
 
+/** R2 (0907): reason for a preserved operator-owned executor (bare `true` included). */
+function operatorOwnershipReason(state: { owner: string | undefined; since: string | undefined }): string {
+    return `availability is operator-owned${state.since !== undefined ? ` since ${state.since}` : ''} — preserved, no automatic change`;
+}
+
 /** Observation reason per the fixed rule: window name + resetsAt go into the reason (0892 R1). */
 function observationReason(provider: string, classification: ProviderUsageClassification): string {
     if (classification.status === 'exhausted' && classification.exhaustedWindow !== undefined) {
@@ -153,14 +168,22 @@ function observationReason(provider: string, classification: ProviderUsageClassi
 /** One mapped executor's would-be/applied availability change. */
 export interface AgentUsageChange {
     executor: string;
-    /** Providers that drove this change (all mapped providers of the executor). */
+    /** Providers that drove this change (all signal-bearing mapped providers of the executor). */
     providers: string[];
     from: string;
+    /** Requested target — for `skipped`/`pending` this is intent, not confirmed state. */
     to: string;
     /** Observation owner — always `quota` from this producer (0892 R1). */
     owner: 'quota';
     reason: string;
-    action: 'applied' | 'would-apply' | 'no-op';
+    /**
+     * Delivery semantics (0907 R3), not proof of byte mutation: `would-apply`
+     * (dry run), `applied` = the exact observation created by this invocation
+     * was acknowledged without a skip, `no-op` = protected or already-satisfied
+     * decision, `skipped` = superseded/rejected observation, `pending` =
+     * unacknowledged or failed delivery.
+     */
+    action: 'applied' | 'would-apply' | 'no-op' | 'skipped' | 'pending';
 }
 
 /** Per-provider summary recorded in the snapshot's `providers` array. */
@@ -310,18 +333,40 @@ export async function runAgentUsageProducer(
 
     const classificationByProvider = new Map(healthy.map((h) => [h.entry.provider, h.classification]));
     const updatedAtByProvider = new Map(healthy.map((h) => [h.entry.provider, h.entry.usage?.updatedAt]));
+    const projectId = context.projectRoot.replace(/[\\/]+$/, '');
     const changes: AgentUsageChange[] = [];
-    const pendingRows: Array<Promise<unknown>> = [];
-    if (mapping.size > 0) {
+    // 0907 R1: only signal-bearing providers (exhausted/headroom) drive decisions;
+    // no-usage providers stay in the diagnostic mapping and snapshot only.
+    const decisionMapping = mapProvidersToExecutors(
+        healthy.filter((h) => h.classification.status !== 'no-usage').map((h) => h.entry.provider),
+        executors,
+    );
+    const undetermined: PendingReconciliation[] = [];
+    if (decisionMapping.size > 0) {
         let db: DbAdapter | undefined;
-        for (const [executorName, providers] of groupExecutors(mapping)) {
+        for (const [executorName, providers] of groupExecutors(decisionMapping)) {
             const profile = resolveQuotaExecutorBinding(executors, executorName);
             if (profile === undefined) continue;
             const entry = executors.find((e) => e.name === executorName);
             const current = normalizeExecutorAvailability(entry?.disabled ?? false);
-            // Deterministic severity merge: any mapped provider exhausted → disable;
-            // the driver is the alphabetically-first exhausted provider, else the
-            // alphabetically-first headroom provider.
+            // 0907 R2: operator ownership (bare `true` included) is evaluated before
+            // planning — no observation is recorded at all; the drain re-checks the
+            // fresh config to protect races.
+            if (current.disabled && current.owner === 'operator') {
+                changes.push({
+                    executor: executorName,
+                    providers,
+                    from: describeAvailability(current),
+                    to: describeAvailability(current),
+                    owner: 'quota',
+                    reason: operatorOwnershipReason(current),
+                    action: 'no-op',
+                });
+                continue;
+            }
+            // Deterministic severity merge over signal-bearing providers: any mapped
+            // provider exhausted → disable; the driver is the alphabetically-first
+            // exhausted provider, else the alphabetically-first headroom provider.
             const exhausted = providers.filter((p) => classificationByProvider.get(p)?.status === 'exhausted').sort();
             const driver = exhausted[0] ?? [...providers].sort()[0] ?? '';
             const classification =
@@ -331,33 +376,38 @@ export async function runAgentUsageProducer(
             const needsRow =
                 current.disabled !== targetExhausted ||
                 (targetExhausted && current.disabled && current.owner !== 'operator');
-            const action =
-                options.dryRun === true ? (needsRow ? 'would-apply' : 'no-op') : needsRow ? 'applied' : 'no-op';
-            changes.push({
+            const common = {
                 executor: executorName,
                 providers,
                 from: describeAvailability(current),
                 to: targetExhausted ? 'disabled(quota)' : 'enabled',
-                owner: 'quota',
+                owner: 'quota' as const,
                 reason,
-                action,
-            });
-            if (options.dryRun !== true && needsRow) {
-                db = db ?? (await context.getDb());
-                pendingRows.push(
-                    recordUsageObservation(context, db, {
-                        projectId: context.projectRoot.replace(/[\\/]+$/, ''),
-                        executorName,
-                        agent: profile.agent,
-                        model: profile.model ?? null,
-                        disabled: targetExhausted,
-                        provider: driver,
-                        observedAt: normalizeQuotaTimestamp(updatedAtByProvider.get(driver) ?? '') ?? capturedAt,
-                    }),
-                );
+            };
+            if (options.dryRun === true || !needsRow) {
+                changes.push({ ...common, action: options.dryRun === true && needsRow ? 'would-apply' : 'no-op' });
+                continue;
             }
+            // 0907 R3: conservative until the drain acknowledges the exact observation.
+            const change: AgentUsageChange = { ...common, action: 'pending' };
+            changes.push(change);
+            db = db ?? (await context.getDb());
+            undetermined.push({
+                change,
+                executorName,
+                projectId,
+                pending: recordUsageObservation(context, db, {
+                    projectId,
+                    executorName,
+                    agent: profile.agent,
+                    model: profile.model ?? null,
+                    disabled: targetExhausted,
+                    provider: driver,
+                    observedAt: normalizeQuotaTimestamp(updatedAtByProvider.get(driver) ?? '') ?? capturedAt,
+                }),
+            });
         }
-        await Promise.allSettled(pendingRows);
+        await settleRecordings(undetermined, context);
     }
 
     const drain =
@@ -369,6 +419,8 @@ export async function runAgentUsageProducer(
                   loadAgentConfig: context.loadAgentConfig,
                   warn: context.warn,
               });
+
+    if (options.dryRun !== true) await finalizeOutcomes(undetermined, context);
 
     return {
         source: source.name,
@@ -408,12 +460,13 @@ async function recordUsageObservation(
         provider: string;
         observedAt: string;
     },
-): Promise<void> {
+): Promise<RecordedObservation> {
     const dao = new AgentExecutorUpdateDao(db);
+    const observationId = `usage-${row.provider}-${randomUUID()}`;
     const outcome = await dao.recordObservation({
         project_id: row.projectId,
         executor_name: row.executorName,
-        observation_id: `usage-${row.provider}-${randomUUID()}`,
+        observation_id: observationId,
         observed_at: row.observedAt,
         agent: row.agent,
         model: row.model,
@@ -425,5 +478,91 @@ async function recordUsageObservation(
     // means this usage observation did not become pending — surface it, never throw.
     if (outcome !== 'recorded') {
         context.warn(`agent usage observation for "${row.executorName}" not recorded (${outcome})`);
+    }
+    return { observationId, outcome };
+}
+
+/** Result of recording one usage observation: the ID enables exact-observation reconciliation. */
+interface RecordedObservation {
+    observationId: string;
+    outcome: RecordAgentExecutorUpdateOutcome;
+}
+
+/** One executor whose change action is not yet final (0907 R3). */
+interface PendingReconciliation {
+    change: AgentUsageChange;
+    executorName: string;
+    projectId: string;
+    /** Set once the observation is recorded; absent when recording failed or was rejected. */
+    observationId?: string;
+    pending: Promise<RecordedObservation>;
+}
+
+/**
+ * R3 step 1 — classify recording outcomes. A rejected recording (superseded
+ * by a newer retained observation) is `skipped` with its outcome; a thrown
+ * recording failure is `pending` (delivery unconfirmed). Failures are
+ * inspected here, never silently lost.
+ */
+async function settleRecordings(entries: PendingReconciliation[], context: AgentUsageProducerContext): Promise<void> {
+    await Promise.allSettled(
+        entries.map(async (entry) => {
+            let recorded: RecordedObservation;
+            try {
+                recorded = await entry.pending;
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                context.warn(`agent usage observation for "${entry.executorName}" failed to record: ${message}`);
+                entry.change.action = 'pending';
+                entry.change.reason += ` — delivery unconfirmed: recording failed (${message})`;
+                return;
+            }
+            if (recorded.outcome !== 'recorded') {
+                entry.change.action = 'skipped';
+                entry.change.reason += ` — observation not recorded (${recorded.outcome})`;
+                return;
+            }
+            entry.observationId = recorded.observationId;
+        }),
+    );
+}
+
+/**
+ * R3 step 2 — final action from the exact observation this invocation created,
+ * read from the same delivery table after the drain: `applied` requires the
+ * row to acknowledge this observation ID without a skip; a replaced row is
+ * `skipped` (superseded); an unacknowledged/failed row is `pending`.
+ */
+async function finalizeOutcomes(entries: PendingReconciliation[], context: AgentUsageProducerContext): Promise<void> {
+    const open = entries.filter((e) => e.observationId !== undefined);
+    if (open.length === 0) return;
+    const dao = new AgentExecutorUpdateDao(await context.getDb());
+    for (const entry of open) {
+        const observationId = entry.observationId;
+        let row: Awaited<ReturnType<typeof dao.getUpdate>>;
+        try {
+            row = await dao.getUpdate(entry.projectId, entry.executorName);
+        } catch (error) {
+            entry.change.action = 'pending';
+            entry.change.reason += ` — delivery unconfirmed: ${error instanceof Error ? error.message : String(error)}`;
+            continue;
+        }
+        if (row === undefined || row.observation_id !== observationId) {
+            entry.change.action = 'skipped';
+            entry.change.reason += ' — superseded by a newer observation before acknowledgement';
+        } else if (row.applied_observation_id === observationId) {
+            if (row.skipped_reason === null) {
+                entry.change.action = 'applied';
+            } else {
+                entry.change.action = 'skipped';
+                entry.change.reason += ` — ${row.skipped_reason}`;
+            }
+        } else {
+            entry.change.action = 'pending';
+            entry.change.reason +=
+                row.last_error !== null && row.last_error !== undefined
+                    ? ` — delivery failed: ${row.last_error}`
+                    : ' — delivery unacknowledged';
+        }
     }
 }

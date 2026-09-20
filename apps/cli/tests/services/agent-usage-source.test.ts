@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { homedir } from 'node:os';
+import { readFileSync, rmSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { UsageSourceError } from '@gobing-ai/spur-app';
 import { CodexbarUsageSource, defaultAgentUsageSnapshotPath } from '../../src/services/agent-usage-source';
 
@@ -62,5 +64,41 @@ describe('CodexbarUsageSource.capture', () => {
             expect(error).toBeInstanceOf(UsageSourceError);
             expect((error as UsageSourceError).message).toContain('capture is unusable (fail-closed)');
         }
+    });
+
+    // 0908 R4/AC1-AC2: bounded termination — the child writes valid JSON and
+    // then hangs; the injected deadline terminates it via runtime-owned group
+    // containment and the outcome surfaces as a fail-closed timeout error.
+    test('fail-closed: hanging capture hits the deadline and the child is reaped', async () => {
+        const pidFile = join(tmpdir(), `spur-0908-hang-${process.pid}-${Date.now()}`);
+        // The child records its own pid, prints valid JSON, then hangs forever.
+        const script =
+            `const{writeFileSync}=require('node:fs');writeFileSync(${JSON.stringify(pidFile)},String(process.pid));` +
+            "console.log('[]');setInterval(()=>{},1e3);";
+        const source = new CodexbarUsageSource(['bun', '-e', script], 2_000);
+        let childPid = 0;
+        try {
+            await source.capture();
+            expect.unreachable();
+        } catch (error) {
+            expect(error).toBeInstanceOf(UsageSourceError);
+            const message = (error as UsageSourceError).message;
+            expect(message).toContain('deadline');
+            expect(message).not.toContain('install codexbar');
+            childPid = Number(readFileSync(pidFile, 'utf8'));
+            expect(Number.isInteger(childPid)).toBe(true);
+        } finally {
+            rmSync(pidFile, { force: true });
+        }
+        // Runtime-owned cleanup: the run settles only after termination, but
+        // leave CI a grace window before the liveness probe.
+        await Bun.sleep(100);
+        let alive = true;
+        try {
+            process.kill(childPid, 0);
+        } catch {
+            alive = false;
+        }
+        expect(alive).toBe(false);
     });
 });

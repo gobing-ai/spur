@@ -160,7 +160,12 @@ describe('spur agent usage (0892)', () => {
             expect(changes.get('codex-exec')?.to).toBe('enabled');
             expect(changes.get('codex-exec')?.reason).toContain('codexbar codex headroom');
             expect(changes.get('openai-model-exec')?.action).toBe('no-op'); // openai ERRORED → no observation
+            // 0907 R2: the operator disable never becomes an observation at all.
+            expect(changes.get('operator-exec')?.action).toBe('no-op');
+            expect(changes.get('operator-exec')?.to).toBe('disabled(operator)');
+            expect(changes.get('operator-exec')?.reason).toContain('operator-owned');
             expect(result.drain?.applied).toBe(1);
+            expect(result.drain?.skippedOperatorOwned).toBe(0);
             // Drain really wrote the project YAML: quota disable recovered, operator disable intact.
             const text = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
             expect(text).not.toContain('owner: quota'); // the only quota disable was recovered
@@ -229,6 +234,9 @@ describe('spur agent usage (0892)', () => {
             expect(code).toBe(0);
             const printed = out.messages.join('\n');
             expect(printed).toContain('codex-exec: disabled(quota) → enabled');
+            // 0907 R2: preview reports the protected no-op with an ownership reason
+            // and an unchanged target.
+            expect(printed).toContain('operator-exec: disabled(operator) → disabled(operator) [no-op]');
             expect(printed).toContain('Dry run: nothing written');
             expect(printed).toContain('Unmapped providers (never guessed):');
             await expect(readFile(snapshotPath, 'utf8')).rejects.toThrow();

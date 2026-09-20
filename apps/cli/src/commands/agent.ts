@@ -178,7 +178,15 @@ export async function runAgentUsage(
         context.output.write(
             [
                 `Usage captured ${result.capturedAt} via ${result.source} (${applied.length} change${applied.length === 1 ? '' : 's'}).`,
-                ...applied.map((c) => `  ${c.executor}: ${c.from} → ${c.to} [${c.action}] — ${c.reason}`),
+                // 0907 R5: every decision is listed; skipped/pending name the requested
+                // target as intent — completion is unconfirmed, not proven persisted.
+                ...result.changes.map((c) => {
+                    const target =
+                        c.action === 'skipped' || c.action === 'pending'
+                            ? `${c.from} → ${c.to} (requested target — completion unconfirmed)`
+                            : `${c.from} → ${c.to}`;
+                    return `  ${c.executor}: ${target} [${c.action}] — ${c.reason}`;
+                }),
                 ...(result.erroredProviders.length > 0
                     ? [
                           `Errored providers (skipped, never treated as recovery): ${result.erroredProviders

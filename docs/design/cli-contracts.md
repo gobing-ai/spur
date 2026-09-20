@@ -494,7 +494,17 @@ capture once (`--source <name>`, default `codexbar`), writes the snapshot to
 [session-pinned-dispatch](session-pinned-dispatch.md) §3.4, and drains the resulting observations
 as `owner: quota` events through the single availability writer. `--dry-run` prints the would-be
 executor changes and writes nothing. A missing/failing capture exits non-zero and changes nothing;
-per-provider error entries are skipped and reported while healthy entries still apply. An external
+the capture is bounded by a finite deadline (180000 ms default in `CodexbarUsageSource` via
+`@gobing-ai/ts-runtime` `NodeProcessExecutor.run({ timeout })`, 0908), and an interrupted run
+(timeout/cancel/signal/error) is unusable even when partial stdout parses — it surfaces as
+`UsageSourceError` naming the deadline, never an installation hint, before any write.
+Per-provider error entries are skipped and reported; partial-provider application holds only for
+normally completed runs, and only providers with a real signal (exhausted/headroom) drive
+availability decisions — `no-usage` and errored providers stay diagnostic-only, so an absent
+window can neither imply recovery nor hide valid headroom (0907). Reported change `action` values
+are delivery semantics (`would-apply`/`applied`/`no-op`/`skipped`/`pending`), not byte-mutation
+proof; decision and outcome detail lives in
+[session-pinned-dispatch](session-pinned-dispatch.md) §3.4. An external
 scheduler (cron/launchd) owns invocation — `spur serve` never runs it (asserted by test), keeping
 the no-hidden-automation posture: no poller, no timer, no serve-side loop. Mapping rules and the
 recorded rejected shape (`spur agent doctor --refresh-usage`) live in

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make usage preview and apply outcomes conservative and truthful
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-20T15:48:46.080Z
-updated_at: "2026-09-20T15:50:08.987Z"
+updated_at: "2026-09-20T19:56:29.759Z"
 feature_id: B61
 priority: P1
 tags:
@@ -23,19 +23,19 @@ I31/0904 C10 exposed preview/apply ownership disagreement. Current runAgentUsage
 
 ### Requirements
 
-- [ ] R1. Exclude no-usage and errored providers from availability decisions and observations; retain their diagnostic/snapshot classifications. When providers share an executor, exhausted valid signal wins; absent signal cannot hide valid headroom or imply recovery.
-- [ ] R2. Preview and apply must preserve both bare disabled:true and explicit operator-owned disables. Preview reports no-op with an ownership reason and unchanged target; it writes no snapshot, observation or YAML.
-- [ ] R3. Emit applied only after the exact observation created by this invocation is acknowledged without a skip. Use no-op for protected/unchanged decisions, skipped for a superseded or rejected observation, and pending for unacknowledged or failed delivery; expose an accurate reason without swallowing write failures.
-- [ ] R4. Preserve the existing single availability writer and declaring-layer precedence. Verify isolated project-only, global-only and shadowed declarations, partial provider errors and nonzero parsable captures without touching operator configuration.
-- [ ] R5. Update the owning design and CLI rendering/tests for additive skipped/pending action values; document applied as acknowledged desired state, not proof of byte mutation. Keep drain.applied as its existing delivery-ack count.
+- [x] R1. Exclude no-usage and errored providers from availability decisions and observations; retain their diagnostic/snapshot classifications. When providers share an executor, exhausted valid signal wins; absent signal cannot hide valid headroom or imply recovery.
+- [x] R2. Preview and apply must preserve both bare disabled:true and explicit operator-owned disables. Preview reports no-op with an ownership reason and unchanged target; it writes no snapshot, observation or YAML.
+- [x] R3. Emit applied only after the exact observation created by this invocation is acknowledged without a skip. Use no-op for protected/unchanged decisions, skipped for a superseded or rejected observation, and pending for unacknowledged or failed delivery; expose an accurate reason without swallowing write failures.
+- [x] R4. Preserve the existing single availability writer and declaring-layer precedence. Verify isolated project-only, global-only and shadowed declarations, partial provider errors and nonzero parsable captures without touching operator configuration.
+- [x] R5. Update the owning design and CLI rendering/tests for additive skipped/pending action values; document applied as acknowledged desired state, not proof of byte mutation. Keep drain.applied as its existing delivery-ack count.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — usage decisions require a real signal and respect operator ownership (req: R1)
-- [ ] AC2 — operator-owned disables survive preview and apply (req: R2)
-- [ ] AC3 — usage actions describe acknowledged outcomes (req: R3)
-- [ ] AC4 — usable partial provider results remain supported (req: R4)
-- [ ] AC5 — usage output documents delivery semantics (req: R5)
+- [x] AC1 — usage decisions require a real signal and respect operator ownership (req: R1)
+- [x] AC2 — operator-owned disables survive preview and apply (req: R2)
+- [x] AC3 — usage actions describe acknowledged outcomes (req: R3)
+- [x] AC4 — usable partial provider results remain supported (req: R4)
+- [x] AC5 — usage output documents delivery semantics (req: R5)
 
 ### Q&A
 
@@ -73,25 +73,103 @@ Source anchors:
 
 ### Plan
 
-- [ ] 1. Establish failing no-usage, operator-preview and post-drain reporting cases against current source, with isolated paths and real DAO (R1-R3/AC1-AC3).
-- [ ] 2. Implement conservative decision selection and exact-observation reconciliation in the existing producer; update rendering exhaustiveness for skipped/pending (R1-R3,R5/AC1-AC3,AC5).
-- [ ] 3. Exercise real writer layer precedence and error/supersession cases; run producer/quota tests inside packages/app and usage command tests inside apps/cli (R4/AC4).
-- [ ] 4. Update session-pinned-dispatch.md §3 and usage reference result semantics; run task-local gates, rebuild/link CLI, verify and commit; defer B61 feature-wide gate until both B61 tasks are complete (R5/AC5).
+- [x] 1. Establish failing no-usage, operator-preview and post-drain reporting cases against current source, with isolated paths and real DAO (R1-R3/AC1-AC3).
+- [x] 2. Implement conservative decision selection and exact-observation reconciliation in the existing producer; update rendering exhaustiveness for skipped/pending (R1-R3,R5/AC1-AC3,AC5).
+- [x] 3. Exercise real writer layer precedence and error/supersession cases; run producer/quota tests inside packages/app and usage command tests inside apps/cli (R4/AC4).
+- [x] 4. Update session-pinned-dispatch.md §3 and usage reference result semantics; run task-local gates, rebuild/link CLI, verify and commit; defer B61 feature-wide gate until both B61 tasks are complete (R5/AC5).
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Conservative decision + truthful outcome fix, confined to the existing producer contract and its consumers (0907 R1–R5).
+
+**packages/app/src/services/agent-usage-producer.ts**
+- R1 (decision mapping, packages/app/src/services/agent-usage-producer.ts:340): decisions now use a `decisionMapping` built from signal-bearing providers only (exhausted/headroom); `no-usage`/errored providers stay in the full diagnostic `mapping` (snapshot `mappedExecutors`, `noUsageProviders`) and can no longer create observations or claim recoveries. Shared-executor severity merge unchanged over signal providers: exhausted wins, else alphabetically-first headroom drives the reason (an absent window can no longer fake a headroom reason).
+- R2 (operator pre-check, packages/app/src/services/agent-usage-producer.ts:352-370 + helper at packages/app/src/services/agent-usage-producer.ts:150): `normalizeExecutorAvailability` owner `operator` (bare `disabled: true` included) → change row is `no-op` with an ownership reason and unchanged target (`to` = current); no observation is recorded at all. The drain's own ownership check stays as race protection (untouched).
+- R3 (packages/app/src/services/agent-usage-producer.ts:399, packages/app/src/services/agent-usage-producer.ts:410, packages/app/src/services/agent-usage-producer.ts:423, packages/app/src/services/agent-usage-producer.ts:507, packages/app/src/services/agent-usage-producer.ts:536; `recordUsageObservation` returns `{ observationId, outcome }` from packages/app/src/services/agent-usage-producer.ts:451): action starts conservative `pending`; after drain, `AgentExecutorUpdateDao.getUpdate` decides — `applied` only when `applied_observation_id` equals this invocation's ID and `skipped_reason` is null; replaced row → `skipped` (superseded); unacknowledged/failed row → `pending` with `last_error`; rejected recording → `skipped` with the upsert outcome; recording throws are inspected (warn + pending), never swallowed.
+- `AgentUsageChange.action` extended additively with `skipped | pending` (interface at packages/app/src/services/agent-usage-producer.ts:161-180; applied = acknowledged desired state, not byte-mutation proof). No drain/DAO/quota-consumer changes — `drain.applied` keeps its delivery-ack meaning.
+
+**apps/cli/src/commands/agent.ts** (R5, apps/cli/src/commands/agent.ts:179-190): human output lists every decision; `skipped`/`pending` rows render `from → to (requested target — completion unconfirmed) [action]`; `--json` flows the additive enum through the existing envelope.
+
+**Docs** (R5): docs/design/session-pinned-dispatch.md:67 — conservative decisions + delivery-semantics paragraph in §3.4; plugins/sp/skills/spur-cli/references/agent.md:235-244 — usage reference: no-usage exclusion, operator preservation, action vocabulary.
+
+**Tests**: packages/app/tests/services/agent-usage-producer.test.ts rewritten hermetic (real loader + `.spur/config.yaml` in temp project + `SPUR_SKIP_GLOBAL_CONFIG`; in-memory SQLite; real drain writer): 10 cases covering R1 no-usage/exhausted/headroom merges, R2 bare-true + operator-object preservation (apply and dry-run), R3 exact-ack applied, superseded-recording skip, failed-delivery pending, plus 0892 dry-run/fail-closed regressions. apps/cli/tests/commands/agent-usage.test.ts:60-66 and apps/cli/tests/commands/agent-usage.test.ts:120-126: operator-exec no-op + `skippedOperatorOwned === 0` and preview ownership-line assertions. Layer precedence/partial-error/nonzero-capture coverage (R4/AC4) verified via existing packages/app/tests/services/agent-quota-updates.test.ts (0891 layer tests) and the CLI R3/R4 cases.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | packages/app/src/services/agent-usage-producer.ts:340-343 — decisionMapping filters `status !== 'no-usage'`; :377-381 exhaustive driver merge (any exhausted wins on shared executors); errored providers stay diagnostic (test "R1 (0907): a no-usage provider drives no decision and no observation, stays diagnostic" pass; "shared executor — exhausted valid signal wins over an absent one" pass) |
+| R2 | MET | packages/app/src/services/agent-usage-producer.ts:355-367 — operator-owned short-circuit (`current.disabled && current.owner === 'operator'`) before planning, emits no-op `no observation recorded`; :153-155 operatorOwnershipReason covers bare `true`; drain re-checks fresh config (agent-quota-updates.ts unmodified). Tests "bare disabled:true survives apply — no-op with ownership reason, no row" and "an operator-owned disable is preserved even against exhaustion" pass |
+| R3 | MET | packages/app/src/services/agent-usage-producer.ts:392 — change starts `pending`, conservative until acknowledged; :451-489 recordUsageObservation tracks exact observation_id; :507-531 settleRecordings (rejected → skipped, thrown → pending, Promise.allSettled inspected); :536-570 finalizeOutcomes — :550 replaced observation_id → skipped (superseded), :553-556 applied only when applied_observation_id matches with skipped_reason null. Tests "a recording rejected as superseded is skipped, never success" and "a failed delivery is pending with the reason, never applied" pass |
+| R4 | MET | No modification: `git diff --name-only |
+| R5 | MET | apps/cli/src/commands/agent.ts:182-190 — skipped/pending targets printed as "(requested target — completion unconfirmed)", every decision listed with `[action]`; docs/design/session-pinned-dispatch.md:67 delivery-semantics paragraph; plugins/sp/skills/spur-cli/references/agent.md action glossary updated; CLI suite 6/6 pass |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | producer :340-343, :355, :377-381; tests 38 pass 0 fail incl. R1 (0907) no-usage/shared-executor cases |
+| AC2 | MET | test | producer :153-155, :355-367; tests "bare disabled:true survives apply", "operator-owned disable preserved" pass |
+| AC3 | MET | test | producer :392, :507-531, :536-570; tests superseded→skipped, failed→pending pass; action union documented at :376-390 |
+| AC4 | MET | test | agent-quota-updates.ts untouched (diff 0); 0892 R2/R3 tests pass; per-provider error skip behavior retained |
+| AC5 | MET | test | apps/cli/src/commands/agent.ts:182-190; design doc line 67; skill reference updated; CLI tests 6 pass 0 fail |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0907 (usage preview/apply conservative + truthful)
+
+**Scope:** git diff vs HEAD @ non-corpus files: packages/app/src/services/agent-usage-producer.ts, apps/cli/src/commands/agent.ts, docs/design/session-pinned-dispatch.md, plugins/sp/skills/spur-cli/references/agent.md, apps/cli/tests/commands/agent-usage.test.ts, packages/app/tests/services/agent-usage-producer.test.ts, docs/tasks5/0907
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS — **approve**
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | usability | Summary line "(N change(s))" counts every non-`no-op` action, so `skipped`/`pending` decisions inflate the headline count; the per-decision lines and the Drain breakdown below it disambiguate. Pre-existing local (`applied`), not a 0907 regression. | `apps/cli/src/commands/agent.ts:175` |
+| 2 | P4 (advisory) | correctness | `finalizeOutcomes` labels `row === undefined` as "superseded by a newer observation" — no code path deletes a row, so if it ever happens the named cause is a guess. Action is still conservative (`skipped`), no false success. | `packages/app/src/services/agent-usage-producer.ts:545-548` |
+| 3 | P4 (advisory) | architecture | Reconciliation results are carried by mutating `PendingReconciliation.change`/`.observationId` inside `settleRecordings` rather than returned values; small, testable, cohesive today — return values only if the producer grows again. | `packages/app/src/services/agent-usage-producer.ts:507-534` |
+
+No P1 (blocker), P2 (major), or P3 (minor) findings. The three defects 0907 set out to fix were all confirmed present at HEAD and are gone: HEAD claimed `action: 'applied'` unconditionally at plan time (before the drain ran); HEAD drove decisions from the full provider mapping (an all-null-window `no-usage` provider could claim a recovery or fake a headroom reason); HEAD recorded observations for operator-owned executors and reported them as applied even when the drain acked them as `operator-owned` skips.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Signal-bearing-only `decisionMapping` (exhausted/headroom) drives rows; `no-usage`/errored providers stay diagnostic (snapshot `providers[].status`, `noUsageProviders`, unmapped list) — `packages/app/src/services/agent-usage-producer.ts:338-343`; exhausted-wins merge over signal providers tested: "shared executor — exhausted valid signal wins over an absent one" (`packages/app/tests/services/agent-usage-producer.test.ts:186`) and headroom-cannot-claim-recovery (`:205`) |
+| R2 | MET | Operator pre-check before planning pushes `no-op` with ownership reason and unchanged target, records no observation — `packages/app/src/services/agent-usage-producer.ts:352-366` + `operatorOwnershipReason` `:153`; bare `disabled: true` → owner `operator` via the single reader `normalizeExecutorAvailability` (`packages/config/src/index.ts:389-408`); drain ownership re-check kept as race protection (`packages/app/src/services/agent-quota-updates.ts`, `ackSkipped` 'operator-owned'); tests: bare-true apply (`agent-usage-producer.test.ts:224`), operator-object vs exhaustion (`:240`), CLI preview line (`apps/cli/tests/commands/agent-usage.test.ts:237-239`) |
+| R3 | MET | Action starts conservative `pending` (`agent-usage-producer.ts:391-392`); recording rejections → `skipped` with outcome, recording throws → warn + `pending` (`settleRecordings`, `:507-534`); `applied` only when `dao.getUpdate` returns this invocation's exact `applied_observation_id` with `skipped_reason` null; replaced row → `skipped`; unacknowledged/`last_error` → `pending` (`finalizeOutcomes`, `:536-570`); tests: exact-ack applied (`test :43-63`), superseded → skipped (`:257`), failed delivery → pending with `last_error` (`:276`) |
+| R4 | MET | Delivery unchanged through `drainPendingAgentQuotaUpdates` → `setExecutorAvailability` (single writer, declaring-layer precedence); layer precedence (project-wins/global-only/shadowed), partial provider errors and nonzero-but-parsable captures covered by existing suites — `packages/app/tests/services/agent-quota-updates.test.ts:647,664,592` and CLI `tests/commands/agent-usage.test.ts` R3/R4 cases (missing binary exit 1, rc=1-with-parsable-array still applies) — all green in this review's runs |
+| R5 | MET | CLI lists every decision; `skipped`/`pending` render "(requested target — completion unconfirmed)" (`apps/cli/src/commands/agent.ts:181-190`); design §3.4 delivery-semantics paragraph (`docs/design/session-pinned-dispatch.md:67`); reference updated (`plugins/sp/skills/spur-cli/references/agent.md:235-244`); `drain.applied` meaning untouched (delivery-ack count) |
+
+AC1→R1, AC2→R2, AC3→R3, AC4→R4, AC5→R5 — all verified against implementation + tests (task-local ACs, per task doc §Questions).
+
+##### Verification evidence (fresh, run during this review)
+
+- `cd packages/app && bun test tests/services/agent-usage-producer.test.ts tests/services/agent-quota-updates.test.ts` → **38 pass, 0 fail** (161 expect()).
+- `cd apps/cli && bun test tests/commands/agent-usage.test.ts` → **6 pass, 0 fail**.
+- `bunx tsc --noEmit` → packages/app exit 0; apps/cli exit 0.
+
+##### SECUA / architecture notes
+
+Security: no new trust boundary — capture still parsed by the fixed zod schema, ownership still resolved by the single `normalizeExecutorAvailability` reader, writes still only via the drain's single writer; no env/fs reads added to packages/app. Efficiency: one extra `getUpdate` read per decided executor after the drain (bounded, indexed PK lookup). Architecture: reconciliation is a deep extension — outcome truth is pushed to one post-drain boundary (`finalizeOutcomes`) reusing the DAO row shape instead of re-implementing row queries; hermetic tests use the real loader/writer/DAO with in-memory SQLite.
+
+##### Residual risk
+
+Concurrent overlapping cron invocations are protected by the DAO latest-observation guard + conditional version-specific ack (drain-level supersession tests green); a dedicated two-producer race test does not exist. Acceptable for this task's scope.
+
+**Next:** approve — proceed to stage gate; no code changes requested.
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-20T19:03:10.775Z todo → wip (system)
+- 2026-09-20T19:20:32.791Z wip → testing (system)
+- 2026-09-20T19:56:29.759Z testing → done (system)
+

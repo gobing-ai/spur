@@ -231,8 +231,17 @@ to executors via `agent.executors[].agent` (or the model's `<provider>/` prefix)
 write path. A provider is exhausted when any `primary|secondary|tertiary` window reports
 `usedPercent >= 100`; the window name and `resetsAt` go into the observation reason. Per-provider
 `{ "error": … }` entries are skipped (listed, never treated as recovery); healthy entries still
-apply. A missing codexbar binary or an unparsable payload exits `1` and changes nothing.
-Unmapped providers are listed and never guessed.
+apply. Providers whose windows are all null carry no signal (`no-usage`): they are reported and
+excluded from availability decisions — an absent signal neither disables nor recovers, and an
+exhausted signal wins on shared executors. Operator-owned availability (`disabled: true` or an
+operator ownership object) is never touched. A missing codexbar binary or an unparsable payload
+exits `1` and changes nothing. Unmapped providers are listed and never guessed.
+
+Each reported change carries a delivery-semantics `action` (0907): `would-apply` (dry run),
+`applied` — the exact observation created by the invocation was acknowledged without a skip
+(desired state confirmed; not proof of a YAML byte change), `no-op` — already satisfied or
+operator-owned, `skipped` — the observation was superseded or rejected, `pending` — delivery
+unconfirmed or failed. For `skipped`/`pending` the printed target is intent only.
 
 **Scheduling is external** (cron/launchd, same pattern as `spur history daily`):
 
