@@ -280,9 +280,7 @@ export async function existingWorkflowRun(service: Pick<WorkflowAppService, 'tra
 
 /** 0901 R1 refusal message for an existing run id. */
 export function existingRunRefusal(runId: string): string {
-    return (
-        `workflow run: run id ${runId} already exists — refusing to overwrite. ` + 'Choose a fresh id with --run-id.'
-    );
+    return `workflow run: run id ${runId} already exists — refusing to overwrite. Choose a fresh id with --run-id.`;
 }
 
 /**
