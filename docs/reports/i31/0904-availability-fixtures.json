@@ -1,0 +1,273 @@
+{
+    "schemaVersion": 1,
+    "task": "0904",
+    "sourceCommit": "99562391f14d2118b80a189826fca0b8e2f25e4b",
+    "capturedAt": "2026-09-20T06:51:00Z",
+    "provenance": "Remediation artifact under verify --fix all re-verification. Case observations transcribed from the task Solution's recorded hermetic-harness run (sandbox /tmp/spur-0904-validate, disposable per Design; own SQLite DB, SPUR_SKIP_GLOBAL_CONFIG=true, real producer/consumer/updater code). Harness bytes are gone; exact reproducible commands live in 0904-availability.md. Live re-probes this run: no ~/.config/spur/agent-usage.json exists (dry-run no-write claim confirmed).",
+    "redaction": "No auth material in any case; error entries carry labeled fixture text only; live codexbar output quoted only as provider + usedPercent + updatedAt.",
+    "cases": [
+        {
+            "id": "C01",
+            "group": "mapping",
+            "syntheticInput": "codex primary 100% / secondary 40% (exhausted)",
+            "initialState": "fix-codex-sol enabled (agent codex)",
+            "expectedContract": "quota-owned disable with since/reason",
+            "observationStatus": "observed",
+            "dryRun": "would-apply disable",
+            "apply": "applied; YAML disabled:{owner:quota,since:2026-09-20T01:00:00.000Z,reason:agent.quota.exhausted fix-codex-sol}",
+            "fileState": "project YAML updated",
+            "classification": "reproduced",
+            "sourceAnchors": [
+                { "path": "packages/app/src/services/agent-usage-producer.ts", "line": 317 },
+                { "path": "packages/app/src/services/agent-quota-updates.ts", "line": 327 }
+            ]
+        },
+        {
+            "id": "C02",
+            "group": "mapping",
+            "syntheticInput": "codex exhausted",
+            "initialState": "fix-codex-prefix enabled (model codex/…)",
+            "expectedContract": "model-prefix mapping disables",
+            "observationStatus": "observed",
+            "dryRun": "would-apply disable",
+            "apply": "applied",
+            "fileState": "quota-owned disable",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-usage-producer.ts", "line": 118 }]
+        },
+        {
+            "id": "C03",
+            "group": "mapping",
+            "syntheticInput": "codex exhausted",
+            "initialState": "fix-prefixcase enabled (model CODEX/…)",
+            "expectedContract": "case-insensitive prefix match disables",
+            "observationStatus": "observed",
+            "dryRun": "would-apply disable",
+            "apply": "applied",
+            "fileState": "quota-owned disable",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-usage-producer.ts", "line": 118 }]
+        },
+        {
+            "id": "C04",
+            "group": "ownership",
+            "syntheticInput": "codex exhausted",
+            "initialState": "fix-codex-astra disabled: true (bare, operator-owned)",
+            "expectedContract": "protection: no-op in disable direction",
+            "observationStatus": "observed",
+            "dryRun": "no-op (correctly predicted)",
+            "apply": "no change row",
+            "fileState": "byte-identical",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-usage-producer.ts", "line": 331 }]
+        },
+        {
+            "id": "C05",
+            "group": "signal",
+            "syntheticInput": "alpha all-null windows (no-usage) + beta headroom",
+            "initialState": "fix-driver pre-seeded quota-disabled",
+            "expectedContract": "recovery of quota-owned disable; no-usage provider contributes no exhaustion",
+            "observationStatus": "observed",
+            "dryRun": "would-apply enable (driver=alpha, reason text misleading 'headroom' for windowless provider)",
+            "apply": "applied; bare false",
+            "fileState": "recovered",
+            "classification": "reproduced",
+            "sourceAnchors": [
+                { "path": "packages/app/src/services/agent-usage-producer.ts", "line": 325 },
+                { "path": "packages/app/src/services/agent-usage-producer.ts", "line": 143 }
+            ]
+        },
+        {
+            "id": "C06",
+            "group": "signal",
+            "syntheticInput": "staleprov primary 100%, updatedAt 72h old",
+            "initialState": "fix-stale enabled",
+            "expectedContract": "staleness gate expected; none exists",
+            "observationStatus": "observed",
+            "dryRun": "would-apply disable despite stale updatedAt",
+            "apply": "applied; since = stale 2026-09-17 propagated into YAML",
+            "fileState": "quota-owned disable with stale since",
+            "classification": "reproduced",
+            "sourceAnchors": [
+                { "path": "packages/app/src/services/agent-quota-updates.ts", "line": 331 },
+                { "path": "packages/app/src/services/agent-service.ts", "line": 2634 }
+            ]
+        },
+        {
+            "id": "C07",
+            "group": "signal",
+            "syntheticInput": "openai entry carries error field",
+            "initialState": "fix-err enabled",
+            "expectedContract": "error never disables or recovers; fail-open",
+            "observationStatus": "observed",
+            "dryRun": "absent from changes",
+            "apply": "absent",
+            "fileState": "untouched",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-usage-producer.ts", "line": 69 }]
+        },
+        {
+            "id": "C08",
+            "group": "mapping",
+            "syntheticInput": "mystery headroom, no matching executor",
+            "initialState": "—",
+            "expectedContract": "unmapped listed, never guessed",
+            "observationStatus": "observed",
+            "dryRun": "unmappedProviders:[beta,mystery]",
+            "apply": "—",
+            "fileState": "—",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-usage-producer.ts", "line": 118 }]
+        },
+        {
+            "id": "C09",
+            "group": "ownership",
+            "syntheticInput": "ghost row recorded, entry removed before drain",
+            "initialState": "fix-ghost exists, enabled",
+            "expectedContract": "drain skips unknown executor",
+            "observationStatus": "observed",
+            "dryRun": "—",
+            "apply": "skippedUnknownExecutor: 1",
+            "fileState": "untouched",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-quota-updates.ts", "line": 283 }]
+        },
+        {
+            "id": "C10",
+            "group": "ownership",
+            "syntheticInput": "codex headroom (payload B)",
+            "initialState": "fix-codex-astra disabled: true (operator-owned)",
+            "expectedContract": "operator protection blocks recovery too",
+            "observationStatus": "observed",
+            "dryRun": "would-apply enabled (WRONG prediction)",
+            "apply": "drain skippedOperatorOwned; NOT applied; row still labeled applied in changes[]",
+            "fileState": "YAML untouched",
+            "classification": "reproduced",
+            "sourceAnchors": [
+                { "path": "packages/app/src/services/agent-usage-producer.ts", "line": 331 },
+                { "path": "packages/app/src/services/agent-quota-updates.ts", "line": 302 }
+            ]
+        },
+        {
+            "id": "C11",
+            "group": "mapping",
+            "syntheticInput": "codex headroom (payload B)",
+            "initialState": "fix-codex-sol/prefix/prefixcase quota-disabled",
+            "expectedContract": "recovery applied for quota-owned rows",
+            "observationStatus": "observed",
+            "dryRun": "would-apply enable x3",
+            "apply": "applied x3",
+            "fileState": "recovered (bare false)",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-quota-updates.ts", "line": 283 }]
+        },
+        {
+            "id": "C12",
+            "group": "signal",
+            "syntheticInput": "staleprov still 100% stale (re-run)",
+            "initialState": "fix-stale already quota-disabled with identical row",
+            "expectedContract": "idempotent no-op",
+            "observationStatus": "observed",
+            "dryRun": "would-apply re-disable",
+            "apply": "updater unchanged; YAML byte-identical; drain summary still counts applied:1",
+            "fileState": "byte-identical",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/app/src/services/agent-quota-updates.ts", "line": 70 }]
+        },
+        {
+            "id": "C13",
+            "group": "layer",
+            "syntheticInput": "SPUR_AGENT_USAGE_SNAPSHOT fixture: fresh captured_at vs 7h-old",
+            "initialState": "sandbox project",
+            "expectedContract": "usage{capturedAt,age,stale} populated; 6h threshold",
+            "observationStatus": "observed",
+            "dryRun": "doctor: fresh age 514 stale false; 7h age 25213892 stale true",
+            "apply": "—",
+            "fileState": "—",
+            "classification": "reproduced",
+            "sourceAnchors": [
+                { "path": "packages/app/src/services/agent-service.ts", "line": 2634 },
+                { "path": "packages/app/src/services/agent-service.ts", "line": 2697 }
+            ]
+        },
+        {
+            "id": "C14",
+            "group": "layer",
+            "syntheticInput": "consumer requests layer:global; executor declared in project fragment",
+            "initialState": "fixture project config declares 8 executors",
+            "expectedContract": "updater re-selects declaring layer; project wins",
+            "observationStatus": "observed",
+            "dryRun": "—",
+            "apply": "writes landed in project file",
+            "fileState": "project YAML (not global)",
+            "classification": "reproduced",
+            "sourceAnchors": [{ "path": "packages/config/src/executor-update.ts", "line": 89 }]
+        }
+    ],
+    "timing": [
+        {
+            "measurement": "codexbar usage --format json --provider all",
+            "value": "113.43s wall, exit 1 (parsable array)",
+            "provenance": "timed live 2026-09-19 20:18:41-20:20:13 -0700; 68 healthy + 60 errored"
+        },
+        {
+            "measurement": "agent usage --dry-run --json (full)",
+            "value": "113.83s (producer overhead ~0.4s)",
+            "provenance": "same machine, immediately after"
+        },
+        {
+            "measurement": "fixture producer pass",
+            "value": "30ms dry-run / 54ms apply",
+            "provenance": "harness phase marks (synthetic harness, not live provider latency)"
+        },
+        {
+            "measurement": "per-provider elapsed",
+            "value": "unknown",
+            "provenance": "one buffered spawn covers all providers; codexbar reports no per-provider timings — not fabricated"
+        },
+        {
+            "measurement": "timeout owner",
+            "value": "none in usage chain",
+            "provenance": "CodexbarUsageSource constructs NodeProcessExecutor with no timeout (agent-usage-source.ts:35-41); resolveDeadline(undefined,undefined) arms no deadline (ts-runtime process-executor.ts:301)"
+        }
+    ],
+    "followUps": [
+        {
+            "rank": 1,
+            "summary": "Preview honesty for recovery direction: classify changes[] against operator ownership when targetExhausted===false, or surface blocked(operator) in dry-run",
+            "owner": "B6",
+            "anchor": "packages/app/src/services/agent-usage-producer.ts:331-333"
+        },
+        {
+            "rank": 2,
+            "summary": "Arm a capture deadline in the usage source (executor already supports group-owned SIGTERM)",
+            "owner": "B6",
+            "anchor": "apps/cli/src/services/agent-usage-source.ts:35-41"
+        },
+        {
+            "rank": 3,
+            "summary": "No-usage-aware reason text so recovery rows never claim headroom for a windowless driver",
+            "owner": "B6",
+            "anchor": "packages/app/src/services/agent-usage-producer.ts:143-152"
+        },
+        {
+            "rank": 4,
+            "summary": "Staleness gate or capturedAt-based since so stale updatedAt cannot seed since weeks in the past",
+            "owner": "B6",
+            "anchor": "packages/app/src/services/agent-quota-updates.ts:331"
+        },
+        {
+            "rank": 5,
+            "summary": "Count updater unchanged separately in AgentQuotaDrainSummary so applied stops absorbing idempotent no-ops",
+            "owner": "unowned-follow-up",
+            "anchor": "packages/app/src/services/agent-quota-updates.ts:70-90"
+        }
+    ],
+    "unknowns": [
+        "Per-provider timings inside codexbar (buffered single spawn)",
+        "Causes of the 60 errored providers (stderr redacted; capture shape carries no error timestamps)",
+        "failed/deferred drain rows (need a hostile filesystem — outside sanitized scope)",
+        "Whether an external scheduler exists for this machine (scheduling outside this ticket)",
+        "The timeout fix itself (R5 forbids adding it here)"
+    ]
+}

@@ -4,7 +4,7 @@ name: Validate usage-to-availability decisions with sanitized fixtures and dry-r
 status: done
 template: brainstorm
 created_at: 2026-09-20T00:51:03.294Z
-updated_at: "2026-09-20T05:58:01.849Z"
+updated_at: "2026-09-20T07:14:17.106Z"
 feature_id: I31
 
 priority: P1
@@ -27,23 +27,23 @@ Type: `wayfinder:research`. This is the second independent investigation on map 
 
 ### Requirements
 
-- [ ] R1. Build the fixed fixture matrix below using synthetic providers/executors, fixed timestamps, and sanitized JSON; include all ownership, signal, mapping, and layer cases without copying real provider auth data.
-- [ ] R2. Exercise classifyProviderUsage, mapProvidersToExecutors, and runAgentUsageProducer with injected UsageSource, clock, loader, snapshot path, and in-memory DB; compare dry-run changes to actual disposable apply results.
-- [ ] R3. Reproduce the operator-owned preview mismatch and no-usage hypothesis independently, recording expected contract, observed preview, persisted fixture state, drain disposition, and whether each defect reproduces.
-- [ ] R4. Exercise the actual shared quota consumer and actual config updater/loader for project-only, global-only, and project-shadowing cases. Assert operator protection, layer isolation, and final file content; do not mock the writer whose correctness is being observed.
-- [ ] R5. Inspect capture timeout ownership and freshness checks across source/producer/consumer. Report only observable timing: synthetic elapsed measurements describe the harness, not live provider latency; per-provider latency remains unavailable without evidence.
-- [ ] R6. Deliver 0904-availability.md and 0904-availability-fixtures.json, with executable reproduction snippets, exact commands, case results, source anchors, sanitized diagnostics, and proposed fixes routed to B6 or explicit unowned follow-up.
-- [ ] R7. Run the reproducibility/coverage checks in disposable state, prove real config and DB were not used for writes, and preserve failed observations without changing production source or weakening assertions.
+- [x] R1. Build the fixed fixture matrix below using synthetic providers/executors, fixed timestamps, and sanitized JSON; include all ownership, signal, mapping, and layer cases without copying real provider auth data.
+- [x] R2. Exercise classifyProviderUsage, mapProvidersToExecutors, and runAgentUsageProducer with injected UsageSource, clock, loader, snapshot path, and in-memory DB; compare dry-run changes to actual disposable apply results.
+- [x] R3. Reproduce the operator-owned preview mismatch and no-usage hypothesis independently, recording expected contract, observed preview, persisted fixture state, drain disposition, and whether each defect reproduces.
+- [x] R4. Exercise the actual shared quota consumer and actual config updater/loader for project-only, global-only, and project-shadowing cases. Assert operator protection, layer isolation, and final file content; do not mock the writer whose correctness is being observed.
+- [x] R5. Inspect capture timeout ownership and freshness checks across source/producer/consumer. Report only observable timing: synthetic elapsed measurements describe the harness, not live provider latency; per-provider latency remains unavailable without evidence.
+- [x] R6. Deliver 0904-availability.md and 0904-availability-fixtures.json, with executable reproduction snippets, exact commands, case results, source anchors, sanitized diagnostics, and proposed fixes routed to B6 or explicit unowned follow-up.
+- [x] R7. Run the reproducibility/coverage checks in disposable state, prove real config and DB were not used for writes, and preserve failed observations without changing production source or weakening assertions.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — All fixed matrix cases have synthetic input, initial state, expected contract, and an explicit observation status. (req: R1)
-- [ ] AC2 — Each tested case records dry-run output separately from apply/drain/file-state observations. (req: R2)
-- [ ] AC3 — Operator-preview and no-usage cases are classified reproduced, ruled-out, or blocked with direct evidence; preview is never called a real config change. (req: R3)
-- [ ] AC4 — Actual disposable project/global persistence and precedence are observable with protected records and correct target-layer checks. (req: R4)
-- [ ] AC5 — Timeout/freshness ownership is source-linked, total timing is correctly labeled, and missing per-provider timing is not fabricated. (req: R5)
-- [ ] AC6 — Both named artifacts contain runnable snippets/commands and owner-scoped recommendations, with no auth bodies. (req: R6)
-- [ ] AC7 — Coverage and state-isolation checks are recorded; production files/config/DB remain unchanged. (req: R7)
+- [x] AC1 — All fixed matrix cases have synthetic input, initial state, expected contract, and an explicit observation status. (req: R1)
+- [x] AC2 — Each tested case records dry-run output separately from apply/drain/file-state observations. (req: R2)
+- [x] AC3 — Operator-preview and no-usage cases are classified reproduced, ruled-out, or blocked with direct evidence; preview is never called a real config change. (req: R3)
+- [x] AC4 — Actual disposable project/global persistence and precedence are observable with protected records and correct target-layer checks. (req: R4)
+- [x] AC5 — Timeout/freshness ownership is source-linked, total timing is correctly labeled, and missing per-provider timing is not fabricated. (req: R5)
+- [x] AC6 — Both named artifacts contain runnable snippets/commands and owner-scoped recommendations, with no auth bodies. (req: R6)
+- [x] AC7 — Coverage and state-isolation checks are recorded; production files/config/DB remain unchanged. (req: R7)
 
 ### Q&A
 
@@ -77,13 +77,13 @@ Baseline commands, when needed, run inside packages/app: `bun test tests/service
 
 ### Plan
 
-- [ ] Step 1 (R1, AC1): Build the fixed fixture matrix below using synthetic providers/executors, fixed timestamps, and sanitized JSON; include all ownership, signal, mapping, and layer cases without copying real provider auth data.
-- [ ] Step 2 (R2, AC2): Exercise classifyProviderUsage, mapProvidersToExecutors, and runAgentUsageProducer with injected UsageSource, clock, loader, snapshot path, and in-memory DB; compare dry-run changes to actual disposable apply results.
-- [ ] Step 3 (R3, AC3): Reproduce the operator-owned preview mismatch and no-usage hypothesis independently, recording expected contract, observed preview, persisted fixture state, drain disposition, and whether each defect reproduces.
-- [ ] Step 4 (R4, AC4): Exercise the actual shared quota consumer and actual config updater/loader for project-only, global-only, and project-shadowing cases. Assert operator protection, layer isolation, and final file content; do not mock the writer whose correctness is being observed.
-- [ ] Step 5 (R5, AC5): Inspect capture timeout ownership and freshness checks across source/producer/consumer. Report only observable timing: synthetic elapsed measurements describe the harness, not live provider latency; per-provider latency remains unavailable without evidence.
-- [ ] Step 6 (R6, AC6): Deliver 0904-availability.md and 0904-availability-fixtures.json, with executable reproduction snippets, exact commands, case results, source anchors, sanitized diagnostics, and proposed fixes routed to B6 or explicit unowned follow-up.
-- [ ] Step 7 (R7, AC7): Run the reproducibility/coverage checks in disposable state, prove real config and DB were not used for writes, and preserve failed observations without changing production source or weakening assertions.
+- [x] Step 1 (R1, AC1): Build the fixed fixture matrix below using synthetic providers/executors, fixed timestamps, and sanitized JSON; include all ownership, signal, mapping, and layer cases without copying real provider auth data.
+- [x] Step 2 (R2, AC2): Exercise classifyProviderUsage, mapProvidersToExecutors, and runAgentUsageProducer with injected UsageSource, clock, loader, snapshot path, and in-memory DB; compare dry-run changes to actual disposable apply results.
+- [x] Step 3 (R3, AC3): Reproduce the operator-owned preview mismatch and no-usage hypothesis independently, recording expected contract, observed preview, persisted fixture state, drain disposition, and whether each defect reproduces.
+- [x] Step 4 (R4, AC4): Exercise the actual shared quota consumer and actual config updater/loader for project-only, global-only, and project-shadowing cases. Assert operator protection, layer isolation, and final file content; do not mock the writer whose correctness is being observed.
+- [x] Step 5 (R5, AC5): Inspect capture timeout ownership and freshness checks across source/producer/consumer. Report only observable timing: synthetic elapsed measurements describe the harness, not live provider latency; per-provider latency remains unavailable without evidence.
+- [x] Step 6 (R6, AC6): Deliver 0904-availability.md and 0904-availability-fixtures.json, with executable reproduction snippets, exact commands, case results, source anchors, sanitized diagnostics, and proposed fixes routed to B6 or explicit unowned follow-up.
+- [x] Step 7 (R7, AC7): Run the reproducibility/coverage checks in disposable state, prove real config and DB were not used for writes, and preserve failed observations without changing production source or weakening assertions.
 
 ### Solution
 
@@ -169,7 +169,20 @@ Per-provider timings inside codexbar; causes of the 60 errored providers (stderr
 
 ### Testing
 
-Targeted probes only (implement scope; full gate belongs to the pipeline's test hop): `bun test packages/config/tests/executor-update.test.ts` → 29 pass; `bun test packages/app/tests/services/agent-quota-updates.test.ts` → 28 pass; `bun test packages/app/tests/services/agent-usage-producer.test.ts` → 3 pass. Harness evidence: fixture dry-run wrote no snapshot (`snapshot-should-not-exist.json` absent, `snapshotPath: null`); sandbox-only writes verified by diffing the fixture project YAML before/after.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | 0904-availability-fixtures.json C01-C14; checker exit 0 |
+| R2 | MET | dry-run vs apply/drain/file-state separated per case |
+| R3 | MET | C04/C10 preview mismatch reproduced; agent-usage-producer.ts:331-333 vs agent-quota-updates.ts:302-315 |
+| R4 | MET | C14 layer reselect executor-update.ts:89; C04/C10 protection; C12 byte-identical |
+| R5 | MET | timeout owner none at agent-usage-source.ts:35-41; per-provider unknown explicit |
+| R6 | MET | docs/reports/i31/0904-availability.{md,json} + 0904-check.ts exit 0 |
+| R7 | MET | checker CHECK-PASS this run; no live snapshot; production diff clean |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
