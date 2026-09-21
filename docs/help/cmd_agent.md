@@ -25,7 +25,7 @@ spur agent run [options] <prompt>
 
 | Flag | Description |
 |---|---|
-| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`) selects the starting tier; an **executor** pins a configured profile; a bare binary name works with a one-time warning; `auto` (default) resolves via the `agent` config block. Explicit `inline` is host-session-only — this surface is headless, so it is rejected with exit 2 and a stable error message (G5 / ADR-047 amendment; it never normalizes to `agent.default`). `spur agent run` always starts a subprocess. |
+| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline`. A **role** (`scribe`/`coder`/`reviewer`/`planner`) selects the starting tier; an **executor** pins a configured profile; a bare binary name works with a one-time warning; `auto` (default) resolves via the `agent` config block. Explicit `inline` requests host-session execution; on headless surfaces (this command is headless) a role/tier fallback resolves with one warning (ADR-087 — substitution over rejection; the G5 exit-2 rejection is retired). `spur agent run` always starts a subprocess. |
 | `--spec <id>` | Team agent spec id (occupant addressing); pairs with `--drain` |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument (explicit `--model` wins over the configured one) |

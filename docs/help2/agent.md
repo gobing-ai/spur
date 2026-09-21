@@ -23,7 +23,7 @@ spur agent run [options] <prompt>
 
 | Flag | Description |
 | --- | --- |
-| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline` (host-session-only; rejected here) |
+| `--agent <name>` | Role, executor, agent binary, `auto`, or `inline` (host-session; on headless surfaces a role/tier fallback resolves with one warning) |
 | `--spec <id>` | Team agent spec id (occupant addressing; pairs with `--drain`) |
 | `--continue` | Resume the previous agent session |
 | `--model <name>` | Agent model argument |
