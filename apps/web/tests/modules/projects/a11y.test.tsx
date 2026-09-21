@@ -328,27 +328,6 @@ describe('R3: status is never colour-alone and state changes are announced (0844
     });
 });
 
-describe('carried 0841 P3: the task chip is keyboard-operable, labeled, and removable', () => {
-    test('data-g6="task-chip" is a native button with a remove label and removes via activation', async () => {
-        setFetchForTesting(stubFetch());
-        saveDraft({
-            path: '/repo/wt',
-            text: 'implement it',
-            refs: [{ kind: 'task', wbs: '0841' }],
-            revision: 1,
-        });
-        const { container } = await renderShell(['/board/projects/conversation']);
-        const chip = container.querySelector('[data-g6="task-chip"]') as HTMLButtonElement;
-        expect(chip).not.toBeNull();
-        expect(chip.tagName).toBe('BUTTON'); // keyboard-focusable and Enter/Space activatable
-        expect(chip.getAttribute('aria-label')).toContain('Remove');
-        expect(chip.getAttribute('aria-label')).toContain('task 0841');
-
-        fireEvent.click(chip);
-        expect(container.querySelector('[data-g6="task-chip"]')).toBeNull();
-    });
-});
-
 describe('0844 bar controls stay reachable and labeled (keyboard parity)', () => {
     test('dock, collapse, and composer are labeled native controls', async () => {
         const { getByTestId, getByLabelText, queryByText, queryByTestId } = await renderBar();

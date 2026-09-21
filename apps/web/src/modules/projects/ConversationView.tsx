@@ -7,18 +7,9 @@ import {
     OPERATOR_AGENT_ID,
     parseInboxMessages,
 } from './conversation';
-import { useConversationDraft } from './drafts';
 import { classifyReceipt, RECEIPT_LABELS, type RequestReceipt } from './receipt';
 import { useProjectContext } from './useProjectContext';
 import { useProjectRequests } from './useProjectRequests';
-
-/** No orchestrator instance bound (0836 vocabulary): skip the orchestrator-side
- *  read and name the state in the composer area, not a generic disabled control. */
-function orchestratorUnbound(fleet: ReturnType<typeof useProjectContext>['fleet']): boolean {
-    if (fleet === null) return true;
-    const { state, instanceId } = fleet.orchestrator;
-    return state === 'missing' || state === 'unresolvable' || !instanceId;
-}
 
 function inboxUrl(agent: string): string {
     return `${resolveApiUrl()}/messages/inbox?agent=${encodeURIComponent(agent)}`;
@@ -27,19 +18,14 @@ function inboxUrl(agent: string): string {
 /**
  * Conversation tab (0841 R1/R4, feature G63): one request/response thread for
  * the served project, rehydrated on mount from the two non-consuming inbox
- * reads — never from client state. Client storage holds the draft and nothing
- * else, so a refresh rebuilds the thread from the server or not at all.
- * Submission, receipts, and hold/result states are 0844's; the composer here
- * renders and edits the shared per-project draft only.
+ * reads — never from client state. Submission is handled by GlobalAgentBar.
  */
 export default function ConversationView() {
     const project = useProjectContext();
-    const { draft, setText, removeRef } = useConversationDraft();
     const [entries, setEntries] = useState<ConversationEntry[] | null>(null);
     const [failed, setFailed] = useState(false);
 
     const instanceId = project.fleet?.orchestrator.instanceId ?? null;
-    const unbound = orchestratorUnbound(project.fleet);
     const { requests, failed: requestsFailed } = useProjectRequests(instanceId);
 
     // Join the thread to the durable results feed (0844): entries match
@@ -108,33 +94,6 @@ export default function ConversationView() {
                     <ConversationRow key={entry.id} entry={entry} />
                 ))}
             </div>
-            <div
-                className="border-t border-spur-border bg-spur-surface shrink-0 p-2 space-y-1"
-                data-conversation-composer
-            >
-                {unbound && (
-                    <div className="text-xs text-spur-text-muted" data-conversation-orchestrator-missing>
-                        Orchestrator unavailable — no orchestrator instance is bound to this project, so requests cannot
-                        be delivered yet.
-                    </div>
-                )}
-                {draft.refs.length > 0 && (
-                    <div className="flex flex-wrap gap-1" data-draft-refs>
-                        {draft.refs.map((ref) => (
-                            <DraftRefChip key={refKey(ref)} ref_={ref} onRemove={removeRef} />
-                        ))}
-                    </div>
-                )}
-                <textarea
-                    className="w-full resize-none rounded-xl border border-spur-border bg-spur-bg p-2 text-sm text-spur-text focus:outline-none focus:ring-1 focus:ring-spur-accent"
-                    rows={3}
-                    value={draft.text}
-                    onChange={(e) => setText(e.target.value)}
-                    aria-label="Conversation draft"
-                    placeholder="Describe what you need — submission is wired to the global input."
-                    data-conversation-draft-input
-                />
-            </div>
         </div>
     );
 }
@@ -192,21 +151,5 @@ function ConversationRow({ entry }: { entry: ConversationEntry }) {
             )}
             <p className="text-spur-text mt-1 whitespace-pre-wrap break-words">{entry.text}</p>
         </div>
-    );
-}
-
-function DraftRefChip({ ref_, onRemove }: { ref_: ConversationRef; onRemove: (ref: ConversationRef) => void }) {
-    const label = ref_.kind === 'task' ? `task ${ref_.wbs}` : `feature ${ref_.id}`;
-    return (
-        <button
-            type="button"
-            className="text-xs px-1 rounded bg-info/20 text-info font-mono hover:bg-info/30"
-            aria-label={`Remove ${label} reference from the draft`}
-            onClick={() => onRemove(ref_)}
-            data-draft-ref={ref_.kind}
-            data-g6={ref_.kind === 'task' ? 'task-chip' : undefined}
-        >
-            {label} ✕
-        </button>
     );
 }

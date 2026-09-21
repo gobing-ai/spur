@@ -91,15 +91,15 @@ describe('Projects module registration (0840 R6)', () => {
 });
 
 describe('ProjectsShell header (0840 R5)', () => {
-    test('renders name + path and ready state when everything resolves', async () => {
+    test('renders title, description and ready state when everything resolves', async () => {
         const { container } = await renderShell(ctx());
         const header = container.querySelector('[data-projects-header]');
         expect(header?.getAttribute('data-projects-state')).toBe('ready');
-        expect(container.textContent).toContain('spur');
-        expect(container.textContent).toContain('/repo/wt');
-        expect(container.textContent).toContain('gtd (v1)');
-        expect(container.textContent).toContain('online');
-        expect(container.textContent).toContain('1 member');
+        expect(container.textContent).toContain('Projects');
+        expect(container.textContent).toContain('Conversation, agents, and processes for this project');
+        expect(container.textContent).not.toContain('Orchestrator:');
+        expect(container.textContent).not.toContain('Fleet:');
+        expect(container.textContent).not.toContain('Strategy:');
     });
 
     test('loading state (context default)', async () => {
@@ -107,12 +107,11 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe('loading');
     });
 
-    test('unresolvable state names the missing path, tabs still mounted', async () => {
+    test('unresolvable state sets data-projects-state, tabs still mounted', async () => {
         const { container } = await renderShell({ path: null, name: '', fleet: null, state: 'unresolvable' });
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'unresolvable',
         );
-        expect(container.textContent).toContain('Project path unavailable');
         expect(container.querySelectorAll('[data-projects-tab]')).toHaveLength(3);
     });
 
@@ -121,10 +120,9 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'fleet-unavailable',
         );
-        expect(container.textContent).toContain('Fleet status unavailable');
     });
 
-    test('no-fleet state names the expected agent.fleet section', async () => {
+    test('no-fleet state when fleet capacity is 0', async () => {
         const { container } = await renderShell(
             ctx({
                 fleet: fleet({
@@ -135,19 +133,15 @@ describe('ProjectsShell header (0840 R5)', () => {
             }),
         );
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe('no-fleet');
-        expect(container.textContent).toContain('no fleet declared');
-        // 0858 R5: the Board hint names the config section, not the retired file.
-        expect(container.textContent).toContain('agent.fleet in .spur/config.yaml');
     });
 
-    test('capacity-missing state lists unresolved members', async () => {
+    test('capacity-missing state when unresolved members exist', async () => {
         const { container } = await renderShell(
             ctx({ fleet: fleet({ capacity: { total: 1, enabled: 0, writeCapable: 0, missing: ['writer-x'] } }) }),
         );
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'capacity-missing',
         );
-        expect(container.textContent).toContain('writer-x');
     });
 
     test('bound-offline orchestrator state wins over facts', async () => {
@@ -157,7 +151,6 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'bound-offline',
         );
-        expect(container.textContent).toContain('bound but not responding');
     });
 });
 

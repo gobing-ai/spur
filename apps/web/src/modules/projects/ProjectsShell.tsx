@@ -34,27 +34,11 @@ function headerState(context: {
     return 'ready';
 }
 
-/** Orchestrator availability by its own name (0840 R5 state 2). */
-function orchestratorText(fleet: ProjectFleetSnapshot): string {
-    switch (fleet.orchestrator.state) {
-        case 'bound-online':
-            return `online${fleet.orchestrator.instanceId ? ` — ${fleet.orchestrator.instanceId}` : ''}`;
-        case 'bound-offline':
-            return 'bound but not responding';
-        case 'missing':
-            return 'no orchestrator bound';
-        case 'unresolvable':
-            return `unresolvable${fleet.orchestrator.reason ? ` — ${fleet.orchestrator.reason}` : ''}`;
-    }
-}
-
 /**
- * Projects board module shell (0840).
+ * Projects board module shell.
  *
- * Renders the SERVED project directly — one server instance serves one project;
- * the switcher navigates between servers. Header names the project/worktree,
- * strategy, orchestrator availability, and fleet capacity; every degraded fact
- * is named, never rendered as an empty shell (R5). Tabs mount in every state.
+ * Header displays standard module framing (matching Histories) with title,
+ * description, and tabs placed in the top-right corner.
  */
 export default function ProjectsShell() {
     const project = useProjectContext();
@@ -62,7 +46,6 @@ export default function ProjectsShell() {
     const active = PROJECT_TABS.find((t) => t.id === activeTab) ?? PROJECT_TABS[0];
     const Active = active?.component;
     const stateAttr = headerState(project);
-    const fleet = project.fleet;
 
     // R7 (0845): tabs are keyboard-navigable — ArrowLeft/ArrowRight move the
     // active tab (wrapping) and move focus with it; Tab/Enter keep working via
@@ -79,106 +62,66 @@ export default function ProjectsShell() {
     };
 
     return (
-        <div className="projects flex flex-col h-full overflow-hidden bg-spur-bg" data-projects-shell>
+        <div
+            className="projects flex flex-col h-full gap-4 p-4 max-w-[1600px] mx-auto w-full overflow-hidden"
+            data-projects-shell
+        >
+            {/* Header & Tab Navigation Bar */}
             <div
-                className="px-4 py-2 border-b border-spur-border bg-spur-surface shrink-0 flex flex-col gap-1"
+                className="flex flex-wrap items-center justify-between gap-4 border-b border-base-content/10 pb-3 shrink-0"
                 data-projects-header
                 data-projects-state={stateAttr}
             >
-                {project.state === 'unresolvable' ? (
-                    <div className="text-xs">
-                        <span className="font-semibold text-spur-text">Project path unavailable</span>
-                        <span className="text-spur-text-muted">
-                            {' '}
-                            — the server did not report this project's worktree path; project-scoped state stays
-                            unloaded.
-                        </span>
+                <div className="flex items-center gap-3">
+                    <span className="text-2xl" aria-hidden="true">
+                        📁
+                    </span>
+                    <div>
+                        <h1 className="text-xl font-bold tracking-tight">Projects</h1>
+                        <p className="text-xs text-base-content/60">
+                            Conversation, agents, and processes for this project
+                        </p>
                     </div>
-                ) : (
-                    <div className="flex items-baseline gap-2 min-w-0">
-                        <span className="text-sm font-semibold text-spur-text shrink-0">
-                            {project.name || 'Projects'}
-                        </span>
-                        <span className="text-xs text-spur-text-muted font-mono">{project.path}</span>
-                    </div>
-                )}
-                {project.state !== 'unresolvable' && fleet === null && (
-                    <div className="text-xs text-spur-text-muted">Fleet status unavailable</div>
-                )}
-                {fleet !== null && (
-                    <>
-                        <div className="text-xs text-spur-text-muted">
-                            Orchestrator: <span className="text-spur-text">{orchestratorText(fleet)}</span>
-                        </div>
-                        <div className="text-xs text-spur-text-muted">
-                            Fleet:{' '}
-                            {fleet.capacity.total === 0 ? (
-                                <span className="text-spur-text">
-                                    no fleet declared — expected{' '}
-                                    <code className="font-mono">agent.fleet in .spur/config.yaml</code>
-                                </span>
-                            ) : fleet.enabled === false ? (
-                                <span className="text-spur-text">
-                                    disabled (<code className="font-mono">agent.fleet.enabled: false</code>) —{' '}
-                                    {fleet.capacity.total} member{fleet.capacity.total === 1 ? '' : 's'} declared
-                                </span>
-                            ) : (
-                                <span className="text-spur-text">
-                                    {fleet.capacity.total} member{fleet.capacity.total === 1 ? '' : 's'} ·{' '}
-                                    {fleet.capacity.enabled} enabled · {fleet.capacity.writeCapable} write-capable
-                                    {fleet.capacity.missing.length > 0
-                                        ? ` · unresolved: ${fleet.capacity.missing.join(', ')}`
-                                        : ''}
-                                </span>
-                            )}
-                        </div>
-                        <div className="text-xs text-spur-text-muted">
-                            Strategy:{' '}
-                            {fleet.strategy === null ? (
-                                <span className="text-spur-text">strategy unavailable</span>
-                            ) : (
-                                <span className="text-spur-text">
-                                    {fleet.strategy.name} (v{fleet.strategy.version})
-                                </span>
-                            )}
-                        </div>
-                    </>
-                )}
+                </div>
+
+                {/* Tab Strip */}
+                <div
+                    role="tablist"
+                    aria-label="Projects tabs"
+                    onKeyDown={onTablistKeyDown}
+                    className="flex items-center gap-1 bg-base-300 p-1 rounded-xl"
+                >
+                    {PROJECT_TABS.map((tab) => {
+                        const selected = tab.id === activeTab;
+                        return (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={selected}
+                                aria-controls={`projects-tab-panel-${tab.id}`}
+                                id={`projects-tab-${tab.id}`}
+                                onClick={() => selectTab(tab.id)}
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                                    selected
+                                        ? 'bg-primary text-primary-content font-bold shadow-sm'
+                                        : 'text-base-content/70 hover:bg-base-content/10'
+                                }`}
+                                data-projects-tab={tab.id}
+                            >
+                                {tab.label}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
-            <div
-                role="tablist"
-                aria-label="Projects tabs"
-                onKeyDown={onTablistKeyDown}
-                className="flex items-center gap-1 px-2 py-1 border-b border-spur-border bg-spur-surface shrink-0"
-            >
-                {PROJECT_TABS.map((tab) => {
-                    const selected = tab.id === activeTab;
-                    return (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            role="tab"
-                            aria-selected={selected}
-                            aria-controls={`projects-tab-panel-${tab.id}`}
-                            id={`projects-tab-${tab.id}`}
-                            onClick={() => selectTab(tab.id)}
-                            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                                selected
-                                    ? 'bg-spur-accent text-white'
-                                    : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                            }`}
-                            data-projects-tab={tab.id}
-                        >
-                            {tab.label}
-                        </button>
-                    );
-                })}
-            </div>
+
+            {/* Tab Panel */}
             <div
                 role="tabpanel"
                 id={`projects-tab-panel-${activeTab}`}
                 aria-labelledby={`projects-tab-${activeTab}`}
-                className="flex-1 overflow-hidden"
+                className="flex-1 min-h-0 overflow-hidden"
             >
                 {Active ? <Active /> : null}
             </div>
