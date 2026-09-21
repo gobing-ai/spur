@@ -393,9 +393,14 @@ describe('healthModule', () => {
             const first = (await (await app.request('/api/project/fleet')).json()) as {
                 members: Array<{ executor: string }>;
                 capacity: { missing: string[] };
+                roles: Array<{ name: string; tier: string; stages: string[]; isCustom: boolean }>;
+                executors: Array<{ name: string; agent: string; tier: string }>;
             };
             expect(first.capacity.missing).toEqual([]);
             expect(first.members.map((m) => m.executor)).toEqual(['capable']);
+            expect(first.roles.map((r) => r.name)).toContain('coder');
+            expect(first.roles.find((r) => r.name === 'coder')?.isCustom).toBe(true);
+            expect(first.executors.map((e) => e.name)).toEqual(['standard', 'capable', 'top']);
             tier = 'capable-2';
             const second = (await (await app.request('/api/project/fleet')).json()) as {
                 members: Array<{ executor: string }>;

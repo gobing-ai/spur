@@ -7,11 +7,13 @@ import {
     type OrchestratorBinding,
     ProjectRegistry,
     type ResolvedFleetMember,
+    resolveAgentRoles,
     type StrategyName,
     StrategyRuntime,
     startRegisteredProject,
 } from '@gobing-ai/spur-app';
-import { CoordinationRunDao, InboxMessageDao } from '@gobing-ai/spur-domain';
+import { normalizeExecutorAvailability } from '@gobing-ai/spur-config';
+import { CoordinationRunDao, InboxMessageDao, TIER_RANK } from '@gobing-ai/spur-domain';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -88,6 +90,8 @@ export const healthModule: ServerModule = {
                     orchestrator: { state: 'unresolvable', reason: 'no-project-context' },
                     members: [],
                     capacity: { total: 0, enabled: 0, writeCapable: 0, missing: [] },
+                    roles: [],
+                    executors: [],
                 });
             }
             const path = normalizeProjectPath(ctx.cwd);
@@ -120,6 +124,127 @@ export const healthModule: ServerModule = {
             let fleetEnabled = false;
             let orchestrator: OrchestratorBinding = { state: 'unresolvable', reason: 'unavailable' };
             let strategy: { name: StrategyName; version: number } | null = null;
+            let roles: Array<{
+                name: string;
+                tier: string;
+                stages: string[];
+                isCustom: boolean;
+                electedExecutor?: string | null;
+            }> = [];
+            let executors: Array<{
+                name: string;
+                agent: string;
+                model?: string;
+                tier: string;
+                disabled: boolean;
+                disabledOwner?: string;
+                disabledReason?: string;
+                disabledSince?: string;
+                installed?: boolean;
+                usable?: boolean;
+                version?: string | null;
+                error?: string | null;
+                elected?: string[];
+                executionCapabilities?: Record<string, unknown>;
+            }> = [];
+
+            try {
+                const config = await ctx.reloadAgentConfig();
+                if (config?.agent) {
+                    const rolesMap = resolveAgentRoles(config.agent);
+                    const customRoles = config.agent.roles ?? {};
+                    roles = Array.from(rolesMap.entries()).map(([name, def]) => ({
+                        name,
+                        tier: def.tier,
+                        stages: [...def.stages],
+                        isCustom: name in customRoles,
+                        electedExecutor: null,
+                    }));
+
+                    const doctorMap = new Map<
+                        string,
+                        { installed?: boolean; version?: string | null; usable?: boolean; error?: string | null }
+                    >();
+                    try {
+                        const doctorCacheFile = `${ctx.cwd}/.spur/run/agent-doctor.json`;
+                        if (ctx.fs && (await ctx.fs.exists(doctorCacheFile))) {
+                            const raw = await ctx.fs.readFile(doctorCacheFile);
+                            const parsed = JSON.parse(raw);
+                            if (Array.isArray(parsed?.results)) {
+                                for (const item of parsed.results) {
+                                    if (item?.agent) {
+                                        doctorMap.set(item.agent, item);
+                                    }
+                                }
+                            }
+                        }
+                    } catch {
+                        // ignore doctor cache read errors
+                    }
+
+                    executors = (config.agent.executors ?? []).map((ex) => {
+                        const avail = normalizeExecutorAvailability(ex.disabled);
+                        const doc = doctorMap.get(ex.name);
+                        const installed = doc?.installed ?? !avail.disabled;
+                        const usable = doc?.usable ?? !avail.disabled;
+                        const version = doc?.version ?? null;
+                        const error = doc?.error ?? null;
+                        return {
+                            name: ex.name,
+                            agent: ex.agent,
+                            model: ex.model,
+                            tier: ex.tier ?? 'standard',
+                            disabled: avail.disabled,
+                            disabledOwner: avail.owner,
+                            disabledReason: avail.reason,
+                            disabledSince: avail.since,
+                            installed,
+                            usable,
+                            version,
+                            error,
+                            elected: [] as string[],
+                            executionCapabilities: ex.executionCapabilities as Record<string, unknown> | undefined,
+                        };
+                    });
+
+                    // Role elections: cheapest usable executor for each role tier (doctor parity)
+                    const usableSet = new Set(executors.filter((e) => !e.disabled && e.usable).map((e) => e.name));
+                    const elections = new Map<string, string>();
+                    for (const [roleId, roleDef] of rolesMap) {
+                        const minRank = TIER_RANK[roleDef.tier as keyof typeof TIER_RANK] ?? 0;
+                        const candidates = (config.agent.executors ?? [])
+                            .filter((e) => {
+                                const rank = TIER_RANK[(e.tier ?? 'standard') as keyof typeof TIER_RANK] ?? 0;
+                                return rank >= minRank;
+                            })
+                            .sort((a, b) => {
+                                const rankA = TIER_RANK[(a.tier ?? 'standard') as keyof typeof TIER_RANK] ?? 0;
+                                const rankB = TIER_RANK[(b.tier ?? 'standard') as keyof typeof TIER_RANK] ?? 0;
+                                return rankA - rankB;
+                            });
+                        const winner = candidates.find((c) => usableSet.has(c.name));
+                        if (winner) {
+                            elections.set(roleId, winner.name);
+                        }
+                    }
+
+                    roles = roles.map((r) => ({
+                        ...r,
+                        electedExecutor: elections.get(r.name) ?? null,
+                    }));
+
+                    for (const ex of executors) {
+                        for (const [roleId, execName] of elections.entries()) {
+                            if (execName === ex.name) {
+                                ex.elected?.push(roleId);
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // Config load issues degrade gracefully (never 500)
+            }
+
             try {
                 const resolved = await fleet.resolve(path);
                 members = resolved.members;
@@ -160,6 +285,8 @@ export const healthModule: ServerModule = {
                     writeCapable: members.filter((m) => m.writeCapable).length,
                     missing,
                 },
+                roles,
+                executors,
             });
         });
 
