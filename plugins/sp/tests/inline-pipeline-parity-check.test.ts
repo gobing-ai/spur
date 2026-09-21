@@ -15,13 +15,14 @@ function runCheck(cwd: string): { status: number; stdout: string; stderr: string
 }
 
 describe('inline-pipeline-parity-check (task 0755 R2/R3)', () => {
-    test('passes against the current repo: documented set matches the union across all 9 workflows', () => {
+    test('passes against the current repo: documented set matches the union across all 10 workflows', () => {
         const res = runCheck(REPO_ROOT);
         expect(res.status).toBe(0);
         expect(res.stdout).toContain('inline-pipeline-parity-check: ok');
         // 9 = the catalogue after task 0866 retired basic / docs-pipeline / feature-dev and
-        // task 0872 added feature-verification (ADR-119 feature-scoped pass).
-        expect(res.stdout).toMatch(/9 workflows/);
+        // task 0872 added feature-verification (ADR-119 feature-scoped pass); 10 = 0911's
+        // decision-routing-example.yaml authoring example.
+        expect(res.stdout).toMatch(/10 workflows/);
         expect(res.stderr).toBe('');
     });
 

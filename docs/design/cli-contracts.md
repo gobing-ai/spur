@@ -806,3 +806,60 @@ an explicitly configured automatic confirm default; it does not force denial or 
 Stock `task-pipeline.yaml` with `profile=auto` skips approval, so no responder runs there. This
 switch affects executed `hitl.*` actions only; it does not change the graph, CLI resume confirmation,
 or the requirement for an explicit answer when resuming a paused headless run (ADR-122).
+
+#### Explicit decision modes (task 0911)
+
+`hitl.confirm` and `hitl.select` accept an optional `decision` option making participation explicit
+per action. `hitl.input` rejects `decision` at parse time.
+
+```yaml
+- kind: hitl.confirm
+  options:
+    prompt: "Publish?"
+    decision:
+      mode: never            # always the human responder, even when the switch is on
+
+- kind: hitl.select
+  options:
+    prompt: "Which route?"
+    options: [tutorial, reference]
+    decision:
+      mode: evidence
+      statusVar: decisionStatus   # required identifier, must differ from the answer var
+      evidenceNodes: [assess]     # producer state/node ids in this workflow (1..20, unique)
+      summaryArtifact: s.md       # optional registered artifact; envelope must match producer evidence
+```
+
+Semantics per mode (absent `decision` = 0910 implicit participation, unchanged):
+
+| Mode | Enabled switch | Disabled/absent switch |
+| --- | --- | --- |
+| `never` | always the original responder; provenance `policy-never` | identical |
+| `evidence` | answers only from verified evidence (below) | defers (`disabled`) |
+| absent (legacy) | 0910 implicit behavior | 0910 passthrough |
+
+Evidence mode accepts only when: every `evidenceNodes` producer has a completed, unambiguous
+latest attempt in the same run; confidence ≥ 0.9 with the selected choice strictly dominant; and,
+when a `summaryArtifact` is declared, that it resolves to a registered artifact whose JSON envelope
+(`schemaVersion 1`,
+matching `runId`/producer node/action id and a summary equal to the producer's recorded redacted
+outcome) is at most 8 KiB. Evidence is capped at 20 rows and 2000 redacted characters per row
+(32 KiB serialized). Any failure defers: the answer var is cleared to `""` (a stale previous answer
+cannot steer the next transition) and, for evidence mode, `statusVar` records `deferred` (`accepted`
+on success). Provenance — mode, outcome, reason, provider, confidence, selected probability,
+evidence action ids, evidence digest, artifact id, duration — is persisted with the action result
+(`action_runs.result_json`) and projected by `spur workflow trace` (a `decision` object on the JSON
+action event, plus the human `decision=` line). It is not attached to the run's event metadata, and
+raw evidence text and provider exception text never enter it.
+
+`workflow validate` (and `run`) reject: `decision` on `hitl.input`; unknown keys/modes; evidence
+mode in `pause: true` states/nodes; more than one evidence action per state/node; select choices
+violating the evidence invariants (<2, duplicate, empty, a `defer` choice); and producer nodes
+that do not exist in the workflow. Bundled workflows ship explicit `mode: never` on their human
+gates, and `config/workflows/decision-routing-example.yaml` demonstrates all three modes.
+
+Offline readiness is projected by `spur self status` as `decisionMaker: {enabled, provider,
+credentialPresent, state, connectivity, inlineSupport}` with states `disabled`, `missing-key`,
+and `configured-not-probed` (presence check only — no live probe, never echoes the key value).
+Known limitations: no hot reload (config is read at process start), no live connectivity probe,
+and provider probabilities are uncalibrated policy, not measured quality.

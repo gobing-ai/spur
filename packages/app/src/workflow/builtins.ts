@@ -23,6 +23,7 @@ import { ResponseValidateActionRunner, type ResponseValidateEngine } from './act
 import { RuleCheckActionRunner } from './actions/rule-check';
 import { RunArtifactActionRunner } from './actions/run-artifact';
 import { StreamingShellActionRunner } from './actions/shell';
+import type { DecisionEvaluator } from './decision-hitl-responder';
 import { ContractViolationGuardRunner } from './guards/contract-violation';
 import { EnvShellGuardRunner } from './guards/shell';
 import type { WorkflowObservabilityBus } from './observability';
@@ -48,6 +49,8 @@ export interface SpurWorkflowBuiltinsOptions {
     artifactDao?: ArtifactDao;
     /** Configured secret values redacted from streamed shell output (0901 R5). */
     secretValues?: readonly string[];
+    /** Application-owned decision evaluator for explicit never/evidence HITL modes (0911). */
+    decisionEvaluator?: DecisionEvaluator;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
@@ -85,8 +88,8 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
     host.registerAction(new FileExistsActionRunner(fileSystem), 'builtin');
     host.registerAction(new FileReadActionRunner(fileSystem), 'builtin');
     host.registerAction(new FileReadIntoVarActionRunner(fileSystem), 'builtin');
-    host.registerAction(new HitlConfirmActionRunner(options.hitlResponder), 'builtin');
-    host.registerAction(new HitlSelectActionRunner(options.hitlResponder), 'builtin');
+    host.registerAction(new HitlConfirmActionRunner(options.hitlResponder, options.decisionEvaluator), 'builtin');
+    host.registerAction(new HitlSelectActionRunner(options.hitlResponder, options.decisionEvaluator), 'builtin');
     host.registerAction(new HitlInputActionRunner(options.hitlResponder), 'builtin');
     host.registerAction(
         new CommandGateActionRunner(options.processExecutor ?? new NodeProcessExecutor(), fileSystem),

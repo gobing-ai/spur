@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.49.0
+version: 1.50.0
 owner: Robin Min
-updated_at: 2026-09-20
+updated_at: 2026-09-21
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1889,3 +1889,4 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Consequence:** This does not change workflow routing or replace explicit CLI resume answers. Stock `profile=auto` still skips its approval state. Provider probabilities are not an empirical quality guarantee; conservative confidence policy and fallback remain application-owned.
 - **Retains:** ADR-021 (application logic), ADR-027 (one config loader), ADR-122 (engine-owned recovery and explicit resume boundary).
 - **Detail:** [CLI contracts](design/cli-contracts.md#optional-decisionmaker-for-executed-hitl-actions).
+- **Clarification (2026-09-21, task 0911):** Decision participation is now an explicit per-action opt-in via the `decision` option on `hitl.confirm`/`hitl.select`: `mode: never` pins the action to the human responder (DecisionMaker bypassed even when enabled), and `mode: evidence` answers only from verified action evidence of declared producer nodes — acceptance requires confidence ≥ 0.9 and, when a summary artifact is declared, that it resolves to a registered artifact matching the producer's recorded redacted outcome; anything else defers (answer var cleared, `statusVar` records `deferred`). Actions without `decision` keep the 0910 default (implicit DecisionMaker participation when enabled) unchanged — the historical default is preserved, not rewritten. Evidence mode is rejected in `pause: true` states/nodes, is limited to one action per state/node, and `decision` is rejected on `hitl.input`. These constraints are enforced by the shared workflow validator for both `validate` and `run`.

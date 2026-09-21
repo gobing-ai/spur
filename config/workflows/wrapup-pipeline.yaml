@@ -308,6 +308,8 @@ states:
       - kind: hitl.confirm
         options:
           prompt: "Branch cleanup for the validated task list (.spur/run/${vars.__runId}-wrapup-tasks.json). This is IRREVERSIBLE (merge or delete). Confirm to proceed?"
+          decision:
+            mode: never
 
   - id: done
     description: >

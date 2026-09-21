@@ -128,10 +128,27 @@ its proposed behavior is not available merely by setting this switch.
 | Headless resume rejects `--yes` alone | Supply an explicit gate answer; `--yes` is a separate confirmation control |
 | Uncertainty still returns `yes` | Check whether the existing `SPUR_HITL_AUTO_APPROVE` fallback was enabled |
 
-Existing workflow traces show action outcomes, but do not yet establish whether the model or
-fallback supplied an answer. There is no dedicated readiness report or live provider-health probe
-in this feature. The task 0910 regression suite uses fake providers; it does not certify your API
-key or live service availability.
+Existing workflow traces now carry a `decision` provenance object (mode, outcome, reason,
+confidence, evidence ids, digest, artifact id), so you can tell a model answer from a human or
+fallback answer without rerunning. There is still no live provider-health probe: `spur self status`
+projects offline readiness only (`decisionMaker.state`: `disabled`, `missing-key`,
+`configured-not-probed`). The task 0910/0911 regression suites use fake providers; they do not
+certify your API key or live service availability.
+
+## Explicit decision modes (0911)
+
+Per action you can pin the policy with the `decision` option (details in
+[CLI contracts](../design/cli-contracts.md#explicit-decision-modes-task-0911)):
+
+- `mode: never` — always the human responder, even with the switch on. Bundled workflows ship
+  this on their human gates.
+- `mode: evidence` — the model answers only from verified prior action evidence (producer nodes,
+  bounded rows, matching summary artifact); anything unverifiable defers and clears the answer
+  variable (`statusVar` records `deferred`).
+- absent — historical 0910 behavior (implicit participation when enabled), unchanged.
+
+Use `config/workflows/decision-routing-example.yaml` as the authoring template. Validation rejects
+mis-declared evidence mode at `workflow validate` time, before any run.
 
 ## Implementation references
 

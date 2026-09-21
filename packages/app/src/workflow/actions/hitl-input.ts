@@ -1,4 +1,5 @@
 import type { ActionResult, ActionRunContext, ActionRunner, HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
+import { parseDecisionConfig } from '../decision-hitl-responder';
 
 const KIND = 'hitl.input';
 
@@ -8,6 +9,9 @@ const KIND = 'hitl.input';
  * Options:
  * - `prompt` (string, required): the question to present.
  * - `var` (string, optional): var name for the answer; defaults to `__hitlInput`.
+ *
+ * Decision modes are not supported on input (frozen surface, 0911): the optional `decision` object
+ * is rejected before any side effect.
  */
 export class HitlInputActionRunner implements ActionRunner {
     readonly kind = KIND;
@@ -25,6 +29,10 @@ export class HitlInputActionRunner implements ActionRunner {
         }
 
         const varName = asString(options.var) ?? '__hitlInput';
+        const parsed = parseDecisionConfig(options, varName, 'input');
+        if (!parsed.ok) {
+            return { ok: false, error: `hitl.input: ${parsed.error}` };
+        }
 
         context.events?.emit('workflow.hitl.ask', {
             runId: context.runId,

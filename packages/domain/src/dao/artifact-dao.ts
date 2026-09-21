@@ -38,4 +38,15 @@ export class ArtifactDao extends EntityDao<typeof artifacts, typeof artifacts.id
     > {
         return this.adapter.queryAll('SELECT path, kind FROM artifacts WHERE run_id = ? ORDER BY id', runId);
     }
+
+    /** 0911 D8: narrow id/path/kind projection for decision-evidence summary validation. */
+    artifactsWithIdByRunId(runId: string): Promise<
+        Array<{
+            id: string;
+            path: string;
+            kind: string;
+        }>
+    > {
+        return this.adapter.queryAll('SELECT id, path, kind FROM artifacts WHERE run_id = ? ORDER BY id', runId);
+    }
 }

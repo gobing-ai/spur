@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import type { Command } from '@commander-js/extra-typings';
+import { computeDecisionReadiness } from '@gobing-ai/spur-app/decision-readiness';
 import type { CliContext } from '../context';
 import { CommandError } from '../errors';
 import { gitContext } from '../git-context';
@@ -38,6 +39,10 @@ async function runStatusCore(
         listAgentSpecIds(context),
     ]);
     const target = path === undefined ? undefined : await readTargetStatus(context, path);
+    const decisionMaker = computeDecisionReadiness(
+        context.spurConfig?.workflow?.hitlDecisionMaker === true,
+        isNonEmpty(context.env.TYPESAFE_API_KEY),
+    );
 
     const status = {
         ok: spurConfigExists,
@@ -45,6 +50,7 @@ async function runStatusCore(
         spurConfig: spurConfigExists,
         git,
         agentSpecs,
+        decisionMaker,
         ...(target === undefined ? {} : { target }),
     };
 
@@ -57,6 +63,7 @@ async function runStatusCore(
                 `Package: ${packageJsonExists ? 'ok' : 'none'}`,
                 `Agents: ${agentSpecs.length === 0 ? 'none' : agentSpecs.join(', ')}`,
                 `Git: ${git.root === null ? 'none' : `${git.branch ?? 'detached'}${git.dirty ? ' dirty' : ' clean'}`}`,
+                `DecisionMaker: ${decisionMaker.state}${decisionMaker.credentialPresent ? ' (key present)' : ''}`,
                 ...(target === undefined ? [] : [`Path: ${target.path}\t${target.size} bytes`]),
             ].join('\n'),
         );
@@ -93,4 +100,9 @@ async function readTargetStatus(
     const stat = await context.fs.stat(resolved);
     if (stat === null) throw new CommandError(`status failed: path does not exist at ${resolved}`);
     return { path: targetPath, size: stat.size, isFile: stat.isFile(), isDirectory: stat.isDirectory() };
+}
+
+/** Presence-only credential check: never echoes the value (0911 D6). */
+function isNonEmpty(value: string | undefined): boolean {
+    return typeof value === 'string' && value.length > 0;
 }

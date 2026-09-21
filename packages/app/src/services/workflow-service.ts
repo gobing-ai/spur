@@ -6,6 +6,7 @@ import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
     type ActionCostAttribution,
     ActionRunDao,
+    ArtifactDao,
     attributeActionCost,
     createId,
     normalizePersistedWorkflowLayer,
@@ -46,7 +47,9 @@ import {
 import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import { createRunLogTraceFailureRecorder, withActionTrace } from '../workflow/action-trace';
+import { validateEvidenceChoices } from '../workflow/actions/hitl-select';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
+import { resolveRunArtifactPath } from '../workflow/actions/run-path';
 import { registerSpurBuiltins } from '../workflow/builtins';
 import {
     type CheckpointMetadata,
@@ -55,7 +58,8 @@ import {
     parseCheckpointMetadata,
 } from '../workflow/checkpoint-contract';
 import { computeDefinitionDigest } from '../workflow/composition-baseline';
-import { createDecisionHitlResponder } from '../workflow/decision-hitl-responder';
+import type { SummaryResolver } from '../workflow/decision-evidence';
+import { type DecisionEvaluator, evaluateDecision, parseDecisionConfig } from '../workflow/decision-hitl-responder';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import {
@@ -491,6 +495,9 @@ export type TimelineEvent =
           outcome: string;
           result: Record<string, string | number | boolean> | null;
           invocation: Record<string, string | number | boolean> | null;
+          /** Decision provenance persisted with a HITL action result (0911 R6); null when the
+           * action carried no `decision` option or the outcome predates the policy. */
+          decision?: TimelineActionDecision | null;
           error: string | null;
           artifacts: string[];
           nextAction?: SystemEventAction;
@@ -501,8 +508,21 @@ export type TimelineEvent =
           cost?: ActionCostAttribution;
       };
 
-/** Result of a per-run trace with timeline. */
-export interface WorkflowTraceTimeline {
+/** Bounded decision provenance projected onto a HITL action trace event (0911 R6). */
+export interface TimelineActionDecision {
+    mode: string;
+    outcome: string;
+    reason: string;
+    provider: string | null;
+    confidence: number | null;
+    selectedProbability: number | null;
+    evidenceActionIds: string[];
+    evidenceDigest: string | null;
+    artifactId: string | null;
+    durationMs: number;
+}
+
+/** Result of a per-run trace with timeline. */ export interface WorkflowTraceTimeline {
     run: WorkflowTraceEntry;
     events: TimelineEvent[];
     /**
@@ -659,6 +679,14 @@ export class WorkflowAppService {
             const varErrors = collectUndeclaredShellVarViolations(workflow);
             if (varErrors.length > 0) {
                 return { ok: false, valid: false, file, errors: varErrors };
+            }
+
+            // Decision-policy check (0911 D2/D5): decision: options on hitl.* actions are parsed
+            // with the runtime parser and structurally validated (pause conflict, one-per-state,
+            // evidence choice invariants, producer-node existence). Same post-schema surface.
+            const decisionErrors = collectHitlDecisionViolations(workflow);
+            if (decisionErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: decisionErrors };
             }
 
             // 0614: warn-only composition advisory (shell measure + agent.run
@@ -1603,6 +1631,7 @@ export class WorkflowAppService {
                     outcome: actionOutcome(a.status, ok),
                     result: result.result,
                     invocation: result.invocation,
+                    decision: result.decision,
                     error: result.error,
                     artifacts,
                     ...(partialArtifact !== undefined
@@ -1721,14 +1750,8 @@ export class WorkflowAppService {
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
-            hitlResponder: createDecisionHitlResponder({
-                enabled: this.ctx.spurConfig?.workflow?.hitlDecisionMaker === true,
-                fallback: this.ctx.hitlResponder(),
-                evidence: async (request) => new ActionRunDao(await this.ctx.getDb()).actionRowsByRunId(request.runId),
-                decisionMaker: this.ctx.decisionMaker,
-                secrets: this.ctx.secretValues,
-                warn: this.ctx.warn,
-            }),
+            hitlResponder: this.ctx.hitlResponder(),
+            decisionEvaluator: this.buildDecisionEvaluator(),
             httpRequester: this.ctx.httpRequester?.(),
             hostAllowlist: this.ctx.hostAllowlist?.(),
             ...(bus !== undefined ? { observabilityBus: bus } : {}),
@@ -1784,6 +1807,48 @@ export class WorkflowAppService {
               )
             : persistence;
         return new EngineWorkflowService(host, adapter);
+    }
+
+    /**
+     * Application decision evaluator for explicit never/evidence HITL modes (0911). Composes the
+     * merged-config activation switch, action-evidence DAO, optional provider factory, configured
+     * secrets and the registered-summary artifact resolver.
+     */
+    private buildDecisionEvaluator(): DecisionEvaluator {
+        const summary: SummaryResolver = {
+            resolve: async (runId, path) => {
+                const fs = createNodeFileSystem(this.ctx.cwd);
+                let canonicalPath: string;
+                try {
+                    canonicalPath = await resolveRunArtifactPath(fs, this.ctx.cwd, path);
+                } catch {
+                    return { ok: false, reason: 'invalid-evidence' };
+                }
+                const dao = new ArtifactDao(await this.ctx.getDb());
+                const registered = await dao.artifactsWithIdByRunId(runId);
+                const match = registered.find((row) => row.path === canonicalPath);
+                if (match === undefined) return { ok: false, reason: 'invalid-evidence' };
+                let raw: string;
+                try {
+                    raw = await fs.readFile(canonicalPath);
+                } catch {
+                    return { ok: false, reason: 'invalid-evidence' };
+                }
+                return { ok: true, artifactId: match.id, raw };
+            },
+        };
+        return {
+            evaluate: (request, config) =>
+                evaluateDecision(request, config, {
+                    enabled: this.ctx.spurConfig?.workflow?.hitlDecisionMaker === true,
+                    evidence: async (request) =>
+                        new ActionRunDao(await this.ctx.getDb()).actionRowsByRunId(request.runId),
+                    decisionMaker: this.ctx.decisionMaker,
+                    secrets: this.ctx.secretValues,
+                    warn: this.ctx.warn,
+                    summary,
+                }),
+        };
     }
 
     /**
@@ -1935,6 +2000,106 @@ function collectAgentRunRoleViolations(def: WorkflowDef): string[] {
         for (const state of smDef.states ?? []) {
             for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
             for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.id, action, i);
+        }
+    }
+    return violations;
+}
+
+const HITL_DECISION_KINDS = new Set(['hitl.confirm', 'hitl.select', 'hitl.input']);
+const HITL_ANSWER_VAR_DEFAULTS: Record<string, string> = {
+    'hitl.confirm': '__hitlAnswer',
+    'hitl.select': '__hitlAnswer',
+    'hitl.input': '__hitlInput',
+};
+
+interface HitlActionSite {
+    readonly stateOrNodeId: string;
+    readonly paused: boolean;
+    readonly kind: string;
+    readonly index: number;
+    readonly options: Record<string, unknown> | undefined;
+}
+
+/**
+ * Post-schema policy walk (0911 D2/D5): every hitl.confirm/select/input `decision:` option is
+ * parsed with the same runtime parser, and evidence-mode declarations get structural checks that
+ * only the whole workflow can see — no evidence-mode action in a pause=true state/node, at most
+ * one per state/node, select choices satisfying the evidence invariants, and every producer
+ * node referencing a state/node that actually exists. Mirrors the role-var walkers so all
+ * post-schema gates stay consistent; both `validate` and `run` share it.
+ */
+export function collectHitlDecisionViolations(def: WorkflowDef): string[] {
+    const stateIds = new Set<string>();
+    const sites: HitlActionSite[] = [];
+
+    const visitAction = (stateOrNodeId: string, paused: boolean, action: ActionDef, idx: number): void => {
+        if (!HITL_DECISION_KINDS.has(action.kind)) return;
+        sites.push({ stateOrNodeId, paused, kind: action.kind, index: idx, options: action.options });
+    };
+
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        const flowDef = def as TransitionFlowWorkflowDef;
+        for (const node of flowDef.nodes ?? []) {
+            stateIds.add(node.id);
+            if (node.action) visitAction(node.id, node.pause === true, node.action, 0);
+        }
+    } else {
+        const smDef = def as StateMachineWorkflowDef;
+        for (const state of smDef.states ?? []) {
+            stateIds.add(state.id);
+            for (const [i, action] of (state.onEnter ?? []).entries())
+                visitAction(state.id, state.pause === true, action, i);
+            for (const [i, action] of (state.onExit ?? []).entries())
+                visitAction(state.id, state.pause === true, action, i);
+        }
+    }
+
+    const violations: string[] = [];
+    const evidencePerState = new Map<string, number>();
+    for (const site of sites) {
+        const location = `${site.stateOrNodeId}/${site.kind}[${site.index}]`;
+        const answerVar =
+            typeof site.options?.var === 'string' && site.options.var.trim() !== ''
+                ? site.options.var
+                : (HITL_ANSWER_VAR_DEFAULTS[site.kind] ?? '__hitlAnswer');
+        const kindName = site.kind === 'hitl.confirm' ? 'confirm' : site.kind === 'hitl.select' ? 'select' : 'input';
+        const parsed = parseDecisionConfig(site.options ?? {}, answerVar, kindName);
+        if (!parsed.ok) {
+            violations.push(`Invalid decision at ${location}: ${parsed.error}`);
+            continue;
+        }
+        if (parsed.config.mode !== 'evidence') continue;
+
+        if (site.paused) {
+            violations.push(
+                `Evidence-mode action at ${location} is not allowed in a pause=true state/node (0911 D2): a paused run never reaches the automatic answer path`,
+            );
+        }
+        const count = (evidencePerState.get(site.stateOrNodeId) ?? 0) + 1;
+        evidencePerState.set(site.stateOrNodeId, count);
+        if (count > 1) {
+            violations.push(
+                `At most one evidence-mode action per state/node (0911): ${site.stateOrNodeId} declares ${count}`,
+            );
+        }
+
+        if (site.kind === 'hitl.select') {
+            // The choice list lives under `options.options` — the key the runtime runner reads
+            // (`actions/hitl-select.ts`) — and is normalized exactly the way `asStringArray` does
+            // (no filtering), so validation and execution agree on empty/duplicate choices.
+            const rawChoices = site.options?.options;
+            const choices = Array.isArray(rawChoices) ? rawChoices.map((choice) => String(choice)) : [];
+            const choiceError = validateEvidenceChoices(choices);
+            if (choiceError !== null) {
+                violations.push(`Invalid decision at ${location}: ${choiceError}`);
+            }
+        }
+
+        const unknownNodes = parsed.config.evidenceNodes.filter((node) => !stateIds.has(node));
+        if (unknownNodes.length > 0) {
+            violations.push(
+                `Unknown producer node(s) at ${location}: ${unknownNodes.join(', ')} — evidenceNodes must reference existing state/node ids (0911 D5)`,
+            );
         }
     }
     return violations;
@@ -2543,17 +2708,28 @@ function projectActionTraceResult(
 ): {
     result: Record<string, string | number | boolean> | null;
     invocation: Record<string, string | number | boolean> | null;
+    decision: TimelineActionDecision | null;
     error: string | null;
 } {
-    if (!resultJson) return { result: null, invocation: null, error: null };
+    if (!resultJson) return { result: null, invocation: null, decision: null, error: null };
     let parsed: unknown;
     try {
         parsed = JSON.parse(resultJson);
     } catch {
-        return { result: null, invocation: null, error: null };
+        return {
+            result: null,
+            invocation: null,
+            decision: null,
+            error: null,
+        };
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        return { result: null, invocation: null, error: null };
+        return {
+            result: null,
+            invocation: null,
+            decision: null,
+            error: null,
+        };
     }
     const result = parsed as Record<string, unknown>;
     const data =
@@ -2599,7 +2775,43 @@ function projectActionTraceResult(
     return {
         result: Object.keys(resultFields).length === 0 ? null : resultFields,
         invocation: Object.keys(invocation).length === 0 ? null : invocation,
+        decision: projectDecisionProvenance(data.decision, secretValues),
         error,
+    };
+}
+
+/**
+ * Project persisted decision provenance (0911 R6) into a bounded, redacted trace object. The
+ * source shape is application-owned, so the projection re-checks every field type and drops
+ * anything that is not part of the closed vocabulary — raw evidence and provider exception text
+ * never live in this object to begin with.
+ */
+function projectDecisionProvenance(value: unknown, secretValues: readonly string[]): TimelineActionDecision | null {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+    const source = value as Record<string, unknown>;
+    if (source.schemaVersion !== 1) return null;
+    const mode = typeof source.mode === 'string' ? source.mode : null;
+    const outcome = typeof source.outcome === 'string' ? source.outcome : null;
+    const reason = typeof source.reason === 'string' ? source.reason : null;
+    if (mode === null || outcome === null || reason === null) return null;
+    const evidenceActionIds = Array.isArray(source.evidenceActionIds)
+        ? source.evidenceActionIds
+              .filter((id): id is string => typeof id === 'string')
+              .slice(0, 20)
+              .map((id) => redactAndBound(id, secretValues, 64))
+        : [];
+    return {
+        mode: redactAndBound(mode, secretValues, 32),
+        outcome: redactAndBound(outcome, secretValues, 32),
+        reason: redactAndBound(reason, secretValues, 64),
+        provider: typeof source.provider === 'string' ? redactAndBound(source.provider, secretValues, 64) : null,
+        confidence: typeof source.confidence === 'number' ? source.confidence : null,
+        selectedProbability: typeof source.selectedProbability === 'number' ? source.selectedProbability : null,
+        evidenceActionIds,
+        evidenceDigest:
+            typeof source.evidenceDigest === 'string' ? redactAndBound(source.evidenceDigest, secretValues, 128) : null,
+        artifactId: typeof source.artifactId === 'string' ? redactAndBound(source.artifactId, secretValues, 64) : null,
+        durationMs: typeof source.durationMs === 'number' ? source.durationMs : 0,
     };
 }
 

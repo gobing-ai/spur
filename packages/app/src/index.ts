@@ -664,6 +664,7 @@ export { TokenLedgerWatcher } from './services/token-ledger-watcher';
 export type {
     CleanedRun,
     PausedRun,
+    TimelineActionDecision,
     TimelineEvent,
     WorkflowAppServiceContext,
     WorkflowCleanResult,
@@ -739,6 +740,24 @@ export {
     computeDefinitionDigest,
     extractResolvedWorkflowFacts,
 } from './workflow/composition-baseline';
+export {
+    createDecisionHitlResponder,
+    type DecisionConfig,
+    type DecisionEvaluationResult,
+    type DecisionEvaluator,
+    type DecisionHitlOptions,
+    type DecisionMode,
+    type DecisionOutcome,
+    type DecisionProvenance,
+    type DecisionReason,
+    evaluateDecision,
+    parseDecisionConfig,
+    resolveDecision,
+} from './workflow/decision-hitl-responder';
+export {
+    computeDecisionReadiness,
+    type DecisionReadiness,
+} from './workflow/decision-readiness';
 export {
     buildEscalationPacket,
     decisionKindForGate,

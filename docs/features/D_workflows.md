@@ -2,11 +2,11 @@
 schema_version: 1
 id: D
 name: Workflows
-status: active
+status: done
 priority: P2
 tags: [group]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-09-20T22:35:30.257Z"
+updated_at: "2026-09-21T18:27:18.116Z"
 ---
 
 # D: Workflows
@@ -38,6 +38,8 @@ Workflow orchestration as configuration — `spur workflow` over
 | 0366 | Fix idea-pipeline HITL approval and pause/resume state loss | done |
 | 0421 | Fine-tune workflow execution progress logging and step reporter CLI UX | done |
 | 0423 | Fix task-0421 pipeline-wait and shell-runner regressions: --follow polling + /bin/sh -c guard | done |
+| 0910 | Optional DecisionMaker responder for workflow HITL | done |
+| 0911 | Complete DecisionMaker workflow policy, routing, diagnostics and operator guidance | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -51,4 +53,6 @@ Feature group. Upstream engine capabilities E1–E4 are ts-libs tasks 0033–003
 - 2026-08-04T06:25:03.163Z active → verifying (system)
 - 2026-08-04T06:25:21.995Z verifying → done (system)
 - 2026-09-20T22:35:30.257Z done → active (system)
+- 2026-09-21T07:19:06.104Z active → verifying (system)
+- 2026-09-21T18:27:18.116Z verifying → done (system)
 

@@ -161,7 +161,10 @@ describe('no historical ADR text is rewritten (0850/0854 R2)', () => {
         });
         if (diff.trim() === '') return;
 
-        const amended = [42, 52, 57, 86, 116];
+        // 0911 added a dated clarification block to ADR-123 (explicit per-action decision modes), so
+        // 123 joins the set of ADRs a working diff may touch. The body-freshness assertions above and
+        // the removals check below still guard every other ADR.
+        const amended = [42, 52, 57, 86, 116, 123];
         const amendedLines = new Set(blocks.filter((b) => amended.includes(b.number)).flatMap((b) => b.lines));
 
         // Only the statuses that ACTUALLY moved may disappear: derive the allowed removals from
@@ -193,15 +196,20 @@ describe('no historical ADR text is rewritten (0850/0854 R2)', () => {
         const removed = lines.filter((l) => l.startsWith('-') && !l.startsWith('---')).map((l) => l.slice(1));
         expect(added.length, 'a non-empty diff must add at least one line').toBeGreaterThan(0);
 
+        // 0911: the constitution requires bumping the doc-hygiene frontmatter (`version:` /
+        // `updated_at:`) on any content change, so those two metadata keys are not ADR text and
+        // are excluded from the freeze on both sides of the diff.
+        const FRONTMATTER_KEY = /^(version|updated_at):\s/;
+
         for (const line of added) {
             expect(
-                amendedLines.has(line) || line.trim() === '',
-                `added line is outside the amended ADRs (42, 52, 57, 86, 116): ${line}`,
+                amendedLines.has(line) || line.trim() === '' || FRONTMATTER_KEY.test(line),
+                `added line is outside the amended ADRs (42, 52, 57, 86, 116, 123): ${line}`,
             ).toBe(true);
         }
         for (const line of removed) {
             expect(
-                allowedRemovals.has(line),
+                allowedRemovals.has(line) || FRONTMATTER_KEY.test(line),
                 `removed line is not an amended ADR's pre-change status — a historical decision was rewritten: ${line}`,
             ).toBe(true);
         }

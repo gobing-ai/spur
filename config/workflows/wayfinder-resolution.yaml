@@ -163,6 +163,8 @@ states:
       - kind: hitl.confirm
         options:
           prompt: "Approve research resolution for task ${vars.wbs}?"
+          decision:
+            mode: never
 
   - id: record
     description: >

@@ -2521,3 +2521,105 @@ Testing convention
 - **Gates:** focused workspace tests while iterating (`cd packages/app && bun test …`), then `bun run spur-check` per task, `bun run spur-check-feature` once per feature after both tasks, `bun link` in `apps/cli` + `bun run --filter @gobing-ai/spur build:bundle` after CLI source changes.
 - **I31 evidence stance:** agent reports identify candidate defects; fixes start from executable regression evidence against current source anchors — sparse historical runs do not authorize redesign.
 
+## 2026-09-21 · task 0911 (DecisionMaker workflow policy, routing, diagnostics)
+
+- **Validator/runtime key parity is a first-class invariant.** The 0911 decision walker read
+  `options.choices` while `hitl.select` executes `options.options`, so the bundled example validated
+  clean and died at run time, and a genuinely mis-declared choice list escaped validation. Any
+  validator that mirrors a runtime action must read the *same* key and the *same* normalization as
+  the runner, and must have a wrong-key fixture asserting rejection — otherwise the check is
+  vacuous in both directions.
+- **A bundled example is only proven by executing it.** `spur workflow validate` checks schema,
+  declared vars and decision policy, but not action-option keys or guard reachability. The example's
+  `$__hitlAnswer` guard coupling and the `choices`/`options` mismatch were invisible until an
+  engine-level test ran the file end to end. Ship one integration test per bundled example.
+- **Paused resume delivers the operator answer as `__hitlAnswer`.** `spur workflow continue
+  --answer yes` passes only `hitlAnswer` (no `hitlVar`), so pause-state guards must test
+  `"$__hitlAnswer"` — a gate that declares its own `var` and guards that var is unreachable from the
+  CLI. Stock gates all guard `__hitlAnswer` for exactly this reason.
+- **The engine owns `pause: true`, not the action result.** A state that declares `pause` pauses
+  even when the DecisionMaker already accepted an answer, which is what makes "a model answer never
+  skips pause" structurally true; the regression test proves the run stays `paused` and needs an
+  explicit `continuePaused` to finish.
+- **Test doubles drift from the runner contract.** `TestProcessExecutor` in
+  `packages/app/tests/services/workflow-service.test.ts` compared `test "a" = b` literally, which
+  predates `EnvShellGuardRunner` passing workflow vars as env — every env-referencing guard silently
+  evaluated false while the real CLI worked. The fake now forwards `env` (via `getEnvVars()`; the
+  `env-var-hygiene` pre-check rule forbids `process.env` in tests) and lets the shell evaluate the
+  condition.
+- **Repo-wide freeze guards are not part of the task-local gate.** `repo-wide-tests/adr-supersession.test.ts`
+  inspects the working diff of `docs/00_ADR.md` and only tolerates added lines inside its `amended`
+  ADR list. A legitimate dated clarification on a new ADR must be added to that list, and only
+  `spur-check-feature` (not `spur-check`) catches the omission.
+- **Per-file coverage can fail a run that reports "0 fail".** `bun run test` exits non-zero when any
+  file falls under the `bunfig.toml` 90% line threshold while the summary still shows zero failures;
+  isolate by diffing the coverage table against the baseline checkout instead of chasing the tests.
+- **The quality-gate wrapper needs its pipeline env.** `plugins/sp/scripts/quality-gate.ts` reads
+  `wbs`, `qualityGateCmd`, `gateProbeCmd` from the environment; invoked without them it runs an empty
+  command, exits 0 and records a vacuous PASS. Always export the pipeline vars before calling it.
+- **Host-fallback drivers must replay the engine's own transitions.** `spur task record
+  --transition testing` refuses from `todo`; the pipeline owns `todo → wip` in an implement-stage
+  `command.gate` (`spur task update <wbs> wip --no-lifecycle`). Running the states by hand without
+  that gate leaves the task unable to reach `done`.
+- **Verdict rows have a shape contract.** `verify-answer-lint` accepts `AC-<n>` (hyphen) or the exact
+  scenario title, and `spur task verdict` downgrades a MET AC whose evidence type is not executable
+  (`test`/`command`) to PARTIAL with "Executable evidence missing" — contract-level guidance needs an
+  executable check beside it, or an honest PARTIAL.
+
+Wrapup complete.
+
+**Doc-evolve (per `sp:doc-evolve` wrapup, constitution §5/§6/§7):**
+- `docs/00_ADR.md` — 1 confirmed defect repaired: frontmatter `updated_at: 2026-09-20` predated the 2026-09-21 ADR-123 clarification → `updated_at: 2026-09-21`, version 1.49.0 → 1.50.0 (`docs/00_ADR.md:7-8`). ADR numbers/dates/history preserved.
+- `docs/03_ARCHITECTURE.md` — clean: §6 workflow sections and engine-boundary invariants verified against code; the 0911 policy adds no new seam (app-internal at the existing `HitlResponder` seam, ADR-123 owns the choice).
+- `docs/04_DESIGN.md` — clean: index rows for both touched satellites unchanged → synchronized per §5; no new satellite.
+- `docs/design/*` — clean: `cli-contracts.md` (+57) and `workflow-observability.md` (+19) match the real surface (readiness states in `decision-readiness.ts:22-24`, `self status` projection `status.ts:53-66`, validator constraints `workflow-service.ts:685`, ADR-123 anchor present); no contradicting satellite.
+- No task/feature corpus writes. Detection commands produced the deltas above; a zero-finding doc is backed by the greps listed.
+
+**Learnings artifact** written to `/Users/robin/xprojects/spur-new-dev-run-0911-ba77/.spur/run/wrap-0911-final-wrapup-learnings.md`:
+
+# Working learnings — wrap-0911 final wrapup
+
+## 2026-09-21
+
+### Task 0911 — Complete DecisionMaker workflow policy, routing, diagnostics and operator guidance (done, verify PASS)
+
+Conventions
+
+- Decision participation is an explicit per-action opt-in: `decision: {mode: never | evidence}` on `hitl.confirm`/`hitl.select` only; `hitl.input` rejects `decision` at parse time. Absent `decision` keeps the 0910 implicit-participation default — historical semantics are preserved, never rewritten.
+- Evidence mode accepts only from verified producer-node evidence: confidence ≥ 0.9, strictly dominant choice, and a declared `summaryArtifact` must resolve to a run-registered artifact whose redacted summary equals the producer's recorded outcome. Everything else defers (`answer` var cleared to `""`, `statusVar` records `deferred`).
+- Provenance persists additively inside the action's own result (`action_runs.result_json` → `data.decision`); `spur workflow trace` is the projection surface. `show`/`progress` intentionally carry no per-action results — no duplicated ledgers for the same fact.
+- CLI commands only project application results; policy, evidence selection and acceptance live in `packages/app` (decision-evidence.ts, decision-readiness.ts) at the existing `HitlResponder` seam. One evaluator shared by the legacy wrapper and the new modes — never copy the acceptance algorithm into runners or skills.
+- Offline readiness (`spur self status` → `decisionMaker` object) reports configuration, not health: presence-only key check, no live probe, never echoes the credential value or endpoint URL.
+
+Errors fixed
+
+- Stale-answer routing bug: a deferred evaluation now explicitly clears the answer var, because a previous iteration's `yes` otherwise steers the next transition after a defer. Defer is never encoded as `no`/`cancel`/first-choice.
+- `ActionRunDao` ordered only by `created_at`; same-timestamp attempts made "latest producer attempt" ambiguous. Fixed with stable ID ordering and defer-on-ambiguity rather than treating random ID order as chronology.
+- `ArtifactDao.artifactsByRunId` projected only path/kind, hiding the artifact id the evidence envelope needs; fixed with a narrowly scoped domain query (id/path/kind constrained by run ID) instead of assuming the projection exposed it.
+- Bundled workflow example was only schema-valid, not runnable: `$__hitlAnswer` guard coupling and a `choices`/`options` key mismatch were invisible to `spur workflow validate` until an engine-level test executed the file. Validate ≠ execute; every bundled example ships with one end-to-end test.
+
+Patterns
+
+- Decorator at an existing seam beats re-registration: replacing `hitl.*` runner registrations would duplicate events and variable semantics; decorating the responder keeps one implementation and lets operators disable provider use without touching workflow YAML.
+- Parse-time rejection + defensive runtime rejection of malformed `decision` config, with the shared validator mirroring the runtime's exact key and normalization — a validator that reads a different key than the runner is vacuous in both directions; a wrong-key fixture proves it.
+- Envelope-bound evidence: `{"schemaVersion":1,"runId","producerNode","producerActionId","summary"}` validated against the run's own recorded action output before use, canonical-path resolution under the run workdir, 8 KiB cap, digest (sha256) over the redacted canonical payload — same evidence ⇒ same digest, new attempt ⇒ new digest.
+- Closed reason vocabulary (`accepted`, `policy-never`, `disabled`, `missing-evidence`, `stale-evidence`, `oversized-evidence`, `explicit-defer`, `uncertain`, `provider-unavailable`, …) with generic codes for transport/auth errors; raw evidence text, provider exception text and request bodies never enter provenance or logs.
+- Deferred is a successful action execution (`ok: true`) with a routing outcome; invalid configuration fails (`ok: false`) before any provider call. Provider failure is never an engine crash.
+
+Gotchas
+
+- `spur workflow continue --answer yes` delivers only `hitlAnswer` (no `hitlVar`), so pause-state guards must test `"$__hitlAnswer"`; a gate declaring its own `var` and guarding that var is unreachable from the CLI resume path.
+- The engine owns `pause: true`, not the action result: a state pauses even when the DecisionMaker already answered — that is what makes "a model answer never skips pause" structurally true. Evidence mode is therefore rejected inside `pause: true` states (split decision evaluation from the operator pause).
+- Frozen-mode discipline: legacy semantics are not reinterpreted on invalid input; unknown `decision` keys/modes reject instead of falling back to legacy.
+- `repo-wide-tests/adr-supersession.test.ts` inspects the working diff of `docs/00_ADR.md` and tolerates only added lines inside its `amended` ADR list; a dated clarification on an existing ADR must be registered there, and only `spur-check-feature` (not task-local `spur-check`) catches the omission.
+- Test doubles drift: `TestProcessExecutor` compared shell guards literally while `EnvShellGuardRunner` passes workflow vars as env — every env-referencing guard silently evaluated false in tests only. Fakes must forward `env` (and the `env-var-hygiene` pre-check rule forbids `process.env` in tests).
+- Per-file coverage thresholds can fail a run whose summary reports zero failures (`bunfig.toml` 90% line floor); diff the coverage table against the baseline instead of chasing tests.
+- The quality-gate wrapper (`plugins/sp/scripts/quality-gate.ts`) silently runs an empty command and records a vacuous PASS when `wbs`/`qualityGateCmd`/`gateProbeCmd` are not exported — always source the pipeline env first.
+- `spur task record --transition testing` refuses from `todo`; the pipeline owns `todo → wip` in an implement-stage gate. Driving states by hand strands the task before `done`.
+- Verdict evidence must be executable (`test`/`command`) or `spur task verdict` downgrades MET to PARTIAL — contract-level guidance needs a runnable check beside it.
+
+### Doc-evolve wrapup (this run)
+
+- Drift audit over 00/03/04 + docs/design: the only confirmed defect was 00's frontmatter (`updated_at: 2026-09-20` predating the 2026-09-21 ADR-123 clarification); repaired to `updated_at: 2026-09-21`, version 1.49.0 → 1.50.0. ADR numbers, dates and decision history preserved per §6.1.
+- 03 and 04 were correctly untouched: the DecisionMaker policy adds no new seam or invariant (app-internal module at the existing responder seam; ADR-123 owns the choice), and satellite edits with unchanged 04 index pointers are synchronized by constitution §5.
+- Tooling footgun: `rg -r` is "replace in output", not "recursive" — a search for `hitlDecisionMaker` displayed every match rewritten to `n`. Use `-n` + explicit paths; `-r` mangles evidence silently.

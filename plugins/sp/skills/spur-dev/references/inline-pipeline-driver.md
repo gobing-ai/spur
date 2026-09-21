@@ -23,7 +23,7 @@ the resolved actions and guards of every `.spur/workflows/*.yaml`; any element p
 in one and absent in the other fails the check. Add a new kind here when the driver
 implements it; remove the entry when the corresponding kind is dropped from the YAML.
 
-**Actions:** `shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate`
+**Actions:** `shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `hitl.select` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate`
 
 **Guards (transitions):** `always` · `shell` · `action-ok` · `contract-violation`
 
@@ -44,6 +44,14 @@ project→bundled model (task 0648/0650, never an unbundled runtime path) — re
 FSM definition. The driver MUST read that file
 at invocation time. It must not copy the state list, actions, guards, or transition order into a
 command, skill, script, or second workflow.
+
+**Inline HITL defer semantics (0911):** bundled pipeline human gates ship `decision: {mode:
+never}`, so the inline driver always prompts the operator for those gates regardless of
+`workflow.hitlDecisionMaker` — the decision policy never answers inline pipeline gates. A local
+workflow override (`.spur/workflows/*.yaml`) may declare `mode: evidence`, but the driver does
+not claim full inline parity for the DecisionMaker path: evidence-mode auto-answering inside the
+inline driver is an explicit non-goal (subprocess runs own that behavior). No hot reload: config
+and YAML changes require restarting the invoking process.
 
 ## Run setup
 

@@ -629,6 +629,7 @@ pipeline owns one lifecycle phase:
 | `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
 | `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
 | `wayfinder-resolution.yaml` | Wayfinder ticket resolution loop  | `spur workflow run` (free-form)   |
+| `decision-routing-example.yaml` | DecisionMaker routing example (never / evidence / omitted modes, defer → operator pause) | `spur workflow run` (authoring sample) |
 
 ### Lifecycle operations
 

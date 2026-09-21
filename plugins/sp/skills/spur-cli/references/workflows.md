@@ -80,7 +80,9 @@ Use this skill to:
 - **Author a workflow** — turn a described process into a validated, dry-run-verified YAML definition
   in the right mode. → authoring-workflows.md
 - **Validate before trusting** — schema + semantic-check a workflow file (references, terminal
-  reachability, template vars) before running it.
+  reachability, template vars, and since 0911 the HITL decision policy: `decision` only on
+  `hitl.confirm`/`hitl.select`, evidence mode banned in `pause: true` states/nodes, one evidence
+  action per state/node, existing producer nodes, valid select choices) before running it.
 - **Run a workflow** — execute a definition and read its run trace (states/nodes entered, transitions
   taken, terminal status).
 - **Refine an existing workflow** — fix a stuck guard, add a state/node, retune `iterationBound`,

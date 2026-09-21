@@ -9,7 +9,8 @@
         "./capability-attestation": "./src/services/capability-attestation.ts",
         "./feature-check": "./src/services/feature-check.ts",
         "./system-event-tap": "./src/services/system-event-tap.ts",
-        "./system-events": "./src/services/event-names.ts"
+        "./system-events": "./src/services/event-names.ts",
+        "./decision-readiness": "./src/workflow/decision-readiness.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

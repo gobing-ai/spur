@@ -44,6 +44,7 @@ const DOCUMENTED = {
         'doctor.probe',
         'file.read.into-var',
         'hitl.confirm',
+        'hitl.select',
         'agent.run',
         'proof.fingerprint',
         'run.artifact',

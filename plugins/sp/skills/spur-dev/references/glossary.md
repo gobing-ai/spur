@@ -72,9 +72,17 @@ reserved for this specific planning/execution split).
 **HITL** (human-in-the-loop) — a workflow state that pauses for explicit operator approval
 before continuing (`hitl.confirm`). A HITL gate is never auto-dismissed by the engine; `--auto`
 can only route *around* one whose objective precondition is already met (see the `--auto`
-routing contract in `cross-cutting.md`).
+routing contract in `cross-cutting.md`). A `decision` option (0911) pins that action's policy:
+`mode: never` forces the human responder, `mode: evidence` lets the optional DecisionMaker answer
+only from verified prior action evidence (deferring otherwise), and absence keeps the 0910
+implicit behavior when `workflow.hitlDecisionMaker` is enabled.
 Avoid: *prompt* (reserved for LLM input text), *interrupt* (implies an exception, not a planned
 pause point).
+
+**DecisionMaker** — optional provider-backed responder for executed `hitl.confirm`/`hitl.select`
+actions (ADR-123), enabled via `workflow.hitlDecisionMaker: true` and `TYPESAFE_API_KEY`.
+Evidence answers clear the answer variable and record `statusVar: accepted/deferred`; unresolved
+cases defer or delegate to the human. Offline readiness: `spur self status`.
 
 **WBS** (work-breakdown-structure ID) — the four-digit task identifier (e.g. `0187`) that
 names a task file and its position in the corpus. WBS IDs are assigned once and never reused.

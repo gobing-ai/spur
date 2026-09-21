@@ -26,6 +26,10 @@ spur status [options] [path]
 - **Project** — `package.json` and `.spur/config.yaml` presence.
 - **Git** — root, current branch, dirty/clean state.
 - **Agents** — agent spec ids found under `.spur/agents/`.
+- **DecisionMaker** (0911) — offline readiness of the optional HITL decision policy: `disabled`
+  (switch off), `missing-key` (switch on, no `TYPESAFE_API_KEY` in the environment), or
+  `configured-not-probed` (key present; never probed and never echoed). Human output prints a
+  `DecisionMaker:` line; JSON exposes the `decisionMaker` object.
 - **Path** (when given) — size, `isFile`, `isDirectory` for the named target.
 
 ## Example
@@ -45,6 +49,14 @@ spur status --json           # machine-readable envelope (see shape below)
   "spurConfig": true,
   "git": { "root": "...", "branch": "main", "dirty": false },
   "agentSpecs": ["reviewer", "tester"],
+  "decisionMaker": {
+    "enabled": true,
+    "provider": "typesafe",
+    "credentialPresent": true,
+    "state": "configured-not-probed",
+    "connectivity": "not-probed",
+    "inlineSupport": "defer-only"
+  },
   "path": { "path": "src/auth", "size": 1234, "isFile": false, "isDirectory": true }
 }
 ```
