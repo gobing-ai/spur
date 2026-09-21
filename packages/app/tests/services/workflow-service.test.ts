@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import {
     AGENT_ROLE_NAMES,
     getEnvVar,
+    getEnvVars,
     removeEnvVar,
     type SpurConfig,
     setEnvVar,
@@ -101,22 +102,6 @@ class TestProcessExecutor implements ProcessExecutor {
             };
         }
 
-        // Handle test commands: test "val1" = val2
-        const testMatch = cmd.match(/^test\s+"?([^"=]*)"?\s*=\s*"?([^"]*)"?$/);
-        if (testMatch) {
-            const left = testMatch[1] ?? '';
-            const right = testMatch[2] ?? '';
-            const ok = left.trim() === right.trim();
-            return {
-                command: options.command,
-                args: options.args ?? [],
-                exitCode: ok ? 0 : 1,
-                stdout: '',
-                stderr: '',
-                durationMs: 1,
-            };
-        }
-
         // Handle touch & exit: touch <file> && exit 1
         const touchMatch = cmd.match(/^touch\s+(.+)\s+&&\s+exit\s+(\d+)$/);
         if (touchMatch) {
@@ -137,12 +122,19 @@ class TestProcessExecutor implements ProcessExecutor {
             // args-capable join: the '-c <script>' shape keeps its script-only form;
             // multi-arg commands (e.g. git rev-parse HEAD) join command + args.
             const joined = options.args?.[0] === '-c' ? cmd : [options.command, ...(options.args ?? [])].join(' ');
-            const stdout = execSync(joined, { cwd, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+            // Guard/shell runners pass workflow vars as env (`EnvShellGuardRunner`), so the fake
+            // executor must forward them or `test "$var" = x` guards see an empty environment.
+            const stdioOut = execSync(joined, {
+                cwd,
+                encoding: 'utf8',
+                stdio: ['pipe', 'pipe', 'pipe'],
+                ...(options.env !== undefined ? { env: { ...getEnvVars(), ...options.env } } : {}),
+            });
             return {
                 command: options.command,
                 args: options.args ?? [],
                 exitCode: 0,
-                stdout,
+                stdout: stdioOut,
                 stderr: '',
                 durationMs: 1,
             };
@@ -267,6 +259,144 @@ terminalStates: [done]
         } finally {
             await rm(dir, { recursive: true });
         }
+    });
+
+    describe('decision policy (0911)', () => {
+        // The shipped example is a runnable state machine, not a doc sample: this block executes it
+        // end to end through the real service so the declared routes cannot rot into prose.
+        const EXAMPLE_WORKFLOW = join(
+            import.meta.dir,
+            '../../../../config',
+            'workflows',
+            'decision-routing-example.yaml',
+        );
+
+        /** Fake provider driver: always accepts the first offered choice with high confidence. */
+        const acceptingDecisionMaker = async () =>
+            createDecisionMaker({
+                driver: {
+                    name: 'fake-0911',
+                    ask: async () => ({
+                        question: {
+                            kind: 'choice',
+                            label: 'option_0',
+                            confidence: 0.95,
+                            probabilities: { option_0: 0.95, option_1: 0.03, defer: 0.02 },
+                        },
+                    }),
+                },
+            });
+
+        test('example: evidence defers without the switch, reaches the never gate and resumes on the operator answer', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-example-defer-'));
+            try {
+                const ctx = makeCtx(dir);
+                const svc = new WorkflowAppService(ctx);
+                const first = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-defer' });
+
+                expect(first.status).toBe('paused');
+                expect(first.finalState).toBe('humanGate');
+
+                const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId('example-defer');
+                const persisted = JSON.parse(rows.find((row) => row.kind === 'hitl.select')?.result_json ?? '{}');
+                expect(persisted.data?.answer).toBe('');
+                expect(persisted.data?.decision?.outcome).toBe('deferred');
+                expect(persisted.data?.decision?.reason).toBe('disabled');
+                expect(persisted.setVars).toMatchObject({ recoveryChoice: '', decisionStatus: 'deferred' });
+
+                const resumed = await svc.continuePaused('example-defer', { hitlAnswer: 'yes' });
+                expect(resumed.status).toBe('done');
+                expect(resumed.finalState).toBe('published');
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('example: an accepted evidence answer runs the bounded retry and projects provenance into the trace', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-example-accept-'));
+            try {
+                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: true } }));
+                const svc = new WorkflowAppService({ ...ctx, decisionMaker: acceptingDecisionMaker });
+                const result = await svc.run(EXAMPLE_WORKFLOW, { runId: 'example-accept' });
+
+                // Accepted retry runs exactly one attempt, then escalates to the pause gate.
+                expect(result.status).toBe('paused');
+                expect(result.finalState).toBe('humanGate');
+
+                const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId('example-accept');
+                const persisted = JSON.parse(rows.find((row) => row.kind === 'hitl.select')?.result_json ?? '{}');
+                expect(persisted.data?.answer).toBe('retry');
+                expect(persisted.data?.decision?.outcome).toBe('accepted');
+                expect(persisted.setVars).toMatchObject({ recoveryChoice: 'retry', decisionStatus: 'accepted' });
+
+                // R6: the persisted provenance reaches the trace projection (JSON and human renderer).
+                const timeline = await svc.trace('example-accept');
+                const event = timeline.events.find(
+                    (candidate) => candidate.kind === 'action' && candidate.actionKind === 'hitl.select',
+                );
+                expect(event?.kind === 'action' ? event.decision?.outcome : undefined).toBe('accepted');
+                expect(event?.kind === 'action' ? event.decision?.mode : undefined).toBe('evidence');
+                expect(event?.kind === 'action' ? event.decision?.evidenceActionIds.length : 0).toBe(1);
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+
+        test('a legacy model answer never skips a declared pause (AC10, R5)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-legacy-pause-'));
+            try {
+                const path = join(dir, 'legacy-pause.yaml');
+                await writeFile(
+                    path,
+                    [
+                        'name: legacy-pause',
+                        'kind: state-machine',
+                        'initialState: start',
+                        'vars:',
+                        '  __hitlAnswer: ""',
+                        'states:',
+                        '  - id: start',
+                        '    onEnter:',
+                        '      - kind: shell',
+                        '        options:',
+                        '          command: "printf \'10 tests passed\'"',
+                        '  - id: gate',
+                        '    pause: true',
+                        '    onEnter:',
+                        '      - kind: hitl.confirm',
+                        '        options:',
+                        '          prompt: "Approve?"',
+                        '  - id: done',
+                        'transitions:',
+                        '  - from: start',
+                        '    to: gate',
+                        '    guard: { kind: always }',
+                        '  - from: gate',
+                        '    to: done',
+                        '    guard:',
+                        '      kind: shell',
+                        '      options:',
+                        '        command: \'test "$__hitlAnswer" = "yes"\'',
+                        'terminalStates: [done]',
+                    ].join('\n'),
+                );
+                const ctx = makeCtx(dir, spurConfigSchema.parse({ workflow: { hitlDecisionMaker: true } }));
+                const svc = new WorkflowAppService({ ...ctx, decisionMaker: acceptingDecisionMaker });
+
+                const result = await svc.run(path, { runId: 'legacy-pause-1' });
+                expect(result.status).toBe('paused');
+                expect(result.finalState).toBe('gate');
+                const rows = await new ActionRunDao(await ctx.getDb()).actionRowsByRunId('legacy-pause-1');
+                const persisted = JSON.parse(rows.find((row) => row.kind === 'hitl.confirm')?.result_json ?? '{}');
+                expect(persisted.data?.decision).toMatchObject({ mode: 'legacy', outcome: 'accepted' });
+
+                const resumed = await svc.continuePaused('legacy-pause-1', { hitlAnswer: 'yes' });
+                expect(resumed.status).toBe('done');
+                expect(resumed.finalState).toBe('done');
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
     });
 
     describe('validate', () => {

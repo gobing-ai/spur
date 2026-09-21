@@ -23,4 +23,25 @@ describe('ArtifactDao', () => {
 
         adapter.close();
     });
+
+    test('artifactsWithIdByRunId returns id/path/kind for a run (0911 provenance)', async () => {
+        const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        const { applyCliMigrations } = await import('../../src/migrations');
+        await applyCliMigrations(adapter);
+
+        const ws = await new WorkspaceDao(adapter).add({ name: 'test-ws', root: '/tmp/test' });
+        const run = await new RunDao(adapter).open({ workspaceId: ws.id, agent: 'pi' });
+        const dao = new ArtifactDao(adapter);
+        await dao.record({ path: '/tmp/other.txt', kind: 'output' });
+        await dao.record({ path: '/tmp/evidence.md', kind: 'evidence-summary', runId: run.id });
+
+        const rows = await dao.artifactsWithIdByRunId(run.id);
+        expect(rows).toHaveLength(1);
+        const [row] = rows;
+        expect(row).toMatchObject({ path: '/tmp/evidence.md', kind: 'evidence-summary' });
+        expect(row?.id).toBeString();
+        expect(await dao.artifactsWithIdByRunId('no-such-run')).toEqual([]);
+
+        adapter.close();
+    });
 });
