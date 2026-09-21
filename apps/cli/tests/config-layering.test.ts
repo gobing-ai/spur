@@ -86,9 +86,9 @@ const GLOBAL_EXECUTOR = [
 
 const FALLBACK_NOTE = 'agent.roles: no config layer defines a table — built-in DEFAULT_AGENT_ROLES fallback in effect';
 
-/** Task 0889: text-mode doctor appends a staleness warning when the stub's detected version differs from the runner record's verifiedAgainst (claude stub reports 1.0.0; record verified against 2.1.274). */
+/** Task 0889: text-mode doctor appends a staleness warning when the stub's detected version differs from the runner record's verifiedAgainst (claude stub reports 1.0.0; record verified against 2.1.278). */
 const CAPABILITY_STALE_WARNING =
-    'Warning: capability-declaration-stale: executor coder-exec (claude) detects version "1.0.0 (claude stub)" (core 1.0.0), but the runner record was verified against "2.1.274" (core 2.1.274) — session capability flags may have drifted.';
+    'Warning: capability-declaration-stale: executor coder-exec (claude) detects version "1.0.0 (claude stub)" (core 1.0.0), but the runner record was verified against "2.1.278" (core 2.1.278) — session capability flags may have drifted.';
 
 const dirsToClean: LayerDirs[] = [];
 

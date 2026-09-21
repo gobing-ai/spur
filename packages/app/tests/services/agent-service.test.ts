@@ -4442,7 +4442,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         const doctorRunner = {
             runAll: mock(() =>
                 Promise.resolve([
-                    mockDoctorResult({ agent: 'codex-exec', version: '0.154.0' }),
+                    mockDoctorResult({ agent: 'codex-exec', version: '0.155.1' }),
                     mockDoctorResult({ agent: 'mystery-exec', version: '1.2.3' }),
                 ]),
             ),
@@ -4459,7 +4459,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
             supportsSessionDir: false,
             supportsPersistentStdin: false,
             supportsStructuredOutput: true,
-            verifiedAgainst: '0.154.0',
+            verifiedAgainst: '0.155.1',
             note: 'no session-dir flag — sessionDir is ignored; `exec` carries one prompt arg (stdin `-` is one-shot), so no multi-turn stdin',
         });
         // Fresh version → no staleness.
@@ -4482,7 +4482,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         await svc.doctor({ json: true }, { doctorRunner });
 
         const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
-        expect(parsed.agents[0].capabilityStale).toEqual({ verifiedAgainst: '0.154.0', detected: '0.999.0' });
+        expect(parsed.agents[0].capabilityStale).toEqual({ verifiedAgainst: '0.155.1', detected: '0.999.0' });
     });
 
     test('R5: stale executor warns on stderr and marks the CAPS cell in text mode', async () => {
@@ -4503,7 +4503,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         // codex record: resume ✓, dir ✗, stdin ✗, structured ✓ — plus the stale marker.
         expect(table).toContain('r✓d✗s✗o✓⚠');
         expect(errors.some((e) => e.includes('capability-declaration-stale'))).toBe(true);
-        expect(errors.some((e) => e.includes('codex-exec') && e.includes('0.999.0') && e.includes('0.154.0'))).toBe(
+        expect(errors.some((e) => e.includes('codex-exec') && e.includes('0.999.0') && e.includes('0.155.1'))).toBe(
             true,
         );
     });
@@ -4514,7 +4514,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
             executors: [{ name: 'pi-exec', agent: 'pi', disabled: false }],
         } as AgentConfig);
         const doctorRunner = {
-            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'pi-exec', version: '0.85.1' })])),
+            runAll: mock(() => Promise.resolve([mockDoctorResult({ agent: 'pi-exec', version: '0.87.0' })])),
             runOne: mock(() => Promise.resolve(mockDoctorResult())),
         } as unknown as AgentRunDeps['doctorRunner'];
 
@@ -4530,8 +4530,8 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         // Regression: pre-0899 exact compare false-positived on every real install
         // (`2.1.274 (Claude Code)`, `codex-cli 0.154.0`, `OpenClaw 2026.6.11 (e085fa1)`).
         const cases = [
-            { name: 'claude-exec', agent: 'claude', version: '2.1.274 (Claude Code)' },
-            { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.154.0' },
+            { name: 'claude-exec', agent: 'claude', version: '2.1.278 (Claude Code)' },
+            { name: 'codex-exec', agent: 'codex', version: 'codex-cli 0.155.1' },
             { name: 'omp-exec', agent: 'omp', version: 'omp/18.2.3' },
             { name: 'openclaw-exec', agent: 'openclaw', version: 'OpenClaw 2026.6.11 (e085fa1)' },
             { name: 'ds-exec', agent: 'deepseek', version: 'deepseek-cli 0.1.5-rc.1' },
@@ -4609,7 +4609,7 @@ describe('AgentService.doctor session capability surface (B8 / task 0889)', () =
         const warning = errors.find((e) => e.includes('capability-declaration-stale'));
         expect(warning).toBeDefined();
         expect(warning).toContain('"codex-cli 0.999.0" (core 0.999.0)');
-        expect(warning).toContain('"0.154.0" (core 0.154.0)');
+        expect(warning).toContain('"0.155.1" (core 0.155.1)');
     });
 });
 
