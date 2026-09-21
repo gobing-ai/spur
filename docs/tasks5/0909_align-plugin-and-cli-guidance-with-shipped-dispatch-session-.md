@@ -4,7 +4,7 @@ name: Align plugin and CLI guidance with shipped dispatch session policy
 status: done
 template: feature-impl
 created_at: 2026-09-20T15:48:46.081Z
-updated_at: "2026-09-21T00:55:28.915Z"
+updated_at: "2026-09-21T01:03:52.745Z"
 feature_id: I32
 priority: P2
 tags:
@@ -92,9 +92,9 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | apps/cli/src/commands/agent.ts:298 (approved inline clause; string-only diff, zero behavior code; negative guard plugins/sp/tests/cli-surface-parity.test.ts:479) |
-| R2 | MET | plugins/sp/skills/spur-dev/references/cross-cutting.md:64-74 (session-policy summary, links design §4 + roles.md, "does not restate"); cross-cutting.md:186-212 (availability via spur agent usage → drain → doctor provenance, stale never enables, usability≠auth≠quota); execution-workflow.md:262-265,281-287 (retired doctor strings dropped, provenance prose, anchor cross-link) |
-| R3 | MET | plugins/sp/tests/inline-execution-contract.test.ts:381-440 (sectionOf + semantic/negative assertions); plugins/sp/tests/cli-surface-parity.test.ts:452-481 (live-help route test); docs/dogfood/2026-09-20-I32-align-plugin-cli-dispatch-guidance-dogfood.md:1 + docs/dogfood/INDEX.md:45 |
+| AC-1 | MET | apps/cli/src/commands/agent.ts:298 (approved inline clause; string-only diff, zero behavior code; negative guard plugins/sp/tests/cli-surface-parity.test.ts:479) |
+| AC-2 | MET | plugins/sp/skills/spur-dev/references/cross-cutting.md:64-74 (session-policy summary, links design §4 + roles.md, "does not restate"); cross-cutting.md:186-212 (availability via spur agent usage → drain → doctor provenance, stale never enables, usability≠auth≠quota); execution-workflow.md:262-265,281-287 (retired doctor strings dropped, provenance prose, anchor cross-link) |
+| AC-3 | MET | plugins/sp/tests/inline-execution-contract.test.ts:381-440 (sectionOf + semantic/negative assertions); plugins/sp/tests/cli-surface-parity.test.ts:452-481 (live-help route test); docs/dogfood/2026-09-20-I32-align-plugin-cli-dispatch-guidance-dogfood.md:1 + docs/dogfood/INDEX.md:45 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
