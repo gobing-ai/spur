@@ -295,7 +295,7 @@ export function registerAgentCommand(program: Command, context: CliContext): voi
         .description('Execute a prompt or slash command via a coding agent.')
         .option(
             '--agent <name>',
-            'Role, executor, agent binary, auto, or inline (host-session-only; errors on headless surfaces)',
+            'Role, executor, agent binary, auto, or inline (host-session; on headless surfaces a role/tier fallback resolves with one warning)',
         )
         .option('--spec <id>', 'Agent spec id (occupant addressing; pairs with --drain)')
         .option('--continue', 'Resume the previous agent session')

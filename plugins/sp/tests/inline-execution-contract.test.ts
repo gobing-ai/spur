@@ -10,6 +10,7 @@ import {
 const ROOT = join(import.meta.dir, '..', '..', '..');
 const COMMANDS_DIR = join(ROOT, 'plugins', 'sp', 'commands');
 const CROSS_CUTTING = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'cross-cutting.md');
+const EXECUTION_WORKFLOW = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'execution-workflow.md');
 const GLOSSARY = join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'flag-glossary.md');
 const ADR = join(ROOT, 'docs', '00_ADR.md');
 const DISPATCH_SURFACE = join(
@@ -372,5 +373,72 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
         expect(driver).toContain('dry-run permission API');
         expect(driver).toContain('blocker immediately on the first missing permission');
         expect(driver).toContain('stage <id> permission precheck: ok | <missing capability>');
+    });
+});
+
+/**
+ * Extract the body of a markdown section: from the heading line starting with `header`
+ * until the next heading of the same or higher level. Section-scoped assertions keep the
+ * contract anchored where it lives instead of anywhere in the file.
+ */
+function sectionOf(markdown: string, header: string): string {
+    const lines = markdown.split('\n');
+    const start = lines.findIndex((line) => line.startsWith(header));
+    if (start < 0) throw new Error(`section not found: ${header}`);
+    const level = (lines[start]?.match(/^#+/) ?? ['#'])[0]?.length ?? 1;
+    const closer = new RegExp(`^#{1,${level}}\\s`);
+    const end = lines.findIndex((line, i) => i > start && closer.test(line));
+    return lines.slice(start, end < 0 ? lines.length : end).join('\n');
+}
+
+describe('task 0909 — shipped dispatch session policy in source guidance (feature I32)', () => {
+    const crossCutting = readFileSync(CROSS_CUTTING, 'utf8');
+    const workflow = readFileSync(EXECUTION_WORKFLOW, 'utf8');
+    const inlineSection = sectionOf(crossCutting, '## Inline-default execution surface');
+
+    test('the inline section carries the B7 session-policy summary and defers ownership to the design authority', () => {
+        const policy = sectionOf(inlineSection, '### Run-scoped session policy');
+        // Role defaults, copied semantically from the shipped YAML/engine policy (B7).
+        expect(policy).toMatch(/coder stages default to `session: reuse`/);
+        expect(policy).toMatch(/reviewer, planner,\nand scribe stages default to `fresh`/);
+        expect(policy).toMatch(/declare `session: reuse` explicitly/);
+        expect(policy).toContain('supportsResumeById: false');
+        expect(policy).toMatch(/re-resolves once, then starts fresh/);
+        expect(policy).toMatch(/traces record/);
+        // Ownership is linked, not restated as a second catalog.
+        expect(policy).toContain('../../../../../docs/design/session-pinned-dispatch.md');
+        expect(policy).toContain('../../../references/roles.md');
+        expect(policy).toContain('does not restate');
+    });
+
+    test('the availability paragraph names the preflight surface and keeps the escalation classifier as the in-run detector', () => {
+        const exhaustion = sectionOf(crossCutting, '### Executor exhaustion is survivable');
+        expect(exhaustion).toContain('`spur agent usage`');
+        expect(exhaustion).toContain('drain');
+        expect(exhaustion).toContain('`owner`');
+        expect(exhaustion).toContain('`since`');
+        expect(exhaustion).toContain('`reason`');
+        expect(exhaustion).toContain('`age`');
+        expect(exhaustion).toMatch(/never enables/);
+        expect(exhaustion).toMatch(/Usability \(doctor\) is not authentication/);
+        expect(exhaustion).toContain('escalation classifier');
+        expect(exhaustion).not.toContain('not by any preflight probe');
+    });
+
+    test('the execution-workflow doctor prose reports usability + availability provenance with the preflight signal', () => {
+        expect(workflow).toContain('availability provenance');
+        expect(workflow).toContain('`spur agent usage`');
+        expect(workflow).toMatch(/stale availability snapshot never/);
+        expect(workflow).toContain('cross-cutting.md#inline-default-execution-surface');
+        expect(workflow).not.toContain('Is auth present?');
+        expect(workflow).not.toContain('installation, version, and auth');
+    });
+
+    test('retired strings stay retired across both live reference files', () => {
+        const retired = ['not by any preflight probe', 'Is auth present?', 'installation, version, and auth'];
+        for (const claim of retired) {
+            expect(crossCutting).not.toContain(claim);
+            expect(workflow).not.toContain(claim);
+        }
     });
 });

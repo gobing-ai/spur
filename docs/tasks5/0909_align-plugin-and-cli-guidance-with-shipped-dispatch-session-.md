@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Align plugin and CLI guidance with shipped dispatch session policy
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-20T15:48:46.081Z
-updated_at: "2026-09-20T15:49:23.010Z"
+updated_at: "2026-09-21T00:55:28.915Z"
 feature_id: I32
 priority: P2
 tags:
@@ -23,15 +23,15 @@ I31/0903 found headless-inline help contradicting shipped fallback, missing cent
 
 ### Requirements
 
-- [ ] R1. Correct agent run --agent help so inline describes host-session execution and existing headless role/tier fallback with warning; do not change dispatch behavior.
-- [ ] R2. Add concise source guidance for coder reuse versus reviewer/planner/scribe fresh defaults, explicit session override, resume capability fallback and existing role/executor/session pins. Replace stale doctor authentication claims with the shipped usability and availability contract.
-- [ ] R3. Keep platform fallback usable without slash commands, link owning session-pinned-dispatch and roles references, and extend existing inline/parity checks to catch these concrete contradictions without snapshotting entire prose.
+- [x] R1. Correct agent run --agent help so inline describes host-session execution and existing headless role/tier fallback with warning; do not change dispatch behavior.
+- [x] R2. Add concise source guidance for coder reuse versus reviewer/planner/scribe fresh defaults, explicit session override, resume capability fallback and existing role/executor/session pins. Replace stale doctor authentication claims with the shipped usability and availability contract.
+- [x] R3. Keep platform fallback usable without slash commands, link owning session-pinned-dispatch and roles references, and extend existing inline/parity checks to catch these concrete contradictions without snapshotting entire prose.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — inline help matches the shipped headless fallback (req: R1)
-- [ ] AC2 — plugin guidance explains shipped session and availability policy (req: R2)
-- [ ] AC3 — CLI-only readers receive the same contract (req: R3)
+- [x] AC1 — inline help matches the shipped headless fallback (req: R1)
+- [x] AC2 — plugin guidance explains shipped session and availability policy (req: R2)
+- [x] AC3 — CLI-only readers receive the same contract (req: R3)
 
 ### Q&A
 
@@ -67,25 +67,53 @@ Source anchors:
 
 ### Plan
 
-- [ ] 1. Compare agent help, cross-cutting/execution prose and shipped session/pin source; record exact contradictions and add a focused failing assertion (R1-R2/AC1-AC2).
-- [ ] 2. Correct help and centralize the concise policy paragraph/links, removing stale doctor-auth and preflight claims (R1-R2/AC1-AC2).
-- [ ] 3. Exercise CLI-only guidance and source-local help; run focused inline/parity tests, record bounded I32 dogfood evidence (R3/AC3).
-- [ ] 4. Run task-local gates and CLI link/bundle after source change, verify, then the I32 feature gate and wrap with one task commit.
+- [x] 1. Compare agent help, cross-cutting/execution prose and shipped session/pin source; record exact contradictions and add a focused failing assertion (R1-R2/AC1-AC2).
+- [x] 2. Correct help and centralize the concise policy paragraph/links, removing stale doctor-auth and preflight claims (R1-R2/AC1-AC2).
+- [x] 3. Exercise CLI-only guidance and source-local help; run focused inline/parity tests, record bounded I32 dogfood evidence (R3/AC3).
+- [x] 4. Run task-local gates and CLI link/bundle after source change, verify, then the I32 feature gate and wrap with one task commit.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:298` |
+| `plugins/sp/tests/cli-surface-parity.test.ts:450` |
+| `plugins/sp/tests/inline-execution-contract.test.ts:13` |
+| `plugins/sp/tests/inline-execution-contract.test.ts:378` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | apps/cli/src/commands/agent.ts:298 (approved inline clause; string-only diff, zero behavior code; negative guard plugins/sp/tests/cli-surface-parity.test.ts:479) |
+| R2 | MET | plugins/sp/skills/spur-dev/references/cross-cutting.md:64-74 (session-policy summary, links design §4 + roles.md, "does not restate"); cross-cutting.md:186-212 (availability via spur agent usage → drain → doctor provenance, stale never enables, usability≠auth≠quota); execution-workflow.md:262-265,281-287 (retired doctor strings dropped, provenance prose, anchor cross-link) |
+| R3 | MET | plugins/sp/tests/inline-execution-contract.test.ts:381-440 (sectionOf + semantic/negative assertions); plugins/sp/tests/cli-surface-parity.test.ts:452-481 (live-help route test); docs/dogfood/2026-09-20-I32-align-plugin-cli-dispatch-guidance-dogfood.md:1 + docs/dogfood/INDEX.md:45 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-21T00:54:53.864Z todo → wip (system)
+- 2026-09-21T00:55:15.851Z wip → testing (system)
+- 2026-09-21T00:55:28.915Z testing → done (system)
+

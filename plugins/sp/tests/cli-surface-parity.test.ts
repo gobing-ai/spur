@@ -447,3 +447,35 @@ describe('cli-surface-parity — R8: ADR-054 ownership boundary', () => {
         expect(ownership.spine.claim).toContain('owns multi-step lifecycle orchestration');
     });
 });
+
+describe('task 0909 (feature I32) — CLI-only route reads the corrected inline help', () => {
+    test('live `agent run --help` advertises host-session inline with the role/tier fallback warning', () => {
+        const argv = [
+            process.execPath,
+            'run',
+            join(REPO_ROOT, 'apps', 'cli', 'src', 'index.ts'),
+            'agent',
+            'run',
+            '--help',
+        ];
+        const result = Bun.spawnSync(argv, { cwd: REPO_ROOT, stdout: 'pipe', stderr: 'pipe' });
+        expect(result.exitCode).toBe(0);
+        const lines = (result.stdout ?? '').toString().split(/\r?\n/);
+        const flagLine = lines.findIndex((line) => line.includes('--agent <name>'));
+        expect(flagLine, 'live help must contain the --agent <name> flag row').toBeGreaterThanOrEqual(0);
+        // Reconstruct the wrapped description block: accumulate continuation lines until the
+        // next 2-space-indented flag row.
+        const parts: string[] = [lines[flagLine] ?? ''];
+        for (let i = flagLine + 1; i < lines.length; i++) {
+            const line = lines[i] ?? '';
+            if (/^ {2}--/.test(line)) break;
+            parts.push(line);
+        }
+        const block = parts.join(' ');
+        // Semantic tokens only — the wrapped layout varies with terminal width and Commander.
+        expect(block).toContain('host-session');
+        expect(block).toContain('role/tier fallback');
+        expect(block).toContain('warning');
+        expect(block).not.toContain('errors on headless surfaces');
+    });
+});

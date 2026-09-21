@@ -61,6 +61,18 @@ The explicit-rejection carve-out above was superseded by ADR-087 (task 0687): a 
 substitutes tier resolution with a warning instead of rejecting — see the substitution blockquote
 above and `resolveAgent` in `packages/app/src/services/agent-service.ts`.
 
+### Run-scoped session policy (B7, summary)
+
+When an inline resolution dispatches a native subagent, or a workflow `agent.run` executes, the
+run-scoped session policy applies: coder stages default to `session: reuse`; reviewer, planner,
+and scribe stages default to `fresh`; a reviewer stage may declare `session: reuse` explicitly.
+A runner record without resume capability (`supportsResumeById: false`) forces a fresh dispatch,
+and a disabled pinned executor re-resolves once, then starts fresh. Run traces record the session
+provenance (`reused | fresh`). This is a summary only: the owning contract is
+[session-pinned-dispatch.md §4](../../../../../docs/design/session-pinned-dispatch.md) with role
+semantics in [roles.md](../../../references/roles.md); this section does not restate that
+contract.
+
 ### Objective triggers override the answer
 
 The one rule resolves operator *intent*. A trigger is a detected *requirement* the chosen executor
@@ -188,8 +200,15 @@ Do not read provider auth or quota from `spur agent doctor`. The doctor resolves
 config), so it historically degraded to `status: usable · auth: no · model: unknown` for GLM-style
 executors and was useless as a preflight gate. Feature B4 removed the auth signal from the surface
 entirely (no column, no `authenticated` in `--json`) precisely so nothing can read it by mistake;
-the precheck probe classifies on usability alone. Exhaustion is detected mid-run by the escalation
-classifier, not by any preflight probe.
+the precheck probe classifies on usability alone. Preflight availability does exist — as a
+separate, owned surface (session-pinned-dispatch.md §3.4): `spur agent usage` captures provider
+quota windows into a durable snapshot, the availability drain derives `quota.exhausted` /
+`quota.recovered` observations from it, and `spur agent doctor` renders the provenance (`owner`,
+`since`, `reason`, snapshot `age`). A snapshot older than `agent.usage.maxAgeMs` renders `stale`
+and never enables an executor. Usability (doctor) is not authentication, and neither is a live
+quota guarantee — the signals stay distinct. Mid-run exhaustion is still detected by the
+escalation classifier; the preflight surface informs planning, it does not replace the in-run
+detector.
 
 ### Explicit subprocess surfaces are unchanged
 

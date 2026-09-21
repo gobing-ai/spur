@@ -260,7 +260,10 @@ an executor failed — the executor is swappable via config, the pipeline is not
 **When an `agent.run` step fails (timeout, non-zero exit, empty output):**
 
 1. **Diagnose, don't bypass.** Check `spur agent doctor <executor>` — is the agent
-   installed? Is auth present? Then check `.spur/config.yaml` → which role/executor does the
+   installed and usable? Doctor reports usability plus availability provenance (`owner`,
+   `since`, `reason`, snapshot `age`); it is read-only and a stale availability snapshot never
+   enables an executor — `spur agent usage` is the preflight availability signal. Then check
+   `.spur/config.yaml` → which role/executor does the
    run resolve to (`agent.default` role → stage-registry tier ladder)? Which model does that
    executor use? Could that model be out of tokens, rate-limited, or deprecated?
 2. **Switch executors, don't abandon the pipeline.** Override the agent for the run:
@@ -275,11 +278,17 @@ an executor failed — the executor is swappable via config, the pipeline is not
    Manual section fills outside either driver are indistinguishable from pipeline output and bypass
    the provenance contract silently.
 
-**Known diagnostic gap:** `spur agent doctor` checks installation, version, and auth — it
-cannot detect token quota exhaustion, model deprecation, or rate limits. An executor
-configured with `agent: omp` + `model: <provider/model>` passes doctor if `omp` is
+**Known diagnostic gap:** `spur agent doctor` checks installation, version, and usability
+(read-only, with availability provenance from `spur agent usage`; a stale snapshot never
+enables) — it cannot detect mid-run token quota exhaustion, model deprecation, or rate limits.
+An executor configured with `agent: omp` + `model: <provider/model>` passes doctor if `omp` is
 installed, even if the model is unavailable. If an `agent.run` times out with no useful
 diagnostic, suspect the model, not the agent binary.
+
+Executor switching also interacts with run-scoped session policy (coder `reuse`,
+reviewer/planner/scribe `fresh`): see the session-policy summary in
+[cross-cutting.md#inline-default-execution-surface](cross-cutting.md#inline-default-execution-surface);
+this file does not restate that contract.
 
 ## Large tasks and timed-out implement resume (task 0424)
 
