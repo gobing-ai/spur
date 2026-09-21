@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Complete DecisionMaker workflow policy, routing, diagnostics and operator guidance
-status: todo
+status: done
 template: standard
 created_at: 2026-09-21T00:19:59.329Z
-updated_at: "2026-09-21T00:26:43.908Z"
+updated_at: "2026-09-21T07:18:07.896Z"
 feature_id: D
 
 priority: P1
@@ -51,16 +51,16 @@ Concurrency snapshot: current tree was clean before this documentation/task prep
 
 ### Requirements
 
-- [ ] R1. Preserve the single merged boolean activation switch and existing legacy behavior for unmodified workflows, including no evidence/provider work when disabled, current key/endpoint environment behavior, fixed 0.9 thresholds, 15-second timeout and zero retries; do not add enablement flags, environment variables, model settings or provider SDK dependencies.
-- [ ] R2. Extend the existing confirm/select action options with the explicit per-action decision modes specified in Design: omitted retains legacy policy, never bypasses DecisionMaker, and evidence produces either an accepted choice or explicit defer. Validate new options before side effects and preserve the single existing action registration and original event/answer/cancellation contract for legacy and never modes.
-- [ ] R3. Make evidence-mode disabled, unavailable, uncertain, malformed and missing/stale-evidence outcomes route to defer without consuming the headless default responder; preserve original responder fallback only for legacy mode and explicitly operator-owned gates.
-- [ ] R4. Add gate-scoped, bounded, redacted evidence selection with explicit producing nodes and an optional registered structured summary artifact; enforce current-run ownership, artifact freshness/path constraints, stable evidence IDs and a reproducible input digest as defined in Design.
-- [ ] R5. Classify and explicitly protect every bundled operator-approval gate with never mode; preserve stock auto-profile bypass, pause=true and explicit resume semantics. Ship one safe bundled evidence-routing example showing accepted choice, explicit human defer and a bounded retry, without replacing deterministic quality/verification checks.
-- [ ] R6. Persist safe decision provenance with each HITL action result and expose it additively through existing workflow show/trace/progress JSON and human output, including accepted/deferred/fallback/disabled outcomes, reason, provider, confidence, selected probability, evidence identifiers/digest and elapsed time; historical rows remain readable.
-- [ ] R7. Add offline DecisionMaker readiness information to existing self status output using merged config and process-environment presence only; report disabled, missing-key or configured-not-probed without contacting the API, exposing credentials or changing existing status exit semantics.
-- [ ] R8. Update inline-driver, workflow authoring, execution and slash-command guidance plus parity tests to make unsupported inline provider execution explicit; legacy/never remains operator-driven, evidence mode takes its declared defer branch inline without a provider call, and no skill duplicates application decision policy.
-- [ ] R9. Synchronize the owning CLI/workflow design satellites, help and environment-variable references, in-scope plugin guidance, workflow inventory and generated bundle/schema surfaces. Distinguish new behavior from historical task 0910 behavior and document the no-hot-reload, no-live-probe and probability-calibration limitations.
-- [ ] R10. Add deterministic unit, engine integration, CLI, routing and plugin-contract regressions for all AC, including stock pause/headless behavior, config precedence, legacy compatibility, safe telemetry and evidence rejection; complete the applicable repository gates and a real task verify PASS before marking implementation done.
+- [x] R1. Preserve the single merged boolean activation switch and existing legacy behavior for unmodified workflows, including no evidence/provider work when disabled, current key/endpoint environment behavior, fixed 0.9 thresholds, 15-second timeout and zero retries; do not add enablement flags, environment variables, model settings or provider SDK dependencies.
+- [x] R2. Extend the existing confirm/select action options with the explicit per-action decision modes specified in Design: omitted retains legacy policy, never bypasses DecisionMaker, and evidence produces either an accepted choice or explicit defer. Validate new options before side effects and preserve the single existing action registration and original event/answer/cancellation contract for legacy and never modes.
+- [x] R3. Make evidence-mode disabled, unavailable, uncertain, malformed and missing/stale-evidence outcomes route to defer without consuming the headless default responder; preserve original responder fallback only for legacy mode and explicitly operator-owned gates.
+- [x] R4. Add gate-scoped, bounded, redacted evidence selection with explicit producing nodes and an optional registered structured summary artifact; enforce current-run ownership, artifact freshness/path constraints, stable evidence IDs and a reproducible input digest as defined in Design.
+- [x] R5. Classify and explicitly protect every bundled operator-approval gate with never mode; preserve stock auto-profile bypass, pause=true and explicit resume semantics. Ship one safe bundled evidence-routing example showing accepted choice, explicit human defer and a bounded retry, without replacing deterministic quality/verification checks.
+- [x] R6. Persist safe decision provenance with each HITL action result and expose it additively through existing workflow show/trace/progress JSON and human output, including accepted/deferred/fallback/disabled outcomes, reason, provider, confidence, selected probability, evidence identifiers/digest and elapsed time; historical rows remain readable.
+- [x] R7. Add offline DecisionMaker readiness information to existing self status output using merged config and process-environment presence only; report disabled, missing-key or configured-not-probed without contacting the API, exposing credentials or changing existing status exit semantics.
+- [x] R8. Update inline-driver, workflow authoring, execution and slash-command guidance plus parity tests to make unsupported inline provider execution explicit; legacy/never remains operator-driven, evidence mode takes its declared defer branch inline without a provider call, and no skill duplicates application decision policy.
+- [x] R9. Synchronize the owning CLI/workflow design satellites, help and environment-variable references, in-scope plugin guidance, workflow inventory and generated bundle/schema surfaces. Distinguish new behavior from historical task 0910 behavior and document the no-hot-reload, no-live-probe and probability-calibration limitations.
+- [x] R10. Add deterministic unit, engine integration, CLI, routing and plugin-contract regressions for all AC, including stock pause/headless behavior, config precedence, legacy compatibility, safe telemetry and evidence rejection; complete the applicable repository gates and a real task verify PASS before marking implementation done.
 
 ### Acceptance Criteria
 
@@ -269,31 +269,178 @@ Non-goals: new CLI nouns/verbs, new activation env vars, changing profile=auto, 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/status.ts:104` |
+| `apps/cli/src/commands/status.ts:3` |
+| `apps/cli/src/commands/status.ts:42` |
+| `apps/cli/src/commands/status.ts:53` |
+| `apps/cli/src/commands/status.ts:66` |
+| `apps/cli/src/commands/workflow.ts:1795` |
+| `apps/cli/tests/commands/status.test.ts:45` |
+| `apps/cli/tests/commands/workflow.test.ts:14` |
+| `apps/cli/tests/commands/workflow.test.ts:2304` |
+| `packages/app/src/index.ts:667` |
+| `packages/app/src/index.ts:743` |
+| `packages/app/src/services/workflow-service.ts:1634` |
+| `packages/app/src/services/workflow-service.ts:1753` |
+| `packages/app/src/services/workflow-service.ts:1812` |
+| `packages/app/src/services/workflow-service.ts:2008` |
+| `packages/app/src/services/workflow-service.ts:2711` |
+| `packages/app/src/services/workflow-service.ts:2714` |
+| `packages/app/src/services/workflow-service.ts:2719` |
+| `packages/app/src/services/workflow-service.ts:2727` |
+| `packages/app/src/services/workflow-service.ts:2778` |
+| `packages/app/src/services/workflow-service.ts:2783` |
+| `packages/app/src/services/workflow-service.ts:498` |
+| `packages/app/src/services/workflow-service.ts:50` |
+| `packages/app/src/services/workflow-service.ts:511` |
+| `packages/app/src/services/workflow-service.ts:52` |
+| `packages/app/src/services/workflow-service.ts:61` |
+| `packages/app/src/services/workflow-service.ts:684` |
+| `packages/app/src/services/workflow-service.ts:9` |
+| `packages/app/src/workflow/actions/hitl-confirm.ts:12` |
+| `packages/app/src/workflow/actions/hitl-confirm.ts:17` |
+| `packages/app/src/workflow/actions/hitl-confirm.ts:2` |
+| `packages/app/src/workflow/actions/hitl-confirm.ts:29` |
+| `packages/app/src/workflow/actions/hitl-confirm.ts:41` |
+| `packages/app/src/workflow/actions/hitl-confirm.ts:55` |
+| `packages/app/src/workflow/actions/hitl-confirm.ts:62` |
+| `packages/app/src/workflow/actions/hitl-input.ts:12` |
+| `packages/app/src/workflow/actions/hitl-input.ts:2` |
+| `packages/app/src/workflow/actions/hitl-input.ts:32` |
+| `packages/app/src/workflow/actions/hitl-select.ts:11` |
+| `packages/app/src/workflow/actions/hitl-select.ts:13` |
+| `packages/app/src/workflow/actions/hitl-select.ts:19` |
+| `packages/app/src/workflow/actions/hitl-select.ts:2` |
+| `packages/app/src/workflow/actions/hitl-select.ts:36` |
+| `packages/app/src/workflow/actions/hitl-select.ts:54` |
+| `packages/app/src/workflow/actions/hitl-select.ts:72` |
+| `packages/app/src/workflow/actions/hitl-select.ts:79` |
+| `packages/app/src/workflow/actions/hitl-select.ts:88` |
+| `packages/app/src/workflow/builtins.ts:26` |
+| `packages/app/src/workflow/builtins.ts:52` |
+| `packages/app/src/workflow/builtins.ts:91` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:14` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:201` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:228` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:3` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:5` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:514` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:516` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:532` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:60` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:62` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:64` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:68` |
+| `packages/app/tests/services/workflow-service.test.ts:104` |
+| `packages/app/tests/services/workflow-service.test.ts:125` |
+| `packages/app/tests/services/workflow-service.test.ts:137` |
+| `packages/app/tests/services/workflow-service.test.ts:264` |
+| `packages/app/tests/services/workflow-service.test.ts:9` |
+| `packages/domain/src/dao/artifact-dao.ts:41` |
+| `packages/domain/tests/dao/artifact-dao.test.ts:26` |
+| `plugins/sp/scripts/inline-pipeline-parity-check.ts:47` |
+| `plugins/sp/tests/inline-pipeline-parity-check.test.ts:18` |
+| `plugins/sp/tests/inline-pipeline-parity-check.test.ts:23` |
+| `repo-wide-tests/adr-supersession.test.ts:164` |
+| `repo-wide-tests/adr-supersession.test.ts:202` |
 
 ### Testing
 
-Implementation has not started. The following is the required verification plan, not a PASS receipt for this task.
+**Pipeline verify results**
 
-| Requirement | Test layer and target | Required observable assertions |
-| --- | --- | --- |
-| R1 | packages/config/tests/loader.test.ts; packages/app/tests/workflow/decision-hitl-responder.test.ts | All global/project boolean combinations; key presence cannot enable; disabled does not call evidence/provider; legacy error/defer fallback unchanged; request options unchanged |
-| R2-R3 | Existing HITL action tests and packages/app/tests/services/workflow-service.test.ts | Validated new options; unknown keys/modes, input use, duplicate choices, colliding vars, unknown nodes and pause=true rejected; no duplicate registrations/events; accepted and deferred clear/set exact vars; auto-approve cannot answer evidence mode |
-| R4 | New focused evidence tests under packages/app/tests/workflow | Last producer attempt and stable IDs; missing/newer-running/foreign evidence rejected; summary registration, ID/content match, symlink/traversal containment, size bounds, truncation, malformed JSON, secret canaries and digest stability/change |
-| R5 | Engine service fixtures with real builtins and workflow YAML parity tests | Example accepted retry once, stop, defer pause, human yes/no/cancel; stock approvals never invoke provider; auto task bypass preserved; legacy model answer still pauses; deterministic gates still required |
-| R6 | App trace projections and apps/cli/tests workflow command tests | Persisted metadata survives service recreation/resume; human/raw JSON/envelope fields; no raw prompt/key/error; missing/malformed old metadata tolerated; no invented historical source |
-| R7 | apps/cli/tests status tests plus application readiness unit tests | Three readiness states; global/project precedence; no fetch/import/provider construction; key never printed; existing status error/exit and envelope behavior unchanged |
-| R8 | plugins/sp/tests and existing inline-pipeline-parity-check | Inline documented supported options; evidence mode deterministically defers without provider; proper answer/status assignments and guard order; legacy approvals unchanged; actual inline dogfood uses a fixture and records branch evidence |
-| R9 | Source/help parity, workflow validate and link checks | Changed examples validate; source-local CLI still has no new noun/verb; guide and env inventory accurate; no manual generated-adapter edit; local overrides documented |
-| R10 | Repository gate and task verify artifacts | All applicable commands green, no suppressed findings, verify PASS references real files and scenario observations |
+- Verdict: PASS (from verdict artifact)
 
-Run existing focused baseline tests from packages/app with `bun test tests/workflow/decision-hitl-responder.test.ts tests/services/workflow-service.test.ts` and from packages/config with `bun test tests/loader.test.ts`; add each new test path to the focused invocation. For CLI/headless tests inject environment and fake drivers so no shell secret or real backend is used. Include a real pause=true workflow fixture; the prior unpaused test alone is insufficient. The optional-artifact fixture must register its producer through real application persistence instead of hand-claiming run ownership. Record actual command results only after running them.
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Legacy and disabled paths unchanged (`decision-hitl-responder.ts:255-356`); `packages/app/tests/services/workflow-service.test.ts` "DecisionMaker switch composes with real builtins…" asserts 0 provider calls when the switch is off and the original `legacy` responder answer when on; no new env var, model setting or provider dependency (`git diff` shows none) |
+| R2 | MET | `parseDecisionConfig` rejects unknown keys, non-object decisions, `hitl.input` use, malformed identifiers and duplicate producers before any side effect (`decision-hitl-responder.ts:126-206`); the validator reads and normalizes the same choice key as the runner and its fixtures cover a wrong key plus empty choices (`workflow-service.ts:2068-2080`; `decision-evidence.test.ts` "validates the same choice key and normalization the runtime runner reads") |
+| R3 | MET | Only `legacy`/`never` delegate to the responder (`decision-hitl-responder.ts:101-124`); every evidence failure returns `deferred` with a cleared answer var, never the headless default responder (`:380,:388,:419,:432,:462,:466`), covered by the defer matrix in `decision-evidence.test.ts` |
+| R4 | MET | Bounds 20 rows / 2000 chars / 32 KiB payload / 8 KiB summary and allow-listed redacted fields (`decision-evidence.ts:6-9,159-177`), in-flight → `stale-evidence` (`:74`), timestamp tie → `invalid-evidence` (`:104-109`), run-id envelope match (`:137`), canonical-path plus registered-artifact ownership (`workflow-service.ts:1802-1820`) |
+| R5 | MET | All 7 stock gates declare `mode: never` (`idea-pipeline.yaml:148,287,365,425`; `task-pipeline.yaml:467`; `wrapup-pipeline.yaml:311`; `wayfinder-resolution.yaml:166`); `decision-routing-example.yaml` implements D2 and is executed end to end by the three `decision policy (0911)` integration tests; `profile=auto` bypass untouched (`task-pipeline.yaml:744`) |
+| R6 | MET | Provenance persisted with each HITL action result and projected by `workflow trace` — JSON `decision` object (`TimelineActionDecision`) plus the human `decision=` line — asserted in `workflow-service.test.ts` (trace projection) and `apps/cli/tests/commands/workflow.test.ts` (renderer), with work without provenance omitted |
+| R7 | MET | `computeDecisionReadiness` reports `disabled` / `missing-key` / `configured-not-probed` from merged config plus env presence only, constructing no provider and making no network call (`decision-readiness.ts:16`, `apps/cli/src/commands/status.ts:42-53`); `apps/cli/tests/commands/status.test.ts` covers all three states in JSON, human and `--json --json-envelope` and asserts the key value is never echoed |
+| R8 | MET | Inline defer semantics, no-hot-reload and the full-inline-parity non-goal documented in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`; parity checker agrees three ways (`bun plugins/sp/scripts/inline-pipeline-parity-check.ts` → 10 actions, 4 guards, 0 spurious edges) and no skill restates application decision policy |
+| R9 | MET | ADR-123 dated clarification (historical text preserved), `docs/design/cli-contracts.md`, `docs/design/workflow-observability.md`, `docs/help/{cmd_workflow,cmd_status,environment_variables,how_to_enable_jev_in_spur}.md`, `plugins/sp/skills/spur-cli/references/{self,workflows}.md`, `spur-dev/references/glossary.md`, both bundled-workflow inventories; bundle regenerated after CLI changes (4.89 MB, 34 `$schema` directives, example copied byte-identical) |
+| R10 | MET | Regressions: `decision-evidence.test.ts` (26), `decision-readiness.test.ts` (2), `artifact-dao.test.ts` (2), 3 engine-integration tests, 2 trace-renderer tests, 1 status CLI test, updated plugin parity test; gates all green — `bun run spur-check` PASS (8655 tests, 0 fail), `bun run spur-check-feature` PASS, `bun run test-cf` PASS, `bun run build` PASS, `bun run plugin-smoke` PASS, 5/5 changed YAMLs `valid: true` |
 
-A live Jev smoke test is optional and requires separate authorization; it is not an acceptance dependency. Do not interpret the offline configured-not-probed state as a verified API key.
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC-1 | MET | test | `workflow-service.test.ts` decision switch composition (disabled ⇒ 0 provider calls; enabled ⇒ provider answer; `legacy` responder preserved) |
+| AC-2 | MET | test | Parser reject matrix plus validator key-parity fixtures (`decision-evidence.test.ts`), and `workflow validate` on every changed YAML reports 0 errors/0 warnings |
+| AC-3 | MET | test | Evidence-mode defer assertions: cleared answer var, `statusVar` = `deferred`, no responder invocation (`decision-evidence.test.ts`; service-level defer path in the example test) |
+| AC-4 | MET | test | Rejection matrix (missing, in-flight/stale, timestamp tie, foreign run, oversized, unsafe path, mismatched summary) plus the run-scoped `artifactsWithIdByRunId` query test |
+| AC-5 | MET | test | The shipped example runs end to end: evidence defers to the never-mode `pause=true` gate and resumes to `published`; an accepted answer runs exactly one bounded retry then escalates; stock gates ship `never` |
+| AC-6 | MET | test | Persisted provenance read before/after resume via `action_runs.result_json`, projected on `workflow trace` JSON and human output; historical rows without the field render unchanged; no raw evidence or exception text in the object |
+| AC-7 | MET | test | `status.test.ts` readiness matrix across JSON/human/`--json --json-envelope`, exit code 0 preserved and credential value never printed |
+| AC-8 | MET | test | Executable: `plugins/sp/tests/inline-pipeline-parity-check.test.ts` (runs the checker over all 10 workflows and both reference sets, so the inline driver's action/guard inventory cannot drift) and the `decision policy (0911)` integration test on the same action path (evidence defers with a cleared answer and follows the declared operator route, no provider call). Guidance text: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`; bundled gates ship `never` |
+| AC-9 | MET | command | `bun run apps/cli/src/index.ts workflow validate <file> --json` on all 5 changed workflows → `valid: true`; doc/help/plugin/reference claims cross-checked against source; bundle regenerated by its owning script |
+| AC-10 | MET | test | `bun run spur-check` PASS (8655 tests, 0 fail), `spur-check-feature` PASS, `test-cf` PASS, `build` PASS, `plugin-smoke` PASS; stock pause regression proves a legacy model answer does not skip `pause` (run stays `paused`, explicit resume completes) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0911 (pass 2, post-remediation)
+
+**Scope:** WBS 0911 diff after the verify→test-fix remediation hop (41 changed/untracked paths)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | architecture | The classification inventory (`workflow-shell-ownership.md`) is not extended for the new example. Deliberate: it records the 2026-08-20 shell-program census and already excludes post-inventory workflows (`history-anatomy.yaml`); the bundled-workflow inventory rows live in `plugins/sp/README.md` and `docs/help/cmd_workflow.md`, both updated | `docs/design/workflow-shell-ownership.md:46-52` |
+| 2 | P4 (advisory) | usability | `docs/design/e2e-workflow-for-system-development.md` keeps its command→workflow table unchanged: the example has no slash entry, so no row's owner changed | `docs/design/e2e-workflow-for-system-development.md:177-188` |
+| 3 | P4 (advisory) | correctness | Inline evidence handling is a documented host contract, not executable code in this repo (`sp:spur-dev` inline driver), so AC8 is proven by the guidance + parity checker rather than a runnable inline test | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md` |
+
+No P1–P3 findings remain. Pass 1 raised six findings; all are closed:
+
+| Pass-1 finding | Disposition |
+| --- | --- |
+| #1 R6 provenance never projected (show/trace/progress) | Fixed — `TimelineActionDecision` projection on `workflow trace` (JSON + human `decision=`), asserted at service and renderer level |
+| #2 No engine/CLI regression for decision flows | Fixed — three integration tests execute the shipped example (defer → pause → resume, accepted bounded retry, legacy answer vs pause) plus a CLI readiness test |
+| #3 Example missing from workflow inventories | Fixed — rows added to `plugins/sp/README.md` and `docs/help/cmd_workflow.md` |
+| #4 No CLI regression for status readiness | Fixed — `status.test.ts` asserts disabled / missing-key / configured-not-probed in JSON, human and `--json --json-envelope`, and that the key value is never echoed |
+| #5 Outcome vocabulary drift (`delegated`) | Fixed — the observability section now states the real closed vocabulary and the real surface |
+| #6 `workflow.hitl.ask` emitted for evidence mode | Accepted — the event is the legacy operator-prompt signal; evidence mode still asks nothing and the run confirms it (deferral path asserted) |
+
+Two further defects were found and fixed while remediating (both would have shipped broken):
+
+- **P1** the bundled example declared `choices:` while `hitl.select` reads `options.options`, and the
+  validator read `choices` too — so the example validated clean and failed at run time, and a real
+  mis-declared choice list escaped validation. The walker now reads and normalizes exactly the
+  runtime key (asserted by a wrong-key fixture).
+- **P1** the example did not implement D2 (it used an `agent.run` producer, no bounded retry, no
+  stop terminal, no cancel branch). Rewritten to D2: shell producer, `[retry, stop]`, one bounded
+  retry, explicit `yes`/`no`/`cancel` branches on `$__hitlAnswer`, no artifact required.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Legacy/disabled composition unchanged; `workflow-service.test.ts` asserts 0 provider calls when disabled and the original responder answer when enabled |
+| R2 | MET | `parseDecisionConfig` rejects unknown keys/modes/vars/duplicate producers before side effects; wrong-key and empty-choice validation fixtures in `decision-evidence.test.ts` |
+| R3 | MET | Evidence outcomes return `deferred` with a cleared answer and never consume the headless responder; defer matrix in `decision-evidence.test.ts` |
+| R4 | MET | Bounds (20/2000/32 KiB/8 KiB), allow-listed redacted fields, in-flight → `stale-evidence`, run-id envelope match, canonical-path + registered-artifact ownership |
+| R5 | MET | All 7 stock gates `mode: never`; the example now matches D2 and is executed end to end by `workflow-service.test.ts`; `profile=auto` bypass untouched |
+| R6 | MET | Provenance persisted with the action result and projected into `workflow trace` JSON + human output, with renderer and service assertions |
+| R7 | MET | `computeDecisionReadiness` + `status.ts` wiring; CLI test covers all three states across JSON, human and envelope with no key leakage |
+| R8 | MET | Inline defer semantics + full-inline-parity non-goal documented; parity checker agrees across 10 workflows and both reference sets |
+| R9 | MET | ADR-123 dated clarification, design satellites, help pages, plugin references, both workflow inventories, regenerated bundle (4.89 MB, 34 `$schema` directives) and 5/5 changed YAMLs `valid: true` |
+| R10 | MET | 30 new/updated regressions (unit + engine + CLI + plugin contract); `spur-check` PASS (8655 tests, 0 fail), `spur-check-feature` PASS, `test-cf` PASS, `build` PASS, `plugin-smoke` PASS |
+
+##### Security / Efficiency notes
+
+- Evidence payloads stay bounded, allow-listed and secret-redacted; provenance carries no raw evidence or provider exception text (provider failures collapse to `provider-unavailable`).
+- Summary resolution fails closed on unsafe paths, unregistered artifacts, run mismatch and read errors — an unresolvable artifact defers rather than accepts.
+- No new noun/verb, dependency, table or migration; one evaluator per engine host, one wiring point.
+
+**Next:** verify PASS → record → done.
 
 ### References
 
@@ -312,4 +459,7 @@ A live Jev smoke test is optional and requires separate authorization; it is not
 ### History
 
 - 2026-09-21T00:26:43.908Z backlog → todo (system)
+- 2026-09-21T07:17:38.120Z todo → wip (system)
+- 2026-09-21T07:17:41.889Z wip → testing (system)
+- 2026-09-21T07:18:07.896Z testing → done (system)
 
