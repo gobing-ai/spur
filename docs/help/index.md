@@ -9,8 +9,8 @@ Codex, Gemini CLI, pi, omp, OpenCode, Antigravity, OpenClaw, Hermes, Grok). It w
 already have installed and authenticated, adding execution discipline, constraint checking, workflow
 orchestration, task & feature management, history analytics, and team coordination.
 
-It is **not** a coding agent and **not** a BYOK LLM platform. Spur owns no model-reaching path other
-than `spur agent run` (delegated to the installed agent).
+It is **not** a coding agent and **not** a BYOK LLM platform. Coding work is delegated to installed
+agents; optional workflow DecisionMaker integration can call TypeSafe for structured decisions.
 
 ### How to install Spur?
 
@@ -125,6 +125,10 @@ wiring. Covers the `WebModule` contract, the RPC/UI seams, and what not to wire 
 — every env var the product reads, grouped by contract type (deployment plane, config overrides,
 execution policy, agent selection, invocation contracts, parent→child), the retired names, and
 the ADR-120 gate for adding a new one.
+
+**Optional Jev workflow decisions:**
+➡️ **[How to Enable Jev in Spur](./how_to_enable_jev_in_spur.md)**
+— project/global activation, credentials, disablement, fallback, and execution-path limits.
 
 **End-to-end pipeline architecture (canonical reference):**
 ➡️ **[`docs/design/e2e-workflow-for-system-development.md`](../design/e2e-workflow-for-system-development.md)**
