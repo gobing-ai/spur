@@ -114,6 +114,7 @@
     },
     "devDependencies": {
         "@biomejs/biome": "2.4.16",
+        "@gobing-ai/spur": "workspace:*",
         "@gobing-ai/superskill": "0.3.17",
         "@logtape/logtape": "2.1.1",
         "@opentelemetry/api": "1.9.1",
