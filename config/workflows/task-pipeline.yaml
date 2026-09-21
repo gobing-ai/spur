@@ -464,6 +464,8 @@ states:
           - kind: hitl.confirm
             options:
                 prompt: "Approve task ${vars.wbs} to proceed to verification?"
+                decision:
+                    mode: never
 
     - id: verify
       description: >

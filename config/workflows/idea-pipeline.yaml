@@ -145,6 +145,8 @@ states:
       - kind: hitl.confirm
         options:
           prompt: "Review the idea evaluation report (.spur/run/${vars.__runId}-idea-eval-report.md). Approve to create a feature, or reject to cancel? (Reject creates no feature.)"
+          decision:
+            mode: never
 
   - id: feature-create
     description: >
@@ -282,6 +284,8 @@ states:
       - kind: hitl.confirm
         options:
           prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Requirement coverage status: $(cat .spur/run/${vars.__runId}-idea-coverage.status 2>/dev/null || echo unknown) — reason: $(cat .spur/run/${vars.__runId}-idea-coverage.reason 2>/dev/null || echo n/a) (.spur/run/${vars.__runId}-idea-coverage.status[.reason]). (Failures route back to ac-generate for revision, capped at 3 retries.)"
+          decision:
+            mode: never
 
   - id: system-design
     description: >
@@ -358,6 +362,8 @@ states:
       - kind: hitl.confirm
         options:
           prompt: "Review the system design for feature ${vars.featureId}. Approve to proceed to decomposition? To reject, first record your feedback in .spur/run/${vars.__runId}-idea-design-review.md under the `## Operator feedback` heading, then answer no."
+          decision:
+            mode: never
 
   - id: decompose
     description: >
@@ -416,6 +422,8 @@ states:
       - kind: hitl.confirm
         options:
           prompt: "Batch-create for feature ${vars.featureId}. Review the task batch and confirm to proceed? (Failures route back to decompose for revision, capped at 3 retries.)"
+          decision:
+            mode: never
 
   - id: batch-create-run
     description: >

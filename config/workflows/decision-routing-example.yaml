@@ -1,0 +1,134 @@
+# DecisionMaker routing example (task 0911, D7). Demonstrates the three `decision:` modes
+# on hitl.* actions; copy the pattern into your own workflow instead of running this file.
+#
+#   never    — the action always asks the human (DecisionMaker is bypassed even when
+#              `workflow.hitlDecisionMaker: true`). Used for gates that must stay human-only.
+#   evidence — the DecisionMaker answers from recorded action evidence of the listed producer
+#              states: it picks one of the offered choices when confidence >= 0.9, or defers
+#              (answer var is cleared, status var records `deferred`) when evidence is missing,
+#              stale, or inconclusive. Requires a non-paused state, a statusVar distinct from
+#              the answer var, and producer states that exist in this workflow.
+#   (omitted) — legacy 0910 semantics: DecisionMaker may confirm/select without evidence and
+#              without provenance. Kept for compatibility; prefer an explicit mode.
+#
+# The run is safe and local: one shell producer emits a fixed failure summary, the choose step
+# reads it as evidence, and the operator gate has no side effects. No provider is required —
+# without `workflow.hitlDecisionMaker: true` (or without a key) the evidence step defers and
+# `never` behaves exactly like an unconfigured gate. See `spur self status` -> `decisionMaker`
+# for offline readiness. Optional registered-summary evidence (`summaryArtifact`) is documented
+# in docs/help/how_to_enable_jev_in_spur.md; this example deliberately creates no artifact.
+"$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
+kind: state-machine
+name: decision-routing-example
+version: "1"
+initialState: assess
+description: >
+  Worked example of DecisionMaker decision routing (0911 D7): a shell producer records a fixed
+  recovery summary as action evidence, a non-pausing hitl.select lets the DecisionMaker choose
+  retry or stop from that evidence (deferring with provenance when it is inconclusive), an
+  accepted retry runs exactly one attempt and then escalates, and the never-mode pause=true
+  hitl.confirm gate always waits for the operator with explicit yes/no/cancel branches.
+  Illustrative only — copy the patterns rather than running this file.
+vars:
+    recoveryChoice: ""
+    decisionStatus: ""
+    # Default answer var the never-mode gate's yes/no/cancel branches read (matches the stock gates).
+    __hitlAnswer: ""
+states:
+  - id: assess
+    description: >
+      Producer state: one shell action whose redacted output becomes the evidence the decide
+      state's DecisionMaker reads. One producer state carries one evidence-bearing action.
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            printf 'Failure summary: verification failed twice on the flaky fixture; no data loss;
+            retry is safe, or stop and hand the decision to the operator.'
+  - id: decide
+    description: >
+      Evidence-mode select (non-paused): DecisionMaker picks a recovery step from the assess
+      state's recorded evidence. Low confidence, missing or stale evidence defers and writes the
+      status variable instead of answering, so no implicit approval is ever produced.
+    onEnter:
+      - kind: hitl.select
+        options:
+          prompt: "Choose the next safe recovery step using the recorded failure summary."
+          options: [retry, stop]
+          var: recoveryChoice
+          decision:
+            mode: evidence
+            statusVar: decisionStatus
+            evidenceNodes: [assess]
+  - id: retry
+    description: >
+      The single bounded retry an accepted `retry` choice buys: this state runs once and routes
+      to the operator gate, so an accepted answer can never loop back into the decision.
+    onEnter:
+      - kind: shell
+        options:
+          command: "printf 'retry attempt: re-running the failed verification step once'"
+  - id: humanGate
+    description: >
+      Never-mode confirm (paused): always waits for the operator, whichever branch reached it.
+      `spur workflow continue --answer yes|no|cancel` records the explicit operator answer.
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Publish the recovered result, stop, or cancel the run?"
+          decision:
+            mode: never
+  - id: published
+    description: Operator approved the recovered result; terminal marker state.
+  - id: stop
+    description: Recovery stopped deliberately — requested by the decision or rejected by the operator.
+  - id: cancelled
+    description: Operator cancelled the run at the gate; terminal marker state.
+transitions:
+  # Accepted decision branches first: the state machine takes the first passing edge.
+  - from: assess
+    to: decide
+    guard: { kind: always }
+  - from: decide
+    to: retry
+    guard:
+      kind: shell
+      options:
+        command: 'test "$recoveryChoice" = "retry"'
+  - from: decide
+    to: stop
+    guard:
+      kind: shell
+      options:
+        command: 'test "$recoveryChoice" = "stop"'
+  # Declared defer edge: evidence mode wrote `deferred` and cleared the answer var.
+  - from: decide
+    to: humanGate
+    guard:
+      kind: shell
+      options:
+        command: 'test "$decisionStatus" = "deferred"'
+  - from: retry
+    to: humanGate
+    guard: { kind: always }
+  # Explicit yes / no / cancel branches on the default answer var, matching the stock gates.
+  - from: humanGate
+    to: published
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = "yes"'
+  - from: humanGate
+    to: stop
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = "no"'
+  - from: humanGate
+    to: cancelled
+    guard:
+      kind: shell
+      options:
+        command: 'test "$__hitlAnswer" = "cancel"'
+terminalStates: [published, stop, cancelled]
