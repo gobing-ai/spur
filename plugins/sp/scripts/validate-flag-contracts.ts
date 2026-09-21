@@ -406,9 +406,9 @@ export function extractTriggerTable(crossCuttingRaw: string): string[] | null {
 function adrAgentClaims(adrRaw: string): Map<string, SurfaceBehavior> | null {
     if (adrRaw.includes('## ADR-047')) {
         const out = new Map<string, SurfaceBehavior>();
-        // G5 amendment (feature G5 / task 0565): explicit inline is host-session-only — headless
-        // surfaces reject it with the stable special error; 0508 native-subagent eligibility
-        // applies to omitted --agent only, never explicit inline.
+        // ADR-087 (task 0687) retired the G5 frozen rejection: explicit `inline` on a headless
+        // surface resolves via role/tier substitution with one warning. This claims map mirrors
+        // the ADR-047 amendment text as written; ADR-087-aware parsing is a follow-up.
         out.set('inline', {
             surfaces: new Set(['inline']),
             conditional: false,
