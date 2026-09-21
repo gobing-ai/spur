@@ -21,6 +21,7 @@
 | `SPUR_LOG_LEVEL` | apps/cli, apps/server | Server log level (`trace`…`fatal`) | `info` |
 | `SPUR_TELEMETRY_ENABLED` | apps/cli | Anonymous usage telemetry opt-in | `false` |
 | `SPUR_TELEMETRY_ENDPOINT` | apps/cli | Telemetry collector (only when enabled) | empty |
+| `TYPESAFE_API_KEY` | packages/app workflow HITL DecisionMaker (via `@gobing-ai/ts-ai-runner` typesafe driver) | Provider credential for the optional decision policy (ADR-123); never read from project config and never echoed by `spur self status` (which reports only `credentialPresent`) | empty → decision policy defers/delegates |
 
 ## Config-resolution overrides (debug, test, registry paths)
 

@@ -90,7 +90,11 @@ spur self status --json               # machine-readable
 ```
 
 Reports the project's Spur configuration state (init status, feature/task counts, rule preset
-health) and git working-tree status. Optional `[path]` argument targets a different project
+health), git working-tree status, and DecisionMaker readiness (0911): the human output adds a
+`DecisionMaker:` line and `--json` exposes `decisionMaker: {enabled, provider,
+credentialPresent, state, connectivity, inlineSupport}` with states `disabled` / `missing-key` /
+`configured-not-probed`. Presence check only — never a live probe, never echoes the key.
+Optional `[path]` argument targets a different project
 directory. Only flag is `--json`.
 
 ## What this skill is NOT

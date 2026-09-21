@@ -323,3 +323,22 @@ The implementation fixture matrix must cover:
 
 No public `spur workflow trace` JSON or human-output field changes in D5. A future public projection
 requires explicit ADR-051 consent and a same-change `04_DESIGN` surface update.
+
+## Decision provenance on HITL actions (0911)
+
+When a `hitl.confirm`/`hitl.select` action carries a `decision` option (ADR-123, task 0911), the
+provenance object is persisted inside the action's own result (`action_runs.result_json` →
+`data.decision`, additive: the historical `data.answer` and `setVars` fields are unchanged) and
+read back by `spur workflow trace`: the JSON action event gains a `decision` object and the human
+renderer prints one `decision=` line. Fields: `mode` (`legacy` | `never` | `evidence`), `outcome`
+(`accepted` | `deferred` | `fallback` | `disabled`), `reason` (closed vocabulary, e.g.
+`accepted`, `policy-never`, `disabled`, `missing-evidence`, `stale-evidence`, `invalid-evidence`,
+`oversized-evidence`, `explicit-defer`, `uncertain`, `provider-unavailable`), `provider`,
+`confidence`, `selectedProbability`, `evidenceActionIds`, `evidenceDigest` (sha256 over the redacted
+canonical evidence payload), `artifactId`, `durationMs`. Values are bounded and pass through the same
+secret redaction as the rest of the trace projection; raw evidence text and provider exception text
+are never part of the object. Evidence mode additionally records the declared `statusVar` and its
+resolved value (`accepted`/`deferred`) in the action's persisted `setVars`.
+
+`spur workflow show` and `spur workflow progress` project no per-action results, so they do not carry
+the object — `trace` is the surface for decision provenance.
