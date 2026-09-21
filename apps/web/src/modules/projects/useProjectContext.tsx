@@ -46,6 +46,33 @@ export interface MemberSession {
     id?: string;
 }
 
+/** Configured agent role from agent.roles. */
+export interface ConfiguredAgentRole {
+    name: string;
+    tier: string;
+    stages: string[];
+    isCustom?: boolean;
+    electedExecutor?: string | null;
+}
+
+/** Configured executor profile from agent.executors. */
+export interface ConfiguredAgentExecutor {
+    name: string;
+    agent: string;
+    model?: string;
+    tier: string;
+    disabled: boolean;
+    disabledOwner?: string;
+    disabledReason?: string;
+    disabledSince?: string;
+    installed?: boolean;
+    usable?: boolean;
+    version?: string | null;
+    error?: string | null;
+    elected?: string[];
+    executionCapabilities?: Record<string, unknown>;
+}
+
 /** Wire shape of GET /api/project/fleet. `path` is null only off a project cwd (CF Worker). */
 export interface ProjectFleetSnapshot {
     path: string | null;
@@ -55,6 +82,8 @@ export interface ProjectFleetSnapshot {
     orchestrator: OrchestratorBinding;
     members: ResolvedFleetMember[];
     capacity: { total: number; enabled: number; writeCapable: number; missing: string[] };
+    roles?: ConfiguredAgentRole[];
+    executors?: ConfiguredAgentExecutor[];
 }
 
 /** Wire shape of GET /api/project. */

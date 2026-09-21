@@ -331,3 +331,61 @@ describe('AgentsView member session (0897 R3)', () => {
         view.unmount();
     });
 });
+
+describe('AgentsView roles and executors sections', () => {
+    test('renders agent roles and executors with filtering support', async () => {
+        const customFleet = fleet({
+            roles: [
+                { name: 'scribe', tier: 'cheap', stages: ['changelog'], isCustom: false },
+                { name: 'coder', tier: 'standard', stages: ['implement', 'test'], isCustom: true },
+                { name: 'reviewer', tier: 'capable-1', stages: ['verify'], isCustom: false },
+                { name: 'planner', tier: 'capable-2', stages: ['plan'], isCustom: false },
+            ],
+            executors: [
+                { name: 'pi-flash', agent: 'pi', model: 'flash-model', tier: 'standard', disabled: false },
+                {
+                    name: 'claude-opus',
+                    agent: 'claude',
+                    model: 'opus-5',
+                    tier: 'capable-3',
+                    disabled: true,
+                    disabledReason: 'quota',
+                },
+            ],
+        });
+        setFetchForTesting(stubFetch(customFleet, { processes: [procRow('orch'), procRow('a1')] }));
+        const view = harness(ctx());
+        await act(async () => {});
+
+        // Roles Section
+        const rolesSection = view.container.querySelector('[data-roles-section]');
+        expect(rolesSection).not.toBeNull();
+        const roleCards = [...view.container.querySelectorAll('[data-role-card]')];
+        expect(roleCards).toHaveLength(4);
+        expect(view.container.querySelector('[data-role-card="coder"]')?.textContent).toContain('project override');
+
+        // Executors Section
+        const executorsSection = view.container.querySelector('[data-executors-section]');
+        expect(executorsSection).not.toBeNull();
+        const executorCards = [...view.container.querySelectorAll('[data-executor-card]')];
+        expect(executorCards).toHaveLength(2);
+        expect(view.container.querySelector('[data-executor-card="pi-flash"]')?.textContent).toContain('Ready');
+        expect(view.container.querySelector('[data-executor-card="claude-opus"]')?.textContent).toContain('Disabled');
+
+        // Fleet Section
+        const fleetSection = view.container.querySelector('[data-fleet-section]');
+        expect(fleetSection).not.toBeNull();
+
+        // Filter buttons
+        const rolesFilter = view.container.querySelector('[data-section-filter="roles"]') as HTMLButtonElement;
+        expect(rolesFilter).not.toBeNull();
+        await act(async () => {
+            rolesFilter.click();
+        });
+        expect(view.container.querySelector('[data-roles-section]')).not.toBeNull();
+        expect(view.container.querySelector('[data-executors-section]')).toBeNull();
+        expect(view.container.querySelector('[data-fleet-section]')).toBeNull();
+
+        view.unmount();
+    });
+});
