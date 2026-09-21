@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.3.91] - 2026-09-21
+
+### Added
+
+- workflows: pin bundled operator gates to never and ship the decision-routing example (0911) (d4201d903)
+- cli: DecisionMaker readiness on self status and decision provenance on workflow trace (0911) (a591c74b9)
+- app: explicit decision modes, evidence policy and provenance (0911) (6322f4671)
+- web: render roles, executors, and fleet sections in projects tab (67e583290)
+- server: return configured agent roles and executors from fleet endpoint (a0b492808)
+- web: align Projects layout with Histories and remove redundant composer (2b68c5336)
+- align plugin and CLI guidance with shipped dispatch session policy (0909) (0464b1b76)
+- app: optional DecisionMaker responder for executed HITL actions (726ec8429)
+- usage: conservative usage decisions and bounded codexbar capture (e2a6922f9)
+
+### Fixed
+
+- repo-wide-tests: allow doc-hygiene frontmatter bumps in the ADR freeze guard (0911) (86c46e8bd)
+- app,cli: update doctor test fixtures and baselines for runner capability updates (176bc990e)
+- sp: fix issues with the description in the frontmatter too long (7555ee794)
+- sp: correct wayfinder tagging recipe and add semantic section-operand drift detection (09a757a0c)
+
+### Changed
+
+- merge 'sp/run-0911-ba77' into main (243d60a19)
+- corpus: record task 0911 completion and feature D wrap (0911) (e3526585d)
+- synchronize decision-mode guidance, satellites, inventories and dogfood ledger (0911) (9e999aefa)
+- rules: note ADR-087 retirement of G5 inline rejection in claims-map comment (a38c8883c)
+- help: align agent run --agent inline prose with ADR-087 fallback policy (902f0e1d2)
+- features: record I32 transition to done (0909 complete) (cdca0c174)
+- tasks: key 0909 verdict rows by AC-N alias for I32 feature gate (fa39aac87)
+- workflow: register task 0911 for DecisionMaker policy (9dc6f5600)
+- help: add Jev DecisionMaker enablement guide (95895eb2b)
+- workflow: record ADR-123 and task 0910 for HITL DecisionMaker (2adc2e716)
+- deps: bump @gobing-ai/ts-* packages to 0.5.1 (3a79d174d)
+- corpus: B61 verifyall PASS — re-verify 0907/0908, shippable gate green (afe2216d5)
+- corpus: register implementation batch tasks 0906-0909 (dc0eec51a)
+- i31: graduate roadmap — 0903/0904/0905 done, authorize next batch (e23cfdd77)
+- i31: close 0905 done — run-baseline artifact + checker (1c8572339)
+- i31: re-verify 0904 against refined spec — availability artifacts + checker (23ce3edd8)
+- i31: re-verify 0903 against refined spec — matrix re-sampled live (7ae6cdee4)
+- wrapup-pipeline run 4630aaa2 outputs (doc-sync + metrics + learnings) (99562391f)
+- integrate task-spec refinement into batch branch (c36fc6e26)
+- tasks: updat tasks after refinment (9940d29ec)
+- i31: complete tasks 0903/0904 (PASS); halt 0905 with recorded fleet deferral (7b957ddaa)
+- add I31 improvement roadmap and sync B8/D3 feature statuses (d8ff752b2)
+
 ## [0.3.90] - 2026-09-19
 
 ### Added
