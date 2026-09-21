@@ -1792,6 +1792,16 @@ function formatTimelineEvent(event: TimelineEvent): string {
         lines.push('      invocation=unavailable');
     }
     lines.push(`      error=${event.error ?? 'unavailable'}`);
+    if (event.decision !== null && event.decision !== undefined) {
+        const d = event.decision;
+        lines.push(
+            `      decision=mode:${d.mode} outcome:${d.outcome} reason:${d.reason}` +
+                ` provider:${d.provider ?? 'unavailable'} confidence:${d.confidence ?? 'unavailable'}` +
+                ` probability:${d.selectedProbability ?? 'unavailable'} durationMs:${d.durationMs}` +
+                ` evidence:[${d.evidenceActionIds.join(',') || 'none'}]` +
+                ` digest:${d.evidenceDigest ?? 'unavailable'} artifact:${d.artifactId ?? 'unavailable'}`,
+        );
+    }
     if (event.artifacts.length === 0) lines.push('      artifact=unavailable');
     else for (const artifact of event.artifacts) lines.push(`      artifact=${artifact}`);
     if (event.nextAction !== undefined) lines.push(`      Next: ${event.nextAction.label} — ${event.nextAction.value}`);

@@ -11,6 +11,7 @@ import {
     _resetAgentServiceShimsForTest,
     buildWorkflowSteps,
     projectWorkflowProgress,
+    type TimelineActionDecision,
     type TimelineEvent,
     type WorkflowProgressProjection,
     WorkflowSteeringController,
@@ -2297,6 +2298,66 @@ describe('formatTraceTimeline cost footer', () => {
     test('omits the hint when every agent.run step is joined', () => {
         const out = formatTraceTimeline(makeTimeline([makeActionEvent({ exact: makeCost(), estimated: null })]));
         expect(out).not.toContain('spur history import');
+    });
+});
+
+describe('formatTraceTimeline decision provenance (task 0911 R6)', () => {
+    test('renders the persisted decision provenance on the action row', () => {
+        const decision: TimelineActionDecision = {
+            mode: 'evidence',
+            outcome: 'deferred',
+            reason: 'stale-evidence',
+            provider: null,
+            confidence: null,
+            selectedProbability: null,
+            evidenceActionIds: ['act-producer'],
+            evidenceDigest: 'sha256:abc',
+            artifactId: null,
+            durationMs: 12,
+        };
+        const out = formatTraceTimeline({
+            run: {
+                runId: 'r1',
+                workflowName: 'wf',
+                mode: 'sync',
+                status: 'done',
+                startedAt: '2026-01-15T10:00:00.000Z',
+                completedAt: '2026-01-15T10:05:00.000Z',
+                isDryRun: false,
+                project: { name: 'project', root: '/project' },
+                durationMs: 300000,
+                outcome: 'success',
+            },
+            events: [
+                {
+                    ...(makeActionEvent() as Extract<TimelineEvent, { kind: 'action' }>),
+                    actionKind: 'hitl.select',
+                    decision,
+                },
+            ],
+        });
+        expect(out).toContain('decision=mode:evidence outcome:deferred reason:stale-evidence');
+        expect(out).toContain('evidence:[act-producer]');
+        expect(out).toContain('digest:sha256:abc');
+    });
+
+    test('omits the decision line for rows without provenance', () => {
+        const out = formatTraceTimeline({
+            run: {
+                runId: 'r1',
+                workflowName: 'wf',
+                mode: 'sync',
+                status: 'done',
+                startedAt: '2026-01-15T10:00:00.000Z',
+                completedAt: '2026-01-15T10:05:00.000Z',
+                isDryRun: false,
+                project: { name: 'project', root: '/project' },
+                durationMs: 300000,
+                outcome: 'success',
+            },
+            events: [makeActionEvent()],
+        });
+        expect(out).not.toContain('decision=');
     });
 });
 
