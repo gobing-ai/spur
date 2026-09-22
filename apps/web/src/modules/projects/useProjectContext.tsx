@@ -53,6 +53,7 @@ export interface ConfiguredAgentRole {
     stages: string[];
     isCustom?: boolean;
     electedExecutor?: string | null;
+    candidateExecutors?: string[];
 }
 
 /** Configured executor profile from agent.executors. */

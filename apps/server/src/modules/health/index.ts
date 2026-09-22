@@ -137,6 +137,7 @@ export const healthModule: ServerModule = {
                 stages: string[];
                 isCustom: boolean;
                 electedExecutor?: string | null;
+                candidateExecutors?: string[];
             }> = [];
             let executors: Array<{
                 name: string;
@@ -245,6 +246,7 @@ export const healthModule: ServerModule = {
                     // Role elections: cheapest usable executor for each role tier (doctor parity)
                     const usableSet = new Set(executors.filter((e) => !e.disabled && e.usable).map((e) => e.name));
                     const elections = new Map<string, string>();
+                    const roleCandidatesMap = new Map<string, string[]>();
                     for (const [roleId, roleDef] of rolesMap) {
                         const minRank = TIER_RANK[roleDef.tier as keyof typeof TIER_RANK] ?? 0;
                         const candidates = (config.agent.executors ?? [])
@@ -261,11 +263,31 @@ export const healthModule: ServerModule = {
                         if (winner) {
                             elections.set(roleId, winner.name);
                         }
+
+                        // Collect candidate executors in current tier, winner first
+                        let inTier = (config.agent.executors ?? []).filter(
+                            (e) => (e.tier ?? 'standard') === roleDef.tier,
+                        );
+                        if (inTier.length === 0) {
+                            inTier = candidates;
+                        }
+                        const winnerName = winner?.name;
+                        const ordered: string[] = [];
+                        if (winnerName) {
+                            ordered.push(winnerName);
+                        }
+                        for (const ex of inTier) {
+                            if (ex.name !== winnerName) {
+                                ordered.push(ex.name);
+                            }
+                        }
+                        roleCandidatesMap.set(roleId, ordered);
                     }
 
                     roles = roles.map((r) => ({
                         ...r,
                         electedExecutor: elections.get(r.name) ?? null,
+                        candidateExecutors: roleCandidatesMap.get(r.name) ?? [],
                     }));
 
                     for (const ex of executors) {

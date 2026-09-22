@@ -105,6 +105,14 @@ function tierBadgeClass(tier: string): string {
     }
 }
 
+const TIER_ORDER: Record<string, number> = {
+    cheap: 1,
+    standard: 2,
+    'capable-1': 3,
+    'capable-2': 4,
+    'capable-3': 5,
+};
+
 type AgentsSection = 'all' | 'roles' | 'executors' | 'fleet';
 
 /**
@@ -302,7 +310,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                 </div>
                                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" data-roles-grid>
                                     {roles.map((role) => (
-                                        <RoleCard key={role.name} role={role} />
+                                        <RoleCard key={role.name} role={role} executors={executors} />
                                     ))}
                                 </div>
                             </section>
@@ -449,7 +457,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
     );
 }
 
-function RoleCard({ role }: { role: ConfiguredAgentRole }) {
+function RoleCard({ role, executors = [] }: { role: ConfiguredAgentRole; executors?: ConfiguredAgentExecutor[] }) {
     const roleIcons: Record<string, string> = {
         scribe: '✍️',
         coder: '💻',
@@ -457,6 +465,59 @@ function RoleCard({ role }: { role: ConfiguredAgentRole }) {
         planner: '📋',
     };
     const icon = roleIcons[role.name.toLowerCase()] ?? '🤖';
+
+    const candidateList = useMemo(() => {
+        const roleTier = role.tier ?? 'standard';
+        // 1. Gather executors in current tier
+        const inTier = executors.filter((e) => (e.tier ?? 'standard') === roleTier);
+        const pool =
+            inTier.length > 0
+                ? inTier
+                : executors.filter((e) => {
+                      const minRank = TIER_ORDER[roleTier] ?? 0;
+                      const rank = TIER_ORDER[e.tier ?? 'standard'] ?? 0;
+                      return rank >= minRank;
+                  });
+
+        // 2. Identify default executor name (elected executor or first usable active)
+        const defaultName = role.electedExecutor ?? pool.find((e) => !e.disabled && e.usable !== false)?.name;
+
+        // 3. Proper candidate order:
+        //    - default executor first
+        //    - other active candidates in configured order
+        //    - disabled executors in configured order
+        const defaultExec = defaultName
+            ? (pool.find((e) => e.name === defaultName) ?? executors.find((e) => e.name === defaultName))
+            : undefined;
+        const otherActive = pool.filter((e) => e.name !== defaultName && !e.disabled);
+        const disabled = pool.filter((e) => e.name !== defaultName && e.disabled);
+
+        const items: Array<{ name: string; isDefault: boolean; disabled: boolean }> = [];
+        if (defaultExec) {
+            items.push({
+                name: defaultExec.name,
+                isDefault: true,
+                disabled: defaultExec.disabled,
+            });
+        }
+        for (const e of otherActive) {
+            items.push({ name: e.name, isDefault: false, disabled: false });
+        }
+        for (const e of disabled) {
+            items.push({ name: e.name, isDefault: false, disabled: true });
+        }
+
+        // Fallback to role.candidateExecutors if pool was empty
+        if (items.length === 0 && role.candidateExecutors && role.candidateExecutors.length > 0) {
+            return role.candidateExecutors.map((name, idx) => ({
+                name,
+                isDefault: name === role.electedExecutor || idx === 0,
+                disabled: false,
+            }));
+        }
+
+        return items;
+    }, [executors, role.tier, role.electedExecutor, role.candidateExecutors]);
 
     return (
         <div
@@ -493,15 +554,51 @@ function RoleCard({ role }: { role: ConfiguredAgentRole }) {
                         ))}
                     </div>
                 </div>
+
+                <div className="mt-2.5">
+                    <div className="text-[10px] uppercase tracking-wider text-spur-text-muted font-medium mb-1 flex items-center justify-between">
+                        <span>Executors</span>
+                        <span className="text-[10px] font-mono text-spur-text-muted/70">
+                            {candidateList.length} in tier
+                        </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1" data-role-executors={role.name}>
+                        {candidateList.length > 0 ? (
+                            candidateList.map((cand) => (
+                                <span
+                                    key={cand.name}
+                                    className={`px-1.5 py-0.5 rounded text-[11px] font-mono inline-flex items-center gap-1 border transition-colors ${
+                                        cand.isDefault
+                                            ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 font-semibold'
+                                            : cand.disabled
+                                              ? 'bg-spur-surface-2/40 border-spur-border/40 text-spur-text-muted/50 line-through'
+                                              : 'bg-spur-surface-2 border-spur-border/60 text-spur-text hover:border-spur-accent/30'
+                                    }`}
+                                    title={
+                                        cand.isDefault
+                                            ? `${cand.name} ⭐ (default executor for ${role.name})`
+                                            : cand.disabled
+                                              ? `${cand.name} (disabled)`
+                                              : `${cand.name} (candidate executor)`
+                                    }
+                                    data-role-executor-item={cand.name}
+                                >
+                                    <span>{cand.name}</span>
+                                    {cand.isDefault && (
+                                        <span role="img" aria-label="default executor">
+                                            ⭐
+                                        </span>
+                                    )}
+                                </span>
+                            ))
+                        ) : (
+                            <span className="text-[11px] font-mono text-spur-text-muted italic">none in tier</span>
+                        )}
+                    </div>
+                </div>
             </div>
 
             <div className="pt-2 border-t border-spur-border/40 flex flex-col gap-1 text-[11px] text-spur-text-muted">
-                {role.electedExecutor && (
-                    <div className="flex items-center justify-between text-spur-accent">
-                        <span>elected</span>
-                        <span className="font-mono font-medium">⭐ {role.electedExecutor}</span>
-                    </div>
-                )}
                 <div className="flex items-center justify-between">
                     <span>source</span>
                     <span className="font-mono text-spur-text">

@@ -495,4 +495,61 @@ describe('AgentsView roles and executors sections', () => {
 
         view.unmount();
     });
+
+    test('RoleCard displays all candidate executors in current tier with default first and trailing star', async () => {
+        const customFleet = fleet({
+            roles: [
+                {
+                    name: 'coder',
+                    tier: 'standard',
+                    stages: ['implement', 'test'],
+                    isCustom: true,
+                    electedExecutor: 'pi-flash-volc',
+                },
+                {
+                    name: 'scribe',
+                    tier: 'cheap',
+                    stages: ['changelog'],
+                    isCustom: false,
+                    electedExecutor: 'minimax',
+                },
+            ],
+            executors: [
+                { name: 'minimax', agent: 'pi', tier: 'cheap', disabled: false },
+                { name: 'pi-flash-volc', agent: 'pi', tier: 'standard', disabled: false },
+                { name: 'pi-zai-volc', agent: 'pi', tier: 'standard', disabled: false },
+                { name: 'pi-zai', agent: 'pi', tier: 'standard', disabled: false },
+                { name: 'pi-deepseek-off', agent: 'pi', tier: 'standard', disabled: true },
+                { name: 'agy-opus', agent: 'antigravity-cli', tier: 'capable-1', disabled: false },
+            ],
+        });
+        setFetchForTesting(stubFetch(customFleet, { processes: [] }));
+        const view = harness(ctx());
+        await act(async () => {});
+
+        const coderExecutors = view.container.querySelector('[data-role-executors="coder"]');
+        expect(coderExecutors).not.toBeNull();
+
+        const coderItems = [...(coderExecutors?.querySelectorAll('[data-role-executor-item]') ?? [])];
+        // 4 executors in standard tier: pi-flash-volc (default), pi-zai-volc, pi-zai, pi-deepseek-off (disabled)
+        expect(coderItems).toHaveLength(4);
+
+        // First item is the default executor with trailing star mark
+        expect(coderItems[0]?.textContent).toContain('pi-flash-volc');
+        expect(coderItems[0]?.textContent).toContain('⭐');
+
+        // Other candidate executors follow in order
+        expect(coderItems[1]?.textContent).toBe('pi-zai-volc');
+        expect(coderItems[2]?.textContent).toBe('pi-zai');
+        expect(coderItems[3]?.textContent).toBe('pi-deepseek-off');
+
+        // Scribe has 1 executor in cheap tier with trailing star mark
+        const scribeExecutors = view.container.querySelector('[data-role-executors="scribe"]');
+        const scribeItems = [...(scribeExecutors?.querySelectorAll('[data-role-executor-item]') ?? [])];
+        expect(scribeItems).toHaveLength(1);
+        expect(scribeItems[0]?.textContent).toContain('minimax');
+        expect(scribeItems[0]?.textContent).toContain('⭐');
+
+        view.unmount();
+    });
 });
