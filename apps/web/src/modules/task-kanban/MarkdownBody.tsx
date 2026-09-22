@@ -17,13 +17,33 @@ export function MermaidBlock({ code }: { code: string }) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [svg, setSvg] = useState<string | null>(null);
     const [error, setError] = useState(false);
+    const [theme, setTheme] = useState<string>(() => {
+        if (typeof document !== 'undefined') {
+            return document.documentElement.getAttribute('data-theme') || 'light';
+        }
+        return 'light';
+    });
+
+    useEffect(() => {
+        if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+        const observer = new MutationObserver(() => {
+            const current = document.documentElement.getAttribute('data-theme') || 'light';
+            setTheme(current);
+        });
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+        return () => observer.disconnect();
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
         void (async () => {
             try {
                 const mermaid = (await import('mermaid')).default;
-                mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+                mermaid.initialize({
+                    startOnLoad: false,
+                    theme: theme === 'dark' ? 'dark' : 'neutral',
+                    securityLevel: 'strict',
+                });
                 const rendered = await mermaid.render(`mermaid-${id}`, code);
                 const clean = DOMPurify.sanitize(rendered.svg, { USE_PROFILES: { svg: true, svgFilters: true } });
                 if (!cancelled) setSvg(clean);
@@ -34,7 +54,7 @@ export function MermaidBlock({ code }: { code: string }) {
         return () => {
             cancelled = true;
         };
-    }, [code, id]);
+    }, [code, id, theme]);
 
     // Inject the DOMPurify-sanitized SVG via the DOM API (mermaid returns a
     // complete SVG string; there is no node-based render alternative). The
@@ -110,10 +130,18 @@ export function renderCodeBlock({ className, children, ...props }: CodeProps) {
     );
 }
 
-export default function MarkdownBody({ source }: { source: string }) {
+export interface MarkdownBodyProps {
+    source: string;
+    className?: string;
+    style?: React.CSSProperties;
+}
+
+export default function MarkdownBody({ source, className, style }: MarkdownBodyProps) {
     return (
         <MDEditor.Markdown
             source={source}
+            className={className}
+            style={style}
             wrapperElement={{ 'data-color-mode': 'light' }}
             components={{
                 code: renderCodeBlock,

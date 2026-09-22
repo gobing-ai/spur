@@ -205,7 +205,26 @@
     background-color: rgba(239, 68, 68, 0.1);
 }
 
-[data-testid="detail-body"] .wmde-markdown .mermaid-diagram svg {
+.mermaid-diagram svg,
+.wmde-markdown .mermaid-diagram svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.workflow-diagram-canvas .wmde-markdown {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.workflow-diagram-canvas .mermaid-diagram {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.workflow-diagram-canvas .mermaid-diagram svg {
+    min-width: min(100%, 360px);
     max-width: 100%;
     height: auto;
 }
