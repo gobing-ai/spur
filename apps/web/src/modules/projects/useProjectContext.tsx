@@ -71,6 +71,8 @@ export interface ConfiguredAgentExecutor {
     error?: string | null;
     elected?: string[];
     executionCapabilities?: Record<string, unknown>;
+    sourceLayer?: 'project' | 'global';
+    sourcePath?: string;
 }
 
 /** Wire shape of GET /api/project/fleet. `path` is null only off a project cwd (CF Worker). */

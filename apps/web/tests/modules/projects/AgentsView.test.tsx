@@ -388,4 +388,111 @@ describe('AgentsView roles and executors sections', () => {
 
         view.unmount();
     });
+
+    test('executor status toggle renders as switch, opens confirmation modal, and cancels or confirms', async () => {
+        const postCalls: Array<{ url: string; body: unknown }> = [];
+        const customFleet = fleet({
+            executors: [
+                {
+                    name: 'pi-flash',
+                    agent: 'pi',
+                    model: 'flash-model',
+                    tier: 'standard',
+                    disabled: false,
+                    sourceLayer: 'project',
+                    sourcePath: '/repo/wt/.spur/config.yaml',
+                },
+                {
+                    name: 'claude-opus',
+                    agent: 'claude',
+                    model: 'opus-5',
+                    tier: 'capable-3',
+                    disabled: true,
+                    disabledReason: 'quota',
+                    sourceLayer: 'global',
+                    sourcePath: '/home/user/.config/spur/config.yaml',
+                },
+            ],
+        });
+
+        const testFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+            if (url.includes('/project/executors/availability')) {
+                let bodyStr = '';
+                if (typeof input === 'object' && input !== null && 'text' in input) {
+                    bodyStr = await (input as Request).text();
+                } else if (init?.body) {
+                    bodyStr = String(init.body);
+                }
+                postCalls.push({ url, body: JSON.parse(bodyStr) });
+                return new Response(JSON.stringify({ ok: true, status: 'updated' }), { status: 200 });
+            }
+            const body = url.includes('/project/fleet') ? customFleet : { processes: [] };
+            return new Response(JSON.stringify(body), { status: 200 });
+        };
+        setFetchForTesting(testFetch as typeof fetch);
+
+        const view = harness(ctx());
+        await act(async () => {});
+
+        // 1. Check toggle switch rendering
+        const piToggle = view.container.querySelector('[data-executor-toggle="pi-flash"]') as HTMLButtonElement;
+        const claudeToggle = view.container.querySelector('[data-executor-toggle="claude-opus"]') as HTMLButtonElement;
+        expect(piToggle).not.toBeNull();
+        expect(claudeToggle).not.toBeNull();
+
+        // Ready is ON (checked = true); Disabled is OFF (checked = false)
+        expect(piToggle.getAttribute('aria-checked')).toBe('true');
+        expect(claudeToggle.getAttribute('aria-checked')).toBe('false');
+
+        // Check provenance tags rendered
+        expect(view.container.querySelector('[data-executor-card="pi-flash"]')?.textContent).toContain('project');
+        expect(view.container.querySelector('[data-executor-card="claude-opus"]')?.textContent).toContain('global');
+
+        // 2. Click toggle on pi-flash -> modal opens
+        await act(async () => {
+            piToggle.click();
+        });
+
+        const modal = view.container.querySelector('[data-executor-confirm-modal]');
+        expect(modal).not.toBeNull();
+        expect(modal?.textContent).toContain('Disable Agent Executor');
+        expect(modal?.textContent).toContain('pi-flash');
+        expect(modal?.textContent).toContain('Project Config');
+        expect(modal?.textContent).toContain('/repo/wt/.spur/config.yaml');
+
+        // 3. Cancel dismisses modal without calling API
+        const cancelBtn = view.container.querySelector('[data-modal-cancel]') as HTMLButtonElement;
+        await act(async () => {
+            cancelBtn.click();
+        });
+        expect(view.container.querySelector('[data-executor-confirm-modal]')).toBeNull();
+        expect(postCalls).toHaveLength(0);
+
+        // 4. Click toggle on claude-opus -> modal opens for enabling
+        await act(async () => {
+            claudeToggle.click();
+        });
+        const modal2 = view.container.querySelector('[data-executor-confirm-modal]');
+        expect(modal2).not.toBeNull();
+        expect(modal2?.textContent).toContain('Enable Agent Executor');
+        expect(modal2?.textContent).toContain('claude-opus');
+        expect(modal2?.textContent).toContain('Global Config');
+
+        // 5. Confirm calls the API and updates state
+        const confirmBtn = view.container.querySelector('[data-modal-confirm]') as HTMLButtonElement;
+        await act(async () => {
+            confirmBtn.click();
+        });
+
+        expect(postCalls).toHaveLength(1);
+        expect(postCalls[0]?.body).toEqual({
+            name: 'claude-opus',
+            disabled: false,
+            layer: 'global',
+        });
+        expect(view.container.querySelector('[data-executor-confirm-modal]')).toBeNull();
+
+        view.unmount();
+    });
 });

@@ -8,6 +8,7 @@ import { useProjectContext } from './useProjectContext';
 
 const fleetUrl = () => `${resolveApiUrl()}/project/fleet`;
 const processesUrl = () => `${resolveApiUrl()}/processes`;
+const toggleExecutorUrl = () => `${resolveApiUrl()}/project/executors/availability`;
 
 const DEFAULT_ROLES: ConfiguredAgentRole[] = [
     { name: 'scribe', tier: 'cheap', stages: ['changelog'], isCustom: false },
@@ -121,7 +122,12 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
     const [orchOffline, setOrchOffline] = useState(false);
     const [activeSection, setActiveSection] = useState<AgentsSection>('all');
     const [executorFilter, setExecutorFilter] = useState('');
+    const [confirmingExecutor, setConfirmingExecutor] = useState<{
+        executor: ConfiguredAgentExecutor;
+        targetDisabled: boolean;
+    } | null>(null);
     const openerRef = useRef<HTMLButtonElement | null>(null);
+    const tickRef = useRef<() => Promise<void>>(async () => {});
 
     useEffect(() => {
         let cancelled = false;
@@ -155,6 +161,7 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
             }
         };
 
+        tickRef.current = tick;
         void tick();
         const interval = setInterval(() => void tick(), pollMs);
         return () => {
@@ -332,7 +339,16 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                                 ) : (
                                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3" data-executors-grid>
                                         {filteredExecutors.map((ex) => (
-                                            <ExecutorCard key={ex.name} executor={ex} />
+                                            <ExecutorCard
+                                                key={ex.name}
+                                                executor={ex}
+                                                onToggle={(executor) =>
+                                                    setConfirmingExecutor({
+                                                        executor,
+                                                        targetDisabled: !executor.disabled,
+                                                    })
+                                                }
+                                            />
                                         ))}
                                     </div>
                                 )}
@@ -410,6 +426,25 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                 )}
             </div>
             {selected !== null && <MemberDetail entry={selected} onClose={closeDetail} />}
+            {confirmingExecutor !== null && (
+                <ExecutorToggleModal
+                    executor={confirmingExecutor.executor}
+                    targetDisabled={confirmingExecutor.targetDisabled}
+                    onClose={() => setConfirmingExecutor(null)}
+                    onSuccess={() => {
+                        const target = confirmingExecutor;
+                        setConfirmingExecutor(null);
+                        if (target) {
+                            setExecutors((prev) =>
+                                prev.map((e) =>
+                                    e.name === target.executor.name ? { ...e, disabled: target.targetDisabled } : e,
+                                ),
+                            );
+                        }
+                        void tickRef.current?.();
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -478,11 +513,22 @@ function RoleCard({ role }: { role: ConfiguredAgentRole }) {
     );
 }
 
-function ExecutorCard({ executor }: { executor: ConfiguredAgentExecutor }) {
+function ExecutorCard({
+    executor,
+    onToggle,
+}: {
+    executor: ConfiguredAgentExecutor;
+    onToggle?: (executor: ConfiguredAgentExecutor) => void;
+}) {
     const axes = executor.executionCapabilities?.axes as Record<string, { state: string }> | undefined;
     const capabilities = axes
         ? Object.keys(axes).filter((k) => axes[k]?.state === 'available' || axes[k]?.state === 'enforced')
         : [];
+
+    const isReady = !executor.disabled;
+    const sourceFilePath =
+        executor.sourcePath ??
+        (executor.sourceLayer === 'project' ? '.spur/config.yaml' : '~/.config/spur/config.yaml');
 
     return (
         <div
@@ -545,37 +591,61 @@ function ExecutorCard({ executor }: { executor: ConfiguredAgentExecutor }) {
                 )}
             </div>
 
-            <div className="pt-2 border-t border-spur-border/40 flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1.5">
-                    <span
-                        className={`w-2 h-2 rounded-full ${
-                            executor.disabled
-                                ? 'bg-amber-500'
-                                : executor.installed === false
-                                  ? 'bg-rose-500'
-                                  : 'bg-emerald-500'
+            <div className="pt-2 border-t border-spur-border/40 flex items-center justify-between text-xs gap-2">
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={isReady}
+                        aria-label={`Toggle ${executor.name} status (currently ${isReady ? 'Ready' : 'Disabled'})`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onToggle?.(executor);
+                        }}
+                        className={`group relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-spur-accent focus:ring-offset-1 focus:ring-offset-spur-surface ${
+                            isReady ? 'bg-emerald-500 border-emerald-500' : 'bg-spur-surface-3 border-spur-border'
                         }`}
-                    />
+                        data-executor-toggle={executor.name}
+                    >
+                        <span className="sr-only">Toggle {executor.name} availability</span>
+                        <span
+                            aria-hidden="true"
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                isReady ? 'translate-x-4' : 'translate-x-0 bg-spur-text-muted/80'
+                            }`}
+                        />
+                    </button>
                     <span
-                        className={
+                        className={`font-mono text-xs font-medium ${
                             executor.disabled
                                 ? 'text-amber-400'
                                 : executor.installed === false
                                   ? 'text-rose-400'
                                   : 'text-emerald-400'
-                        }
+                        }`}
                     >
                         {executor.disabled ? 'Disabled' : executor.installed === false ? 'CLI Missing' : 'Ready'}
                     </span>
-                </span>
-                {executor.disabled && (
-                    <span
-                        className="text-[11px] text-spur-text-muted truncate max-w-[160px]"
-                        title={executor.disabledReason ?? executor.disabledOwner ?? 'disabled'}
-                    >
-                        {executor.disabledReason ?? executor.disabledOwner ?? 'disabled'}
-                    </span>
-                )}
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-hidden">
+                    {executor.sourceLayer && (
+                        <span
+                            className="px-1.5 py-0.5 rounded bg-spur-surface-2 border border-spur-border/60 text-[10px] font-mono text-spur-text-muted"
+                            title={`Declared in ${executor.sourceLayer === 'project' ? 'Project Config' : 'Global Config'}: ${sourceFilePath}`}
+                        >
+                            {executor.sourceLayer}
+                        </span>
+                    )}
+                    {executor.disabled && (
+                        <span
+                            className="text-[11px] text-spur-text-muted truncate max-w-[120px]"
+                            title={executor.disabledReason ?? executor.disabledOwner ?? 'disabled'}
+                        >
+                            {executor.disabledReason ?? executor.disabledOwner ?? 'disabled'}
+                        </span>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -667,5 +737,187 @@ function RosterCard({
                 </div>
             )}
         </button>
+    );
+}
+
+function ExecutorToggleModal({
+    executor,
+    targetDisabled,
+    onClose,
+    onSuccess,
+}: {
+    executor: ConfiguredAgentExecutor;
+    targetDisabled: boolean;
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !submitting) {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onClose, submitting]);
+
+    const handleConfirm = async () => {
+        setSubmitting(true);
+        setError(null);
+        try {
+            const res = await fetchWithTimeout(
+                new Request(toggleExecutorUrl(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: executor.name,
+                        disabled: targetDisabled,
+                        layer: executor.sourceLayer,
+                    }),
+                }),
+            );
+            if (!res.ok) {
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                throw new Error(data.error ?? `Request failed with status ${res.status}`);
+            }
+            onSuccess();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+            setSubmitting(false);
+        }
+    };
+
+    const targetConfigLabel = executor.sourceLayer === 'project' ? 'Project Config' : 'Global Config';
+    const configFilePath =
+        executor.sourcePath ??
+        (executor.sourceLayer === 'project' ? '.spur/config.yaml' : '~/.config/spur/config.yaml');
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            data-modal-backdrop
+        >
+            <button
+                type="button"
+                aria-label="Close modal backdrop"
+                tabIndex={-1}
+                className="fixed inset-0 w-full h-full bg-transparent border-0 cursor-default"
+                onClick={submitting ? undefined : onClose}
+            />
+            <div
+                className="relative z-10 w-full max-w-md p-6 bg-spur-surface border border-spur-border rounded-2xl shadow-2xl space-y-4 text-spur-text"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="executor-modal-title"
+                data-executor-confirm-modal
+            >
+                <div className="flex items-start gap-3">
+                    <div
+                        className={`p-2.5 rounded-xl text-lg flex items-center justify-center ${
+                            targetDisabled
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                        }`}
+                        aria-hidden="true"
+                    >
+                        {targetDisabled ? '⏸️' : '⚡'}
+                    </div>
+                    <div>
+                        <h3 id="executor-modal-title" className="text-base font-semibold text-spur-text">
+                            {targetDisabled ? 'Disable Agent Executor' : 'Enable Agent Executor'}
+                        </h3>
+                        <p className="text-xs text-spur-text-muted mt-0.5">
+                            Are you sure you want to change the status of{' '}
+                            <code className="px-1.5 py-0.5 rounded bg-spur-surface-2 border border-spur-border font-mono text-spur-accent font-semibold">
+                                {executor.name}
+                            </code>
+                            ?
+                        </p>
+                    </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-spur-surface-2 border border-spur-border/60 space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-spur-text-muted">Target configuration:</span>
+                        <span className="font-mono font-medium text-spur-text">{targetConfigLabel}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="text-spur-text-muted shrink-0">Config file:</span>
+                        <code
+                            className="font-mono text-spur-accent text-[11px] truncate max-w-[230px]"
+                            title={configFilePath}
+                        >
+                            {configFilePath}
+                        </code>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-spur-text-muted">Status transition:</span>
+                        <div className="flex items-center gap-1.5 font-mono text-xs">
+                            <span className={executor.disabled ? 'text-amber-400' : 'text-emerald-400'}>
+                                {executor.disabled ? 'Disabled' : 'Ready'}
+                            </span>
+                            <span className="text-spur-text-muted">→</span>
+                            <span className={`font-semibold ${targetDisabled ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                {targetDisabled ? 'Disabled (OFF)' : 'Ready (ON)'}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="pt-2 border-t border-spur-border/40 text-[11px] text-spur-text-muted leading-relaxed">
+                        {targetDisabled ? (
+                            <span>
+                                ⚠️ Disabling will update your {targetConfigLabel.toLowerCase()} and exclude this executor
+                                from role elections and execution pipelines.
+                            </span>
+                        ) : (
+                            <span>
+                                ✨ Enabling will update your {targetConfigLabel.toLowerCase()} and make this executor
+                                eligible for role elections and execution pipelines.
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {error && (
+                    <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+                        {error}
+                    </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={submitting}
+                        className="px-4 py-2 text-xs font-medium rounded-xl border border-spur-border bg-spur-surface-2 hover:bg-spur-surface-3 text-spur-text transition-colors disabled:opacity-50"
+                        data-modal-cancel
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleConfirm}
+                        disabled={submitting}
+                        className={`px-4 py-2 text-xs font-medium rounded-xl border transition-colors flex items-center gap-1.5 disabled:opacity-50 ${
+                            targetDisabled
+                                ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+                                : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+                        }`}
+                        data-modal-confirm
+                    >
+                        {submitting ? (
+                            <>
+                                <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                <span>Updating...</span>
+                            </>
+                        ) : (
+                            <span>{targetDisabled ? 'Confirm Disable' : 'Confirm Enable'}</span>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }
