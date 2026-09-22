@@ -213,6 +213,51 @@ describe('WorkflowsView', () => {
         });
     });
 
+    test('handles direction layout toggle (TD vs LR) in Diagram view', async () => {
+        let copiedText = '';
+        Object.defineProperty(navigator, 'clipboard', {
+            value: {
+                writeText: (text: string) => {
+                    copiedText = text;
+                    return Promise.resolve();
+                },
+            },
+            writable: true,
+            configurable: true,
+        });
+
+        const { container } = render(<WorkflowsView />);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-yaml-viewer]')).not.toBeNull();
+        });
+
+        const diagramTab = container.querySelector('[data-subtab="diagram"]') as HTMLButtonElement;
+        fireEvent.click(diagramTab);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="direction-lr-btn"]')).not.toBeNull();
+        });
+
+        const tdBtn = container.querySelector('[data-testid="direction-td-btn"]') as HTMLButtonElement;
+        const lrBtn = container.querySelector('[data-testid="direction-lr-btn"]') as HTMLButtonElement;
+
+        expect(tdBtn.className).toContain('bg-spur-accent');
+        expect(lrBtn.className).not.toContain('bg-spur-accent');
+
+        // Switch to LR
+        fireEvent.click(lrBtn);
+        expect(lrBtn.className).toContain('bg-spur-accent');
+
+        // Copy in diagram mode with LR direction
+        const copyBtn = container.querySelector('[data-testid="copy-workflow-btn"]') as HTMLButtonElement;
+        fireEvent.click(copyBtn);
+
+        await waitFor(() => {
+            expect(copiedText).toContain('flowchart LR');
+        });
+    });
+
     test('displays error message and allows retry on fetch error', async () => {
         let attempts = 0;
         setFetchForTesting((() => {

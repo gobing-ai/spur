@@ -1,7 +1,7 @@
 import type { ProjectWorkflowsResponse, WorkflowDefinitionDto } from '@gobing-ai/spur-contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
-import { MermaidBlock } from '../task-kanban/MarkdownBody';
+import MarkdownBody from '../task-kanban/MarkdownBody';
 import YamlViewer from './YamlViewer';
 
 const workflowsUrl = () => `${resolveApiUrl()}/project/workflows`;
@@ -16,6 +16,7 @@ export default function WorkflowsView() {
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState<boolean>(false);
     const [zoom, setZoom] = useState<number>(1);
+    const [direction, setDirection] = useState<'TD' | 'LR'>('TD');
 
     const loadWorkflows = useCallback(async () => {
         setLoading(true);
@@ -70,9 +71,23 @@ export default function WorkflowsView() {
         return groups;
     }, [workflows]);
 
+    const workflowMarkdown = useMemo(() => {
+        if (!activeWorkflow?.mermaidDiagram) return '';
+        let diagram = activeWorkflow.mermaidDiagram.trim();
+        if (!diagram.startsWith('```')) {
+            diagram = `\`\`\`mermaid\n${diagram}\n\`\`\``;
+        }
+        if (direction === 'LR') {
+            diagram = diagram.replace(/flowchart\s+(TD|TB)/g, 'flowchart LR');
+        } else {
+            diagram = diagram.replace(/flowchart\s+LR/g, 'flowchart TD');
+        }
+        return diagram;
+    }, [activeWorkflow, direction]);
+
     const handleCopy = useCallback(async () => {
         if (!activeWorkflow) return;
-        const textToCopy = activeSubtab === 'yaml' ? activeWorkflow.rawYaml : activeWorkflow.mermaidDiagram;
+        const textToCopy = activeSubtab === 'yaml' ? activeWorkflow.rawYaml : workflowMarkdown;
         try {
             await navigator.clipboard.writeText(textToCopy);
             setCopied(true);
@@ -80,15 +95,7 @@ export default function WorkflowsView() {
         } catch {
             // clipboard write error
         }
-    }, [activeWorkflow, activeSubtab]);
-
-    const cleanMermaidDiagram = useMemo(() => {
-        if (!activeWorkflow?.mermaidDiagram) return '';
-        return activeWorkflow.mermaidDiagram
-            .replace(/^```mermaid\s*/i, '')
-            .replace(/```\s*$/, '')
-            .trim();
-    }, [activeWorkflow]);
+    }, [activeWorkflow, activeSubtab, workflowMarkdown]);
 
     return (
         <div className="flex flex-col h-full gap-4 overflow-y-auto pr-1" data-workflows-view>
@@ -176,7 +183,7 @@ export default function WorkflowsView() {
                         onClick={handleCopy}
                         disabled={!activeWorkflow}
                         className="px-2.5 py-1 text-xs font-medium bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-spur-text rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        title={activeSubtab === 'yaml' ? 'Copy raw YAML' : 'Copy Mermaid code'}
+                        title={activeSubtab === 'yaml' ? 'Copy raw YAML' : 'Copy Mermaid Markdown'}
                         data-testid="copy-workflow-btn"
                     >
                         {copied ? (
@@ -187,7 +194,7 @@ export default function WorkflowsView() {
                         ) : (
                             <>
                                 <span>📋</span>
-                                <span>{activeSubtab === 'yaml' ? 'Copy YAML' : 'Copy Mermaid'}</span>
+                                <span>{activeSubtab === 'yaml' ? 'Copy YAML' : 'Copy Diagram'}</span>
                             </>
                         )}
                     </button>
@@ -302,40 +309,74 @@ export default function WorkflowsView() {
 
                             {/* Canvas Toolbar & Container */}
                             <div className="flex-1 flex flex-col min-h-[480px] bg-spur-surface-2/70 border border-spur-border rounded-xl overflow-hidden relative">
-                                {/* Diagram Zoom Controls */}
-                                <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-spur-surface-1/90 backdrop-blur border border-spur-border rounded-lg p-1 shadow-md">
-                                    <button
-                                        type="button"
-                                        onClick={() => setZoom((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))))}
-                                        className="w-7 h-7 flex items-center justify-center text-xs font-bold text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3 rounded cursor-pointer transition-colors"
-                                        title="Zoom out"
-                                        data-testid="zoom-out-btn"
-                                    >
-                                        −
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setZoom(1)}
-                                        className="px-2 h-7 flex items-center justify-center text-[11px] font-mono text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3 rounded cursor-pointer transition-colors"
-                                        title="Reset zoom"
-                                        data-testid="zoom-reset-btn"
-                                    >
-                                        {Math.round(zoom * 100)}%
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => setZoom((z) => Math.min(2.5, Number((z + 0.15).toFixed(2))))}
-                                        className="w-7 h-7 flex items-center justify-center text-xs font-bold text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3 rounded cursor-pointer transition-colors"
-                                        title="Zoom in"
-                                        data-testid="zoom-in-btn"
-                                    >
-                                        +
-                                    </button>
+                                {/* Diagram Controls Bar: Direction + Zoom */}
+                                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 bg-spur-surface-1/90 border-b border-spur-border/60 shrink-0">
+                                    {/* Left: Direction Toggle (Vertical vs Horizontal) */}
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-spur-text-muted font-medium">Layout:</span>
+                                        <div className="inline-flex rounded-lg border border-spur-border bg-spur-surface-2 p-0.5 text-xs">
+                                            <button
+                                                type="button"
+                                                onClick={() => setDirection('TD')}
+                                                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 font-medium ${
+                                                    direction === 'TD'
+                                                        ? 'bg-spur-accent text-white shadow-sm'
+                                                        : 'text-spur-text-muted hover:text-spur-text'
+                                                }`}
+                                                data-testid="direction-td-btn"
+                                            >
+                                                <span>↕️ Vertical (TD)</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setDirection('LR')}
+                                                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer flex items-center gap-1 font-medium ${
+                                                    direction === 'LR'
+                                                        ? 'bg-spur-accent text-white shadow-sm'
+                                                        : 'text-spur-text-muted hover:text-spur-text'
+                                                }`}
+                                                data-testid="direction-lr-btn"
+                                            >
+                                                <span>↔️ Horizontal (LR)</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Right: Diagram Zoom Controls */}
+                                    <div className="flex items-center gap-1 bg-spur-surface-2 border border-spur-border rounded-lg p-0.5 shadow-sm">
+                                        <button
+                                            type="button"
+                                            onClick={() => setZoom((z) => Math.max(0.4, Number((z - 0.15).toFixed(2))))}
+                                            className="w-6 h-6 flex items-center justify-center text-xs font-bold text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3 rounded cursor-pointer transition-colors"
+                                            title="Zoom out"
+                                            data-testid="zoom-out-btn"
+                                        >
+                                            −
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setZoom(1)}
+                                            className="px-2 h-6 flex items-center justify-center text-[11px] font-mono text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3 rounded cursor-pointer transition-colors"
+                                            title="Reset zoom"
+                                            data-testid="zoom-reset-btn"
+                                        >
+                                            {Math.round(zoom * 100)}%
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setZoom((z) => Math.min(2.5, Number((z + 0.15).toFixed(2))))}
+                                            className="w-6 h-6 flex items-center justify-center text-xs font-bold text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3 rounded cursor-pointer transition-colors"
+                                            title="Zoom in"
+                                            data-testid="zoom-in-btn"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Mermaid Diagram Canvas */}
-                                <div className="flex-1 p-6 overflow-auto flex items-center justify-center">
-                                    {cleanMermaidDiagram ? (
+                                <div className="workflow-diagram-canvas flex-1 p-8 overflow-auto flex flex-col items-center justify-start">
+                                    {workflowMarkdown ? (
                                         <div
                                             style={{
                                                 transform: `scale(${zoom})`,
@@ -344,10 +385,13 @@ export default function WorkflowsView() {
                                             }}
                                             className="w-full flex justify-center"
                                         >
-                                            <MermaidBlock code={cleanMermaidDiagram} />
+                                            <MarkdownBody
+                                                source={workflowMarkdown}
+                                                style={{ backgroundColor: 'transparent' }}
+                                            />
                                         </div>
                                     ) : (
-                                        <div className="text-spur-text-muted text-xs">
+                                        <div className="text-spur-text-muted text-xs py-12">
                                             No diagram available for this workflow.
                                         </div>
                                     )}
