@@ -210,6 +210,7 @@ Feature: Workflow execution economy: contract-first stages, inline traceability,
 | 0880 | Wire the feature verification caller into feature-lifecycle and drop the settled-tree precondition | done |
 | 0881 | Make the guard-parity harness enumerate both reference sets and catch spurious dependency edges | done |
 | 0882 | Refuse retiring workflow definitions that still have real non-dry runs | done |
+| 0912 | Establish the post-delivery workflow baseline and select a measured task-pipeline pilot | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

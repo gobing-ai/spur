@@ -23,7 +23,7 @@
     └── [done] **B8**: Runner capability matrix: per-agent session and stdin capabilities declared upstream and consumed by Spur ([B8_runner-capability-matrix-per-agent-session-and-stdin-capabilities-declared-upstream-and-consumed-by-spur.md](./B8_runner-capability-matrix-per-agent-session-and-stdin-capabilities-declared-upstream-and-consumed-by-spur.md))
 [active] **C**: Rules ([C_rules.md](./C_rules.md))
     └── [done] **C1**: Rule surface contract and catalog integrity ([C1_rule-surface-contract-and-catalog-integrity.md](./C1_rule-surface-contract-and-catalog-integrity.md))
-[active] **D**: Workflows ([D_workflows.md](./D_workflows.md))
+[done] **D**: Workflows ([D_workflows.md](./D_workflows.md))
     ├── [done] **D1**: workflow run observability — enriched step lines, FSM transitions, async follow ([D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md](./D1_workflow-run-observability-enriched-step-lines-fsm-transitions-async-follow.md))
     ├── [done] **D2**: All-in-one per-run workflow run log ([D2_all-in-one-per-run-workflow-run-log.md](./D2_all-in-one-per-run-workflow-run-log.md))
     ├── [active] **D3**: Workflow run reliability defects: schema resolution, shell interpolation, headless HITL ([D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md](./D3_workflow-run-reliability-defects-schema-resolution-shell-interpolation-headless-hitl.md))

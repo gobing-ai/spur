@@ -47,6 +47,7 @@ Feature: sp plugin capability ownership
 | --- | ---- | ------ |
 | 0600 | Align plugins/sp scripts to the superskill entrypoint contract and record the ADR | done |
 | 0715 | Synchronize expert-spur and spur-cli with the complete CLI surface | done |
+| 0913 | Make session review and dogfood produce trustworthy workflow-improvement evidence | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
