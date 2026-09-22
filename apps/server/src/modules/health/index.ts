@@ -1,7 +1,6 @@
 import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import {
-    type AgentService,
     DeliveryReconciler,
     FleetService,
     isPortLive,
@@ -9,7 +8,6 @@ import {
     type OrchestratorBinding,
     ProjectRegistry,
     type ResolvedFleetMember,
-    type RuleService,
     registeredWorkflowPaths,
     renderWorkflowMermaid,
     resolveAgentRoles,
@@ -17,7 +15,6 @@ import {
     type StrategyName,
     StrategyRuntime,
     startRegisteredProject,
-    WorkflowAppService,
 } from '@gobing-ai/spur-app';
 import { normalizeExecutorAvailability } from '@gobing-ai/spur-config';
 import {
@@ -28,7 +25,6 @@ import {
     setExecutorAvailability,
 } from '@gobing-ai/spur-config/loader';
 import { CoordinationRunDao, InboxMessageDao, REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
-import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
@@ -736,17 +732,7 @@ export const healthModule: ServerModule = {
 
             try {
                 const paths = registeredWorkflowPaths(ctx.spurConfig ?? null);
-                const wfSvc =
-                    typeof ctx.workflowService === 'function'
-                        ? ctx.workflowService()
-                        : new WorkflowAppService({
-                              cwd: ctx.cwd,
-                              spurConfig: ctx.spurConfig ?? null,
-                              getDb: ctx.getDb ?? (() => Promise.reject(new Error('no db'))),
-                              agentService: () => ({}) as unknown as AgentService,
-                              ruleService: () => ({}) as unknown as RuleService,
-                              hitlResponder: () => ({}) as unknown as HitlResponder,
-                          });
+                const wfSvc = ctx.workflowService();
                 const listResult = await wfSvc.list(paths);
                 const workflows = [];
                 const fs = ctx.fs ?? createNodeFileSystem(ctx.cwd);
