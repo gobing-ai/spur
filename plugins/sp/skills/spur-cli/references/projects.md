@@ -19,6 +19,7 @@ shapes live in `apps/cli/src/commands/projects.ts`.
 | ---- | ------- | --------- |
 | `add <path>` | Upsert an existing path in the registry | `--name <name>` `--json` |
 | `remove <target>` | Remove an entry by display name or path | `--json` |
+| `clean` | Purge missing project folders and terminate lingering processes (alias: `refresh`) | `--no-terminate-processes` `--json` |
 | `list` | List entries with live running status | `--json` `--fleet` |
 | `start <target>` | Start or reuse a detached project server | `--port <n>` `--json` |
 | `stop <target>` | Best-effort stop the listener and clear its recorded port | `--json` |
@@ -35,7 +36,8 @@ exit `0`; validation, registry, spawn, health, or lookup failure is exit `1`.
 - `add` requires an existing path, resolves a relative path from the current working directory, and
   defaults the display name to its basename. It upserts; it does not start a server. The current
   source does not enforce a `.spur/` marker or directory type.
-- `list` probes recorded ports and heals stale entries to `port: 0` before reporting `running`.
+- `list` automatically heals tilde paths, verifies project directories exist on disk (purging missing entries and terminating lingering processes), and heals stale entries to `port: 0` before reporting `running`.
+- `clean` (alias `refresh`) explicitly purges non-existent project directories from `projects.json`, probes live ports for removed entries, and cleanly terminates orphaned listening processes (SIGTERM with bounded wait and SIGKILL escalation). Supports `--no-terminate-processes` to skip process kills.
 - `list --fleet` (0835/0858) additionally resolves each project's `agent.fleet` section from that
   project's `.spur/config.yaml` under the existing verb (no new noun). Per project it prints one line
   per member: instance id (the spec id / mailbox identity), `role`, resolved `executor`,

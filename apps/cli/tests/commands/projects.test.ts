@@ -7,6 +7,7 @@ import {
     ProjectRegistry,
     setDetachedServeSpawnForTests,
     setPortProbeForTests,
+    setProcessHelpersForTests,
 } from '@gobing-ai/spur-app';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { stringify } from 'yaml';
@@ -28,6 +29,7 @@ describe('spur projects CLI command', () => {
 
     afterEach(() => {
         setPortProbeForTests(undefined);
+        setProcessHelpersForTests(undefined);
         ProjectRegistry.prototype.list = origList;
         ProjectRegistry.prototype.allocatePort = origAllocate;
         removeEnvVar('SPUR_PROJECTS_FILE');
@@ -557,5 +559,96 @@ describe('spur projects CLI command', () => {
             else removeEnvVar('PATH');
             if (existsSync(binDir)) rmSync(binDir, { recursive: true, force: true });
         }
+    });
+
+    it('should purge missing projects and report results via clean --json', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        const missingPath = join(tempDir, 'ghost-project');
+        await registry.upsert({ name: 'KeepMe', path: projectPath, port: 0 });
+        await registry.upsert({ name: 'GhostMe', path: missingPath, port: 0 });
+
+        const mockJson = createMockOutput();
+        const exit = await main(['projects', 'clean', '--json'], {
+            cwd: tempDir,
+            output: mockJson.output,
+        });
+        expect(exit).toBe(0);
+        const data = JSON.parse(mockJson.getText()) as {
+            ok: boolean;
+            purgedCount: number;
+            purgedProjects: Array<{ name: string; path: string }>;
+            terminatedProcesses: Array<unknown>;
+        };
+        expect(data.ok).toBe(true);
+        expect(data.purgedCount).toBe(1);
+        expect(data.purgedProjects[0]?.name).toBe('GhostMe');
+
+        // Registry should now only contain KeepMe
+        const raw = registry.readRaw();
+        expect(raw.projects.map((p) => p.name)).toEqual(['KeepMe']);
+    });
+
+    it('should support refresh alias and text output when clean', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        await registry.upsert({ name: 'Existing', path: projectPath, port: 0 });
+
+        const mockText = createMockOutput();
+        const exit = await main(['projects', 'refresh'], {
+            cwd: tempDir,
+            output: mockText.output,
+        });
+        expect(exit).toBe(0);
+        expect(mockText.getText()).toContain('Registry is clean. No stale project entries found.');
+    });
+
+    it('should purge missing project and terminate lingering process via clean with human text', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        const missingPath = join(tempDir, 'ghost-with-port');
+        const ghostPort = 3599;
+        setPortProbeForTests(async (p) => (p === ghostPort ? 'in-use' : 'available'));
+
+        const killedPids: number[] = [];
+        setProcessHelpersForTests({
+            pidFinder: async (port) => (port === ghostPort ? 98765 : undefined),
+            processKiller: (pid) => {
+                killedPids.push(pid);
+                return true;
+            },
+        });
+
+        await registry.upsert({ name: 'GhostWithPort', path: missingPath, port: ghostPort });
+
+        const mockText = createMockOutput();
+        const exit = await main(['projects', 'clean'], {
+            cwd: tempDir,
+            output: mockText.output,
+        });
+        expect(exit).toBe(0);
+        const output = mockText.getText();
+        expect(output).toContain('Purged 1 stale project(s):');
+        expect(output).toContain('GhostWithPort');
+        expect(output).toContain('Terminated 1 lingering process(es):');
+        expect(output).toContain('PID 98765 on port 3599');
+        expect(killedPids).toContain(98765);
+    });
+
+    it('should support --json-envelope on clean', async () => {
+        const registry = new ProjectRegistry(projectsFile);
+        const missingPath = join(tempDir, 'ghost-env');
+        await registry.upsert({ name: 'GhostEnv', path: missingPath, port: 0 });
+
+        const mockJson = createMockOutput();
+        const exit = await main(['projects', 'clean', '--json', '--json-envelope'], {
+            cwd: tempDir,
+            output: mockJson.output,
+        });
+        expect(exit).toBe(0);
+        const env = JSON.parse(mockJson.getText()) as {
+            ok: boolean;
+            data?: { purgedCount: number; purgedProjects: Array<{ name: string }> };
+        };
+        expect(env.ok).toBe(true);
+        expect(env.data?.purgedCount).toBe(1);
+        expect(env.data?.purgedProjects[0]?.name).toBe('GhostEnv');
     });
 });

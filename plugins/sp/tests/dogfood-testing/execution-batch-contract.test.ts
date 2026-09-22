@@ -91,3 +91,14 @@ describe('execution-batch spec contract (task 0720)', () => {
         expect(SPEC).not.toContain('Record-first ordering');
     });
 });
+
+describe('execution-batch spec contract (task 0924)', () => {
+    test('WT-4 — projects.json registry cleanup upon worktree removal', () => {
+        expect(SPEC).toContain('WT-4c — clean up registry entry in ~/.config/spur/projects.json');
+        expect(SPEC).toContain('spur projects remove "$WT_PATH"');
+    });
+
+    test('WT-5 — discard instructions deregister worktree from projects.json', () => {
+        expect(SPEC).toContain('spur projects remove <worktree-path>');
+    });
+});

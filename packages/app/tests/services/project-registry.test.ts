@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
     classifyPortBindError,
+    findListeningPid,
     isPortAvailable,
     isPortLive,
     normalizeProjectPath,
@@ -13,6 +14,7 @@ import {
     portBindingAvailable,
     probePort,
     setPortProbeForTests,
+    setProcessHelpersForTests,
 } from '../../src/services/project-registry';
 
 describe('ProjectRegistry', () => {
@@ -29,6 +31,7 @@ describe('ProjectRegistry', () => {
 
     afterEach(() => {
         setPortProbeForTests(undefined);
+        setProcessHelpersForTests(undefined);
         removeEnvVar('SPUR_PROJECTS_FILE');
         if (existsSync(tempDir)) {
             rmSync(tempDir, { recursive: true, force: true });
@@ -164,6 +167,15 @@ describe('ProjectRegistry', () => {
         expect(staleEntry?.port).toBe(0);
     });
 
+    it('should purge non-existent project directories during list', async () => {
+        const missingDir = join(tempDir, 'does-not-exist');
+        await registry.upsert({ name: 'Valid Project', path: tempDir, port: 0 });
+        await registry.upsert({ name: 'Missing Project', path: missingDir, port: 0 });
+
+        const projects = await registry.list();
+        expect(projects.map((p) => p.name)).toEqual(['Valid Project']);
+    });
+
     it('should handle corrupt file in readRaw gracefully', () => {
         writeFileSync(projectsFile, '{ invalid json', 'utf-8');
         const raw = registry.readRaw();
@@ -197,24 +209,33 @@ describe('ProjectRegistry', () => {
     });
 
     it('should heal tilde paths to absolute on list', async () => {
-        const tildePath = `~/tmp-spur-registry-heal-test-${Date.now()}`;
-        // Write a hand-edited registry entry with a tilde path (as users often do).
-        writeFileSync(
-            projectsFile,
-            JSON.stringify(
-                {
-                    schema_version: 1,
-                    projects: [{ name: 'TildeProj', path: tildePath, port: 0 }],
-                },
-                null,
-                2,
-            ),
-            'utf-8',
-        );
-        const projects = await registry.list();
-        expect(projects).toHaveLength(1);
-        expect(projects[0]?.path.startsWith('~')).toBe(false);
-        expect(projects[0]?.path).toBe(normalizeProjectPath(tildePath));
+        const testSubdir = `tmp-spur-registry-heal-test-${Date.now()}`;
+        const tildePath = `~/${testSubdir}`;
+        const expandedPath = normalizeProjectPath(tildePath);
+        mkdirSync(expandedPath, { recursive: true });
+        try {
+            // Write a hand-edited registry entry with a tilde path (as users often do).
+            writeFileSync(
+                projectsFile,
+                JSON.stringify(
+                    {
+                        schema_version: 1,
+                        projects: [{ name: 'TildeProj', path: tildePath, port: 0 }],
+                    },
+                    null,
+                    2,
+                ),
+                'utf-8',
+            );
+            const projects = await registry.list();
+            expect(projects).toHaveLength(1);
+            expect(projects[0]?.path.startsWith('~')).toBe(false);
+            expect(projects[0]?.path).toBe(expandedPath);
+        } finally {
+            if (existsSync(expandedPath)) {
+                rmSync(expandedPath, { recursive: true, force: true });
+            }
+        }
     });
 
     // Bucket A test: checks occupied and invalid ports on the OS.
@@ -346,5 +367,139 @@ describe('ProjectRegistry', () => {
         setPortProbeForTests(undefined);
         // With seam cleared, probePort invalid port returns 'denied' directly without calling any mock
         expect(await probePort(0)).toBe('denied');
+    });
+
+    describe('refreshProjects', () => {
+        it('purges non-existent project directories while preserving existing ones', async () => {
+            const existingDir = mkdtempSync(join(tmpdir(), 'spur-existing-proj-'));
+            const missingDir = join(tempDir, 'deleted-worktree-path');
+
+            try {
+                await registry.upsert({ name: 'Existing', path: existingDir, port: 3100 });
+                await registry.upsert({ name: 'Deleted Worktree', path: missingDir, port: 0 });
+
+                const initial = registry.readRaw().projects;
+                expect(initial).toHaveLength(2);
+
+                const result = await registry.refreshProjects();
+                expect(result.removed).toHaveLength(1);
+                expect(result.removed[0]?.name).toBe('Deleted Worktree');
+                expect(result.terminated).toHaveLength(0);
+
+                const remaining = registry.readRaw().projects;
+                expect(remaining).toHaveLength(1);
+                expect(remaining[0]?.name).toBe('Existing');
+            } finally {
+                if (existsSync(existingDir)) {
+                    rmSync(existingDir, { recursive: true, force: true });
+                }
+            }
+        });
+
+        it('terminates lingering process on occupied port when purging deleted project', async () => {
+            const missingDir = join(tempDir, 'deleted-with-serve');
+            await registry.upsert({ name: 'Zombied Serve', path: missingDir, port: 3456 });
+
+            let liveState = true;
+            setPortProbeForTests(async (port) => {
+                if (port === 3456) return liveState ? 'in-use' : 'available';
+                return 'available';
+            });
+
+            const signalsReceived: Array<{ pid: number; signal: string }> = [];
+            setProcessHelpersForTests({
+                pidFinder: (port) => (port === 3456 ? 99999 : undefined),
+                processKiller: (pid, signal) => {
+                    signalsReceived.push({ pid, signal });
+                    // Simulate process dying after SIGTERM
+                    if (signal === 'SIGTERM') {
+                        liveState = false;
+                    }
+                    return true;
+                },
+            });
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 200 });
+            expect(result.removed).toHaveLength(1);
+            expect(result.removed[0]?.name).toBe('Zombied Serve');
+            expect(result.terminated).toHaveLength(1);
+            expect(result.terminated[0]).toEqual({ pid: 99999, port: 3456, signal: 'SIGTERM' });
+            expect(signalsReceived).toEqual([{ pid: 99999, signal: 'SIGTERM' }]);
+
+            const remaining = registry.readRaw().projects;
+            expect(remaining).toHaveLength(0);
+        });
+
+        it('escalates to SIGKILL if port remains bound after killTimeoutMs', async () => {
+            const missingDir = join(tempDir, 'stubborn-serve');
+            await registry.upsert({ name: 'Stubborn Serve', path: missingDir, port: 3789 });
+
+            // Port stays in-use even after SIGTERM
+            setPortProbeForTests(async (port) => (port === 3789 ? 'in-use' : 'available'));
+
+            const signalsReceived: Array<{ pid: number; signal: string }> = [];
+            setProcessHelpersForTests({
+                pidFinder: (port) => (port === 3789 ? 88888 : undefined),
+                processKiller: (pid, signal) => {
+                    signalsReceived.push({ pid, signal });
+                    return true;
+                },
+            });
+
+            const result = await registry.refreshProjects({ killTimeoutMs: 100 });
+            expect(result.removed).toHaveLength(1);
+            expect(result.terminated).toHaveLength(1);
+            expect(result.terminated[0]).toEqual({ pid: 88888, port: 3789, signal: 'SIGKILL' });
+            expect(signalsReceived).toEqual([
+                { pid: 88888, signal: 'SIGTERM' },
+                { pid: 88888, signal: 'SIGKILL' },
+            ]);
+        });
+
+        it('skips process termination when terminateProcesses is false', async () => {
+            const missingDir = join(tempDir, 'skip-term');
+            await registry.upsert({ name: 'Skip Term', path: missingDir, port: 3999 });
+
+            setPortProbeForTests(async () => 'in-use');
+            let killerCalled = false;
+            setProcessHelpersForTests({
+                pidFinder: () => 77777,
+                processKiller: () => {
+                    killerCalled = true;
+                    return true;
+                },
+            });
+
+            const result = await registry.refreshProjects({ terminateProcesses: false });
+            expect(result.removed).toHaveLength(1);
+            expect(result.terminated).toHaveLength(0);
+            expect(killerCalled).toBe(false);
+            expect(registry.readRaw().projects).toHaveLength(0);
+        });
+
+        it('findListeningPid safely ignores self and parent PID', async () => {
+            // Under mock pid finder returning self or parent
+            setProcessHelpersForTests({
+                pidFinder: () => process.pid,
+            });
+            expect(await findListeningPid(3000)).toBe(process.pid);
+
+            // Clear test helper
+            setProcessHelpersForTests(undefined);
+            // Non-existent or invalid port returns undefined
+            expect(await findListeningPid(-1)).toBeUndefined();
+            expect(await findListeningPid(70000)).toBeUndefined();
+
+            // Test with custom executor output filtering self & parent
+            const mockExecutor = {
+                run: async () => ({
+                    exitCode: 0,
+                    stdout: `${process.pid}\n${process.ppid}\n12345\n`,
+                    stderr: '',
+                }),
+            };
+            const foundPid = await findListeningPid(3000, mockExecutor as never);
+            expect(foundPid).toBe(12345);
+        });
     });
 });

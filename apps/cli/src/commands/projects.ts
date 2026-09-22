@@ -97,6 +97,62 @@ export function registerProjectsCommand(program: Command, context: CliContext): 
         });
 
     projectsCmd
+        .command('clean')
+        .alias('refresh')
+        .description('purge missing project directories and terminate lingering processes')
+        .option('--no-terminate-processes', 'Skip process termination on occupied ports')
+        .option(...SHARED_OPTIONS.jsonProjectsResponse)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (options) => {
+            try {
+                const registry = new ProjectRegistry();
+                const result = await registry.refreshProjects({
+                    terminateProcesses: options.terminateProcesses !== false,
+                });
+
+                if (options.json) {
+                    context.output.write(
+                        toEnvelopeJson(
+                            {
+                                ok: true,
+                                purgedCount: result.purgedProjects.length,
+                                purgedProjects: result.purgedProjects,
+                                terminatedProcesses: result.terminatedProcesses,
+                            },
+                            { enveloped: options.jsonEnvelope },
+                        ),
+                    );
+                } else if (result.purgedProjects.length === 0) {
+                    context.output.write('Registry is clean. No stale project entries found.');
+                } else {
+                    context.output.write(`Purged ${result.purgedProjects.length} stale project(s):`);
+                    for (const project of result.purgedProjects) {
+                        context.output.write(`- ${project.name} (${project.path})`);
+                    }
+                    if (result.terminatedProcesses.length > 0) {
+                        context.output.write(`Terminated ${result.terminatedProcesses.length} lingering process(es):`);
+                        for (const proc of result.terminatedProcesses) {
+                            context.output.write(`- PID ${proc.pid} on port ${proc.port} (${proc.signal})`);
+                        }
+                    }
+                }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                if (options.json) {
+                    context.output.write(
+                        toEnvelopeJson(
+                            { ok: false, error: message },
+                            { enveloped: options.jsonEnvelope, error: { code: 'INTERNAL_ERROR', message } },
+                        ),
+                    );
+                } else {
+                    context.output.error(`Error: ${message}`);
+                }
+                context.setExitCode(1);
+            }
+        });
+
+    projectsCmd
         .command('list')
         .option(...SHARED_OPTIONS.jsonProjectsArray)
         .option(

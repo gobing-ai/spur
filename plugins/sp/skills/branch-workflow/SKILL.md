@@ -81,6 +81,7 @@ git push
 ```bash
 git branch -d feature/<slug>        # Delete merged branch
 git worktree remove ../<project>-feature-<slug>  # Remove worktree if used
+spur projects remove ../<project>-feature-<slug> 2>/dev/null || true # Deregister from projects.json if registered
 git worktree prune                  # Clean up stale worktree references
 ```
 

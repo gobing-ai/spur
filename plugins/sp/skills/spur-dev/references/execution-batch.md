@@ -743,6 +743,8 @@ if [ -n "$FINAL" ]; then
 fi                                           #   NO prune/remove/branch delete
 git worktree remove "../<worktree-dir>"
 git branch -d "$BRANCH"
+# WT-4c — clean up registry entry in ~/.config/spur/projects.json (task 0924)
+spur projects remove "$WT_PATH" 2>/dev/null || spur projects clean --json 2>/dev/null || true
 # update marker: status = "merged"
 ```
 
@@ -828,7 +830,7 @@ Resume, merge, or discard:
 
   resume:  cd <worktree-path> && <command> --continue --worktree <worktree-path>
   merge:   git checkout <base-ref> && git merge <branch>     # resolve conflicts manually
-  discard: git worktree remove <worktree-path> && git branch -D <branch>
+  discard: git worktree remove <worktree-path> && git branch -D <branch> && spur projects remove <worktree-path>
 ```
 
 The report reuses the [`--next` chain contract](flag-glossary.md#--next-chain-contract) halt-report

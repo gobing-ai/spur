@@ -388,15 +388,23 @@ export type {
 export { ProcessInventoryService } from './services/process-inventory-service';
 export {
     classifyPortBindError,
+    findListeningPid,
     isPortAvailable,
     isPortLive,
     normalizeProjectPath,
+    type PidFinder,
     type PortProbe,
     type PortProbeResult,
+    type ProcessKiller,
     ProjectRegistry,
     portBindingAvailable,
     probePort,
+    type RefreshProjectsOptions,
+    type RefreshProjectsResult,
+    sendSignalToPid,
     setPortProbeForTests,
+    setProcessHelpersForTests,
+    type TerminatedProcessInfo,
 } from './services/project-registry';
 export {
     type DetachedServeChild,

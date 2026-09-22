@@ -3,6 +3,127 @@ import { connect, createServer } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { getProjectsFilePath, type ProjectEntry, type ProjectsFile, projectsFileSchema } from '@gobing-ai/spur-config';
+import { NodeProcessExecutor, type ProcessExecutor } from '@gobing-ai/ts-runtime';
+
+/** Information about a terminated process during registry refresh. */
+export interface TerminatedProcessInfo {
+    pid: number;
+    port: number;
+    signal: 'SIGTERM' | 'SIGKILL';
+}
+
+/** Result of refreshing project entries. */
+export interface RefreshProjectsResult {
+    /** Project entries removed because their directory does not exist. */
+    removed: ProjectEntry[];
+    /** Processes terminated on occupied ports of removed projects. */
+    terminated: TerminatedProcessInfo[];
+    /** Alias for removed. */
+    purgedProjects: ProjectEntry[];
+    /** Alias for terminated. */
+    terminatedProcesses: TerminatedProcessInfo[];
+}
+
+/** Options for refreshing project entries. */
+export interface RefreshProjectsOptions {
+    /** Whether to terminate lingering processes on occupied ports (default: true). */
+    terminateProcesses?: boolean;
+    /** Maximum wait time in milliseconds before escalating SIGTERM to SIGKILL (default: 2000). */
+    killTimeoutMs?: number;
+    /** Optional ProcessExecutor to use for process inspection (default: NodeProcessExecutor). */
+    processExecutor?: ProcessExecutor;
+}
+
+/** Test override function type for process killing. */
+export type ProcessKiller = (pid: number, signal: NodeJS.Signals) => boolean;
+
+/** Test override function type for listening PID resolution. */
+export type PidFinder = (port: number) => Promise<number | undefined> | number | undefined;
+
+let testPidFinder: PidFinder | undefined;
+let testProcessKiller: ProcessKiller | undefined;
+
+/** Install or clear test overrides for PID discovery and process killing (tests only). */
+export function setProcessHelpersForTests(
+    helpers:
+        | {
+              pidFinder?: PidFinder;
+              processKiller?: ProcessKiller;
+          }
+        | undefined,
+): void {
+    testPidFinder = helpers?.pidFinder;
+    testProcessKiller = helpers?.processKiller;
+}
+
+/** Discover the PID listening on a local TCP port, filtering out self and parent PID. */
+export async function findListeningPid(
+    port: number,
+    executor: ProcessExecutor = new NodeProcessExecutor(),
+): Promise<number | undefined> {
+    if (testPidFinder) {
+        return testPidFinder(port);
+    }
+    if (port <= 0 || port > 65535) return undefined;
+
+    try {
+        const res = await executor.run({
+            command: 'lsof',
+            args: ['-t', `-iTCP:${port}`, '-sTCP:LISTEN'],
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        if (res.exitCode === 0 && res.stdout) {
+            const lines = res.stdout.trim().split('\n');
+            for (const line of lines) {
+                const pid = parseInt(line.trim(), 10);
+                if (!Number.isNaN(pid) && pid > 0 && pid !== process.pid && pid !== process.ppid) {
+                    return pid;
+                }
+            }
+        }
+    } catch {
+        // Fall back to fuser if lsof fails/unavailable
+    }
+
+    try {
+        const res = await executor.run({
+            command: 'fuser',
+            args: [`${port}/tcp`],
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        if (res.exitCode === 0 && (res.stdout || res.stderr)) {
+            const out = (res.stdout || res.stderr).trim();
+            const pids = out
+                .split(/\s+/)
+                .map((s) => parseInt(s.trim(), 10))
+                .filter((p) => !Number.isNaN(p) && p > 0);
+            for (const pid of pids) {
+                if (pid !== process.pid && pid !== process.ppid) {
+                    return pid;
+                }
+            }
+        }
+    } catch {
+        // Ignore fallback error
+    }
+
+    return undefined;
+}
+
+/** Send signal to a PID safely, using testProcessKiller if configured. */
+export function sendSignalToPid(pid: number, signal: NodeJS.Signals): boolean {
+    if (testProcessKiller) {
+        return testProcessKiller(pid, signal);
+    }
+    try {
+        process.kill(pid, signal);
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 /**
  * Expand a leading ~ to user homedir and normalize path.
@@ -269,9 +390,10 @@ export class ProjectRegistry {
         });
     }
 
-    /** List all registered projects, healing paths + stale ports first. */
+    /** List all registered projects, healing paths, refreshing missing directories, and clearing stale ports first. */
     async list(): Promise<ProjectEntry[]> {
         await this.healTildePaths();
+        await this.refreshProjects();
         await this.healStale();
         return this.readRaw().projects;
     }
@@ -422,6 +544,70 @@ export class ProjectRegistry {
             if (changed) {
                 this.writeRaw(data);
             }
+        });
+    }
+
+    /**
+     * Verify all registered project folders exist on disk; purge missing ones.
+     * For purged entries with port > 0, if the port is currently live, discover
+     * its listening process ID and terminate it cleanly (SIGTERM -> bounded wait -> SIGKILL).
+     */
+    async refreshProjects(options?: RefreshProjectsOptions): Promise<RefreshProjectsResult> {
+        const terminate = options?.terminateProcesses ?? true;
+        const killTimeoutMs = options?.killTimeoutMs ?? 2000;
+        const executor = options?.processExecutor ?? new NodeProcessExecutor();
+
+        return this.withLock(async () => {
+            const data = this.readRaw();
+            const kept: ProjectEntry[] = [];
+            const removed: ProjectEntry[] = [];
+            const terminated: TerminatedProcessInfo[] = [];
+
+            for (const project of data.projects) {
+                const normalizedPath = normalizeProjectPath(project.path);
+                if (existsSync(normalizedPath)) {
+                    kept.push(project);
+                } else {
+                    removed.push(project);
+                    if (terminate && project.port > 0) {
+                        const live = await isPortLive(project.port);
+                        if (live) {
+                            const pid = await findListeningPid(project.port, executor);
+                            if (pid !== undefined) {
+                                sendSignalToPid(pid, 'SIGTERM');
+                                let stillLive = true;
+                                const pollInterval = 50;
+                                const maxTicks = Math.ceil(killTimeoutMs / pollInterval);
+                                for (let tick = 0; tick < maxTicks; tick++) {
+                                    await new Promise((r) => setTimeout(r, pollInterval));
+                                    stillLive = await isPortLive(project.port);
+                                    if (!stillLive) break;
+                                }
+
+                                if (stillLive) {
+                                    sendSignalToPid(pid, 'SIGKILL');
+                                    await new Promise((r) => setTimeout(r, pollInterval));
+                                    terminated.push({ pid, port: project.port, signal: 'SIGKILL' });
+                                } else {
+                                    terminated.push({ pid, port: project.port, signal: 'SIGTERM' });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (removed.length > 0) {
+                data.projects = kept;
+                this.writeRaw(data);
+            }
+
+            return {
+                removed,
+                terminated,
+                purgedProjects: removed,
+                terminatedProcesses: terminated,
+            };
         });
     }
 }

@@ -46,6 +46,7 @@ Shows all worktrees with their branches and paths.
 
 ```bash
 git worktree remove ../project-hotfix
+spur projects remove ../project-hotfix 2>/dev/null || true
 ```
 
 ### Prune (clean up stale references)
@@ -83,6 +84,7 @@ After removing a worktree, run `git worktree prune` and `git gc` to reclaim spac
 
 ```bash
 git worktree remove ../old-worktree
+spur projects remove ../old-worktree 2>/dev/null || true
 git worktree prune
 git gc --aggressive
 ```
