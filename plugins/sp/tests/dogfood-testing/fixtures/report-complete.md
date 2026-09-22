@@ -25,6 +25,12 @@ protocol: sp:dogfood-testing@1.2
 - **Mode:** `observe-only (--max-retry 0)`
 - **Task under test:** 0001 — fixture task
 - **Run id:** `fixture-complete-0001` · **Live:** `.spur/run/dogfood/fixture-complete-0001.md` · **Report:** `docs/dogfood/2026-07-17-sp-dev-example-dogfood.md`
+- **Source evidence:** commit `fixture` (clean tree at report time; no dirty-state drift recorded)
+- **Definition:** path+hash `plugins/sp/tests/dogfood-testing/fixtures/report-complete.md` · resolved digest: unknown (fixture)
+- **Execution mode:** `observe-only (--max-retry 0)`; driver and testee in one session (no chained leg)
+- **Measurement scope:** driver ledger, chars/4 heuristic, per-step scope; external meter: none (`Meter: n/a`)
+- **Sample coverage:** 2/2 executed steps observed; testee workflow/run/session IDs: unknown
+- **Comparability:** not comparable — fixture evidence with unresolved definition digest (additive provenance, task 0913)
 
 ### 2. Execution Summary
 
@@ -35,7 +41,7 @@ protocol: sp:dogfood-testing@1.2
 
 #### Cost
 
-- **Ledger estimate:** ~1400 total | ~700 cached (~33% hit rate) `[~estimate]`
+- **Ledger estimate:** ~2100 total | ~700 cached (~33% hit rate) `[~estimate]`
 - **Method:** chars/4 heuristic (monitor-ledger.md); confidence: LOW
 - **Meter:** n/a
 
@@ -69,7 +75,7 @@ protocol: sp:dogfood-testing@1.2
 
 ── Dogfood Summary ──
 Result: PASS — no issues, no findings.
-Tokens: ~1400 total | ~700 cached (~33% hit rate) [~estimate]
+Tokens: ~2100 total | ~700 cached (~33% hit rate) [~estimate]
 
 Fixed issues:
   • (none)

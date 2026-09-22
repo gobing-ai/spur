@@ -2,18 +2,18 @@
 doc: design/session-review
 owns: SURFACE — active-session review command, evidence boundary, and compact report contract
 authority: derived
-updated_at: 2026-08-27
+updated_at: 2026-09-22
 ---
 
 # Active session review
 
 **Area:** `/sp:dev-review-session` and `sp:session-review`.
-**Status:** built (ADR-089).
+**Status:** built (ADR-089; triage exception clarified 2026-09-22, task 0913).
 
 ## Operator surface
 
 ```text
-/sp:dev-review-session [<focus>]
+/sp:dev-review-session [<focus>] [--triage]
 ```
 
 `focus` changes ordering only. The command runs in the active host session and delegates once to
@@ -46,6 +46,10 @@ environment-improvement placement rule and remain proposals only.
 ## Boundaries
 
 - No workflow YAML, subprocess, subagent, history import, baseline, cache, or atomic publication.
-- No source/doc edit, corpus task creation, or indexed-context append.
+- Report-only by default: no source/doc edit, no corpus task creation, and no indexed-context
+  append, except the explicit bounded `--triage` exception (shipped with the command, documented
+  here since task 0913): exactly two mutation classes — pure-doc / one-to-two-line direct fixes
+  applied inline with re-verification, and exactly one triage task created through the CLI-gated
+  corpus surface. Anything else stays a proposal.
 - No recurrence or trend claim from one session.
 - Ended sessions, cross-agent windows, and quantitative forensics route to history-anatomy.

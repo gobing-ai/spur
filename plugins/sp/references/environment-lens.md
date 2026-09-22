@@ -24,7 +24,7 @@ field named by each column — never as a history-anatomy `category` (that vocab
 | automated checks | `reliability` | `automated-checks` | `environment`; action is a gate, not prose |
 | coding standards | `workflow` | `coding-standards` | `environment`; owner surface is review, never implementer |
 | AGENTS.md placement | `workflow` | `agents-md-placement` | `environment`; action = move to skill/reference/check |
-| tool economy | `performance` | `tool-economy` | existing cache-health P3; `environment` when the tool itself is the waste |
+| tool economy | `performance` | `tool-economy` | existing evidence-based reuse-observation P3 (task 0913); `environment` when the tool itself is the waste |
 | no-ops | `workflow` | `no-ops` | `environment`; `file:line` of the dead instruction |
 | information access | `telemetry` | `information-access` | existing chained-step `~unknown` P3; `environment` when access is missing |
 

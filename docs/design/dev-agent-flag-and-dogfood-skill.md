@@ -74,7 +74,9 @@ Two coupled gaps in the `/sp:dev-*` surface:
   to fine-tune the testee from the report alone.
 - **Monitor + ledger** (`references/monitor-ledger.md`): the live-ledger rule (write a row the instant
   a step resolves), an explicit column contract, the token/cache `~estimate` heuristic, and the
-  cache-health finding rule (<50% aggregate / <40% per-step → P3).
+  cache-health finding rule (<50% aggregate / <40% per-step → P3). *(Amendment 2026-09-22,
+  task 0913: the fixed-threshold cache-health rule was retired — estimated reuse shares now yield
+  evidence-or-hypothesis findings only; see `monitor-ledger.md`.)*
 
 ## Why these choices
 

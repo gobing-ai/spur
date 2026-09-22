@@ -84,7 +84,14 @@ three buckets — never skip triage and start fixing from the raw findings list.
    Apply the placement rule in
    [the environment-improvement mapping](../../references/environment-lens.md): automate with a
    check when possible, place coding standards on the review path, and keep always-loaded steering
-   as navigation pointers.
+   as navigation pointers. When the session drove a task pipeline, at most three bounded
+   diagnostic questions may be drawn from the supported observations (F1/F2) and measured
+   overhead candidates (F3/F4) in the 0912 workflow baseline
+   (`docs/reports/i31/0912-workflow-baseline.md`) — e.g. repeated gate runs (F4), full-loss
+   test-fix timeouts (F3), or unemitted/non-terminal run rows (F1/F2) — each citing its artifact
+   anchor and owner handoff (driver adoption D62, row-closure defect P). Areas the baseline marks
+   INSUFFICIENT_EVIDENCE (token/USD, percentages, fleet) stay excluded; record the limitation
+   instead of a performance conclusion.
 5. **Render the report.** Use the exact compact output contract below. Omit empty table rows, not
    headings; write `None observed` when a section has no supported entry.
 
@@ -123,7 +130,10 @@ session. Do not list ordinary implementation steps as issues.
 ### Process and environment improvements
 
 For each supported proposal, name its owner surface, expected impact, verification method, and
-reversibility. Proposals remain report-only: apply no change and create no task.
+reversibility. Proposals remain report-only: apply no change and create no task. A pipeline
+observation adopted from the 0912 workflow baseline cites its anchor
+(`docs/reports/i31/0912-workflow-baseline.md`) and owner handoff, and carries no unsupported
+performance claim.
 
 ### Triage (only when `--triage` was passed)
 

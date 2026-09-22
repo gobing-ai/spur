@@ -194,8 +194,9 @@ On **every** step resolve:
 
 The final report MUST include a `### 3. Monitor Ledger` section containing those rows (cardinality:
 row count == the declared executed steps). Cardinality, full methodology, column contract,
-token/cache estimation, multi-source Cost honesty, the cache-health finding rule, and the
-**cache-conservation discipline** live in
+token/context-reuse estimation, multi-source Cost honesty, the evidence-based reuse and
+pipeline-provenance observation rules (supported 0912 baseline findings, owner handoffs,
+INSUFFICIENT_EVIDENCE limits — task 0913), and the **cache-conservation discipline** live in
 **[monitor-ledger.md](references/monitor-ledger.md)** — apply conservation while monitoring; low
 cache% is usually the driver re-fetching data it already holds.
 
@@ -532,7 +533,8 @@ Do NOT:
 - [references/report-template.md](references/report-template.md) — report section contract,
   mandatory footer, task-sink L3 rule.
 - [references/monitor-ledger.md](references/monitor-ledger.md) — live-ledger column contract,
-  token/cache estimation, cache-health finding rule.
+  token/context-reuse estimation, evidence-based reuse observation rule, pipeline-run provenance
+  observation rules.
 
 ## Platform Notes
 

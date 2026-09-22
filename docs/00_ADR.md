@@ -1278,6 +1278,13 @@ workflow, delegates to another agent, imports history, compares a baseline, publ
 mutates source, docs, memory, or corpus state. `/sp:dev-find-issue` remains the daily/ad-hoc
 imported-history surface.
 
+**Amendment 2026-09-22 (task 0913) — documented `--triage` exception.** The absolute read-only
+wording above predates the shipped `--triage` mode. Report-only remains the default; the explicit
+exception is bounded to exactly two mutation classes — pure-doc / one-to-two-line direct fixes
+re-verified inline, and one triage task created through the CLI-gated corpus surface — while
+workflow launch, delegation, history import, baseline comparison, and indexed-context appends
+stay prohibited. This records the already-shipped surface; it does not reopen the decision.
+
 **Why.** Immediate wrap-up and historical forensics have different evidence, latency, and output
 contracts; combining them would unfreeze history-anatomy's two-mode and twelve-section contracts.
 

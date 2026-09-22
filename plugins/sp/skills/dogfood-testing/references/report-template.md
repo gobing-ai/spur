@@ -96,7 +96,20 @@ Skeleton is written in Phase 1; filled as the run progresses; finalized in Phase
 - **Mode:** `observe-only (--max-retry 0)` | `fix (--max-retry N)`
 - **Task under test:** WBS + title (if applicable)
 - **Run id:** `<run_id>` · **Live:** `<live_path>` · **Report:** `<report_path>`
+- **Source evidence:** `<commit sha>` + dirty-state (`clean` | `porcelain hash` | `unrecorded`)
+- **Definition:** resolved definition digest, or `path+hash`; `unknown` when not resolvable
+- **Execution mode:** `<observe-only | fix>` · driver/testee separation noted for chained legs
+- **Measurement scope:** `<driver ledger (chars/4, per-step) | ccusage <day\|session> | agent usage fields>`; external meter name or `none`
+- **Sample coverage:** `<k>/<n>` executed steps observed; testee workflow/run/session IDs `<ids | unknown>`
 ```
+
+**Provenance and comparability (task 0913, R4 — additive).** The provenance lines above are
+optional in `@1.2`: legacy reports without them remain readable and valid, but are **not
+automatically eligible for comparison**. Before treating two reports as comparable, require
+compatible measurement scope, execution mode, and resolved definition identity; otherwise emit
+**`not comparable`** and route the missing evidence to its owner. Unsupported identifiers are
+recorded as `unknown` — never invented. Driver cost and testee/chained-leg cost stay separate
+rows; pilot comparisons must not mix them.
 
 When `status` is `aborted` or the report is partial, add under §1:
 
@@ -122,14 +135,22 @@ When `status` is `aborted` or the report is partial, add under §1:
 
 **Cost honesty rules:**
 
-- Always include ledger-derived `~estimate` total / cached / cache% with a **Method** line and
+- Separate the three evidence classes in every Cost block (task 0913, R3): **measured** usage
+  (real meter, scope-labeled), **heuristic estimates** (chars/4 ledger, labeled `~estimate`,
+  confidence `LOW`), and **unavailable** values rendered `n/a` — never a fabricated number or a
+  share computed over unknown rows.
+- Always include ledger-derived `~estimate` total / cached / reuse share with a **Method** line and
   **confidence** (`LOW` when estimate-only; `MEDIUM` when a real meter is also present).
 - Optional meters when available (never invent):
   - `ccusage` session/daily delta — label scope (`day` / `session`), **not** per-step
   - agent usage fields if present in tool results
-- If no meter: print `Meter: n/a` explicitly.
+- If no meter: print `Meter: n/a` explicitly; if no ledger row is observable, print totals and
+  share as `n/a` rather than folding unknowns into zero.
 - Never present an unsubstantiated precise integer as billed/metered cost.
-- Aggregate cache% MUST equal the ledger formula (see §3); otherwise the report is invalid.
+- Observable totals MUST satisfy `total = fresh + cached` and the share MUST equal the ledger
+  formula over observable rows within display rounding (±1 point); the validator (task 0913)
+  rejects violations. The chars/4 figures estimate the driver session's context reuse — they are
+  **not** provider cache measurements and establish no realized savings.
 - **Chained-step segmentation (@1.2):** when a derived step is implement-heavy (the step runs a
   pipeline leg, writes code, or mutates more than its own arguments), its cost MUST be a separate
   ledger row tagged `chained:<step>` and kept out of the driver's row. If the chained leg ran in a
@@ -251,8 +272,8 @@ from the trailing feasibility tag:
 ```
 
 Omitting the class preserves the current line shape; untagged findings remain valid and the
-protocol stays `sp:dogfood-testing@1.2` (the validator gains no required field; the cache-health
-P3 above needs no class).
+protocol stays `sp:dogfood-testing@1.2` (the validator gains no required field; an
+evidence-based reuse observation needs no class).
 
 - `testee` — a defect in the testee's contract (the protocol the run grades). Bounded fix-mode
   may repair it, unchanged.
@@ -278,13 +299,15 @@ Severity scale:
   finding:** when a drift row (`drift:external`) is present in the ledger, a P2 finding naming the
   drifted paths is mandatory in the report (not optional). The finding states the run's evidence is
   degraded, not voided. See [SKILL.md §Workspace-drift guard](../SKILL.md#workspace-drift-guard-r2--task-0296).
-- **P3** — efficiency / DX / observation (includes the cache-health rule below).
+- **P3** — efficiency / DX / observation (includes evidence-based context-reuse observations below).
 - **P4** — nice-to-have, cosmetic, or speculative.
 
-**Cache-health rule** (from [monitor-ledger.md](monitor-ledger.md)): if aggregate cache% < 50% or any
-step < 40%, emit a **P3** — "Low cache hit rate — candidate for context-window or prompt trimming"
-with the offending step(s). Absolute token totals from the heuristic are trend-only (`[unverifiable]`
-as billable cost proof is expected).
+**Context-reuse observation rule** (task 0913 — replaces the fixed-threshold cache-health rule;
+see [monitor-ledger.md](monitor-ledger.md)): estimated reuse shares (chars/4) never auto-generate
+causal waste findings. Report a low estimated share only as a labeled-hypothesis finding carrying
+`[unverifiable]` and naming the confirmation needed, or cite measured meter evidence with its
+scope. Absolute token totals from the heuristic are trend-only (`[unverifiable]` as billable cost
+proof is expected).
 
 **Migration grep rule.** When dogfooding migrations or retired surfaces, distinguish intentional
 legacy-term mentions in guidance from live routed surfaces. Pair any broad grep for old skill or

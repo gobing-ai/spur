@@ -108,7 +108,7 @@
         ├── [done] **H82**: Unified --agent execution-surface selector ([H82_unified-agent-execution-surface-selector.md](./H82_unified-agent-execution-surface-selector.md))
         └── [done] **H83**: Run-scoped agent session affinity, live agent streaming, unified --agent inline ([H83_run-scoped-agent-session-affinity-live-agent-streaming-unified-agent-inline.md](./H83_run-scoped-agent-session-affinity-live-agent-streaming-unified-agent-inline.md))
     └── [done] **H9**: Executor selection: inline default, agent/executor naming, and working tier-based fallback ([H9_executor-selection-inline-default-agent-executor-naming-and-working-tier-based-fallback.md](./H9_executor-selection-inline-default-agent-executor-naming-and-working-tier-based-fallback.md))
-[verifying] **I**: sp plugin ([I_sp-plugin.md](./I_sp-plugin.md))
+[active] **I**: sp plugin ([I_sp-plugin.md](./I_sp-plugin.md))
     ├── [done] **I1**: sp plugin hands-off ready ([I1_sp-plugin-hands-off-ready.md](./I1_sp-plugin-hands-off-ready.md))
         ├── [done] **I11**: dev-idea: drop --design force path + idea-evaluation taste gate ([I11_dev-idea-drop-design-force-path-idea-evaluation-taste-gate.md](./I11_dev-idea-drop-design-force-path-idea-evaluation-taste-gate.md))
         └── [active] **I12**: dev-idea robustness: verbatim idea artifact, requirement inventory and coverage gate, checker-aware stage prompts, --from-file ([I12_dev-idea-robustness-verbatim-idea-artifact-requirement-inventory-and-coverage-gate-checker-aware-stage-prompts-from-file.md](./I12_dev-idea-robustness-verbatim-idea-artifact-requirement-inventory-and-coverage-gate-checker-aware-stage-prompts-from-file.md))

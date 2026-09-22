@@ -47,7 +47,7 @@ Exactly one file under `plugins/sp/references/` enumerates these seven names, ve
 | automated checks | `reliability` | `automated-checks` | `environment`; action is a gate, not prose |
 | coding standards | `workflow` | `coding-standards` | `environment`; owner surface is review, never implementer |
 | AGENTS.md placement | `workflow` | `agents-md-placement` | `environment`; action = move to skill/reference/check |
-| tool economy | `performance` | `tool-economy` | existing cache-health P3; `environment` when the tool itself is the waste |
+| tool economy | `performance` | `tool-economy` | existing evidence-based reuse-observation P3 (task 0913); `environment` when the tool itself is the waste |
 | no-ops | `workflow` | `no-ops` | `environment`; `file:line` of the dead instruction |
 | information access | `telemetry` | `information-access` | existing chained-step `~unknown` P3; `environment` when access is missing |
 
@@ -83,7 +83,7 @@ Optional class tag, closed set: `environment` | `testee` | `waste`. Finding line
 | Missed coding standard | `environment` | review path — never the implementer skill |
 | Session mistake a linter/typechecker/test could have caught | `environment` | the check, not a new AGENTS.md sentence |
 | Testee contract bug | `testee` (or untagged) | the testee |
-| Token/tool waste that is not a missing environment affordance | `waste` or untagged cache-health P3 | existing cost/cache findings |
+| Token/tool waste that is not a missing environment affordance | `waste` or untagged reuse-observation P3 | existing cost/cache findings |
 
 When the testee is a skill or command, a defect in **that testee's contract** (the protocol the run is grading) is `testee` and may be repaired in fix-mode. The same file tagged `environment` (always-loaded steering, placement, a check that should exist, a review-path standard) is a proposal only. Class, not path, decides mutation.
 
@@ -153,7 +153,8 @@ Structural tests (plugin suite) must prove:
 1. Exactly one `plugins/sp/references/` file enumerates the seven names and the placement rule.
 2. `report-template.md` and `report-contract.md` name that file and do not redefine the seven names.
 3. A dogfood report with an `environment` / `testee` / `waste` tagged §6 finding is accepted by `validate-report` at protocol `sp:dogfood-testing@1.2`.
-4. An untagged @1.2 report, including cache-health P3, remains accepted.
+4. An untagged @1.2 report, including the legacy fixed-threshold cache-health P3 (retired as an
+   automatic rule by task 0913), remains accepted.
 5. A history-anatomy fixture using only closed categories passes the structure gate, including a section 9 that is numbered prose without I9 proposal fields.
 6. A history-anatomy finding whose `category` or key first segment is a retro name fails the structure gate; the same retro name in `<signal>` passes.
 7. `dogfood-testing` and `issue-finding` SKILL.md byte sizes do not exceed their BODY_BUDGET baselines.

@@ -248,7 +248,8 @@ the effect are per-command — this flag is a family, not one behavior:
   offered target (rank-1 or the explicit id) and forwards `--auto` to the children. Optional feature
   id names the target instead of offering rank 1.
 - `dev-debug` `[<wbs>]` — **attaches** findings to an existing task. Optional WBS names it.
-- `dev-dogfood` (no value) — **records** run outcomes against the task under test.
+- `dev-dogfood` (no value) — **creates** a new review-template task for the run's findings
+  (`spur task create --template review`); it does not attach to or update the task under test.
 
 ### `--since <ref>` — lower bound on a range
 
@@ -333,7 +334,9 @@ pauses, even under `--auto`.
 **Anchor:** `#flag-max-retry`.
 
 Bound the retry loop on fix-family commands (`dev-dogfood`, `dev-fixall`, `dev-gtd`). After `n` consecutive
-failed fix attempts, stop and ask the operator rather than looping indefinitely.
+failed fix attempts, stop and ask the operator rather than looping indefinitely. On `dev-dogfood`
+the default is `2` (fix mode) and `--max-retry 0` selects observe-only — matching the backing
+`sp:dogfood-testing` skill; the command table and the skill must not drift on this default.
 
 ### `--full` — rewrite a `--next` run as full pipeline
 

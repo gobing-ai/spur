@@ -240,8 +240,9 @@ describe('environment-lens class tags (task 0686, R3-R5/R14)', () => {
         expect(validateReport(passFixture).ok).toBe(true);
     });
 
-    // R14: the pre-existing cache-health P3 (aggregate cache% < 50 or a step < 40) predates the
-    // class tags and must keep validating without one — the tags add no required field.
+    // R14 historical note (task 0913): the old fixed-threshold cache-health P3 rule was retired
+    // from guidance (estimated reuse alone cannot establish waste); the line SHAPE must still
+    // validate structurally — the validator judges evidence arithmetic, not finding prose.
     test('the untagged cache-health P3 still validates under @1.2 (R14)', () => {
         const cacheHealth =
             '- **P3** — Low cache hit rate — candidate for context-window or prompt trimming ' +
@@ -250,5 +251,128 @@ describe('environment-lens class tags (task 0686, R3-R5/R14)', () => {
         expect(cacheHealth).not.toContain('[environment]');
         expect(cacheHealth).not.toContain('[waste]');
         expect(validateReport(inject(cacheHealth)).ok).toBe(true);
+    });
+});
+
+describe('cost evidence contract (task 0913, R2/R7)', () => {
+    // Helper: replace the Cost §-block Ledger estimate line (fixture carries exactly one).
+    const setCostLine = (line: string): string =>
+        passFixture.replace(/- \*\*Ledger estimate:\*\*.*$/m, `- **Ledger estimate:** ${line} [\`~estimate\`]`);
+    const setFooterTokens = (line: string): string =>
+        passFixture.replace(/^Tokens: .*$/m, `Tokens: ${line} [~estimate]`);
+
+    test('cost-missing-cost-block — a complete report without a Cost block is rejected', () => {
+        const mutated = passFixture.replace('#### Cost', '#### Costs');
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('missing_cost_block');
+    });
+
+    test('cost-missing-fields — Ledger estimate, Method and Meter are each required', () => {
+        const noMethod = validateReport(passFixture.replace(/- \*\*Method:\*\*.*\n/m, ''));
+        expect(noMethod.errors).toContain('missing_cost_field:Method');
+        const noMeter = validateReport(passFixture.replace(/- \*\*Meter:\*\*.*\n/m, ''));
+        expect(noMeter.errors).toContain('missing_cost_field:Meter');
+        const noEstimate = validateReport(passFixture.replace(/- \*\*Ledger estimate:\*\*.*\n/m, ''));
+        expect(noEstimate.errors).toContain('missing_cost_field:Ledger estimate');
+    });
+
+    test('cost-impossible-percentage — a 999% cache figure is rejected', () => {
+        const mutated = setCostLine('~2100 total | ~700 cached (~999% hit rate)');
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('impossible_percentage:999%');
+    });
+
+    test('cost-impossible-percentage — an impossible per-row cache% is rejected', () => {
+        const mutated = passFixture.replace('| ~800 | ~300 | 27% |', '| ~800 | ~300 | 999% |');
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('impossible_percentage:999%');
+    });
+
+    test('cost-total-mismatch — the historical 1400-vs-2100 golden-fixture bug is rejected', () => {
+        const costOnly = validateReport(setCostLine('~1400 total | ~700 cached (~33% hit rate)'));
+        expect(costOnly.ok).toBe(false);
+        expect(costOnly.errors).toContain('cost_total_mismatch:cost_expected_2100');
+
+        const footerOnly = validateReport(setFooterTokens('~1400 total | ~700 cached (~33% hit rate)'));
+        expect(footerOnly.ok).toBe(false);
+        expect(footerOnly.errors).toContain('cost_total_mismatch:footer_expected_2100');
+    });
+
+    test('cost-total-mismatch — cached total inconsistent with ledger rows is rejected', () => {
+        const mutated = validateReport(setCostLine('~2100 total | ~500 cached (~24% hit rate)'));
+        expect(mutated.ok).toBe(false);
+        expect(mutated.errors).toContain('cost_total_mismatch:cost_cached_expected_700');
+        expect(mutated.errors).toContain('cache_share_mismatch:cost_expected_33');
+    });
+
+    test('cost-unknown-folded — an ~unknown row carrying a numeric cache% is rejected', () => {
+        const mutated = passFixture.replace(
+            '| 1 resolve | 1 | PASS | — | — | ~600 | ~400 | 40% |',
+            '| 1 resolve | 1 | PASS | — | — | ~600 | ~unknown | 40% |',
+        );
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('unknown_row_with_numeric_cache');
+    });
+
+    test('cost-all-unknown — all-unknown rows with n/a totals validate (unavailable evidence accepted)', () => {
+        const mutated = passFixture
+            .replace('| ~600 | ~400 | 40% |', '| ~unknown | ~unknown | — |')
+            .replace('| ~800 | ~300 | 27% |', '| ~unknown | ~unknown | — |')
+            .replace(
+                /- \*\*Ledger estimate:\*\*.*$/m,
+                '- **Ledger estimate:** ~n/a total | ~n/a cached (n/a hit rate) `[~estimate]`',
+            )
+            .replace(/^Tokens: .*$/m, 'Tokens: ~n/a total | ~n/a cached (n/a hit rate) [~estimate]');
+        const result = validateReport(mutated);
+        expect(result.errors).toEqual([]);
+        expect(result.ok).toBe(true);
+    });
+
+    test('cost-fabricated-share — numeric totals over all-unknown rows are rejected', () => {
+        const mutated = passFixture
+            .replace('| ~600 | ~400 | 40% |', '| ~unknown | ~unknown | — |')
+            .replace('| ~800 | ~300 | 27% |', '| ~unknown | ~unknown | — |');
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('fabricated_cache_share:cost');
+        expect(result.errors).toContain('fabricated_cache_share:footer');
+    });
+
+    test('cost-malformed-cost-line — an unparseable Ledger estimate value is flagged and no longer silently disables the remaining cost checks (task 0913 review P3-1)', () => {
+        // Pre-fix, the garbled cost line made validateCostEvidence `return`, so the
+        // per-row 999% scan never ran and the report validated ok.
+        const mutated = passFixture
+            .replace(
+                /- \*\*Ledger estimate:\*\*.*$/m,
+                '- **Ledger estimate:** roughly twenty-one hundred tokens total `[~estimate]`',
+            )
+            .replace('| ~800 | ~300 | 27% |', '| ~800 | ~300 | 999% |');
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('malformed_cost_line');
+        expect(result.errors).toContain('impossible_percentage:999%');
+    });
+
+    test('cost-malformed-footer — an unparseable Tokens: footer line is flagged, not silently skipped', () => {
+        const mutated = passFixture.replace(
+            /^Tokens: .*$/m,
+            'Tokens: about two thousand one hundred total [~estimate]',
+        );
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('malformed_footer');
+    });
+
+    test('cost-rounding-tolerance — ±1 point display rounding is accepted; beyond it is rejected', () => {
+        const withinTolerance = validateReport(setCostLine('~2100 total | ~700 cached (~34% hit rate)'));
+        expect(withinTolerance.ok).toBe(true); // exact 33.3% may display as 34
+
+        const beyondTolerance = validateReport(setCostLine('~2100 total | ~700 cached (~40% hit rate)'));
+        expect(beyondTolerance.ok).toBe(false);
+        expect(beyondTolerance.errors).toContain('cache_share_mismatch:cost_expected_33');
     });
 });

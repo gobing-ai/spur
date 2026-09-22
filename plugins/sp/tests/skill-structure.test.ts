@@ -852,7 +852,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // 0795 R5: 38800 → 39103 (+303B) complete PIPELINE_TOKENS inventories
             // (4 missing *refineall/*verifyall tokens + marker wrappers). Not
             // permanent — split into references.
-            'dogfood-testing': 39_103,
+            // 0913 R3/R5: +~160B for the evidence-based reuse + pipeline-provenance rule
+            // pointers; the rule bodies live in references/monitor-ledger.md. Not permanent.
+            'dogfood-testing': 39_266,
             'code-verification': 30_488,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
@@ -1138,6 +1140,63 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(command).toContain('non-overlapping time breakdown');
         expect(command).toContain('Skill(skill="sp:session-review", args="$ARGUMENTS")');
         expect(command).not.toContain('spur workflow run');
+    });
+
+    test('session-review --triage exception is reconciled across skill, command, design satellite, and ADR-089 (task 0913 R6)', () => {
+        const skill = readFileSync(join(SKILLS_DIR, 'session-review', 'SKILL.md'), 'utf8');
+        const command = readFileSync(join(PLUGIN_ROOT, 'commands', 'dev-review-session.md'), 'utf8');
+        const design = readFileSync(join(PLUGIN_ROOT, '..', '..', 'docs', 'design', 'session-review.md'), 'utf8');
+        const adr = readFileSync(join(PLUGIN_ROOT, '..', '..', 'docs', '00_ADR.md'), 'utf8');
+
+        // Report-only default + the two-class triage exception, stated in skill and satellite.
+        expect(command).toContain('[--triage]');
+        expect(skill).toContain('Report-only stays the default.');
+        expect(skill).toContain('exactly one new task');
+        expect(design).toContain('/sp:dev-review-session [<focus>] [--triage]');
+        expect(design).toContain('bounded `--triage` exception');
+        expect(design).toContain('exactly one triage task');
+
+        // ADR-089 keeps its decision history and carries a narrowly dated clarification.
+        expect(adr).toContain(
+            '## ADR-089: Active Session Review Is Inline and Separate from Imported-History Forensics',
+        );
+        expect(adr).toContain('**Amendment 2026-09-22 (task 0913) — documented `--triage` exception.**');
+        expect(adr).toContain('it does not reopen the decision');
+    });
+
+    test('dogfood guidance no longer auto-emits causal cache-waste findings from fixed thresholds (task 0913 R3)', () => {
+        const ledger = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'references', 'monitor-ledger.md'), 'utf8');
+        const template = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'references', 'report-template.md'), 'utf8');
+        for (const text of [ledger, template]) {
+            expect(text).not.toContain('even if the step succeeded');
+            expect(text).not.toContain('tuning candidate regardless of the');
+            expect(text).not.toContain('emit a **P3** — "Low cache hit rate');
+        }
+        expect(ledger).toContain('never auto-generate a causal waste finding');
+        expect(template).toContain('estimated reuse shares (chars/4) never auto-generate');
+    });
+
+    test('dogfood report template carries additive provenance/comparability contract (task 0913 R4)', () => {
+        const template = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'references', 'report-template.md'), 'utf8');
+        expect(template).toContain('**Provenance and comparability (task 0913, R4 — additive).**');
+        expect(template).toContain('**Source evidence:**');
+        expect(template).toContain('**Sample coverage:**');
+        expect(template).toContain('**`not comparable`**');
+        expect(template).toContain('remain readable and valid');
+    });
+
+    test('dogfood skill adopts supported 0912 findings with owner handoffs and preserves INSUFFICIENT_EVIDENCE limits (task 0913 R5)', () => {
+        const dogfood = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'SKILL.md'), 'utf8');
+        const ledger = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'references', 'monitor-ledger.md'), 'utf8');
+        const review = readFileSync(join(SKILLS_DIR, 'session-review', 'SKILL.md'), 'utf8');
+        // SKILL.md carries the pointer; the full rules live in monitor-ledger.md (R44 body budget).
+        expect(dogfood).toContain('supported 0912 baseline findings, owner handoffs,');
+        expect(ledger).toContain('docs/reports/i31/0912-workflow-baseline.md');
+        expect(ledger).toContain('INSUFFICIENT_EVIDENCE');
+        expect(ledger).toContain('driver adoption: D62');
+        expect(ledger).toContain('row-closure defect: P');
+        expect(review).toContain('docs/reports/i31/0912-workflow-baseline.md');
+        expect(review).toContain('INSUFFICIENT_EVIDENCE');
     });
 
     test('R43 — README index tables list every shipped command/skill/agent exactly once (task 0187 AC6, task 0514 R1)', () => {

@@ -14,11 +14,11 @@ Wraps the **sp:dogfood-testing** skill.
 | Flag | Description | Default |
 | --- | --- | --- |
 | `<testee>` | Skill / command / CLI to exercise end-to-end. | required |
-| `--agent` `<inline\|auto\|name>` | Who runs the model-bearing dogfood work. | omit |
-| `--max-retry` `<n>` | Max auto-fix retries per stage. | 3 |
+| `--agent` `<inline\|auto\|name>` | **Testee-scoped** agent the testee runs under — forwarded into the testee invocation; the dogfood driver always runs in the current session. | omit (forward nothing) |
+| `--max-retry` `<n>` | Max auto-fix retries per step. `0` = observe-only. Mandatory (as `0` or `N`) for pipeline-driving testees and testees with a mutating `--fix` mode. | 2 |
 | `--save` | Compatibility no-op; saving is now default. Retained until evidenced retirement. | off |
-| `--task` | Record outcomes against a task. | omitted |
-| `--chain-follow` | Follow the testee's chained follow-ups. | off |
+| `--task` | **Creates** a new review-template task for the findings (`spur task create --template review`) — it does not attach to or update the task under test. | off |
+| `--chain-follow` | **Reads existing chained-leg evidence** (verdict artifacts, task-file diffs, review tables) after a chained leg completes, for attribution — it never executes the chained leg itself. Without it the driver stops at the testing boundary. | off |
 | `--full` | Full report verbosity (all sections). | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).

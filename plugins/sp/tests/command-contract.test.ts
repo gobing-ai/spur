@@ -1178,6 +1178,33 @@ describe('(i) task 0316 — dev-debug and dev-daily entry points', () => {
         expect(raw).not.toContain('--agent');
         expect(existsSync(join(SKILLS_DIR, 'session-review', 'SKILL.md'))).toBe(true);
     });
+
+    test('dev-dogfood matches the backing skill semantics: retry default 2, testee-scoped --agent, --task creates a review task, --chain-follow reads only (task 0913 R1)', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-dogfood.md'), 'utf8');
+        const skill = readFileSync(join(SKILLS_DIR, 'dogfood-testing', 'SKILL.md'), 'utf8');
+        const glossary = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'flag-glossary.md'), 'utf8');
+
+        // Retry default: command table pins 2 (never 3); skill states the same default.
+        expect(raw).toMatch(/\| `--max-retry` `<n>` \|[^\n]*\| 2 \|/);
+        expect(raw).not.toMatch(/\| 3 \|/);
+        expect(skill).toContain('The **default is `2`**');
+        expect(glossary).toContain('the default is `2` (fix mode) and `--max-retry 0` selects observe-only');
+
+        // --agent is testee-scoped in the command, matching the skill's Testee-scoped agent section.
+        expect(raw).toContain('**Testee-scoped** agent the testee runs under');
+        expect(skill).toContain('## Testee-scoped agent');
+
+        // --task creates a review-template task; it does not attach to the task under test.
+        expect(raw).toContain('**Creates** a new review-template task');
+        expect(raw).toContain('does not attach to or update the task under test');
+        expect(glossary).toContain("**creates** a new review-template task for the run's findings");
+        expect(skill).toContain('`--task` → file findings as a review task (`spur task create --template review`)');
+
+        // --chain-follow licenses reading existing chained-leg evidence only — never execution.
+        expect(raw).toContain('**Reads existing chained-leg evidence**');
+        expect(raw).toContain('never executes the chained leg itself');
+        expect(skill).toContain('it does NOT license the driver to execute the chained leg itself');
+    });
 });
 
 // ─── (j) task 0318 — least-privilege allowed-tools sweep ───────────────────

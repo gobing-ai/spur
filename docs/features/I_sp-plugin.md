@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I"
 name: "sp plugin"
-status: verifying
+status: active
 priority: P2
 tags: ["group"]
 created_at: "2026-08-11T21:13:55.867Z"
-updated_at: "2026-08-24T17:41:08.543Z"
+updated_at: "2026-09-22T05:56:00.093Z"
 ---
 
 # I: sp plugin
@@ -47,7 +47,7 @@ Feature: sp plugin capability ownership
 | --- | ---- | ------ |
 | 0600 | Align plugins/sp scripts to the superskill entrypoint contract and record the ADR | done |
 | 0715 | Synchronize expert-spur and spur-cli with the complete CLI surface | done |
-| 0913 | Make session review and dogfood produce trustworthy workflow-improvement evidence | backlog |
+| 0913 | Make session review and dogfood produce trustworthy workflow-improvement evidence | testing |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -57,5 +57,8 @@ I11 records its narrower dev-idea taste gate; I2 owns the active spur-dev/spur-c
 Boundary approved 2026-08-11: B owns runtime agent execution, I owns the plugin harness, and H is
 frozen historical structure pending a separate child-by-child audit.
 ## History
+
 - 2026-08-11T21:14:58.855Z backlog → active (system)
 - 2026-08-24T17:41:08.543Z active → verifying (system)
+- 2026-09-22T05:56:00.093Z verifying → active (system)
+

@@ -1,6 +1,6 @@
 ---
 name: monitor-ledger
-description: "The dogfood monitor methodology + on-disk live ledger column contract + dual-write + token/cache estimation heuristic + the cache-health finding rule. The on-disk ledger is the single source of truth the report is assembled from — recorded live, per step, never reconstructed."
+description: "The dogfood monitor methodology + on-disk live ledger column contract + dual-write + token/cache estimation heuristic + evidence-based context-reuse observation rules. The on-disk ledger is the single source of truth the report is assembled from — recorded live, per step, never reconstructed."
 see_also:
   - dogfood-testing
   - report-template
@@ -99,14 +99,16 @@ in the report's §6 Findings (no exemption applies).
 | `Finding` | One-line finding surfaced at this step, or `—`. A finding does **not** change `Outcome`. |
 | `Fresh Tokens` | Estimated fresh context for the step. Prefix with `~`. |
 | `Cached Tokens` | Estimated reused context for the step. Prefix with `~`. |
-| `Cache %` | `Cached Tokens / (Fresh Tokens + Cached Tokens)`, rounded to the nearest whole percent. An `~unknown` row carries `—`, never `0%` — unknown basis is not an observed zero. |
+| `Cache %` | Estimated context-reuse share: `Cached Tokens / (Fresh Tokens + Cached Tokens)`, rounded to the nearest whole percent. This is a **heuristic estimate** of how much context the step reused — it is not observed provider cache behavior (task 0913, R3). An `~unknown` row carries `—`, never `0%` — unknown basis is not an observed zero. |
 | `Basis` | Observable basis for the estimate: command output, prior file read reused, generated text, etc. |
 | `Wall-clock` | Elapsed time for the step. |
 
-## Token + cache estimation heuristic
+## Token + context-reuse estimation heuristic
 
 A skill **cannot read its own exact token meter** — derive an estimate and label every number
-`~estimate`. The accepted methodology is deterministic from the ledger rows:
+`~estimate`. These chars/4 figures estimate **context volume and reuse within the driver's own
+session**; they do not measure provider cache hits, cache cost, or realized savings (task 0913,
+R3). The accepted methodology is deterministic from the ledger rows:
 
 1. Estimate **Fresh Tokens** from new material consumed or produced by the step:
    - text read from files or command output: `ceil(characters / 4)`, rounded to the nearest 100;
@@ -122,8 +124,9 @@ A skill **cannot read its own exact token meter** — derive an estimate and lab
    both sums (or surfaced as a separate unknown bucket), never folded in as `Cached ~0`:
    `aggregate cache% = round(sum(Cached Tokens) / sum(Fresh Tokens + Cached Tokens) * 100)`.
 
-The **trend across runs** is the signal, not the absolute value: rising cache% = the testee is
-reusing context efficiently; falling cache% = context bloat creeping in.
+The **trend across runs** is the signal, not the absolute value: a falling estimated reuse share
+suggests context bloat creeping in; a rising one, efficient reference reuse. Trend claims from
+estimates stay labeled as such — they never become causal waste findings on their own.
 
 > Never print a precise token number you cannot substantiate. The numbers exist to show a *trend*,
 > not to bill anyone.
@@ -169,27 +172,58 @@ missing, mark the row `~unknown`, exclude it from the aggregate (or surface it a
 bucket), and explain the missing basis — never fold it in as `Cached Tokens = ~0`: unknown cache use
 is not an observed zero-percent hit rate, and a low-cache diagnosis needs observed data.
 
-## Cache-health finding rule
+## Context-reuse observation rule (task 0913, R3 — replaces the fixed-threshold cache-health rule)
 
-Cache% is the operational signal for testee-tuning:
+The estimated reuse share is a **heuristic** (chars/4 over the driver's own session); it cannot
+prove provider cache behavior, unnecessary re-reading, or realized savings. Threshold crossings
+(40%, 50%, or any other fixed line) therefore **never auto-generate a causal waste finding**.
+Instead:
 
-- Any **individual step with cache% < 40%** → it is re-reading files or re-sending prompt context
-  unnecessarily. Emit a **P3** finding naming that step, **even if the step succeeded**.
-- A run with **aggregate cache% < 50%** → the testee is a tuning candidate regardless of the
-  PASS/PARTIAL/FAIL verdict. Emit a **P3** finding: "Low cache hit rate — candidate for
-  context-window or prompt trimming."
+- **Estimated-only evidence** (chars/4 ledger, no external meter): a low estimated reuse share may
+  be reported only as a **labeled hypothesis** finding carrying the `[unverifiable]` tag, naming
+  the confirmation it needs (per-step provider telemetry, a real meter, or a measured reread
+  trace). Example shape: `P3 — estimated reuse share 36%, below the run's own trend — hypothesis:
+  repeated task-list refetching; confirm with per-step metering` `[unverifiable]`.
+- **Measured evidence** (ccusage session/day delta, or agent usage fields in tool results): report
+  the measured figures with their scope label and confidence, and keep them out of per-step ledger
+  cells. A waste finding may then name the measured evidence — still without claiming causality
+  the meter does not show.
+- **Unavailable evidence**: print `Meter: n/a` and totals `n/a` rather than a fabricated share;
+  route the missing-measurement gap to its owner as an improvement proposal.
 
-These feed the report's §6 Findings (see [report-template.md](report-template.md)).
+Unobservable chained-step cost keeps its **mandatory** P3 finding (`P3 — chained-step cost not
+observable`, task 0278 R3) — that rule reports missing evidence, not causal waste, and stays.
+
+These findings feed the report's §6 Findings (see [report-template.md](report-template.md)).
+
+## Pipeline-run provenance observations (task 0913, R5)
+
+When the testee drives a task pipeline, the driver may adopt the supported findings from the
+0912 workflow baseline (`docs/reports/i31/0912-workflow-baseline.md`) as bounded observations —
+with artifact anchors and owner handoffs, never as invented performance conclusions:
+
+- **Run-row closure / structured emission (supported, pilot-selected):** if the observed pipeline
+  run leaves a non-terminal run row or emits no `action_runs` rows, record the observation with
+  the run id as anchor and hand off to the owners named in the baseline (driver adoption: D62;
+  row-closure defect: P). These are the baseline's pilot-eligible findings (F1/F2).
+- **Performance conclusions (INSUFFICIENT_EVIDENCE in the baseline):** no token/USD, percentage,
+  speedup, or fleet claim may be derived from a dogfood run. Record the limitation explicitly
+  (what was unmeasured and why) and route the missing evidence to the baseline's named gaps
+  (session/cost joins E6; scoped-gate experiment F3/F4; fleet serve session S5).
+- Historical comparison, recurrence, and cohort trends stay with history-anatomy and existing
+  doctor tooling — the dogfood report owns only what its own ledger observed.
 
 ## Cache-conservation discipline (how to keep cache% high)
 
-The cache-health rule above *detects* waste; this section is the mitigation. The dogfooding driver
+The context-reuse observation rule above interprets the signal; this section is the mitigation. The
+dogfooding driver
 (the agent running Phase 2/3) controls most of the cache% it later reports — low cache% is usually
 the driver re-fetching data it already holds. Apply these while monitoring each step:
 
 ### Driver cache checklist (task 0278 R7)
 
-When aggregate cache% risks falling under 50%, apply this checklist **before** re-reading:
+When the estimated reuse share looks low (or trends down across runs), apply this checklist
+**before** re-reading:
 
 | # | Action | Why |
 | --- | -------- | ----- |
@@ -198,12 +232,13 @@ When aggregate cache% risks falling under 50%, apply this checklist **before** r
 | 3 | Prefer `--json` CLI over re-parsing freeform prose | Smaller, stable payloads |
 | 4 | Dual-write ledger rows without re-reading the whole report each step | Append/patch; don't full-file re-load |
 | 5 | Skip redundant `bun test` full suite between steps when a focused file suite already green | Run the broad suite once at the end |
-| 6 | For batch testees (`verifyall` / `runall` / `refineall`): freeze `task list --json` once at resolve | Re-listing the set per task is the #1 sub-50% cache pattern on feature dogfoods |
-| 7 | On re-verify of done tasks: re-read only cited `file:line` anchors, not full Solution blobs | Anchor-first re-verify keeps cache% above the 50% floor |
+| 6 | For batch testees (`verifyall` / `runall` / `refineall`): freeze `task list --json` once at resolve | Re-listing the set per task is the #1 low-reuse-estimate pattern on feature dogfoods |
+| 7 | On re-verify of done tasks: re-read only cited `file:line` anchors, not full Solution blobs | Anchor-first re-verify keeps the reuse estimate honest and high |
 
 1. **Reuse CLI output already in context.** If a prior step (or a prior tool call this step)
    captured `spur task show`/`check`/`list` output, do **not** re-invoke the same command for that
-   data — reference the prior result. Re-invocation is the #1 cause of sub-40% steps. Only re-fetch
+   data — reference the prior result. Re-invocation is the #1 cause of low estimated-reuse steps.
+   Only re-fetch
    when the underlying state *changed* (e.g. you just wrote a section and need the new
    `requiredSections`).
 2. **Don't re-ground shared scaffolding per step.** Command docs, the skill preamble, and the
@@ -217,7 +252,8 @@ When aggregate cache% risks falling under 50%, apply this checklist **before** r
    useful as a trend if it reflects what actually happened.
 
 The point is not to game the number — it is to drive the testee (and your own monitoring) toward
-reusing context, which is the real cost saving the cache% signal stands for.
+reusing context, which is the context-efficiency gain the estimated reuse share stands for. The
+share itself remains a heuristic trend signal (task 0913, R3), not a measured saving.
 
 ## Worked ledger example
 
@@ -230,6 +266,7 @@ reusing context, which is the real cost saving the cache% signal stands for.
 | 4 profile | 1 | PASS | — | — | ~500 | ~350 | 41% | command output + prior profile reused | ~2s |
 ```
 
-Aggregate: total = `3700 + 2050 = 5750`; cached = `2050`; cache% =
-`round(2050 / 5750 * 100) = 36%` `[~estimate]` — below the 50% floor, so emit the P3 cache-health
-finding.
+Aggregate: total = `3700 + 2050 = 5750`; cached = `2050`; estimated reuse share =
+`round(2050 / 5750 * 100) = 36%` `[~estimate]`. A low estimated reuse share is reported only as a
+labeled-hypothesis `[unverifiable]` finding (or backed by a real meter) — never as an automatic
+causal waste claim (task 0913, R3).
