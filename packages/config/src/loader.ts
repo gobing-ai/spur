@@ -301,10 +301,12 @@ export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions)
 // the import cycle executor-update → loader is safe — the shared symbols are used
 // lazily at call time, never at module init.)
 export {
+    declaresExecutor,
     type ExecutorConfigLayer,
     type ExecutorDisabledUpdate,
     ExecutorUpdateError,
     type ExecutorUpdateErrorCode,
+    getDeclaredExecutorNames,
     type SetExecutorAvailabilityRequest,
     type SetExecutorAvailabilityResult,
     setExecutorAvailability,

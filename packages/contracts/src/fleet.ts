@@ -98,6 +98,48 @@ export const processListResponseSchema = z.object({
 /** Process list response DTO. */
 export type ProcessListResponse = z.infer<typeof processListResponseSchema>;
 
+/** One configured executor row in the fleet snapshot. */
+export const configuredAgentExecutorSchema = z.object({
+    name: z.string(),
+    agent: z.string(),
+    model: z.string().optional(),
+    tier: z.string(),
+    disabled: z.boolean(),
+    disabledOwner: z.string().optional(),
+    disabledReason: z.string().optional(),
+    disabledSince: z.string().optional(),
+    installed: z.boolean().optional(),
+    usable: z.boolean().optional(),
+    version: z.string().nullable().optional(),
+    error: z.string().nullable().optional(),
+    elected: z.array(z.string()).optional(),
+    executionCapabilities: z.record(z.string(), z.unknown()).optional(),
+    sourceLayer: z.enum(['project', 'global']).optional(),
+    sourcePath: z.string().optional(),
+});
+
+export type ConfiguredAgentExecutorDto = z.infer<typeof configuredAgentExecutorSchema>;
+
+/** Request shape for toggling an executor's availability (ready / disabled). */
+export const executorAvailabilityInputSchema = z.object({
+    name: z.string(),
+    disabled: z.boolean(),
+    layer: z.enum(['project', 'global']).optional(),
+});
+
+export type ExecutorAvailabilityInput = z.infer<typeof executorAvailabilityInputSchema>;
+
+/** Response shape for updating an executor's availability. */
+export const executorAvailabilityResponseSchema = z.object({
+    ok: z.boolean(),
+    status: z.enum(['updated', 'unchanged']),
+    reason: z.string().optional(),
+    targetLayer: z.enum(['project', 'global']).optional(),
+    targetPath: z.string().optional(),
+});
+
+export type ExecutorAvailabilityResponse = z.infer<typeof executorAvailabilityResponseSchema>;
+
 /** Fleet snapshot contract — CONTRACT ONLY, served by the Hono health module. */
 export const fleetContract = {
     snapshot: oc
@@ -108,6 +150,15 @@ export const fleetContract = {
             tags: ['fleet'],
         })
         .output(fleetSnapshotSchema),
+    setExecutorAvailability: oc
+        .route({
+            method: 'POST',
+            path: '/project/executors/availability',
+            summary: 'Toggle an executor availability state (Ready / Disabled) in project or global config',
+            tags: ['fleet'],
+        })
+        .input(executorAvailabilityInputSchema)
+        .output(executorAvailabilityResponseSchema),
 };
 
 /** Supervised process list contract — CONTRACT ONLY, served by the Hono processes module. */

@@ -106,32 +106,41 @@ export async function setExecutorAvailability(
 }
 
 /**
+ * Read all executor names declared under `agent.executors` in a config file.
+ * Returns an empty set if the file does not exist, is invalid YAML, or lacks executors.
+ */
+export async function getDeclaredExecutorNames(configPath: string): Promise<Set<string>> {
+    let content: string;
+    try {
+        content = await readFile(configPath, 'utf8');
+    } catch {
+        return new Set();
+    }
+    const doc = parseDocument(content);
+    if (doc.errors.length > 0) return new Set();
+    const executors = doc.get('agent');
+    if (!isMap(executors)) return new Set();
+    const seq = executors.get('executors');
+    if (!isSeq(seq)) return new Set();
+    const names = new Set<string>();
+    for (const item of seq.items) {
+        if (isAlias(item) || !isMap(item)) continue;
+        const nameNode = item.get('name', true);
+        if (isScalar(nameNode) && typeof nameNode.value === 'string' && nameNode.value.length > 0) {
+            names.add(nameNode.value);
+        }
+    }
+    return names;
+}
+
+/**
  * Cheap declaration probe: does this config file's `agent.executors` sequence name
  * `executorName`? Parse errors surface to the caller only when this layer becomes
  * the write target; a broken OTHER layer must not block a legitimate global write.
  */
-async function declaresExecutor(configPath: string, executorName: string): Promise<boolean> {
-    let content: string;
-    try {
-        content = await readFile(configPath, 'utf8');
-    } catch (error) {
-        // ENOENT race after existsSync in resolveConfigLayers: the layer vanished
-        // between listing and read — treat as not declaring rather than surfacing
-        // a raw fs error from a probe (0891 review fix).
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
-        throw error;
-    }
-    const doc = parseDocument(content);
-    if (doc.errors.length > 0) return false;
-    const executors = doc.get('agent');
-    if (!isMap(executors)) return false;
-    const seq = executors.get('executors');
-    if (!isSeq(seq)) return false;
-    return seq.items.some((item) => {
-        if (isAlias(item) || !isMap(item)) return false;
-        const nameNode = item.get('name', true);
-        return isScalar(nameNode) && nameNode.value === executorName;
-    });
+export async function declaresExecutor(configPath: string, executorName: string): Promise<boolean> {
+    const names = await getDeclaredExecutorNames(configPath);
+    return names.has(executorName);
 }
 
 /**

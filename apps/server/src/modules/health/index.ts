@@ -13,6 +13,13 @@ import {
     startRegisteredProject,
 } from '@gobing-ai/spur-app';
 import { normalizeExecutorAvailability } from '@gobing-ai/spur-config';
+import {
+    declaresExecutor,
+    ExecutorUpdateError,
+    getDeclaredExecutorNames,
+    resolveConfigLayers,
+    setExecutorAvailability,
+} from '@gobing-ai/spur-config/loader';
 import { CoordinationRunDao, InboxMessageDao, TIER_RANK } from '@gobing-ai/spur-domain';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
@@ -146,6 +153,8 @@ export const healthModule: ServerModule = {
                 error?: string | null;
                 elected?: string[];
                 executionCapabilities?: Record<string, unknown>;
+                sourceLayer?: 'project' | 'global';
+                sourcePath?: string;
             }> = [];
 
             try {
@@ -182,6 +191,21 @@ export const healthModule: ServerModule = {
                         // ignore doctor cache read errors
                     }
 
+                    let projectExecutors = new Set<string>();
+                    let globalExecutors = new Set<string>();
+                    let layers: { project?: string; global?: string } = {};
+                    try {
+                        layers = resolveConfigLayers(ctx.cwd);
+                        if (layers.project) {
+                            projectExecutors = await getDeclaredExecutorNames(layers.project);
+                        }
+                        if (layers.global) {
+                            globalExecutors = await getDeclaredExecutorNames(layers.global);
+                        }
+                    } catch {
+                        // ignore layer discovery errors
+                    }
+
                     executors = (config.agent.executors ?? []).map((ex) => {
                         const avail = normalizeExecutorAvailability(ex.disabled);
                         const doc = doctorMap.get(ex.name);
@@ -189,6 +213,15 @@ export const healthModule: ServerModule = {
                         const usable = doc?.usable ?? !avail.disabled;
                         const version = doc?.version ?? null;
                         const error = doc?.error ?? null;
+                        const isProject = projectExecutors.has(ex.name);
+                        const isGlobal = globalExecutors.has(ex.name);
+                        const sourceLayer: 'project' | 'global' | undefined = isProject
+                            ? 'project'
+                            : isGlobal
+                              ? 'global'
+                              : undefined;
+                        const sourcePath = isProject ? layers.project : isGlobal ? layers.global : undefined;
+
                         return {
                             name: ex.name,
                             agent: ex.agent,
@@ -204,6 +237,8 @@ export const healthModule: ServerModule = {
                             error,
                             elected: [] as string[],
                             executionCapabilities: ex.executionCapabilities as Record<string, unknown> | undefined,
+                            sourceLayer,
+                            sourcePath,
                         };
                     });
 
@@ -440,6 +475,71 @@ export const healthModule: ServerModule = {
                 const message = err instanceof Error ? err.message : String(err);
                 const status = message.includes('not found') ? 404 : 500;
                 return c.json({ error: message }, status);
+            }
+        });
+
+        // ── Agent executor availability toggle (Ready / Disabled) ──
+        app.post('/api/project/executors/availability', async (c) => {
+            if (!ctx) {
+                return c.json({ error: 'Executor availability updates unavailable on Cloudflare Workers' }, 501);
+            }
+            let body: { name?: string; executor?: string; disabled?: boolean; layer?: 'project' | 'global' } = {};
+            try {
+                body = await c.req.json();
+            } catch {
+                return c.json({ error: 'Invalid JSON request body' }, 400);
+            }
+
+            const executorName = body.name ?? body.executor;
+            if (!executorName || typeof executorName !== 'string' || executorName.trim().length === 0) {
+                return c.json({ error: 'Missing or invalid executor name' }, 400);
+            }
+            if (typeof body.disabled !== 'boolean') {
+                return c.json({ error: 'Missing or non-boolean "disabled" field' }, 400);
+            }
+
+            try {
+                const layers = resolveConfigLayers(ctx.cwd);
+                const isProject = layers.project ? await declaresExecutor(layers.project, executorName) : false;
+
+                const targetLayer: 'project' | 'global' = body.layer ?? (isProject ? 'project' : 'global');
+                const targetPath = targetLayer === 'project' ? layers.project : layers.global;
+
+                const result = await setExecutorAvailability({
+                    layer: targetLayer,
+                    projectRoot: ctx.cwd,
+                    executor: executorName,
+                    disabled: body.disabled,
+                });
+
+                if (result.status === 'unchanged' && result.reason === 'missing-executor') {
+                    return c.json(
+                        {
+                            error: `Executor "${executorName}" not declared in ${targetLayer} config`,
+                            reason: result.reason,
+                        },
+                        404,
+                    );
+                }
+
+                if (result.status === 'updated') {
+                    await ctx.reloadAgentConfig();
+                }
+
+                return c.json({
+                    ok: true,
+                    status: result.status,
+                    reason: 'reason' in result ? result.reason : undefined,
+                    targetLayer,
+                    targetPath,
+                });
+            } catch (err) {
+                if (err instanceof ExecutorUpdateError) {
+                    const status = err.code === 'CONFIG_CONFLICT' ? 409 : 400;
+                    return c.json({ error: err.message, code: err.code }, status);
+                }
+                const message = err instanceof Error ? err.message : String(err);
+                return c.json({ error: message }, 500);
             }
         });
     },

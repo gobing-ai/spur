@@ -603,4 +603,93 @@ describe('healthModule', () => {
             close();
         }
     });
+
+    test('/api/project/executors/availability toggles executor disabled state in project config', async () => {
+        const { writeFileSync, mkdirSync } = await import('node:fs');
+        mkdirSync(join(tempDir, '.spur'), { recursive: true });
+        writeFileSync(
+            join(tempDir, '.spur', 'config.yaml'),
+            [
+                'version: "1.2"',
+                'name: test-proj',
+                'agent:',
+                '  executors:',
+                '    - name: alpha',
+                '      agent: pi',
+                '      tier: standard',
+                '      disabled: false',
+            ].join('\n'),
+        );
+
+        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+
+        try {
+            // Check initial fleet snapshot returns sourceLayer: 'project'
+            const fleetRes = await app.request('/api/project/fleet');
+            expect(fleetRes.status).toBe(200);
+            const fleetBody = (await fleetRes.json()) as {
+                executors: Array<{ name: string; disabled: boolean; sourceLayer?: string }>;
+            };
+            const alpha = fleetBody.executors.find((e) => e.name === 'alpha');
+            expect(alpha).toBeDefined();
+            expect(alpha?.disabled).toBe(false);
+            expect(alpha?.sourceLayer).toBe('project');
+
+            // Disable alpha
+            const disableRes = await app.request('/api/project/executors/availability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'alpha', disabled: true }),
+            });
+            expect(disableRes.status).toBe(200);
+            const disableBody = (await disableRes.json()) as { ok: boolean; status: string; targetLayer?: string };
+            expect(disableBody.ok).toBe(true);
+            expect(disableBody.status).toBe('updated');
+            expect(disableBody.targetLayer).toBe('project');
+
+            // Verify reloaded fleet reflects disabled: true
+            const fleetRes2 = await app.request('/api/project/fleet');
+            const fleetBody2 = (await fleetRes2.json()) as {
+                executors: Array<{ name: string; disabled: boolean }>;
+            };
+            const alpha2 = fleetBody2.executors.find((e) => e.name === 'alpha');
+            expect(alpha2?.disabled).toBe(true);
+
+            // Re-enable alpha
+            const enableRes = await app.request('/api/project/executors/availability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'alpha', disabled: false }),
+            });
+            expect(enableRes.status).toBe(200);
+            expect(((await enableRes.json()) as { status: string }).status).toBe('updated');
+
+            // Invalid payload handling
+            const badRes1 = await app.request('/api/project/executors/availability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: '', disabled: true }),
+            });
+            expect(badRes1.status).toBe(400);
+
+            const badRes2 = await app.request('/api/project/executors/availability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'alpha', disabled: 'yes' }),
+            });
+            expect(badRes2.status).toBe(400);
+
+            // Undeclared executor
+            const notFoundRes = await app.request('/api/project/executors/availability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'non-existent', disabled: true, layer: 'project' }),
+            });
+            expect(notFoundRes.status).toBe(404);
+        } finally {
+            close();
+        }
+    });
 });
