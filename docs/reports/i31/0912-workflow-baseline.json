@@ -1,0 +1,956 @@
+{
+    "schemaVersion": 1,
+    "task": "0912",
+    "feature": "I31 (evidence for D62 R4/R9/R13/R14)",
+    "sourceCommit": "dc109b0e42a4ca042a3dfc6c8f1036e3779f2abe",
+    "capturedAt": "2026-09-22T01:30:57Z",
+    "window": "14 UTC days: 2026-09-08T01:30:57Z .. 2026-09-22T01:30:57Z (frozen before querying)",
+    "provenance": {
+        "cliVersion": "0.3.91",
+        "cliInvocation": "bun apps/cli/src/index.ts (source-local, published spur on PATH not used)",
+        "runnerVersions": {
+            "codex-cli": "0.155.1",
+            "claude": "2.1.278"
+        },
+        "evidenceBaseRoot": "/Users/robin/xprojects/spur-new",
+        "dbs": {
+            "mainCheckoutTrace": "/Users/robin/xprojects/spur-new/.spur/spur.db (read-only sqlite3 only; never mutated)",
+            "thisWorktreeTrace": ".spur/spur.db (written by this run's driver, not by this task)"
+        },
+        "evidenceSources": [
+            "workflow trace via source-local CLI (workflow trace --since/--last --json)",
+            "runs/workflow_states/action_runs/coordination_runs/history_* read-only SQL",
+            ".spur/run/ stage artifacts and verdicts in the main checkout",
+            "task show / verdict artifacts for tasks 0849-0855, 0887, 0898, 0903-0909",
+            "workflow list --json resolution layers; installed plugin diff; inline-run-setup receipts",
+            "docs/reports/i31/0905-run-baseline.{json,md} and 0903 contract adoption artifact"
+        ],
+        "mutationPolicy": "none for runtime/source/workflows/config/installed adapters; read-only measurement; no live DB mutation, no workflow cleanup, no status changes",
+        "prerequisitesRechecked": {
+            "tasks0903-0909": "all done via task show this run",
+            "featureI31": "active; D62 active; 0905 sparse baseline consumed as prior"
+        }
+    },
+    "cohort": {
+        "definition": "all task-pipeline run rows in the main-checkout trace DB with started_at in the window; dry runs and lifecycle FSMs (task-lifecycle, feature-lifecycle) excluded by rule; dedup by persisted run id",
+        "selection": "complete window, no truncation; 16/16 rows included; this run's own worktree row recorded separately as in-flight observation",
+        "caps": {
+            "perMode": 10,
+            "note": "cap not binding: terminal rows per mode <= 4"
+        },
+        "preparationSampleReconciliation": "preparation (2026-09-21) capped sample: 15 rows (2 done, 4 failed, 9 running); at freeze: 16 rows (2 done, 4 failed, 10 running)",
+        "counts": {
+            "rows": 16,
+            "terminal": {
+                "done": 2,
+                "failed": 4,
+                "total": 6
+            },
+            "runningAtFreeze": 10,
+            "terminalByMode": {
+                "engine": 1,
+                "batch": 1,
+                "inline": 0,
+                "unknown": 4
+            },
+            "runningWithOutOfDbTerminalEvidence": 7,
+            "runningUnknown": 3
+        },
+        "denominators": {
+            "terminalExecutionDenominator": 6,
+            "note": "running rows are in-flight/stale at measurement and are excluded from terminal numerators (0905 convention); lifecycle FSMs and dry runs excluded by rule; fleet has no runs",
+            "inlineNote": "inline mode: 0 DB-terminal rows; 5 inline executions carry out-of-DB terminal evidence - the terminal evidence for inline mode lives entirely outside the run-row lifecycle (finding F1)"
+        },
+        "definitionDigests": {
+            "sha256:485542ce686c31dbec23caf265b78d7ecfa323f8bc7a5ef1174a04898e265bb7": [
+                "e021bbc1-f2ff-4b6b-acdd-b730e5acd155",
+                "65d22158-9446-4635-9571-1bf8c7dacc4c",
+                "632715dd-e51c-4b53-81e2-eb1bf6802266",
+                "run-20260914T054140Z-0849-inline",
+                "run-20260914T155556Z-0850-main",
+                "run-20260914T174208Z-0854-main"
+            ],
+            "sha256:1df82541d7a312b064b29d3f48a47c6e45d2f84454c8abc7d7145c0b20206def": [
+                "dev-run-0853-inline-160905",
+                "dev-run-0855-inline-174033",
+                "5b9072aa-f303-4377-97f5-bf8f4b70ae3b",
+                "765f59e5-e9a5-4244-8a9e-2d6a2fd91cee",
+                "0a2b0930-53e7-40ef-bfd2-70e3e89f6826"
+            ],
+            "sha256:20fdc169fe26a045b546382ad605bac855346446e16de11e7b76330e2cd5eabf": [
+                "7b7419f3-65da-4cc6-bdbf-9e09aad88ce7",
+                "inline-G66-20260918T081544",
+                "2ddb3f15-375c-4327-9b6f-55085820d8e3",
+                "ce44b029-c9f6-48d5-9bfc-2a423597c5c3"
+            ],
+            "sha256:e885c9d955b9f883cb603a296e986a8fa325508163f123548fbf606684c89d81": [
+                "51a0f9b6-ab6d-4aec-9ab4-ecc0eaaa89c3"
+            ]
+        },
+        "exclusions": [
+            {
+                "id": "inline-0912-6441",
+                "mode": "inline",
+                "reason": "this task's own in-flight run in the worktree trace DB - excluded from numerators, retained as live emission observation"
+            },
+            {
+                "id": "lifecycle-fsms",
+                "mode": "lifecycle",
+                "reason": "task-lifecycle 48 rows, feature-lifecycle 6 rows in window - externally driven status FSMs, not pipeline executions (D62 R2)"
+            },
+            {
+                "id": "coordination-rows",
+                "mode": "fleet",
+                "reason": "31 coordination_runs rows in window are pi host processes with empty run_id/spec_id - not fleet workflow runs; fleet coverage = 0 runs"
+            }
+        ],
+        "digestMapNote": "4 distinct digests inside the window; a 5th (sha256:9134966426ef...) is current at freeze; improvement comparisons never pool across digest versions"
+    },
+    "runs": [
+        {
+            "id": "7b7419f3-65da-4cc6-bdbf-9e09aad88ce7",
+            "task": "0887",
+            "changeClass": "code",
+            "mode": "engine",
+            "modeEvidence": "9 action_runs rows written by engine persistence (only cohort run with structured trace)",
+            "definitionDigest": "sha256:20fdc169fe26a045b546382ad605bac855346446e16de11e7b76330e2cd5eabf",
+            "startedAt": "2026-09-17T21:30:04.489Z",
+            "dbCompletedAt": "2026-09-17T22:57:12.659Z",
+            "durationSeconds": 5228,
+            "durationBasis": "DB started/completed",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": false,
+            "terminalEvidence": {
+                "kind": "db+verdict",
+                "refs": ["runs row done", ".spur/run/0887-verdict.json"]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0887-verdict.json",
+            "gateRepetitions": 1,
+            "repairAttempts": 2,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "test stage failed fast at 12s (lint-fast-fail); test-fix attempt 1 failed at exactly 1800s (full-loss timeout); attempt 2 succeeded in 899s; recheck 239s; action-sum 4008.4s vs 5228s wall => ~1220s inter-action dispatch/queue overhead (n=1 observation)"
+        },
+        {
+            "id": "run-20260914T174208Z-0854-main",
+            "task": "0854",
+            "changeClass": "docs",
+            "mode": "batch",
+            "modeEvidence": "dev-runall worktree naming (-main suffix); no inline receipt; no action rows in main DB (worktree trace fragmentation, F6)",
+            "definitionDigest": "sha256:485542ce686c31dbec23caf265b78d7ecfa323f8bc7a5ef1174a04898e265bb7",
+            "startedAt": "2026-09-14T17:42:09.003Z",
+            "dbCompletedAt": "2026-09-14T21:44:02.973Z",
+            "durationSeconds": 14514,
+            "durationBasis": "DB started/completed",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": false,
+            "terminalEvidence": {
+                "kind": "db+verdict",
+                "refs": ["runs row done", ".spur/run/0854-verdict.json"]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0854-verdict.json",
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "single-pass; test-fix-attempt counter file = 0; verdict mtime is a bulk merge-copy (18:23:02Z cluster) and must not be read as completion time"
+        },
+        {
+            "id": "65d22158-9446-4635-9571-1bf8c7dacc4c",
+            "task": null,
+            "changeClass": null,
+            "mode": "unknown",
+            "modeEvidence": "workflow_states written at precheck; no inline receipt; no dispatch artifact found",
+            "definitionDigest": "sha256:485542ce686c31dbec23caf265b78d7ecfa323f8bc7a5ef1174a04898e265bb7",
+            "startedAt": "2026-09-13T06:07:46.996Z",
+            "dbCompletedAt": "2026-09-13T06:07:47.199Z",
+            "durationSeconds": 0.203,
+            "durationBasis": "DB",
+            "processExit": null,
+            "workflowTerminal": "failed",
+            "staleRow": false,
+            "terminalEvidence": {
+                "kind": "db workflow_states",
+                "refs": ["precheck state, failed state, wbs=0000"]
+            },
+            "verifiedSuccess": false,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "sub-second precheck rejection with wbs=0000 (no task id at dispatch); operator/dispatch error class, ~0 machine cost"
+        },
+        {
+            "id": "765f59e5-e9a5-4244-8a9e-2d6a2fd91cee",
+            "task": null,
+            "changeClass": null,
+            "mode": "unknown",
+            "modeEvidence": "workflow_states written at precheck; no inline receipt",
+            "definitionDigest": "sha256:1df82541d7a312b064b29d3f48a47c6e45d2f84454c8abc7d7145c0b20206def",
+            "startedAt": "2026-09-13T06:07:46.434Z",
+            "dbCompletedAt": "2026-09-13T06:07:46.654Z",
+            "durationSeconds": 0.22,
+            "durationBasis": "DB",
+            "processExit": null,
+            "workflowTerminal": "failed",
+            "staleRow": false,
+            "terminalEvidence": {
+                "kind": "db workflow_states",
+                "refs": ["precheck state, failed state, wbs=0000"]
+            },
+            "verifiedSuccess": false,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "same dispatch-error class as 65d22158, paired launch"
+        },
+        {
+            "id": "632715dd-e51c-4b53-81e2-eb1bf6802266",
+            "task": null,
+            "changeClass": null,
+            "mode": "unknown",
+            "modeEvidence": "workflow_states written at precheck; no inline receipt",
+            "definitionDigest": "sha256:485542ce686c31dbec23caf265b78d7ecfa323f8bc7a5ef1174a04898e265bb7",
+            "startedAt": "2026-09-13T05:52:30.079Z",
+            "dbCompletedAt": "2026-09-13T05:52:30.285Z",
+            "durationSeconds": 0.206,
+            "durationBasis": "DB",
+            "processExit": null,
+            "workflowTerminal": "failed",
+            "staleRow": false,
+            "terminalEvidence": {
+                "kind": "db workflow_states",
+                "refs": ["precheck state, failed state, wbs=0000"]
+            },
+            "verifiedSuccess": false,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "same dispatch-error class, earlier pair"
+        },
+        {
+            "id": "0a2b0930-53e7-40ef-bfd2-70e3e89f6826",
+            "task": null,
+            "changeClass": null,
+            "mode": "unknown",
+            "modeEvidence": "workflow_states written at precheck; no inline receipt",
+            "definitionDigest": "sha256:1df82541d7a312b064b29d3f48a47c6e45d2f84454c8abc7d7145c0b20206def",
+            "startedAt": "2026-09-13T05:52:29.594Z",
+            "dbCompletedAt": "2026-09-13T05:52:29.776Z",
+            "durationSeconds": 0.182,
+            "durationBasis": "DB",
+            "processExit": null,
+            "workflowTerminal": "failed",
+            "staleRow": false,
+            "terminalEvidence": {
+                "kind": "db workflow_states",
+                "refs": ["precheck state, failed state, wbs=0000"]
+            },
+            "verifiedSuccess": false,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "same dispatch-error class, earlier pair"
+        },
+        {
+            "id": "51a0f9b6-ab6d-4aec-9ab4-ecc0eaaa89c3",
+            "task": "0906",
+            "changeClass": "code",
+            "mode": "inline",
+            "modeEvidence": "inline-setup.json receipt + event trace (inline FSM emulation, worktree sp/run-0906-51a0f9)",
+            "definitionDigest": "sha256:e885c9d955b9f883cb603a296e986a8fa325508163f123548fbf606684c89d81",
+            "startedAt": "2026-09-20T17:06:45.144Z",
+            "dbCompletedAt": null,
+            "durationSeconds": 3379,
+            "durationBasis": "approx: row insert -> terminal commit 09a757a0c (2026-09-20T18:03:04Z)",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": true,
+            "terminalEvidence": {
+                "kind": "out-of-db",
+                "refs": [
+                    ".spur/run/51a0f9b6-...-event-trace.md (done 11:02, commit 09a757a0c)",
+                    ".spur/run/0906-verdict.json PASS",
+                    "task 0906 done",
+                    "checkpoint 0906-done-checkpoint.json"
+                ]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0906-verdict.json",
+            "gateRepetitions": 1,
+            "repairAttempts": 3,
+            "operatorInterventions": 0,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "repair events per trace: test gate #1 failed on PRE-EXISTING main lint (0904-check.ts:71, not in task diff); review provider timeout -> routed resume; record command.gate GuardDenied then retry exit 0. DB row left running despite terminal evidence (F1)"
+        },
+        {
+            "id": "2ddb3f15-375c-4327-9b6f-55085820d8e3",
+            "task": "0898",
+            "changeClass": "code",
+            "mode": "inline",
+            "modeEvidence": "inline-setup.json receipt + worktree record dev-run-0898 (path ../spur-new-run-0898-2ddb3f15)",
+            "definitionDigest": "sha256:20fdc169fe26a045b546382ad605bac855346446e16de11e7b76330e2cd5eabf",
+            "startedAt": "2026-09-18T05:11:10.534Z",
+            "dbCompletedAt": null,
+            "durationSeconds": 3150,
+            "durationBasis": "approx: row insert -> worktree mergedAt 06:03:40Z",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": true,
+            "terminalEvidence": {
+                "kind": "out-of-db",
+                "refs": [
+                    "worktree json: status merged, mergedCommit f0c2316d1",
+                    ".spur/run/0898-verdict.json PASS",
+                    "task 0898 done"
+                ]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0898-verdict.json",
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "merge-mode rebase-then-ff; DB row left running (F1)"
+        },
+        {
+            "id": "inline-G66-20260918T081544",
+            "task": "G66 (feature verification batch)",
+            "changeClass": "batch-verification",
+            "mode": "inline",
+            "modeEvidence": "inline-setup.json receipt + batch report header",
+            "definitionDigest": "sha256:20fdc169fe26a045b546382ad605bac855346446e16de11e7b76330e2cd5eabf",
+            "startedAt": "2026-09-18T15:15:44.587Z",
+            "dbCompletedAt": null,
+            "durationSeconds": 28470,
+            "durationBasis": "approx: row insert -> batch report mtime 2026-09-18T23:10:14Z (merge-copy caveat)",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": true,
+            "terminalEvidence": {
+                "kind": "out-of-db",
+                "refs": [".spur/run/inline-G66-20260918T081544-batch-report.md"]
+            },
+            "verifiedSuccess": null,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "batch report cites engine-canonical digest sha256:045f523b... while the DB row persists 20fdc169 - identity labeling mismatch recorded as unknown; no per-run verdict claimed"
+        },
+        {
+            "id": "dev-run-0853-inline-160905",
+            "task": "0853",
+            "changeClass": "docs",
+            "mode": "inline",
+            "modeEvidence": "inline-setup.json + implement/record/done-transition receipts + event trace",
+            "definitionDigest": "sha256:1df82541d7a312b064b29d3f48a47c6e45d2f84454c8abc7d7145c0b20206def",
+            "startedAt": "2026-09-14T23:09:09.337Z",
+            "dbCompletedAt": null,
+            "durationSeconds": null,
+            "durationBasis": "no reliable end anchor (verdict mtime is bulk copy)",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": true,
+            "terminalEvidence": {
+                "kind": "out-of-db",
+                "refs": ["done-transition receipt PASS", ".spur/run/0853-verdict.json PASS", "task 0853 done"]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0853-verdict.json",
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "DB row left running (F1)"
+        },
+        {
+            "id": "dev-run-0855-inline-174033",
+            "task": "0855",
+            "changeClass": "code",
+            "mode": "inline",
+            "modeEvidence": "inline-setup.json + implement/record/done-transition receipts",
+            "definitionDigest": "sha256:1df82541d7a312b064b29d3f48a47c6e45d2f84454c8abc7d7145c0b20206def",
+            "startedAt": "2026-09-15T00:40:33.361Z",
+            "dbCompletedAt": null,
+            "durationSeconds": null,
+            "durationBasis": "no reliable end anchor",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": true,
+            "terminalEvidence": {
+                "kind": "out-of-db",
+                "refs": ["done-transition receipt PASS", ".spur/run/0855-verdict.json PASS", "task 0855 done"]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0855-verdict.json",
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "DB row left running (F1)"
+        },
+        {
+            "id": "run-20260914T155556Z-0850-main",
+            "task": "0850",
+            "changeClass": "docs",
+            "mode": "batch",
+            "modeEvidence": "-main dev-runall naming; review-gate pass2 artifacts; no inline receipt",
+            "definitionDigest": "sha256:485542ce686c31dbec23caf265b78d7ecfa323f8bc7a5ef1174a04898e265bb7",
+            "startedAt": "2026-09-14T15:55:56.389Z",
+            "dbCompletedAt": null,
+            "durationSeconds": null,
+            "durationBasis": "no reliable end anchor",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": true,
+            "terminalEvidence": {
+                "kind": "out-of-db",
+                "refs": [".spur/run/0850-verdict.json PASS", "task 0850 done"]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0850-verdict.json",
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "review gate pass2 log present (one review repetition recorded); DB row left running (F1)"
+        },
+        {
+            "id": "run-20260914T054140Z-0849-inline",
+            "task": "0849",
+            "changeClass": "code",
+            "mode": "unknown",
+            "modeEvidence": "name suggests inline but NO inline receipt and no action rows; classified unknown by dispatch-evidence rule",
+            "definitionDigest": "sha256:485542ce686c31dbec23caf265b78d7ecfa323f8bc7a5ef1174a04898e265bb7",
+            "startedAt": "2026-09-14T05:41:40.314Z",
+            "dbCompletedAt": null,
+            "durationSeconds": null,
+            "durationBasis": "no reliable end anchor",
+            "processExit": null,
+            "workflowTerminal": "done",
+            "staleRow": true,
+            "terminalEvidence": {
+                "kind": "out-of-db",
+                "refs": [".spur/run/0849-verdict.json PASS", "task 0849 done"]
+            },
+            "verifiedSuccess": true,
+            "verdictArtifact": ".spur/run/0849-verdict.json",
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "review-pass1 artifacts present; test-gate findings empty (pass); DB row left running (F1)"
+        },
+        {
+            "id": "5b9072aa-f303-4377-97f5-bf8f4b70ae3b",
+            "task": null,
+            "changeClass": null,
+            "mode": "inline",
+            "modeEvidence": "inline-setup.json + review-answer + review-proof.digest receipts; task identity not recovered from artifacts",
+            "definitionDigest": "sha256:1df82541d7a312b064b29d3f48a47c6e45d2f84454c8abc7d7145c0b20206def",
+            "startedAt": "2026-09-14T21:56:59.523Z",
+            "dbCompletedAt": null,
+            "durationSeconds": null,
+            "durationBasis": null,
+            "processExit": null,
+            "workflowTerminal": "unknown",
+            "staleRow": true,
+            "terminalEvidence": null,
+            "verifiedSuccess": null,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "progressed at least to review; no terminal evidence; stale row retained as unknown (not relabeled)"
+        },
+        {
+            "id": "ce44b029-c9f6-48d5-9bfc-2a423597c5c3",
+            "task": "B8 batch (dev-runall feature:B8)",
+            "changeClass": "batch",
+            "mode": "inline",
+            "modeEvidence": "inline-setup.json + worktree record (command dev-runall, selector feature:B8, status active)",
+            "definitionDigest": "sha256:20fdc169fe26a045b546382ad605bac855346446e16de11e7b76330e2cd5eabf",
+            "startedAt": "2026-09-18T01:16:38.505Z",
+            "dbCompletedAt": null,
+            "durationSeconds": null,
+            "durationBasis": null,
+            "processExit": null,
+            "workflowTerminal": "unknown",
+            "staleRow": true,
+            "terminalEvidence": null,
+            "verifiedSuccess": null,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "worktree record still active at freeze; review-answer artifact mtime (2026-09-17T21:15:48Z) PREDATES row start - row-insert-late anomaly recorded as unknown; resolved task-pipeline from the INSTALLED node_modules path with layer mislabeled 'project' (F4 evidence)"
+        },
+        {
+            "id": "e021bbc1-f2ff-4b6b-acdd-b730e5acd155",
+            "task": null,
+            "changeClass": null,
+            "mode": "unknown",
+            "modeEvidence": "no receipts, no artifacts, no states found",
+            "definitionDigest": "sha256:485542ce686c31dbec23caf265b78d7ecfa323f8bc7a5ef1174a04898e265bb7",
+            "startedAt": "2026-09-09T06:41:57.070Z",
+            "dbCompletedAt": null,
+            "durationSeconds": null,
+            "durationBasis": null,
+            "processExit": null,
+            "workflowTerminal": "unknown",
+            "staleRow": true,
+            "terminalEvidence": null,
+            "verifiedSuccess": null,
+            "verdictArtifact": null,
+            "gateRepetitions": 0,
+            "repairAttempts": 0,
+            "operatorInterventions": null,
+            "sessions": null,
+            "tokens": null,
+            "usd": null,
+            "notes": "13 days stale at freeze with zero side evidence; retained as unknown (cleanup forbidden by task)"
+        }
+    ],
+    "inFlightObservation": {
+        "id": "inline-0912-6441",
+        "db": "worktree .spur/spur.db",
+        "resolution": {
+            "layer": "project",
+            "path": "worktree config/workflows/task-pipeline.yaml",
+            "digest": "sha256:9134966426ef7ad999b68718ed058706fdb20220eb4d2bdc9a07ce68ba926a9d",
+            "source": "inline-setup.json receipt"
+        },
+        "emissionEvidence": "0 action_runs rows and no --action/--close receipts while actions have already executed (precheck done, implement dispatched) - ADR-117 emission contract not executed by the current driver path (live corroboration of F2)"
+    },
+    "metrics": {
+        "completeRunDurations": [
+            {
+                "run": "7b7419f3 (0887, code)",
+                "durationSeconds": 5228,
+                "basis": "DB"
+            },
+            {
+                "run": "run-...-0854-main (0854, docs)",
+                "durationSeconds": 14514,
+                "basis": "DB"
+            },
+            {
+                "run": "51a0f9b6 (0906, code)",
+                "durationSeconds": 3379,
+                "basis": "approx"
+            },
+            {
+                "run": "2ddb3f15 (0898, code)",
+                "durationSeconds": 3150,
+                "basis": "approx"
+            }
+        ],
+        "stageDurations0887": [
+            {
+                "node": "implement",
+                "kind": "agent.run",
+                "durationSeconds": 169,
+                "status": "done"
+            },
+            {
+                "node": "test",
+                "kind": "shell",
+                "durationSeconds": 12,
+                "status": "done",
+                "ok": false
+            },
+            {
+                "node": "test-fix",
+                "kind": "agent.run",
+                "durationSeconds": 1800,
+                "status": "failed",
+                "note": "full-loss timeout at bound"
+            },
+            {
+                "node": "test-fix",
+                "kind": "agent.run",
+                "durationSeconds": 899,
+                "status": "done"
+            },
+            {
+                "node": "test-recheck",
+                "kind": "shell",
+                "durationSeconds": 239,
+                "status": "done"
+            },
+            {
+                "node": "review",
+                "kind": "agent.run",
+                "durationSeconds": 519,
+                "status": "done"
+            },
+            {
+                "node": "verify",
+                "kind": "agent.run",
+                "durationSeconds": 367,
+                "status": "done"
+            },
+            {
+                "node": "record",
+                "kind": "command.gate",
+                "durationSeconds": 2.5,
+                "status": "done"
+            },
+            {
+                "node": "done",
+                "kind": "command.gate",
+                "durationSeconds": 0.9,
+                "status": "done"
+            }
+        ],
+        "repairAndGates": {
+            "observedRepairEvents": 5,
+            "detail": "0887: 1 gate repetition + 2 test-fix attempts (1 full-loss 1800s timeout); 0906: 1 gate repetition + 3 recovery events (pre-existing-lint gate fail, review provider timeout resume, record gate retry)",
+            "batchRuns0849to0855": "test-fix-attempt counters all 0 - gates passed first try",
+            "operatorInterventions": "0 corroborated (0906 trace); others null (not instrumented)"
+        },
+        "sessionCoverage": {
+            "cohortRuns": 16,
+            "runsWithSessionJoin": 0,
+            "inWindowHistoryToolCalls": 4274,
+            "note": "4274 in-window history_tool_call rows exist but 0 join to cohort run ids (E6 gap persists in-window)"
+        },
+        "costCoverage": {
+            "tokens": {
+                "value": null,
+                "denominator": 0,
+                "scope": "cohort",
+                "note": "no session joins -> no usage attribution; missing values are null, never zero"
+            },
+            "usd": {
+                "value": null,
+                "denominator": 0,
+                "scope": "cohort",
+                "note": "same"
+            },
+            "aggregate": {
+                "scope": "all-history",
+                "records": 682181,
+                "note": "history_tool_call total in this DB; reported separately, never as 14-day results"
+            },
+            "wallClockOnly": true
+        }
+    },
+    "adoption": {
+        "definitionsToday": [
+            {
+                "name": "task-pipeline",
+                "registeredDigest": "sha256:9134966426ef7ad999b68718ed058706fdb20220eb4d2bdc9a07ce68ba926a9d",
+                "sharedDigest": "sha256:9134966426ef7ad999b68718ed058706fdb20220eb4d2bdc9a07ce68ba926a9d",
+                "identical": true
+            },
+            {
+                "name": "wrapup-pipeline",
+                "registeredDigest": "sha256:ade7f6aea0672",
+                "sharedDigest": "sha256:ade7f6aea0672",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "idea-pipeline",
+                "registeredDigest": "sha256:e455eab1c6cfd",
+                "sharedDigest": "sha256:e455eab1c6cfd",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "task-lifecycle",
+                "registeredDigest": "sha256:b14ae894713f3",
+                "sharedDigest": "sha256:b14ae894713f3",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "feature-lifecycle",
+                "registeredDigest": "sha256:f039b0bba7777",
+                "sharedDigest": "sha256:f039b0bba7777",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "pr-review",
+                "registeredDigest": "sha256:32eaf7604e48e",
+                "sharedDigest": "sha256:32eaf7604e48e",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "wayfinder-resolution",
+                "registeredDigest": "sha256:b491b6cde389d",
+                "sharedDigest": "sha256:b491b6cde389d",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "feature-verification",
+                "registeredDigest": "sha256:e28b6c2544de2",
+                "sharedDigest": "sha256:e28b6c2544de2",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "history-anatomy",
+                "registeredDigest": "sha256:2e3030ff2a5aa",
+                "sharedDigest": "sha256:2e3030ff2a5aa",
+                "identical": true,
+                "truncated": true
+            },
+            {
+                "name": "decision-routing-example",
+                "registeredDigest": "sha256:6f0784e0ac8c7",
+                "sharedDigest": "sha256:6f0784e0ac8c7",
+                "identical": true,
+                "truncated": true
+            }
+        ],
+        "byteComparison": "task-pipeline.yaml, wrapup-pipeline.yaml, idea-pipeline.yaml byte-identical (cmp exit 0) between installed bundle /Users/robin/node_modules/@gobing-ai/spur/config/workflows and source config/workflows",
+        "versions": {
+            "sourceCli": "0.3.91",
+            "installedBundle": "0.3.91"
+        },
+        "resolutionSurfacesInWindow": [
+            {
+                "run": "ce44b029",
+                "resolvedPath": "/Users/robin/node_modules/@gobing-ai/spur/config/workflows/task-pipeline.yaml",
+                "layerLabel": "project",
+                "note": "installed bundle served the definition on 2026-09-18; layer label inconsistent with path"
+            },
+            {
+                "run": "51a0f9b6",
+                "resolvedPath": "/Users/robin/xprojects/spur-new/config/workflows/task-pipeline.yaml",
+                "layerLabel": "shared"
+            },
+            {
+                "run": "inline-0912-6441",
+                "resolvedPath": "worktree config/workflows/task-pipeline.yaml",
+                "layerLabel": "project"
+            }
+        ],
+        "installedPlugin": {
+            "inlineRunSetupScript": "byte-identical (~/.agents/scripts/sp/inline-run-setup.ts vs plugins/sp/scripts/inline-run-setup.ts)",
+            "inlineDriverDoc": "installed sp-spur-dev/references/inline-pipeline-driver.md differs from repo only in 5 cosmetic command-name hunks (/sp-dev-* vs /sp:*); the --action/--close emission contract is present in BOTH copies"
+        },
+        "inlineDriverEmission": {
+            "contract": "ADR-117/0868: driver must call inline-run-setup --action per settled action and --close at terminal (explicitly to prevent workflow-clean reaping)",
+            "inlineRunsObservedCohort": 15,
+            "inlineRunsWithActionRows": 0,
+            "cohortRowsLeftNonTerminal": 10,
+            "liveCorroboration": "this run: 0 rows mid-flight",
+            "engineContrast": "engine path has 2888 action_runs rows across 429 runs all-time"
+        },
+        "modeAdoption": {
+            "idea": {
+                "rows": 10,
+                "done": 1,
+                "failed": 4,
+                "running": 5,
+                "note": "all 5 running rows updated_at == started_at (stale)"
+            },
+            "batch": {
+                "rows": 7,
+                "note": "task-pipeline rows driven by dev-run/dev-runall (worktree records + -main/-inline names + receipts)"
+            },
+            "wrapup": {
+                "rows": 26,
+                "done": 14,
+                "failed": 12,
+                "note": "highest terminal throughput of any definition in the window"
+            },
+            "fleet": {
+                "rows": 0,
+                "note": "no fleet workflow runs; coordination_rows are pi host processes without run ids"
+            }
+        }
+    },
+    "findings": [
+        {
+            "rank": 1,
+            "id": "F1",
+            "class": "confirmed-defect",
+            "severity": "high",
+            "observation": "Inline-driven task-pipeline runs are never closed in the trace DB: all 10 in-window running rows have updated_at within 1 ms of started_at (8 exact to the ms; zero meaningful updates since insert); 7 carry out-of-DB terminal evidence (verdicts PASS, done-transition receipts, worktree merge records, batch report, task status done); 3 terminal outcomes remain unknown",
+            "evidence": "runs table + .spur/run receipts + task show 0849/0850/0853/0855/0898/0906 done",
+            "reproduced": true,
+            "owner": "P (row closure) / D62 (driver emission adoption)",
+            "risk": "spur workflow clean would reap live-completed runs as stale; completion-rate denominators corrupted"
+        },
+        {
+            "rank": 2,
+            "id": "F2",
+            "class": "adoption-gap",
+            "severity": "high",
+            "observation": "ADR-117 structured emission is documented (both installed and repo driver docs) and scripted (installed script byte-identical) but not executed: 0/15 inline cohort runs have any action_runs row; this run repeats the gap live",
+            "evidence": "action_runs per run_id = 0 for all inline ids; engine contrast 2888 rows/429 runs",
+            "reproduced": true,
+            "owner": "D62",
+            "risk": "inline execution is invisible to workflow progress, ActionRunDao, and any measured-economy join"
+        },
+        {
+            "rank": 3,
+            "id": "F3",
+            "class": "avoidable-overhead",
+            "severity": "medium",
+            "observation": "Test-gate repair can lose a full timeout window: 0887's test-fix attempt 1 failed at exactly 1800s and the retry succeeded in 899s (~900-1800s avoidable per occurrence)",
+            "confidence": "measured once (n=1 in cohort); cause of the first failure unknown (no failing-gate output retained, 0905 cluster 3)",
+            "owner": "P/D62",
+            "smallestExperiment": "retain failing-gate output and count full-loss timeouts across the next 3 code-changing pipeline runs before any pilot claim"
+        },
+        {
+            "rank": 4,
+            "id": "F4",
+            "class": "avoidable-overhead",
+            "severity": "medium",
+            "observation": "Gate measures the tree, not the diff: 0906's test gate #1 failed on a pre-existing main lint error outside the task diff, consuming a fix pass + 239s recheck; 0887's test also failed at lint-fast-fail (12s)",
+            "confidence": "2 occurrences, shared cause candidate; repair necessity unproven (n small)",
+            "owner": "D62 (gate economy; ADR-119 constraints apply)",
+            "smallestExperiment": "over the next 3 code-changing runs, record whether each gate failure's cause lies inside the task diff"
+        },
+        {
+            "rank": 5,
+            "id": "F5",
+            "class": "operator-work",
+            "severity": "low",
+            "observation": "4 sub-second failed dispatches (wbs=0000) on 2026-09-13: precheck rejected launches missing a task id; ~0 machine cost, pure operator rework",
+            "owner": "P (dispatch validation feedback)",
+            "smallestExperiment": "surface the missing-wbs reason at dispatch time; no pipeline change"
+        },
+        {
+            "rank": 6,
+            "id": "F6",
+            "class": "traceability",
+            "severity": "medium",
+            "observation": "Worktree trace fragmentation: batch worktree runs (0854) have no action rows in the main DB; per-worktree DBs make batch-time joins impossible without an import step",
+            "confidence": "inferred from absence + merge-copy artifacts; not separately reproduced",
+            "owner": "E6"
+        },
+        {
+            "rank": 7,
+            "id": "F7",
+            "class": "economy-join",
+            "severity": "medium",
+            "observation": "Session/cost join absent in-window: 0/16 cohort runs have history_run_session links; 4274 in-window tool-call rows unjoinable to cohort runs",
+            "owner": "E6"
+        }
+    ],
+    "pilotDecision": {
+        "decision": "SELECT",
+        "selected": {
+            "name": "inline-driver terminal close + structured action emission on task-pipeline",
+            "mechanism": "the executing inline driver invokes the already-installed inline-run-setup.ts receipts: --action per settled action boundary and --close --status <done|failed|paused> at the declared terminal state (ADR-117/D62 R4 contract that already exists on disk)",
+            "whyEligible": "concrete shared cause (driver path never calls the receipts - 15/15 cohort runs, reproduced live), observable saved work (structured rows for progress/ActionRunDao/E6 joins; 0 stale-reapable completions vs 9/10 today), unchanged correctness contracts (pure observability emission; no gate, graph, status-semantic or mutation-policy change)"
+        },
+        "benefitTargetFrozenBeforeImplementation": "In the pilot window: (a) every newly terminal inline task-pipeline run has >=1 action_runs row per executed action; (b) every such run's row is terminal (done/failed/paused) - zero rows left for workflow clean to reap; (c) baseline to beat: 0/15 inline runs with any action rows, all 8 in-cohort inline/batch rows non-terminal (2 further running rows are mode-unknown and excluded). Counts, not percentages.",
+        "beforeAfterComparison": "before = this baseline (same documented read-only queries); after = identical queries over the pilot window cohort",
+        "regressionChecks": [
+            "plugins/sp/tests/inline-run-setup.test.ts (script contract)",
+            "task-local checks + task/feature gates on the pilot run itself",
+            "verify/record gates and reviewer isolation unchanged; proof invalidation after mutations unchanged",
+            "no change to workflow YAML, config, or installed adapters (mutationPolicy: none)"
+        ],
+        "deadline": "2026-10-06",
+        "deadlineBasis": "promote-or-delete review 14 days after freeze (calendar date set at candidate creation); not a graph candidate so no config/workflow-candidates.json entry is required",
+        "rollback": "driver stops calling the receipts; no schema, graph or config rollback needed; rows simply cease appearing",
+        "projectionLabel": "all timing/join benefits below are ANALYTICAL PROJECTIONS from the mechanism; one successful pilot run is not live proof; live claim requires >=3 observed terminal inline runs in the pilot window",
+        "insufficientEvidence": [
+            {
+                "area": "scoped-gate / test-fix-timeout pilot (F3/F4)",
+                "smallestExperiment": "3 code-changing runs with retained failing-gate output and diff-attribution of gate failures; only then freeze a benefit target",
+                "owner": "D62"
+            },
+            {
+                "area": "any token/USD or percentage improvement claim",
+                "smallestExperiment": "pilot-window runs with session joins + history import before any cost claim (E6)",
+                "owner": "E6"
+            },
+            {
+                "area": "fleet-mode conclusions",
+                "smallestExperiment": "one bounded serve session on a quiet tree (carried from 0905 S5)",
+                "owner": "I31 close-out"
+            }
+        ]
+    },
+    "nextAction": {
+        "description": "Run ONE controlled task-pipeline inline run with the emission receipts wired, then re-run the baseline queries",
+        "steps": [
+            "bun apps/cli/src/index.ts workflow trace --last 20 --json  # recount non-terminal task-pipeline rows",
+            "sqlite3 -readonly /Users/robin/xprojects/spur-new/.spur/spur.db \"select run_id, count(*) from action_runs where run_id='<new-run-id>' group by run_id;\"  # expect >=1 row per executed action",
+            "bun run docs/reports/i31/0912-check.ts  # baseline artifact still validates"
+        ],
+        "owner": "D62 (pilot execution); P owns the row-closure defect fix"
+    },
+    "limitations": [
+        "capped, single-tree window; this tree's worktree-local trace DBs mean cohort counts are from the main checkout DB only",
+        "inline terminal evidence is artifact-derived; approximate durations labeled per run",
+        "definition digests churned 4x in-window; no cross-digest pooling",
+        "no fleet runs, no session joins, no cost attribution - economy conclusions are wall-clock only",
+        "verdict artifact mtimes in the main checkout are bulk merge-copies for batch runs; not completion times"
+    ],
+    "sparseBaseline": {
+        "sparse": true,
+        "delimitation": "Terminal DB evidence: engine n=1 (code), batch n=1 (docs), failed n=4 (dispatch-error class), inline n=0 DB-terminal (5 executions evidenced out-of-DB). Fleet: 0 runs - no fleet conclusions. Cost: all null (0 joined sessions) - wall-clock only. No completion-rate generalization from n<=2 terminal per mode.",
+        "missingEvidence": [
+            ">=3 terminal inline runs with action rows and closed run rows (pilot window)",
+            "session identifiers + history import before any token/USD claim",
+            "diff-attributed gate-failure sampling over >=3 code-changing runs (F3/F4)",
+            "one bounded serve session for fleet vocabulary (S5 carry-over)"
+        ]
+    },
+    "unknowns": [
+        "terminal outcome of 5b9072aa (review-stage receipts, no terminal evidence)",
+        "terminal outcome of ce44b029 (B8 batch; worktree record active; review artifact predates row start)",
+        "identity and outcome of e021bbc1 (no side evidence at all)",
+        "digest labeling mismatch for inline-G66 (batch report 045f523b vs DB row 20fdc169)",
+        "cause of 0887 test-fix attempt-1 timeout (failing-gate output not retained)",
+        "operator interventions for all runs except 0906 (not instrumented)"
+    ]
+}
