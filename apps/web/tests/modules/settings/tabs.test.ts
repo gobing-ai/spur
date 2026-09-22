@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import AgentsView from '../../../src/modules/settings/AgentsView';
+import GeneralView from '../../../src/modules/settings/GeneralView';
 import { DEFAULT_SETTINGS_TAB, SETTINGS_TABS } from '../../../src/modules/settings/tabs';
 
 describe('SETTINGS_TABS', () => {
-    test('contains the Agents tab', () => {
-        expect(SETTINGS_TABS.map((t) => t.id)).toEqual(['agents']);
+    test('contains General as the first tab and Agents as the second tab', () => {
+        expect(SETTINGS_TABS.map((t) => t.id)).toEqual(['general', 'agents']);
     });
 
     test('tab ids are unique and labels are non-empty', () => {
@@ -16,11 +17,12 @@ describe('SETTINGS_TABS', () => {
         }
     });
 
-    test('default tab is agents', () => {
-        expect(DEFAULT_SETTINGS_TAB).toBe('agents');
+    test('default tab is general', () => {
+        expect(DEFAULT_SETTINGS_TAB).toBe('general');
     });
 
-    test('agents tab mounts AgentsView', () => {
+    test('general tab mounts GeneralView and agents tab mounts AgentsView', () => {
+        expect(SETTINGS_TABS.find((t) => t.id === 'general')?.component).toBe(GeneralView);
         expect(SETTINGS_TABS.find((t) => t.id === 'agents')?.component).toBe(AgentsView);
     });
 });

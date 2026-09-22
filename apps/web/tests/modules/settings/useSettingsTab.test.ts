@@ -24,13 +24,15 @@ describe('useSettingsTab', () => {
     test('parses the active tab from the path segment after settings', () => {
         const { result } = renderHook(() => useSettingsTab(), { wrapper: wrapper(['/board/settings/agents']) });
         expect(result.current.activeTab).toBe('agents');
+        const gen = renderHook(() => useSettingsTab(), { wrapper: wrapper(['/board/settings/general']) });
+        expect(gen.result.current.activeTab).toBe('general');
     });
 
     test('missing or unknown segment falls back to the default tab', () => {
         const none = renderHook(() => useSettingsTab(), { wrapper: wrapper(['/board/settings']) });
-        expect(none.result.current.activeTab).toBe('agents');
+        expect(none.result.current.activeTab).toBe('general');
         const unknown = renderHook(() => useSettingsTab(), { wrapper: wrapper(['/board/settings/bogus']) });
-        expect(unknown.result.current.activeTab).toBe('agents');
+        expect(unknown.result.current.activeTab).toBe('general');
     });
 
     test('selectTab navigates to the tab route preserving the query string', () => {

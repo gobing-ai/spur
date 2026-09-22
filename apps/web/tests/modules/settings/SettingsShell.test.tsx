@@ -79,7 +79,21 @@ describe('SettingsShell header and layout', () => {
         expect(container.textContent).toContain('System configuration, agent executors, and workspace preferences');
     });
 
-    test('renders tablist with Agents tab and active tabpanel', () => {
+    test('renders tablist with General as default tab and active tabpanel', () => {
+        const { container } = renderShell(['/board/settings']);
+        const tablist = container.querySelector('[role="tablist"]');
+        expect(tablist?.getAttribute('aria-label')).toBe('Settings tabs');
+        const tabs = container.querySelectorAll('[data-settings-tab]');
+        expect(tabs).toHaveLength(2);
+        const generalTab = container.querySelector('#settings-tab-general');
+        expect(generalTab?.getAttribute('aria-selected')).toBe('true');
+        const panel = container.querySelector('#settings-tab-panel-general');
+        expect(panel).not.toBeNull();
+        expect(panel?.getAttribute('role')).toBe('tabpanel');
+        expect(panel?.getAttribute('aria-labelledby')).toBe('settings-tab-general');
+    });
+
+    test('renders tablist with Agents tab and active tabpanel when navigated', () => {
         const { container } = renderShell(['/board/settings/agents']);
         const tablist = container.querySelector('[role="tablist"]');
         expect(tablist?.getAttribute('aria-label')).toBe('Settings tabs');
