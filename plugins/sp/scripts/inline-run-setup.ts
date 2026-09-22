@@ -5,27 +5,25 @@
  * Unlike the subprocess path (`spur workflow run`), the interactive inline driver
  * allocated a run id but never persisted an authoritative `runs` row, so bound
  * `run.artifact` registration (0785 R3) correctly refused every inline record. This
- * script is the thin delegate the driver now runs at Run setup: it resolves the spur
- * repo checkout from the SPUR_BIN chain, imports the real app service
+ * script is the thin delegate the driver now runs at Run setup: it loads the source
+ * app service when the SPUR_BIN chain identifies a checkout, otherwise its generated bundle
  * (`createOrAttachInlineRun` / `openInlineRunProjectDb` from packages/app), and lets it
- * resolve the SAME project-or-bundled definition the engine would launch, compute the
+ * resolve the SAME project/registered/shared definition the engine would launch, compute the
  * canonical definition digest with the exported hash machinery, and create-or-attach the
  * run row through the existing engine persistence adapter.
  *
  * The script itself contains NO direct SQL, NO second hasher and NO persistence policy —
- * every rule lives in packages/app (0804 D1). On a bundle-only install there is no repo
- * checkout to import the app service from, so the setup fails closed with actionable
- * remediation guidance (point SPUR_BIN at a repo checkout); it never falls back to an
- * unbound run (0804 R1 failure policy).
+ * every rule lives in packages/app (0804 D1). On a bundle-only install, the existing
+ * workflow-show projection selects the CLI's definition; the bundled app revalidates its
+ * schema and digest before recording the selected layer. It never creates an unbound run.
  *
  * Outcome JSON is written to `.spur/run/<run-id>-inline-setup.json` so the driver can
  * seed the inline var overlay (`__runId`, `__definitionDigest`) that proof capture and
  * bound registration verify against. Exit 0 = authoritative identity ready (created or
  * idempotently attached); exit 1 = fail closed, the driver must stop.
  *
- * Repo-only script (ADR-065): it imports the app workspace source, so it runs under bun
- * against a monorepo checkout only — the same posture as task-size-precheck.ts and
- * task-evidence-precheck.ts.
+ * Standard script (ADR-065): the generated Node-runnable twin re-enters Bun for the
+ * existing SQLite runtime. Bun on PATH is required; a monorepo checkout is not.
  *
  * Usage:
  *   bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]
@@ -49,6 +47,7 @@
  * Env: SPUR_BIN
  */
 
+import { spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -112,12 +111,9 @@ function refuseUnsafeRunId(runId: string): never {
  * (--spur-bin > SPUR_BIN > monorepo-local CLI entry > PATH `spur`), then derive the repo
  * root from the resolved main module. `bun <repo>/apps/cli/src/index.ts` → repo root is
  * three levels up. A bundle-only install (`spur` on PATH, a bundled `spur.js`, or a spur
- * binary without the app workspace) has no app entry to import — the caller fails that
- * closed with remediation guidance.
+ * binary without the app workspace) uses the adjacent generated application bundle.
  */
-function resolveAppEntry(
-    spurBin: string,
-): { entry: string; repoRoot: string } | { entry: null; repoRoot: null; chain: string } {
+function resolveAppEntry(spurBin: string): { entry: string; portable: boolean } {
     let candidates: string[] = [];
     if (spurBin !== '') {
         candidates = [spurBin];
@@ -137,10 +133,42 @@ function resolveAppEntry(
         const srcDir = dirname(mainModule);
         const repoRoot = resolve(srcDir, '..', '..', '..');
         const appEntry = join(repoRoot, 'packages', 'app', 'src', 'index.ts');
-        if (existsSync(appEntry)) return { entry: appEntry, repoRoot };
-        return { entry: null, repoRoot: null, chain: `${candidate} (no ${appEntry})` };
+        if (existsSync(appEntry)) return { entry: appEntry, portable: false };
     }
-    return { entry: null, repoRoot: null, chain: spurBin === '' ? 'PATH spur (bundle-only install)' : spurBin };
+    const entry = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
+    if (!existsSync(entry)) {
+        throw new Error('inline application bundle is missing — rebuild/install the sp plugin before running inline');
+    }
+    return { entry, portable: true };
+}
+
+/** Let the selected CLI own config and layer resolution, then revalidate its snapshot in the app. */
+async function readInstalledInventory(file: string, spurBin: string): Promise<unknown> {
+    const localCli = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
+    const bundle = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
+    const { splitLaunchCommand } = (await import(bundle)) as typeof import('../lib/inline-run.generated.mjs');
+    const launch = spurBin
+        ? splitLaunchCommand(spurBin, 'inline-run-setup "spurBin"')
+        : existsSync(localCli)
+          ? { command: 'bun', leadingArgs: [localCli] }
+          : { command: 'spur', leadingArgs: [] };
+    if ('error' in launch) throw new Error(launch.error);
+    const result = spawnSync(
+        launch.command,
+        [...launch.leadingArgs, 'workflow', 'show', file, '--format', 'todo', '--json'],
+        { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024 },
+    );
+    if (result.status !== 0) {
+        throw new Error(
+            `could not resolve the workflow definition with the installed CLI: ${result.error?.message ?? result.stderr}`,
+        );
+    }
+    const value: unknown = JSON.parse(result.stdout);
+    // Honor the existing optional JSON envelope without inventing another projection format.
+    if (value && typeof value === 'object' && 'ok' in value && 'data' in value && value.ok === true) {
+        return value.data;
+    }
+    return value;
 }
 
 function writeOutcome(runId: string, outcome: SetupOutcome): void {
@@ -159,14 +187,7 @@ function writeOutcome(runId: string, outcome: SetupOutcome): void {
  * Returns the process exit code: 0 printed, 1 read/resolve failure.
  */
 async function printFingerprint(taskFile: string, featureFile: string, spurBin: string): Promise<number> {
-    const { entry, repoRoot, chain } = resolveAppEntry(spurBin);
-    if (entry === null || repoRoot === null) {
-        console.error(
-            `inline-run-setup: FAIL — no monorepo checkout of spur is reachable via ${chain}. ` +
-                'The proof-input digest must be computed by the app service; a bundle-only install cannot do it.',
-        );
-        return 1;
-    }
+    const { entry } = resolveAppEntry(spurBin);
     const app = (await import(entry)) as {
         computeProofInputFingerprint: (options: Record<string, unknown>) => Promise<string>;
         readProofInputContents: (
@@ -204,7 +225,7 @@ const CLOSE_STATUSES = new Set(['done', 'failed', 'paused']);
 const ACTION_STATUSES = new Set(['done', 'failed']);
 
 /** Input for the ADR-117 emission modes (`--action` / `--close`). */
-import type { WorkflowActionTraceWriter } from '@gobing-ai/app';
+import type { WorkflowActionTraceWriter } from '@gobing-ai/spur-app';
 
 interface TraceModeInput {
     readonly runId: string;
@@ -254,27 +275,20 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
         return input.close ? 1 : 0;
     };
 
-    const { entry, repoRoot, chain } = resolveAppEntry(input.spurBin);
-    if (entry === null || repoRoot === null) {
-        return fail(
-            `no monorepo checkout of spur is reachable via ${chain} — the shared trace writer ` +
-                'lives in packages/app (point SPUR_BIN at a repo checkout)',
-        );
-    }
-
     // Compile-time link (0868 finding #5): the writer half is typed by the real packages/app
     // export (type-only import, erased at runtime) so a signature drift breaks THIS file's
     // typecheck instead of hiding behind the hand-declared cast.
-    const app = (await import(entry)) as {
-        openInlineRunProjectDb: (workdir: string) => Promise<{ adapter: unknown; close: () => void }>;
-        createWorkflowActionTraceWriter: (
-            db: unknown,
-            recordFailure?: (failure: unknown) => void,
-        ) => WorkflowActionTraceWriter;
-    };
-
     let projectDb: { adapter: unknown; close: () => void } | undefined;
     try {
+        const { entry } = resolveAppEntry(input.spurBin);
+        const app = (await import(entry)) as {
+            openInlineRunProjectDb: (workdir: string) => Promise<{ adapter: unknown; close: () => void }>;
+            createWorkflowActionTraceWriter: (
+                db: unknown,
+                recordFailure?: (failure: unknown) => void,
+            ) => WorkflowActionTraceWriter;
+        };
+
         projectDb = await app.openInlineRunProjectDb(process.cwd());
         const writer = app.createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
             const detail = failure as { operation?: string; error?: string };
@@ -321,6 +335,14 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
 }
 
 async function main(): Promise<void> {
+    // The portable Node twin has no workspace imports; SQLite still uses Spur's existing Bun runtime.
+    if (!process.versions.bun) {
+        const child = spawnSync('bun', [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
+            stdio: 'inherit',
+        });
+        if (child.error) console.error(`inline-run-setup requires Bun on PATH: ${child.error.message}`);
+        process.exit(child.status ?? 1);
+    }
     let runId = '';
     let file = '';
     let fingerprint = false;
@@ -396,23 +418,7 @@ async function main(): Promise<void> {
     if (runId.trim() === '' || file.trim() === '') usage();
     if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
 
-    const { entry, repoRoot, chain } = resolveAppEntry(spurBin);
-    if (entry === null || repoRoot === null) {
-        const outcome: SetupOutcome = {
-            ok: false,
-            runId,
-            error:
-                `inline run setup failed closed: no monorepo checkout of spur is reachable via ${chain}. ` +
-                'The authoritative run identity must be persisted by the app service ' +
-                '(packages/app/src/services/inline-run-setup.ts); a bundle-only install cannot do this. ' +
-                'Remediation: point SPUR_BIN at a repo checkout, e.g. ' +
-                'SPUR_BIN="bun /path/to/spur/apps/cli/src/index.ts". The pipeline must not run unbound.',
-        };
-        writeOutcome(runId, outcome);
-        console.error(`inline-run-setup: FAIL for run ${runId}`);
-        console.error(`  ${outcome.error}`);
-        process.exit(1);
-    }
+    const { entry, portable } = resolveAppEntry(spurBin);
 
     // Dynamic import by absolute path: the app source graph resolves its own workspace
     // dependencies from the repo checkout, never from this plugin script's location.
@@ -422,11 +428,22 @@ async function main(): Promise<void> {
             getDb: () => Promise<unknown>;
             file: string;
             runId: string;
+            inventory?: unknown;
+            embeddedSchemas?: ReadonlyMap<string, string>;
         }) => Promise<SetupOutcome & { ok: boolean }>;
         openInlineRunProjectDb: (workdir: string) => Promise<{ adapter: unknown; close: () => void }>;
+        EMBEDDED_SPUR_SCHEMAS?: ReadonlyMap<string, string>;
     };
 
     const workdir = process.cwd();
+    let inventory: unknown;
+    try {
+        inventory = await readInstalledInventory(file, spurBin);
+    } catch (error) {
+        const message = `could not resolve the workflow definition: ${error instanceof Error ? error.message : String(error)}`;
+        writeOutcome(runId, { ok: false, runId, error: message });
+        throw new Error(message);
+    }
     const projectDb = await app.openInlineRunProjectDb(workdir);
     let exitCode = 0;
     try {
@@ -435,6 +452,8 @@ async function main(): Promise<void> {
             getDb: async () => projectDb.adapter,
             file,
             runId,
+            inventory,
+            ...(portable ? { embeddedSchemas: app.EMBEDDED_SPUR_SCHEMAS } : {}),
         });
         writeOutcome(runId, result);
         if (!result.ok) {

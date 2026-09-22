@@ -164,7 +164,7 @@ describe('task 0406 / H82 — unified --agent execution-surface contract', () =>
             expect(raw, `${command}: missing interactive omit/inline contract`).toContain('omit/`inline`');
         }
         expect(driver).toContain('remains the sole');
-        expect(driver).toContain('project→bundled model');
+        expect(driver).toContain('project→registered→shared model');
         expect(driver).toContain('spur task run-link <wbs> --source inline-full');
         expect(driver).toContain('stage <id> executed inline in session <session-id>');
         expect(driver).toContain("execute the action's input in the host session");

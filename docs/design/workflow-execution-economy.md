@@ -64,21 +64,36 @@ roster narrows from five definitions to three: `basic`, `feature-dev`, `docs-pip
 
 That a documented reading of the trace produced a wrong retirement list is the argument for ADR-117.
 
-### 2.4 The inline surface cannot close its own run row
+### 2.4 Inline run identity, closure and installed execution
 
-`plugins/sp/scripts/inline-run-setup.ts` creates-or-attaches the authoritative run row, and no
-supported path marks that row terminal when the inline run completes — the script takes `--run-id`,
-`--file`, `--fingerprint` and `--spur-bin`, and `spur workflow` offers `cancel` (wrong verdict for a
-successful run) and `clean` (reaps non-terminal rows as stale). A successful inline run therefore
-stays `running` until housekeeping reaps it.
+`plugins/sp/scripts/inline-run-setup.ts` creates-or-attaches the authoritative run row.
+Its existing `--action` and `--close` modes (0868/0879) record action outcomes and terminal
+closure through the shared application writer. Action observation failure is best-effort;
+identity setup and terminal bookkeeping fail nonzero. The previous absence of closure described
+below is historical, not the current runtime contract.
 
-This corrupts the failure statistics the catalogue is judged by. Of `task-lifecycle`'s 496 `failed`
+In the 2026-09-16 baseline, missing closure corrupted the catalogue statistics. Of `task-lifecycle`'s 496 `failed`
 rows, **470 carry a `staleReason` from `spur workflow clean`**, as do 87 of `feature-lifecycle`'s 106
 — those are unclosed rows, not failures. `task-pipeline` is less affected (27 of 217 reaped), so its
 measured completion rate stands roughly as reported, but the catalogue-wide picture does not.
 
 Closing the run row at its declared terminal state is part of the ADR-117 emission obligation: a
 surface that can open a run owes the row that ends it.
+
+Task 0914 makes the same boundary usable from a bundle-only plugin install. The build generates
+`plugins/sp/lib/inline-run.generated.mjs` from the existing app setup, fingerprint and trace functions
+plus the existing embedded schema assets; it contains no second SQL writer or digest algorithm.
+The standard `inline-run-setup.mjs` twin uses Bun for the existing SQLite runtime, without requiring
+workspace packages or repository source files on the installed target.
+
+For source and installed setup, the selected Spur CLI's existing `workflow show --format todo --json`
+projection owns project/registered/shared resolution. The application service validates the
+projection and re-loads its selected definition under schema validation, checks name and digest,
+and only then persists that source identity. Changed definitions, invalid projection/source and
+incompatible existing rows fail closed. Configuration stays owned by the CLI composition root;
+direct application callers pass already-resolved registered paths. Fingerprint/action/close calls use the same application functions
+without starting a model or another workflow. This adds no public CLI noun or verb and does not
+extend inline engine-resume, artifact-ledger or DecisionMaker capabilities.
 
 ### 2.3 Required shape
 

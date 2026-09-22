@@ -5,7 +5,7 @@
  * link but, unlike the subprocess path (`spur workflow run`), never persisted an
  * authoritative `runs` row — so bound `run.artifact` registration (0785 R3) correctly
  * refused every inline record. This module is the setup operation the driver now runs at
- * Run setup: resolve the SAME two-tier project-or-bundled definition the engine would
+ * Run setup: resolve the SAME project/registered/shared definition the engine would
  * launch, compute the canonical definition digest with the exported hash machinery, and
  * create-or-attach the run row through the existing engine persistence adapter — no raw
  * SQL, no second hasher, no synthetic lifecycle outcome (a fresh row is `running`, never
@@ -39,6 +39,7 @@ import {
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
 import {
     type ResolvedWorkflowDefinition,
     resolveWorkflowDefinition,
@@ -52,12 +53,16 @@ export interface InlineRunSetupInput {
     readonly workdir: string;
     /** Lazily resolves the project DB adapter (the same DB the engine persists to). */
     readonly getDb: () => Promise<DbAdapter>;
-    /** Workflow file path or name, exactly as the driver selected it (two-tier resolved). */
+    /** Workflow file path or name, exactly as the driver selected it. */
     readonly file: string;
     /** Collision-resistant run id allocated by the driver's Run setup. */
     readonly runId: string;
     /** Embedded `$schema` map for composition-root parity; optional. */
     readonly embeddedSchemas?: ReadonlyMap<string, string>;
+    /** CLI-selected definition for a detached plugin install; revalidated before any run write. */
+    readonly inventory?: unknown;
+    /** Registered paths supplied by the caller's already-loaded configuration. */
+    readonly registered?: readonly string[];
 }
 
 /** Successful setup: authoritative identity for the inline var overlay and the run log. */
@@ -142,10 +147,29 @@ export async function createOrAttachInlineRun(input: InlineRunSetupInput): Promi
 
     let resolved: ResolvedWorkflowDefinition;
     try {
-        resolved = await resolveWorkflowDefinition(workdir, input.file, {
+        const projection = input.inventory === undefined ? undefined : parseWorkflowInventory(input.inventory);
+        if (projection && !projection.ok) return projection;
+        const inventory = projection?.ok ? projection.inventory : undefined;
+        if (inventory && (!inventory.source || inventory.kind !== 'state-machine')) {
+            return { ok: false, error: 'inline run setup requires a state-machine inventory with definition source' };
+        }
+        resolved = await resolveWorkflowDefinition(workdir, inventory?.source?.path ?? input.file, {
             validateSchema: true,
             ...(input.embeddedSchemas !== undefined ? { embeddedSchemas: input.embeddedSchemas } : {}),
+            ...(!inventory ? { registered: input.registered } : {}),
         });
+        if ((resolved.workflow.kind ?? 'state-machine') !== 'state-machine') {
+            return { ok: false, error: 'inline run setup requires a state-machine definition' };
+        }
+        if (inventory?.source) {
+            const identity = assertInventoryIdentity(inventory, resolved.digest);
+            if (!identity.ok) return identity;
+            if (inventory.name !== resolved.workflow.name) {
+                return { ok: false, error: 'inline run setup: inventory workflow name does not match its definition' };
+            }
+            // The selected CLI owns layer resolution; explicit-path revalidation must not relabel it.
+            resolved = { ...resolved, layer: inventory.source.layer };
+        }
     } catch (error) {
         return {
             ok: false,

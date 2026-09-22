@@ -39,8 +39,8 @@ interactive `/sp:dev-run --mode full`, sequential `/sp:dev-runall`, `/sp:dev-ide
 `--agent auto`, parallel batch mode, `spur workflow run`, and `spur agent run` keep the existing
 subprocess path.
 
-The selected project runtime definition — `task-pipeline.yaml` or `idea-pipeline.yaml`, resolved through the two-tier
-project→bundled model (task 0648/0650, never an unbundled runtime path) — remains the sole
+The selected project runtime definition — `task-pipeline.yaml` or `idea-pipeline.yaml`, resolved through the
+project→registered→shared model (ADR-113) — remains the sole
 FSM definition. The driver MUST read that file
 at invocation time. It must not copy the state list, actions, guards, or transition order into a
 command, skill, script, or second workflow.
@@ -76,16 +76,21 @@ the human/native presentation layer — labels are display addresses only, never
 
    ```bash
    SETUP_SCRIPT="plugins/sp/scripts/inline-run-setup.ts";
-   [ -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.ts 2>/dev/null)";
+   [ -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)";
    [ -n "$SETUP_SCRIPT" ] && [ -f "$SETUP_SCRIPT" ] && \
      bun "$SETUP_SCRIPT" --run-id "$RUN_ID" --file <selected-pipeline-yaml> \
      || { echo "inline run setup failed closed — checker not found; run 'superskill install sp'" >&2; exit 1; }
    ```
 
-   The delegate resolves the app service from the SPUR_BIN chain, creates-or-attaches the row,
+   The delegate uses the source app service when the SPUR_BIN chain identifies a checkout;
+   otherwise it loads the generated application bundle shipped with the plugin. Both setup paths
+   obtains the selected definition from the existing CLI `workflow show --format todo --json`
+   projection and revalidates its schema/name/digest before preserving its source layer.
+   Both paths create-or-attach the row,
    and writes `.spur/run/<run-id>-inline-setup.json`. Seed `__runId` and `__definitionDigest`
    from that file so proof capture and bound registration verify against the persisted identity.
-   A non-zero exit (missing row identity, changed definition, bundle-only install) stops the run —
+   Bun remains required for SQLite; the Node-runnable installed twin re-enters Bun on PATH.
+   A non-zero exit (missing runtime/bundle, invalid projection, missing row identity, changed definition) stops the run —
    never continue unbound and never fabricate a PASS. (The delegate persists the authoritative
    RUN row only — the 0808 inline record is the registration-equivalent convention below, not a
    setup-time artifact-ledger insert.)

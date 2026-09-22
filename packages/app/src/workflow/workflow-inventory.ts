@@ -34,6 +34,7 @@ export interface WorkflowInventory {
     version: string;
     definitionDigest: string;
     steps: InventoryStep[];
+    source?: { path: string; layer: 'project' | 'registered' | 'shared' };
 }
 
 /** Parse outcome for a workflow todo projection: a validated inventory, or a named failure. */
@@ -57,6 +58,22 @@ export function parseWorkflowInventory(json: unknown): InventoryParseResult {
     // is a supported, valid projection (0814 R4: preserve the existing JSON schema).
     const version = typeof obj.version === 'string' || typeof obj.version === 'number' ? String(obj.version) : '';
     const definitionDigest = typeof obj.definitionDigest === 'string' ? obj.definitionDigest : '';
+    let source: WorkflowInventory['source'];
+    if (obj.source !== undefined) {
+        if (typeof obj.source !== 'object' || obj.source === null) {
+            return { ok: false, error: 'workflow inventory: invalid definition source' };
+        }
+        const value = obj.source as Record<string, unknown>;
+        if (
+            typeof value.path !== 'string' ||
+            value.path === '' ||
+            typeof value.layer !== 'string' ||
+            !['project', 'registered', 'shared'].includes(value.layer)
+        ) {
+            return { ok: false, error: 'workflow inventory: invalid definition source path/layer' };
+        }
+        source = { path: value.path, layer: value.layer as NonNullable<WorkflowInventory['source']>['layer'] };
+    }
 
     if (name === '') return { ok: false, error: 'workflow inventory: missing name' };
     if (kind === '') return { ok: false, error: 'workflow inventory: missing kind' };
@@ -89,7 +106,7 @@ export function parseWorkflowInventory(json: unknown): InventoryParseResult {
 
     return {
         ok: true,
-        inventory: { name, kind, format, version, definitionDigest, steps },
+        inventory: { name, kind, format, version, definitionDigest, steps, ...(source ? { source } : {}) },
     };
 }
 

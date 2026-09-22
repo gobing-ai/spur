@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { ArtifactDao } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
@@ -45,6 +46,67 @@ transitions:
 
 const WORKFLOW_V2 = WORKFLOW_V1.replace('echo smoke', 'echo smoke-v2');
 
+test('installed setup binds the CLI-selected layer and refuses projection drift before opening the DB', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'spur-inline-installed-'));
+    let db: InlineRunProjectDb | undefined;
+    try {
+        const file = join(root, 'selected.yaml');
+        writeFileSync(file, `kind: state-machine\n${WORKFLOW_V1}`);
+        const selected = await resolveWorkflowDefinition(root, file);
+        const inventory = {
+            name: selected.workflow.name,
+            kind: 'state-machine',
+            format: 'todo',
+            version: null,
+            definitionDigest: selected.digest,
+            source: { path: file, layer: 'registered' },
+            steps: [
+                { id: 'start', initial: true },
+                { id: 'end', terminal: true },
+            ],
+        };
+        let opens = 0;
+        const getDb = async () => {
+            opens++;
+            db ??= await openInlineRunProjectDb(root);
+            return db.adapter;
+        };
+        const input = { workdir: root, getDb, file: 'inline-smoke', runId: 'installed-selected', inventory };
+        const result = await createOrAttachInlineRun(input);
+        expect(result).toMatchObject({ ok: true, layer: 'registered', definitionDigest: selected.digest });
+        expect(await createOrAttachInlineRun(input)).toMatchObject({ ok: true, attached: true });
+        const opensBeforeDrift = opens;
+        writeFileSync(file, `kind: state-machine\n${WORKFLOW_V2}`);
+        expect(await createOrAttachInlineRun({ ...input, runId: 'drifted' })).toMatchObject({ ok: false });
+        expect(opens).toBe(opensBeforeDrift);
+        writeFileSync(file, `kind: state-machine\n${WORKFLOW_V1}`);
+        for (const layer of ['invented', ['registered']]) {
+            expect(
+                await createOrAttachInlineRun({
+                    ...input,
+                    inventory: { ...inventory, source: { path: file, layer } },
+                }),
+            ).toMatchObject({ ok: false, error: 'workflow inventory: invalid definition source path/layer' });
+        }
+        expect(opens).toBe(opensBeforeDrift);
+        writeFileSync(
+            file,
+            'kind: transition-flow\nname: inline-flow\ninitialNode: start\nnodes:\n  - id: start\nedges: []\n',
+        );
+        const flow = await resolveWorkflowDefinition(root, file);
+        expect(
+            await createOrAttachInlineRun({
+                ...input,
+                inventory: { ...inventory, name: flow.workflow.name, definitionDigest: flow.digest },
+            }),
+        ).toMatchObject({ ok: false, error: 'inline run setup requires a state-machine definition' });
+        expect(opens).toBe(opensBeforeDrift);
+    } finally {
+        db?.close();
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
 interface Row {
     id: string;
     workflow_name: string;
@@ -52,6 +114,42 @@ interface Row {
     status: string;
     metadata_json: string;
 }
+
+test('source setup follows project, registered and shared workflow precedence', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'spur-inline-layers-'));
+    const previous = getEnvVar('SPUR_SKIP_GLOBAL_CONFIG');
+    setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', 'true');
+    const db = await openInlineRunProjectDb(root);
+    try {
+        const project = join(root, '.spur/workflows');
+        const registered = join(root, 'registered');
+        mkdirSync(project, { recursive: true });
+        mkdirSync(registered);
+        writeFileSync(join(root, '.spur/config.yaml'), 'workflows:\n  paths: [registered]\n');
+        const yaml = WORKFLOW_V1.replace('inline-smoke', 'task-pipeline');
+        writeFileSync(join(project, 'task-pipeline.yaml'), yaml);
+        writeFileSync(join(registered, 'task-pipeline.yaml'), yaml);
+        const input = { workdir: root, getDb: async () => db.adapter, file: 'task-pipeline', registered: [registered] };
+        expect(await createOrAttachInlineRun({ ...input, runId: 'layer-project' })).toMatchObject({
+            ok: true,
+            layer: 'project',
+        });
+        rmSync(join(project, 'task-pipeline.yaml'));
+        expect(await createOrAttachInlineRun({ ...input, runId: 'layer-registered' })).toMatchObject({
+            ok: true,
+            layer: 'registered',
+        });
+        rmSync(join(registered, 'task-pipeline.yaml'));
+        expect(await createOrAttachInlineRun({ ...input, runId: 'layer-shared' })).toMatchObject({
+            ok: true,
+            layer: 'shared',
+        });
+    } finally {
+        db.close();
+        setEnvVar('SPUR_SKIP_GLOBAL_CONFIG', previous);
+        rmSync(root, { recursive: true, force: true });
+    }
+});
 
 describe('createOrAttachInlineRun (task 0804 R1)', () => {
     let base: string;

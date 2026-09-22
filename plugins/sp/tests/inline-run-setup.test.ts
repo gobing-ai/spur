@@ -108,7 +108,7 @@ function makeDelegateFixture(behavior: DelegateBehavior) {
     mkdirSync(join(repoRoot, 'packages', 'app', 'src'), { recursive: true });
     writeFileSync(
         join(repoRoot, 'apps', 'cli', 'src', 'index.ts'),
-        '// stub CLI entry — proves resolveAppEntry derives the repo root from --spur-bin\n',
+        'console.log(JSON.stringify({ source: { path: "fixture", layer: "project" } }));\n',
     );
     writeFileSync(join(repoRoot, 'packages', 'app', 'src', 'index.ts'), fixtureAppSource(behavior, markerFile));
     return {
@@ -120,11 +120,15 @@ function makeDelegateFixture(behavior: DelegateBehavior) {
 }
 
 function runDelegate(workdir: string, runId: string, appEntry: string) {
-    return spawnSync('bun', [SCRIPT, '--run-id', runId, '--file', 'task-pipeline.yaml', '--spur-bin', appEntry], {
-        cwd: workdir,
-        stdio: 'pipe',
-        encoding: 'utf8',
-    });
+    return spawnSync(
+        'bun',
+        [SCRIPT, '--run-id', runId, '--file', 'task-pipeline.yaml', '--spur-bin', `bun ${appEntry}`],
+        {
+            cwd: workdir,
+            stdio: 'pipe',
+            encoding: 'utf8',
+        },
+    );
 }
 
 function makeDelegateWorkdir(): { workdir: string; cleanup: () => void } {

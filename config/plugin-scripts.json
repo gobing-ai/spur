@@ -48,7 +48,8 @@
         },
         {
             "rel": "inline-run-setup.ts",
-            "contract": "repo-only"
+            "contract": "standard",
+            "twin": "inline-run-setup.mjs"
         },
         {
             "rel": "idea-coverage-check.ts",

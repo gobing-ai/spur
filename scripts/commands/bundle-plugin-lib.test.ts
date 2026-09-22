@@ -52,3 +52,25 @@ describe('bundleIdeaHandoffLib (task 0824)', () => {
         expect(mjs).not.toContain('import.meta.main');
     });
 });
+
+test('inline application bundle regenerates deterministically with only runtime builtin imports', () => {
+    const path = join(import.meta.dir, '../../plugins/sp/lib/inline-run.generated.mjs');
+    const before = readFileSync(path, 'utf8');
+    // Build in the release process boundary: Bun's in-process test loader can rewrite
+    // cached workspace modules while the bundler reads their dependency graph.
+    const result = Bun.spawnSync(
+        [
+            'bun',
+            '-e',
+            'import { bundleInlineRunLib } from "./scripts/commands/bundle-plugin-lib"; await bundleInlineRunLib();',
+        ],
+        { cwd: join(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
+    );
+    expect(result.exitCode, result.stderr.toString()).toBe(0);
+    const after = readFileSync(path, 'utf8');
+    expect(after).toBe(before);
+    expect(existsSync(path.replace(/\.mjs$/, '.d.mts'))).toBe(true);
+    for (const imported of new Bun.Transpiler({ loader: 'js' }).scanImports(after)) {
+        expect(imported.path.startsWith('node:') || imported.path.startsWith('bun:')).toBe(true);
+    }
+});
