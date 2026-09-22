@@ -61,6 +61,26 @@ interface ProjectEntry {
 Path matching: expand `~`, resolve realpath when the directory exists; identity key is normalized
 absolute path (name is display-only, unique by convention).
 
+### 3.2 Registry freshness, process reclamation, and worktree teardown (feature K3)
+
+When isolated worktrees are created for `--worktree` runs, `spur serve` or command runs register
+the worktree path in `~/.config/spur/projects.json`. When the worktree is merged or deleted, the
+entry becomes stale and any lingering serve process becomes an orphaned background daemon.
+
+**The `refreshProjects` operation** (`ProjectRegistry.refreshProjects`):
+1. **Directory existence check**: check `existsSync(normalizeProjectPath(entry.path))`. If the path exists, pass.
+2. **Process termination for missing paths**: if the directory does not exist and `entry.port > 0`:
+   - Probe if the port is currently live via `isPortLive(entry.port)`.
+   - If occupied, resolve the listening PID (`lsof -t -iTCP:<port> -sTCP:LISTEN` or `fuser`).
+   - Filter out `process.pid` and `process.ppid` to prevent accidental self-termination.
+   - Send `SIGTERM`, wait for a bounded duration (up to 2s), and escalate to `SIGKILL` only if the port remains bound.
+3. **Atomic registry purge**: remove the missing project entry from `projects.json` under `withLock`.
+
+**Invocation seams**:
+- **Automatic self-healing**: `ProjectRegistry.list()` calls `refreshProjects()` before returning project entries, so every `projects list` call or switcher UI load purges stale entries.
+- **Explicit CLI command**: `spur projects clean` (and alias `spur projects refresh`) executes `refreshProjects` and prints purged entries and terminated process IDs.
+- **Worktree lifecycle integration**: `plugins/sp/skills/spur-dev/references/execution-batch.md` WT-4 (create mode worktree teardown) and `branch-workflow` worktree removal steps invoke `spur projects remove <worktree-path>` or `spur projects clean` to ensure immediate cleanup upon merge or deletion.
+
 ### 3.1 Project fleet declaration — `agent.fleet` in `<projectPath>/.spur/config.yaml` (0858)
 
 The **project** is the composition unit (ADR-116). Its agent roster is a fleet declared in the
