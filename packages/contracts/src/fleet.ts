@@ -118,6 +118,7 @@ export const configuredAgentExecutorSchema = z.object({
     sourcePath: z.string().optional(),
 });
 
+/** A single executor as reported in the project fleet snapshot. */
 export type ConfiguredAgentExecutorDto = z.infer<typeof configuredAgentExecutorSchema>;
 
 /** Request shape for toggling an executor's availability (ready / disabled). */
@@ -127,6 +128,7 @@ export const executorAvailabilityInputSchema = z.object({
     layer: z.enum(['project', 'global']).optional(),
 });
 
+/** Input for toggling an executor's availability; layer falls back to where the executor is declared (project when the request targets a project, else global). */
 export type ExecutorAvailabilityInput = z.infer<typeof executorAvailabilityInputSchema>;
 
 /** Response shape for updating an executor's availability. */
@@ -138,6 +140,7 @@ export const executorAvailabilityResponseSchema = z.object({
     targetPath: z.string().optional(),
 });
 
+/** Result of toggling an executor's availability (ready/disabled) for a project. */
 export type ExecutorAvailabilityResponse = z.infer<typeof executorAvailabilityResponseSchema>;
 
 /** Fleet snapshot contract — CONTRACT ONLY, served by the Hono health module. */
