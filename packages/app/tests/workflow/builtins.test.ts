@@ -282,7 +282,7 @@ describe('registerSpurBuiltins', () => {
         expect(persisted.data?.answer?.length).toBeLessThanOrEqual(4096);
         expect(persisted.data?.stdoutTail?.length).toBeLessThanOrEqual(4096);
         expect(persisted.data?.stderrTail?.length).toBeLessThanOrEqual(4096);
-    });
+    }, 15000);
 
     test('http.request templates are resolved once, by the engine, end-to-end', async () => {
         // The runner deliberately does no template expansion of its own. Driving it

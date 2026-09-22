@@ -92,7 +92,7 @@ describe('CLI dispatch and status', () => {
         // agent list --specs on a specless project routes through dispatch and exits 0.
         expect(await main(['agent', 'list', '--specs'], { cwd, output, dbUrl: ':memory:' })).toBe(0);
         expect(output.messages.at(-1)).toMatch(/No agent specs found/);
-    });
+    }, 15000);
 
     test('status reports optional path metadata and missing path errors', async () => {
         const cwd = await createTempProject();

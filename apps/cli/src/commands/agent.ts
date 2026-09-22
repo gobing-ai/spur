@@ -493,6 +493,14 @@ async function runAgentList(
         return svc.list({ json: opts.json ?? false, enveloped: opts.jsonEnvelope });
     }
     const specs = await new AgentCoordinationService(context).listAgentSpecs();
+    if (specs.length === 0) {
+        if (opts.json) {
+            context.output.write(toEnvelopeJson({ specs: [] }, { enveloped: opts.jsonEnvelope }));
+            return 0;
+        }
+        context.output.write('No agent specs found in .spur/agents/');
+        return 0;
+    }
     // The CLI process never owns the supervisor — specs are spawned by `spur serve` —
     // so the local listing is only the desired state until the server's process table
     // overrides it. Unreachable server ⇒ every spec `stopped` plus a stderr warning,
@@ -535,10 +543,6 @@ async function runAgentList(
         );
         return 0;
     }
-    if (specs.length === 0) {
-        context.output.write('No agent specs found in .spur/agents/');
-        return 0;
-    }
     // 0544 R2/R4: role and executor are distinct columns; undeclared renders `unset`.
     // Live run status is the trailing column (`running pid=<n>` / `stopped`), then the
     // member session (0897): mode + shortened resume id, `-` when none.
@@ -568,6 +572,14 @@ async function runAgentStatus(
     opts: { json?: boolean; jsonEnvelope?: boolean; server?: string },
 ): Promise<number> {
     const specs = await new AgentCoordinationService(context).listAgentSpecs();
+    if (specs.length === 0) {
+        if (opts.json) {
+            context.output.write(toEnvelopeJson({ agents: [] }, { enveloped: opts.jsonEnvelope }));
+            return 0;
+        }
+        context.output.write('No agent specs found in .spur/agents/');
+        return 0;
+    }
     const live = await fetchServerProcesses(opts.server ?? DEFAULT_SERVER);
     if (live === null) {
         context.output.error(
@@ -588,10 +600,6 @@ async function runAgentStatus(
     });
     if (opts.json) {
         context.output.write(toEnvelopeJson({ agents: rows }, { enveloped: opts.jsonEnvelope }));
-        return 0;
-    }
-    if (rows.length === 0) {
-        context.output.write('No agent specs found in .spur/agents/');
         return 0;
     }
     context.output.write(
@@ -620,7 +628,10 @@ interface LiveProcess {
 
 async function fetchServerProcesses(server: string): Promise<Map<string, LiveProcess> | null> {
     try {
-        const res = await (_testFetch ?? fetch)(`${server}/processes`, { method: 'GET' });
+        const res = await (_testFetch ?? fetch)(`${server}/processes`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(1500),
+        });
         if (!res.ok) return null;
         const body = (await res.json()) as {
             processes?: Array<{
@@ -683,7 +694,7 @@ async function runAgentLifecycle(
     let body: { ok?: boolean; error?: unknown; pid?: number; status?: string };
     try {
         const url = `${options.server}/agents/${encodeURIComponent(agentId)}/${action}`;
-        res = await (_testFetch ?? fetch)(url, { method: 'POST' });
+        res = await (_testFetch ?? fetch)(url, { method: 'POST', signal: AbortSignal.timeout(3000) });
         body = (await res.json()) as typeof body;
     } catch (err) {
         writeJsonError(
