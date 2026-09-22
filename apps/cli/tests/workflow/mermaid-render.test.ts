@@ -57,8 +57,8 @@ describe('renderWorkflowMermaid', () => {
         for (const s of ['start', 'mid', 'done', 'failed']) {
             expect(out).toContain(`["${s}"]`);
         }
-        expect(out).toContain('start -->|trigger:go| mid');
-        expect(out).toContain('mid -->|guard:no-retry| failed');
+        expect(out).toContain('start -->|"[go]"| mid');
+        expect(out).toContain('mid -->|"[no-retry]"| failed');
     });
 
     test('state-machine: terminal and failure states are visually distinguished', () => {
@@ -75,7 +75,7 @@ describe('renderWorkflowMermaid', () => {
         expect(out).toContain('check{{"check"');
         expect(out).toContain('branch{"branch"');
         expect(out).toContain('fan[("fan"');
-        expect(out).toContain('check -->|cond:is-ok| branch');
+        expect(out).toContain('check -->|"[is-ok]"| branch');
         expect(out).toContain('class check gate;');
         expect(out).toContain('class branch decision;');
         expect(out).toContain('class fan parallel;');
@@ -83,7 +83,7 @@ describe('renderWorkflowMermaid', () => {
         expect(out).toContain('class enter initial;');
     });
 
-    test('escapes quotes and brackets in ids', () => {
+    test('sanitizes node IDs and safely escapes quotes and brackets in labels', () => {
         const def: WorkflowDef = {
             kind: 'state-machine',
             name: 'x',
@@ -93,12 +93,14 @@ describe('renderWorkflowMermaid', () => {
             transitions: [{ from: 'a"b', to: 'c[d]' }],
         };
         const out = renderWorkflowMermaid(def);
-        expect(out).toContain('&quot;');
-        expect(out).toContain('&#91;');
-        expect(out).toContain('&#93;');
+        expect(out).toContain('a_b["a\'b"]');
+        expect(out).toContain('c_d_(["c[d]"])');
+        expect(out).toContain('a_b --> c_d_');
+        expect(out).toContain('class c_d_ terminal;');
+        expect(out).toContain('class a_b initial;');
     });
 
-    test('escapes parens in edge labels (mermaid rejects them unquoted)', () => {
+    test('preserves natural parens in edge labels with quoted syntax without entity corruption', () => {
         const def: WorkflowDef = {
             kind: 'transition-flow',
             name: 'x',
@@ -108,6 +110,8 @@ describe('renderWorkflowMermaid', () => {
             edges: [{ from: 'a', to: 'b', description: 'rerun the half (ADR-079).' }],
         };
         const out = renderWorkflowMermaid(def);
-        expect(out).toContain('&#40;ADR-079&#41;');
+        expect(out).toContain('a -->|"rerun the half (ADR-079)."| b');
+        expect(out).not.toContain('&#40;');
+        expect(out).not.toContain('&#41;');
     });
 });

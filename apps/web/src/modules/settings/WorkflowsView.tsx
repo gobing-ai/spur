@@ -182,21 +182,14 @@ export default function WorkflowsView() {
                         type="button"
                         onClick={handleCopy}
                         disabled={!activeWorkflow}
-                        className="px-2.5 py-1 text-xs font-medium bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-spur-text rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        title={activeSubtab === 'yaml' ? 'Copy raw YAML' : 'Copy Mermaid Markdown'}
+                        className="w-7 h-7 flex items-center justify-center text-xs font-medium bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-spur-text rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                        title={copied ? 'Copied!' : activeSubtab === 'yaml' ? 'Copy raw YAML' : 'Copy Mermaid Markdown'}
+                        aria-label={
+                            copied ? 'Copied!' : activeSubtab === 'yaml' ? 'Copy raw YAML' : 'Copy Mermaid Markdown'
+                        }
                         data-testid="copy-workflow-btn"
                     >
-                        {copied ? (
-                            <>
-                                <span className="text-emerald-400">✓</span>
-                                <span className="text-emerald-400 font-semibold">Copied!</span>
-                            </>
-                        ) : (
-                            <>
-                                <span>📋</span>
-                                <span>{activeSubtab === 'yaml' ? 'Copy YAML' : 'Copy Diagram'}</span>
-                            </>
-                        )}
+                        {copied ? <span className="text-emerald-400 font-bold">✓</span> : <span>📋</span>}
                     </button>
                 </div>
             </div>
@@ -375,15 +368,15 @@ export default function WorkflowsView() {
                                 </div>
 
                                 {/* Mermaid Diagram Canvas */}
-                                <div className="workflow-diagram-canvas flex-1 p-8 overflow-auto flex flex-col items-center justify-start">
+                                <div className="workflow-diagram-canvas flex-1 p-4 overflow-auto">
                                     {workflowMarkdown ? (
                                         <div
                                             style={{
                                                 transform: `scale(${zoom})`,
-                                                transformOrigin: 'top center',
+                                                transformOrigin: 'top left',
                                                 transition: 'transform 0.15s ease',
+                                                width: zoom !== 1 ? `${(100 / zoom).toFixed(1)}%` : '100%',
                                             }}
-                                            className="w-full flex justify-center"
                                         >
                                             <MarkdownBody
                                                 source={workflowMarkdown}
@@ -391,33 +384,85 @@ export default function WorkflowsView() {
                                             />
                                         </div>
                                     ) : (
-                                        <div className="text-spur-text-muted text-xs py-12">
+                                        <div className="text-spur-text-muted text-xs py-12 text-center">
                                             No diagram available for this workflow.
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Color Legend Bar */}
-                                <div className="border-t border-spur-border/60 bg-spur-surface-1/60 px-4 py-2 flex flex-wrap items-center justify-center gap-4 text-[11px] text-spur-text-muted shrink-0">
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-[#fff3cd] border border-[#b8860b]" />
-                                        <span>Initial</span>
+                                {/* Color & Transition Legend Bar */}
+                                <div
+                                    className="border-t border-spur-border/60 bg-spur-surface-1/70 px-4 py-2 flex flex-wrap items-center justify-between gap-y-2 gap-x-4 text-[11px] text-spur-text-muted shrink-0"
+                                    data-testid="diagram-legend"
+                                >
+                                    {/* Action Kinds */}
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <span className="font-semibold text-spur-text-secondary text-[10px] uppercase tracking-wider">
+                                            Steps:
+                                        </span>
+                                        <div
+                                            className="flex items-center gap-1.5"
+                                            title="Agent run (prompt / slash command)"
+                                        >
+                                            <span className="px-1.5 py-0.5 rounded bg-[#e0e7ff] border border-[#4f46e5] text-[#1e1b4b] font-medium text-[10px]">
+                                                🤖 agent.run
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5" title="Shell command execution">
+                                            <span className="px-1.5 py-0.5 rounded bg-[#ecfdf5] border border-[#059669] text-[#064e3b] font-medium text-[10px]">
+                                                💻 shell
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5" title="Human-in-the-loop decision">
+                                            <span className="px-1.5 py-0.5 rounded bg-[#fdf4ff] border border-[#9333ea] text-[#3b0764] font-medium text-[10px]">
+                                                👤 hitl
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5" title="Structural gate or probe">
+                                            <span className="px-1.5 py-0.5 rounded bg-[#e8e8f8] border border-[#5b5bd6] text-[#1a1a5e] font-medium text-[10px]">
+                                                🔒 gate
+                                            </span>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-2.5 h-2.5 rounded bg-spur-surface-3 border border-spur-border" />
-                                        <span>Action / State</span>
+
+                                    {/* Transition Line Styles */}
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <span className="font-semibold text-spur-text-secondary text-[10px] uppercase tracking-wider">
+                                            Transitions:
+                                        </span>
+                                        <div
+                                            className="flex items-center gap-1.5"
+                                            title="Direct or unconditional transition"
+                                        >
+                                            <span className="font-mono text-spur-text-secondary font-bold">───▶</span>
+                                            <span>Direct / Always</span>
+                                        </div>
+                                        <div
+                                            className="flex items-center gap-1.5"
+                                            title="Transition guarded by a shell condition"
+                                        >
+                                            <span className="font-mono text-emerald-500 font-bold">- - ▶</span>
+                                            <span className="text-emerald-400">Shell Guard</span>
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-2.5 h-2.5 rounded bg-[#e8e8f8] border border-[#5b5bd6]" />
-                                        <span>Gate / Decision</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-2.5 h-2.5 rounded-full bg-[#d4edda] border border-[#1e7e34]" />
-                                        <span>Terminal (Done)</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="w-2.5 h-2.5 rounded bg-[#f8d7da] border border-[#c62828]" />
-                                        <span>Failure / Cancelled</span>
+
+                                    {/* Lifecycle States */}
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <span className="font-semibold text-spur-text-secondary text-[10px] uppercase tracking-wider">
+                                            State:
+                                        </span>
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-[#fff3cd] border border-[#b8860b]" />
+                                            <span>Initial</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-2.5 h-2.5 rounded-full bg-[#d4edda] border border-[#1e7e34]" />
+                                            <span>Done</span>
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-2.5 h-2.5 rounded bg-[#f8d7da] border border-[#c62828]" />
+                                            <span>Failed</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

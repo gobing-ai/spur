@@ -205,28 +205,46 @@
     background-color: rgba(239, 68, 68, 0.1);
 }
 
-.mermaid-diagram svg,
-.wmde-markdown .mermaid-diagram svg {
-    max-width: 100%;
+/* Mermaid diagram containers — ensure SVG fills available width.
+   'max-width: none' overrides the browser default on SVG elements so the
+   diagram is not shrunk below its natural size. The SVG itself has width="100%"
+   patched in by MermaidBlock after render. */
+.mermaid-diagram {
+    width: 100%;
+    display: block;
+}
+
+.mermaid-diagram svg {
+    display: block;
+    width: 100%;
+    max-width: none;
     height: auto;
 }
 
+/* Workflow diagram canvas: fill the panel and center-align the mermaid block */
 .workflow-diagram-canvas .wmde-markdown {
     width: 100%;
-    display: flex;
-    justify-content: center;
+    display: block;
+    background: transparent;
 }
 
 .workflow-diagram-canvas .mermaid-diagram {
     width: 100%;
-    display: flex;
-    justify-content: center;
+    display: block;
 }
 
 .workflow-diagram-canvas .mermaid-diagram svg {
-    min-width: min(100%, 360px);
-    max-width: 100%;
+    width: 100%;
+    max-width: none;
     height: auto;
+    display: block;
+}
+
+/* Edge label text inside the Mermaid SVG */
+.workflow-diagram-canvas .mermaid-diagram .edgeLabel text,
+.workflow-diagram-canvas .mermaid-diagram .edgeLabel span {
+    font-size: 11px;
+    fill: var(--color-spur-text);
 }
 
 /* Liveness indicator pulse for the System Events tab (task 0222 R1). The dot

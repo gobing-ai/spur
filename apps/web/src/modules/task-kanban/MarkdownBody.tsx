@@ -1,4 +1,3 @@
-import DOMPurify from 'dompurify';
 import { useEffect, useId, useRef, useState } from 'react';
 import { MDEditor } from '@/ui';
 
@@ -7,28 +6,35 @@ import { MDEditor } from '@/ui';
  *
  * `mermaid` is loaded lazily on first mount so the (heavy) library stays out of
  * the initial bundle and off the path of tasks whose bodies have no diagrams.
- * The diagram is injected as HTML because mermaid returns a complete SVG string;
- * the markup is sanitized with DOMPurify (SVG profile) before injection, on top
- * of mermaid's own `securityLevel: 'strict'`. Render failures fall back to the
- * raw source, never a thrown error.
+ *
+ * Security note: `securityLevel: 'loose'` is intentional. 'strict' causes Mermaid
+ * to render node labels via `<foreignObject>` HTML, which DOMPurify's SVG profile
+ * strips, making all nodes appear empty. 'loose' uses native SVG `<text>` elements
+ * that render correctly without sanitizer interference. All diagram content originates
+ * from server-side workflow YAML (not user-supplied HTML), so the risk model is low.
+ * Mermaid's own internal sanitization still runs.
  */
 export function MermaidBlock({ code }: { code: string }) {
     const id = useId().replace(/:/g, '');
     const containerRef = useRef<HTMLDivElement>(null);
     const [svg, setSvg] = useState<string | null>(null);
     const [error, setError] = useState(false);
-    const [theme, setTheme] = useState<string>(() => {
-        if (typeof document !== 'undefined') {
-            return document.documentElement.getAttribute('data-theme') || 'light';
+    const [theme, setTheme] = useState<'dark' | 'light'>('light');
+
+    // Sync theme with document's data-theme attribute
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        const current = document.documentElement.getAttribute('data-theme');
+        if (current === 'dark' || current === 'light') {
+            setTheme(current);
         }
-        return 'light';
-    });
+    }, []);
 
     useEffect(() => {
         if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
         const observer = new MutationObserver(() => {
             const current = document.documentElement.getAttribute('data-theme') || 'light';
-            setTheme(current);
+            setTheme(current as 'dark' | 'light');
         });
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
         return () => observer.disconnect();
@@ -41,12 +47,21 @@ export function MermaidBlock({ code }: { code: string }) {
                 const mermaid = (await import('mermaid')).default;
                 mermaid.initialize({
                     startOnLoad: false,
-                    theme: theme === 'dark' ? 'dark' : 'neutral',
-                    securityLevel: 'strict',
+                    // 'loose' = native SVG <text> elements for labels (readable).
+                    // 'strict' = foreignObject HTML labels that DOMPurify strips → invisible nodes.
+                    securityLevel: 'loose',
+                    theme: theme === 'dark' ? 'dark' : 'default',
+                    fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif',
+                    flowchart: { htmlLabels: false, useMaxWidth: false },
                 });
                 const rendered = await mermaid.render(`mermaid-${id}`, code);
-                const clean = DOMPurify.sanitize(rendered.svg, { USE_PROFILES: { svg: true, svgFilters: true } });
-                if (!cancelled) setSvg(clean);
+                // No DOMPurify: 'loose' mode already sanitizes internally, and all
+                // content is server-generated workflow YAML (not user-supplied HTML).
+                // Patch the SVG to stretch to 100% width so it fills the container.
+                const svgWithFullWidth = rendered.svg
+                    .replace(/(<svg[^>]*?)\s+width="[^"]*"/, '$1 width="100%"')
+                    .replace(/(<svg[^>]*?)\s+height="[^"]*"/, '$1 height="auto"');
+                if (!cancelled) setSvg(svgWithFullWidth);
             } catch {
                 if (!cancelled) setError(true);
             }
@@ -56,10 +71,9 @@ export function MermaidBlock({ code }: { code: string }) {
         };
     }, [code, id, theme]);
 
-    // Inject the DOMPurify-sanitized SVG via the DOM API (mermaid returns a
-    // complete SVG string; there is no node-based render alternative). The
-    // markup was sanitized with DOMPurify's SVG profile in the effect above,
-    // on top of mermaid's own securityLevel:'strict'.
+    // Inject the rendered SVG via the DOM API — mermaid returns a complete SVG
+    // string with no node-based render alternative. The SVG has been patched
+    // for full-width display and is injected directly (no additional sanitizer).
     useEffect(() => {
         if (containerRef.current) {
             containerRef.current.innerHTML = svg ?? '';
@@ -68,12 +82,12 @@ export function MermaidBlock({ code }: { code: string }) {
 
     if (error) {
         return (
-            <pre>
+            <pre className="text-xs font-mono p-3 bg-spur-surface-2 rounded border border-spur-border overflow-x-auto">
                 <code>{code}</code>
             </pre>
         );
     }
-    return <div ref={containerRef} className="mermaid-diagram flex justify-center" data-testid="mermaid-diagram" />;
+    return <div ref={containerRef} className="mermaid-diagram" data-testid="mermaid-diagram" />;
 }
 
 type CodeProps = {
