@@ -30,7 +30,7 @@ const MOCK_WORKFLOWS: ProjectWorkflowsResponse = {
             kind: 'state-machine',
             version: '3',
             description: 'Standard task pipeline',
-            path: 'config/workflows/task-pipeline.yaml',
+            path: '.spur/workflows/task-pipeline.yaml',
             source: 'registered',
             valid: true,
             rawYaml: 'name: task-pipeline\nkind: state-machine\nversion: "3"\n',
@@ -41,7 +41,7 @@ const MOCK_WORKFLOWS: ProjectWorkflowsResponse = {
             kind: 'state-machine',
             version: '4',
             description: 'Wrapup pipeline',
-            path: 'config/workflows/wrapup-pipeline.yaml',
+            path: '.spur/workflows/wrapup-pipeline.yaml',
             source: 'registered',
             valid: true,
             rawYaml: 'name: wrapup-pipeline\nkind: state-machine\nversion: "4"\n',
@@ -98,7 +98,7 @@ describe('WorkflowsView', () => {
         });
 
         expect(container.textContent).toContain('task-pipeline');
-        expect(container.textContent).toContain('config/workflows/task-pipeline.yaml');
+        expect(container.textContent).toContain('.spur/workflows/task-pipeline.yaml');
         expect(container.textContent).toContain('name: task-pipeline');
     });
 
@@ -134,7 +134,7 @@ describe('WorkflowsView', () => {
         fireEvent.change(select, { target: { value: 'wrapup-pipeline' } });
 
         await waitFor(() => {
-            expect(container.textContent).toContain('config/workflows/wrapup-pipeline.yaml');
+            expect(container.textContent).toContain('.spur/workflows/wrapup-pipeline.yaml');
         });
         expect(container.textContent).toContain('name: wrapup-pipeline');
     });

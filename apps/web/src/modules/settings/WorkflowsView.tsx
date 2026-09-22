@@ -253,8 +253,8 @@ export default function WorkflowsView() {
                 <div className="flex flex-col items-center justify-center h-64 text-spur-text-muted text-sm gap-2 bg-spur-surface-2/40 border border-dashed border-spur-border rounded-xl">
                     <span>No workflows found.</span>
                     <span className="text-xs text-spur-text-secondary">
-                        Add workflow config files under <code className="font-mono">config/workflows/</code> or{' '}
-                        <code className="font-mono">.spur/workflows/</code>.
+                        Add workflow YAML files under <code className="font-mono">.spur/workflows/</code> or configured
+                        paths.
                     </span>
                 </div>
             ) : activeWorkflow ? (
