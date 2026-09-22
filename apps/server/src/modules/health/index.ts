@@ -1,5 +1,3 @@
-import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join, relative, resolve } from 'node:path';
 import {
@@ -31,6 +29,7 @@ import {
 } from '@gobing-ai/spur-config/loader';
 import { CoordinationRunDao, InboxMessageDao, REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
 import type { HitlResponder } from '@gobing-ai/ts-dual-workflow-engine';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -750,6 +749,7 @@ export const healthModule: ServerModule = {
                           });
                 const listResult = await wfSvc.list(paths);
                 const workflows = [];
+                const fs = ctx.fs ?? createNodeFileSystem(ctx.cwd);
 
                 for (const entry of listResult.entries) {
                     const layer = listResult.layers.find((l) => l.id === entry.source);
@@ -760,10 +760,8 @@ export const healthModule: ServerModule = {
                     let error = entry.error;
 
                     try {
-                        if (ctx.fs && (await ctx.fs.exists(fullPath))) {
-                            rawYaml = await ctx.fs.readFile(fullPath);
-                        } else if (existsSync(fullPath)) {
-                            rawYaml = await readFile(fullPath, 'utf8');
+                        if (await fs.exists(fullPath)) {
+                            rawYaml = await fs.readFile(fullPath);
                         }
                     } catch (readErr) {
                         error = readErr instanceof Error ? readErr.message : String(readErr);
