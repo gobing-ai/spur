@@ -4,7 +4,6 @@ import { Button, Tooltip } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../lib/rpc-client';
 import { modules } from '../modules/registry';
 import ProjectSwitcher from './ProjectSwitcher';
-import SettingsModal from './SettingsModal';
 import ThemeToggle from './ThemeToggle';
 
 /** Sidebar title shown until the server identifies the project (and on fetch failure). */
@@ -76,16 +75,21 @@ function SidebarFoldButton({ collapsed, onToggle }: { collapsed: boolean; onTogg
     );
 }
 
-/** Settings button trigger for the placeholder SettingsModal. */
-function SettingsButton({ onClick }: { onClick: () => void }) {
-    return (
-        <button
-            type="button"
-            onClick={onClick}
+/** Settings navigation link in the sidebar footer. */
+function SettingsButton({ collapsed }: { collapsed?: boolean }) {
+    const link = (
+        <NavLink
+            to="/board/settings"
             aria-label="Open settings"
             title="Open settings"
             data-testid="sidebar-settings"
-            className="flex h-8 w-8 items-center justify-center rounded-md text-spur-text-muted hover:bg-spur-accent/20 hover:text-spur-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-spur-accent"
+            className={({ isActive }) =>
+                `flex h-8 w-8 items-center justify-center rounded-md transition-colors ${
+                    isActive
+                        ? 'bg-spur-accent/20 text-spur-accent'
+                        : 'text-spur-text-muted hover:bg-spur-accent/20 hover:text-spur-accent'
+                } focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-spur-accent`
+            }
         >
             <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                 <path
@@ -94,8 +98,18 @@ function SettingsButton({ onClick }: { onClick: () => void }) {
                     clipRule="evenodd"
                 />
             </svg>
-        </button>
+        </NavLink>
     );
+
+    if (collapsed) {
+        return (
+            <Tooltip position="right" tip="Settings" className="block">
+                {link}
+            </Tooltip>
+        );
+    }
+
+    return link;
 }
 
 interface Props {
@@ -106,41 +120,41 @@ interface Props {
 
 export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Props) {
     const projectName = useProjectName();
-    const [settingsOpen, setSettingsOpen] = useState(false);
 
     return (
-        <>
-            <aside
-                className={`flex flex-col bg-spur-surface border-r border-spur-border ${
-                    collapsed ? 'overflow-visible' : 'overflow-hidden'
-                }`}
-            >
-                {collapsed ? (
-                    // Collapsed rail: project icon/switcher at the top of the icon list.
-                    <div className="flex items-center justify-center border-b border-spur-border shrink-0 py-2">
-                        <ProjectSwitcher currentName={projectName} collapsed />
-                    </div>
-                ) : (
-                    // Expanded: project switcher + optional mobile close (fold control moved to footer).
-                    <div className="flex items-center justify-between gap-1 p-3 border-b border-spur-border shrink-0">
-                        <ProjectSwitcher currentName={projectName} />
+        <aside
+            className={`flex flex-col bg-spur-surface border-r border-spur-border ${
+                collapsed ? 'overflow-visible' : 'overflow-hidden'
+            }`}
+        >
+            {collapsed ? (
+                // Collapsed rail: project icon/switcher at the top of the icon list.
+                <div className="flex items-center justify-center border-b border-spur-border shrink-0 py-2">
+                    <ProjectSwitcher currentName={projectName} collapsed />
+                </div>
+            ) : (
+                // Expanded: project switcher + optional mobile close (fold control moved to footer).
+                <div className="flex items-center justify-between gap-1 p-3 border-b border-spur-border shrink-0">
+                    <ProjectSwitcher currentName={projectName} />
 
-                        {onMobileClose && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-spur-text-muted md:hidden"
-                                onClick={onMobileClose}
-                                aria-label="Close navigation"
-                            >
-                                ✕
-                            </Button>
-                        )}
-                    </div>
-                )}
+                    {onMobileClose && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-spur-text-muted md:hidden"
+                            onClick={onMobileClose}
+                            aria-label="Close navigation"
+                        >
+                            ✕
+                        </Button>
+                    )}
+                </div>
+            )}
 
-                <nav className={`flex-1 ${collapsed ? 'overflow-visible' : 'overflow-y-auto'}`}>
-                    {modules.map((mod) => {
+            <nav className={`flex-1 ${collapsed ? 'overflow-visible' : 'overflow-y-auto'}`}>
+                {modules
+                    .filter((mod) => mod.id !== 'settings')
+                    .map((mod) => {
                         const label = mod.sidebarLabel ?? mod.name;
                         const navLink = (
                             <NavLink
@@ -175,34 +189,30 @@ export default function LeftSidebar({ collapsed, onToggle, onMobileClose }: Prop
 
                         return navLink;
                     })}
-                </nav>
+            </nav>
 
-                <div
-                    data-testid="sidebar-footer"
-                    className={`border-t border-spur-border shrink-0 ${
-                        collapsed
-                            ? 'py-2 flex flex-col items-center gap-2'
-                            : 'p-3 flex items-center justify-between gap-2'
-                    }`}
-                >
-                    {collapsed ? (
-                        <>
+            <div
+                data-testid="sidebar-footer"
+                className={`border-t border-spur-border shrink-0 ${
+                    collapsed ? 'py-2 flex flex-col items-center gap-2' : 'p-3 flex items-center justify-between gap-2'
+                }`}
+            >
+                {collapsed ? (
+                    <>
+                        <ThemeToggle />
+                        <SettingsButton collapsed />
+                        <SidebarFoldButton collapsed onToggle={onToggle} />
+                    </>
+                ) : (
+                    <>
+                        <div className="flex items-center gap-2">
                             <ThemeToggle />
-                            <SettingsButton onClick={() => setSettingsOpen(true)} />
-                            <SidebarFoldButton collapsed onToggle={onToggle} />
-                        </>
-                    ) : (
-                        <>
-                            <div className="flex items-center gap-2">
-                                <ThemeToggle />
-                                <SettingsButton onClick={() => setSettingsOpen(true)} />
-                            </div>
-                            <SidebarFoldButton collapsed={false} onToggle={onToggle} />
-                        </>
-                    )}
-                </div>
-            </aside>
-            <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-        </>
+                            <SettingsButton />
+                        </div>
+                        <SidebarFoldButton collapsed={false} onToggle={onToggle} />
+                    </>
+                )}
+            </div>
+        </aside>
     );
 }

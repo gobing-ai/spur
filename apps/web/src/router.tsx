@@ -14,7 +14,7 @@ import { defaultModule, modules } from './modules/registry';
 export const RETIRED_ROUTES: ReadonlyArray<{ from: string; to: string }> = [
     { from: 'workspace', to: '/board/projects' },
     { from: 'inbox', to: '/board/projects/conversation' },
-    { from: 'teams', to: '/board/projects/agents' },
+    { from: 'teams', to: '/board/settings/agents' },
 ];
 
 /** Route tree shared by the browser router (prod) and memory router (tests). */

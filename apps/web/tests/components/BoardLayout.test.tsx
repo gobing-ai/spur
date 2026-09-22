@@ -436,7 +436,7 @@ describe('router + module wiring', () => {
         await waitFor(() => expect(container.querySelector('[data-kanban-board]')).not.toBeNull());
 
         const navLinks = container.querySelectorAll('nav a');
-        expect(navLinks.length).toBe(modules.length);
+        expect(navLinks.length).toBe(modules.filter((m) => m.id !== 'settings').length);
 
         const active = Array.from(navLinks).find((a) => a.className.includes('text-spur-accent'));
         expect(active).toBeDefined();
@@ -476,8 +476,11 @@ describe('router + module wiring', () => {
             const router = createMemoryRouter(routes, { initialEntries: [`/board/${retired.from}`] });
             const view = render(<RouterProvider router={router} />);
             await waitFor(() => expect(router.state.location.pathname).toBe(retired.to));
-            const active = view.container.querySelector('[data-projects-tab][aria-selected="true"]');
-            expect(active?.getAttribute('data-projects-tab')).toBe(EXPECTED_TAB[retired.from]);
+            const active = view.container.querySelector(
+                '[data-projects-tab][aria-selected="true"], [data-settings-tab][aria-selected="true"]',
+            );
+            const activeTab = active?.getAttribute('data-projects-tab') ?? active?.getAttribute('data-settings-tab');
+            expect(activeTab).toBe(EXPECTED_TAB[retired.from]);
             view.unmount();
         }
         expect(Object.keys(EXPECTED_TAB).sort()).toEqual(RETIRED_ROUTES.map((r) => r.from).sort());

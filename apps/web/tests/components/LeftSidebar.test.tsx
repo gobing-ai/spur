@@ -126,7 +126,7 @@ describe('LeftSidebar fold / unfold controls', () => {
     });
 });
 
-describe('LeftSidebar footer and settings modal', () => {
+describe('LeftSidebar footer and settings navigation', () => {
     test('renders footer with ThemeToggle, SettingsButton, and SidebarFoldButton in expanded state', () => {
         silentProjectFetch();
         const { getByTestId, getByLabelText, getAllByLabelText } = renderSidebar(false);
@@ -149,17 +149,11 @@ describe('LeftSidebar footer and settings modal', () => {
         expect(getAllByLabelText(/Switch to (light|dark) mode/).length).toBe(1);
     });
 
-    test('opens SettingsModal when clicking settings button in footer and closes on modal close', () => {
+    test('renders SettingsButton as a navigation link pointing to /board/settings', () => {
         silentProjectFetch();
-        const { getByTestId, getByRole, getByLabelText, queryByRole } = renderSidebar(false);
-        expect(queryByRole('dialog')).toBeNull();
-
-        fireEvent.click(getByTestId('sidebar-settings'));
-        expect(getByRole('dialog')).toBeTruthy();
-        expect(getByRole('dialog').textContent).toContain('Settings');
-
-        fireEvent.click(getByLabelText('Close settings'));
-        expect(queryByRole('dialog')).toBeNull();
+        const { getByTestId } = renderSidebar(false);
+        const settingsLink = getByTestId('sidebar-settings');
+        expect(settingsLink.getAttribute('href')).toBe('/board/settings');
     });
 });
 
