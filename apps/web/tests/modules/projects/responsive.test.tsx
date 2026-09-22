@@ -19,6 +19,7 @@ import {
     type ProjectFleetSnapshot,
     type ResolvedFleetMember,
 } from '../../../src/modules/projects/useProjectContext';
+import SettingsShell from '../../../src/modules/settings/SettingsShell';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterAll(teardownHappyDom);
@@ -118,6 +119,17 @@ function installSilentApiFetch(): void {
 }
 
 function renderView(tab: 'conversation' | 'agents' | 'processes') {
+    if (tab === 'agents') {
+        return render(
+            <MemoryRouter initialEntries={['/board/settings/agents']}>
+                <ProjectContext.Provider
+                    value={{ path: '/repo/wt', name: 'spur', fleet: fleet(), state: 'ready' as const } as never}
+                >
+                    <SettingsShell />
+                </ProjectContext.Provider>
+            </MemoryRouter>,
+        );
+    }
     return render(
         <MemoryRouter initialEntries={[`/board/projects/${tab}`]}>
             <ProjectContext.Provider
@@ -146,7 +158,7 @@ describe('LB-1 structural invariants (0845 R4)', () => {
         for (const tab of ['conversation', 'agents', 'processes'] as const) {
             const { container, unmount } = renderView(tab);
             await act(async () => {});
-            expect(container.querySelector('[data-projects-shell]'), tab).not.toBeNull();
+            expect(container.querySelector('[data-projects-shell], [data-settings-shell]'), tab).not.toBeNull();
             assertNoWideMinWidth(container.innerHTML);
             unmount();
         }

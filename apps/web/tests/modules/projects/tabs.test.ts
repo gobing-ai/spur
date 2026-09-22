@@ -3,8 +3,8 @@ import ProcessesView from '../../../src/modules/projects/ProcessesView';
 import { DEFAULT_PROJECT_TAB, PROJECT_TABS } from '../../../src/modules/projects/tabs';
 
 describe('PROJECT_TABS (0840 R3)', () => {
-    test('contains the 3 tabs in frozen order: Conversation, Agents, Processes', () => {
-        expect(PROJECT_TABS.map((t) => t.id)).toEqual(['conversation', 'agents', 'processes']);
+    test('contains the 2 tabs in frozen order: Conversation, Processes', () => {
+        expect(PROJECT_TABS.map((t) => t.id)).toEqual(['conversation', 'processes']);
     });
 
     test('tab ids are unique and labels are non-empty', () => {

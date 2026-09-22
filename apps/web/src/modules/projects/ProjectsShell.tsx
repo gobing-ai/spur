@@ -78,9 +78,7 @@ export default function ProjectsShell() {
                     </span>
                     <div>
                         <h1 className="text-xl font-bold tracking-tight">Projects</h1>
-                        <p className="text-xs text-base-content/60">
-                            Conversation, agents, and processes for this project
-                        </p>
+                        <p className="text-xs text-base-content/60">Conversation and processes for this project</p>
                     </div>
                 </div>
 

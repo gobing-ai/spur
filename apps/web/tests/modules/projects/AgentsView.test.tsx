@@ -4,10 +4,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { act, cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { resetFetchForTesting, setFetchForTesting } from '../../../src/lib/rpc-client';
-import AgentsView from '../../../src/modules/projects/AgentsView';
-import ProjectsShell from '../../../src/modules/projects/ProjectsShell';
 import type { ProjectFleetSnapshot, ResolvedFleetMember } from '../../../src/modules/projects/useProjectContext';
 import { ProjectContext } from '../../../src/modules/projects/useProjectContext';
+import AgentsView from '../../../src/modules/settings/AgentsView';
+import SettingsShell from '../../../src/modules/settings/SettingsShell';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterAll(teardownHappyDom);
@@ -83,11 +83,11 @@ function stubFetch(fleetBody: unknown, processesBody: unknown): typeof fetch {
     }) as typeof fetch;
 }
 
-function harness(projectValue: Record<string, unknown>, initial = ['/board/projects/agents']) {
+function harness(projectValue: Record<string, unknown>, initial = ['/board/settings/agents']) {
     return render(
         <MemoryRouter initialEntries={initial}>
             <ProjectContext.Provider value={projectValue as never}>
-                <ProjectsShell />
+                <SettingsShell />
             </ProjectContext.Provider>
         </MemoryRouter>,
     );
@@ -96,7 +96,7 @@ function harness(projectValue: Record<string, unknown>, initial = ['/board/proje
 // ── R1: the roster shows the project fleet ──
 
 describe('AgentsView roster (0842 R1)', () => {
-    test('/board/projects/agents renders the roster panel with role, executor, and orchestrator marker', async () => {
+    test('/board/settings/agents renders the roster panel with role, executor, and orchestrator marker', async () => {
         setFetchForTesting(stubFetch(fleet(), { processes: [procRow('orch'), procRow('a1', 'exited')] }));
         const view = harness(ctx());
         await act(async () => {});
@@ -136,7 +136,7 @@ describe('AgentsView roster (0842 R1)', () => {
         // 0858 R5: the empty-roster hint names `agent.fleet` in the project config.
         expect(view.container.querySelector('[data-roster-empty]')?.textContent).toContain('agent.fleet');
         expect(view.container.querySelector('[data-roster-empty]')?.textContent).toContain('.spur/config.yaml');
-        expect(view.container.querySelector('[data-projects-tab="agents"]')).not.toBeNull();
+        expect(view.container.querySelector('[data-settings-tab="agents"]')).not.toBeNull();
         view.unmount();
     });
 });

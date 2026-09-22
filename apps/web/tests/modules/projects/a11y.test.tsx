@@ -19,6 +19,7 @@ import {
     type ProjectFleetSnapshot,
     type ResolvedFleetMember,
 } from '../../../src/modules/projects/useProjectContext';
+import AgentsView from '../../../src/modules/settings/AgentsView';
 import { registerHappyDom, teardownHappyDom } from '../../happy-dom';
 
 afterAll(teardownHappyDom);
@@ -178,7 +179,7 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
         const tablist = container.querySelector('[role="tablist"]');
         expect(tablist?.getAttribute('aria-label')).toBe('Projects tabs');
         const tabs = [...container.querySelectorAll('[data-projects-tab]')];
-        expect(tabs).toHaveLength(3);
+        expect(tabs).toHaveLength(2);
         for (const tab of tabs) {
             expect(tab.getAttribute('role')).toBe('tab');
             expect(tab.getAttribute('aria-selected')).toMatch(/true|false/);
@@ -204,11 +205,11 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
         expect(document.activeElement).toBe(tab('conversation'));
 
         fireEvent.keyDown(tablist, { key: 'ArrowRight' });
-        await settleInAct(); // panel switch mounts the agents panel, which fetches on mount
-        expect(tab('agents').getAttribute('aria-selected')).toBe('true');
+        await settleInAct(); // panel switch mounts the processes panel, which fetches on mount
+        expect(tab('processes').getAttribute('aria-selected')).toBe('true');
         expect(tab('conversation').getAttribute('aria-selected')).toBe('false');
-        expect(container.querySelector('#projects-tab-panel-agents')).not.toBeNull();
-        expect(document.activeElement).toBe(tab('agents'));
+        expect(container.querySelector('#projects-tab-panel-processes')).not.toBeNull();
+        expect(document.activeElement).toBe(tab('processes'));
 
         fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
         await settleInAct(); // panel switch mounts the conversation panel, which fetches on mount
@@ -220,8 +221,14 @@ describe('R2: tabs are keyboard-navigable with aria-selected (0840 frozen tablis
 describe('KB-4: Escape closes member detail and restores focus to its opener (0842)', () => {
     test('Escape closes the pane and document.activeElement is the opening card', async () => {
         setFetchForTesting(stubFetch());
-        const view = await renderShell(['/board/projects/agents']);
-        await act(async () => {});
+        const view = render(
+            <MemoryRouter initialEntries={['/board/settings/agents']}>
+                <ProjectContext.Provider value={ctx() as never}>
+                    <AgentsView pollMs={10} />
+                </ProjectContext.Provider>
+            </MemoryRouter>,
+        );
+        await settleInAct();
         const card = view.container.querySelector(
             '[data-g6="open-member"][data-roster-entry="a1"]',
         ) as HTMLButtonElement;

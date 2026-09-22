@@ -86,7 +86,7 @@ describe('Projects module registration (0840 R6)', () => {
         expect(projectsModule.order).toBe(45);
         expect(discovered.filter((m) => m.id === 'projects')).toHaveLength(1);
         expect(discovered.filter((m) => m.route === 'projects')).toHaveLength(1);
-        expect(discovered.map((m) => m.id)).toHaveLength(5);
+        expect(discovered.map((m) => m.id)).toHaveLength(6);
     });
 });
 
@@ -96,7 +96,7 @@ describe('ProjectsShell header (0840 R5)', () => {
         const header = container.querySelector('[data-projects-header]');
         expect(header?.getAttribute('data-projects-state')).toBe('ready');
         expect(container.textContent).toContain('Projects');
-        expect(container.textContent).toContain('Conversation, agents, and processes for this project');
+        expect(container.textContent).toContain('Conversation and processes for this project');
         expect(container.textContent).not.toContain('Orchestrator:');
         expect(container.textContent).not.toContain('Fleet:');
         expect(container.textContent).not.toContain('Strategy:');
@@ -112,7 +112,7 @@ describe('ProjectsShell header (0840 R5)', () => {
         expect(container.querySelector('[data-projects-header]')?.getAttribute('data-projects-state')).toBe(
             'unresolvable',
         );
-        expect(container.querySelectorAll('[data-projects-tab]')).toHaveLength(3);
+        expect(container.querySelectorAll('[data-projects-tab]')).toHaveLength(2);
     });
 
     test('fleet-unavailable when identity is ready but fleet fetch failed', async () => {
@@ -155,16 +155,16 @@ describe('ProjectsShell header (0840 R5)', () => {
 });
 
 describe('ProjectsShell tabs (0840 R3/R5)', () => {
-    test('three tabs render with the WorkspaceShell aria contract and deep-link selection', async () => {
-        const { container } = await renderShell(ctx(), ['/board/projects/agents']);
+    test('two tabs render with the WorkspaceShell aria contract and deep-link selection', async () => {
+        const { container } = await renderShell(ctx(), ['/board/projects/processes']);
         const tabs = container.querySelectorAll('[data-projects-tab]');
-        expect(tabs).toHaveLength(3);
-        const agents = container.querySelector('#projects-tab-agents');
-        expect(agents?.getAttribute('aria-selected')).toBe('true');
+        expect(tabs).toHaveLength(2);
+        const processes = container.querySelector('#projects-tab-processes');
+        expect(processes?.getAttribute('aria-selected')).toBe('true');
         expect(container.querySelector('[role="tablist"]')?.getAttribute('aria-label')).toBe('Projects tabs');
-        const panel = container.querySelector('#projects-tab-panel-agents');
+        const panel = container.querySelector('#projects-tab-panel-processes');
         expect(panel?.getAttribute('role')).toBe('tabpanel');
-        expect(panel?.getAttribute('aria-labelledby')).toBe('projects-tab-agents');
+        expect(panel?.getAttribute('aria-labelledby')).toBe('projects-tab-processes');
     });
 
     test('tab click swaps the active panel and aria-selected', async () => {

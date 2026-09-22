@@ -22,8 +22,8 @@ function wrapper(initialEntries: string[]) {
 
 describe('useProjectTab (0840 R3)', () => {
     test('parses the active tab from the path segment after projects', () => {
-        const { result } = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/agents']) });
-        expect(result.current.activeTab).toBe('agents');
+        const { result } = renderHook(() => useProjectTab(), { wrapper: wrapper(['/board/projects/processes']) });
+        expect(result.current.activeTab).toBe('processes');
     });
 
     test('missing or unknown segment falls back to the default tab', () => {
@@ -45,14 +45,14 @@ describe('useProjectTab (0840 R3)', () => {
         render(
             createElement(
                 MemoryRouter,
-                { initialEntries: ['/board/projects/processes?feature=G63'] },
+                { initialEntries: ['/board/projects/conversation?feature=G63'] },
                 createElement(Routes, null, createElement(Route, { path: '*', element: createElement(TabProbe) })),
             ),
         );
+        expect(tabHook?.activeTab).toBe('conversation');
+        act(() => tabHook?.selectTab('processes'));
         expect(tabHook?.activeTab).toBe('processes');
-        act(() => tabHook?.selectTab('agents'));
-        expect(tabHook?.activeTab).toBe('agents');
-        expect(loc?.pathname).toBe('/board/projects/agents');
+        expect(loc?.pathname).toBe('/board/projects/processes');
         expect(loc?.search).toBe('?feature=G63');
     });
 });
