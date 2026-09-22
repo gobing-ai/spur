@@ -2623,3 +2623,11 @@ Gotchas
 - Drift audit over 00/03/04 + docs/design: the only confirmed defect was 00's frontmatter (`updated_at: 2026-09-20` predating the 2026-09-21 ADR-123 clarification); repaired to `updated_at: 2026-09-21`, version 1.49.0 → 1.50.0. ADR numbers, dates and decision history preserved per §6.1.
 - 03 and 04 were correctly untouched: the DecisionMaker policy adds no new seam or invariant (app-internal module at the existing responder seam; ADR-123 owns the choice), and satellite edits with unchanged 04 index pointers are synchronized by constitution §5.
 - Tooling footgun: `rg -r` is "replace in output", not "recursive" — a search for `hitlDecisionMaker` displayed every match rewritten to `n`. Use `-n` + explicit paths; `-r` mangles evidence silently.
+
+## 0912 — Post-delivery workflow baseline + pilot selection (wrap 2026-09-22)
+
+- Executor-narration leak: wrapup doc-sync dispatched to `codex` completed in one turn and appended its own narration ("Now let me read...") to `learnings.md` verbatim instead of curated learnings; the run still reported done. A doc-sync step that finishes without producing content should be detected as hollow, not passed through.
+- Tier resolution can select an unusable executor: role `coder` → pi with `volc/deepseek-v4-1-flash-260910` → 404 UnsupportedModel, killing the first wrap run at doc-sync. Fix is pinning a working executor (`codex`), not config surgery.
+- Inline task-pipeline runs leave `runs` rows perpetually `running` (0912 F1): 10/10 stale at freeze, 7 with out-of-DB terminal evidence. Row closure + ADR-117 emission are the selected pilot (deadline 2026-10-06).
+- The proof digest hashes the isolated git tree, not just the task/feature specs — committing untracked deliverables or landing unrelated main commits changes it. Bound registrations must be captured against the exact tree being certified.
+- Pre-existing gate failures on main (fleet.ts tsdoc) block every task's gate; repair them in a separately-attributed commit rather than smuggling them into the task's diff.
