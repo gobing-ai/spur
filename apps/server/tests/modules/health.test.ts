@@ -785,4 +785,65 @@ describe('healthModule', () => {
             close();
         }
     });
+
+    test('/api/project/workflows returns empty data without ServerContext', async () => {
+        const app = new Hono();
+        healthModule.mount(app, undefined);
+        const res = await app.request('/api/project/workflows');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { workflows: unknown[]; total: number };
+        expect(body.workflows).toEqual([]);
+        expect(body.total).toBe(0);
+    });
+
+    test('/api/project/workflows returns workflows with rawYaml and mermaidDiagram', async () => {
+        const { writeFileSync, mkdirSync } = await import('node:fs');
+        const wfDir = join(tempDir, '.spur', 'workflows');
+        mkdirSync(wfDir, { recursive: true });
+        const sampleYaml = [
+            'name: sample-flow',
+            'kind: state-machine',
+            'version: "1"',
+            'description: Sample workflow for testing',
+            'initialState: start',
+            'terminalStates: [done]',
+            'states:',
+            '  - id: start',
+            '  - id: done',
+            'transitions:',
+            '  - from: start',
+            '    to: done',
+            '    trigger: proceed',
+        ].join('\n');
+        writeFileSync(join(wfDir, 'sample-flow.yaml'), sampleYaml);
+
+        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+
+        try {
+            const res = await app.request('/api/project/workflows');
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                workflows: Array<{
+                    name: string;
+                    kind: string;
+                    version: string | null;
+                    rawYaml: string;
+                    mermaidDiagram: string;
+                    valid: boolean;
+                }>;
+                total: number;
+            };
+            expect(body.total).toBeGreaterThan(0);
+            const sample = body.workflows.find((w) => w.name === 'sample-flow');
+            expect(sample).toBeDefined();
+            expect(sample?.valid).toBe(true);
+            expect(sample?.rawYaml).toContain('name: sample-flow');
+            expect(sample?.mermaidDiagram).toContain('flowchart TD');
+            expect(sample?.mermaidDiagram).toContain('class done terminal;');
+        } finally {
+            close();
+        }
+    });
 });

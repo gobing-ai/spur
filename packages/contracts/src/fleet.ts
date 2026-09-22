@@ -224,3 +224,41 @@ export const configsContract = {
         })
         .output(configFilesResponseSchema),
 };
+
+/** Workflow definition item in the workflows listing. */
+export const workflowDefinitionDtoSchema = z.object({
+    name: z.string(),
+    kind: z.string(),
+    version: z.string().nullable(),
+    description: z.string().nullable(),
+    path: z.string(),
+    source: z.enum(['project', 'registered', 'shared']),
+    valid: z.boolean(),
+    error: z.string().optional(),
+    rawYaml: z.string(),
+    mermaidDiagram: z.string(),
+});
+
+/** Workflow definition DTO inferred from the public schema. */
+export type WorkflowDefinitionDto = z.infer<typeof workflowDefinitionDtoSchema>;
+
+/** Workflows list response DTO. */
+export const projectWorkflowsResponseSchema = z.object({
+    workflows: z.array(workflowDefinitionDtoSchema),
+    total: z.number(),
+});
+
+/** Workflows list response DTO inferred from the public schema. */
+export type ProjectWorkflowsResponse = z.infer<typeof projectWorkflowsResponseSchema>;
+
+/** Workflows read contract — served by Hono health module. */
+export const workflowsContract = {
+    list: oc
+        .route({
+            method: 'GET',
+            path: '/project/workflows',
+            summary: 'List registered and available Spur workflows with raw YAML and Mermaid diagram definitions',
+            tags: ['fleet'],
+        })
+        .output(projectWorkflowsResponseSchema),
+};

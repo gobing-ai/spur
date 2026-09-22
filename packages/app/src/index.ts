@@ -785,6 +785,12 @@ export {
     type LifecycleProfile,
     TASK_LIFECYCLE_PROFILE,
 } from './workflow/lifecycle-adapter';
+export {
+    classLine,
+    esc,
+    type RenderWorkflowMermaidOptions,
+    renderWorkflowMermaid,
+} from './workflow/mermaid-render';
 // Workflow observability — per-step event stream for the board / live consumers
 export {
     createWorkflowEventIdentity,
