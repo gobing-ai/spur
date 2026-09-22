@@ -66,6 +66,7 @@ function ledgerCostRows(markdown) {
     const freshCell = cells[5] ?? "";
     const cachedCell = cells[6] ?? "";
     return {
+      step: cells[0] ?? "",
       fresh: parseTokenCell(freshCell),
       cached: parseTokenCell(cachedCell),
       cachePct: parsePctCell(cells[7] ?? ""),
@@ -93,6 +94,9 @@ function validateCostEvidence(markdown, errors) {
   const footerTotals = footerLine ? parseTokensLine(footerLine) : null;
   if (footerLine !== undefined && footerTotals === null)
     errors.push("malformed_footer");
+  if (footerLine === undefined && markdown.includes("── Dogfood Summary ──")) {
+    errors.push("missing_footer_tokens");
+  }
   const pctScopes = [costBlock, footerLine ?? ""];
   for (const row of ledgerCostRows(markdown)) {
     if (row.cachePct !== null)
@@ -109,6 +113,17 @@ function validateCostEvidence(markdown, errors) {
   for (const row of rows) {
     if (row.unknownCell && row.cachePct !== null)
       errors.push("unknown_row_with_numeric_cache");
+  }
+  for (const row of rows) {
+    if (row.fresh === null || row.cached === null || row.cachePct === null)
+      continue;
+    const basis = row.fresh + row.cached;
+    if (basis === 0)
+      continue;
+    const expected = Math.round(row.cached / basis * 100);
+    if (Math.abs(row.cachePct - expected) > CACHE_SHARE_TOLERANCE) {
+      errors.push(`cache_pct_mismatch:${row.step}_expected_${expected}`);
+    }
   }
   const observable = rows.filter((r) => r.fresh !== null && r.cached !== null);
   const sumFresh = observable.reduce((acc, r) => acc + (r.fresh ?? 0), 0);

@@ -87,6 +87,7 @@ function parseTokensLine(line: string): CostTotals | null {
 }
 
 interface LedgerCostRow {
+    step: string;
     fresh: number | null;
     cached: number | null;
     cachePct: number | null;
@@ -125,6 +126,7 @@ function ledgerCostRows(markdown: string): LedgerCostRow[] {
             const freshCell = cells[5] ?? '';
             const cachedCell = cells[6] ?? '';
             return {
+                step: cells[0] ?? '',
                 fresh: parseTokenCell(freshCell),
                 cached: parseTokenCell(cachedCell),
                 cachePct: parsePctCell(cells[7] ?? ''),
@@ -153,8 +155,12 @@ function validateCostEvidence(markdown: string, errors: string[]): void {
     const footerLine = markdown.split('\n').find((l) => l.trim().startsWith('Tokens:'));
     const footerTotals = footerLine ? parseTokensLine(footerLine) : null;
     // Same contract for the footer: a present-but-unparseable Tokens: line must not
-    // silently skip the footer totals comparison.
+    // silently skip the footer totals comparison. An absent Tokens: line with the
+    // summary block present is its own defect (task 0913 verify advisory).
     if (footerLine !== undefined && footerTotals === null) errors.push('malformed_footer');
+    if (footerLine === undefined && markdown.includes('── Dogfood Summary ──')) {
+        errors.push('missing_footer_tokens');
+    }
 
     // Percentages must be within 0..100 wherever cost evidence renders one.
     const pctScopes = [costBlock, footerLine ?? ''];
@@ -174,6 +180,18 @@ function validateCostEvidence(markdown: string, errors: string[]): void {
     // unknown must carry `—`, never a computed percent.
     for (const row of rows) {
         if (row.unknownCell && row.cachePct !== null) errors.push('unknown_row_with_numeric_cache');
+    }
+
+    // Per-row arithmetic: a numeric Cache % must match the row's own fresh/cached cells
+    // (±1pt display rounding), not merely the aggregate share (task 0913 verify advisory).
+    for (const row of rows) {
+        if (row.fresh === null || row.cached === null || row.cachePct === null) continue;
+        const basis = row.fresh + row.cached;
+        if (basis === 0) continue;
+        const expected = Math.round((row.cached / basis) * 100);
+        if (Math.abs(row.cachePct - expected) > CACHE_SHARE_TOLERANCE) {
+            errors.push(`cache_pct_mismatch:${row.step}_expected_${expected}`);
+        }
     }
 
     const observable = rows.filter((r) => r.fresh !== null && r.cached !== null);

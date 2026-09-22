@@ -367,6 +367,23 @@ describe('cost evidence contract (task 0913, R2/R7)', () => {
         expect(result.errors).toContain('malformed_footer');
     });
 
+    test('cost-row-pct-mismatch — a row Cache % inconsistent with its own fresh/cached cells is rejected (task 0913 advisory)', () => {
+        // 300/(800+300)=27.3% but the row claims 50% — aggregate share is untouched,
+        // so only per-row arithmetic catches the fabrication.
+        const mutated = passFixture.replace('| ~800 | ~300 | 27% |', '| ~800 | ~300 | 50% |');
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('cache_pct_mismatch:2 execute_expected_27');
+    });
+
+    test('cost-missing-footer-tokens — a Dogfood Summary block without a Tokens: line is rejected (task 0913 advisory)', () => {
+        // Pre-fix the absent line silently skipped the footer totals comparison.
+        const mutated = passFixture.replace(/^Tokens: .*\n/m, '');
+        const result = validateReport(mutated);
+        expect(result.ok).toBe(false);
+        expect(result.errors).toContain('missing_footer_tokens');
+    });
+
     test('cost-rounding-tolerance — ±1 point display rounding is accepted; beyond it is rejected', () => {
         const withinTolerance = validateReport(setCostLine('~2100 total | ~700 cached (~34% hit rate)'));
         expect(withinTolerance.ok).toBe(true); // exact 33.3% may display as 34
