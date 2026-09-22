@@ -1199,6 +1199,14 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(review).toContain('INSUFFICIENT_EVIDENCE');
     });
 
+    test('environment-lens mapping row stays verbatim-consistent with its design satellite (task 0913 advisory)', () => {
+        const lens = readFileSync(join(PLUGIN_ROOT, 'references', 'environment-lens.md'), 'utf8');
+        const satellite = readFileSync(join(REPO_ROOT, 'docs', 'design', 'environment-improvement-lens.md'), 'utf8');
+        const clause = 'existing evidence-based reuse-observation P3 (task 0913)';
+        expect(lens).toContain(clause);
+        expect(satellite).toContain(clause);
+    });
+
     test('R43 — README index tables list every shipped command/skill/agent exactly once (task 0187 AC6, task 0514 R1)', () => {
         const readmePath = join(PLUGIN_ROOT, 'README.md');
         statSync(readmePath);
