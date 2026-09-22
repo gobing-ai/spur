@@ -121,6 +121,21 @@ export const configuredAgentExecutorSchema = z.object({
 /** A single executor as reported in the project fleet snapshot. */
 export type ConfiguredAgentExecutorDto = z.infer<typeof configuredAgentExecutorSchema>;
 
+/** One pipeline stage row from the perspective of agent executors. */
+export const configuredStageInfoSchema = z.object({
+    id: z.string(),
+    alias: z.string().optional(),
+    description: z.string(),
+    role: z.string(),
+    tier: z.string(),
+    skill: z.string().optional(),
+    electedExecutor: z.string().nullable().optional(),
+    candidateExecutors: z.array(z.string()).optional(),
+});
+
+/** Pipeline stage DTO from the perspective of agent executors. */
+export type ConfiguredStageInfoDto = z.infer<typeof configuredStageInfoSchema>;
+
 /** Request shape for toggling an executor's availability (ready / disabled). */
 export const executorAvailabilityInputSchema = z.object({
     name: z.string(),

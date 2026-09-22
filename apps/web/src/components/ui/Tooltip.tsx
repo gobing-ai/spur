@@ -32,6 +32,9 @@ export interface TooltipProps extends React.HTMLAttributes<HTMLSpanElement> {
  * Follows the wrapper conventions established in `Badge`.
  */
 export function Tooltip({ position, tip, className, ...rest }: TooltipProps) {
-    const classes = ['tooltip', position && POSITION_CLASSES[position], className].filter(Boolean).join(' ');
+    const isMultiline = tip?.includes('\n');
+    const classes = ['tooltip', position && POSITION_CLASSES[position], isMultiline && 'tooltip-multiline', className]
+        .filter(Boolean)
+        .join(' ');
     return <span className={classes} data-tip={tip} {...rest} />;
 }

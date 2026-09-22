@@ -20,7 +20,7 @@ import {
     resolveConfigLayers,
     setExecutorAvailability,
 } from '@gobing-ai/spur-config/loader';
-import { CoordinationRunDao, InboxMessageDao, TIER_RANK } from '@gobing-ai/spur-domain';
+import { CoordinationRunDao, InboxMessageDao, REGISTERED_CANONICAL_STAGES, TIER_RANK } from '@gobing-ai/spur-domain';
 import type { Hono } from 'hono';
 import type { ServerContext } from '../../context';
 import type { ServerModule } from '../types';
@@ -136,6 +136,16 @@ export const healthModule: ServerModule = {
                 tier: string;
                 stages: string[];
                 isCustom: boolean;
+                electedExecutor?: string | null;
+                candidateExecutors?: string[];
+            }> = [];
+            let stages: Array<{
+                id: string;
+                alias?: string;
+                description: string;
+                role: string;
+                tier: string;
+                skill?: string;
                 electedExecutor?: string | null;
                 candidateExecutors?: string[];
             }> = [];
@@ -290,6 +300,65 @@ export const healthModule: ServerModule = {
                         candidateExecutors: roleCandidatesMap.get(r.name) ?? [],
                     }));
 
+                    // Build perspective on Stages for agent executors
+                    const canonicalMap = new Map(REGISTERED_CANONICAL_STAGES.map((s) => [s.id, s]));
+                    const canonicalOrder = [
+                        'plan',
+                        'refine',
+                        'brainstorm',
+                        'implement',
+                        'test',
+                        'review',
+                        'verify',
+                        'dogfood',
+                        'wrap',
+                        'changelog',
+                    ];
+                    const seenStages = new Set<string>();
+
+                    const stageIdsToProcess: string[] = [];
+                    for (const id of canonicalOrder) {
+                        if (canonicalMap.has(id)) {
+                            stageIdsToProcess.push(id);
+                            seenStages.add(id);
+                        }
+                    }
+                    for (const [, roleDef] of rolesMap) {
+                        for (const stageId of roleDef.stages) {
+                            if (!seenStages.has(stageId)) {
+                                stageIdsToProcess.push(stageId);
+                                seenStages.add(stageId);
+                            }
+                        }
+                    }
+
+                    stages = stageIdsToProcess.map((stageId) => {
+                        const canon = canonicalMap.get(stageId);
+                        let owningRole = '';
+                        let roleTier = canon?.model_policy.min_tier ?? 'standard';
+                        for (const [roleName, roleDef] of rolesMap) {
+                            if (roleDef.stages.includes(stageId)) {
+                                owningRole = roleName;
+                                roleTier = roleDef.tier;
+                                break;
+                            }
+                        }
+
+                        const elected = owningRole ? (elections.get(owningRole) ?? null) : null;
+                        const candidates = owningRole ? (roleCandidatesMap.get(owningRole) ?? []) : [];
+
+                        return {
+                            id: stageId,
+                            alias: canon?.aliases?.[0],
+                            description: canon?.description ?? `Pipeline stage ${stageId}`,
+                            role: owningRole,
+                            tier: roleTier,
+                            skill: canon?.reasoning_skill,
+                            electedExecutor: elected,
+                            candidateExecutors: candidates,
+                        };
+                    });
+
                     for (const ex of executors) {
                         for (const [roleId, execName] of elections.entries()) {
                             if (execName === ex.name) {
@@ -343,6 +412,7 @@ export const healthModule: ServerModule = {
                     missing,
                 },
                 roles,
+                stages,
                 executors,
             });
         });

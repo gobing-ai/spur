@@ -372,6 +372,58 @@ describe('healthModule', () => {
         }
     });
 
+    test('the fleet snapshot returns stages with perspective on agent executors', async () => {
+        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
+        ctx.reloadAgentConfig = async () =>
+            spurConfigSchema.parse({
+                agent: {
+                    fleet: {
+                        enabled: true,
+                        members: [{ id: 'lead', executor: 'build' }],
+                    },
+                    roles: {
+                        coder: {
+                            tier: 'standard',
+                            stages: ['implement', 'test', 'wrap'],
+                        },
+                    },
+                    executors: [
+                        { name: 'build', agent: 'claude', tier: 'standard', model: 'claude-sonnet-4' },
+                        { name: 'backup', agent: 'codex', tier: 'standard' },
+                    ],
+                },
+            });
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+        try {
+            const res = await app.request('/api/project/fleet');
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                stages: Array<{
+                    id: string;
+                    alias?: string;
+                    description: string;
+                    role: string;
+                    tier: string;
+                    skill?: string;
+                    electedExecutor: string | null;
+                    candidateExecutors: string[];
+                }>;
+            };
+            expect(body.stages).toBeDefined();
+            expect(body.stages.length).toBeGreaterThanOrEqual(10);
+            const implementStage = body.stages.find((s) => s.id === 'implement');
+            expect(implementStage).toBeDefined();
+            expect(implementStage?.role).toBe('coder');
+            expect(implementStage?.tier).toBe('standard');
+            expect(implementStage?.alias).toBe('dev-run');
+            expect(implementStage?.electedExecutor).toBe('build');
+            expect(implementStage?.candidateExecutors).toEqual(['build', 'backup']);
+        } finally {
+            close();
+        }
+    });
+
     test('0848: role-only fleet members resolve through fresh configured role tiers on the Board', async () => {
         const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
         let tier = 'capable-1';

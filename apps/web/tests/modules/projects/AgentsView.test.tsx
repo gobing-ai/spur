@@ -534,14 +534,17 @@ describe('AgentsView roles and executors sections', () => {
         // 4 executors in standard tier: pi-flash-volc (default), pi-zai-volc, pi-zai, pi-deepseek-off (disabled)
         expect(coderItems).toHaveLength(4);
 
-        // First item is the default executor with trailing star mark
+        // First item is the default executor with trailing star mark and tooltip
         expect(coderItems[0]?.textContent).toContain('pi-flash-volc');
         expect(coderItems[0]?.textContent).toContain('⭐');
+        expect(coderItems[0]?.getAttribute('title')).toBe('Agent: pi\nModel: default');
+        expect(coderItems[0]?.closest('.tooltip')?.getAttribute('data-tip')).toBe('Agent: pi\nModel: default');
 
         // Other candidate executors follow in order
         expect(coderItems[1]?.textContent).toBe('pi-zai-volc');
         expect(coderItems[2]?.textContent).toBe('pi-zai');
         expect(coderItems[3]?.textContent).toBe('pi-deepseek-off');
+        expect(coderItems[3]?.getAttribute('title')).toBe('Agent: pi\nModel: default');
 
         // Scribe has 1 executor in cheap tier with trailing star mark
         const scribeExecutors = view.container.querySelector('[data-role-executors="scribe"]');
@@ -549,6 +552,167 @@ describe('AgentsView roles and executors sections', () => {
         expect(scribeItems).toHaveLength(1);
         expect(scribeItems[0]?.textContent).toContain('minimax');
         expect(scribeItems[0]?.textContent).toContain('⭐');
+        expect(scribeItems[0]?.getAttribute('title')).toBe('Agent: pi\nModel: default');
+
+        view.unmount();
+    });
+
+    test('AgentsView renders Stages section, tab filter, and stage cards with executor perspective', async () => {
+        const customFleet = fleet({
+            roles: [
+                {
+                    name: 'coder',
+                    tier: 'standard',
+                    stages: ['implement', 'test', 'wrap'],
+                    isCustom: false,
+                    electedExecutor: 'pi-flash-volc',
+                },
+                {
+                    name: 'planner',
+                    tier: 'capable-2',
+                    stages: ['plan', 'refine', 'brainstorm'],
+                    isCustom: false,
+                    electedExecutor: 'claude-sonnet',
+                },
+            ],
+            stages: [
+                {
+                    id: 'plan',
+                    alias: '/sp:dev-plan',
+                    description: 'Intake and decompose feature into spec and tasks',
+                    role: 'planner',
+                    tier: 'capable-2',
+                    skill: 'sp:super-planner',
+                    electedExecutor: 'claude-sonnet',
+                    candidateExecutors: ['claude-sonnet', 'agy-opus'],
+                },
+                {
+                    id: 'implement',
+                    alias: '/sp:dev-run',
+                    description: 'Transform requirements into production code',
+                    role: 'coder',
+                    tier: 'standard',
+                    skill: 'sp:super-coder',
+                    electedExecutor: 'pi-flash-volc',
+                    candidateExecutors: ['pi-flash-volc', 'pi-zai', 'pi-deepseek-off'],
+                },
+            ],
+            executors: [
+                {
+                    name: 'claude-sonnet',
+                    agent: 'claude',
+                    model: 'claude-3-7-sonnet',
+                    tier: 'capable-2',
+                    disabled: false,
+                },
+                {
+                    name: 'agy-opus',
+                    agent: 'antigravity-cli',
+                    model: 'claude-3-opus',
+                    tier: 'capable-2',
+                    disabled: false,
+                },
+                { name: 'pi-flash-volc', agent: 'pi', model: 'doubao-seed', tier: 'standard', disabled: false },
+                { name: 'pi-zai', agent: 'pi', model: 'glm-4-flash', tier: 'standard', disabled: false },
+                { name: 'pi-deepseek-off', agent: 'pi', model: 'deepseek-v3', tier: 'standard', disabled: true },
+            ],
+        });
+        setFetchForTesting(stubFetch(customFleet, { processes: [] }));
+        const view = harness(ctx());
+        await act(async () => {});
+
+        // 1. Verify Stages sub-nav button
+        const stagesFilterBtn = view.container.querySelector('[data-section-filter="stages"]') as HTMLButtonElement;
+        expect(stagesFilterBtn).not.toBeNull();
+        expect(stagesFilterBtn.textContent).toContain('Stages');
+        expect(stagesFilterBtn.textContent).toContain('2');
+
+        // 2. Both sections and separator lines visible in 'all' view
+        expect(view.container.querySelector('[data-roles-section]')).not.toBeNull();
+        expect(view.container.querySelector('[data-stages-section]')).not.toBeNull();
+        const separators = view.container.querySelectorAll('hr');
+        expect(separators.length).toBe(3);
+
+        // 3. Click Stages tab -> only Stages section remains
+        await act(async () => {
+            stagesFilterBtn.click();
+        });
+        expect(view.container.querySelector('[data-stages-section]')).not.toBeNull();
+        expect(view.container.querySelector('[data-roles-section]')).toBeNull();
+        expect(view.container.querySelector('[data-executors-section]')).toBeNull();
+        expect(view.container.querySelector('[data-fleet-section]')).toBeNull();
+
+        // 4. Verify stage cards and tooltips
+        const planCard = view.container.querySelector('[data-stage-card="plan"]');
+        expect(planCard).not.toBeNull();
+        expect(planCard?.textContent).toContain('plan');
+        expect(planCard?.textContent).toContain('/sp:dev-plan');
+        expect(planCard?.textContent).toContain('capable-2');
+        expect(planCard?.textContent).toContain('sp:super-planner');
+        expect(planCard?.textContent).toContain('role: planner');
+        expect(planCard?.textContent).toContain('claude-sonnet');
+        expect(planCard?.textContent).toContain('⭐');
+
+        const claudeSonnetItem = planCard?.querySelector('[data-stage-executor-item="claude-sonnet"]');
+        expect(claudeSonnetItem?.getAttribute('title')).toBe('Agent: claude\nModel: claude-3-7-sonnet');
+        // Verify visual DaisyUI Tooltip wrapper with data-tip
+        expect(claudeSonnetItem?.closest('.tooltip')?.getAttribute('data-tip')).toBe(
+            'Agent: claude\nModel: claude-3-7-sonnet',
+        );
+
+        const implementCard = view.container.querySelector('[data-stage-card="implement"]');
+        expect(implementCard).not.toBeNull();
+        expect(implementCard?.textContent).toContain('implement');
+        expect(implementCard?.textContent).toContain('/sp:dev-run');
+        expect(implementCard?.textContent).toContain('standard');
+        expect(implementCard?.textContent).toContain('sp:super-coder');
+
+        // 5. Verify Candidate Ladder on implement stage
+        const stageExecutors = view.container.querySelector('[data-stage-executors="implement"]');
+        expect(stageExecutors).not.toBeNull();
+        const candItems = [...(stageExecutors?.querySelectorAll('[data-stage-executor-item]') ?? [])];
+        expect(candItems).toHaveLength(3);
+
+        // Default executor first with star and tooltip
+        expect(candItems[0]?.textContent).toContain('pi-flash-volc');
+        expect(candItems[0]?.textContent).toContain('⭐');
+        expect(candItems[0]?.getAttribute('title')).toBe('Agent: pi\nModel: doubao-seed');
+        expect(candItems[0]?.closest('.tooltip')?.getAttribute('data-tip')).toBe('Agent: pi\nModel: doubao-seed');
+
+        // Other candidates in order
+        expect(candItems[1]?.textContent).toBe('pi-zai');
+        expect(candItems[1]?.getAttribute('title')).toBe('Agent: pi\nModel: glm-4-flash');
+        expect(candItems[2]?.textContent).toBe('pi-deepseek-off');
+        expect(candItems[2]?.className).toContain('line-through');
+        expect(candItems[2]?.getAttribute('title')).toBe('Agent: pi\nModel: deepseek-v3');
+
+        // 6. Test search filter
+        const searchInput = view.container.querySelector('[data-stage-filter]') as HTMLInputElement;
+        expect(searchInput).not.toBeNull();
+        const reactProps = (el: Element): Record<string, unknown> | undefined => {
+            const holder = el as unknown as Record<string, Record<string, unknown> | undefined>;
+            const key = Object.keys(holder).find((k) => k.startsWith('__reactProps$'));
+            return key ? holder[key] : undefined;
+        };
+
+        await act(async () => {
+            (reactProps(searchInput)?.onChange as (e: { target: { value: string } }) => void)?.({
+                target: { value: 'implement' },
+            });
+        });
+
+        // After filter, only implement card is rendered
+        expect(view.container.querySelector('[data-stage-card="implement"]')).not.toBeNull();
+        expect(view.container.querySelector('[data-stage-card="plan"]')).toBeNull();
+
+        // Non-matching query shows empty message
+        await act(async () => {
+            (reactProps(searchInput)?.onChange as (e: { target: { value: string } }) => void)?.({
+                target: { value: 'nonexistent-stage' },
+            });
+        });
+        expect(view.container.querySelector('[data-stage-card="implement"]')).toBeNull();
+        expect(view.container.querySelector('[data-stages-section]')?.textContent).toContain('No stages match filter.');
 
         view.unmount();
     });

@@ -224,3 +224,13 @@
         transform: scale(0.85);
     }
 }
+
+/* Multi-line tooltip support for daisyUI 5: preserves newline characters in data-tip */
+.tooltip[data-tip]:before {
+    white-space: pre-line;
+}
+
+.tooltip.tooltip-multiline[data-tip]:before {
+    white-space: pre-line;
+    text-align: left;
+}

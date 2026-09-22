@@ -91,7 +91,7 @@ function validateCostEvidence(markdown, errors) {
   const footerLine = markdown.split(`
 `).find((l) => l.trim().startsWith("Tokens:"));
   const footerTotals = footerLine ? parseTokensLine(footerLine) : null;
-  if (footerLine !== void 0 && footerTotals === null)
+  if (footerLine !== undefined && footerTotals === null)
     errors.push("malformed_footer");
   const pctScopes = [costBlock, footerLine ?? ""];
   for (const row of ledgerCostRows(markdown)) {

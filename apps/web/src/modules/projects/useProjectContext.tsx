@@ -76,6 +76,18 @@ export interface ConfiguredAgentExecutor {
     sourcePath?: string;
 }
 
+/** Configured pipeline stage row from the perspective of agent executors. */
+export interface ConfiguredStageInfo {
+    id: string;
+    alias?: string;
+    description: string;
+    role: string;
+    tier: string;
+    skill?: string;
+    electedExecutor?: string | null;
+    candidateExecutors?: string[];
+}
+
 /** Wire shape of GET /api/project/fleet. `path` is null only off a project cwd (CF Worker). */
 export interface ProjectFleetSnapshot {
     path: string | null;
@@ -86,6 +98,7 @@ export interface ProjectFleetSnapshot {
     members: ResolvedFleetMember[];
     capacity: { total: number; enabled: number; writeCapable: number; missing: string[] };
     roles?: ConfiguredAgentRole[];
+    stages?: ConfiguredStageInfo[];
     executors?: ConfiguredAgentExecutor[];
 }
 
