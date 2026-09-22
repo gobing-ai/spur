@@ -84,7 +84,7 @@ describe('SettingsShell header and layout', () => {
         const tablist = container.querySelector('[role="tablist"]');
         expect(tablist?.getAttribute('aria-label')).toBe('Settings tabs');
         const tabs = container.querySelectorAll('[data-settings-tab]');
-        expect(tabs).toHaveLength(2);
+        expect(tabs).toHaveLength(SETTINGS_TABS.length);
         const generalTab = container.querySelector('#settings-tab-general');
         expect(generalTab?.getAttribute('aria-selected')).toBe('true');
         const panel = container.querySelector('#settings-tab-panel-general');
@@ -105,5 +105,19 @@ describe('SettingsShell header and layout', () => {
         expect(panel).not.toBeNull();
         expect(panel?.getAttribute('role')).toBe('tabpanel');
         expect(panel?.getAttribute('aria-labelledby')).toBe('settings-tab-agents');
+    });
+
+    test('renders tablist with Workflows tab and active tabpanel when navigated', () => {
+        const { container } = renderShell(['/board/settings/workflows']);
+        const tablist = container.querySelector('[role="tablist"]');
+        expect(tablist?.getAttribute('aria-label')).toBe('Settings tabs');
+        const tabs = container.querySelectorAll('[data-settings-tab]');
+        expect(tabs).toHaveLength(SETTINGS_TABS.length);
+        const workflowsTab = container.querySelector('#settings-tab-workflows');
+        expect(workflowsTab?.getAttribute('aria-selected')).toBe('true');
+        const panel = container.querySelector('#settings-tab-panel-workflows');
+        expect(panel).not.toBeNull();
+        expect(panel?.getAttribute('role')).toBe('tabpanel');
+        expect(panel?.getAttribute('aria-labelledby')).toBe('settings-tab-workflows');
     });
 });

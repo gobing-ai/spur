@@ -1,9 +1,10 @@
 import type { ComponentType } from 'react';
 import AgentsView from './AgentsView';
 import GeneralView from './GeneralView';
+import WorkflowsView from './WorkflowsView';
 
 /** Tab contract for the Settings module. */
-export type SettingsTabId = 'general' | 'agents';
+export type SettingsTabId = 'general' | 'agents' | 'workflows';
 
 export interface SettingsTab {
     id: SettingsTabId;
@@ -16,4 +17,5 @@ export const DEFAULT_SETTINGS_TAB: SettingsTabId = 'general';
 export const SETTINGS_TABS: readonly SettingsTab[] = [
     { id: 'general', label: 'General', component: GeneralView },
     { id: 'agents', label: 'Agents', component: AgentsView },
+    { id: 'workflows', label: 'Workflows', component: WorkflowsView },
 ];

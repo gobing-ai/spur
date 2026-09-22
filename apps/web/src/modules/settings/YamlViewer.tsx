@@ -194,14 +194,14 @@ export interface YamlViewerProps {
  * Rich syntax-highlighted YAML code viewer with line numbers and copy feedback.
  */
 export default function YamlViewer({
-    code,
+    code = '',
     filePath,
     maxHeight = 'calc(100vh - 280px)',
     className = '',
 }: YamlViewerProps) {
     const [copied, setCopied] = useState(false);
     const lineEntries = useMemo(
-        () => code.split('\n').map((line, idx) => ({ id: `line-entry-${idx + 1}`, line, lineNum: idx + 1 })),
+        () => (code ?? '').split('\n').map((line, idx) => ({ id: `line-entry-${idx + 1}`, line, lineNum: idx + 1 })),
         [code],
     );
 
