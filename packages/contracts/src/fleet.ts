@@ -190,3 +190,37 @@ export const processesContract = {
         })
         .output(processListResponseSchema),
 };
+
+/** Single configuration file metadata and raw contents. */
+export const configFileSchema = z.object({
+    path: z.string(),
+    displayPath: z.string(),
+    exists: z.boolean(),
+    content: z.string(),
+    sizeBytes: z.number(),
+    updatedAt: z.string().nullable(),
+});
+
+/** Single configuration file DTO inferred from the public schema. */
+export type ConfigFile = z.infer<typeof configFileSchema>;
+
+/** Project and global configuration files response DTO. */
+export const configFilesResponseSchema = z.object({
+    global: configFileSchema,
+    project: configFileSchema,
+});
+
+/** Configuration files response DTO inferred from the public schema. */
+export type ConfigFilesResponse = z.infer<typeof configFilesResponseSchema>;
+
+/** Configuration files read contract — served by Hono health module. */
+export const configsContract = {
+    get: oc
+        .route({
+            method: 'GET',
+            path: '/project/configs',
+            summary: 'Read Spur project and global configuration files with raw YAML content',
+            tags: ['fleet'],
+        })
+        .output(configFilesResponseSchema),
+};

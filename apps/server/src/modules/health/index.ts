@@ -1,4 +1,5 @@
-import { basename } from 'node:path';
+import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 import {
     DeliveryReconciler,
     FleetService,
@@ -634,5 +635,90 @@ export const healthModule: ServerModule = {
                 return c.json({ error: message }, 500);
             }
         });
+
+        // ── Project and global configuration files ──
+        const configsHandler = async (c: { json: (data: unknown) => Response }) => {
+            if (!ctx) {
+                return c.json({
+                    global: {
+                        path: '~/.config/spur/config.yaml',
+                        displayPath: '~/.config/spur/config.yaml',
+                        exists: false,
+                        content: '',
+                        sizeBytes: 0,
+                        updatedAt: null,
+                    },
+                    project: {
+                        path: '.spur/config.yaml',
+                        displayPath: '.spur/config.yaml',
+                        exists: false,
+                        content: '',
+                        sizeBytes: 0,
+                        updatedAt: null,
+                    },
+                });
+            }
+
+            const projectPath = join(ctx.cwd, '.spur', 'config.yaml');
+            const globalPath = join(homedir(), '.config', 'spur', 'config.yaml');
+
+            let projectExists = false;
+            let projectContent = '';
+            let projectSizeBytes = 0;
+            let projectUpdatedAt: string | null = null;
+            try {
+                if (ctx.fs && (await ctx.fs.exists(projectPath))) {
+                    projectExists = true;
+                    projectContent = await ctx.fs.readFile(projectPath);
+                    const stat = await ctx.fs.stat(projectPath);
+                    if (stat) {
+                        projectSizeBytes = stat.size;
+                        projectUpdatedAt = stat.mtimeMs ? new Date(stat.mtimeMs).toISOString() : null;
+                    }
+                }
+            } catch {
+                // file read error
+            }
+
+            let globalExists = false;
+            let globalContent = '';
+            let globalSizeBytes = 0;
+            let globalUpdatedAt: string | null = null;
+            try {
+                if (ctx.fs && (await ctx.fs.exists(globalPath))) {
+                    globalExists = true;
+                    globalContent = await ctx.fs.readFile(globalPath);
+                    const stat = await ctx.fs.stat(globalPath);
+                    if (stat) {
+                        globalSizeBytes = stat.size;
+                        globalUpdatedAt = stat.mtimeMs ? new Date(stat.mtimeMs).toISOString() : null;
+                    }
+                }
+            } catch {
+                // file read error
+            }
+
+            return c.json({
+                global: {
+                    path: globalPath,
+                    displayPath: '~/.config/spur/config.yaml',
+                    exists: globalExists,
+                    content: globalContent,
+                    sizeBytes: globalSizeBytes,
+                    updatedAt: globalUpdatedAt,
+                },
+                project: {
+                    path: projectPath,
+                    displayPath: '.spur/config.yaml',
+                    exists: projectExists,
+                    content: projectContent,
+                    sizeBytes: projectSizeBytes,
+                    updatedAt: projectUpdatedAt,
+                },
+            });
+        };
+
+        app.get('/api/project/configs', configsHandler);
+        app.get('/api/configs', configsHandler);
     },
 };

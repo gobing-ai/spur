@@ -744,4 +744,45 @@ describe('healthModule', () => {
             close();
         }
     });
+
+    test('/api/project/configs returns empty data without ServerContext', async () => {
+        const app = new Hono();
+        healthModule.mount(app, undefined);
+        const res = await app.request('/api/project/configs');
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+            global: { exists: boolean; content: string };
+            project: { exists: boolean; content: string };
+        };
+        expect(body.global.exists).toBe(false);
+        expect(body.global.content).toBe('');
+        expect(body.project.exists).toBe(false);
+        expect(body.project.content).toBe('');
+    });
+
+    test('/api/project/configs returns project and global config with content and metadata', async () => {
+        const { writeFileSync, mkdirSync } = await import('node:fs');
+        mkdirSync(join(tempDir, '.spur'), { recursive: true });
+        writeFileSync(join(tempDir, '.spur', 'config.yaml'), 'name: test-proj\nversion: "1.2"\nagent:\n  fleet: []\n');
+
+        const { ctx, close } = await fullCtx(join(tempDir, '.spur', 'spur.db'));
+        const app = new Hono();
+        healthModule.mount(app, ctx);
+
+        try {
+            const res = await app.request('/api/project/configs');
+            expect(res.status).toBe(200);
+            const body = (await res.json()) as {
+                global: { path: string; displayPath: string; exists: boolean };
+                project: { path: string; displayPath: string; exists: boolean; content: string; sizeBytes: number };
+            };
+            expect(body.project.exists).toBe(true);
+            expect(body.project.displayPath).toBe('.spur/config.yaml');
+            expect(body.project.content).toContain('name: test-proj');
+            expect(body.project.sizeBytes).toBeGreaterThan(0);
+            expect(body.global.displayPath).toBe('~/.config/spur/config.yaml');
+        } finally {
+            close();
+        }
+    });
 });
