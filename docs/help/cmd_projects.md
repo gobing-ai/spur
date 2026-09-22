@@ -11,6 +11,7 @@
 | `list` | List registered projects |
 | `start <target>` | Start a project's server (`--port <n>` to bind explicitly) |
 | `stop <target>` | Stop a project's server |
+| `clean` | Purge missing project directories and terminate lingering processes |
 
 All verbs accept `--json` for machine-readable output.
 
@@ -81,6 +82,17 @@ spur projects stop [options] <target>
 
 | Flag | Description |
 |---|---|
+| `--json` | Output JSON response |
+
+## spur projects clean
+
+```
+spur projects clean [options]
+```
+
+| Flag | Description |
+|---|---|
+| `--no-terminate-processes` | Skip process termination on occupied ports |
 | `--json` | Output JSON response |
 
 ## Example

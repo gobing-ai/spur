@@ -281,8 +281,9 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // `agent create`), 67 → 66 (G65 0856: one retired projects-noun verb),
         // 66 → 67 (0867: `workflow progress` declares `--json-envelope`),
         // 67 → 68 (0892: `agent usage` declares `--json-envelope`),
-        // 68 → 69 (0897: `agent status` declares `--json-envelope`).
-        expect(advertising.length).toBe(69);
+        // 68 → 69 (0897: `agent status` declares `--json-envelope`),
+        // 69 → 70 (feature K3: `projects clean` declares `--json-envelope`).
+        expect(advertising.length).toBe(70);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });
 

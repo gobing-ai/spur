@@ -173,7 +173,9 @@ describe('project-start', () => {
     it('startRegisteredProject throws error when entry path does not exist on disk', async () => {
         const nonExistentPath = join(tempDir, 'deleted-folder');
         await registry.upsert({ name: 'DeletedApp', path: nonExistentPath, port: 0 });
-        await expect(startRegisteredProject(registry, 'DeletedApp')).rejects.toThrow(/Project path does not exist/);
+        // Task 0923: registry query auto-purges entries whose paths do not exist on disk,
+        // so starting a project with a deleted directory rejects as not found in registry.
+        await expect(startRegisteredProject(registry, 'DeletedApp')).rejects.toThrow(/Project not found in registry/);
     });
 
     it('startRegisteredProject throws error when port polling times out', async () => {
