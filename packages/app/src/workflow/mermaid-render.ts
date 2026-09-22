@@ -46,12 +46,13 @@ export function renderWorkflowMermaid(def: WorkflowDef, options: RenderWorkflowM
         lines.push('```mermaid');
     }
     lines.push(`flowchart ${direction}`);
-    lines.push('    classDef terminal fill:#d4edda,stroke:#1e7e34,color:#0a3d1f;');
-    lines.push('    classDef failure fill:#f8d7da,stroke:#c62828,color:#5f1414;');
-    lines.push('    classDef initial fill:#fff3cd,stroke:#b8860b,color:#5a4a00;');
-    lines.push('    classDef gate fill:#e8e8f8,stroke:#5b5bd6,color:#1a1a5e;');
-    lines.push('    classDef decision fill:#ffe9d1,stroke:#e07b00,color:#6b3a00;');
-    lines.push('    classDef parallel fill:#f0f4f8,stroke:#2c7fb8,color:#123a55;');
+    lines.push('    classDef default fill:#ffffff,stroke:#64748b,stroke-width:1.5px,color:#0f172a;');
+    lines.push('    classDef terminal fill:#d4edda,stroke:#1e7e34,stroke-width:1.5px,color:#0a3d1f;');
+    lines.push('    classDef failure fill:#f8d7da,stroke:#c62828,stroke-width:1.5px,color:#5f1414;');
+    lines.push('    classDef initial fill:#fff3cd,stroke:#b8860b,stroke-width:1.5px,color:#5a4a00;');
+    lines.push('    classDef gate fill:#e8e8f8,stroke:#5b5bd6,stroke-width:1.5px,color:#1a1a5e;');
+    lines.push('    classDef decision fill:#ffe9d1,stroke:#e07b00,stroke-width:1.5px,color:#6b3a00;');
+    lines.push('    classDef parallel fill:#f0f4f8,stroke:#2c7fb8,stroke-width:1.5px,color:#123a55;');
 
     if (def.kind === 'transition-flow') {
         const terminal = new Set<string>(def.terminalNodes ?? []);

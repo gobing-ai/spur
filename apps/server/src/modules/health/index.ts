@@ -773,7 +773,7 @@ export const healthModule: ServerModule = {
                             const resolved = await resolveWorkflowDefinition(ctx.cwd, fullPath, {
                                 registered: paths,
                             });
-                            mermaidDiagram = renderWorkflowMermaid(resolved.workflow, { fenced: false });
+                            mermaidDiagram = renderWorkflowMermaid(resolved.workflow, { fenced: true });
                         } catch (mermaidErr) {
                             error = mermaidErr instanceof Error ? mermaidErr.message : String(mermaidErr);
                             isValid = false;
