@@ -35,6 +35,10 @@
 
     /* Border radius */
     --radius-spur: 0.5rem;
+
+    /* Responsive breakpoints for wide displays */
+    --breakpoint-3xl: 1920px;
+    --breakpoint-4xl: 2200px;
 }
 
 /* Light-theme overrides for Spur custom tokens */

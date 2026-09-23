@@ -172,8 +172,11 @@ export default function FeaturesShell() {
     return (
         <>
             <div className="relative h-full w-full p-4 overflow-hidden" data-features-shell>
-                {/* Central Container — contains the module header AND the full-width body, sharing the exact same max-w-[1600px] width constraint as History so the body matches the header width. The tree is a floating overlay docked at the body's left side; it consumes no layout width, so toggling it never resizes the body. */}
-                <div className="flex flex-col h-full w-full max-w-[1600px] mx-auto gap-3" data-features-workspace>
+                {/* Central Container — contains the module header AND the full-width body. In larger screens (3xl+), it constraints so the header and main body area share the exact same width, while tree and metadata float outside in the left and right margins. In laptop screens (<3xl), it uses the 3-zone in-flow flex layout. */}
+                <div
+                    className="flex flex-col h-full w-full max-w-full 3xl:max-w-[1200px] 4xl:max-w-[1600px] mx-auto gap-3"
+                    data-features-workspace
+                >
                     {/* Module header — R1/R2 */}
                     <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
                         <div className="flex items-center gap-3">
@@ -290,14 +293,17 @@ export default function FeaturesShell() {
                         </div>
                     </header>
 
-                    {/* Body area — 3-zone adaptive layout fitting laptop and desktop screens */}
-                    <div className="flex-1 min-h-0 flex items-stretch gap-3 overflow-hidden" ref={bodyAreaRef}>
+                    {/* Body area — in laptop screens (<3xl), 3-zone in-flow flex layout. In larger screens (3xl+), relative container where the body is w-full (matching the header width) and docks float outside in the margins */}
+                    <div
+                        className="flex-1 min-h-0 flex items-stretch gap-3 overflow-hidden 3xl:relative 3xl:block 3xl:overflow-visible"
+                        ref={bodyAreaRef}
+                    >
                         <div
                             id="feature-tree-dock"
                             hidden={!isTreeOpen}
                             className={`${
-                                isTreeOpen ? 'w-64 lg:w-72 flex' : 'hidden'
-                            } shrink-0 flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xs`}
+                                isTreeOpen ? 'flex' : 'hidden'
+                            } w-64 lg:w-72 shrink-0 flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xs 3xl:absolute 3xl:right-[calc(100%_+_12px)] 3xl:top-0 3xl:bottom-0 3xl:z-20 3xl:w-72 4xl:w-80 3xl:shadow-xl`}
                         >
                             <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
                                 <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
@@ -321,7 +327,7 @@ export default function FeaturesShell() {
                             </div>
                         </div>
                         <div
-                            className="flex-1 min-w-0 h-full overflow-hidden rounded-lg border border-spur-border bg-base-100 relative"
+                            className="flex-1 min-w-0 h-full overflow-hidden rounded-lg border border-spur-border bg-base-100 relative 3xl:w-full 3xl:flex-none"
                             data-testid="detail-workspace"
                         >
                             <div className="w-full h-full overflow-y-auto">

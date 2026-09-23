@@ -816,9 +816,11 @@ describe('FeatureDetail', () => {
         // Portaled into the dock (mirror of the tree dock), not the component root.
         const panel = getByTestId('feature-metadata-panel');
         expect(panel.parentElement).toBe(dock);
-        // Mirror classes: in-flow dock with responsive width.
+        // Mirror classes: in-flow dock with responsive width on laptop, floating outside on large screens.
         expect(panel.className).toContain('w-64');
         expect(panel.className).toContain('shrink-0');
+        expect(panel.className).toContain('3xl:absolute');
+        expect(panel.className).toContain('3xl:left-[calc(100%_+_12px)]');
         expect(panel.className).not.toContain('inset-y-0 right-0');
 
         // Folded by default in mirror mode too: hidden + no focusable rows.
@@ -1017,8 +1019,11 @@ describe('FeaturesShell', () => {
         const dockClass = dock?.getAttribute('class') ?? '';
         expect(dockClass).toContain('w-64');
         expect(dockClass).toContain('shrink-0');
-        // The detail workspace adapts dynamically via flex-1.
+        expect(dockClass).toContain('3xl:absolute');
+        expect(dockClass).toContain('3xl:right-[calc(100%_+_12px)]');
+        // The detail workspace adapts dynamically via flex-1 on laptop, w-full on large screens.
         expect(workspace?.className).toContain('flex-1');
+        expect(workspace?.className).toContain('3xl:w-full');
     });
     /**
      * Serve the detail endpoint with a status that changes after the first read, so a
@@ -1197,12 +1202,15 @@ describe('F841 Acceptance Criteria', () => {
         expect(detailWorkspace).not.toBeNull();
         expect(detailWorkspace?.contains(treeDock)).toBe(false);
 
-        // The tree is docked in-flow with responsive width
+        // The tree is docked in-flow on laptop with responsive width, floating on large screens
         expect(treeDock?.className).toContain('w-64');
         expect(treeDock?.className).toContain('shrink-0');
+        expect(treeDock?.className).toContain('3xl:absolute');
+        expect(treeDock?.className).toContain('3xl:right-[calc(100%_+_12px)]');
 
-        // The detail workspace adapts dynamically via flex-1.
+        // The detail workspace adapts dynamically via flex-1 on laptop, w-full on large screens.
         expect(detailWorkspace?.className).toContain('flex-1');
+        expect(detailWorkspace?.className).toContain('3xl:w-full');
 
         // Toggle tree closed via header toggle
         const toggle = getByLabelText('Collapse feature tree');

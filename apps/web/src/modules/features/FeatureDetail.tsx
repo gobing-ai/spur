@@ -509,7 +509,9 @@ export default function FeatureDetail({
             hidden={isMetadataMirror && !showMetadata}
             className={`flex flex-col overflow-hidden bg-base-200 ${
                 isMetadataMirror
-                    ? `w-64 lg:w-72 shrink-0 rounded-lg border border-spur-border shadow-xs ${showMetadata ? 'flex' : 'hidden'}`
+                    ? `w-64 lg:w-72 shrink-0 rounded-lg border border-spur-border shadow-xs ${
+                          showMetadata ? 'flex' : 'hidden'
+                      } 3xl:absolute 3xl:top-0 3xl:bottom-0 3xl:left-[calc(100%_+_12px)] 3xl:z-20 3xl:w-72 4xl:w-80 3xl:shadow-xl`
                     : `absolute inset-y-0 right-0 z-30 w-80 max-w-full border-l border-spur-border shadow-xl transition-transform duration-200 ${
                           showMetadata ? 'translate-x-0' : 'translate-x-full'
                       }`
