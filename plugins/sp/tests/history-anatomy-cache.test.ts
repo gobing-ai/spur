@@ -17,6 +17,7 @@ import {
     resolvePaths,
     runCacheCli,
     semanticArtifactDigest,
+    validateSelector,
 } from '../scripts/history-anatomy-cache';
 
 function baseProvenance(over: Partial<CacheProvenance> = {}): CacheProvenance {
@@ -1312,6 +1313,171 @@ describe('probe --helper digest identity (0771)', () => {
             expect(prov.helperDigest).not.toBe('not available');
         } finally {
             rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('paths grammar validation (0920 — deterministic scope owner)', () => {
+    const good = { helper: '/p/h.mjs', out: '/tmp/x-paths.env' };
+
+    test('daily default and explicit real date pass; invalid calendar day fails by name', () => {
+        expect(validateSelector({ mode: 'daily', date: '2026-08-24' })).toEqual({
+            ok: true,
+            mode: 'daily',
+            date: '2026-08-24',
+            focus: null,
+            since: null,
+            until: null,
+        });
+        expect(validateSelector({ date: '2026-02-30' })).toMatchObject({ ok: false });
+        expect(
+            validateSelector({ date: '2026-02-30' }).ok === false && validateSelector({ date: '2026-02-30' }).errors[0],
+        ).toContain('--date');
+        expect(validateSelector({ date: '2024-02-29' }).ok).toBe(true); // leap day is real
+    });
+
+    test('daily rejects focus/since/until/output, naming every attributable flag', () => {
+        const v = validateSelector({
+            mode: 'daily',
+            focus: 'f',
+            since: '2026-01-01T00:00:00Z',
+            until: '2026-01-02T00:00:00Z',
+            output: 'o.md',
+        });
+        expect(v.ok).toBe(false);
+        if (!v.ok) {
+            expect(v.errors.some((e) => e.includes('--focus'))).toBe(true);
+            expect(v.errors.some((e) => e.includes('--since'))).toBe(true);
+            expect(v.errors.some((e) => e.includes('--until'))).toBe(true);
+            expect(v.errors.some((e) => e.includes('--output'))).toBe(true);
+        }
+    });
+
+    test('unknown mode, bad recompute literal fail by name', () => {
+        expect(validateSelector({ mode: 'weekly' }).ok).toBe(false);
+        expect(
+            validateSelector({ mode: 'weekly' }).ok === false && validateSelector({ mode: 'weekly' }).errors[0],
+        ).toContain('--mode');
+        expect(validateSelector({ recompute: 'yes' }).ok).toBe(false);
+    });
+
+    test('ad-hoc: valid ordered inclusive bounds pass untouched; ordering/parse failures named', () => {
+        const ok = validateSelector({
+            mode: 'ad-hoc',
+            focus: 'auth refactor',
+            since: '2026-08-01T09:30:00+05:30',
+            until: '2026-08-05T18:00:00+05:30',
+        });
+        expect(ok).toEqual({
+            ok: true,
+            mode: 'ad-hoc',
+            date: null,
+            focus: 'auth refactor',
+            since: '2026-08-01T09:30:00+05:30',
+            until: '2026-08-05T18:00:00+05:30',
+        });
+        const ordered = validateSelector({
+            mode: 'ad-hoc',
+            focus: 'f',
+            since: '2026-08-05T00:00:00Z',
+            until: '2026-08-01T00:00:00Z',
+        });
+        expect(ordered.ok === false && ordered.errors[0]).toContain('--since must not be after --until');
+        const badInstant = validateSelector({
+            mode: 'ad-hoc',
+            focus: 'f',
+            since: 'not-a-date',
+            until: '2026-08-05T00:00:00Z',
+        });
+        expect(badInstant.ok === false && badInstant.errors.some((e) => e.includes('--since'))).toBe(true);
+        expect(
+            validateSelector({ mode: 'ad-hoc', since: '2026-08-01T00:00:00Z', until: '2026-08-05T00:00:00Z' }).ok,
+        ).toBe(false); // no focus
+    });
+
+    test('ad-hoc rejects --date and --recompute; daily allows recompute', () => {
+        const v = validateSelector({
+            mode: 'ad-hoc',
+            focus: 'f',
+            since: '2026-08-01T00:00:00Z',
+            until: '2026-08-05T00:00:00Z',
+            date: '2026-08-02',
+            recompute: 'true',
+        });
+        expect(v.ok).toBe(false);
+        if (!v.ok) {
+            expect(v.errors.some((e) => e.includes('--date'))).toBe(true);
+            expect(v.errors.some((e) => e.includes('--recompute'))).toBe(true);
+        }
+        expect(validateSelector({ mode: 'daily', recompute: 'true' }).ok).toBe(true);
+        expect(
+            validateSelector({
+                mode: 'ad-hoc',
+                recompute: 'false',
+                focus: 'f',
+                since: '2026-08-01T00:00:00Z',
+                until: '2026-08-05T00:00:00Z',
+            }).ok,
+        ).toBe(true);
+    });
+
+    test('CLI: failure leaves no paths file; success writes env and selector observation', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'ha-paths-'));
+        const envOut = join(dir, 'paths.env');
+        try {
+            const bad = runCacheCli([
+                'paths',
+                '--helper',
+                '/p/h.mjs',
+                '--out',
+                envOut,
+                '--mode',
+                'ad-hoc',
+                '--since',
+                '2026-08-01T00:00:00Z',
+                '--until',
+                '2026-08-05T00:00:00Z',
+            ]);
+            expect(bad.exitCode).toBe(1);
+            expect(bad.stderr).toContain('--focus');
+            expect(existsSync(envOut)).toBe(false); // no usable paths file on invalid input
+
+            const ok = runCacheCli([
+                'paths',
+                '--helper',
+                '/p/h.mjs',
+                '--out',
+                envOut,
+                '--mode',
+                'ad-hoc',
+                '--focus',
+                'auth',
+                '--since',
+                '2026-08-01T09:30:00+05:30',
+                '--until',
+                '2026-08-05T18:00:00+05:30',
+                '--run-id',
+                'testsel0920',
+            ]);
+            expect(ok.exitCode).toBe(0);
+            const env = readFileSync(envOut, 'utf8');
+            expect(env).toContain('HA_SINCE=2026-08-01T09:30:00+05:30'); // inclusive bounds untouched
+            expect(env).not.toContain('HA_BASELINE_');
+            const sel = JSON.parse(readFileSync('.spur/run/testsel0920-selector.json', 'utf8')) as Record<
+                string,
+                unknown
+            >;
+            expect(sel).toMatchObject({
+                mode: 'ad-hoc',
+                focus: 'auth',
+                since: '2026-08-01T09:30:00+05:30',
+                until: '2026-08-05T18:00:00+05:30',
+            });
+            expect(sel.date).toMatch(/^\d{4}-\d{2}-\d{2}$/); // effective local day
+            expect(typeof sel.timezone).toBe('string');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+            rmSync('.spur/run/testsel0920-selector.json', { force: true });
         }
     });
 });

@@ -36,10 +36,10 @@
             "decision": null
         },
         "history-anatomy": {
-            "modelQueries": 4,
+            "modelQueries": 3,
             "wallClockMs": null,
             "tokenCostUsd": null,
-            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
+            "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0. 0920 recount 2026-09-23: 4 -> 3 — the resolve-scope model hop was removed; scope/window validation is deterministic in the history-anatomy-cache paths command.",
             "decision": null
         },
         "wayfinder-resolution": {

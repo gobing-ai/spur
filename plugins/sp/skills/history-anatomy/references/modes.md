@@ -1,7 +1,9 @@
 # Mode contract — `sp:history-anatomy` (HA-S1, 0658)
 
 The skill resolves exactly two modes. Everything else fails loud. This matrix is the enforcement
-surface the workflow (0660) and the skill share; keep the vocabulary frozen.
+surface the workflow (0660) and the skill share; keep the vocabulary frozen. Execution note
+(0920): argument validation runs deterministically in the `history-anatomy-cache` helper `paths`
+command before the workflow starts; the model hop no longer performs it.
 
 ## Mode vocabulary (frozen)
 
@@ -26,7 +28,7 @@ Rejected arguments (each fails loud, naming the offending argument):
 | --- | --- |
 | focus text (positional) | Daily mode has no focus string. |
 | `--since` / `--until` | Daily always uses the calendar-day window. |
-| `--output` | Daily always writes to the run directory (see 0660). |
+| `--output` | Daily always writes to `docs/report/<date>-history-anatomy.md` (the executing helper's default; 0660). |
 
 A daily invocation must print the normalized **inclusive ISO bounds** and the timezone used, so the
 wall-clock window is auditable.
@@ -40,7 +42,7 @@ Requires a **non-empty focus** and **two ordered inclusive bounds**.
 | focus (positional) | Required; a missing or empty focus fails loud. |
 | `--since <iso>` | Required; the inclusive lower bound. |
 | `--until <iso>` | Required; must be present with `--since`; must not be earlier than `--since`. |
-| `--output <path>` | Optional; when present, writes to that explicit path. When absent, writes to the run directory. |
+| `--output <path>` | Optional; when present, writes to that explicit path. When absent, writes to `docs/report/<date>-history-anatomy.md` (the executing helper's default). |
 
 Rejected arguments (each fails loud, naming the offending argument):
 

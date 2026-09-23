@@ -10,6 +10,7 @@ import {
   existsSync,
   fsyncSync,
   openSync,
+  mkdirSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -434,6 +435,69 @@ HA_BASELINE_UNTIL=${baseline.until}
 `;
   return env;
 }
+function isRealDate(ymd) {
+  const m = ymd.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m)
+    return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+function validateSelector(opts) {
+  const errors = [];
+  const has = (v) => v !== undefined && v !== "";
+  const mode = has(opts.mode) ? opts.mode : "daily";
+  if (mode !== "daily" && mode !== "ad-hoc") {
+    return { ok: false, errors: [`--mode must be "daily" or "ad-hoc", got "${opts.mode}"`] };
+  }
+  const recompute = opts.recompute ?? "";
+  if (recompute !== "" && recompute !== "true" && recompute !== "false") {
+    errors.push(`--recompute must be "true" or "false", got "${recompute}"`);
+  }
+  if (mode === "daily") {
+    for (const [flag, v] of [["--focus", opts.focus], ["--since", opts.since], ["--until", opts.until], ["--output", opts.output]]) {
+      if (has(v))
+        errors.push(`daily mode rejects ${flag}`);
+    }
+    if (has(opts.date) && !isRealDate(opts.date)) {
+      errors.push(`--date must be a real YYYY-MM-DD calendar day, got "${opts.date}"`);
+    }
+  } else {
+    if (has(opts.date))
+      errors.push("ad-hoc mode rejects --date");
+    if (recompute === "true")
+      errors.push("ad-hoc mode rejects --recompute");
+    if (!has(opts.focus))
+      errors.push("ad-hoc mode requires a non-empty --focus");
+    const sinceOk = has(opts.since);
+    const untilOk = has(opts.until);
+    if (!sinceOk)
+      errors.push("ad-hoc mode requires --since (inclusive ISO instant)");
+    if (!untilOk)
+      errors.push("ad-hoc mode requires --until (inclusive ISO instant)");
+    if (sinceOk && untilOk) {
+      const since = new Date(opts.since);
+      const until = new Date(opts.until);
+      if (Number.isNaN(since.getTime()))
+        errors.push(`--since must be a parseable ISO instant, got "${opts.since}"`);
+      if (Number.isNaN(until.getTime()))
+        errors.push(`--until must be a parseable ISO instant, got "${opts.until}"`);
+      if (!Number.isNaN(since.getTime()) && !Number.isNaN(until.getTime()) && since.getTime() > until.getTime()) {
+        errors.push(`--since must not be after --until ("${opts.since}" > "${opts.until}")`);
+      }
+    }
+  }
+  if (errors.length)
+    return { ok: false, errors };
+  return {
+    ok: true,
+    mode,
+    date: has(opts.date) ? opts.date : null,
+    focus: has(opts.focus) ? opts.focus : null,
+    since: has(opts.since) ? opts.since : null,
+    until: has(opts.until) ? opts.until : null
+  };
+}
 function buildProvenance(opts) {
   let raw;
   try {
@@ -699,19 +763,41 @@ ${result.problems.map((p) => `- ${p}
         return {
           exitCode: 1,
           stdout: "",
-          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>]
+          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>] [--focus <text>] [--recompute true|false] [--run-id <id>]
 `
         };
       }
-      writeFileSync(f.out, resolvePaths({
+      const v = validateSelector({
+        mode: f.mode,
+        date: f.date,
+        since: f.since,
+        until: f.until,
+        focus: f.focus,
+        recompute: f.recompute,
+        output: f.output
+      });
+      if (!v.ok)
+        return { exitCode: 1, stdout: "", stderr: `${v.errors.join(`
+`)}
+` };
+      const env = resolvePaths({
         helper: f.helper,
         reportDir: f["report-dir"] ?? "docs/report",
         date: f.date,
         output: f.output,
-        mode: f.mode,
+        mode: v.mode,
         since: f.since,
         until: f.until
-      }));
+      });
+      writeFileSync(f.out, env);
+      if (f["run-id"] !== undefined && f["run-id"] !== "") {
+        mkdirSync(".spur/run", { recursive: true });
+        const envVars = Object.fromEntries(env.trim().split(`
+`).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+        writeFileSync(`.spur/run/${f["run-id"]}-selector.json`, `${JSON.stringify({ mode: v.mode, date: envVars.HA_DATE ?? null, focus: v.focus, since: envVars.HA_SINCE ?? null, until: envVars.HA_UNTIL ?? null, timezone: tz }, null, 2)}
+`);
+      }
       return { exitCode: 0, stdout: "", stderr: "" };
     }
     case "probe": {
@@ -805,6 +891,7 @@ ${reasons}`, stderr: "" };
   process.exitCode = exitCode;
 }
 export {
+  validateSelector,
   stampReport,
   semanticArtifactDigest,
   runCacheCli,
