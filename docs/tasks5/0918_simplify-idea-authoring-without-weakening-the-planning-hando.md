@@ -4,7 +4,7 @@ name: Simplify idea authoring without weakening the planning handoff
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T17:56:20.806Z"
+updated_at: "2026-09-23T22:06:44.378Z"
 feature_id: D63
 priority: P2
 tags:
@@ -90,6 +90,7 @@ Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.tes
 | R2 | MET | config/workflows/idea-pipeline.yaml absent from git diff 9e874de17~1..9e874de17 (only report + task file); verbatim intake (.spur/run/<runId>-idea-input.md), idea-ac-check/idea-coverage-check, taste gates (idea-eval, feature-check, design-approval) and corpus CLI write boundary all untouched by definition; idea-pipeline-definition.test.ts re-run 41 pass / 0 fail. |
 | R3 | MET | Graph untouched → task dependency ordering, ready-prepare preparation digest flow and the single handoff finalize path unchanged; same suite re-run green; `workflow show idea-pipeline --json` shows the unchanged e455eab1 graph with intact decompose → batch-create → batch-create-run → ready-prepare → handoff-finalize → handoff route. |
 | R4 | MET | Candidate registration is preconditioned on the eligible branch ("For an eligible cohort, register one candidate before changing the graph"); branch did not fire. config/workflow-candidates.json candidates: [] and unmodified by 9e874de17 → no candidate, no deadline; disposition INSUFFICIENT_EVIDENCE recorded (report Decision §, task Solution). The retire/reject path is moot with nothing registered, and the promotion process itself was honored by not bypassing it. |
+| R5 — Planning preserves intent through handoff | MET | (feature-scenario key for this task's evidence above, Verdict: PASS); added for DD-09 traceability by task 0921. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

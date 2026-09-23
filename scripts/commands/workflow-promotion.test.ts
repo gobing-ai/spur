@@ -222,6 +222,41 @@ describe('evaluateCandidate (0873 R2 verdict)', () => {
     });
 });
 
+describe('evaluateCandidate (0921 declared-count baseline)', () => {
+    const measured: AgentRunMeasurement = {
+        workflow: 'task-pipeline',
+        agentRunCount: { runs: 11, mean: 3, median: 3, min: 1, max: 4 },
+        agentRunDurationMs: { runs: 11, mean: 500000, median: 400000, min: 10000, max: 900000 },
+    };
+
+    test('promotes an already-applied candidate: projection 3 < baseline 4 while the live canonical also declares 3', () => {
+        const c = candidate({ delta: { agentRunCount: 3, baselineAgentRunCount: 4 } });
+        const v = evaluateCandidate(c, measured, 3, '2026-09-24T00:00:00.000Z');
+        expect(v.decision).toBe('promote');
+        expect(v.candidateAgentRunCount).toBe(3);
+        expect(v.canonicalAgentRunCount).toBe(3);
+        expect(v.reason).toContain('incumbent baseline of 4');
+        expect(v.reason).toContain('now declares 3');
+    });
+
+    test('keeps the pre-0921 rule without a baseline: projection vs the live canonical count', () => {
+        const v = evaluateCandidate(candidate({ delta: { agentRunCount: 2 } }), measured, 3, 'x');
+        expect(v.decision).toBe('promote');
+        expect(v.reason).toContain('canonical task-pipeline count of 3');
+    });
+
+    test('deletes when the projection does not beat the incumbent baseline (no model-hop reduction)', () => {
+        const v = evaluateCandidate(
+            candidate({ delta: { agentRunCount: 3, baselineAgentRunCount: 3 } }),
+            measured,
+            3,
+            'x',
+        );
+        expect(v.decision).toBe('delete');
+        expect(v.reason).toContain('not fewer than');
+    });
+});
+
 describe('resolve CLI (0878 R6)', () => {
     // `runWorkflowPromotion` writes refusals/results to stdout/stderr; capture both so the dots
     // reporter output stays clean (same pattern as eval-pipeline.test.ts nesting guard).
@@ -289,6 +324,82 @@ describe('resolve CLI (0878 R6)', () => {
             ]);
             expect(code).toBe(1);
             expect(JSON.parse(await readFile(p, 'utf8')).candidates).toHaveLength(1);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('evaluate refuses when the live canonical count matches neither baseline nor projection (0921 drift)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'canonical-drift-'));
+        const p = await candidatesFile([candidate({ delta: { agentRunCount: 3, baselineAgentRunCount: 4 } })]);
+        const seeded = await seedDb();
+        try {
+            await writeFile(
+                join(dir, 'task-pipeline.yaml'),
+                [
+                    'terminalStates: [done]',
+                    'states:',
+                    '  - id: implement',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options: { input: run }',
+                ].join('\n'),
+            );
+            const code = await runWorkflowPromotion([
+                'evaluate',
+                'c1',
+                '--config',
+                p,
+                '--workflows-dir',
+                dir,
+                '--db',
+                seeded.dbPath,
+            ]);
+            expect(code).toBe(1);
+            expect(JSON.parse(await readFile(p, 'utf8')).candidates[0].verdict).toBeNull();
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+            await seeded.close();
+        }
+    });
+
+    test('resolve --decision promote passes with a baseline when the canonical declares the projection (0921)', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'canonical-resolve-'));
+        const p = await candidatesFile([
+            candidate({ verdict: verdict('promote'), delta: { agentRunCount: 3, baselineAgentRunCount: 4 } }),
+        ]);
+        try {
+            await writeFile(
+                join(dir, 'task-pipeline.yaml'),
+                [
+                    'terminalStates: [done]',
+                    'states:',
+                    '  - id: enrich',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options: { input: enrich }',
+                    '  - id: validate',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options: { input: validate }',
+                    '  - id: correct',
+                    '    onEnter:',
+                    '      - kind: agent.run',
+                    '        options: { input: correct }',
+                ].join('\n'),
+            );
+            const code = await runWorkflowPromotion([
+                'resolve',
+                'c1',
+                '--decision',
+                'promote',
+                '--config',
+                p,
+                '--workflows-dir',
+                dir,
+            ]);
+            expect(code).toBe(0);
+            expect(JSON.parse(await readFile(p, 'utf8')).candidates).toHaveLength(0);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }

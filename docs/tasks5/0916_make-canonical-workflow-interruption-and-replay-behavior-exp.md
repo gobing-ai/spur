@@ -4,7 +4,7 @@ name: Make canonical workflow interruption and replay behavior explicit
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.300Z
-updated_at: "2026-09-23T18:56:51.794Z"
+updated_at: "2026-09-23T22:06:44.162Z"
 feature_id: D63
 priority: P2
 tags:
@@ -82,6 +82,7 @@ Plan 2 disposition: no helper/declaration corrections demonstrated necessary. PR
 | R2 | MET | replay-matrix.test.ts:67-84 (AC1: no unmarked rerun-enter) + packages/app/tests/services/workflow-service.test.ts:1385-1408 (live concurrent owner refused at resume boundary; engine CAS backstop per ADR-122) |
 | R3 | MET | plugins/sp/tests/pr-reviewing.test.ts:113 (exact-HEAD match), :130 (clean review at current HEAD only) — PR request replay does not duplicate, stale HEAD stays pending; pause gates at human boundaries locked by matrix test :86-105 |
 | R4 | MET | plugins/sp/skills/spur-cli/references/workflows.md:331-337 — refusal names next safe action (resume paused / clean sweeps to interrupted); rerun-enter opt-in requires demonstrated repeatability + conscious matrix update; no second FSM (diff is tests+docs only) |
+| R3 — Recovery preserves ownership and side effects | MET | (feature-scenario key for this task's evidence above, Verdict: PASS); added for DD-09 traceability by task 0921. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

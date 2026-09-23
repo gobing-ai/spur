@@ -55,6 +55,13 @@ const TERMINAL_RUN_STATUSES = ['done', 'failed', 'cancelled'];
 export interface WorkflowCandidateDelta {
     /** The candidate's projected number of `agent.run` actions per run. */
     agentRunCount: number;
+    /**
+     * The incumbent's declared `agent.run` count at registration (0921). The ADR-076 bar compares
+     * the projection against this baseline, so a candidate whose canonical change has already
+     * landed (live count == projection) still evaluates against what it replaces. Absent, the
+     * live canonical count stays the comparator (pre-0921 records).
+     */
+    baselineAgentRunCount?: number;
     note?: string;
 }
 
@@ -167,6 +174,13 @@ export function validateCandidate(candidate: WorkflowCandidate): string | null {
         (candidate.delta.agentRunCount as number) < 0
     ) {
         return `candidate ${candidate.id}: delta.agentRunCount must be a non-negative integer`;
+    }
+    if (
+        candidate.delta.baselineAgentRunCount !== undefined &&
+        (!Number.isInteger(candidate.delta.baselineAgentRunCount) ||
+            (candidate.delta.baselineAgentRunCount as number) < 0)
+    ) {
+        return `candidate ${candidate.id}: delta.baselineAgentRunCount must be a non-negative integer`;
     }
     if (candidate.verdict !== null && typeof candidate.verdict !== 'object') {
         return `candidate ${candidate.id}: verdict must be null or an object`;
@@ -302,24 +316,32 @@ export function evaluateCandidate(
     nowIso: string,
 ): WorkflowCandidateVerdict {
     const candidateCount = candidate.delta.agentRunCount;
+    // 0921: the incumbent baseline pins what the candidate replaces, so an already-applied change
+    // (live count == projection) still compares against its origin. Absent, the live canonical
+    // count is the comparator — exactly the pre-0921 rule the 0873 pins assert.
+    const baseline = candidate.delta.baselineAgentRunCount ?? canonicalAgentRunCount;
     // ADR-076: the gate decides on the measured data it cites — zero recorded real runs cannot promote.
     const decision: 'promote' | 'delete' =
-        measured.agentRunCount.runs > 0 && candidateCount < canonicalAgentRunCount ? 'promote' : 'delete';
+        measured.agentRunCount.runs > 0 && candidateCount < baseline ? 'promote' : 'delete';
     const measuredCitation =
         measured.agentRunCount.runs === 0
             ? 'no measured real-run history'
             : `${measured.agentRunCount.runs} real run(s), median ${measured.agentRunCount.median ?? 'n/a'} ` +
               `agent.run action(s)/run, median ${measured.agentRunDurationMs.median ?? 'n/a'} ms/run`;
+    const countContext =
+        baseline === canonicalAgentRunCount
+            ? `the canonical ${candidate.canonical} count of ${canonicalAgentRunCount}`
+            : `the incumbent baseline of ${baseline} (canonical ${candidate.canonical} now declares ${canonicalAgentRunCount})`;
     let reason: string;
     if (measured.agentRunCount.runs === 0) {
         reason =
-            `candidate projects ${candidateCount} agent.run action(s) against the canonical ${candidate.canonical} count of ` +
-            `${canonicalAgentRunCount}, but with no measured real-run history the ADR-076 gate cannot promote unmeasured — ` +
+            `candidate projects ${candidateCount} agent.run action(s) against ${countContext}, but with no measured ` +
+            `real-run history the ADR-076 gate cannot promote unmeasured — ` +
             `decision falls to delete; re-evaluate after real runs`;
     } else if (decision === 'promote') {
-        reason = `candidate projects ${candidateCount} agent.run action(s) against the canonical ${candidate.canonical} count of ${canonicalAgentRunCount} (${measuredCitation})`;
+        reason = `candidate projects ${candidateCount} agent.run action(s) against ${countContext} (${measuredCitation})`;
     } else {
-        reason = `candidate projects ${candidateCount} agent.run action(s), not fewer than the canonical ${candidate.canonical} count of ${canonicalAgentRunCount} (${measuredCitation}) — ADR-076 rejected a graph adding a model hop`;
+        reason = `candidate projects ${candidateCount} agent.run action(s), not fewer than ${countContext} (${measuredCitation}) — ADR-076 rejected a graph adding a model hop`;
     }
     return {
         decision,
@@ -615,6 +637,19 @@ export async function runWorkflowPromotion(argv: string[]): Promise<number> {
         const measured = measureAgentRunHistory(dbPath, candidate.measurement.workflow, candidate.measurement.runIds);
         const canonicalCounts = loadCanonicalAgentRunCounts(workflowsDir);
         const canonicalCount = canonicalCounts[candidate.canonical] ?? 0;
+        // 0921: with a registered baseline, the live count must be either the baseline (change not
+        // yet applied) or the projection (change already applied) — anything else is registry/live
+        // drift and evaluating would pin a verdict against a definition nobody registered.
+        const baseline = candidate.delta.baselineAgentRunCount;
+        if (baseline !== undefined && canonicalCount !== baseline && canonicalCount !== candidate.delta.agentRunCount) {
+            console.error(
+                `workflow-promotion: evaluate refused — ${candidate.canonical} declares ${canonicalCount} ` +
+                    `agent.run action(s), which is neither the recorded baseline ${baseline} nor the projected ` +
+                    `${candidate.delta.agentRunCount}; the registry and the live definition have drifted. ` +
+                    `Re-register the candidate against the current definition.`,
+            );
+            return 1;
+        }
         candidate.verdict = evaluateCandidate(candidate, measured, canonicalCount, nowIso);
         await saveWorkflowCandidates(config, configPath);
         console.log(
