@@ -161,7 +161,10 @@
 /* ── Detail panel markdown (0100/0101) ──
    The body renders in the normal/light theme (data-color-mode="light" in
    MarkdownBody.tsx). Only fenced code blocks get a dark treatment below. */
-[data-testid="detail-body"] .wmde-markdown code {
+[data-testid="detail-body"] .wmde-markdown code,
+[data-testid="feature-body-section"] .wmde-markdown code,
+[data-testid="design-markdown-body"] .wmde-markdown code,
+[data-testid="design-body-container"] .wmde-markdown code {
     font-family: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, monospace;
     font-size: 0.8125rem;
 }
@@ -170,7 +173,9 @@
    prettylights syntax variables to their dark values, so the tokens stay readable on
    the dark background while the rest of the body stays light. */
 [data-testid="detail-body"] .wmde-markdown pre,
-[data-testid="feature-body-section"] .wmde-markdown pre {
+[data-testid="feature-body-section"] .wmde-markdown pre,
+[data-testid="design-markdown-body"] .wmde-markdown pre,
+[data-testid="design-body-container"] .wmde-markdown pre {
     background-color: #0d1117;
     color: #c9d1d9;
     border: 1px solid #30363d;
@@ -192,7 +197,9 @@
 }
 /* The fenced code text itself inherits the dark canvas foreground. */
 [data-testid="detail-body"] .wmde-markdown pre code,
-[data-testid="feature-body-section"] .wmde-markdown pre code {
+[data-testid="feature-body-section"] .wmde-markdown pre code,
+[data-testid="design-markdown-body"] .wmde-markdown pre code,
+[data-testid="design-body-container"] .wmde-markdown pre code {
     color: #c9d1d9;
     background: transparent;
 }
