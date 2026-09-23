@@ -4,7 +4,7 @@ name: Make installed inline workflow execution use the authoritative application
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.296Z
-updated_at: "2026-09-22T21:46:54.454Z"
+updated_at: "2026-09-23T04:30:00.361Z"
 feature_id: D63
 priority: P2
 tags:
@@ -88,6 +88,7 @@ Recovery: the original worktree under .spur was excluded by Biome; run d63-0914-
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
+| R1 — Installed and source execution preserve authoritative identity | MET | `plugins/sp/tests/inline-run-installed.test.ts:8` — installed/source resolver identity equality, authoritative setup, fingerprint and closure (AC5); task requirements R1–R4 below are this scenario's task-local regression evidence. |
 | R1 | MET | `plugins/sp/tests/inline-run-installed.test.ts:8` — detached Node twin setup, fingerprint, action and closure passed in the final quality gate. Real compiled CLI smoke also passed. |
 | R2 | MET | `packages/app/tests/services/inline-run-setup.test.ts:49` — source identity, digest drift, malformed layer and actual workflow-kind refusal; existing attachment/workdir tests passed. |
 | R3 | MET | `plugins/sp/tests/inline-run-installed.test.ts:145` — missing action reports ok:false with exit0; missing closure exits1. |
