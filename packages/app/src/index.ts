@@ -776,6 +776,28 @@ export {
     extractProofDigest,
     renderEscalationMarkdown,
 } from './workflow/escalation-packet';
+export type {
+    CompleteFeatureReceiptOptions,
+    FeatureReceiptPaths,
+    FeatureReceiptRejection,
+    FeatureReceiptRunPort,
+    FeatureReceiptStatus,
+    FeatureReceiptValidation,
+    FeatureVerificationReceipt,
+    FeatureVerifierIdentity,
+    StartFeatureReceiptOptions,
+    ValidateFeatureReceiptOptions,
+} from './workflow/feature-verification-receipt';
+export {
+    captureFeatureReceiptDigest,
+    completeFeatureVerificationReceipt,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    FEATURE_RECEIPT_SCHEMA_VERSION,
+    featureReceiptPaths,
+    isProofCaptureError,
+    startFeatureVerificationReceipt,
+    validateFeatureVerificationReceipt,
+} from './workflow/feature-verification-receipt';
 export {
     type FinalizeIdeaHandoffOptions,
     type FinalizeIdeaHandoffResult,

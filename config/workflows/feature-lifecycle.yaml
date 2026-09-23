@@ -68,13 +68,14 @@ transitions:
   - from: verifying
     to: done
     description: >
-      Feature verified — complete. Requires the feature-scoped verification pass
-      (ADR-119) to have recorded PASS, then strict check (AC validated,
-      traceability clean).
+      Feature verified — complete. The strict check at the done boundary also
+      validates the bound verification receipt (D63 task 0915): current, PASS,
+      matching feature identity and verifier contract, digest-chained to the
+      checked inputs. Stale/missing/failed evidence denies the hop.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$featureId-feature-verification.status 2>/dev/null)" = PASS && $spurBin feature check $featureId --strict --as done'
+        command: '$spurBin feature check $featureId --strict --as done'
 
   # Rework: verifying → active (mandatory History entry)
   - from: verifying

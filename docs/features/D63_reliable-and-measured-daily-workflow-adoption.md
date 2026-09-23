@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D63"
 name: "Reliable and measured daily-workflow adoption"
-status: active
+status: blocked
 priority: P2
 tags: []
 created_at: "2026-09-22T02:55:20.144Z"
-updated_at: "2026-09-23T03:24:31.516Z"
+updated_at: "2026-09-23T18:22:08.867Z"
 ---
 
 # D63: Reliable and measured daily-workflow adoption
@@ -105,12 +105,12 @@ Feature: Reliable and measured daily-workflow adoption
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0914 | Make installed inline workflow execution use the authoritative application boundary | done |
-| 0915 | Bind feature completion and wrapup to current verification evidence | todo |
+| 0915 | Bind feature completion and wrapup to current verification evidence | done |
 | 0916 | Make canonical workflow interruption and replay behavior explicit | blocked |
 | 0917 | Deliver the measured task-pipeline optimization selected by 0912 | blocked |
-| 0918 | Simplify idea authoring without weakening the planning handoff | todo |
+| 0918 | Simplify idea authoring without weakening the planning handoff | done |
 | 0919 | Reconcile batch continuation against the original frozen plan | blocked |
-| 0920 | Make history workflow scope normalization deterministic | todo |
+| 0920 | Make history workflow scope normalization deterministic | done |
 | 0921 | Complete measured workflow migration and catalogue reconciliation | blocked |
 <!-- END AUTO-GENERATED -->
 
@@ -125,4 +125,5 @@ Feature scenarios R1–R8 map in order to proposal labels W01–W08; task-local 
 ## History
 
 - 2026-09-22T21:46:38.980Z backlog → active (system)
+- 2026-09-23T18:22:08.867Z active → blocked (system)
 

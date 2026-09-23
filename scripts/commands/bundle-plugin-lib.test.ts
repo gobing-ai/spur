@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bundleIdeaHandoffLib, bundlePluginLib } from './bundle-plugin-lib';
+import { bundlePluginLib } from './bundle-plugin-lib';
 
 describe('bundle-plugin-lib (task 0669)', () => {
     test('generated artifacts exist and are committed', () => {
@@ -37,9 +37,17 @@ describe('bundleIdeaHandoffLib (task 0824)', () => {
 
     test('regeneration is deterministic and exports the handoff CLI entry', async () => {
         const before = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/idea-handoff.generated.mjs'), 'utf8');
-        const result = await bundleIdeaHandoffLib();
-        expect(result.mjs.endsWith('idea-handoff.generated.mjs')).toBeTrue();
-        expect(result.dmts.endsWith('idea-handoff.generated.d.mts')).toBeTrue();
+        // Build in the release process boundary: Bun's in-process test loader can rewrite
+        // cached workspace modules while the bundler reads their dependency graph.
+        const result = Bun.spawnSync(
+            [
+                'bun',
+                '-e',
+                'import { bundleIdeaHandoffLib } from "./scripts/commands/bundle-plugin-lib"; await bundleIdeaHandoffLib();',
+            ],
+            { cwd: join(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
+        );
+        expect(result.exitCode, result.stderr.toString()).toBe(0);
         const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/idea-handoff.generated.mjs'), 'utf8');
         expect(after).toContain('runIdeaHandoffCli');
         expect(after).toBe(before);

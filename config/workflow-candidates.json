@@ -1,7 +1,36 @@
 {
     "schemaVersion": 1,
     "note": "Workflow graph-change promotion candidates (task 0873, feature D62; ADR-076 amendment). A candidate is shadow-run against recorded real-run inputs and is promoted into the canonical definition or deleted by its named deadline — never left as a standing parallel <name>2.yaml. `verdict` is null while pending and is filled by `bun scripts/spur-dev.ts promotion evaluate <id>`; `promotion check` (spur-check-feature) fails any candidate still present past its deadline, any unreferenced parallel definition in config/workflows/, and (0877 R8) any retired definition with real (non-dry) terminal runs lacking a recorded decision in `retirements[]`.",
-    "candidates": [],
+    "candidates": [
+        {
+            "id": "history-anatomy-scope-inline",
+            "canonical": "history-anatomy",
+            "deadline": "2026-10-07",
+            "createdAt": "2026-09-23",
+            "rationale": "0920 (D63 R7): remove the model-only resolve-scope grammar hop; the history-anatomy-cache paths command becomes the sole deterministic mode/window/selector owner (identical normalized bounds, fail-loud on invalid input). Primary benefit: one fewer agent.run per run and >=25s off the 51,452ms scope-stage median on >=5 comparable terminal candidate runs at >=80% mapped action coverage. Unknown token/cost deltas stay unknown. Safety floor: formerly valid selectors yield equivalent bounds/target; invalid selectors fail before analyze/publication; no cache/validation/publication regression.",
+            "measurement": {
+                "workflow": "history-anatomy",
+                "runIds": [
+                    "11102d60-741f-422c-88e1-929bcbadbda1",
+                    "127691dd-d42f-4bfb-8d98-94d51d66dc57",
+                    "2b26d91c-b094-45bd-81cb-f14e31fc9cdf",
+                    "a9a571cf-9840-4c82-9af2-dc616b06cf80",
+                    "ea94a466-c683-4c1c-850e-7a90511534ae",
+                    "a9ed7c02-0248-41f0-b9ab-c10e539165d4",
+                    "0417e77c-27c9-482e-a1a9-7ef568a958c9",
+                    "52563347-8eae-4c84-a0de-c9e678580f2f",
+                    "62810640-a460-49bf-b4fd-d9b4e57e8c73",
+                    "94c8889a-d542-482c-87bc-3c00ffc00e5c",
+                    "0c621bb7-fe2f-47fa-a571-3583a64c056e"
+                ]
+            },
+            "delta": {
+                "agentRunCount": 2,
+                "note": "resolve-scope removed; enrich/validate (and conditional correct) remain. Canonical currently declares 3 unconditional agent.run states (resolve-scope, enrich, validate) + conditional correct."
+            },
+            "verdict": null
+        }
+    ],
     "retirements": [
         {
             "name": "planning-pipeline",

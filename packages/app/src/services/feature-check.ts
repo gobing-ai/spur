@@ -20,10 +20,21 @@ import {
     WAYFINDER_MAP_TAG,
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
+import {
+    captureFeatureReceiptDigest,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    type FeatureReceiptRejection,
+    type FeatureReceiptRunPort,
+    type FeatureVerifierIdentity,
+    isProofCaptureError,
+    validateFeatureVerificationReceipt,
+} from '../workflow/feature-verification-receipt';
+import { resolveWorkflowDefinition } from '../workflow/workflow-resolver';
 import { computeAggregate, readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import {
     type CheckFindings,
     FINDING_CODES,
+    type FindingCode,
     type MatrixEntry,
     PlanningCheckService,
     type SectionMatrix,
@@ -172,6 +183,14 @@ export class FeatureCheckService extends PlanningCheckService {
             dogfoodDir?: string;
             /** Directory containing `<wbs>-verdict.json` artifacts (default: <tasksDir parent>/.spur/run). */
             runDir?: string;
+            /**
+             * Read-only run-store ports for receipt validation (D63 task 0915):
+             * terminal run-row status, persisted definition identity/vars and
+             * artifact registration. The CLI command wires `RunDao`/`ArtifactDao`;
+             * omitted when the caller cannot observe the run store (those checks
+             * are then skipped, the remaining contract checks still enforce).
+             */
+            receiptRunPort?: FeatureReceiptRunPort;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
             /**
              * Transition-target hint (0418): evaluate the one-active-goal rule as if
@@ -236,6 +255,23 @@ export class FeatureCheckService extends PlanningCheckService {
         if (options?.featuresDir) {
             await this.checkOneActiveGoal(fm, featureId, options.featuresDir, findings, options.asStatus);
             await this.checkChildrenLimit(featureId, options.featuresDir, findings);
+        }
+
+        // ── D63 task 0915 (R2): completion evaluates CURRENT verification evidence ──
+        // The receipt demand binds to the completion boundary — the transition
+        // target `--as done` — not to plain on-disk `done` reads, so archival
+        // re-checks and all-features scans stay advisory for features that
+        // predate receipts (no backfill burden). Every real completion path
+        // (`feature advance`, the engine verifying→done guard via
+        // `feature check --strict --as done`) passes the hint and enforces.
+        if (options?.asStatus === 'done' && options?.runDir) {
+            await this.checkFeatureVerificationReceipt(
+                featureId,
+                raw,
+                options.runDir,
+                findings,
+                options.receiptRunPort,
+            );
         }
 
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
@@ -394,6 +430,109 @@ export class FeatureCheckService extends PlanningCheckService {
                 message: `One-active-goal violated: P0 feature "${conflict.id}" is already ${conflict.status}`,
             });
         }
+    }
+
+    /**
+     * Completion-boundary receipt validation (D63 task 0915, R2). Resolves the
+     * currently selected `feature-verification` definition (project override
+     * wins) to obtain the expected verifier identity and configured command,
+     * captures the current checked-input digest — including gitignored
+     * `.spur/context/learnings.md`, which the digest chain must see — via the
+     * shared proof-input engine, and validates the feature's receipt against
+     * both. Every rejection is an unsuppressible error finding — changed tree,
+     * changed spec, changed learnings, changed check contract, changed
+     * selected definition, wrong identity, non-terminal recording run, failed
+     * or missing evidence cannot satisfy completion, while unchanged valid
+     * evidence is reused without rerunning. Resolution and digest-capture
+     * failures are fail-closed (0751 R1 semantics), never a pass.
+     */
+    private async checkFeatureVerificationReceipt(
+        featureId: string,
+        featureContent: string,
+        runDir: string,
+        findings: CheckFeatureFindings[],
+        runPort?: FeatureReceiptRunPort,
+    ): Promise<void> {
+        // Fail-closed verifier-contract evaluation: without the selected
+        // definition there is no identity/command to validate the receipt
+        // against, so completion is denied rather than waved through.
+        let verifier: FeatureVerifierIdentity;
+        let configuredCmd: string;
+        try {
+            const selected = await resolveWorkflowDefinition(process.cwd(), 'feature-verification');
+            verifier = {
+                name: 'feature-verification',
+                sourcePath: selected.path,
+                layer: selected.layer,
+                definitionDigest: selected.digest,
+            };
+            const vars = selected.workflow.vars as { verificationCmd?: unknown } | undefined;
+            configuredCmd =
+                typeof vars?.verificationCmd === 'string' && vars.verificationCmd.length > 0
+                    ? vars.verificationCmd
+                    : DEFAULT_FEATURE_VERIFICATION_CMD;
+        } catch (err) {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_FEATURE_RECEIPT_CONTRACT,
+                severity: 'error',
+                section: '',
+                message: `Feature "${featureId}" completion evidence could not be evaluated against the selected feature-verification definition (fail-closed): ${String(err)}`,
+            });
+            return;
+        }
+
+        // Learnings live under gitignored .spur/context; fold their content into
+        // the digest explicitly so learning appends after a pass go stale.
+        let learningsContent: string | undefined;
+        try {
+            learningsContent = await this.fs.readFile(join(process.cwd(), '.spur', 'context', 'learnings.md'));
+        } catch {
+            learningsContent = undefined;
+        }
+        let currentDigest: string;
+        try {
+            currentDigest = await captureFeatureReceiptDigest(process.cwd(), featureContent, learningsContent);
+        } catch (err) {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_FEATURE_RECEIPT_STALE,
+                severity: 'error',
+                section: '',
+                message:
+                    `Feature "${featureId}" completion evidence could not be captured (fail-closed): ` +
+                    (isProofCaptureError(err) ? err.message : String(err)),
+            });
+            return;
+        }
+        const outcome = await validateFeatureVerificationReceipt(this.fs, {
+            featureId,
+            runDir,
+            currentDigest,
+            currentVerifier: verifier,
+            currentVerificationCmd: configuredCmd,
+            runPort,
+        });
+        if (outcome.ok) return;
+        const codeByReason: Record<FeatureReceiptRejection, FindingCode> = {
+            missing: FINDING_CODES.L4_FEATURE_RECEIPT_MISSING,
+            malformed: FINDING_CODES.L4_FEATURE_RECEIPT_MALFORMED,
+            'cross-feature': FINDING_CODES.L4_FEATURE_RECEIPT_CROSS_FEATURE,
+            divergent: FINDING_CODES.L4_FEATURE_RECEIPT_DIVERGENT,
+            failed: FINDING_CODES.L4_FEATURE_RECEIPT_FAILED,
+            run: FINDING_CODES.L4_FEATURE_RECEIPT_RUN,
+            stale: FINDING_CODES.L4_FEATURE_RECEIPT_STALE,
+            'contract-mismatch': FINDING_CODES.L4_FEATURE_RECEIPT_CONTRACT,
+        };
+        findings.push({
+            layer: 'L4',
+            code: codeByReason[outcome.reason],
+            severity: 'error',
+            section: '',
+            message:
+                `Feature "${featureId}" completion evidence rejected (${outcome.reason}): ${outcome.detail}. ` +
+                'Re-run the feature-scoped verification pass to record current evidence.',
+        });
     }
 
     // ── L3: Children-limit — <=9 children per node (DD-14, corpus-derived) ──

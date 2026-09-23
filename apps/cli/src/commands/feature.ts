@@ -2,12 +2,13 @@ import type { Command } from '@commander-js/extra-typings';
 import {
     FEATURE_LIFECYCLE_PROFILE,
     FeatureCheckService,
+    type FeatureReceiptRunPort,
     FeatureService,
     PlanningWriteService,
     resolvePlanningFolders,
     type WriteResult,
 } from '@gobing-ai/spur-app';
-import { normalizeFeatureStatus } from '@gobing-ai/spur-domain';
+import { ArtifactDao, normalizeFeatureStatus, RunDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
@@ -438,6 +439,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         tasksDirs,
                         // Verdict SSOT is always <cwd>/.spur/run (not docs/.spur/run).
                         runDir: context.fs.resolve('.spur/run'),
+                        // Receipt validation (0915) needs the run store: terminal
+                        // recording-run status, persisted definition identity and
+                        // artifact registration.
+                        receiptRunPort: await makeReceiptRunPort(context),
                         severityOverrides: resolved.severityOverrides,
                         asStatus: options.as,
                         fix: options.fix === true,
@@ -555,6 +560,51 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         });
 }
 
+/**
+ * Read-only run-store ports for receipt validation (0915): the recording run's
+ * terminal status, its persisted definition digest (resume digest wins) and
+ * artifact registration. The project DB opens lazily; a missing row or absent
+ * registration surfaces as a fail-closed `run` rejection at the completion
+ * boundary.
+ */
+async function makeReceiptRunPort(context: CliContext): Promise<FeatureReceiptRunPort> {
+    const db = await context.getDb();
+    const runs = new RunDao(db);
+    const artifacts = new ArtifactDao(db);
+    return {
+        readRunRow: async (runId) => {
+            const row = await runs.traceRowById(runId);
+            if (!row) return undefined;
+            let meta: Record<string, unknown> = {};
+            try {
+                meta = JSON.parse(row.metadata_json) as Record<string, unknown>;
+            } catch {
+                meta = {};
+            }
+            const digest =
+                typeof meta.resumeDefinitionDigest === 'string'
+                    ? meta.resumeDefinitionDigest
+                    : typeof meta.definitionDigest === 'string'
+                      ? meta.definitionDigest
+                      : null;
+            return { status: row.status, definitionDigest: digest, varsJson: null };
+        },
+        hasArtifact: async (runId, path) => {
+            const rows = await artifacts.artifactsByRunId(runId);
+            // Paths may differ by symlink resolution (e.g. /tmp vs /private/tmp), so
+            // fall back to realpath comparison before rejecting a registered artifact.
+            const real = (p: string): string => {
+                try {
+                    return context.fs.realPath?.(p) ?? p;
+                } catch {
+                    return p;
+                }
+            };
+            return rows.some((row) => row.path === path || real(row.path) === real(path));
+        },
+    };
+}
+
 async function makeService(context: CliContext, folderOverride?: string): Promise<FeatureService> {
     // Derive feature/task folders from `.spur/config.yaml` (phase folders) — never hardcode.
     const resolved = await resolvePlanningFolders(context.fs);
@@ -599,6 +649,12 @@ async function assertFeatureCheckPass(
         featuresDir,
         tasksDir,
         tasksDirs,
+        // Receipt validation (0915) reads evidence from the same run dir the CLI
+        // check action uses — the completion boundary must see the same evidence.
+        runDir: context.fs.resolve('.spur/run'),
+        // Same run-store port as the check action: the advance hop's completion
+        // boundary must see terminal recording runs and registered artifacts.
+        receiptRunPort: await makeReceiptRunPort(context),
         // 0418: the hop's target status so the one-active-goal rule sees the
         // post-transition state (same hint the FSM shell guard passes).
         asStatus,

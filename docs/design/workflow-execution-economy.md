@@ -256,3 +256,58 @@ Fix is an ordering or scoping choice — apply dependencies before the digest is
 `computePlanningDigest`) — the smaller of the two options: it needs no new ordering state, keeps the
 ready-checklist `dependencies` row as the drift check, and makes `handoff-finalize` idempotent as a
 consequence rather than a second fix.
+
+## Feature verification receipt — v1 service contract (D63 task 0915)
+
+The feature-scoped verification pass (above) recorded evidence as a bare
+`.spur/run/<fid>-feature-verification.status` string — identity-blind, input-blind,
+writer-blind. Task 0915 replaces it with a bound receipt service; the status file
+remains as coarse routing evidence for the `feature-verification` workflow's internal
+`verify→done` transition, but it no longer satisfies completion by itself.
+
+**Writer.** The `feature-verification` workflow's `onEnter` script
+(`plugins/sp/scripts/feature-verification-steps.ts`) is the single writer: it resolves
+the workflow definition, captures the before digest, records a RUNNING receipt, shells
+the configured command via `splitLaunchCommand` (log appended to
+`.spur/run/<runId>-feature-verification.log`, 4h timeout), captures the after digest and
+completes the receipt atomically (tmp+rename). The CLI `feature verify` verb is removed.
+
+**Artifacts** (written by the receipt service in `packages/app/src/workflow/feature-verification-receipt.ts`,
+schema `feature-verification-receipt/v1`):
+
+| Copy | Path | Role |
+| --- | --- | --- |
+| Run-scoped | `.spur/run/<runId>-feature-verification.json` | evidence bound to the engine run; registered as a run artifact |
+| Feature-latest | `.spur/run/<featureId>-feature-verification.json` | latest pass per feature; superseded by the next `start` |
+| Coarse status | `.spur/run/<runId>-feature-verification.status` | `PASS`/`FAIL` string for the workflow guard |
+
+Receipt fields: `schemaVersion`, `featureId`, `runId`, `workdir` (diagnostic; the
+digest is path-relative), `verifier` (`name`, `sourcePath`, `layer`, `definitionDigest`),
+`verificationCmd`, `status` (`PASS`/`FAIL`/`RUNNING`), `startedAt`, `completedAt`
+(null while `RUNNING`) and `inputDigest` — the proof-input fingerprint (feature
+markdown + git tree of tracked sources, shared `ProofInputFingerprint` engine)
+captured at completion, i.e. the tree *after* the pass; completion re-checks it
+against current inputs. The script additionally captures a before digest around
+the pass and fails it when they disagree, but only the after-side digest is bound
+into the receipt.
+
+**Completion boundary.** `FeatureCheckService.check` validates the feature-latest copy
+when the transition target is `--as done` (plain on-disk `done` reads stay advisory —
+no backfill burden on pre-receipt features). Eight unsuppressible `L4.feature-receipt-*`
+error reasons, checked in order: `missing`, `malformed`, `cross-feature`, `divergent`
+(the two copies disagree), `failed`, `run` (run-store binding broken: run row absent,
+not done, verifier digest mismatch, or receipt not registered as a run artifact —
+skipped when no run port is supplied), `contract-mismatch` (recorded verifier name/
+layer/digest or `verificationCmd` differs from the currently resolved `feature-verification`
+definition — `--cmd` overrides cannot forge a contract), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
+fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop and
+the engine `verifying→done` guard (`feature check --strict --as done`).
+
+**Ordering and replay.** Re-running the pass overwrites both copies (start supersedes
+the feature-latest copy first; complete writes both + the coarse status). Wrapup
+mutations that land after the pass change the tree digest and make the receipt stale,
+forcing re-verification — record/learning writes must complete before the final pass,
+and the digest chain (not call order) enforces it. Unchanged valid evidence is reused
+without re-running the repo-wide pass. The wrapup pipeline gained a `feature-verify`
+state that re-runs the feature check gate (`featureGateCmd`; receipt-enforcing
+under the done-boundary variant) before `done`.

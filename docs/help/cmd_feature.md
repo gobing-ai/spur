@@ -17,6 +17,7 @@
 | `move <id>` | Move a feature to a new parent — cascade-rename the subtree |
 | `refresh` | Rebuild `INDEX.md` + each feature `## Tasks` table from task edges (**docs only** — no status change); scope explicit via `--feature <id>` or `--all` |
 | `check [id]` | Validate feature file(s) through the four-layer check |
+| `verify <id>` | Run the feature-scoped verification pass and record the bound evidence receipt (0915) |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) |
 
 ## spur feature create
@@ -287,6 +288,10 @@ spur feature check [options] [id]
   (linked tasks not done/cancelled).
 
 `--strict` elevates warnings to failures.
+
+Completion evidence: when the target is `done`, `feature check` validates the feature
+verification receipt recorded by the `feature-verification` workflow
+(see `docs/design/workflow-execution-economy.md` — v1 receipt contract).
 
 ## See Also
 

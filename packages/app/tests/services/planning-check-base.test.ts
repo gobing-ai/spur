@@ -8,6 +8,7 @@ import {
     type CorpusSeverity,
     type DocKind,
     FINDING_CODES,
+    isUnsuppressibleFinding,
     type MatrixEntry,
     PlanningCheckService,
     type SectionMatrix,
@@ -767,5 +768,24 @@ describe('PlanningCheckService end-to-end pipeline', () => {
         // means no closed-world warnings, so all findings are errors.
         expect(findings.every((f) => f.severity === 'error')).toBe(true);
         expect(result.missingSections).toEqual(['Solution', 'Testing']);
+    });
+});
+
+// ─── Receipt rejection codes are unsuppressible (0915 re-review P2) ───────
+describe('receipt rejection codes are unsuppressible', () => {
+    const receiptCodes = [
+        FINDING_CODES.L4_FEATURE_RECEIPT_MISSING,
+        FINDING_CODES.L4_FEATURE_RECEIPT_MALFORMED,
+        FINDING_CODES.L4_FEATURE_RECEIPT_CROSS_FEATURE,
+        FINDING_CODES.L4_FEATURE_RECEIPT_DIVERGENT,
+        FINDING_CODES.L4_FEATURE_RECEIPT_FAILED,
+        FINDING_CODES.L4_FEATURE_RECEIPT_RUN,
+        FINDING_CODES.L4_FEATURE_RECEIPT_STALE,
+        FINDING_CODES.L4_FEATURE_RECEIPT_CONTRACT,
+    ] as const;
+    test('every receipt rejection code resists severityOverrides at the done boundary', () => {
+        for (const code of receiptCodes) {
+            expect(isUnsuppressibleFinding(code)).toBe(true);
+        }
     });
 });

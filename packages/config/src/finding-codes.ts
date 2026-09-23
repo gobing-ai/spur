@@ -67,6 +67,15 @@ export const ALL_FINDING_CODES = [
     'L4.scenario-unverified',
     'L4.testing-verdict-stub',
     'L4.evidence-not-recoverable',
+    // Feature verification receipt (D63 task 0915) — completion-boundary rejections.
+    'L4.feature-receipt-missing',
+    'L4.feature-receipt-malformed',
+    'L4.feature-receipt-cross-feature',
+    'L4.feature-receipt-divergent',
+    'L4.feature-receipt-failed',
+    'L4.feature-receipt-run',
+    'L4.feature-receipt-stale',
+    'L4.feature-receipt-contract',
 ] as const;
 
 /** Union type of all valid finding codes. */
@@ -139,4 +148,14 @@ export const FINDING_CODES = {
     L4_SCENARIO_UNVERIFIED: 'L4.scenario-unverified',
     L4_TESTING_VERDICT_STUB: 'L4.testing-verdict-stub',
     L4_EVIDENCE_NOT_RECOVERABLE: 'L4.evidence-not-recoverable',
+    // Feature verification receipt (D63 task 0915): completion-boundary evidence
+    // rejections. One code per fail-closed reason; all are unsuppressible.
+    L4_FEATURE_RECEIPT_MISSING: 'L4.feature-receipt-missing',
+    L4_FEATURE_RECEIPT_MALFORMED: 'L4.feature-receipt-malformed',
+    L4_FEATURE_RECEIPT_CROSS_FEATURE: 'L4.feature-receipt-cross-feature',
+    L4_FEATURE_RECEIPT_DIVERGENT: 'L4.feature-receipt-divergent',
+    L4_FEATURE_RECEIPT_FAILED: 'L4.feature-receipt-failed',
+    L4_FEATURE_RECEIPT_RUN: 'L4.feature-receipt-run',
+    L4_FEATURE_RECEIPT_STALE: 'L4.feature-receipt-stale',
+    L4_FEATURE_RECEIPT_CONTRACT: 'L4.feature-receipt-contract',
 } as const satisfies Record<string, FindingCode>;

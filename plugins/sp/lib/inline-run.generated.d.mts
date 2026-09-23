@@ -4,5 +4,14 @@ export declare const openInlineRunProjectDb: typeof import('@gobing-ai/spur-app'
 export declare const computeProofInputFingerprint: typeof import('@gobing-ai/spur-app').computeProofInputFingerprint;
 export declare const readProofInputContents: typeof import('@gobing-ai/spur-app').readProofInputContents;
 export declare const createWorkflowActionTraceWriter: typeof import('@gobing-ai/spur-app').createWorkflowActionTraceWriter;
+export declare const captureFeatureReceiptDigest: typeof import('@gobing-ai/spur-app').captureFeatureReceiptDigest;
+export declare const completeFeatureVerificationReceipt: typeof import('@gobing-ai/spur-app').completeFeatureVerificationReceipt;
+export declare const DEFAULT_FEATURE_VERIFICATION_CMD: typeof import('@gobing-ai/spur-app').DEFAULT_FEATURE_VERIFICATION_CMD;
+export declare const featureReceiptPaths: typeof import('@gobing-ai/spur-app').featureReceiptPaths;
+export declare const startFeatureVerificationReceipt: typeof import('@gobing-ai/spur-app').startFeatureVerificationReceipt;
+export declare const validateFeatureVerificationReceipt: typeof import('@gobing-ai/spur-app').validateFeatureVerificationReceipt;
+export declare const resolveWorkflowDefinition: typeof import('@gobing-ai/spur-app').resolveWorkflowDefinition;
+export declare const ArtifactDao: typeof import('@gobing-ai/spur-domain').ArtifactDao;
+export declare const RunDao: typeof import('@gobing-ai/spur-domain').RunDao;
 export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;
 export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };

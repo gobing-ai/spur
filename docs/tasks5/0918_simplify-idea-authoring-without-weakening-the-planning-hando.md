@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Simplify idea authoring without weakening the planning handoff
-status: todo
+status: done
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T03:23:38.910Z"
+updated_at: "2026-09-23T17:56:20.806Z"
 feature_id: D63
 priority: P2
 tags:
@@ -31,20 +31,18 @@ The 0912 discovery sample found ten idea-pipeline rows: one DB done, four failed
 
 ### Requirements
 
-- [ ] R1. Use an idea-specific baseline to determine whether consolidating feature-intent and AC authoring removes measurable redundant model work.
-- [ ] R2. Preserve verbatim intake and requirement coverage, feature structural checks, explicit design decisions and the corpus CLI write boundary.
-- [ ] R3. Preserve task dependency ordering, preparation digest validity and the single honest refineall/runall handoff.
-- [ ] R4. Use the established candidate deadline and real-evidence promotion process, with rejection/retirement if parity or benefit is unproven.
+- [x] R1. Use an idea-specific baseline to determine whether consolidating feature-intent and AC authoring removes measurable redundant model work.
+- [x] R2. Preserve verbatim intake and requirement coverage, feature structural checks, explicit design decisions and the corpus CLI write boundary.
+- [x] R3. Preserve task dependency ordering, preparation digest validity and the single honest refineall/runall handoff.
+- [x] R4. Use the established candidate deadline and real-evidence promotion process, with rejection/retirement if parity or benefit is unproven.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The selected change cites an idea-specific baseline and demonstrates its model-hop benefit on comparable real runs, or remains unpromoted. (req: R1)
-- [ ] AC2 — All input clauses reach the intended feature/task scope and invalid AC or unresolved design decisions prevent handoff. (req: R2)
-- [ ] AC3 — Dependency updates preserve valid preparation evidence and exactly one correct next-command handoff is emitted. (req: R3)
-- [ ] AC4 — Parity, failure-path coverage and candidate disposition are recorded with no standing parallel idea workflow. (req: R4)
-- [ ] AC5 — Planning preserves intent through handoff (req: R1)
-
-Feature-level traceability: this task delivers D63 scenario R5; AC1–AC4 give its task-local regression evidence.
+- [x] AC1 — The selected change cites an idea-specific baseline and demonstrates its model-hop benefit on comparable real runs, or remains unpromoted. (req: R1)
+- [x] AC2 — All input clauses reach the intended feature/task scope and invalid AC or unresolved design decisions prevent handoff. (req: R2)
+- [x] AC3 — Dependency updates preserve valid preparation evidence and exactly one correct next-command handoff is emitted. (req: R3)
+- [x] AC4 — Parity, failure-path coverage and candidate disposition are recorded with no standing parallel idea workflow. (req: R4)
+- [x] AC5 — Planning preserves intent through handoff (req: R1)
 
 ### Q&A
 
@@ -68,22 +66,41 @@ Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.tes
 
 ### Plan
 
-- [ ] 1. Recheck current idea graph and 0912/0913 provenance, then collect the idea-specific cohort and publish run IDs, exclusions, stage timing coverage and the eligibility result. (R1)
-- [ ] 2. If eligible, register the one candidate with the derived threshold and deadline before a graph edit; otherwise record the bounded missing-evidence experiment and stop without a speed claim. (R1, R4)
-- [ ] 3. Implement the feature-create AC draft and deterministic validation/repair routing using existing artifacts and Spur corpus writes; keep taste gates, coverage, preparation and handoff unchanged. (R2, R3)
-- [ ] 4. Run route/failure fixtures, installed/source parity and relevant task/plugin/build gates; compare attributable real candidate runs and promote or retire by the deadline. (R1–R4)
+- [x] 1. Rechecked current idea graph (digest e455eab1…) and 0912/0913 provenance; collected the idea-specific cohort (79 rows classified by digest/dry-run/terminal) and published exclusions, stage-timing coverage and the eligibility result in docs/reports/i31/0918-idea-cohort-eligibility.md. (R1)
+- [x] 2. Eligibility floor failed on all three criteria → recorded INSUFFICIENT_EVIDENCE with the bounded missing-evidence experiment; no graph edit, no speed claim. (R1, R4)
+- [x] 3. Collapsed by condition — eligible branch did not fire; graph, artifacts, caps, write boundary and taste gates left untouched. (R2, R3)
+- [x] 4. Collapsed by condition — no candidate to promote or retire; existing definition/coverage suites re-run green; disposition handed to 0921. (R1–R4)
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- Cohort frozen from the main project run store (`.spur/spur.db`): 79 idea-pipeline rows; at the currently selected digest sha256:e455eab1… exactly 1 done row exists and it is synthetic fixture data (epoch≈2s timestamps, canned durations) — 0 real terminal runs (docs/reports/i31/0918-idea-cohort-eligibility.md:11).
+- Eligibility floor (≥5 real terminals, ≥80% mapped action coverage, ≥3 timed new-feature planning runs) FAILS on all three criteria; older digests are not pooled per the refine Q&A (docs/reports/i31/0918-idea-cohort-eligibility.md:29).
+- Disposition: INSUFFICIENT_EVIDENCE — idea-pipeline graph unchanged, no D62 candidate registered, no deadline opened; report published at docs/reports/i31/0918-idea-cohort-eligibility.md with the smallest real-run collection needed to re-evaluate (≥3 real new-feature intents at the current digest with feature-create/ac-generate stage timing + ≥1 further terminal run).
+- Plan steps 3–4 collapsed by their own conditions (eligible branch did not fire); D63 R5 reported as still unverified to 0921.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Idea-specific baseline frozen and published: 79 rows classified by digest/dry-run/terminal (docs/reports/i31/0918-idea-cohort-eligibility.md:14-24); determination recorded — benefit not demonstrable at 0 real terminals; SQL re-run this session confirms 79 rows / 1 synthetic done at e455eab1. R1 does not demand a graph change; it demands the baseline-driven determination, which exists. |
+| R2 | MET | config/workflows/idea-pipeline.yaml absent from git diff 9e874de17~1..9e874de17 (only report + task file); verbatim intake (.spur/run/<runId>-idea-input.md), idea-ac-check/idea-coverage-check, taste gates (idea-eval, feature-check, design-approval) and corpus CLI write boundary all untouched by definition; idea-pipeline-definition.test.ts re-run 41 pass / 0 fail. |
+| R3 | MET | Graph untouched → task dependency ordering, ready-prepare preparation digest flow and the single handoff finalize path unchanged; same suite re-run green; `workflow show idea-pipeline --json` shows the unchanged e455eab1 graph with intact decompose → batch-create → batch-create-run → ready-prepare → handoff-finalize → handoff route. |
+| R4 | MET | Candidate registration is preconditioned on the eligible branch ("For an eligible cohort, register one candidate before changing the graph"); branch did not fire. config/workflow-candidates.json candidates: [] and unmodified by 9e874de17 → no candidate, no deadline; disposition INSUFFICIENT_EVIDENCE recorded (report Decision §, task Solution). The retire/reject path is moot with nothing registered, and the promotion process itself was honored by not bypassing it. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
@@ -96,4 +113,7 @@ Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.tes
 
 - 2026-09-22T02:58:00.918Z todo → blocked (system)
 - 2026-09-23T03:03:04.280Z blocked → todo (system)
+- 2026-09-23T17:43:45.773Z todo → wip (system)
+- 2026-09-23T17:56:20.472Z wip → testing (system)
+- 2026-09-23T17:56:20.806Z testing → done (system)
 

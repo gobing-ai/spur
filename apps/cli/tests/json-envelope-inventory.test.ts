@@ -282,7 +282,8 @@ describe('0699 R1 — no flag-declaring verb exits non-zero without JSON', () =>
         // 66 → 67 (0867: `workflow progress` declares `--json-envelope`),
         // 67 → 68 (0892: `agent usage` declares `--json-envelope`),
         // 68 → 69 (0897: `agent status` declares `--json-envelope`),
-        // 69 → 70 (feature K3: `projects clean` declares `--json-envelope`).
+        // 69 → 70 (feature K3: `projects clean` declares `--json-envelope`),
+        // 71 → 70 (D63 0915 remediation: `feature verify` verb removed).
         expect(advertising.length).toBe(70);
         expect(new Set(advertising.map((b) => `${b.noun} ${b.verb}`)).size).toBe(advertising.length);
     });

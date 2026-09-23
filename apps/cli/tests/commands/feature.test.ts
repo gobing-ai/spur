@@ -19,7 +19,19 @@ let cwd: string;
 beforeAll(async () => {
     cwd = join(import.meta.dir, '..', `.tmp-feature-test-${Date.now()}`);
     await mkdir(join(cwd, 'docs', 'features'), { recursive: true });
-});
+    // Real repos ignore `.spur/` — keeps recorded receipts out of the digest tree.
+    writeFileSync(join(cwd, '.gitignore'), '.spur/\n');
+    // Fixture commits HEAD first so `git read-tree HEAD` resolves for tree-digest paths.
+    const init = Bun.spawnSync(
+        [
+            'sh',
+            '-c',
+            'git init -q && git config user.email t@t && git config user.name t && git add -A && git commit -q -m init',
+        ],
+        { cwd },
+    );
+    if (init.exitCode !== 0) throw new Error(`fixture git init failed: ${init.stderr.toString()}`);
+}, 20000);
 
 afterAll(() => {
     rmSync(cwd, { recursive: true, force: true });

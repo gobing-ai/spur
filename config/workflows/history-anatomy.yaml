@@ -11,7 +11,7 @@
 # would exceed the shell composition threshold and be flagged as an owned-capability candidate.
 #
 # Shape:
-#   start -> resolve-scope -> resolve-paths -> analyze -> cache-probe
+#   start -> resolve-paths -> analyze -> cache-probe
 #            (hit  -> refresh-provenance -> publish -> published)
 #            (miss -> render -> enrich -> structure-gate -> validate -> stamp -> publish)
 #            (structure-gate FAIL -> correct (max 2 total) -> structure-gate; exhausted -> failed)
@@ -28,7 +28,7 @@
 #
 # Vars (all must be declared here — the vars: block is the only safe shape; `spur workflow
 # validate` and the skill-structure test enforce it):
-#   mode      — "daily" (default) | "ad-hoc" (validated in resolve-scope)
+#   mode      — "daily" (default) | "ad-hoc" (validated deterministically by the helper `paths` command)
 #   date      — YYYY-MM-DD for --date (daily); empty for ad-hoc
 #   since     — inclusive ISO lower bound (ad-hoc; also normalizes daily via the DST-aware rule)
 #   until     — inclusive ISO upper bound (ad-hoc)
@@ -39,7 +39,7 @@
 #   focus     — ad-hoc focus string (required in ad-hoc mode, rejected in daily)
 #   recompute — "true" forces the full analyze/render/enrich/validate path (cache disposition
 #               forced-recompute)
-#   output    — explicit report output path; default run directory
+#   output    — explicit report output path; default docs/report/<date>-history-anatomy.md
 #   agent     — executor for the agent.run stages (enrich/validate)
 #   spurBin   — PATH-independent spur invocation (overridden by CLI at run start)
 #   __runId   — run-scoped id for explicit artifact paths (allocated in start)
@@ -93,20 +93,6 @@ states:
             if [ -z "$__runId" ]; then __runId=$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8); fi;
             echo "$__runId" > .spur/run/history-anatomy-run.id
 
-  - id: resolve-scope
-    description: >
-      Dispatch the skill's mode validation (0658 references/modes.md): daily is the default and
-      rejects focus/since/until/output; ad-hoc requires a non-empty focus plus two ordered
-      inclusive bounds and rejects --date/--recompute. Writes the normalized selector artifact.
-    onEnter:
-      - kind: agent.run
-        options:
-          agent: ${vars.agent}
-          input: "Validate the mode arguments per sp:history-anatomy references/modes.md and write the normalized selector to .spur/run/${vars.__runId}-selector.json. mode=${vars.mode} date=${vars.date} since=${vars.since} until=${vars.until} focus=${vars.focus}. Reject conflicting arguments, naming the offending one; a rejection marks the run failed."
-          # Declared Layer-1 role (0538 R2): mode validation is a reviewer-standard judgment.
-          role: reviewer
-          expectFile: .spur/run/${vars.__runId}-selector.json
-          timeoutMs: ${vars.stepTimeoutMs}
 
   - id: resolve-paths
     description: >
@@ -122,6 +108,7 @@ states:
             h=$(superskill script path sp history-anatomy-cache.mjs);
             node "$h" paths --helper "$h" --report-dir "$reportDir" --date "$date"
             --output "$output" --mode "$mode" --since "$since" --until "$until"
+            --focus "$focus" --recompute "$recompute" --run-id "$__runId"
             --out .spur/run/$__runId-paths.txt
 
   - id: analyze
@@ -338,14 +325,8 @@ states:
 
 transitions:
   - from: start
-    to: resolve-scope
-    description: Scope resolved.
-    guard:
-      kind: always
-
-  - from: resolve-scope
     to: resolve-paths
-    description: Mode valid — resolve helper/skill/target paths once.
+    description: Mode/window grammar validated and paths resolved once (deterministic).
     guard:
       kind: always
 

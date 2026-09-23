@@ -20,7 +20,7 @@
  *
  * Run via `bun run build:plugin-lib`; chained ahead of `build:scripts`.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const REPO_ROOT = new URL('../../', import.meta.url).pathname;
@@ -89,7 +89,7 @@ export async function bundleIdeaHandoffLib(outDir: string = OUT_DIR): Promise<{ 
         entrypoints: [join(REPO_ROOT, 'packages/app/src/workflow/idea-handoff-cli.ts')],
         target: 'node',
         format: 'esm',
-        minify: true,
+        minify: { whitespace: true, syntax: true, identifiers: false },
         define: { 'import.meta.main': 'false' },
         root: join(REPO_ROOT, 'packages/app/src/workflow'),
         naming: 'idea-handoff.generated.mjs',
@@ -108,8 +108,11 @@ export async function bundleIdeaHandoffLib(outDir: string = OUT_DIR): Promise<{ 
 /** Bundle only the inline driver's existing application operations and schema assets. */
 export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mjs: string; dmts: string }> {
     // Keep the temporary entry inside the repo so workspace dependencies resolve consistently.
-    const scratch = mkdtempSync(join(REPO_ROOT, '.inline-run-bundle-'));
+    // ponytail: fixed scratch path — the mkdtemp suffix leaked into Bun's minified
+    // identifier assignment and broke the determinism gate; builds are serialized.
+    const scratch = join(REPO_ROOT, '.inline-run-bundle');
     try {
+        mkdirSync(scratch, { recursive: true });
         const entry = join(scratch, 'entry.ts');
         writeFileSync(
             entry,
@@ -118,6 +121,12 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
                 "export { computeProofInputFingerprint, readProofInputContents } from '../packages/app/src/workflow/proof-input-fingerprint';",
                 "export { createWorkflowActionTraceWriter } from '../packages/app/src/workflow/action-trace';",
                 "export { splitLaunchCommand } from '../packages/app/src/workflow/split-launch-command';",
+                // Feature verification receipt (D63 task 0915): the standard script
+                // records/validates receipts and resolves the selected verifier
+                // definition through the same seams in both layouts.
+                "export { captureFeatureReceiptDigest, completeFeatureVerificationReceipt, DEFAULT_FEATURE_VERIFICATION_CMD, featureReceiptPaths, startFeatureVerificationReceipt, validateFeatureVerificationReceipt } from '../packages/app/src/workflow/feature-verification-receipt';",
+                "export { resolveWorkflowDefinition } from '../packages/app/src/workflow/workflow-resolver';",
+                "export { ArtifactDao, RunDao } from '../packages/domain/src/dao';",
                 "export { EMBEDDED_SPUR_SCHEMAS } from '../apps/cli/src/config/embedded-schemas';",
             ].join('\n'),
         );
@@ -125,7 +134,7 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
             entrypoints: [entry],
             target: 'node',
             format: 'esm',
-            minify: true,
+            minify: { whitespace: true, syntax: true, identifiers: false },
             external: ['bun:sqlite'],
             define: { 'import.meta.main': 'false' },
             naming: 'inline-run.generated.mjs',
@@ -147,6 +156,18 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
                     'readProofInputContents',
                     'createWorkflowActionTraceWriter',
                 ].map((name) => `export declare const ${name}: typeof import('@gobing-ai/spur-app').${name};`),
+                ...[
+                    'captureFeatureReceiptDigest',
+                    'completeFeatureVerificationReceipt',
+                    'DEFAULT_FEATURE_VERIFICATION_CMD',
+                    'featureReceiptPaths',
+                    'startFeatureVerificationReceipt',
+                    'validateFeatureVerificationReceipt',
+                    'resolveWorkflowDefinition',
+                ].map((name) => `export declare const ${name}: typeof import('@gobing-ai/spur-app').${name};`),
+                ...['ArtifactDao', 'RunDao'].map(
+                    (name) => `export declare const ${name}: typeof import('@gobing-ai/spur-domain').${name};`,
+                ),
                 'export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;',
                 'export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };',
                 '',

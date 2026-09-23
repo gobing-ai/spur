@@ -2,16 +2,24 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { ArtifactDao, applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { FeatureCheckService } from '../../src/services/feature-check';
 import type { EntityRef } from '../../src/services/planning-write-service';
+import {
+    captureFeatureReceiptDigest,
+    completeFeatureVerificationReceipt,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    featureReceiptPaths,
+    startFeatureVerificationReceipt,
+} from '../../src/workflow/feature-verification-receipt';
 import {
     FEATURE_LIFECYCLE_PROFILE,
     LifecycleAdapter,
     type LifecycleAdapterOptions,
 } from '../../src/workflow/lifecycle-adapter';
+import { resolveWorkflowDefinition } from '../../src/workflow/workflow-resolver';
 
 // The real feature-lifecycle state-machine the adapter drives (repo-root config).
 const WORKFLOW_PATH = resolve(import.meta.dir, '..', '..', '..', '..', 'config', 'workflows', 'feature-lifecycle.yaml');
@@ -22,6 +30,82 @@ const makeRef = (id: string): EntityRef => ({
     filePath: `/features/${id}.md`,
     folder: '/features',
 });
+
+/** Minimal git repo: tracked fixture files give the receipt digest a stable tree. */
+function initGit(root: string): void {
+    const run = (args: string) => {
+        Bun.spawnSync(['sh', '-c', args], { cwd: root });
+    };
+    run('git init -q && git config user.email t@t && git config user.name t');
+    run('git add -A && git commit -qm init');
+}
+
+/**
+ * Mirror the production verification script's recording path (D63 task 0915):
+ * digest the current checked inputs, record RUNNING then the terminal receipt,
+ * and back it with a `done` run row + registered artifact — the same run-store
+ * binding the CLI's receipt port enforces at the completion boundary.
+ */
+async function recordReceipt(
+    fs: FileSystem,
+    root: string,
+    featuresDir: string,
+    fileName: string,
+    featureId: string,
+    verdict: 'PASS' | 'FAIL' = 'PASS',
+): Promise<void> {
+    const raw = readFileSync(join(featuresDir, fileName), 'utf8');
+    const inputDigest = await captureFeatureReceiptDigest(root, raw);
+    const runId = `run-${featureId.toLowerCase()}`;
+    const runDir = join(root, '.spur', 'run');
+    // Mirror the production script: record the verifier exactly as the workflow
+    // resolver selects it in this workdir, or the completion contract check fails.
+    const selected = await resolveWorkflowDefinition(root, 'feature-verification');
+    const running = await startFeatureVerificationReceipt(fs, runDir, {
+        featureId,
+        runId,
+        workdir: root,
+        verifier: {
+            name: 'feature-verification',
+            sourcePath: selected.path,
+            layer: selected.layer,
+            definitionDigest: selected.digest,
+        },
+        verificationCmd: DEFAULT_FEATURE_VERIFICATION_CMD,
+        inputDigest,
+    });
+    await completeFeatureVerificationReceipt(fs, runDir, running, {
+        status: verdict,
+        inputDigest,
+    });
+    // Run-store mirror: the CLI's receipt port refuses a receipt whose run row
+    // is absent or still running, so the fixture records what the engine would.
+    await fs.ensureDir(join(root, '.spur'));
+    const db = await createDbAdapter({ driver: 'bun-sqlite', url: join(root, '.spur', 'spur.db') });
+    await applyCliMigrations(db);
+    const now = new Date().toISOString();
+    // Idempotent: R4 (0872) re-records the receipt after the last tree mutation.
+    await db.run(
+        'INSERT OR REPLACE INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+            runId,
+            'feature-verification',
+            'state-machine',
+            'done',
+            now,
+            now,
+            JSON.stringify({ definitionDigest: selected.digest }),
+            Date.now(),
+            Date.now(),
+        ],
+    );
+    await db.run('DELETE FROM artifacts WHERE run_id = ?', [runId]);
+    await new ArtifactDao(db).record({
+        runId,
+        path: featureReceiptPaths(runDir, featureId, runId).runScoped,
+        kind: 'feature-verification',
+    });
+}
 
 async function makeAdapter(): Promise<{ adapter: LifecycleAdapter; db: DbAdapter }> {
     const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
@@ -208,6 +292,11 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         writeFileSync(join(featuresDir, 'F4_fourth.md'), featureFixtureFile('F4', 'Fourth P0', '9902'));
         writeFileSync(join(tasksDir, '9901_done.md'), taskFixtureFile('9901', 'F2'));
         writeFileSync(join(tasksDir, '9902_done.md'), taskFixtureFile('9902', 'F4'));
+        // Real repos ignore `.spur/` — without it `git add -A` in the digest
+        // capture would pull the receipt itself into the tree (self-referential
+        // instability). Same for the 0872 fixture below.
+        writeFileSync(join(root, '.gitignore'), '.spur/\n');
+        initGit(root);
 
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
@@ -233,11 +322,12 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         if (!hop1.allowed) throw new Error(`expected relieving transition allowed: ${hop1.report}`);
         writeStatus('F2_second.md', 'verifying');
 
-        // Terminal hop: F2 → done — the ADR-119 guard requires the feature-scoped
-        // verification pass to have recorded PASS (task 0872 R4) before the strict
-        // check (`--as done`) runs. Mirror the pass recording it before the hop.
+        // Terminal hop: F2 → done — the done boundary requires CURRENT bound
+        // verification evidence (D63 task 0915): the strict check (`--as done`)
+        // validates a receipt digest-chained to the checked inputs. Mirror the
+        // pass recording it after the last tree mutation, before the hop.
         mkdirSync(join(root, '.spur', 'run'), { recursive: true });
-        writeFileSync(join(root, '.spur', 'run', 'F2-feature-verification.status'), 'PASS\n');
+        await recordReceipt(createNodeFileSystem(), root, featuresDir, 'F2_second.md', 'F2');
 
         const hop2 = await adapter.requestTransition(makeRef('F2'), 'verifying', 'done');
         expect(hop2.allowed, hop2.report ?? 'no report').toBe(true);
@@ -275,6 +365,8 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         mkdirSync(tasksDir, { recursive: true });
         writeFileSync(join(featuresDir, 'F6_sixth.md'), featureFixtureFile('F6', 'Sixth', '9903'));
         writeFileSync(join(tasksDir, '9903_done.md'), taskFixtureFile('9903', 'F6'));
+        writeFileSync(join(root, '.gitignore'), '.spur/\n');
+        initGit(root);
 
         const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
         await applyCliMigrations(db);
@@ -296,16 +388,19 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         expect(missing.allowed).toBe(false);
         if (missing.allowed) throw new Error('expected denial while the pass verdict is missing');
 
-        // 2. A FAIL verdict → denied, even on a strict-clean feature.
+        // 2. A FAIL verdict → denied, even on a strict-clean feature: the receipt
+        // is recorded with verdict FAIL (the coarse `.status` alone no longer
+        // satisfies anything — the receipt is the completion evidence, 0915).
         const runDir = join(root, '.spur', 'run');
         mkdirSync(runDir, { recursive: true });
-        writeFileSync(join(runDir, 'F6-feature-verification.status'), 'FAIL\n');
+        const fs = createNodeFileSystem();
+        await recordReceipt(fs, root, featuresDir, 'F6_sixth.md', 'F6', 'FAIL');
         const failing = await adapter.requestTransition(makeRef('F6'), 'verifying', 'done');
         expect(failing.allowed).toBe(false);
         if (failing.allowed) throw new Error('expected denial while the pass verdict is FAIL');
 
-        // 3. A PASS verdict → the strict check runs and the hop is allowed.
-        writeFileSync(join(runDir, 'F6-feature-verification.status'), 'PASS\n');
+        // 3. A current PASS receipt → the strict check runs and the hop is allowed.
+        await recordReceipt(fs, root, featuresDir, 'F6_sixth.md', 'F6', 'PASS');
         const passing = await adapter.requestTransition(makeRef('F6'), 'verifying', 'done');
         expect(passing.allowed, passing.report ?? 'no report').toBe(true);
         if (!passing.allowed)
