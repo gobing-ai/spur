@@ -309,4 +309,5 @@ mutations that land after the pass change the tree digest and make the receipt s
 forcing re-verification — record/learning writes must complete before the final pass,
 and the digest chain (not call order) enforces it. Unchanged valid evidence is reused
 without re-running the repo-wide pass. The wrapup pipeline gained a `feature-verify`
-state that re-invokes the `feature-verification` workflow before `done`.
+state that re-runs the feature check gate (`featureGateCmd`; receipt-enforcing
+under the done-boundary variant) before `done`.
