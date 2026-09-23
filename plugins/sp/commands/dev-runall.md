@@ -75,7 +75,9 @@ advancing the feature lifecycle). **was: `--next` deliberately omitted; the old 
 **Three orthogonal axes** (do not confuse): `--keep-going`
 = batch failure policy (does a failure halt the batch or skip dependents?);
 `--continue` = resume from
-checkpoint (pick up an interrupted batch); `--next`
+checkpoint against the batch's original frozen identity — persisted plan membership, worktree
+marker, identity-filtered checkpoints as hints (execution-batch.md § Batch continuation, task
+0919); `--next`
 = chain each task to terminal status + batch-once wrap. See `dev-operations.md` § runall for the
 full distinction.
 

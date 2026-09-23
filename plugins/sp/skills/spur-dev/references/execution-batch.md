@@ -409,7 +409,9 @@ not mutate the corpus (the pipeline's `record` step already wrote per-task resul
 **Next:** <one-line action — pick up halted run / resolve 0099 / all green, feature H1 complete>
 ```
 
-The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`.
+The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`,
+plus the resume-only `recheck` (stale/mismatched evidence — pipeline re-run) and `not-admitted`
+(post-freeze selector match, never executed — task 0919 BC-1/BC-2).
 The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
@@ -958,18 +960,63 @@ Parallel fan-out and any subagent dispatch obey the four disciplines owned by
 - **Per-role model selection** — the cheapest model that fits each role (`--agent` pins the executor; the discipline picks the model per role).
 - **Never pre-judge the reviewer** — verify/review subagents receive artifact + contract only; no pre-rated severity, no "do not flag X".
 
-## Checkpoint read on batch resume
+## Batch continuation (`--continue`) — identity binding + checkpoint reconciliation (task 0919)
 
-When resuming an interrupted batch run, read the latest checkpoint from
-`.spur/memory/sessions/` before re-launching:
+`--continue` resumes an interrupted batch against the batch's **original identity** — never
+whatever a fresh selector resolution or a newer unrelated checkpoint would suggest.
 
-```bash
-ls -t .spur/memory/sessions/*.md 2>/dev/null | head -1
-```
+### BC-1 — Re-bind the original frozen identity (R1; AC1/AC5)
 
-The checkpoint's YAML frontmatter contains `session_id`, `workflow`, `task_wbs` or `feature_id`,
-`phase`, `last_gate`, `timestamp`, and `next_action`. Surface `next_action` to the operator
-before resuming. The batch driver reads the checkpoint to determine which task was last
-attempted and whether it reached a terminal state. Checkpoints are working memory — the task
-files and the frozen task set are the authoritative state. See
-[cross-cutting.md](cross-cutting.md) § "Session Checkpoint Convention" for the full format.
+Resume identity comes from persisted batch artifacts, in priority order:
+
+1. **WT-3 marker** (worktree batches): the marker's `command` + `selector` and worktree
+   name/branch re-derive the original launch (the WT-6 fallback already resolves this way).
+2. **Persisted batch report** (`.spur/run/worktree-<marker-id>-batch-report.md`, or the
+   invoking-tree Step 5 report of a non-worktree batch): its `Plan:` row IS the frozen ordered
+   membership — the resumed loop iterates exactly those WBS rows.
+
+Re-running the selector is a **validation, not a re-definition**: tasks that newly match the
+selector but are absent from the frozen plan are reported `not-admitted` and never executed —
+freshly listed tasks do not join a resumed batch implicitly. A frozen task whose dependencies
+changed after freeze may invalidate its admission: report `blocked (admission invalidated —
+re-plan required)` and stop for operator decision. The authorized frozen set is never silently
+rewritten (Design).
+
+### BC-2 — Checkpoints are hints (R2; AC2)
+
+Do **not** pick the resume point by mtime alone: `ls -t … | head -1` over `.spur/memory/sessions/`
+is identity-blind, so an unrelated later session (different feature or task) must not become
+authoritative. Select candidate checkpoints by identity first, newest first within the match:
+
+- frontmatter `workflow` is `task-pipeline` (or the batch's own workflow), and
+- `feature_id` equals the batch's feature selector, or `task_wbs` is a member of the frozen plan.
+
+Checkpoints matching neither rule are ignored regardless of recency. A matched checkpoint only
+**hints** where the loop left off (`phase`, `next_action` — surface them to the operator); the
+driver then reconciles against authoritative state before skipping or repeating any task:
+
+- **Skip** requires ALL of: task file status `done` AND a persisted PASS verdict artifact
+  (`.spur/run/<wbs>-verdict.json`, or the worktree-persisted
+  `.spur/run/worktree-<marker-id>-verdicts/<wbs>-verdict.json`) consistent with the task's
+current metadata. Anything less is not a valid skip.
+- **Stale or mismatched evidence** — checkpoint claims done but the verdict artifact is missing,
+  the task file moved backwards, or the recorded `source_commit`/`digest` no longer matches —
+  yields outcome `recheck`: re-run that task's pipeline. When reconciliation cannot proceed
+  safely (lost worktree, unresolvable marker), report `blocked` with the reason. Never treat an
+  unverified claim as done.
+
+### BC-3 — Ordering, write ownership, terminal mix, evidence (R3/R4; AC3/AC4)
+
+Sequential dependency-correct execution remains the default; opt-in `--mode parallel` keeps the
+existing proven-independence requirements with one writer per tree (Step 3). Mixed terminal
+results resume under the unchanged failure policy (Step 4). The Step 5 report keeps per-task
+outcomes distinct — `done | failed | blocked | skipped | not-attempted` plus the resume-only
+`recheck` and `not-admitted` — and the batch verdict stays `halted`/`aborted`: a resumed,
+partially-complete batch is never reported `clean`. Worktree evidence survives cleanup via the
+invoking-tree persistence in Step 5 (task 0720 R3); a persistence failure routes to **WT-5**
+(retain tree + branch), so partial outcomes are never silently lost and never read as a completed
+batch.
+
+See [cross-cutting.md](cross-cutting.md) § "Session Checkpoint Convention" for the canonical
+frontmatter fields and the per-task owner-mismatch semantics
+(`packages/app/src/workflow/checkpoint-contract.ts`).

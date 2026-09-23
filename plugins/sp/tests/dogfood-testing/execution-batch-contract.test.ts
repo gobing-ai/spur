@@ -102,3 +102,31 @@ describe('execution-batch spec contract (task 0924)', () => {
         expect(SPEC).toContain('spur projects remove <worktree-path>');
     });
 });
+
+describe('execution-batch spec contract (task 0919 — batch continuation reconciliation)', () => {
+    test('BC — no identity-blind newest-checkpoint read remains', () => {
+        expect(SPEC).toContain('Batch continuation (`--continue`)');
+        expect(SPEC).not.toContain('ls -t .spur/memory/sessions/*.md 2>/dev/null | head -1');
+        expect(SPEC).toContain('identity-blind');
+        expect(SPEC).toContain('ignored regardless of recency');
+    });
+
+    test('BC-1 — frozen identity binds membership; post-freeze additions never join', () => {
+        expect(SPEC).toContain('validation, not a re-definition');
+        expect(SPEC).toContain('`not-admitted`');
+        expect(SPEC).toContain('never silently\nrewritten');
+    });
+
+    test('BC-2 — checkpoints are hints; skip requires reconciled evidence; stale rechecks', () => {
+        expect(SPEC).toContain('Checkpoints are hints');
+        expect(SPEC).toContain('Anything less is not a valid skip.');
+        expect(SPEC).toContain('`recheck`');
+        expect(SPEC).toContain('Never treat an\n  unverified claim as done.');
+    });
+
+    test('BC-3 — resumed partial batch is never reported clean; evidence survives cleanup', () => {
+        expect(SPEC).toContain('is never reported `clean`');
+        expect(SPEC).toContain('task 0720 R3');
+        expect(SPEC).toContain('routes to **WT-5**');
+    });
+});
