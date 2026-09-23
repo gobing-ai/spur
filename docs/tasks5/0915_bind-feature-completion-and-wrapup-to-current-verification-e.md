@@ -4,7 +4,7 @@ name: Bind feature completion and wrapup to current verification evidence
 status: todo
 template: standard
 created_at: 2026-09-22T02:56:46.299Z
-updated_at: "2026-09-23T03:24:02.177Z"
+updated_at: "2026-09-23T03:50:45.499Z"
 feature_id: D63
 priority: P2
 tags:
@@ -69,7 +69,7 @@ Tests: packages/app/tests/workflow for input/identity/supersession/drift validat
 
 ### Plan
 
-- [ ] 1. Rebase the clean 0915 worktree onto current main; trace every receipt/status reader and wrapup mutation, then record the v1 private contract in the owning design satellite. (R1)
+- [ ] 1. Create a fresh worktree off current main; trace every receipt/status reader and wrapup mutation, then record the v1 private contract in the owning design satellite. (R1)
 - [ ] 2. Implement the shared input digest and receipt validator using existing fingerprint, resolver, run snapshot and artifact services; integrate source and bundled script paths. (R1, R4)
 - [ ] 3. Wire verifier, lifecycle and wrapup ordering; make same-run learning/metrics writes replay-safe and keep partial-feature wrapup task-local. (R2, R3)
 - [ ] 4. Exercise a harmless real workflow/CLI run plus wrong identity, stale/rework/dirty-input, command override, mid-check drift, failed write and replay cases. Run task-local, plugin standalone/parity, build and affected workflow checks; leave the feature-wide gate for the settled feature boundary. (R1–R4)
@@ -90,6 +90,6 @@ Tests: packages/app/tests/workflow for input/identity/supersession/drift validat
 
 - D63 R2; docs/plans/2026-09-21-next-generation-spur-workflows.md; docs/design/workflow-execution-economy.md (ADR-119).
 - Existing seams: config/workflows/feature-verification.yaml; config/workflows/feature-lifecycle.yaml; config/workflows/wrapup-pipeline.yaml; packages/app/src/workflow/proof-input-fingerprint.ts; packages/app/src/services/inline-run-setup.ts; scripts/commands/bundle-plugin-lib.ts; plugins/sp/scripts/wrapup-steps.ts.
-- Current worktree: /Users/robin/xprojects/spur-new-0915 is clean but based on 676a405b; the coding agent must rebase onto the planning commit before work. No other wip task or worktree was found at refinement.
+- Worktree /Users/robin/xprojects/spur-new-0915 and branch feat/0915-current-feature-evidence were removed on 2026-09-22 (empty: zero commits, nothing to merge). Implement on a fresh worktree off current main at task start.
 
 ### History
