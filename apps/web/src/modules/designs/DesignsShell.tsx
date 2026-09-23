@@ -140,7 +140,10 @@ export default function DesignsShell() {
     return (
         <div className="relative h-full w-full p-4 overflow-hidden" data-designs-shell>
             {/* Central Workspace Container — matches FeaturesShell layout */}
-            <div className="flex flex-col h-full w-full max-w-[1600px] mx-auto gap-3" data-designs-workspace>
+            <div
+                className="flex flex-col h-full w-full max-w-full 3xl:max-w-[1200px] 4xl:max-w-[1600px] mx-auto gap-3"
+                data-designs-workspace
+            >
                 {/* Module Header */}
                 <header className="flex flex-wrap items-center justify-between gap-4 border-b border-spur-border pb-3 shrink-0">
                     <div className="flex items-center gap-3">
@@ -206,15 +209,18 @@ export default function DesignsShell() {
                     </div>
                 </header>
 
-                {/* Body Area — 3-zone adaptive layout fitting laptop and desktop screens */}
-                <div className="flex-1 min-h-0 flex items-stretch gap-3 overflow-hidden" ref={bodyAreaRef}>
+                {/* Body Area — 3-zone adaptive layout on laptop (<3xl), floating outside on larger screens (3xl+) */}
+                <div
+                    className="flex-1 min-h-0 flex items-stretch gap-3 overflow-hidden 3xl:relative 3xl:block 3xl:overflow-visible"
+                    ref={bodyAreaRef}
+                >
                     {/* Left Dock: Design Files List */}
                     <div
                         id="design-files-dock"
                         hidden={!isListOpen}
                         className={`${
-                            isListOpen ? 'w-64 lg:w-72 flex' : 'hidden'
-                        } shrink-0 flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xs`}
+                            isListOpen ? 'flex' : 'hidden'
+                        } w-64 lg:w-72 shrink-0 flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xs 3xl:absolute 3xl:right-[calc(100%_+_12px)] 3xl:top-0 3xl:bottom-0 3xl:z-20 3xl:w-72 4xl:w-80 3xl:shadow-xl`}
                         data-testid="design-files-dock"
                     >
                         <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
@@ -238,9 +244,9 @@ export default function DesignsShell() {
                         </div>
                     </div>
 
-                    {/* Central Workspace Main Panel — adapts width dynamically via flex-1 */}
+                    {/* Central Workspace Main Panel — adapts width dynamically via flex-1 on laptop, w-full matching header on 3xl+ */}
                     <div
-                        className="flex-1 min-w-0 h-full overflow-hidden rounded-lg border border-spur-border bg-base-100 relative"
+                        className="flex-1 min-w-0 h-full overflow-hidden rounded-lg border border-spur-border bg-base-100 relative 3xl:w-full 3xl:flex-none"
                         data-testid="design-workspace"
                     >
                         <div className="w-full h-full overflow-y-auto" ref={mainContentScrollRef}>

@@ -248,23 +248,28 @@ describe('DesignsShell layout and interactions', () => {
             expect(getByTestId('design-workspace')).toBeDefined();
         });
 
-        // Left dock is docked with responsive width
+        // Left dock is docked with responsive width on laptop, floating outside on large screens
         const leftDock = getByTestId('design-files-dock');
         expect(leftDock.className).toContain('w-64');
+        expect(leftDock.className).toContain('3xl:absolute');
+        expect(leftDock.className).toContain('3xl:right-[calc(100%_+_12px)]');
 
-        // Main panel dynamically takes flex-1 to adapt to screen width
+        // Main panel dynamically takes flex-1 to adapt to laptop screen width, w-full on large screens
         const workspace = getByTestId('design-workspace');
         expect(workspace.className).toContain('flex-1');
+        expect(workspace.className).toContain('3xl:w-full');
 
         // Main panel renders content
         await waitFor(() => {
             expect(getByText('Tokens')).toBeDefined();
         });
 
-        // Right TOC dock is AUTOMATICALLY present when document is selected with responsive width
+        // Right TOC dock is AUTOMATICALLY present when document is selected with responsive width on laptop, floating on large screens
         const rightTocDock = getByTestId('design-toc-dock');
         expect(rightTocDock).toBeDefined();
         expect(rightTocDock.className).toContain('w-64');
+        expect(rightTocDock.className).toContain('3xl:absolute');
+        expect(rightTocDock.className).toContain('3xl:left-[calc(100%_+_12px)]');
     });
 
     test('toggles right TOC dock when header button or close button is clicked', async () => {

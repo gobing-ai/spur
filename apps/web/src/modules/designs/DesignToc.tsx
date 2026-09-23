@@ -119,7 +119,7 @@ export default function DesignToc({ markdown, scrollContainerRef, onClose }: Des
         <aside
             id="design-toc-dock"
             aria-label="Table of Contents"
-            className="w-64 lg:w-72 shrink-0 rounded-lg border border-spur-border bg-base-200 shadow-xs flex flex-col overflow-hidden"
+            className="w-64 lg:w-72 shrink-0 rounded-lg border border-spur-border bg-base-200 shadow-xs flex flex-col overflow-hidden 3xl:absolute 3xl:top-0 3xl:bottom-0 3xl:left-[calc(100%_+_12px)] 3xl:z-20 3xl:w-72 4xl:w-80 3xl:shadow-xl"
             data-testid="design-toc-dock"
         >
             <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
