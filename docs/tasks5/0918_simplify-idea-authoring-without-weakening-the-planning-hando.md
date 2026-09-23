@@ -4,7 +4,7 @@ name: Simplify idea authoring without weakening the planning handoff
 status: todo
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T03:03:04.280Z"
+updated_at: "2026-09-23T03:23:38.910Z"
 feature_id: D63
 priority: P2
 tags:
@@ -20,11 +20,14 @@ dependencies: ["0914"]
 
 ### Background
 
-idea-pipeline has separate feature-intent and AC model authoring as well as design, decomposition and ready preparation. The safe candidate is adjacent authoring consolidation, not removal of human design decisions or evidence-bound handoff. Covers D63 R5. Its prerequisite is the completed installed-execution boundary in 0914; it needs an idea-specific baseline and the existing D62 promotion process, independent of 0917's task-pipeline observation window.
+idea-pipeline.yaml currently runs separate planner calls for discovery, feature creation/intent, and AC authoring. The feature-create state creates or selects the feature and writes Goal/Scope through Spur; ac-generate writes AC through Spur, then deterministic AC and requirement-coverage checks run. The candidate is to author an AC draft in the feature-create call and retain the existing AC repair call only when checks fail. This preserves the idea-evaluation and design-approval taste gates, task decomposition, ready preparation and handoff. It delivers D63 R5 and depends on completed 0914 for installed inline execution.
 
-Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md. W05 is the planning cross-reference. Refine against current source and measure before activation.
+The 0912 discovery sample found ten idea-pipeline rows: one DB done, four failed and five running/stale. A fresh source-local trace on 2026-09-22 found 79 idea rows across definition versions, but only one terminal done row at the currently selected digest sha256:e455eab1c6cfd3c85b1acf284000bb9f1f24b6051719d404b5797a4363d7360c. Older digests are not a comparable current baseline. This is insufficient evidence for a speed claim or immediate graph promotion. This task first obtains an idea-specific, attributable cohort under 0913's evidence rules; it may finish with a no-change/insufficient-evidence decision. The existing D62 promotion tool and registry own any candidate. Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md.
 
-Rubric: E8 D1 L2 C1 R1 = 13. One vertical deliverable and rollback boundary; keep coupled implementation and verification together. Split only if refinement reveals a separate outcome or exceeds the size limit.
+**Refine corrections (2026-09-22)**
+- The previous Design only said to prefer coherent authoring → the current graph has a model-bearing feature-create state followed by a separate AC authoring state → the candidate stage/artifact and failure route are fixed below.
+- The previous task implied an eligible idea optimization might already exist → 0912 has only one done idea row and no comparable candidate evidence → graph activation is conditional on the explicit cohort gate below.
+- The whole-history idea count looked large enough to sample → the current selected graph has only one terminal done row → do not pool older digests to clear the candidate floor.
 
 ### Requirements
 
@@ -49,16 +52,26 @@ Feature-level traceability: this task delivers D63 scenario R5; AC1–AC4 give i
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-23T03:20:55.189Z
+
+Ready decision: the candidate is the feature-create AC draft plus deterministic validation and repair-only ac-generate path. The 0912 sample does not authorize activation. The coding agent first applies the fixed eligibility rule; if it fails, the task produces an explicit no-change disposition rather than inventing a benchmark. Any eligible candidate uses the existing D62 registry and a named deadline; 0917 is not a prerequisite.
+
 ### Design
 
-Prefer one coherent authoring artifact containing feature intent and AC, then existing deterministic CLI mutations and validation. Keep semantic design judgment and operator decisions distinct. Do not turn ready preparation into a blind shape check or fuse it across mutations that invalidate its digest. The proposal does not remove freshness policies across independent planning roles; any changed session boundary must be measured and justified within the candidate.
+Candidate only; no unconditional YAML edit. The current owner is config/workflows/idea-pipeline.yaml, with existing .spur/run/<runId>-idea-input.md, -idea-eval-report.md and -idea-ac-content.md artifacts. The feature-create planner call must continue creating/selecting a feature, writing feature id and Goal/Scope bodies, and may additionally write the existing -idea-ac-content.md as one coherent intent/AC draft. A deterministic AC-validation state persists that draft through spur feature update, runs the existing idea-ac-check and idea-coverage-check once, and routes PASS through the same feature-check/design/decompose decisions. Missing/empty/invalid draft routes to the existing ac-generate planner repair call; its capped retry path returns to the same validation state. The implementation may rename states to keep the graph legible but must preserve the existing artifact names, three-attempt cap, CLI write boundary and manual taste decisions. No new production YAML, public CLI surface, skill or duplicate validator.
+
+First freeze an idea-specific source/installed cohort with workflow digest, execution mode, task/change class, terminal identity and mapped action durations. Eligibility to edit the graph is at least five real terminal idea runs, at least 80% mapped action coverage, and at least three successful new-feature planning runs whose feature-create and AC stages are timed separately. Reconcile stale rows; do not count them as terminals. If this floor is absent, record INSUFFICIENT_EVIDENCE, name the smallest real-run collection needed, and leave the graph unchanged. This is an accepted task outcome, not a delivered speed claim; report D63 R5 as still unverified to 0921 rather than closing it by assumption.
+
+For an eligible cohort, register one candidate before changing the graph. Primary benefit: one fewer planner agent.run on a first-pass successful path. Freeze a net elapsed improvement threshold equal to at least half the baseline median AC-authoring stage duration, plus no loss of requirement coverage, no invalid AC handoff, no higher first-pass failure rate and no new taste-gate bypass. Name a calendar deadline within 14 days of candidate creation and resolve by that date. Replay proves route parity; comparable real candidate runs prove or disprove elapsed benefit. Unknown timing, tokens or cost remain unknown, never zero. Retire on insufficient evidence or a failed reliability floor. Project overrides remain untouched.
+
+Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.test.ts and plugins/sp/tests/idea-coverage-check.test.ts; exercise omitted inventory items, invalid AC, existing-feature selection, rejected idea/design, dependency mutation and preparation digest. Update the dev-idea/dev-plan wrappers and owning spur-dev guidance only if the promoted behavior changes their contract. 0921 consumes the final candidate disposition; 0917's task-pipeline observation window is independent.
 
 ### Plan
 
-- [ ] 1. Baseline current idea stages and map intake clauses through existing feature/task/handoff evidence.
-- [ ] 2. Define the combined authoring artifact and cheap validation using existing helper ownership.
-- [ ] 3. Exercise ambiguity, rejected design, omitted requirements, invalid AC, dependency mutation and preparation/handoff cases.
-- [ ] 4. Compare authorized real idea runs and use the existing D62 candidate process to promote or retire; update dev-idea/dev-plan and their owning skills.
+- [ ] 1. Recheck current idea graph and 0912/0913 provenance, then collect the idea-specific cohort and publish run IDs, exclusions, stage timing coverage and the eligibility result. (R1)
+- [ ] 2. If eligible, register the one candidate with the derived threshold and deadline before a graph edit; otherwise record the bounded missing-evidence experiment and stop without a speed claim. (R1, R4)
+- [ ] 3. Implement the feature-create AC draft and deterministic validation/repair routing using existing artifacts and Spur corpus writes; keep taste gates, coverage, preparation and handoff unchanged. (R2, R3)
+- [ ] 4. Run route/failure fixtures, installed/source parity and relevant task/plugin/build gates; compare attributable real candidate runs and promote or retire by the deadline. (R1–R4)
 
 ### Solution
 
@@ -74,7 +87,10 @@ Prefer one coherent authoring artifact containing feature intent and AC, then ex
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- D63 R5; 0912 baseline: docs/reports/i31/0912-workflow-baseline.md; 0913 evidence contract; ADR-107 and existing D62 promotion in docs/design/workflow-execution-economy.md.
+- Current graph and validators: config/workflows/idea-pipeline.yaml; plugins/sp/scripts/idea-coverage-check.ts; packages/app/tests/workflow/idea-pipeline-definition.test.ts; plugins/sp/tests/idea-coverage-check.test.ts.
+- Current-digest check on 2026-09-22: `workflow show idea-pipeline.yaml --format todo --json` selected sha256:e455eab1c6cfd3c85b1acf284000bb9f1f24b6051719d404b5797a4363d7360c; `workflow trace --workflow idea-pipeline --last 100 --json` returned 79 rows across digests but only one terminal done row for that digest.
+- At refinement, only the clean /Users/robin/xprojects/spur-new-0915 worktree existed and no task was wip. Use a fresh isolated branch/worktree when implementation begins.
 
 ### History
 
