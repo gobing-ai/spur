@@ -4,7 +4,7 @@ name: Deliver the measured task-pipeline optimization selected by 0912
 status: blocked
 template: standard
 created_at: 2026-09-22T02:56:46.301Z
-updated_at: "2026-09-22T02:57:59.825Z"
+updated_at: "2026-09-23T03:00:12.259Z"
 feature_id: D63
 priority: P2
 tags:
@@ -20,28 +20,26 @@ dependencies: ["0914", "0915", "0912", "0913"]
 
 ### Background
 
-0912 will select a bounded pilot or report insufficient evidence; 0913 supplies trustworthy feedback. Existing D9 fast paths remain subject to ADR-107, and D62 already provides the candidate registry and promotion mechanism. This task consumes those outputs rather than choosing an optimization before measurement. Covers proposed feature R4. Depends on W01, W02, 0912 and 0913.
+0912 is complete. Its selected pilot is adoption of the existing inline action-emission and terminal-close contract, with a frozen 2026-10-06 decision date and a target of at least three real terminal inline runs. It did not select a faster graph: the cohort had no terminal inline DB rows, only one structured engine trace, and no session/cost joins. Task 0913 is also done and supplies the provenance and measured-versus-estimated evidence rules. First check whether the selected observability pilot has already been delivered under D62/P; do not implement it twice.
 
-Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md. Registered under accepted feature D63; W04 is the planning cross-reference. Refine against concurrent changes before implementation.
-
-Rubric: E8 D1 L2 C1 R1 = 13. One vertical deliverable and rollback boundary; keep its coupled implementation and verification together. Split further only if refinement reveals a separate outcome or exceeds the size limit.
+This task owns the D63 decision at the task-pipeline seam: establish a comparable post-adoption cohort, validate the selected observability outcome, and either propose one bounded speed candidate from that evidence or record why none is eligible. An observability improvement is not a measured speed improvement. No task-pipeline graph edit is required when the evidence is insufficient. Preserve ADR-107 activation eligibility, independent verification, role isolation, proof freshness and existing candidate expiry. Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md.
 
 ### Requirements
 
-- [ ] R1. Select exactly one bounded task-pipeline bottleneck from the landed 0912 baseline; freeze the cohort, primary metric, benefit threshold, reliability criteria, owner and candidate deadline before evaluation.
-- [ ] R2. Preserve deterministic admission, current proof, reviewer independence, role pins, availability/capability policy and the safety fallback on unknown evidence.
-- [ ] R3. Use existing promotion tooling to distinguish static projections, replay equivalence and measured real outcomes; retain ADR-107 eligibility requirements.
-- [ ] R4. Promote a candidate only on qualifying evidence or retire it with a named outcome; insufficient evidence must not enable a route or count as a delivered speed improvement.
+- [ ] R1. Check the 0912 inline tracing and terminal-close pilot against its frozen target and 2026-10-06 deadline using attributable real runs; reuse any completed D62/P implementation and report insufficient samples honestly.
+- [ ] R2. Build a comparable task-pipeline cohort after instrumentation, separating definition digest, inline/engine/fleet mode, code/docs work, terminal/attempt identity, and known versus missing cost or duration evidence under 0913's contract.
+- [ ] R3. Select at most one speed candidate only if the cohort identifies a repeatable bottleneck; predeclare its primary benefit metric, threshold, reliability floor, exclusions, sample requirement, owner and deadline before evaluation. Otherwise record INSUFFICIENT_EVIDENCE and the smallest bounded experiment.
+- [ ] R4. Preserve admission, proof, independent review and verification, role/capability policies and full fallback on unknown dependency scope. Promote only on comparable real evidence through the existing process; retire an unproven candidate by its deadline without claiming speed gains.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The candidate or insufficiency decision cites 0912's actual cohort and predeclared metric/threshold/deadline, with 0913 evidence distinctions preserved. (req: R1)
-- [ ] AC2 — Safety-floor and unknown-evidence regression cases pass on every reachable route. (req: R2)
-- [ ] AC3 — Evaluation labels projections and replay separately from real candidate measurements and enforces the existing activation floor. (req: R3)
-- [ ] AC4 — By the deadline the candidate is promoted with evidence or retired; an insufficient sample leaves the safety default and no fabricated speed claim. (req: R4)
-- [ ] AC5 — Task optimization earns promotion (req: R1)
+- [ ] AC1 — The 0912 observability pilot is evaluated against its original real-run target and deadline; missing runs or joins remain unknown, and D62/P work is not duplicated. (req: R1)
+- [ ] AC2 — Every speed comparison names the comparable run cohort, definition/mode/change-class strata and known/total measurement coverage. (req: R2)
+- [ ] AC3 — One eligible candidate has predeclared metrics and an expiry, or an explicit insufficiency verdict names the evidence gap and smallest experiment before any graph edit. (req: R3)
+- [ ] AC4 — Existing safety and proof contracts pass on every reachable route; promotion requires the declared real benefit and reliability floor, while an unproven candidate retires. (req: R4)
+- [ ] AC5 — Task optimization earns promotion (req: R4)
 
-Feature-level traceability: this task delivers D63 scenario R4; AC1–AC4 give its task-local regression evidence.
+Feature-level traceability: this task delivers D63 scenario R4; AC1–AC4 give its task-local regression evidence. An insufficient-evidence outcome satisfies honest task completion but leaves speed adoption unclaimed.
 
 ### Q&A
 
@@ -51,14 +49,16 @@ Feature-level traceability: this task delivers D63 scenario R4; AC1–AC4 give i
 
 ### Design
 
-The exact graph edit is intentionally selected by 0912, not pre-invented here. Candidates may remove redundant preparation/check work or bound contract repair; do not remove independent review/verification. Reuse config/proportional-route-table.ts and the existing promotion registry. If affected-only checks are selected, require conservative dependency closure and a full fallback for unknown/global changes; task-local naming alone is not evidence that a check is narrow. Analytical savings based on recorded durations must not be labeled realized candidate performance.
+The first gate is evidence, not a graph edit. Compare the 0912 frozen baseline with new real terminal inline runs and verify both action rows and run closure; no projection or replay substitutes for the pilot's three-run live claim. Use the 0913 provenance and coverage fields, and inspect whether 0914's installed bridge or later D62/P work already wires the driver. The current pilot improves observability; it creates the denominator needed to judge speed, but it cannot by itself establish lower latency or cost.
+
+If the new cohort exposes a repeated avoidable model or repair cost, define one candidate using the existing route table and promotion registry. Preserve all current completion gates and compare like execution modes, change classes and definition digests. If no candidate clears the evidence floor, finish with a documented no-change decision and a named next measurement; this is a valid task outcome but does not claim the feature's speed aspiration was delivered. Do not add a standing v2 YAML or a new measurement service.
 
 ### Plan
 
-- [ ] 1. Recheck the completed 0912/0913 evidence, current source and ADR-107 eligibility; refine this task before starting implementation.
-- [ ] 2. Register the single candidate using the existing mechanism with deadline and predeclared success/non-regression thresholds.
-- [ ] 3. Implement and test routing equivalence plus missing/stale evidence cases, then observe qualifying authorized real runs.
-- [ ] 4. Record promotion or retirement; update affected command/skill guidance and the measured rollout procedure for later slices.
+- [ ] 1. Recheck 0912/0913 and later D62/P receipts; confirm the selected tracing/closure pilot's implementation and frozen live target by its deadline.
+- [ ] 2. Collect the smallest comparable post-adoption cohort, with run IDs, definitions, modes, change classes, terminal evidence and explicit measurement coverage.
+- [ ] 3. Decide whether one speed candidate is eligible. For an eligible candidate, freeze criteria before changing the graph and run safety/replay checks plus real comparison. For insufficient evidence, record the bounded next experiment and keep the current graph.
+- [ ] 4. Resolve any candidate through the existing promotion or retirement path; update only affected task-pipeline callers, guidance and the outcome record.
 
 ### Solution
 

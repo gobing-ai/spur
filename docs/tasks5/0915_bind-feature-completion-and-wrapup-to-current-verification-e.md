@@ -4,7 +4,7 @@ name: Bind feature completion and wrapup to current verification evidence
 status: todo
 template: standard
 created_at: 2026-09-22T02:56:46.299Z
-updated_at: "2026-09-22T02:57:57.722Z"
+updated_at: "2026-09-23T03:01:29.546Z"
 feature_id: D63
 priority: P2
 tags:
@@ -50,7 +50,13 @@ Feature-level traceability: this task delivers D63 scenario R2; AC1–AC4 give i
 
 ### Design
 
-Replace the unbound PASS consumption with a narrow shared receipt-validation boundary; choose its private schema in the owning design satellite before implementation. Fingerprint relevant tracked and dirty inputs, not HEAD alone. Exclude only explicitly defined generated bookkeeping inputs to avoid self-invalidation; exclusions cannot hide source/spec/doc changes protected by the check. Verification should precede the status-only final transition but follow relevant wrapup edits. A lifecycle metadata write must not create a permanent invalidate/recheck loop. Keep feature-verification as a separate workflow and reuse existing proof primitives rather than adding a cache service.
+The completion boundary consumes a private verification receipt, not the current feature-named PASS text file. Bind the receipt to feature and run identity, selected verifier definition and check command, and a digest of the checked tree and relevant feature/task/doc inputs. Reuse the existing workflow resolver, proof fingerprint, semantic digest, run snapshot and artifact ledger; do not add a public CLI verb, second digest implementation or cache service. The receipt's exact private schema and storage path belong to the workflow contract satellite before implementation.
+
+At verification entry, reuse an unchanged valid receipt; otherwise run the selected verifier and publish a new receipt only after the check and input-stability check pass. Missing, malformed, failed, superseded or cross-feature/run receipts refuse completion. A one-off command override cannot certify the lifecycle's configured check contract. Forward status metadata and generated task/index bookkeeping must be normalized narrowly enough to avoid a completion loop, while source, specifications, authored docs, rework and learning changes still invalidate evidence.
+
+Wrapup must apply relevant doc and learning mutations before final verification. Replay of the same wrapup run must not duplicate learnings or metrics, and a done feature whose inputs changed must re-enter the supported lifecycle before recertification. A partial-feature wrapup remains task-local; it must not trigger an unnecessary feature-wide gate. Keep the existing task proof refusal and canonical transition behavior intact.
+
+Acceptance evidence includes an actual harmless CLI/engine verification run plus focused cases for unchanged reuse, changed input, rework, wrong identity, missing/corrupt/FAIL receipts, mid-check drift and replayed wrapup side effects. Validate source and bundle-only plugin execution, generated script parity, task gates and affected documentation. Implementation files and helper shape are chosen by the coding agent after checking the current 0914 boundary.
 
 ### Plan
 

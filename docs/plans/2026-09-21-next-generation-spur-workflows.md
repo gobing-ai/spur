@@ -4,7 +4,9 @@ Date: 2026-09-21. Status: **architecture and eight-task breakdown approved by Ro
 Approval authorizes this delivery plan and corpus registration; runtime implementation and measured
 activation remain subject to the per-slice prerequisites below.
 Scope: all ten definitions in `config/workflows`, their CLI/runtime seams, and their plugin callers.
-Tasks 0912 and 0913 are being implemented separately; this proposal neither replaces nor modifies them.
+Revision 2026-09-22: 0912 and 0913 are done; 0914 is done. The selected 0912 pilot is inline
+trace emission and terminal closure, not a speed route. D63 scenario R4 and task 0917 now separate
+that observability result from any later speed candidate. This plan does not take over their owners.
 
 ## 1. Recommendation and readiness
 
@@ -14,9 +16,10 @@ machines separate from execution; keep batch coordination in its existing host l
 universal workflow, another engine, or permanent `*-v2.yaml` definitions.
 
 We are ready to plan the entire migration and fix demonstrated integration gaps. We are **not yet
-ready to enable faster routes across the catalogue**. Task 0912 must establish the post-delivery
-baseline and pilot eligibility; 0913 must make the feedback trustworthy. Shipped dispatch/session
-features are enabling mechanisms, not proof that each workflow is faster or safe to resume.
+ready to enable faster routes across the catalogue**. The completed 0912 baseline selected an
+observability pilot but found too little comparable real execution to select a speed change. The
+completed 0913 contract makes future evidence attributable. Shipped dispatch/session features are
+enabling mechanisms, not proof that each workflow is faster or safe to resume.
 
 The new work differs from D8/D9 and D62: those established routing, tracing, contracts, gate placement,
 and promotion mechanisms. This proposal makes their adoption portable, closes remaining result-validity
@@ -69,7 +72,7 @@ remain subprocess capabilities unless a separately designed change makes them av
 | `task-lifecycle` | Retain as status FSM | Preserve canonical statuses and guarded transitions. Do not restore the unsafe one-edge-per-pair proportional pilot | W02, W03 |
 | `feature-lifecycle` | Retain as status FSM | Require current verification evidence at completion; rework and changed inputs invalidate it | W02 |
 | `feature-verification` | Retain as separate reusable verifier | Replace unbound PASS consumption with a run/input-bound receipt; run after relevant closure edits and reuse only exact valid evidence | W02 |
-| `task-pipeline` | Retain; first measured execution pilot | Reuse existing route table, coder continuity, fresh review/verify and bounded repair; change only the bottleneck selected by 0912 | W04 |
+| `task-pipeline` | Retain; measure after the selected observability pilot | Validate inline action emission and closure against 0912's live target. Change a speed route only if later comparable runs identify a repeated bottleneck and pass a separate candidate gate | W04 |
 | `idea-pipeline` | Retain; consolidate adjacent authoring only if demonstrated | Candidate: one model produces coherent feature intent + AC, followed by existing deterministic CLI writes/checks. Keep design decision and preparation/handoff boundaries | W05 |
 | `wrapup-pipeline` | Retain; integrate with trustworthy closure | Conditional doc work based on actual changes; idempotent evidence/learning writes; exact post-edit verification ordering. Existing doc-sync/learning model merge stays | W02, W03 |
 | `wayfinder-resolution` | Retain research boundary | Preserve research mutation policy, independent verification and operator decision. Reuse shared proof/recovery helpers, not an implementation profile disguised as research | W03 |
@@ -143,8 +146,10 @@ integration outcome, not a new top-level program.
   missing receipt or failed check cannot satisfy feature completion; unchanged valid evidence can be reused.
 - **R3 — Recovery preserves ownership and side effects:** interruption/race/replay tests preserve
   upstream ownership rules, human decisions and external-request identity without false completion.
-- **R4 — Task optimization earns promotion:** a bounded task-pipeline candidate preserves the safety
-  floor and meets predeclared measured benefit/reliability criteria, or is retired by its deadline.
+- **R4 — Task optimization earns promotion:** the 0912 observability pilot is checked against its
+  own real-run target. A later speed candidate preserves the safety floor and meets predeclared
+  measured benefit/reliability criteria, or is retired by its deadline. Insufficient evidence leaves
+  the graph unchanged and makes no speed claim.
 - **R5 — Planning preserves intent through handoff:** the optimized idea path retains all requested
   scope, valid AC/design and dependency-bound preparation; ambiguity and human decisions remain explicit.
 - **R6 — Batch continuation uses the original authorized set:** unrelated checkpoints, new task-list
@@ -168,18 +173,18 @@ rerunnable migration: do not batch-create it again. Dependencies were applied th
 
 | Slice | Independently reviewable outcome | Depends on | Covers | Estimate |
 | --- | --- | --- | --- | --- |
-| W01 / 0914 | Installed inline execution uses the authoritative application boundary | Design accepted; refine first | R1 | 8h |
-| W02 / 0915 | Feature closure and wrapup consume current verification receipts | Design accepted; refine first | R2 | 8h |
+| W01 / 0914 | Installed inline execution uses the authoritative application boundary | Done; reconcile R1 feature-verdict mapping at W08 | R1 | 8h |
+| W02 / 0915 | Feature closure and wrapup consume current verification receipts | Design ready for coding handoff | R2 | 8h |
 | W03 / 0916 | Canonical workflows declare and test safe interruption/replay behavior | 0914, 0915; reuse 0902/0911 | R3 | 6h |
-| W04 / 0917 | Deliver the single measured task-pipeline pilot | 0914, 0915, 0912, 0913; eligibility and workflow-change decision | R4 | 8h |
-| W05 / 0918 | Simplify idea authoring while preserving the complete planning handoff | 0914, 0917; own baseline and workflow-change decision | R5 | 8h |
+| W04 / 0917 | Validate the 0912 observability pilot; gate any later speed candidate on comparable real runs | 0914, 0915, 0912, 0913; separate pilot and speed decisions | R4 | 8h |
+| W05 / 0918 | Simplify idea authoring while preserving the complete planning handoff | 0914; own baseline and existing D62 promotion process | R5 | 8h |
 | W06 / 0919 | Bind batch continuation to its frozen plan and verified child results | 0914, 0915 | R6 | 6h |
-| W07 / 0920 | Remove model-only argument normalization from history orchestration | 0917; own baseline and workflow-change decision | R7 | 6h |
+| W07 / 0920 | Remove model-only argument normalization from history orchestration | Own baseline and existing D62 promotion process; no W04 dependency | R7 | 6h |
 | W08 / 0921 | Complete catalogue migration and measured promotion/retirement | 0916–0920, 0912, 0913 | R8 | 6h |
 
 Approximate active engineering effort: **56 hours**, excluding the separately owned 0912/0913 work,
 review turnaround, real-run observation windows, upstream fixes and materially expanded scope. These
-are planning estimates, not throughput promises. Re-estimate after 0912 selects the actual pilot.
+are planning estimates, not throughput promises. Re-estimate W04 after its live observation window.
 
 Decomposition rationale: whole scope E56 + D8 + L3 + C2 + R2 = 71; separate installation, completion,
 recovery, execution, planning, coordination, diagnostics and migration acceptance boundaries justify
@@ -188,23 +193,27 @@ every YAML, command, test suite or documentation edit; those travel with their b
 
 ### Sequencing and stop conditions
 
-1. **Now:** finish this proposal; let the other agent finish 0912/0913. W01/W02 can be prepared once
-   the design is accepted because source evidence, not performance inference, motivates them.
-2. **Foundation:** W01/W02, then W03/W06. Independent slices may use separate worktrees; one writer
+1. **Now:** 0912/0913 and W01 are done. Hand W02's feature-evidence design to a coding agent; its
+   correctness premise does not depend on speed measurements.
+2. **Foundation:** Finish W02, then W03/W06. Independent slices may use separate worktrees; one writer
    per tree. Do not create parallel agents merely because the DAG permits it.
-3. **Pilot:** W04 consumes 0912 and 0913. If 0912 says insufficient evidence, retain safety defaults
-   and the candidate's expiry/retirement path. This blocks optimization activation, not portability
-   or correctness fixes. W04 must finish with a valid promoted/retired outcome, not a forced win.
-4. **Expansion:** W05 and W07 each need their own relevant baseline. They may reuse the promotion
-   procedure after W04, including its negative lessons; a failed pilot is not permission to activate
-   other unmeasured routes. W06 is not gated on model-speed gains.
+3. **Pilot:** W04 consumes 0912 and 0913. Check the selected tracing/closure pilot against its
+   frozen 2026-10-06 target of at least three real terminal inline runs; reuse any D62/P delivery.
+   This pilot makes future speed comparisons possible but does not establish one. A later speed
+   candidate needs its own baseline, frozen threshold and expiry. With insufficient evidence,
+   keep the safety graph and record the smallest next experiment.
+4. **Expansion:** W05 and W07 are ready for just-in-time refinement now; their own baselines and the
+   existing D62 promotion process govern activation. Neither needs to wait for W04's task-pipeline
+   observation window. A failed pilot is not permission to activate another unmeasured route. W06
+   is not gated on model-speed gains.
 5. **Closure:** W08 reconciles all ten definitions, every affected caller and remaining candidates.
    Deferred optimizations are explicitly retired/deferred with evidence, not marked implemented.
 
-Task readiness is separate from registration: 0914/0915 are `todo` for refinement; 0916–0921 are
-`blocked` on their recorded prerequisites. The CLI creates populated batch items as `todo` and the
-current lifecycle has no `todo → backlog` edge, so dependent tasks use the supported `blocked` state
-instead of the originally proposed backlog state. A valid task batch is not execution readiness.
+Task readiness is separate from registration: 0914 is done; 0915, 0918 and 0920 are `todo` for
+their coding/refinement handoffs; 0916, 0917, 0919 and 0921 remain `blocked` on recorded prerequisites.
+The CLI creates populated batch items as `todo` and the current lifecycle has no `todo → backlog`
+edge, so dependent tasks use the supported `blocked` state instead of the originally proposed
+backlog state. A valid task batch is not execution readiness.
 
 ## 7. CLI, skills and implementation boundaries
 
@@ -258,8 +267,9 @@ proof of faster execution. Replay fixtures prove routing equivalence; static sta
 duration projections indicate candidates; only comparable real execution demonstrates realized benefit.
 Never shadow-run external writes or corpus mutations against a live project just to obtain a sample.
 
-W04 must use/extend the current promotion tooling to distinguish these evidence classes. Later slices
-reuse it. Any change requiring an experiment exception must have an explicit decision; an exception
+W04 must use the 0912 frozen target for observability and the current promotion tooling for any
+separate graph candidate. Later slices reuse that distinction. Any change requiring an experiment
+exception must have an explicit decision; an exception
 cannot turn missing measurements into PASS. Candidate expiry results in promotion or deletion from the
 candidate set under the existing contract, never a standing alternative production graph.
 
@@ -304,10 +314,15 @@ source, generated plugin/bundled configuration and init defaults aligned within 
 
 Robin accepted the architecture and breakdown with “approved” on 2026-09-21. D63 and tasks 0914–0921
 were registered through the source-local Spur CLI, with task-local AC altitude, feature-scenario links
-and the dependency table above. Ready preparation was skipped explicitly; no model agents or runtime
-workflow refactoring were launched. Tasks 0912/0913 were read, not modified.
+and the dependency table above. At registration, ready preparation was skipped. Since then 0912,
+0913 and 0914 completed independently. The 0912 outcome and 0913 evidence contract are now reflected
+in D63 R4 and 0917; neither an observability pilot nor a replay projection is a speed result.
 
-The next actions are `/sp:dev-refine 0914 --depth ready` and `/sp:dev-refine 0915 --depth ready`.
+The next coding handoff is 0915. 0918 and 0920 can be refined in isolated worktrees without waiting
+for the task-pipeline pilot. Refine 0916/0919 after 0915's current-evidence contract lands; refine
+0917 against observed post-instrumentation runs and the D62/P pilot receipt before any graph edit.
+Before D63 completion, reconcile 0914's feature-check warning: its done-task Testing rows do not
+currently map to D63 R1, so `feature check` cannot treat that scenario as verified.
 After dependencies and evidence premises are satisfied, refine and unblock each later task through
 the normal lifecycle. Do not run the companion registration batch again or launch all eight tasks
 indiscriminately.

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Simplify idea authoring without weakening the planning handoff
-status: blocked
+status: todo
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-22T02:58:00.918Z"
+updated_at: "2026-09-23T03:03:04.280Z"
 feature_id: D63
 priority: P2
 tags:
@@ -13,18 +13,18 @@ tags:
 estimate_hours: 8
 
 ac_altitude: task-local
-dependencies: ["0914", "0917"]
+dependencies: ["0914"]
 ---
 
 ## 0918. Simplify idea authoring without weakening the planning handoff
 
 ### Background
 
-idea-pipeline has separate feature-intent and AC model authoring as well as design, decomposition and ready preparation. The safe candidate is adjacent authoring consolidation, not removal of human design decisions or evidence-bound handoff. Covers proposed feature R5. Depends on W01 and W04's completed promotion procedure; needs an idea-specific baseline.
+idea-pipeline has separate feature-intent and AC model authoring as well as design, decomposition and ready preparation. The safe candidate is adjacent authoring consolidation, not removal of human design decisions or evidence-bound handoff. Covers D63 R5. Its prerequisite is the completed installed-execution boundary in 0914; it needs an idea-specific baseline and the existing D62 promotion process, independent of 0917's task-pipeline observation window.
 
-Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md. Registered under accepted feature D63; W05 is the planning cross-reference. Refine against concurrent changes before implementation.
+Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md. W05 is the planning cross-reference. Refine against current source and measure before activation.
 
-Rubric: E8 D1 L2 C1 R1 = 13. One vertical deliverable and rollback boundary; keep its coupled implementation and verification together. Split further only if refinement reveals a separate outcome or exceeds the size limit.
+Rubric: E8 D1 L2 C1 R1 = 13. One vertical deliverable and rollback boundary; keep coupled implementation and verification together. Split only if refinement reveals a separate outcome or exceeds the size limit.
 
 ### Requirements
 
@@ -58,7 +58,7 @@ Prefer one coherent authoring artifact containing feature intent and AC, then ex
 - [ ] 1. Baseline current idea stages and map intake clauses through existing feature/task/handoff evidence.
 - [ ] 2. Define the combined authoring artifact and cheap validation using existing helper ownership.
 - [ ] 3. Exercise ambiguity, rejected design, omitted requirements, invalid AC, dependency mutation and preparation/handoff cases.
-- [ ] 4. Compare authorized real runs and promote or retire through the W04 method; update dev-idea/dev-plan and their owning skills.
+- [ ] 4. Compare authorized real idea runs and use the existing D62 candidate process to promote or retire; update dev-idea/dev-plan and their owning skills.
 
 ### Solution
 
@@ -79,4 +79,5 @@ Prefer one coherent authoring artifact containing feature intent and AC, then ex
 ### History
 
 - 2026-09-22T02:58:00.918Z todo → blocked (system)
+- 2026-09-23T03:03:04.280Z blocked → todo (system)
 

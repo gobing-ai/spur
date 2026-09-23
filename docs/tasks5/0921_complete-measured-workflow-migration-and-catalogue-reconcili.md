@@ -4,7 +4,7 @@ name: Complete measured workflow migration and catalogue reconciliation
 status: blocked
 template: standard
 created_at: 2026-09-22T02:56:46.303Z
-updated_at: "2026-09-22T02:58:04.179Z"
+updated_at: "2026-09-23T03:04:39.583Z"
 feature_id: D63
 priority: P2
 tags:
@@ -58,7 +58,8 @@ No new production YAML or permanent v2 is expected. Keep nine production definit
 - [ ] 1. Assemble the disposition and source/installed/override conformance matrix from the completed slices.
 - [ ] 2. Resolve outstanding candidate deadlines and run compatibility/rollback exercises without live external side effects.
 - [ ] 3. Apply the smallest justified example classification or relocation with reference/package checks.
-- [ ] 4. Run the final feature-scoped gates, record measured outcomes and explicit deferrals, and synchronize owning documentation through its established process.
+- [ ] 4. Reconcile any feature-check traceability warnings from completed tasks, including 0914's currently unmatched Testing rows for D63 R1; do not count a done task as verified feature evidence without a matching PASS row.
+- [ ] 5. Run the final feature-scoped gates, record measured outcomes and explicit deferrals, and synchronize owning documentation through its established process.
 
 ### Solution
 

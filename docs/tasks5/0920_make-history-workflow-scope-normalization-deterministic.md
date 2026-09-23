@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make history workflow scope normalization deterministic
-status: blocked
+status: todo
 template: standard
 created_at: 2026-09-22T02:56:46.303Z
-updated_at: "2026-09-22T02:58:03.042Z"
+updated_at: "2026-09-23T03:03:04.729Z"
 feature_id: D63
 priority: P2
 tags:
@@ -13,18 +13,18 @@ tags:
 estimate_hours: 6
 
 ac_altitude: task-local
-dependencies: ["0917"]
+dependencies: []
 ---
 
 ## 0920. Make history workflow scope normalization deterministic
 
 ### Background
 
-history-anatomy currently dispatches a model to validate a declared daily/ad-hoc argument grammar. Fresh analysis, semantic cache keys, independent model validation and atomic publication already exist and must remain. Covers proposed feature R7. Depends on W04's promotion procedure and a history-specific baseline.
+history-anatomy currently dispatches a model to validate a declared daily/ad-hoc argument grammar. Fresh analysis, semantic cache keys, independent model validation and atomic publication already exist and must remain. Covers D63 R7. Its deterministic normalization design can be refined independently of 0917's task-pipeline observation window; it needs its own history-specific baseline and the existing D62 promotion process.
 
-Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md. Registered under accepted feature D63; W07 is the planning cross-reference. Refine against concurrent changes before implementation.
+Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md. W07 is the planning cross-reference. Recheck current source and I81 ownership before implementation.
 
-Rubric: E6 D1 L2 C1 R1 = 11. One vertical deliverable and rollback boundary; keep its coupled implementation and verification together. Split further only if refinement reveals a separate outcome or exceeds the size limit.
+Rubric: E6 D1 L2 C1 R1 = 11. One vertical deliverable and rollback boundary; keep coupled implementation and verification together. Split only if refinement reveals a separate outcome or exceeds the size limit.
 
 ### Requirements
 
@@ -79,4 +79,5 @@ Extend history-anatomy-cache or another existing owning helper rather than makin
 ### History
 
 - 2026-09-22T02:58:03.042Z todo → blocked (system)
+- 2026-09-23T03:03:04.729Z blocked → todo (system)
 
