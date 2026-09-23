@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make history workflow scope normalization deterministic
-status: wip
+status: done
 template: standard
 created_at: 2026-09-22T02:56:46.303Z
-updated_at: "2026-09-23T18:07:30.879Z"
+updated_at: "2026-09-23T18:20:07.487Z"
 feature_id: D63
 priority: P2
 tags:
@@ -32,10 +32,10 @@ Read-only source-local trace inspection on 2026-09-22 found ten terminal runs fo
 
 ### Requirements
 
-- [ ] R1. Move daily/ad-hoc argument validation into the existing `history-anatomy-cache` paths command; preserve the mode, date/window and fail-loud grammar from references/modes.md, the executing helper's output-target default, and one consistent run-scoped selector observation artifact.
-- [ ] R2. Keep fresh deterministic analysis before the semantic cache probe and retain independent validation, bounded correction and atomic publication.
-- [ ] R3. Preserve the configured executor choice and the declared reviewer role/capability policy for enrichment, validation and correction; remove only the model-only scope dispatch.
-- [ ] R4. Evaluate the removed hop against current-definition real-run evidence through the existing candidate process; label unknown token/cost and historical report compatibility honestly.
+- [x] R1. Move daily/ad-hoc argument validation into the existing `history-anatomy-cache` paths command; preserve the mode, date/window and fail-loud grammar from references/modes.md, the executing helper's output-target default, and one consistent run-scoped selector observation artifact.
+- [x] R2. Keep fresh deterministic analysis before the semantic cache probe and retain independent validation, bounded correction and atomic publication.
+- [x] R3. Preserve the configured executor choice and the declared reviewer role/capability policy for enrichment, validation and correction; remove only the model-only scope dispatch.
+- [x] R4. Evaluate the removed hop against current-definition real-run evidence through the existing candidate process; label unknown token/cost and historical report compatibility honestly.
 
 ### Acceptance Criteria
 
@@ -84,15 +84,27 @@ Tests live in plugins/sp/tests/history-anatomy-cache.test.ts and the existing wo
 
 ### Testing
 
-Focused suites (run inside owning workspaces):
-- plugins/sp: `bun test tests/history-anatomy-cache.test.ts tests/feature-verification-scope.test.ts` → 83 pass / 0 fail (255→284 expect calls; new 0920 grammar describe).
-- scripts: `bun test scripts/commands/pipeline-budgets.test.ts packages/app/tests/workflow/composition-baseline.test.ts` → 20/0; `bun test scripts/commands/workflow-promotion.test.ts scripts/commands/real-run-cost.test.ts packages/app/tests/workflow/wrapup-pipeline.test.ts` → 60/0 (promotion check accepts the new candidate; budgets recount consistent).
-- `bun run plugin-smoke` PASS (standalone twin installs clean); .mjs twin regenerated via `superskill script convert sp history-anatomy-cache.ts`.
-- `bunx biome check` on both touched TS files clean; `workflow validate config/workflows/history-anatomy.yaml` → valid; `promotion check` → PASS (1 candidate, no parallel definitions).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/scripts/history-anatomy-cache.ts:623-684` — `validateSelector` owns the full per-mode grammar: daily rejects focus/since/until/output naming each flag (:654-661) and validates a real YYYY-MM-DD via `isRealDate` (:612-620, leap/century-safe); ad-hoc requires non-empty focus (:648) + two parseable ordered inclusive instants (:649-668) and rejects date / recompute=true (:645-646); unknown mode and bad recompute fail by name (:634-643). `paths` CLI case validates before writing (:1013-1041): invalid input exits 1 with every attributable error on stderr and no env file; success writes the env file plus `.spur/run/<runId>-selector.json` v1 (mode/date/focus/since/until/timezone, :1044-1063). YAML bridge passes --focus/--recompute/--run-id (`config/workflows/history-anatomy.yaml:108-113`). modes.md grammar preserved + output-target corrected to docs/report/<date>-history-anatomy.md (`plugins/sp/skills/history-anatomy/references/modes.md:29-45`) + execution-method note (:6-8). Tests: `plugins/sp/tests/history-anatomy-cache.test.ts:1319-1483` — grammar, DST-real-date, every forbidden combination, ordering/parse failures, no-paths-file-on-failure, selector-on-success; suite re-run: 83 pass / 0 fail. |
+| R2 | MET | Diff is hunk-limited (git show audit): only the resolve-scope state deleted, resolve-paths command +3 flags, start edge merged. analyze still precedes cache-probe (`config/workflows/history-anatomy.yaml:117-137` -> `:139-153`; ADR-079 fresh-digest rule in header); cache-probe, validate, correct, stamp, publish states and their transitions byte-identical; bounds math unchanged (`dayBounds`/`zonedDayStart` :525-549). |
+| R3 | MET | Enrich (`config/workflows/history-anatomy.yaml:173-179`), validate (:210-216), correct (:265-271) each retain `agent: ${vars.agent}` (executor choice; config override still injected at workflow-service.ts:765-775 seam), `role: reviewer`, `expectFile`, `timeoutMs`; the independent-validation and bounded-correction (cap 2, shared counter) sequencing untouched; only the model-only resolve-scope dispatch removed. |
+| R4 | MET | Candidate `history-anatomy-scope-inline` (`config/workflow-candidates.json:6-31`): createdAt 2026-09-23, deadline 2026-10-07 = exactly +14 days (<= 14-day rule); 11 real terminal current-digest replay inputs — all 11 runIds verified read-only in /Users/robin/xprojects/spur-new/.spur/spur.db: exist, workflow_name=history-anatomy, status 4 done / 7 failed, definitionDigest sha256:2e3030ff…28eb (matches the claimed recount cohort); projected agent.run 3 -> 2 with the 3-state canonical note; >=25s stage floor vs the 51,452ms median on >=5 comparable runs at >=80% mapped coverage; token/cost explicitly labeled unknown in the rationale; `promotion check` PASS. Realized comparison is deadline-bound, owned by `promotion evaluate`, consumed by 0921. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
@@ -106,4 +118,6 @@ Focused suites (run inside owning workspaces):
 - 2026-09-22T02:58:03.042Z todo → blocked (system)
 - 2026-09-23T03:03:04.729Z blocked → todo (system)
 - 2026-09-23T17:56:51.171Z todo → wip (system)
+- 2026-09-23T18:20:03.848Z wip → testing (system)
+- 2026-09-23T18:20:07.487Z testing → done (system)
 
