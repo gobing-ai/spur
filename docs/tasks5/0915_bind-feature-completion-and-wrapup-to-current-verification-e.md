@@ -4,7 +4,7 @@ name: Bind feature completion and wrapup to current verification evidence
 status: wip
 template: standard
 created_at: 2026-09-22T02:56:46.299Z
-updated_at: "2026-09-23T04:57:40.918Z"
+updated_at: "2026-09-23T06:27:05.474Z"
 feature_id: D63
 priority: P2
 tags:
@@ -105,7 +105,39 @@ Upgraded the ADR-119 feature verification evidence from the v0 identity-blind `.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0915
+
+**Scope:** dd1933c56 vs a1deeaaea (19 files, +905/−34) against `docs/tasks5/0915_bind-feature-completion-and-wrapup-to-current-verification-e.md`
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PARTIAL
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P2 (major) | functional | R3/AC3 wrapup ordering is unenforced: the digest chain is blind to exactly what wrapup mutates — `docs/tasks*`/`docs/features*` are excluded from the tree hash (proof-input-fingerprint.ts:235) and `.spur/context` learnings are gitignored. A receipt recorded before wrapup still validates after wrapup edits, so a wrapup document edit is NOT guaranteed to be verified before completion. The Solution's "the digest chain enforces this rather than trusting call order" is false for wrapup's mutation surface, and design step 3 (run verifier after record/learning in wrapup-pipeline.yaml) was not implemented. | `packages/app/src/workflow/proof-input-fingerprint.ts:235`, diff omits `config/workflows/wrapup-pipeline.yaml` |
+| 2 | P2 (major) | functional | Frozen v1 contract (task Q&A: "private v1 receipt fields and two .spur/run locations above are fixed") deviated: no verifier-definition identity (name/source path/layer/definition digest), no workdir, no RUNNING state, no run-scoped+feature-latest two-copy agreement, no run-row terminal-done validation, no artifact registration (R4's "artifact services" half unused). `runId` is recorded but never validated, so AC1's "bound … run" clause is decorative; receipt 1.5 has only 7 fields vs design's 11+. Downstream 0916/0919 are told to consume "this contract" — they will consume a different one than designed. | `packages/app/src/services/feature-verification-receipt.ts:33-48` |
+| 3 | P3 (minor) | correctness | Digest is captured only BEFORE the pass (design: capture before AND after; mismatch is FAIL). Mid-check drift (check command mutating tracked inputs) is undetected at record time; a mutating check makes the receipt false-stale until a second verify run converges. Fail-closed, self-healing, but a silent deviation from the designed drift check. | `apps/cli/src/commands/feature.ts:517-523` |
+| 4 | P3 (minor) | usability | Verifier contract is a one-way door: the workflow records `--cmd "$verificationCmd"` (its declared trusted-config var), but the completion guard shells `feature check --strict --as done` with no `--cmd` passthrough, validating against the DEFAULT constant. Overriding the workflow var permanently contract-mismatches every completion; `FeatureCheckService.check`'s `verificationCmd` option is unreachable from any CLI/engine surface (dead option). Fail-closed, but operationally bricking. | `packages/app/src/services/feature-check.ts:186-192`, `config/workflows/feature-verification.yaml` onEnter |
+| 5 | P3 (minor) | security | `new RegExp('^' + id + '_.+\\.md$')` builds a regex from an unsanitized CLI argument — metacharacters break the scan or enable ReDoS-style backtracking. Pre-existing pattern reused from sibling verbs; traversal is gated by the featuresDir listing, so impact is bounded, but the input is untrusted. | `apps/cli/src/commands/feature.ts:506` |
+| 6 | P4 (advisory) | security | `sh -c "... > '<log>' 2>&1"` single-quote wrapping is fine here: the id cannot contain quotes (fileName gate rejects it before the shell runs) and `verificationCmd` is trusted-config class, as documented. No action needed. | `apps/cli/src/commands/feature.ts:521-523` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | PARTIAL | Receipt binds feature identity (feature-verification-receipt.ts:143), verifier contract (:146), input digest (:144) — validation fail-closed on all six rejection paths (:116-208). Run identity recorded (:145) but never validated; run-row checks, two-copy agreement and artifact registration from the design contract dropped (finding 2). |
+| R2 | MET | Completion-boundary gate demands receipt only for `--as done` (feature-check.ts:255-263), six `L4.feature-receipt-*` codes all in the unsuppressible COMPLETION_FINDING_CODES set (planning-check-base.ts:48-63); lifecycle guard simplified to the single strict check (feature-lifecycle.yaml:68-82), strictly safer than the old status+check compound; plain `done` reads and all-feature scans stay advisory (no backfill burden). |
+| R3 | PARTIAL | Replay-safe record (idempotent overwrite, receipt ts:118-137; tested "AC3: recording is idempotent") ✓; no lifecycle-metadata invalidation loop ✓ (History/status writes normalized out of the digest); but wrapup-edit-before-completion ordering unenforced (finding 1) and learning replay dedup untouched by this diff (pre-existing WBS-list dedup only, wrapup-steps.ts:163-168). |
+| R4 | PARTIAL | Shared ProofInputFingerprint engine reused — no second digest (receipt ts:75-80; "AC4" test passes) ✓; `feature verify` verb reuses the engine's receipt recording in the workflow ✓; artifact services not used (finding 2). |
+
+**AC check:** AC1 PARTIAL (feature ✓ contract ✓ digest ✓, run ✗) · AC2 MET (rejections fail-closed, reuse tested) · AC3 PARTIAL (loop-free ✓, idempotent record ✓, wrapup-edit ordering ✗) · AC4 MET.
+
+##### Architecture (sp-code-improvement)
+
+Positive: `feature-verification-receipt.ts` is a deep module — schema, paths, recording and validation in one owner with a narrow `FeatureReceiptValidation` union; digest ownership is not duplicated (reuses the 0751 proof-input engine, satisfying R4's anti-drift intent); the guard simplification removes a hand-rolled `cat … = PASS` shell comparison in favor of the service (single SSOT); findings route through the existing unsuppressible completion set rather than a parallel enforcement channel. Test seam is clean (FileSystem + digest injected via service options; process.cwd capture is the one hidden edge — see finding 3). One advisory: the DEFAULT cmd constant couples the CLI writer and the engine guard; if a `--cmd` passthrough is ever added (finding 4), make it flow from the workflow var, not a second constant.
+
+**Next:** Fix finding 1 (either fold wrapup-written surfaces into the digest or add an explicit post-wrapup verification step in wrapup-pipeline.yaml) and reconcile finding 2 with the frozen v1 contract or amend the task Design before 0916/0919 consume the schema. Findings 3-5 can ride along.
 
 ### References
 
