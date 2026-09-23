@@ -6,7 +6,7 @@ status: active
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-09-08T00:09:43.138Z"
+updated_at: "2026-09-23T06:50:10.743Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -15,23 +15,41 @@ updated_at: "2026-09-08T00:09:43.138Z"
 
 The Spur daily-workflow skill suite: a **thin orchestration spine** (`sp:spur-dev`) that drives the
 planning→execution lifecycle and **dispatches deep, functionally-decomposed competency skills**
-(`sys-architecture`, `code-implementation`, `code-testing`, `code-verification`, `spec-decomposition`,
-with `test-driven-development` as a referenced discipline), plus a `sp:spur-cli` CLI facade — backing the `sp:dev-*`
-command family and the `expert-spur` / `super-coder` subagents (ADR-028).
+(`sys-architecture`, `code-implementation`, `code-testing`, `code-verification`, `functional-review`,
+`code-improvement`, `spec-decomposition`, with `test-driven-development` as a referenced discipline),
+plus a `sp:spur-cli` CLI facade, backing the `sp:dev-*` command family and the `expert-spur`,
+`super-coder` (build), `super-planner` (batch orchestration) and `super-reviewer` subagents (ADR-028).
+
+The remaining delivery is **batch execution v2**: parallel batches that keep one writer per working
+tree (Slice A, R21–R25), and headless pipeline steps that can pause for an operator answer instead of
+guessing (Slice B, R26–R30).
 
 ## Scope
 
 **In scope:**
 - The orchestration spine (`sp:spur-dev`) and the `phase → skill` binding in `task-pipeline.yaml`.
 - The functional competency skills (`sys-architecture`, `code-implementation`, `code-testing`,
-  `code-verification`, `spec-decomposition`) and `test-driven-development` as a referenced discipline.
-- The `sp:spur-cli` CLI facade (one reference per noun) and the `expert-spur` / `super-coder` subagents.
+  `code-verification`, `functional-review`, `code-improvement`, `spec-decomposition`) and
+  `test-driven-development` as a referenced discipline.
+- The `sp:spur-cli` CLI facade (one reference per noun) and the `expert-spur`, `super-coder`,
+  `super-planner` and `super-reviewer` subagents.
 - The ADR-016-filtered `sp:dev-*` command subset (byte-stable surface).
+- Sequential batch execution with optional single-worktree isolation (`--worktree`, tasks 0141/0477/0496).
+- **Batch v2 Slice A:** per-task worktree isolation, bounded concurrency, and rebase-plus-fast-forward
+  integration for `/sp:dev-runall --mode parallel` (R21–R25).
+- **Batch v2 Slice B:** a question-artifact escalation contract for headless `agent.run` steps, a paused
+  `hitl.input` state in `task-pipeline.yaml`, and `spur workflow continue --answer-text` (operator
+  consent 2026-09-22) to resume with a free-text answer (R26–R30).
 
 **Out of scope:**
 - Companions and the write-guard hook (H2).
 - The gate-level rules engine (C).
-- Parallel/worktree batch execution (H1 task 0142, separately tracked).
+- Automatic conflict resolution when integrating parallel task branches: a conflict always retains the
+  worktree for the operator (R24).
+- The cross-process steering control channel (`docs/design/workflow-steering-control-channel.md`,
+  proposed only) and any agent-to-agent Q&A over `spur message`; Slice B uses the workflow pause and
+  continue path only.
+- `/sp:dev-parallel` review-panel and investigation fan-out modes, which do not run task pipelines.
 
 ## Acceptance Criteria
 
@@ -52,7 +70,7 @@ Feature: spur-dev umbrella skill
   Scenario: Commands are thin wrappers
     Given any shipped sp:dev-* command
     When its definition is inspected
-    Then it parameterizes sp:spur-dev and contains no pipeline logic
+    Then it delegates to its owning skill and contains no pipeline logic
 
   # ── Batch execution (task 0141 — /sp:dev-runall + sp:super-coder) ──
   Scenario: R1.1 Run an explicit WBS list
@@ -126,7 +144,7 @@ Feature: spur-dev umbrella skill
     Then agent is merged into per-task vars and the orchestrator is unchanged
 
   Scenario: R5.1 super-coder drives between runs, never inside a step
-    Given sp:super-coder is the orchestrator
+    Given the batch orchestrator agent (sp:super-planner; sp:super-coder at task 0141)
     When the batch runs
     Then it acts between runs and never inside a pipeline step
 
@@ -344,7 +362,7 @@ Feature: spur-dev umbrella skill
     Given a batch command invoked with --worktree --mode parallel
     When the flags are validated
     Then the combination is rejected
-    And the message points to task 0142 for per-task parallel isolation
+    And the message explains that parallel mode already isolates each task in its own worktree
 
   # ── R9/R10: docs and portability ──
 
@@ -484,7 +502,75 @@ Feature: spur-dev umbrella skill
     Then the anchor states that any executor can exhaust and that the pipeline escalates
     And no document claims an executor has no hard quota
     And no document instructs reading quota state from `spur agent doctor`
+
+  # ── Batch execution v2, Slice A: per-task worktree isolation for parallel batches (supersedes 0142 R6) ──
+  Scenario: R21 Parallel mode runs each concurrent task in its own worktree
+    Given a frozen batch with two tasks that have no dependency path between them
+    When the operator runs /sp:dev-runall with --mode parallel
+    Then each concurrently running task gets its own git worktree and branch cut from the current base ref
+    And no two task pipelines ever write to the same working tree
+    And a marker under .spur/run records each task worktree's path, branch, base ref, and base SHA
+
+  Scenario: R22 Parallel concurrency is bounded and dependents wait for integration
+    Given a parallel batch whose independent set is larger than the concurrency bound
+    When the batch runs
+    Then at most the bound (default 2) task pipelines run at once
+    And a dependent task starts only after every in-set dependency has been integrated onto the base ref
+    And sequential remains the default when --mode is omitted
+
+  Scenario: R23 A finished task integrates by rebase and fast-forward only
+    Given a parallel task that succeeded while a sibling was already integrated
+    When the orchestrator integrates it
+    Then its branch is rebased onto the current base ref tip and fast-forward-merged
+    And its worktree and branch are removed after the fast-forward
+    And no merge commit is created
+
+  Scenario: R24 An integration conflict retains the task worktree and never auto-resolves
+    Given a parallel task whose rebase onto the base ref conflicts
+    When the orchestrator integrates it
+    Then the rebase is aborted and no conflict resolution is attempted
+    And the task worktree and branch are retained and named in the batch report with resume, merge, and discard commands
+    And the task's dependent subtree is blocked under the normal failure policy
+
+  Scenario: R25 Generated corpus regions are regenerated once after integration
+    Given parallel tasks under the same feature
+    When their branches are integrated
+    Then no integration conflicts on generated regions such as feature Tasks tables or features INDEX.md
+    And the orchestrator regenerates those regions once on the base ref after the last integration
+
+  # ── Batch execution v2, Slice B: headless within-step escalation (supersedes 0142 R7) ──
+  Scenario: R26 A headless step can pause its run with an operator question
+    Given a task pipeline step running as a subprocess executor
+    When its agent writes a question artifact under the step's escalation contract
+    Then the run pauses at an input gate instead of failing or guessing
+    And the question text is visible through spur workflow trace and spur workflow progress
+
+  Scenario: R27 The operator's free-text answer resumes the paused step
+    Given a run paused at an input gate with a pending question
+    When the operator runs spur workflow continue <run-id> --answer-text "<answer>"
+    Then the answer is injected into the gate's input variable before guards re-evaluate
+    And the escalating step is re-dispatched with the question and the answer in its input
+
+  Scenario: R28 Answer flags are validated against the pending gate kind
+    Given a paused run
+    When the operator passes --answer-text to a confirm gate, or --answer to an input gate, or both flags together
+    Then the command fails with VALIDATION_FAILED naming the pending gate kind
+    And the run stays paused and unchanged
+
+  Scenario: R29 Routine decisions are auto-answered and escalation is bounded
+    Given a step agent facing a decision inside the task's frozen Design and the global instructions
+    When it runs under the escalation contract
+    Then it decides without escalating
+    And a step escalates at most twice before the pipeline routes to failed with the unanswered question recorded
+
+  Scenario: R30 An unattended batch surfaces an escalation at the batch boundary
+    Given /sp:dev-runall running with --auto
+    When a task pipeline pauses on an escalated question
+    Then the batch never auto-answers it
+    And the batch report lists the paused run, the question, and the exact continue command
+    And the inline pipeline driver asks the same question in the host session instead of pausing a subprocess
 ```
+
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
@@ -493,7 +579,7 @@ Feature: spur-dev umbrella skill
 | 0064 | W3: sp:spur-dev umbrella skill — planning and execution halves | done |
 | 0065 | W3: sp:dev-* slash command subset and subagents | done |
 | 0141 | Batch task execution — /sp:dev-runall + dependency-ordered driver + sp:super-coder orchestrator | done |
-| 0142 | Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation | blocked |
+| 0142 | Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation | cancelled |
 | 0161 | Split sp:spur-dev at the lifecycle-half seam into planning (sp:spur-plan) and execution (sp:spur-dev) | done |
 | 0162 | Strengthen sp dev-verify with mandatory Acceptance Criteria guard | done |
 | 0227 | enhance the review capability in plugin sp | done |
@@ -515,10 +601,15 @@ Feature: spur-dev umbrella skill
 | 0588 | Measure spur-dev model-hop wall-clock and decide the latency lever | done |
 | 0589 | Raise process-inspector coverage to the 90% gate threshold | cancelled |
 | 0590 | Fix task-verdict answer parser consuming SECUA rows as AC rows | done |
-| 0800 | Close the residue that pipeline completion leaves behind: Plan checkboxes, review sub-heading level, docs/help drift, and the task-list status contract | testing |
+| 0800 | Close the residue that pipeline completion leaves behind: Plan checkboxes, review sub-heading level, docs/help drift, and the task-list status contract | done |
+| 0931 | Isolate parallel batch tasks in per-task worktrees with rebase-and-fast-forward integration | todo |
+| 0932 | Add --answer-text to spur workflow continue for input gates | todo |
+| 0933 | Pause headless pipeline steps on an operator question and resume with the answer | todo |
+| 0934 | Re-verify legacy H1 umbrella scenarios and close out the feature | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
+
 The umbrella skill is decomposed by **function**, not by lifecycle phase (ADR-028, task 0161): a thin
 spine dispatches deep competency skills and never inlines them. A phase split (planning vs. execution)
 was considered and rejected — a phase boundary is temporal and relocates coupling rather than reducing
@@ -527,13 +618,35 @@ skills + thin spine); evidence reviewed at design time only (see task 0161), nev
 dependency — `plugins/sp` is self-contained (ADR-028d). dev-* names continue for muscle memory; subset
 decided per candidate by the ADR-016 test (task 0065).
 
+**Re-baseline 2026-09-22 (pre-decomposition audit).**
+- Task 0800 is `done` (commit `fa3453412`); the Tasks table showed `testing` only because it had not
+  been refreshed.
+- Task 0142 was a placeholder, not a buildable task. Its Slice A (parallel worktree isolation) never
+  shipped: `--worktree` is sequential-only and `--worktree --mode parallel` is rejected
+  (`plugins/sp/skills/spur-dev/references/execution-batch.md:872`, `plugins/sp/commands/dev-runall.md:59`),
+  while `--mode parallel` without it runs concurrent pipelines in one shared tree
+  (`execution-batch.md:935-947`), breaking the one-writer-per-working-tree rule. Its Slice B blocker
+  (workspace + inbox + team mode) is obsolete: those modules shipped (G3, M4, M) and were retired by
+  ADR-116 (G64). The workflow engine already has `hitl.input` (`packages/app/src/workflow/actions/hitl-input.ts`),
+  but headless `spur workflow continue` only answers yes/no/cancel (`apps/cli/src/commands/workflow.ts:1047`).
+  R21–R30 replace 0142's R6/R7; 0142 is cancelled as superseded once the replacement tasks exist.
+- Operator decisions 2026-09-22: Slice A integrates by rebase + fast-forward with no auto-resolve;
+  Slice B adds `--answer-text` to `spur workflow continue` (public-surface consent granted).
+- Scenario bodies updated without title changes (links preserved): "Commands are thin wrappers"
+  (commands delegate to their owning skill, not only `sp:spur-dev`), R5.1 (the batch orchestrator is now
+  `sp:super-planner`), R8.1 (the rejection message no longer points at 0142).
+- Known residual warnings: 52 `L4.scenario-unverified` and 3 `L4.evidence-not-recoverable` come from
+  tasks that predate durable verdict artifacts (0141, 0161, 0477, 0482 and others); they are not
+  re-verified retroactively. The four scenarios with no linked task (the three original umbrella
+  scenarios and R9) are re-verified by the H1 close-out task.
+- Stale docs to fix with Slice A/B: `plugins/sp/agents/super-planner.md:276` (out-of-scope list),
+  `execution-batch.md:446,872,887`, `plugins/sp/commands/dev-runall.md:59`,
+  `plugins/sp/skills/spur-dev/references/flag-glossary.md:434`.
 
-
-**Do not close H1 yet.** Linked task `0142` (tasks2) remains **blocked** — deferred parallel worktree batching + mid-step interactive escalation. Sync correctly refuses `done` and proposes `blocked` while 0142 is non-terminal.
-
-- `task list --feature H1` only shows active-folder tasks by default (tasks3); archive folder tasks2 still count for feature edges.
 - H81/H82/H83 are separate features; closing them does not close the H1 umbrella.
-- When 0142 is cancelled (if superseded by H51/parallel work) or completed, re-run `spur feature sync H1`.
+- Feature edges count tasks in every configured folder (`docs/tasks2`–`docs/tasks5`); `docs/tasks5` is
+  active.
+
 ## History
 
 - 2026-06-12 — created (rd3-migration feature finalizing)
