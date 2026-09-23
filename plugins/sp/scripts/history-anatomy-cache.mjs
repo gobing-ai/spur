@@ -9,8 +9,8 @@ import {
   closeSync,
   existsSync,
   fsyncSync,
-  openSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   renameSync,
@@ -446,6 +446,7 @@ function isRealDate(ymd) {
 function validateSelector(opts) {
   const errors = [];
   const has = (v) => v !== undefined && v !== "";
+  const val = (v) => has(v) ? v : null;
   const mode = has(opts.mode) ? opts.mode : "daily";
   if (mode !== "daily" && mode !== "ad-hoc") {
     return { ok: false, errors: [`--mode must be "daily" or "ad-hoc", got "${opts.mode}"`] };
@@ -455,7 +456,12 @@ function validateSelector(opts) {
     errors.push(`--recompute must be "true" or "false", got "${recompute}"`);
   }
   if (mode === "daily") {
-    for (const [flag, v] of [["--focus", opts.focus], ["--since", opts.since], ["--until", opts.until], ["--output", opts.output]]) {
+    for (const [flag, v] of [
+      ["--focus", opts.focus],
+      ["--since", opts.since],
+      ["--until", opts.until],
+      ["--output", opts.output]
+    ]) {
       if (has(v))
         errors.push(`daily mode rejects ${flag}`);
     }
@@ -476,8 +482,8 @@ function validateSelector(opts) {
     if (!untilOk)
       errors.push("ad-hoc mode requires --until (inclusive ISO instant)");
     if (sinceOk && untilOk) {
-      const since = new Date(opts.since);
-      const until = new Date(opts.until);
+      const since = new Date(opts.since ?? "");
+      const until = new Date(opts.until ?? "");
       if (Number.isNaN(since.getTime()))
         errors.push(`--since must be a parseable ISO instant, got "${opts.since}"`);
       if (Number.isNaN(until.getTime()))
@@ -492,10 +498,10 @@ function validateSelector(opts) {
   return {
     ok: true,
     mode,
-    date: has(opts.date) ? opts.date : null,
-    focus: has(opts.focus) ? opts.focus : null,
-    since: has(opts.since) ? opts.since : null,
-    until: has(opts.until) ? opts.until : null
+    date: val(opts.date),
+    focus: val(opts.focus),
+    since: val(opts.since),
+    until: val(opts.until)
   };
 }
 function buildProvenance(opts) {
@@ -795,7 +801,14 @@ ${result.problems.map((p) => `- ${p}
         const envVars = Object.fromEntries(env.trim().split(`
 `).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-        writeFileSync(`.spur/run/${f["run-id"]}-selector.json`, `${JSON.stringify({ mode: v.mode, date: envVars.HA_DATE ?? null, focus: v.focus, since: envVars.HA_SINCE ?? null, until: envVars.HA_UNTIL ?? null, timezone: tz }, null, 2)}
+        writeFileSync(`.spur/run/${f["run-id"]}-selector.json`, `${JSON.stringify({
+          mode: v.mode,
+          date: envVars.HA_DATE ?? null,
+          focus: v.focus,
+          since: envVars.HA_SINCE ?? null,
+          until: envVars.HA_UNTIL ?? null,
+          timezone: tz
+        }, null, 2)}
 `);
       }
       return { exitCode: 0, stdout: "", stderr: "" };

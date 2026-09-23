@@ -39,7 +39,7 @@
 #   focus     — ad-hoc focus string (required in ad-hoc mode, rejected in daily)
 #   recompute — "true" forces the full analyze/render/enrich/validate path (cache disposition
 #               forced-recompute)
-#   output    — explicit report output path; default run directory
+#   output    — explicit report output path; default docs/report/<date>-history-anatomy.md
 #   agent     — executor for the agent.run stages (enrich/validate)
 #   spurBin   — PATH-independent spur invocation (overridden by CLI at run start)
 #   __runId   — run-scoped id for explicit artifact paths (allocated in start)

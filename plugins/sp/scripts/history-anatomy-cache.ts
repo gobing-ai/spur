@@ -631,6 +631,7 @@ export function validateSelector(opts: {
 }): SelectorValidation {
     const errors: string[] = [];
     const has = (v?: string) => v !== undefined && v !== '';
+    const val = (v?: string) => (has(v) ? v : null);
     const mode = has(opts.mode) ? opts.mode : 'daily';
     if (mode !== 'daily' && mode !== 'ad-hoc') {
         return { ok: false, errors: [`--mode must be "daily" or "ad-hoc", got "${opts.mode}"`] };
@@ -660,8 +661,8 @@ export function validateSelector(opts: {
         if (!sinceOk) errors.push('ad-hoc mode requires --since (inclusive ISO instant)');
         if (!untilOk) errors.push('ad-hoc mode requires --until (inclusive ISO instant)');
         if (sinceOk && untilOk) {
-            const since = new Date(opts.since!);
-            const until = new Date(opts.until!);
+            const since = new Date(opts.since ?? '');
+            const until = new Date(opts.until ?? '');
             if (Number.isNaN(since.getTime()))
                 errors.push(`--since must be a parseable ISO instant, got "${opts.since}"`);
             if (Number.isNaN(until.getTime()))
@@ -675,10 +676,10 @@ export function validateSelector(opts: {
     return {
         ok: true,
         mode,
-        date: has(opts.date) ? opts.date! : null,
-        focus: has(opts.focus) ? opts.focus! : null,
-        since: has(opts.since) ? opts.since! : null,
-        until: has(opts.until) ? opts.until! : null,
+        date: val(opts.date),
+        focus: val(opts.focus),
+        since: val(opts.since),
+        until: val(opts.until),
     };
 }
 

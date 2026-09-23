@@ -1318,8 +1318,6 @@ describe('probe --helper digest identity (0771)', () => {
 });
 
 describe('paths grammar validation (0920 — deterministic scope owner)', () => {
-    const good = { helper: '/p/h.mjs', out: '/tmp/x-paths.env' };
-
     test('daily default and explicit real date pass; invalid calendar day fails by name', () => {
         expect(validateSelector({ mode: 'daily', date: '2026-08-24' })).toEqual({
             ok: true,
