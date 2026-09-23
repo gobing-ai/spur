@@ -352,78 +352,34 @@ export default function AgentsView({ pollMs = STATUS_POLL_MS }: { pollMs?: numbe
                         {/* Sub-navigation / Filter Strip */}
                         <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-spur-border/50">
                             <div className="flex items-center gap-1.5 p-1 bg-spur-surface-2 rounded-xl border border-spur-border">
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveSection('all')}
-                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                                        activeSection === 'all'
-                                            ? 'bg-spur-accent text-white shadow-sm'
-                                            : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                                    }`}
-                                    data-section-filter="all"
-                                >
-                                    All
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveSection('roles')}
-                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                                        activeSection === 'roles'
-                                            ? 'bg-spur-accent text-white shadow-sm'
-                                            : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                                    }`}
-                                    data-section-filter="roles"
-                                >
-                                    <span>Roles</span>
-                                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
-                                        {roles.length}
-                                    </span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveSection('stages')}
-                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                                        activeSection === 'stages'
-                                            ? 'bg-spur-accent text-white shadow-sm'
-                                            : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                                    }`}
-                                    data-section-filter="stages"
-                                >
-                                    <span>Stages</span>
-                                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
-                                        {stages.length}
-                                    </span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveSection('executors')}
-                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                                        activeSection === 'executors'
-                                            ? 'bg-spur-accent text-white shadow-sm'
-                                            : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                                    }`}
-                                    data-section-filter="executors"
-                                >
-                                    <span>Executors</span>
-                                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
-                                        {executors.length}
-                                    </span>
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setActiveSection('fleet')}
-                                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                                        activeSection === 'fleet'
-                                            ? 'bg-spur-accent text-white shadow-sm'
-                                            : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                                    }`}
-                                    data-section-filter="fleet"
-                                >
-                                    <span>Fleet</span>
-                                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
-                                        {entries.length}
-                                    </span>
-                                </button>
+                                {(
+                                    [
+                                        { id: 'all' as const, label: 'All' },
+                                        { id: 'roles' as const, label: 'Roles', count: roles.length },
+                                        { id: 'stages' as const, label: 'Stages', count: stages.length },
+                                        { id: 'executors' as const, label: 'Executors', count: executors.length },
+                                        { id: 'fleet' as const, label: 'Fleet', count: entries.length },
+                                    ] as const
+                                ).map((sec) => (
+                                    <button
+                                        key={sec.id}
+                                        type="button"
+                                        onClick={() => setActiveSection(sec.id)}
+                                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
+                                            activeSection === sec.id
+                                                ? 'bg-spur-accent text-white shadow-sm'
+                                                : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
+                                        }`}
+                                        data-section-filter={sec.id}
+                                    >
+                                        <span>{sec.label}</span>
+                                        {'count' in sec && (
+                                            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/20">
+                                                {sec.count}
+                                            </span>
+                                        )}
+                                    </button>
+                                ))}
                             </div>
 
                             {activeSection === 'stages' && stages.length > 0 && (
@@ -751,14 +707,52 @@ function buildExecutorTooltip(cand: CandidateItem): string {
     return [`Agent: ${cand.agent || '—'}`, `Model: ${cand.model || 'default'}`].join('\n');
 }
 
+const ROLE_ICONS: Record<string, string> = {
+    scribe: '✍️',
+    coder: '💻',
+    reviewer: '🔍',
+    planner: '📋',
+};
+
+function resolveExecutorSourcePath(executor: ConfiguredAgentExecutor): string {
+    return (
+        executor.sourcePath ?? (executor.sourceLayer === 'project' ? '.spur/config.yaml' : '~/.config/spur/config.yaml')
+    );
+}
+
+function CandidateBadge({ cand, kind }: { cand: CandidateItem; kind: 'role' | 'stage' }) {
+    const testProps =
+        kind === 'role' ? { 'data-role-executor-item': cand.name } : { 'data-stage-executor-item': cand.name };
+    return (
+        <Tooltip
+            position="top"
+            tip={buildExecutorTooltip(cand)}
+            className="inline-flex! z-30 [&:before]:whitespace-pre-line! [&:before]:text-left! [&:before]:font-mono [&:before]:text-[11px] [&:before]:p-2 [&:before]:rounded-lg [&:before]:shadow-xl after:whitespace-pre-line after:text-left after:font-mono after:text-[11px]"
+        >
+            <span
+                className={`px-1.5 py-0.5 rounded text-[11px] font-mono inline-flex items-center gap-1 border transition-colors cursor-help ${
+                    cand.isDefault
+                        ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 font-semibold'
+                        : cand.disabled
+                          ? 'bg-spur-surface-2/40 border-spur-border/40 text-spur-text-muted/50 line-through'
+                          : 'bg-spur-surface-2 border-spur-border/60 text-spur-text hover:border-spur-accent/30'
+                }`}
+                title={buildExecutorTooltip(cand)}
+                {...testProps}
+            >
+                <span>{cand.name}</span>
+                {cand.isDefault && (
+                    <span role="img" aria-label="default executor">
+                        ⭐
+                    </span>
+                )}
+            </span>
+        </Tooltip>
+    );
+}
+
 function RoleCard({ role, executors = [] }: { role: ConfiguredAgentRole; executors?: ConfiguredAgentExecutor[] }) {
-    const roleIcons: Record<string, string> = {
-        scribe: '✍️',
-        coder: '💻',
-        reviewer: '🔍',
-        planner: '📋',
-    };
-    const icon = roleIcons[role.name.toLowerCase()] ?? '🤖';
+    const icon = ROLE_ICONS[role.name.toLowerCase()] ?? '🤖';
 
     const candidateList = useMemo(
         () =>
@@ -816,33 +810,7 @@ function RoleCard({ role, executors = [] }: { role: ConfiguredAgentRole; executo
                     </div>
                     <div className="flex flex-wrap gap-1" data-role-executors={role.name}>
                         {candidateList.length > 0 ? (
-                            candidateList.map((cand) => (
-                                <Tooltip
-                                    key={cand.name}
-                                    position="top"
-                                    tip={buildExecutorTooltip(cand)}
-                                    className="inline-flex! z-30 [&:before]:whitespace-pre-line! [&:before]:text-left! [&:before]:font-mono [&:before]:text-[11px] [&:before]:p-2 [&:before]:rounded-lg [&:before]:shadow-xl after:whitespace-pre-line after:text-left after:font-mono after:text-[11px]"
-                                >
-                                    <span
-                                        className={`px-1.5 py-0.5 rounded text-[11px] font-mono inline-flex items-center gap-1 border transition-colors cursor-help ${
-                                            cand.isDefault
-                                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 font-semibold'
-                                                : cand.disabled
-                                                  ? 'bg-spur-surface-2/40 border-spur-border/40 text-spur-text-muted/50 line-through'
-                                                  : 'bg-spur-surface-2 border-spur-border/60 text-spur-text hover:border-spur-accent/30'
-                                        }`}
-                                        title={buildExecutorTooltip(cand)}
-                                        data-role-executor-item={cand.name}
-                                    >
-                                        <span>{cand.name}</span>
-                                        {cand.isDefault && (
-                                            <span role="img" aria-label="default executor">
-                                                ⭐
-                                            </span>
-                                        )}
-                                    </span>
-                                </Tooltip>
-                            ))
+                            candidateList.map((cand) => <CandidateBadge key={cand.name} cand={cand} kind="role" />)
                         ) : (
                             <span className="text-[11px] font-mono text-spur-text-muted italic">none in tier</span>
                         )}
@@ -941,33 +909,7 @@ function StageCard({ stage, executors = [] }: { stage: ConfiguredStageInfo; exec
                     </div>
                     <div className="flex flex-wrap gap-1" data-stage-executors={stage.id}>
                         {candidateList.length > 0 ? (
-                            candidateList.map((cand) => (
-                                <Tooltip
-                                    key={cand.name}
-                                    position="top"
-                                    tip={buildExecutorTooltip(cand)}
-                                    className="inline-flex! z-30 [&:before]:whitespace-pre-line! [&:before]:text-left! [&:before]:font-mono [&:before]:text-[11px] [&:before]:p-2 [&:before]:rounded-lg [&:before]:shadow-xl after:whitespace-pre-line after:text-left after:font-mono after:text-[11px]"
-                                >
-                                    <span
-                                        className={`px-1.5 py-0.5 rounded text-[11px] font-mono inline-flex items-center gap-1 border transition-colors cursor-help ${
-                                            cand.isDefault
-                                                ? 'bg-amber-500/15 border-amber-500/40 text-amber-300 font-semibold'
-                                                : cand.disabled
-                                                  ? 'bg-spur-surface-2/40 border-spur-border/40 text-spur-text-muted/50 line-through'
-                                                  : 'bg-spur-surface-2 border-spur-border/60 text-spur-text hover:border-spur-accent/30'
-                                        }`}
-                                        title={buildExecutorTooltip(cand)}
-                                        data-stage-executor-item={cand.name}
-                                    >
-                                        <span>{cand.name}</span>
-                                        {cand.isDefault && (
-                                            <span role="img" aria-label="default executor">
-                                                ⭐
-                                            </span>
-                                        )}
-                                    </span>
-                                </Tooltip>
-                            ))
+                            candidateList.map((cand) => <CandidateBadge key={cand.name} cand={cand} kind="stage" />)
                         ) : (
                             <span className="text-[11px] font-mono text-spur-text-muted italic">none in tier</span>
                         )}
@@ -991,9 +933,7 @@ function ExecutorCard({
         : [];
 
     const isReady = !executor.disabled;
-    const sourceFilePath =
-        executor.sourcePath ??
-        (executor.sourceLayer === 'project' ? '.spur/config.yaml' : '~/.config/spur/config.yaml');
+    const sourceFilePath = resolveExecutorSourcePath(executor);
 
     return (
         <div
@@ -1256,9 +1196,7 @@ function ExecutorToggleModal({
     };
 
     const targetConfigLabel = executor.sourceLayer === 'project' ? 'Project Config' : 'Global Config';
-    const configFilePath =
-        executor.sourcePath ??
-        (executor.sourceLayer === 'project' ? '.spur/config.yaml' : '~/.config/spur/config.yaml');
+    const configFilePath = resolveExecutorSourcePath(executor);
 
     return (
         <div

@@ -16,6 +16,11 @@ function formatBytes(bytes: number): string {
 
 export type ConfigSubtab = 'global' | 'project';
 
+const CONFIG_SUBTABS = [
+    { id: 'global' as const, label: '🌐 Global Config', path: '~/.config/spur/config.yaml' },
+    { id: 'project' as const, label: '📁 Project Config', path: '.spur/config.yaml' },
+] as const;
+
 export default function GeneralView() {
     const [activeSubtab, setActiveSubtab] = useState<ConfigSubtab>('global');
     const [configs, setConfigs] = useState<ConfigFilesResponse | null>(null);
@@ -43,7 +48,7 @@ export default function GeneralView() {
         loadConfigs();
     }, [loadConfigs]);
 
-    const activeConfig: ConfigFile | undefined = configs ? configs[activeSubtab] : undefined;
+    const activeConfig: ConfigFile | undefined = configs?.[activeSubtab];
 
     return (
         <div className="flex flex-col h-full gap-4 overflow-y-auto pr-1" data-general-view>
@@ -56,44 +61,31 @@ export default function GeneralView() {
                     className="flex items-center gap-1.5 p-1 bg-spur-surface-2 border border-spur-border rounded-xl"
                     data-config-subtabs
                 >
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeSubtab === 'global'}
-                        aria-controls="config-subtab-panel-global"
-                        id="config-subtab-global"
-                        onClick={() => setActiveSubtab('global')}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
-                            activeSubtab === 'global'
-                                ? 'bg-spur-accent text-white shadow-sm'
-                                : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                        }`}
-                        data-subtab="global"
-                    >
-                        <span>🌐 Global Config</span>
-                        <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20 text-white/90">
-                            ~/.config/spur/config.yaml
-                        </code>
-                    </button>
-                    <button
-                        type="button"
-                        role="tab"
-                        aria-selected={activeSubtab === 'project'}
-                        aria-controls="config-subtab-panel-project"
-                        id="config-subtab-project"
-                        onClick={() => setActiveSubtab('project')}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
-                            activeSubtab === 'project'
-                                ? 'bg-spur-accent text-white shadow-sm'
-                                : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
-                        }`}
-                        data-subtab="project"
-                    >
-                        <span>📁 Project Config</span>
-                        <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20 text-white/90">
-                            .spur/config.yaml
-                        </code>
-                    </button>
+                    {CONFIG_SUBTABS.map((tab) => {
+                        const isSelected = activeSubtab === tab.id;
+                        return (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                role="tab"
+                                aria-selected={isSelected}
+                                aria-controls={`config-subtab-panel-${tab.id}`}
+                                id={`config-subtab-${tab.id}`}
+                                onClick={() => setActiveSubtab(tab.id)}
+                                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-2 ${
+                                    isSelected
+                                        ? 'bg-spur-accent text-white shadow-sm'
+                                        : 'text-spur-text-muted hover:text-spur-text hover:bg-spur-surface-3'
+                                }`}
+                                data-subtab={tab.id}
+                            >
+                                <span>{tab.label}</span>
+                                <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/20 text-white/90">
+                                    {tab.path}
+                                </code>
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {/* Right Actions & Meta */}
