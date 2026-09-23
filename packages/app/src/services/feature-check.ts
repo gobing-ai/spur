@@ -22,8 +22,16 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { computeAggregate, readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
 import {
+    captureFeatureReceiptDigest,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    type FeatureReceiptRejection,
+    isProofCaptureError,
+    validateFeatureVerificationReceipt,
+} from './feature-verification-receipt';
+import {
     type CheckFindings,
     FINDING_CODES,
+    type FindingCode,
     type MatrixEntry,
     PlanningCheckService,
     type SectionMatrix,
@@ -172,6 +180,12 @@ export class FeatureCheckService extends PlanningCheckService {
             dogfoodDir?: string;
             /** Directory containing `<wbs>-verdict.json` artifacts (default: <tasksDir parent>/.spur/run). */
             runDir?: string;
+            /**
+             * Verifier contract expected in the feature verification receipt
+             * (D63 task 0915). Defaults to {@link DEFAULT_FEATURE_VERIFICATION_CMD};
+             * only surfaces that record evidence with a different command need to pass it.
+             */
+            verificationCmd?: string;
             severityOverrides?: Record<string, 'error' | 'warning' | 'off'>;
             /**
              * Transition-target hint (0418): evaluate the one-active-goal rule as if
@@ -236,6 +250,23 @@ export class FeatureCheckService extends PlanningCheckService {
         if (options?.featuresDir) {
             await this.checkOneActiveGoal(fm, featureId, options.featuresDir, findings, options.asStatus);
             await this.checkChildrenLimit(featureId, options.featuresDir, findings);
+        }
+
+        // ── D63 task 0915 (R2): completion evaluates CURRENT verification evidence ──
+        // The receipt demand binds to the completion boundary — the transition
+        // target `--as done` — not to plain on-disk `done` reads, so archival
+        // re-checks and all-features scans stay advisory for features that
+        // predate receipts (no backfill burden). Every real completion path
+        // (`feature advance`, the engine verifying→done guard via
+        // `feature check --strict --as done`) passes the hint and enforces.
+        if (options?.asStatus === 'done' && options?.runDir) {
+            await this.checkFeatureVerificationReceipt(
+                featureId,
+                raw,
+                options.runDir,
+                options.verificationCmd ?? DEFAULT_FEATURE_VERIFICATION_CMD,
+                findings,
+            );
         }
 
         // ── L4: Traceability — incoming feature_id edges + orphan scenarios ──
@@ -394,6 +425,64 @@ export class FeatureCheckService extends PlanningCheckService {
                 message: `One-active-goal violated: P0 feature "${conflict.id}" is already ${conflict.status}`,
             });
         }
+    }
+
+    /**
+     * Completion-boundary receipt validation (D63 task 0915, R2). Captures the
+     * current checked-input digest via the shared proof-input engine and
+     * validates the feature's verification receipt against it. Every rejection
+     * is an unsuppressible error finding — changed tree, changed spec, changed
+     * check contract, wrong identity, failed or missing evidence cannot satisfy
+     * completion, while unchanged valid evidence is reused without rerunning.
+     * Digest capture failure is fail-closed (0751 R1 semantics), never a pass.
+     */
+    private async checkFeatureVerificationReceipt(
+        featureId: string,
+        featureContent: string,
+        runDir: string,
+        verificationCmd: string,
+        findings: CheckFeatureFindings[],
+    ): Promise<void> {
+        let currentDigest: string;
+        try {
+            currentDigest = await captureFeatureReceiptDigest(process.cwd(), featureContent);
+        } catch (err) {
+            findings.push({
+                layer: 'L4',
+                code: FINDING_CODES.L4_FEATURE_RECEIPT_STALE,
+                severity: 'error',
+                section: '',
+                message:
+                    `Feature "${featureId}" completion evidence could not be captured (fail-closed): ` +
+                    (isProofCaptureError(err) ? err.message : String(err)),
+            });
+            return;
+        }
+        const outcome = await validateFeatureVerificationReceipt(
+            this.fs,
+            runDir,
+            featureId,
+            currentDigest,
+            verificationCmd,
+        );
+        if (outcome.ok) return;
+        const codeByReason: Record<FeatureReceiptRejection, FindingCode> = {
+            missing: FINDING_CODES.L4_FEATURE_RECEIPT_MISSING,
+            malformed: FINDING_CODES.L4_FEATURE_RECEIPT_MALFORMED,
+            'cross-feature': FINDING_CODES.L4_FEATURE_RECEIPT_CROSS_FEATURE,
+            failed: FINDING_CODES.L4_FEATURE_RECEIPT_FAILED,
+            stale: FINDING_CODES.L4_FEATURE_RECEIPT_STALE,
+            'contract-mismatch': FINDING_CODES.L4_FEATURE_RECEIPT_CONTRACT,
+        };
+        findings.push({
+            layer: 'L4',
+            code: codeByReason[outcome.reason],
+            severity: 'error',
+            section: '',
+            message:
+                `Feature "${featureId}" completion evidence rejected (${outcome.reason}): ${outcome.detail}. ` +
+                'Re-run the feature-scoped verification pass to record current evidence.',
+        });
     }
 
     // ── L3: Children-limit — <=9 children per node (DD-14, corpus-derived) ──

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Bind feature completion and wrapup to current verification evidence
-status: todo
+status: wip
 template: standard
 created_at: 2026-09-22T02:56:46.299Z
-updated_at: "2026-09-23T03:50:45.499Z"
+updated_at: "2026-09-23T04:57:40.918Z"
 feature_id: D63
 priority: P2
 tags:
@@ -76,7 +76,28 @@ Tests: packages/app/tests/workflow for input/identity/supersession/drift validat
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+## Approach
+
+Upgraded the ADR-119 feature verification evidence from the v0 identity-blind `.status` string to a **bound receipt** (R1), validated fail-closed at the completion boundary (R2), digest-chained through the shared proof-input engine (R4), with record/replay ordering enforced by the digest chain rather than call order (R3).
+
+## Changes
+
+- `packages/config/src/finding-codes.ts` — registered 6 completion-boundary codes: `L4.feature-receipt-missing|malformed|cross-feature|failed|stale|contract`.
+- `packages/app/src/services/feature-verification-receipt.ts:38` (new) — v1 receipt contract: schema `feature-verification-receipt/v1` `{schema, featureId, inputDigest, verificationCmd, verdict, runId, recordedAt}`; `featureReceiptPaths`, `captureFeatureReceiptDigest` (feature-verification-receipt.ts:98, single digest engine: `ProofInputFingerprint.compute({cwd, featureContent})` — git tree covers sources + spec + check-contract source), `recordFeatureVerificationReceipt` (feature-verification-receipt.ts:117, idempotent overwrite of receipt + coarse `.status`), `validateFeatureVerificationReceipt` (feature-verification-receipt.ts:142, ordered rejections: missing → malformed → cross-feature → failed → contract-mismatch → stale; digest-capture failure surfaced as stale/fail-closed).
+- `packages/app/src/services/planning-check-base.ts` — all 6 codes added to `COMPLETION_FINDING_CODES` ⇒ unsuppressible error severity at the done boundary.
+- `packages/app/src/services/feature-check.ts` — receipt validation in `check()` gated on completion boundary only (feature-check.ts:262 `options.asStatus === 'done' && options.runDir`): plain on-disk `done` reads and all-feature scans stay advisory (no backfill burden); every real completion path (`advance` done hop, engine guard via `feature check --strict --as done`, `--as done`) enforces. Digest-capture git failure = stale finding (0751 R1 fail-closed). Validator: feature-check.ts:439 `checkFeatureVerificationReceipt`.
+- `apps/cli/src/commands/feature.ts` — new public verb `spur feature verify <id> [--cmd]` (feature.ts:477): digest-before-pass, runs `sh -c "$cmd"` with output to `.spur/run/<fid>-feature-verification.log`, records receipt via `recordFeatureVerificationReceipt`, exit 0 PASS / 1 FAIL; envelope JSON output; `SPUR_RUN_ID` picked up as receipt `runId`. `assertFeatureCheckPass` (feature.ts:227 done hop) now passes `runDir` so the advance done hop sees the same evidence as the CLI check.
+- `config/workflows/feature-verification.yaml` — onEnter shells `$spurBin feature verify "$featureId" --cmd "$verificationCmd" || true` (fail-closed routing preserved); workflow contract comment updated.
+- `config/workflows/feature-lifecycle.yaml` — verifying→done guard collapses to `$spurBin feature check $featureId --strict --as done` (receipt validation moved inside feature check; the old `cat .status` precondition is subsumed).
+- `packages/app/tests/services/feature-verification-receipt.test.ts` (new) — AC1 valid PASS receipt validates (identity + inputs + status co-recorded); AC2 missing/malformed/cross-feature/failed/stale/contract-mismatch all reject; tree-edit after pass invalidates, unchanged evidence reused; AC3 record idempotent (clean overwrite); AC4 digest ≡ shared engine, git failure throws `ProofCaptureError` (no sentinel digest).
+- `docs/design/workflow-execution-economy.md` — v1 private contract section (artifact fields, boundary scope, ordering/replay).
+
+## Design notes
+
+- **Completion boundary scoping** (key decision): receipt demand keyed on the transition target `--as done`, not frontmatter `status === 'done'`, so archival re-checks and `corpus-check` scans don't require receipts for pre-receipt features, while `assertFeatureCheckPass` (advance done hop, non-strict) still fails closed because the 6 codes are unsuppressible.
+- **`--cmd` trust class**: operator/config surface, same class as task-pipeline `qualityGateCmd`; `DEFAULT_FEATURE_VERIFICATION_CMD='bun run spur-check-feature'` preserves ADR-119 semantics; comparison at validation is verbatim.
+- **Ordering (R3)**: `feature verify` captures the digest before the pass; any wrapup mutation after the pass changes the tree and forces re-verification. `.spur/context` learnings are gitignored (out-of-digest); receipt and task `record` writes are idempotent, so retry after mid-flight failure is replay-safe.
+- **Reuse path**: unchanged valid receipt validates without re-running the repo-wide pass; any drift (tree/spec/contract/identity/verdict/contract) yields an unsuppressible error finding that denies completion.
 
 ### Testing
 
@@ -93,3 +114,6 @@ Tests: packages/app/tests/workflow for input/identity/supersession/drift validat
 - Worktree /Users/robin/xprojects/spur-new-0915 and branch feat/0915-current-feature-evidence were removed on 2026-09-22 (empty: zero commits, nothing to merge). Implement on a fresh worktree off current main at task start.
 
 ### History
+
+- 2026-09-23T04:57:04.549Z todo → wip (system)
+

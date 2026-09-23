@@ -87,13 +87,17 @@ describe('feature-verification scope split (task 0872)', () => {
         expect([...guardKinds].sort()).toEqual(['always', 'shell']);
     });
 
-    test('R4: feature-lifecycle verifying→done requires the feature pass PASS status', () => {
+    test('R4: feature-lifecycle verifying→done requires the strict done check (bound receipt, 0915)', () => {
         const wf = readWorkflow('feature-lifecycle.yaml');
         const edge = (
             wf.transitions as Array<{ from: string; to: string; guard?: { options?: { command?: string } } }>
         ).find((t) => t.from === 'verifying' && t.to === 'done');
         expect(edge).toBeDefined();
-        expect(edge?.guard?.options?.command ?? '').toContain('feature-verification.status');
+        // D63 task 0915: the old `.status`-only precondition collapsed into the
+        // strict `feature check --as done`, whose L4 layer validates the bound
+        // verification receipt (verdict, identity, contract, input digest).
+        expect(edge?.guard?.options?.command ?? '').toContain('feature check');
+        expect(edge?.guard?.options?.command ?? '').toContain('--as done');
     });
 
     test('R5 (0880): feature-lifecycle verifying entry invokes the feature-verification workflow', () => {

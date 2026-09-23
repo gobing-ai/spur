@@ -17,6 +17,7 @@
 | `move <id>` | Move a feature to a new parent — cascade-rename the subtree |
 | `refresh` | Rebuild `INDEX.md` + each feature `## Tasks` table from task edges (**docs only** — no status change); scope explicit via `--feature <id>` or `--all` |
 | `check [id]` | Validate feature file(s) through the four-layer check |
+| `verify <id>` | Run the feature-scoped verification pass and record the bound evidence receipt (0915) |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) |
 
 ## spur feature create
@@ -287,6 +288,35 @@ spur feature check [options] [id]
   (linked tasks not done/cancelled).
 
 `--strict` elevates warnings to failures.
+
+## spur feature verify
+
+```
+spur feature verify <id> [options]
+```
+
+Runs the repo-wide verification command (default `bun run spur-check-feature`), then records
+a receipt binding the verdict to the feature identity, the verifier command and the checked
+inputs (feature markdown + git tree digest). Completion (`feature check --as done`, the
+`advance` done hop, the engine `verifying→done` guard) validates this receipt: changed
+tree/spec/contract, wrong feature, missing or failed evidence cannot satisfy completion;
+unchanged valid evidence is reused. Idempotent — re-running overwrites the receipt.
+Exits nonzero on FAIL.
+
+| Argument | Description |
+|---|---|
+| `id` | Feature ID |
+
+| Flag | Description |
+|---|---|
+| `--cmd <command>` | Verification command (default: `bun run spur-check-feature`) |
+| `--folder <path>` | Custom features folder |
+| `--json` | Output machine-readable JSON |
+
+Artifacts: `.spur/run/<id>-feature-receipt.json` (bound receipt),
+`.spur/run/<id>-feature-verification.status` (coarse PASS/FAIL),
+`.spur/run/<id>-feature-verification.log` (command output). `SPUR_RUN_ID` is recorded as the
+receipt `runId` when set.
 
 ## See Also
 

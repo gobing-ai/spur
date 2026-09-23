@@ -1,13 +1,18 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
+    captureFeatureReceiptDigest,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
     FEATURE_LIFECYCLE_PROFILE,
     FeatureCheckService,
     FeatureService,
+    featureReceiptPaths,
     PlanningWriteService,
+    recordFeatureVerificationReceipt,
     resolvePlanningFolders,
     type WriteResult,
 } from '@gobing-ai/spur-app';
 import { normalizeFeatureStatus } from '@gobing-ai/spur-domain';
+import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
@@ -466,6 +471,81 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             }
         });
 
+    // ── verify ──
+    feature
+        .command('verify')
+        .summary('Run the feature-scoped verification pass and record the bound evidence receipt (0915).')
+        .description(
+            [
+                'Runs the repo-wide verification command (default: bun run spur-check-feature), then records',
+                'a receipt binding the verdict to the feature identity, the verifier command and the checked',
+                'inputs (feature markdown + git tree digest). Completion (`--as done` checks) validates this',
+                'receipt: changed tree/spec/contract, wrong feature, missing or failed evidence cannot',
+                'satisfy completion; unchanged valid evidence is reused.',
+                '',
+                'Idempotent: re-running overwrites the receipt. The command exits nonzero on FAIL.',
+            ].join('\n'),
+        )
+        .argument('<id>', 'Feature ID')
+        .option('--cmd <command>', `Verification command (default: ${DEFAULT_FEATURE_VERIFICATION_CMD})`)
+        .option(...SHARED_OPTIONS.folderFeatures)
+        .option(...SHARED_OPTIONS.json)
+        .option(...SHARED_OPTIONS.jsonEnvelope)
+        .action(async (id, options) => {
+            const resolved = await resolvePlanningFolders(context.fs);
+            const featuresDir = options.folder ?? context.fs.resolve(resolved.featuresDir);
+            const verificationCmd = options.cmd ?? DEFAULT_FEATURE_VERIFICATION_CMD;
+            const runDir = context.fs.resolve('.spur/run');
+            try {
+                const entries = await context.fs.readDir(featuresDir);
+                const fileName = entries.find((n) => n.match(new RegExp(`^${id}_.+\\.md$`)));
+                if (!fileName) {
+                    writeJsonError(context.output, options, `Feature ${id} not found`, 'NOT_FOUND');
+                    context.setExitCode(1);
+                    return;
+                }
+                const featurePath = `${featuresDir}/${fileName}`;
+                const raw = await context.fs.readFile(featurePath);
+                // Digest BEFORE the pass: the receipt binds the inputs that were verified.
+                // Wrapup edits after the pass change the tree and the receipt goes stale —
+                // that ordering is the enforcement (R3), not a bug.
+                const inputDigest = await captureFeatureReceiptDigest(context.cwd, raw);
+                const paths = featureReceiptPaths(runDir, id);
+                await context.fs.ensureDir(runDir);
+                // Shell-level redirection keeps the unbounded verification log
+                // intact (no in-memory capture cap); node:fs is banned at the
+                // CLI command layer by no-direct-fs-io.
+                const result = await new NodeProcessExecutor().run({
+                    command: 'sh',
+                    args: ['-c', `${verificationCmd} > '${paths.log}' 2>&1`],
+                    cwd: context.cwd,
+                    rejectOnError: false,
+                });
+                const verdict: 'PASS' | 'FAIL' = result.exitCode === 0 ? 'PASS' : 'FAIL';
+                const receipt = await recordFeatureVerificationReceipt(context.fs, runDir, {
+                    featureId: id,
+                    inputDigest,
+                    verificationCmd,
+                    verdict,
+                    runId: context.env.SPUR_RUN_ID ?? null,
+                });
+                if (options.json) {
+                    context.output.write(
+                        toEnvelopeJson(
+                            { id, verdict, inputDigest, receipt, receiptPath: paths.receipt, logPath: paths.log },
+                            { enveloped: options.jsonEnvelope },
+                        ),
+                    );
+                } else {
+                    context.output.write(`${id}: verification ${verdict} (receipt ${paths.receipt})`);
+                }
+                if (verdict === 'FAIL') context.setExitCode(1);
+            } catch (err) {
+                writeJsonError(context.output, options, String(err));
+                context.setExitCode(1);
+            }
+        });
+
     // ── sync ──
     feature
         // Distinct from `refresh`: sync proposes/applies real lifecycle transitions
@@ -599,6 +679,9 @@ async function assertFeatureCheckPass(
         featuresDir,
         tasksDir,
         tasksDirs,
+        // Receipt validation (0915) reads evidence from the same run dir the CLI
+        // check action uses — the completion boundary must see the same evidence.
+        runDir: context.fs.resolve('.spur/run'),
         // 0418: the hop's target status so the one-active-goal rule sees the
         // post-transition state (same hint the FSM shell guard passes).
         asStatus,

@@ -256,3 +256,39 @@ Fix is an ordering or scoping choice — apply dependencies before the digest is
 `computePlanningDigest`) — the smaller of the two options: it needs no new ordering state, keeps the
 ready-checklist `dependencies` row as the drift check, and makes `handoff-finalize` idempotent as a
 consequence rather than a second fix.
+
+## Feature verification receipt — v1 private contract (D63 task 0915)
+
+The feature-scoped verification pass (above) recorded evidence as a bare
+`.spur/run/<fid>-feature-verification.status` string — identity-blind, input-blind,
+writer-blind. Task 0915 replaces it with a bound receipt; the status file remains as
+coarse routing evidence for the `feature-verification` workflow's internal `verify→done`
+transition, but it no longer satisfies completion by itself.
+
+**Artifact** `.spur/run/<fid>-feature-receipt.json`, written by `spur feature verify <fid> --cmd <cmd>`
+(single writer; the workflow shells it). Private schema `feature-verification-receipt/v1`:
+
+| Field | Meaning |
+| --- | --- |
+| `featureId` | owning feature; validated at completion (cross-feature rejection) |
+| `inputDigest` | `ProofInputFingerprint.compute({cwd, featureContent})` — feature markdown + git tree of tracked sources (shared engine, no second digest) |
+| `verificationCmd` | verifier contract, recorded verbatim and compared at validation |
+| `verdict` | `PASS`/`FAIL`; only PASS satisfies completion |
+| `runId` | engine run identity when recorded inside a workflow run, else null |
+| `recordedAt` | diagnostic timestamp — freshness is the digest chain, not the clock |
+
+**Completion boundary.** `FeatureCheckService.check` validates the receipt when the
+transition target is `--as done` (plain on-disk `done` reads stay advisory — no
+backfill burden on pre-receipt features). Rejections are unsuppressible
+`L4.feature-receipt-*` error findings: `missing`, `malformed`, `cross-feature`,
+`failed`, `stale` (digest drift: tree, spec or check contract changed after the
+pass), `contract-mismatch`. Digest-capture git failure is fail-closed (0751 R1).
+All completion paths enforce: `feature advance`'s done hop, and the engine
+`verifying→done` guard (`feature check --strict --as done`, whose `cat .status`
+precondition the receipt subsumes and replaces).
+
+**Ordering and replay.** `feature verify` is idempotent (overwrite on re-run).
+Wrapup mutations that land after the pass change the tree digest and make the
+receipt stale, forcing re-verification — record/learning writes must complete
+before the final pass, and the digest chain (not call order) enforces it.
+Unchanged valid evidence is reused without re-running the repo-wide pass.

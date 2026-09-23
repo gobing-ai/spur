@@ -231,6 +231,22 @@ export {
     FeatureService,
     isFeatureActionName,
 } from './services/feature-service';
+export type {
+    FeatureReceiptPaths,
+    FeatureReceiptRejection,
+    FeatureReceiptValidation,
+    FeatureVerificationReceipt,
+    RecordFeatureReceiptOptions,
+} from './services/feature-verification-receipt';
+export {
+    captureFeatureReceiptDigest,
+    DEFAULT_FEATURE_VERIFICATION_CMD,
+    FEATURE_RECEIPT_SCHEMA,
+    featureReceiptPaths,
+    isProofCaptureError,
+    recordFeatureVerificationReceipt,
+    validateFeatureVerificationReceipt,
+} from './services/feature-verification-receipt';
 export {
     ALL_FINDING_CODES,
     FINDING_CODES,

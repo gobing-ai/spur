@@ -11,10 +11,11 @@
 #
 # Run: spur workflow run feature-verification.yaml --vars '{"featureId":"D62"}'
 #
-# Shape: verify -> done | failed. The shell action writes the verdict to
-# `.spur/run/<featureId>-feature-verification.status` and always exits 0; the
-# transition guard reads the status so a missing, corrupt or FAIL verdict routes
-# to `failed` (fail-closed), never a silent PASS.
+# Shape: verify -> done | failed. The `feature verify` verb (task 0915) runs the
+# command, writes the verdict to `.spur/run/<featureId>-feature-verification.status`
+# AND a bound receipt (`.receipt.json`) digest-chained to the checked inputs; it
+# always exits 0 here, so the transition guard reads the status and a missing,
+# corrupt or FAIL verdict routes to `failed` (fail-closed), never a silent PASS.
 #
 # Reliability (aligned with task-pipeline / ADR-043): no agent.run nodes; the
 # verification command is a trusted config var executed via `sh -c` (same
@@ -39,16 +40,16 @@ vars:
 states:
   - id: verify
     description: >
-      Run the repo-wide check set, record the verdict, always exit 0.
+      Run the repo-wide check set via `feature verify`, which records the verdict
+      and a bound evidence receipt (D63 task 0915: feature identity, verifier
+      contract, checked-input digest), always exit 0 so the transition guard
+      routes missing/corrupt/FAIL to `failed`.
     onEnter:
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run;
-            sh -c "$verificationCmd" > ".spur/run/$featureId-feature-verification.log" 2>&1
-            && printf 'PASS\n' > ".spur/run/$featureId-feature-verification.status"
-            || printf 'FAIL\n' > ".spur/run/$featureId-feature-verification.status";
-            exit 0
+            $spurBin feature verify "$featureId" --cmd "$verificationCmd" || true
 
   - id: done
     description: Terminal — repo-wide checks passed.
