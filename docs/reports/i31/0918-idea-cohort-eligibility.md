@@ -19,15 +19,16 @@ Currently selected definition: `idea-pipeline` digest
 
 | Class | Count | Current digest | Other digests | No digest recorded |
 | --- | --- | --- | --- | --- |
-| done | 15 | 1 (synthetic) | 14 | — |
-| failed | 57 | 0 | 21+12 (dry) | 24 |
+| done | 15 | 1 (synthetic) | 4 | 10 |
+| failed | 57 | 0 | 11 (+19 dry) | 23 (+4 dry) |
 | paused | 2 | 0 | 1 | 1 |
 | running | 5 | 0 | 5 | — |
 
 Notes: the single "done" row at the current digest
 (`09edc382-e392-41aa-bab7-51b340ec5f45`) is synthetic fixture data — epoch
 timestamps ≈ 2 s and canned round durations (`discovery 200ms`, `idea-eval
-123000ms`) — not a real execution; excluded. Dry-run rows are excluded as
+123000ms`; `agent.run` nodes complete in 200 ms) — not a real execution;
+excluded. Dry-run rows are excluded as
 non-real. Rows with no `definitionDigest` in run metadata are unattributable
 and excluded per the 0913 evidence rules.
 
