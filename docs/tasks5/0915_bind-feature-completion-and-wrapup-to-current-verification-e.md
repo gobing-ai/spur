@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Bind feature completion and wrapup to current verification evidence
-status: wip
+status: done
 template: standard
 created_at: 2026-09-22T02:56:46.299Z
-updated_at: "2026-09-23T06:27:05.474Z"
+updated_at: "2026-09-23T17:40:37.911Z"
 feature_id: D63
 priority: P2
 tags:
@@ -30,20 +30,18 @@ Planning reference: docs/plans/2026-09-21-next-generation-spur-workflows.md. One
 
 ### Requirements
 
-- [ ] R1. Record and validate feature verification evidence against feature/run identity, selected verifier definition, check contract and the relevant checked tree/spec inputs.
-- [ ] R2. Reject missing, malformed, failed, stale or cross-feature evidence at feature completion and after rework; reuse unchanged valid evidence without an unnecessary full rerun.
-- [ ] R3. Order wrapup mutations and feature verification so all relevant final changes are checked; make record/learning operations idempotent where they may replay.
-- [ ] R4. Reuse existing proof/digest and artifact services and preserve the existing task lifecycle and independent verification requirements.
+- [x] R1. Record and validate feature verification evidence against feature/run identity, selected verifier definition, check contract and the relevant checked tree/spec inputs.
+- [x] R2. Reject missing, malformed, failed, stale or cross-feature evidence at feature completion and after rework; reuse unchanged valid evidence without an unnecessary full rerun.
+- [x] R3. Order wrapup mutations and feature verification so all relevant final changes are checked; make record/learning operations idempotent where they may replay.
+- [x] R4. Reuse existing proof/digest and artifact services and preserve the existing task lifecycle and independent verification requirements.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A completion fixture accepts a valid receipt only for its bound feature, run, verifier/check contract and input digest. (req: R1)
-- [ ] AC2 — Changed relevant inputs, rework, missing/corrupt receipt and FAIL cannot advance feature completion, while unchanged valid evidence is reusable. (req: R2)
-- [ ] AC3 — A wrapup document edit is verified before completion, and replay neither duplicates learning entries nor creates a lifecycle-metadata invalidation loop. (req: R3)
-- [ ] AC4 — Existing task verification/proof refusal cases and canonical status transitions remain intact, with no second digest implementation. (req: R4)
-- [ ] AC5 — Completion uses current evidence (req: R1)
-
-Feature-level traceability: this task delivers D63 scenario R2; AC1–AC4 give its task-local regression evidence.
+- [x] AC1 — A completion fixture accepts a valid receipt only for its bound feature, run, verifier/check contract and input digest. (req: R1)
+- [x] AC2 — Changed relevant inputs, rework, missing/corrupt receipt and FAIL cannot advance feature completion, while unchanged valid evidence is reusable. (req: R2)
+- [x] AC3 — A wrapup document edit is verified before completion, and replay neither duplicates learning entries nor creates a lifecycle-metadata invalidation loop. (req: R3)
+- [x] AC4 — Existing task verification/proof refusal cases and canonical status transitions remain intact, with no second digest implementation. (req: R4)
+- [x] AC5 — Completion uses current evidence (req: R1)
 
 ### Q&A
 
@@ -69,10 +67,10 @@ Tests: packages/app/tests/workflow for input/identity/supersession/drift validat
 
 ### Plan
 
-- [ ] 1. Create a fresh worktree off current main; trace every receipt/status reader and wrapup mutation, then record the v1 private contract in the owning design satellite. (R1)
-- [ ] 2. Implement the shared input digest and receipt validator using existing fingerprint, resolver, run snapshot and artifact services; integrate source and bundled script paths. (R1, R4)
-- [ ] 3. Wire verifier, lifecycle and wrapup ordering; make same-run learning/metrics writes replay-safe and keep partial-feature wrapup task-local. (R2, R3)
-- [ ] 4. Exercise a harmless real workflow/CLI run plus wrong identity, stale/rework/dirty-input, command override, mid-check drift, failed write and replay cases. Run task-local, plugin standalone/parity, build and affected workflow checks; leave the feature-wide gate for the settled feature boundary. (R1–R4)
+- [x] 1. Create a fresh worktree off current main; trace every receipt/status reader and wrapup mutation, then record the v1 private contract in the owning design satellite. (R1)
+- [x] 2. Implement the shared input digest and receipt validator using existing fingerprint, resolver, run snapshot and artifact services; integrate source and bundled script paths. (R1, R4)
+- [x] 3. Wire verifier, lifecycle and wrapup ordering; make same-run learning/metrics writes replay-safe and keep partial-feature wrapup task-local. (R2, R3)
+- [x] 4. Exercise a harmless real workflow/CLI run plus wrong identity, stale/rework/dirty-input, command override, mid-check drift, failed write and replay cases. Run task-local, plugin standalone/parity, build and affected workflow checks; leave the feature-wide gate for the settled feature boundary. (R1–R4)
 
 ### Solution
 
@@ -101,7 +99,17 @@ Upgraded the ADR-119 feature verification evidence from the v0 identity-blind `.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Frozen v1 receipt contract, all 11 fields: packages/app/src/workflow/feature-verification-receipt.ts:70-95 (schemaVersion, featureId, runId, workdir, verifier{name,sourcePath,layer,definitionDigest}, verificationCmd, inputDigest, status RUNNING/PASS/FAIL, startedAt, completedAt). Two-copy storage .spur/run/<runId>-… + <featureId>-…: receipt ts:136-150, atomic tmp+rename :144-150. Start supersedes feature-latest before the result exists (:181-208); complete binds the after-pass digest (:210-243). Recording script resolves the selected definition for verifier identity and registers the run-scoped receipt as a run artifact: plugins/sp/scripts/feature-verification-steps.ts:160-181. |
+| R2 | MET | Done-boundary gate keyed on the transition target: packages/app/src/services/feature-check.ts:267-275 (`asStatus==='done' && runDir`); plain done reads and all-feature scans stay advisory. Fail-closed validation: feature-check.ts:448-533 — resolver failure → L4.feature-receipt-contract (:461-478), digest-capture failure → stale (:489-505), 8 rejections mapped 1:1 to codes (:517-526). All 8 codes registered: packages/config/src/finding-codes.ts:153-160; all 8 unsuppressible via COMPLETION_FINDING_CODES → REQUIRED_FINDING_CODES spread: packages/app/src/services/planning-check-base.ts:60-68, :89, isUnsuppressibleFinding :93-95. Every completion path enforces: `feature advance` done hop (apps/cli/src/commands/feature.ts:635-663, runDir + receiptRunPort) and the engine verifying→done guard `feature check --strict --as done` (config/workflows/feature-lifecycle.yaml:78; CLI check path wires the port at feature.ts:435-449). Reuse without rerun: unchanged valid PASS validates (receipt test 'valid PASS receipt validates and both copies agree'); rework supersedes via start (receipt ts:181-208). |
+| R3 | MET | Wrapup mutations are ordered before the verification gate: config/workflows/wrapup-pipeline.yaml state chain task-resolve → doc-sync → learnings → metrics → feature-transition (:16, :79) → feature-verify hop (:299-321) re-runs the feature gate over the post-wrapup corpus and fails wrapup loudly on FAIL. Digest-chain enforcement: tree/spec/learning drift after the pass yields stale at the done boundary (receipt ts:450-455); gitignored learnings folded explicitly into the digest (feature-check.ts:489-497, proof-input-fingerprint.ts:58, :399). Idempotent record/learning: receipt writes atomic + superseding (receipt ts:144-243); learning WBS dedup first-seen (plugins/sp/scripts/wrapup-steps.ts:164-168) and 0607 learnings dedup (wrapup-pipeline.yaml:47, :120). No lifecycle-metadata invalidation loop: extractFeatureProofData folds only frontmatter id/name + Goal/Scope/AC sections (packages/app/src/workflow/proof-input-fingerprint.ts:343-364) — forward status/updated_at, Tasks table, History lines and INDEX markers are excluded from the digest. |
+| R4 | MET | Single digest engine, no second implementation: captureFeatureReceiptDigest → ProofInputFingerprint.compute (receipt ts:464-470). Existing artifact/run services reused: ArtifactDao.record registration (feature-verification-steps.ts:173-181); read-only RunDao/ArtifactDao receiptRunPort (apps/cli/src/commands/feature.ts:570-605). Lifecycle and independent verification preserved: canonical feature-lifecycle states/transitions untouched, only the done guard now enforces the strict check; safe launch splitter, never shell interpolation (feature-verification-steps.ts:183-186); receipt paths confined (receipt ts:118-133). No new public surface: `spur feature --help` shows no verify verb (removed; design doc docs/design/workflow-execution-economy.md:273). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -148,4 +156,6 @@ Positive: `feature-verification-receipt.ts` is a deep module — schema, paths, 
 ### History
 
 - 2026-09-23T04:57:04.549Z todo → wip (system)
+- 2026-09-23T17:39:41.248Z wip → testing (system)
+- 2026-09-23T17:40:37.911Z testing → done (system)
 
