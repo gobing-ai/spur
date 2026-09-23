@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Simplify idea authoring without weakening the planning handoff
-status: wip
+status: done
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T17:47:34.940Z"
+updated_at: "2026-09-23T17:56:20.806Z"
 feature_id: D63
 priority: P2
 tags:
@@ -31,10 +31,10 @@ The 0912 discovery sample found ten idea-pipeline rows: one DB done, four failed
 
 ### Requirements
 
-- [ ] R1. Use an idea-specific baseline to determine whether consolidating feature-intent and AC authoring removes measurable redundant model work.
-- [ ] R2. Preserve verbatim intake and requirement coverage, feature structural checks, explicit design decisions and the corpus CLI write boundary.
-- [ ] R3. Preserve task dependency ordering, preparation digest validity and the single honest refineall/runall handoff.
-- [ ] R4. Use the established candidate deadline and real-evidence promotion process, with rejection/retirement if parity or benefit is unproven.
+- [x] R1. Use an idea-specific baseline to determine whether consolidating feature-intent and AC authoring removes measurable redundant model work.
+- [x] R2. Preserve verbatim intake and requirement coverage, feature structural checks, explicit design decisions and the corpus CLI write boundary.
+- [x] R3. Preserve task dependency ordering, preparation digest validity and the single honest refineall/runall handoff.
+- [x] R4. Use the established candidate deadline and real-evidence promotion process, with rejection/retirement if parity or benefit is unproven.
 
 ### Acceptance Criteria
 
@@ -80,13 +80,27 @@ Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.tes
 
 ### Testing
 
-- No production code changed (no-change outcome); existing suites re-run green: packages/app/tests/workflow/idea-pipeline-definition.test.ts 41 pass / 0 fail, plugins/sp/tests/idea-coverage-check.test.ts 6 pass / 0 fail.
-- Evidence queries (main project DB): workflow show idea-pipeline --json (selected digest e455eab1…); runs grouped by status × dryRun × definitionDigest (79 rows; 1 done at current digest, synthetic); action_runs for run 09edc382-e392-41aa-bab7-51b340ec5f45 (fixture durations).
-- Coverage claim: N/A — disposition/report task; no new source paths.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Idea-specific baseline frozen and published: 79 rows classified by digest/dry-run/terminal (docs/reports/i31/0918-idea-cohort-eligibility.md:14-24); determination recorded — benefit not demonstrable at 0 real terminals; SQL re-run this session confirms 79 rows / 1 synthetic done at e455eab1. R1 does not demand a graph change; it demands the baseline-driven determination, which exists. |
+| R2 | MET | config/workflows/idea-pipeline.yaml absent from git diff 9e874de17~1..9e874de17 (only report + task file); verbatim intake (.spur/run/<runId>-idea-input.md), idea-ac-check/idea-coverage-check, taste gates (idea-eval, feature-check, design-approval) and corpus CLI write boundary all untouched by definition; idea-pipeline-definition.test.ts re-run 41 pass / 0 fail. |
+| R3 | MET | Graph untouched → task dependency ordering, ready-prepare preparation digest flow and the single handoff finalize path unchanged; same suite re-run green; `workflow show idea-pipeline --json` shows the unchanged e455eab1 graph with intact decompose → batch-create → batch-create-run → ready-prepare → handoff-finalize → handoff route. |
+| R4 | MET | Candidate registration is preconditioned on the eligible branch ("For an eligible cohort, register one candidate before changing the graph"); branch did not fire. config/workflow-candidates.json candidates: [] and unmodified by 9e874de17 → no candidate, no deadline; disposition INSUFFICIENT_EVIDENCE recorded (report Decision §, task Solution). The retire/reject path is moot with nothing registered, and the promotion process itself was honored by not bypassing it. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
 
 ### References
 
@@ -100,4 +114,6 @@ Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.tes
 - 2026-09-22T02:58:00.918Z todo → blocked (system)
 - 2026-09-23T03:03:04.280Z blocked → todo (system)
 - 2026-09-23T17:43:45.773Z todo → wip (system)
+- 2026-09-23T17:56:20.472Z wip → testing (system)
+- 2026-09-23T17:56:20.806Z testing → done (system)
 
