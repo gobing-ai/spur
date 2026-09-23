@@ -29,7 +29,6 @@ what* or *how to write a scenario*, this skill.
 | `move <id>` | Re-parent a subtree (cascade-rename of descendants) | `--parent <id>` `--dry-run` `--folder` `--json` |
 | `refresh` | Rebuild INDEX + each feature `## Tasks` table from task edges (**docs only**; no status change) | `--feature <id>` `--all` `--folder` `--json` |
 | `check [id]` | Validate one feature / the tree; the 4-layer gate; `--fix` repairs structural findings in place | `--strict` `--fix` `--as <status>` `--folder` `--json` |
-| `verify <id>` | Run the feature-scoped verification pass and record the bound receipt consumed by completion checks (0915) | `--cmd <command>` `--folder` `--json` |
 | `sync [id]` | Align feature **lifecycle status** with linked task states (real transitions + guards) | `--all` `--dry-run` `--force` `--folder` `--json` |
 
 **`refresh` vs `sync` (do not conflate):**

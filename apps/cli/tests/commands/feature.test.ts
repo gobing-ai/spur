@@ -8,7 +8,7 @@
  * and exit codes 0/1/2 (design §7.2, §10).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { rmSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { main } from '../../src/index';
@@ -21,10 +21,7 @@ beforeAll(async () => {
     await mkdir(join(cwd, 'docs', 'features'), { recursive: true });
     // Real repos ignore `.spur/` — keeps recorded receipts out of the digest tree.
     writeFileSync(join(cwd, '.gitignore'), '.spur/\n');
-    // The feature `verify` verb digests the git tree (0915) — the shared fixture
-    // needs one commit so `git read-tree HEAD` resolves. Committed eagerly so both
-    // describes share one initialized repo; Bun hook ordering across describes
-    // otherwise leaves the verify tests without a HEAD.
+    // Fixture commits HEAD first so `git read-tree HEAD` resolves for tree-digest paths.
     const init = Bun.spawnSync(
         [
             'sh',
@@ -648,54 +645,5 @@ Review description
         const code2 = await main(['feature', 'update', fid, '--value', 'val'], { cwd, output: errOut2 });
         expect(code2).toBe(2);
         expect(errOut2.errors.join('')).toContain('--field is required with --value');
-    });
-});
-
-describe('spur feature verify (0915)', () => {
-    async function createFeature(name: string): Promise<string> {
-        const output = createCapturedOutput();
-        // Feature A is created by the first describe; child IDs keep the top-level
-        // letter space (exhausted by describe 1) out of the equation.
-        const code = await main(['feature', 'create', name, '--parent', 'A'], { cwd, output });
-        if (code !== 0 || output.messages.length === 0)
-            throw new Error(`fixture create failed (${code}): ${output.errors.join(' | ')}`);
-        return createdId(output);
-    }
-
-    test('unknown feature ID exits 1 with NOT_FOUND', async () => {
-        const output = createCapturedOutput();
-        const exitCode = await main(['feature', 'verify', 'ZZZ', '--cmd', 'true'], { cwd, output });
-        expect(exitCode).toBe(1);
-        expect(output.errors.join('')).toContain('not found');
-    });
-
-    test('passing verification command records a PASS receipt and exits 0', async () => {
-        const fid = await createFeature('Verify Me');
-        const output = createCapturedOutput();
-        const exitCode = await main(['feature', 'verify', fid, '--cmd', 'true'], { cwd, output });
-        expect(exitCode).toBe(0);
-        expect(output.messages.join('')).toContain('verification PASS');
-        const receiptPath = join(cwd, '.spur', 'run', `${fid}-feature-verification.receipt.json`);
-        const receipt = JSON.parse(readFileSync(receiptPath, 'utf8')) as { featureId: string; verdict: string };
-        expect(receipt.featureId).toBe(fid);
-        expect(receipt.verdict).toBe('PASS');
-    });
-
-    test('failing verification command records FAIL and exits 1', async () => {
-        const fid = await createFeature('Verify Fail');
-        const output = createCapturedOutput();
-        const exitCode = await main(['feature', 'verify', fid, '--cmd', 'false'], { cwd, output });
-        expect(exitCode).toBe(1);
-        expect(output.messages.join('')).toContain('verification FAIL');
-    });
-
-    test('--json returns the verdict envelope', async () => {
-        const fid = await createFeature('Verify Json');
-        const output = createCapturedOutput();
-        const exitCode = await main(['feature', 'verify', fid, '--cmd', 'true', '--json'], { cwd, output });
-        expect(exitCode).toBe(0);
-        const payload = JSON.parse(lastMessage(output)) as { verdict: string; id: string };
-        expect(payload.verdict).toBe('PASS');
-        expect(payload.id).toBe(fid);
     });
 });

@@ -1,18 +1,14 @@
 import type { Command } from '@commander-js/extra-typings';
 import {
-    captureFeatureReceiptDigest,
-    DEFAULT_FEATURE_VERIFICATION_CMD,
     FEATURE_LIFECYCLE_PROFILE,
     FeatureCheckService,
+    type FeatureReceiptRunPort,
     FeatureService,
-    featureReceiptPaths,
     PlanningWriteService,
-    recordFeatureVerificationReceipt,
     resolvePlanningFolders,
     type WriteResult,
 } from '@gobing-ai/spur-app';
-import { normalizeFeatureStatus } from '@gobing-ai/spur-domain';
-import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
+import { ArtifactDao, normalizeFeatureStatus, RunDao } from '@gobing-ai/spur-domain';
 import type { CliContext } from '../context';
 import { toEnvelopeJson, writeJsonError } from '../output';
 import { makePlanningEmitter } from '../planning-emitter';
@@ -443,6 +439,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         tasksDirs,
                         // Verdict SSOT is always <cwd>/.spur/run (not docs/.spur/run).
                         runDir: context.fs.resolve('.spur/run'),
+                        // Receipt validation (0915) needs the run store: terminal
+                        // recording-run status, persisted definition identity and
+                        // artifact registration.
+                        receiptRunPort: await makeReceiptRunPort(context),
                         severityOverrides: resolved.severityOverrides,
                         asStatus: options.as,
                         fix: options.fix === true,
@@ -465,81 +465,6 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     context.output.write(toEnvelopeJson(results, { enveloped: options.jsonEnvelope, kind: 'list' }));
                 }
                 if (results.some((r) => !r.pass)) context.setExitCode(1);
-            } catch (err) {
-                writeJsonError(context.output, options, String(err));
-                context.setExitCode(1);
-            }
-        });
-
-    // ── verify ──
-    feature
-        .command('verify')
-        .summary('Run the feature-scoped verification pass and record the bound evidence receipt (0915).')
-        .description(
-            [
-                'Runs the repo-wide verification command (default: bun run spur-check-feature), then records',
-                'a receipt binding the verdict to the feature identity, the verifier command and the checked',
-                'inputs (feature markdown + git tree digest). Completion (`--as done` checks) validates this',
-                'receipt: changed tree/spec/contract, wrong feature, missing or failed evidence cannot',
-                'satisfy completion; unchanged valid evidence is reused.',
-                '',
-                'Idempotent: re-running overwrites the receipt. The command exits nonzero on FAIL.',
-            ].join('\n'),
-        )
-        .argument('<id>', 'Feature ID')
-        .option('--cmd <command>', `Verification command (default: ${DEFAULT_FEATURE_VERIFICATION_CMD})`)
-        .option(...SHARED_OPTIONS.folderFeatures)
-        .option(...SHARED_OPTIONS.json)
-        .option(...SHARED_OPTIONS.jsonEnvelope)
-        .action(async (id, options) => {
-            const resolved = await resolvePlanningFolders(context.fs);
-            const featuresDir = options.folder ?? context.fs.resolve(resolved.featuresDir);
-            const verificationCmd = options.cmd ?? DEFAULT_FEATURE_VERIFICATION_CMD;
-            const runDir = context.fs.resolve('.spur/run');
-            try {
-                const entries = await context.fs.readDir(featuresDir);
-                const fileName = entries.find((n) => n.match(new RegExp(`^${id}_.+\\.md$`)));
-                if (!fileName) {
-                    writeJsonError(context.output, options, `Feature ${id} not found`, 'NOT_FOUND');
-                    context.setExitCode(1);
-                    return;
-                }
-                const featurePath = `${featuresDir}/${fileName}`;
-                const raw = await context.fs.readFile(featurePath);
-                // Digest BEFORE the pass: the receipt binds the inputs that were verified.
-                // Wrapup edits after the pass change the tree and the receipt goes stale —
-                // that ordering is the enforcement (R3), not a bug.
-                const inputDigest = await captureFeatureReceiptDigest(context.cwd, raw);
-                const paths = featureReceiptPaths(runDir, id);
-                await context.fs.ensureDir(runDir);
-                // Shell-level redirection keeps the unbounded verification log
-                // intact (no in-memory capture cap); node:fs is banned at the
-                // CLI command layer by no-direct-fs-io.
-                const result = await new NodeProcessExecutor().run({
-                    command: 'sh',
-                    args: ['-c', `${verificationCmd} > '${paths.log}' 2>&1`],
-                    cwd: context.cwd,
-                    rejectOnError: false,
-                });
-                const verdict: 'PASS' | 'FAIL' = result.exitCode === 0 ? 'PASS' : 'FAIL';
-                const receipt = await recordFeatureVerificationReceipt(context.fs, runDir, {
-                    featureId: id,
-                    inputDigest,
-                    verificationCmd,
-                    verdict,
-                    runId: context.env.SPUR_RUN_ID ?? null,
-                });
-                if (options.json) {
-                    context.output.write(
-                        toEnvelopeJson(
-                            { id, verdict, inputDigest, receipt, receiptPath: paths.receipt, logPath: paths.log },
-                            { enveloped: options.jsonEnvelope },
-                        ),
-                    );
-                } else {
-                    context.output.write(`${id}: verification ${verdict} (receipt ${paths.receipt})`);
-                }
-                if (verdict === 'FAIL') context.setExitCode(1);
             } catch (err) {
                 writeJsonError(context.output, options, String(err));
                 context.setExitCode(1);
@@ -635,6 +560,51 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         });
 }
 
+/**
+ * Read-only run-store ports for receipt validation (0915): the recording run's
+ * terminal status, its persisted definition digest (resume digest wins) and
+ * artifact registration. The project DB opens lazily; a missing row or absent
+ * registration surfaces as a fail-closed `run` rejection at the completion
+ * boundary.
+ */
+async function makeReceiptRunPort(context: CliContext): Promise<FeatureReceiptRunPort> {
+    const db = await context.getDb();
+    const runs = new RunDao(db);
+    const artifacts = new ArtifactDao(db);
+    return {
+        readRunRow: async (runId) => {
+            const row = await runs.traceRowById(runId);
+            if (!row) return undefined;
+            let meta: Record<string, unknown> = {};
+            try {
+                meta = JSON.parse(row.metadata_json) as Record<string, unknown>;
+            } catch {
+                meta = {};
+            }
+            const digest =
+                typeof meta.resumeDefinitionDigest === 'string'
+                    ? meta.resumeDefinitionDigest
+                    : typeof meta.definitionDigest === 'string'
+                      ? meta.definitionDigest
+                      : null;
+            return { status: row.status, definitionDigest: digest, varsJson: null };
+        },
+        hasArtifact: async (runId, path) => {
+            const rows = await artifacts.artifactsByRunId(runId);
+            // Paths may differ by symlink resolution (e.g. /tmp vs /private/tmp), so
+            // fall back to realpath comparison before rejecting a registered artifact.
+            const real = (p: string): string => {
+                try {
+                    return context.fs.realPath?.(p) ?? p;
+                } catch {
+                    return p;
+                }
+            };
+            return rows.some((row) => row.path === path || real(row.path) === real(path));
+        },
+    };
+}
+
 async function makeService(context: CliContext, folderOverride?: string): Promise<FeatureService> {
     // Derive feature/task folders from `.spur/config.yaml` (phase folders) — never hardcode.
     const resolved = await resolvePlanningFolders(context.fs);
@@ -682,6 +652,9 @@ async function assertFeatureCheckPass(
         // Receipt validation (0915) reads evidence from the same run dir the CLI
         // check action uses — the completion boundary must see the same evidence.
         runDir: context.fs.resolve('.spur/run'),
+        // Same run-store port as the check action: the advance hop's completion
+        // boundary must see terminal recording runs and registered artifacts.
+        receiptRunPort: await makeReceiptRunPort(context),
         // 0418: the hop's target status so the one-active-goal rule sees the
         // post-transition state (same hint the FSM shell guard passes).
         asStatus,

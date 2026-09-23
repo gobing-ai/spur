@@ -289,34 +289,9 @@ spur feature check [options] [id]
 
 `--strict` elevates warnings to failures.
 
-## spur feature verify
-
-```
-spur feature verify <id> [options]
-```
-
-Runs the repo-wide verification command (default `bun run spur-check-feature`), then records
-a receipt binding the verdict to the feature identity, the verifier command and the checked
-inputs (feature markdown + git tree digest). Completion (`feature check --as done`, the
-`advance` done hop, the engine `verifying→done` guard) validates this receipt: changed
-tree/spec/contract, wrong feature, missing or failed evidence cannot satisfy completion;
-unchanged valid evidence is reused. Idempotent — re-running overwrites the receipt.
-Exits nonzero on FAIL.
-
-| Argument | Description |
-|---|---|
-| `id` | Feature ID |
-
-| Flag | Description |
-|---|---|
-| `--cmd <command>` | Verification command (default: `bun run spur-check-feature`) |
-| `--folder <path>` | Custom features folder |
-| `--json` | Output machine-readable JSON |
-
-Artifacts: `.spur/run/<id>-feature-receipt.json` (bound receipt),
-`.spur/run/<id>-feature-verification.status` (coarse PASS/FAIL),
-`.spur/run/<id>-feature-verification.log` (command output). `SPUR_RUN_ID` is recorded as the
-receipt `runId` when set.
+Completion evidence: when the target is `done`, `feature check` validates the feature
+verification receipt recorded by the `feature-verification` workflow
+(see `docs/design/workflow-execution-economy.md` — v1 receipt contract).
 
 ## See Also
 

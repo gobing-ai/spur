@@ -2,21 +2,24 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
+import { ArtifactDao, applyCliMigrations, type DbAdapter, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDbAdapter } from '@gobing-ai/ts-db';
 import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { FeatureCheckService } from '../../src/services/feature-check';
+import type { EntityRef } from '../../src/services/planning-write-service';
 import {
     captureFeatureReceiptDigest,
+    completeFeatureVerificationReceipt,
     DEFAULT_FEATURE_VERIFICATION_CMD,
-    recordFeatureVerificationReceipt,
-} from '../../src/services/feature-verification-receipt';
-import type { EntityRef } from '../../src/services/planning-write-service';
+    featureReceiptPaths,
+    startFeatureVerificationReceipt,
+} from '../../src/workflow/feature-verification-receipt';
 import {
     FEATURE_LIFECYCLE_PROFILE,
     LifecycleAdapter,
     type LifecycleAdapterOptions,
 } from '../../src/workflow/lifecycle-adapter';
+import { resolveWorkflowDefinition } from '../../src/workflow/workflow-resolver';
 
 // The real feature-lifecycle state-machine the adapter drives (repo-root config).
 const WORKFLOW_PATH = resolve(import.meta.dir, '..', '..', '..', '..', 'config', 'workflows', 'feature-lifecycle.yaml');
@@ -38,8 +41,10 @@ function initGit(root: string): void {
 }
 
 /**
- * Mirror the production `spur feature verify` recording path (D63 task 0915):
- * digest the current checked inputs, record the bound receipt for `verdict`.
+ * Mirror the production verification script's recording path (D63 task 0915):
+ * digest the current checked inputs, record RUNNING then the terminal receipt,
+ * and back it with a `done` run row + registered artifact — the same run-store
+ * binding the CLI's receipt port enforces at the completion boundary.
  */
 async function recordReceipt(
     fs: FileSystem,
@@ -51,11 +56,54 @@ async function recordReceipt(
 ): Promise<void> {
     const raw = readFileSync(join(featuresDir, fileName), 'utf8');
     const inputDigest = await captureFeatureReceiptDigest(root, raw);
-    await recordFeatureVerificationReceipt(fs, join(root, '.spur', 'run'), {
+    const runId = `run-${featureId.toLowerCase()}`;
+    const runDir = join(root, '.spur', 'run');
+    // Mirror the production script: record the verifier exactly as the workflow
+    // resolver selects it in this workdir, or the completion contract check fails.
+    const selected = await resolveWorkflowDefinition(root, 'feature-verification');
+    const running = await startFeatureVerificationReceipt(fs, runDir, {
         featureId,
-        inputDigest,
+        runId,
+        workdir: root,
+        verifier: {
+            name: 'feature-verification',
+            sourcePath: selected.path,
+            layer: selected.layer,
+            definitionDigest: selected.digest,
+        },
         verificationCmd: DEFAULT_FEATURE_VERIFICATION_CMD,
-        verdict,
+        inputDigest,
+    });
+    await completeFeatureVerificationReceipt(fs, runDir, running, {
+        status: verdict,
+        inputDigest,
+    });
+    // Run-store mirror: the CLI's receipt port refuses a receipt whose run row
+    // is absent or still running, so the fixture records what the engine would.
+    await fs.ensureDir(join(root, '.spur'));
+    const db = await createDbAdapter({ driver: 'bun-sqlite', url: join(root, '.spur', 'spur.db') });
+    await applyCliMigrations(db);
+    const now = new Date().toISOString();
+    // Idempotent: R4 (0872) re-records the receipt after the last tree mutation.
+    await db.run(
+        'INSERT OR REPLACE INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+            runId,
+            'feature-verification',
+            'state-machine',
+            'done',
+            now,
+            now,
+            JSON.stringify({ definitionDigest: selected.digest }),
+            Date.now(),
+            Date.now(),
+        ],
+    );
+    await db.run('DELETE FROM artifacts WHERE run_id = ?', [runId]);
+    await new ArtifactDao(db).record({
+        runId,
+        path: featureReceiptPaths(runDir, featureId, runId).runScoped,
+        kind: 'feature-verification',
     });
 }
 

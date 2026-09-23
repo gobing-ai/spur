@@ -15,6 +15,7 @@
 #
 # Shape: start -> task-resolve -> doc-sync -> learnings-append -> metrics-record
 #          -> feature-transition (conditional: if vars.feature set)
+#          -> feature-verify (post-transition feature check gate, 0915 F1)
 #          -> branch-cleanup (conditional: if vars.merge=true)
 #          -> done
 #        doc-sync routes a contract violation to `repair` (cheap, no
@@ -295,6 +296,27 @@ states:
               printf 'FAIL\n' > ".spur/run/$__runId-wrapup-sync.status";
             fi
 
+  - id: feature-verify
+    description: >
+      Post-feature-transition verification hop (D63 task 0915, review finding
+      F1): wrapup's doc-sync and the feature transition mutate the corpus AFTER
+      the feature-scoped verification pass ran. The proof digest deliberately
+      excludes docs/tasks*/docs/features* (shared evidence, concurrent writers),
+      so the bound receipt stays valid — but the feature's completion boundary
+      must still observe the post-wrapup state. This hop re-runs the feature
+      check gate (`featureGateCmd`): it validates the bound evidence receipt
+      (feature identity, verifier definition digest, terminal recording run,
+      artifact registration, checked-input digest) against the current feature
+      contract. A FAIL fails the wrapup loudly instead of letting a stale PASS
+      ride; only a verified gate writes PASS (0783 R4).
+    onEnter:
+      - kind: shell
+        options:
+          command: >-
+            sh -c "$featureGateCmd" &&
+            printf 'PASS\n' > ".spur/run/$__runId-wrapup-feature-verify.status" ||
+            printf 'FAIL\n' > ".spur/run/$__runId-wrapup-feature-verify.status"
+
   - id: branch-cleanup
     description: >
       Irreversible-operation HITL gate, consent-only (0770). If vars.merge=true,
@@ -474,19 +496,36 @@ transitions:
       options:
         command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = FAIL'
   - from: feature-transition
+    to: feature-verify
+    description: Sync PASS — re-run the feature check gate against the post-wrapup state.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = PASS'
+  - from: feature-verify
+    to: failed
+    description: >
+      Post-wrapup feature check failed (0915 F1): the bound receipt no longer
+      validates against the current feature contract. Already-written
+      learnings/metrics stay on disk.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-feature-verify.status 2>/dev/null)" = FAIL'
+  - from: feature-verify
     to: branch-cleanup
-    description: Sync PASS — merge is requested.
+    description: Post-wrapup feature check PASS — merge is requested.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = PASS && test "$merge" = true'
-  - from: feature-transition
+        command: 'test "$(cat .spur/run/$__runId-wrapup-feature-verify.status 2>/dev/null)" = PASS && test "$merge" = true'
+  - from: feature-verify
     to: done
-    description: Sync PASS — no merge requested.
+    description: Post-wrapup feature check PASS — no merge requested.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = PASS && test "$merge" != true'
+        command: 'test "$(cat .spur/run/$__runId-wrapup-feature-verify.status 2>/dev/null)" = PASS && test "$merge" != true'
 
   # ── branch-cleanup: HITL exhaustive routing (yes / no / cancel → done) ──
   # No irreversible git op is wired yet; confirmation is recorded, then wrap

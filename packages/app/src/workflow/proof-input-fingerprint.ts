@@ -50,6 +50,12 @@ export interface ComputeProofInputOptions {
     taskContent?: string;
     /** Raw markdown content of the feature file. */
     featureContent?: string;
+    /**
+     * Raw content of gitignored `.spur/context/learnings.md`, folded verbatim
+     * into the digest (D63 task 0915 design: learnings are in scope). Omitted
+     * when the file does not exist; appends after a proof invalidate it.
+     */
+    learningsContent?: string;
     /** Corpus and ephemeral path globs excluded from the git tree hash. */
     excludeGlobs?: string[];
     /** ProcessExecutor abstraction. */
@@ -390,6 +396,7 @@ export async function computeProofInputFingerprint(options: ComputeProofInputOpt
         gitTree,
         ...(task !== undefined ? { task } : {}),
         ...(feature !== undefined ? { feature } : {}),
+        ...(options.learningsContent !== undefined ? { learnings: options.learningsContent } : {}),
     });
 
     const hash = crypto.createHash('sha256').update(canonical, 'utf8').digest('hex');

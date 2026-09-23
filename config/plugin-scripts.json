@@ -52,6 +52,11 @@
             "twin": "inline-run-setup.mjs"
         },
         {
+            "rel": "feature-verification-steps.ts",
+            "contract": "standard",
+            "twin": "feature-verification-steps.mjs"
+        },
+        {
             "rel": "idea-coverage-check.ts",
             "contract": "repo-only"
         },

@@ -71,7 +71,9 @@ export const ALL_FINDING_CODES = [
     'L4.feature-receipt-missing',
     'L4.feature-receipt-malformed',
     'L4.feature-receipt-cross-feature',
+    'L4.feature-receipt-divergent',
     'L4.feature-receipt-failed',
+    'L4.feature-receipt-run',
     'L4.feature-receipt-stale',
     'L4.feature-receipt-contract',
 ] as const;
@@ -151,7 +153,9 @@ export const FINDING_CODES = {
     L4_FEATURE_RECEIPT_MISSING: 'L4.feature-receipt-missing',
     L4_FEATURE_RECEIPT_MALFORMED: 'L4.feature-receipt-malformed',
     L4_FEATURE_RECEIPT_CROSS_FEATURE: 'L4.feature-receipt-cross-feature',
+    L4_FEATURE_RECEIPT_DIVERGENT: 'L4.feature-receipt-divergent',
     L4_FEATURE_RECEIPT_FAILED: 'L4.feature-receipt-failed',
+    L4_FEATURE_RECEIPT_RUN: 'L4.feature-receipt-run',
     L4_FEATURE_RECEIPT_STALE: 'L4.feature-receipt-stale',
     L4_FEATURE_RECEIPT_CONTRACT: 'L4.feature-receipt-contract',
 } as const satisfies Record<string, FindingCode>;

@@ -1,30 +1,34 @@
-# Feature-scoped verification pass (ADR-119, feature D62, task 0872).
+# Feature-scoped verification pass (ADR-119, feature D62, task 0872; D63 task
+# 0915 remediation folds the evidence contract into a workflow-owned script).
 #
 # Owns a lifecycle boundary no per-task graph owns: the repo-wide checks whose
-# invariant spans the repository rather than a single task's diff — corpus
-# consistency, contract baselines, dependency/schema drift, the frozen History
-# surface, and the repo-wide test set. They run once per feature, deliberately
-# the slow pass; `feature-lifecycle`'s verifying entry invokes this workflow (task
-# 0880 caller wiring), and its verifying→done guard refuses to complete the
-# feature until this pass records PASS (ADR-119 consequence: a feature is not
-# done until it passes).
+# invariant spans the repository rather than a single task's diff. They run
+# once per feature, deliberately the slow pass; `feature-lifecycle`'s verifying
+# entry invokes this workflow (task 0880 caller wiring), and its verifying→done
+# guard refuses to complete the feature until this pass records PASS (ADR-119
+# consequence: a feature is not done until it passes).
 #
-# Run: spur workflow run feature-verification.yaml --vars '{"featureId":"D62"}'
+# Run: spur workflow run feature-verification.yaml --vars '{"featureId":"D63"}'
 #
-# Shape: verify -> done | failed. The `feature verify` verb (task 0915) runs the
-# command, writes the verdict to `.spur/run/<featureId>-feature-verification.status`
-# AND a bound receipt (`.receipt.json`) digest-chained to the checked inputs; it
-# always exits 0 here, so the transition guard reads the status and a missing,
-# corrupt or FAIL verdict routes to `failed` (fail-closed), never a silent PASS.
+# Shape: verify -> done | failed. The onEnter step runs the standard script
+# `feature-verification-steps.ts` (no public CLI verb, D63 task 0915): it
+# resolves this very definition for the verifier identity (name, source path,
+# layer, definition digest), records the RUNNING receipt (run-scoped +
+# feature-latest copies), registers the run-scoped receipt as a run artifact,
+# runs the configured verification command via the safe launch splitter, and
+# completes the receipt PASS/FAIL with the after-pass proof-input digest. A
+# changed tree during the pass records FAIL.
 #
 # Reliability (aligned with task-pipeline / ADR-043): no agent.run nodes; the
-# verification command is a trusted config var executed via `sh -c` (same
-# surface as task-pipeline's qualityGateCmd — never interpolate untrusted input).
+# verification command comes from `vars.verificationCmd` below and is never
+# interpolated through a shell. The always-exit-0 onEnter means missing,
+# corrupt or FAIL evidence routes to `failed` via the guard (fail-closed),
+# never a silent PASS; infrastructure errors exit nonzero and surface.
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: feature-verification
 version: "1"
-description: "Feature-scoped verification pass (ADR-119): runs the repo-wide check set once per feature and records PASS/FAIL. Invoked by feature-lifecycle's verifying entry."
+description: "Feature-scoped verification pass (ADR-119): runs the repo-wide check set once per feature and records a bound PASS/FAIL evidence receipt. Invoked by feature-lifecycle's verifying entry."
 iterationBound: 2
 initialState: verify
 terminalStates:
@@ -36,37 +40,40 @@ vars:
   featureId: "X"
   spurBin: "spur"
   verificationCmd: "bun run spur-check-feature"
+  __runId: ""
 
 states:
   - id: verify
     description: >
-      Run the repo-wide check set via `feature verify`, which records the verdict
-      and a bound evidence receipt (D63 task 0915: feature identity, verifier
-      contract, checked-input digest), always exit 0 so the transition guard
-      routes missing/corrupt/FAIL to `failed`.
+      Run the repo-wide check set via the standard verification script, which
+      records the bound evidence receipt (verifier identity, checked-input
+      digest, run identity) and the coarse status file, always exit 0 so the
+      transition guard routes missing/corrupt/FAIL to `failed`.
     onEnter:
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run;
-            $spurBin feature verify "$featureId" --cmd "$verificationCmd" || true
+            bun plugins/sp/scripts/feature-verification-steps.ts verify
+            --feature-id "$featureId"
+            --run-id "$__runId"
+            --spur-bin "$spurBin"
 
   - id: done
-    description: Terminal — repo-wide checks passed.
+    description: Terminal — repo-wide checks passed and the receipt is bound.
 
   - id: failed
-    description: Terminal — repo-wide checks failed or the verdict is missing/corrupt.
+    description: Terminal — repo-wide checks failed or the evidence is missing/corrupt.
 
 transitions:
   - from: verify
     to: done
-    description: Repo-wide checks passed — the feature-scoped verification pass records PASS.
+    description: Repo-wide checks passed — the script completed the receipt with PASS.
     guard:
       kind: shell
       options:
-        command: 'test "$(cat .spur/run/$featureId-feature-verification.status 2>/dev/null)" = PASS'
+        command: 'test "$(cat .spur/run/$__runId-feature-verification.status 2>/dev/null)" = PASS'
   - from: verify
     to: failed
-    description: Repo-wide checks failed (or the verdict is missing/corrupt) — stop at failed.
+    description: Repo-wide checks failed (or the evidence is missing/corrupt) — stop at failed.
     guard:
       kind: always
