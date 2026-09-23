@@ -2631,3 +2631,54 @@ Gotchas
 - Inline task-pipeline runs leave `runs` rows perpetually `running` (0912 F1): 10/10 stale at freeze, 7 with out-of-DB terminal evidence. Row closure + ADR-117 emission are the selected pilot (deadline 2026-10-06).
 - The proof digest hashes the isolated git tree, not just the task/feature specs — committing untracked deliverables or landing unrelated main commits changes it. Bound registrations must be captured against the exact tree being certified.
 - Pre-existing gate failures on main (fleet.ts tsdoc) block every task's gate; repair them in a separately-attributed commit rather than smuggling them into the task's diff.
+**Doc-evolve wrapup complete.** Drift audit (deterministic detection + judgment per §7):
+
+**Findings → repairs**
+- **T3 drift (fixed):** the workflows reading surface shipped 2026-09-22 across 6 commits (server `GET /api/workflows` + alias in `803c51d09`; web settings tab in `84e420a6e`→`4a8ca580b`) with no satellite and no 04 row — `rg 'api/workflows' docs/` returned zero. Created `docs/design/workflows-reading-surface.md` (endpoint payload, resolution order, error degradation, web view, tests), added the 04 index row + surface section, bumped 04 frontmatter to 1.80.0 / 2026-09-22.
+- **00_ADR.md — clean:** frontmatter matches last commit (`df8b92e77`, ADR-123); the 09-22 commits are derived-surface/conformance work (ADR-113/117), no §6.1 choice. No edit.
+- **03_ARCHITECTURE.md — clean:** boundaries unchanged (read endpoint via `workflowService`, no new module); inline-run bundling already owned by `workflow-execution-economy.md` (updated in `676a405b4`). No edit.
+- **Non-findings:** satellite `doc:` frontmatter variance is mixed-by-convention (§4.3 governs key docs only); `docs/design/prototypes/` is a directory, not an orphan satellite.
+
+**Verification:** re-ran detection — `rg api/workflows docs/` now hits the satellite; disk-vs-04-index cross-check passes. Diff is exactly the two doc files; no task/feature corpus writes.
+
+Artifact written to `.spur/run/992bee7e-44f2-49a6-b2c4-1f4026783d28-wrapup-learnings.md`. Learnings follow.
+
+# Wrapup learnings — run 992bee7e (2026-09-22, WBS 0912)
+
+## 2026-09-22 — Task 0912: post-delivery workflow baseline + task-pipeline pilot selection
+
+### Measurement conventions (working)
+
+- Freeze the cohort before querying: record source commit, source-local CLI + runner versions, selection rules, run/definition identities, execution mode, exclusions and denominators in the artifact itself. A capped discovery sample (e.g. "latest 100 traces, 15 task-pipeline rows") is context, never a completion-rate denominator.
+- Deduplicate by persisted run ID; separate inline vs subprocess-pipeline vs fleet using dispatch evidence, not run-name substring guesses.
+- Record docs-only and code-changing runs as different classes; never pool pre-fix and post-fix runs into one "improvement" comparison.
+- Process exit, workflow terminal state and verify PASS are three distinct facts — name which one a metric uses.
+- Leave stale `running` rows untouched during measurement (do not clean/relabel); the row-closure defect is owned by P/D62.
+- Keep missing measurements null with explicit coverage (tokens/USD stayed null — E6 owns session/cost joins). No universal reliability percentages from n≤2 per mode; disclose the real denominator (terminal execution denominator was 6).
+
+### Gotchas hit
+
+- Verdict-file mtimes can be bulk merge-copies (all five 0849–0855 verdicts share one second) — never usable as completion times; use persisted terminal rows instead.
+- Worktree-local trace DBs mean cohort counts come from the main-checkout DB only — scope the claim to that tree in the report.
+- Historical handoff/receipt status is not live truth: recheck current state before building on prior tasks' "done" (I31 0903–0905 + 0906–0909 all rechecked here).
+
+### Decision/report patterns (working)
+
+- INSUFFICIENT_EVIDENCE is a truthful, complete outcome — it finishes the report only and never justifies broader migration; pair it with the smallest missing-evidence experiment and an owner.
+- Pilot eligibility = concrete shared cause + observable saved work + unchanged correctness contracts (pure observability changes qualify; anything touching gates/graphs/status semantics does not).
+- Freeze the benefit target BEFORE implementation, as counts not percentages (e.g. "every new terminal inline run has ≥1 action_runs row and is terminal — zero rows left to reap"), never a target chosen after seeing results.
+- Analytical replay ≠ live proof: label all savings "projected"; a live claim needs ≥3 observed terminal inline runs.
+- Promotion deadline is set at decision creation (2026-10-06 here) as a plain calendar date — non-graph candidates get no `config/workflow-candidates.json` entry; rollback design = stop calling the receipts, no schema/graph/config rollback.
+- Report convention (i31): sanitized JSON baseline + readable MD decision + one small `<wbs>-check.ts` following the report-check convention, with `--self-test` covering deliberate invalid cases (`CHECK-PASS` / `SELF-PASS` lines); artifacts must be independently checkable (AC7).
+- Defect taxonomy (R4/AC4): classify every anomaly as confirmed defect / adoption gap / unknown, each with its existing owner (P = runtime defects, E6 = session/cost joins, I4 = installed-role propagation, D62 = pipeline contracts) — no duplicate implementation tasks before reproduction.
+
+### Root cause reproduced (defect fixed-by-plan)
+
+- Non-terminal inline rows root cause, reproduced live: the executing inline driver never calls `inline-run-setup.ts` receipts (15/15 cohort runs with zero `action_runs`). Selected pilot: wire `--action` per boundary + `--close` at terminal on ONE controlled task-pipeline run; verification commands are `sqlite3 -readonly` count of `action_runs` + `workflow trace --last 20 --json`.
+
+### Doc-evolve wrapup patterns (this wrapup, same date)
+
+- T3 detection shape: rg the real surface (`app.get(` in apps/server, `git log -S 'api/workflows'`) and rg the docs (`api/workflows`, `WorkflowsView` in docs/) — zero doc hits across 6 shipping commits (803c51d09, 84e420a6e, 92e838716, 79a79abbe, b1cea2e5f, 4a8ca580b) proved the drift before any prose was written.
+- Repair shape: one new satellite (`docs/design/workflows-reading-surface.md`, frontmatter in the `doc:/area:/status:` style) + 04 index row + 04 surface section + 04 frontmatter bump (1.79.0→1.80.0, updated_at 2026-09-22). Minimal correct repair; 00/03 needed nothing (no §6.1 architectural choice; server boundary unchanged by a read endpoint via `workflowService`).
+- Satellite `doc:` frontmatter is mixed-by-convention in docs/design/ — §4.3 governs the nine key docs only; do not mass-normalize satellites during a wrapup.
+- Cross-check false positives to remember: `docs/design/prototypes/` is a directory, not an unindexed satellite; a 04-index link-target regex must match `(...)` targets, not `[...]` labels.
