@@ -186,8 +186,9 @@ export function highlightYamlLine(line: string, lineIndex: number): React.ReactN
 export interface YamlViewerProps {
     code: string;
     filePath?: string;
-    maxHeight?: string;
+    maxHeight?: string | 'none';
     className?: string;
+    hideToolbar?: boolean;
 }
 
 /**
@@ -198,6 +199,7 @@ export default function YamlViewer({
     filePath,
     maxHeight = 'calc(100vh - 280px)',
     className = '',
+    hideToolbar = false,
 }: YamlViewerProps) {
     const [copied, setCopied] = useState(false);
     const lineEntries = useMemo(
@@ -221,56 +223,58 @@ export default function YamlViewer({
             data-yaml-viewer
         >
             {/* Top Toolbar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-spur-border/70 text-xs">
-                <div className="flex items-center gap-2 font-mono text-spur-text-muted truncate">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                        YAML
-                    </span>
-                    {filePath && (
-                        <span className="text-slate-300 truncate" title={filePath}>
-                            {filePath}
+            {!hideToolbar && (
+                <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-spur-border/70 text-xs shrink-0">
+                    <div className="flex items-center gap-2 font-mono text-spur-text-muted truncate">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                            YAML
                         </span>
-                    )}
-                </div>
-                <div className="flex items-center gap-3">
-                    <span className="text-[11px] text-slate-500 font-mono">
-                        {lineEntries.length} {lineEntries.length === 1 ? 'line' : 'lines'}
-                    </span>
-                    <button
-                        type="button"
-                        onClick={handleCopy}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-slate-200 cursor-pointer"
-                        data-copy-button
-                    >
-                        {copied ? (
-                            <>
-                                <span className="text-emerald-400">✓</span>
-                                <span className="text-emerald-400">Copied</span>
-                            </>
-                        ) : (
-                            <>
-                                <svg
-                                    className="w-3.5 h-3.5 text-slate-400"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2"
-                                    aria-hidden="true"
-                                >
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                </svg>
-                                <span>Copy</span>
-                            </>
+                        {filePath && (
+                            <span className="text-slate-300 truncate" title={filePath}>
+                                {filePath}
+                            </span>
                         )}
-                    </button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="text-[11px] text-slate-500 font-mono">
+                            {lineEntries.length} {lineEntries.length === 1 ? 'line' : 'lines'}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={handleCopy}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors bg-spur-surface-2 hover:bg-spur-surface-3 border border-spur-border text-slate-200 cursor-pointer"
+                            data-copy-button
+                        >
+                            {copied ? (
+                                <>
+                                    <span className="text-emerald-400">✓</span>
+                                    <span className="text-emerald-400">Copied</span>
+                                </>
+                            ) : (
+                                <>
+                                    <svg
+                                        className="w-3.5 h-3.5 text-slate-400"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        aria-hidden="true"
+                                    >
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                    </svg>
+                                    <span>Copy</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Code Body with Line Numbers */}
             <div
-                className="overflow-auto text-xs font-mono leading-relaxed"
-                style={{ maxHeight }}
+                className="flex-1 min-h-0 overflow-auto text-xs font-mono leading-relaxed"
+                style={maxHeight && maxHeight !== 'none' ? { maxHeight } : undefined}
                 data-yaml-code-container
             >
                 <div className="flex min-w-full w-max py-2">

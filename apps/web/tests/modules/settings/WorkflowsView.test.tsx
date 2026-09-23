@@ -74,15 +74,17 @@ describe('WorkflowsView', () => {
         }) as unknown as typeof fetch);
     });
 
-    test('renders view subtabs (YAML and Diagram) and dropdown', async () => {
+    test('renders controls bar with dropdown, copy button, and view yaml button', async () => {
         const { container } = render(<WorkflowsView />);
-        const subtabs = container.querySelector('[data-view-subtabs]');
-        expect(subtabs).not.toBeNull();
+        const copyBtn = container.querySelector('[data-testid="copy-workflow-btn"]');
+        const viewYamlBtn = container.querySelector('[data-testid="view-yaml-btn"]');
+        expect(copyBtn).not.toBeNull();
+        expect(viewYamlBtn).not.toBeNull();
 
-        const yamlTab = container.querySelector('[data-subtab="yaml"]');
-        const diagramTab = container.querySelector('[data-subtab="diagram"]');
-        expect(yamlTab).not.toBeNull();
-        expect(diagramTab).not.toBeNull();
+        // subtabs YAML / Diagram should no longer exist
+        expect(container.querySelector('[data-view-subtabs]')).toBeNull();
+        expect(container.querySelector('[data-subtab="yaml"]')).toBeNull();
+        expect(container.querySelector('[data-subtab="diagram"]')).toBeNull();
 
         await waitFor(() => {
             const options = container.querySelectorAll('option');
@@ -90,36 +92,66 @@ describe('WorkflowsView', () => {
         });
     });
 
-    test('displays YAML view by default with syntax viewer', async () => {
+    test('displays Diagram view directly by default', async () => {
         const { container } = render(<WorkflowsView />);
-
-        await waitFor(() => {
-            expect(container.querySelector('[data-yaml-viewer]')).not.toBeNull();
-        });
-
-        expect(container.textContent).toContain('task-pipeline');
-        expect(container.textContent).toContain('.spur/workflows/task-pipeline.yaml');
-        expect(container.textContent).toContain('name: task-pipeline');
-    });
-
-    test('switches to Diagram view when Diagram subtab is clicked', async () => {
-        const { container } = render(<WorkflowsView />);
-
-        await waitFor(() => {
-            expect(container.querySelector('[data-yaml-viewer]')).not.toBeNull();
-        });
-
-        const diagramTab = container.querySelector('[data-subtab="diagram"]') as HTMLButtonElement;
-        fireEvent.click(diagramTab);
 
         await waitFor(() => {
             expect(container.querySelector('[data-testid="workflow-diagram-view"]')).not.toBeNull();
         });
 
-        // Zoom controls should be present in diagram mode
+        // Zoom and direction controls should be present directly
         expect(container.querySelector('[data-testid="zoom-in-btn"]')).not.toBeNull();
         expect(container.querySelector('[data-testid="zoom-out-btn"]')).not.toBeNull();
         expect(container.querySelector('[data-testid="zoom-reset-btn"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="direction-td-btn"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="direction-lr-btn"]')).not.toBeNull();
+        expect(container.querySelector('[data-testid="diagram-legend"]')).not.toBeNull();
+
+        expect(container.textContent).toContain('task-pipeline');
+        expect(container.textContent).toContain('.spur/workflows/task-pipeline.yaml');
+    });
+
+    test('opens and closes YAML floating window with syntax highlighting', async () => {
+        const { container } = render(<WorkflowsView />);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="view-yaml-btn"]')).not.toBeNull();
+        });
+
+        // Modal should initially not be in the DOM
+        expect(container.querySelector('[data-testid="yaml-modal"]')).toBeNull();
+
+        // Click View YAML button
+        const viewYamlBtn = container.querySelector('[data-testid="view-yaml-btn"]') as HTMLButtonElement;
+        fireEvent.click(viewYamlBtn);
+
+        // Modal opens
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="yaml-modal"]')).not.toBeNull();
+        });
+
+        const yamlModal = container.querySelector('[data-testid="yaml-modal"]');
+        expect(yamlModal).not.toBeNull();
+        expect(yamlModal?.querySelector('[data-yaml-viewer]')).not.toBeNull();
+        expect(yamlModal?.textContent).toContain('name: task-pipeline');
+
+        // Close via close button
+        const closeBtn = container.querySelector('[data-testid="close-yaml-modal-btn"]') as HTMLButtonElement;
+        fireEvent.click(closeBtn);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="yaml-modal"]')).toBeNull();
+        });
+
+        // Re-open and close via Escape key
+        fireEvent.click(viewYamlBtn);
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="yaml-modal"]')).not.toBeNull();
+        });
+        fireEvent.keyDown(window, { key: 'Escape' });
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="yaml-modal"]')).toBeNull();
+        });
     });
 
     test('switching dropdown selects another workflow', async () => {
@@ -136,10 +168,18 @@ describe('WorkflowsView', () => {
         await waitFor(() => {
             expect(container.textContent).toContain('.spur/workflows/wrapup-pipeline.yaml');
         });
-        expect(container.textContent).toContain('name: wrapup-pipeline');
+
+        // Open YAML modal to confirm it displays selected workflow's yaml
+        const viewYamlBtn = container.querySelector('[data-testid="view-yaml-btn"]') as HTMLButtonElement;
+        fireEvent.click(viewYamlBtn);
+
+        await waitFor(() => {
+            const yamlModal = container.querySelector('[data-testid="yaml-modal"]');
+            expect(yamlModal?.textContent).toContain('name: wrapup-pipeline');
+        });
     });
 
-    test('displays validation error banner for invalid workflow in Diagram view', async () => {
+    test('displays validation error banner for invalid workflow and allows inspect in YAML', async () => {
         const { container } = render(<WorkflowsView />);
 
         await waitFor(() => {
@@ -150,24 +190,28 @@ describe('WorkflowsView', () => {
         const select = container.querySelector('[data-testid="workflow-select"]') as HTMLSelectElement;
         fireEvent.change(select, { target: { value: 'broken-pipeline' } });
 
-        const diagramTab = container.querySelector('[data-subtab="diagram"]') as HTMLButtonElement;
-        fireEvent.click(diagramTab);
-
         await waitFor(() => {
             expect(container.textContent).toContain('Workflow failed validation');
             expect(container.textContent).toContain('Missing initialState');
+        });
+
+        // Clicking "Inspect in YAML" button opens the floating modal
+        const inspectBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+            b.textContent?.includes('Inspect in YAML'),
+        ) as HTMLButtonElement;
+        expect(inspectBtn).toBeDefined();
+        fireEvent.click(inspectBtn);
+
+        await waitFor(() => {
+            expect(container.querySelector('[data-testid="yaml-modal"]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="yaml-modal"]')?.textContent).toContain(
+                'name: broken-pipeline',
+            );
         });
     });
 
     test('handles zoom controls in Diagram view', async () => {
         const { container } = render(<WorkflowsView />);
-
-        await waitFor(() => {
-            expect(container.querySelector('[data-yaml-viewer]')).not.toBeNull();
-        });
-
-        const diagramTab = container.querySelector('[data-subtab="diagram"]') as HTMLButtonElement;
-        fireEvent.click(diagramTab);
 
         await waitFor(() => {
             expect(container.querySelector('[data-testid="zoom-reset-btn"]')).not.toBeNull();
@@ -186,7 +230,7 @@ describe('WorkflowsView', () => {
         expect(zoomReset.textContent).toBe('100%');
     });
 
-    test('handles copy button click', async () => {
+    test('handles copy button click with raw YAML', async () => {
         let copiedText = '';
         Object.defineProperty(navigator, 'clipboard', {
             value: {
@@ -213,27 +257,8 @@ describe('WorkflowsView', () => {
         });
     });
 
-    test('handles direction layout toggle (TD vs LR) in Diagram view', async () => {
-        let copiedText = '';
-        Object.defineProperty(navigator, 'clipboard', {
-            value: {
-                writeText: (text: string) => {
-                    copiedText = text;
-                    return Promise.resolve();
-                },
-            },
-            writable: true,
-            configurable: true,
-        });
-
+    test('handles direction layout toggle (TD vs LR)', async () => {
         const { container } = render(<WorkflowsView />);
-
-        await waitFor(() => {
-            expect(container.querySelector('[data-yaml-viewer]')).not.toBeNull();
-        });
-
-        const diagramTab = container.querySelector('[data-subtab="diagram"]') as HTMLButtonElement;
-        fireEvent.click(diagramTab);
 
         await waitFor(() => {
             expect(container.querySelector('[data-testid="direction-lr-btn"]')).not.toBeNull();
@@ -248,14 +273,7 @@ describe('WorkflowsView', () => {
         // Switch to LR
         fireEvent.click(lrBtn);
         expect(lrBtn.className).toContain('bg-spur-accent');
-
-        // Copy in diagram mode with LR direction
-        const copyBtn = container.querySelector('[data-testid="copy-workflow-btn"]') as HTMLButtonElement;
-        fireEvent.click(copyBtn);
-
-        await waitFor(() => {
-            expect(copiedText).toContain('flowchart LR');
-        });
+        expect(tdBtn.className).not.toContain('bg-spur-accent');
     });
 
     test('displays error message and allows retry on fetch error', async () => {
@@ -282,7 +300,7 @@ describe('WorkflowsView', () => {
         fireEvent.click(retryBtn);
 
         await waitFor(() => {
-            expect(container.querySelector('[data-yaml-viewer]')).not.toBeNull();
+            expect(container.querySelector('[data-testid="workflow-diagram-view"]')).not.toBeNull();
         });
     });
 });
