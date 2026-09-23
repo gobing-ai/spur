@@ -304,11 +304,14 @@ states:
       excludes docs/tasks*/docs/features* (shared evidence, concurrent writers),
       so the bound receipt stays valid — but the feature's completion boundary
       must still observe the post-wrapup state. This hop re-runs the feature
-      check gate (`featureGateCmd`): it validates the bound evidence receipt
-      (feature identity, verifier definition digest, terminal recording run,
-      artifact registration, checked-input digest) against the current feature
-      contract. A FAIL fails the wrapup loudly instead of letting a stale PASS
-      ride; only a verified gate writes PASS (0783 R4).
+      check gate (`featureGateCmd`). When the configured command is the done-
+      boundary variant (`feature check --as done`), it validates the bound
+      evidence receipt (feature identity, verifier definition digest, terminal
+      recording run, artifact registration, checked-input digest) against the
+      current feature contract; a plain gate command observes the post-wrapup
+      corpus state but does not enforce the receipt (0915 re-review P3). A FAIL
+      fails the wrapup loudly instead of letting a stale PASS ride; only a
+      verified gate writes PASS (0783 R4).
     onEnter:
       - kind: shell
         options:

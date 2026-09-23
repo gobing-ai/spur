@@ -281,12 +281,15 @@ schema `feature-verification-receipt/v1`):
 | Feature-latest | `.spur/run/<featureId>-feature-verification.json` | latest pass per feature; superseded by the next `start` |
 | Coarse status | `.spur/run/<runId>-feature-verification.status` | `PASS`/`FAIL` string for the workflow guard |
 
-Receipt fields: `schemaVersion`, `featureId`, `runId`, `status` (`PASS`/`FAIL`/`RUNNING`),
-`inputDigest` (feature markdown + git tree of tracked sources, shared
-`ProofInputFingerprint` engine), `beforeDigest`/`afterDigest` (tree digests captured
-around the pass — after-digest is what completion re-checks), `verificationCmd`,
-`recordedAt` (diagnostic only), `verifier` (`name`, `sourcePath`, `layer`,
-`definitionDigest`) and optional `detail`.
+Receipt fields: `schemaVersion`, `featureId`, `runId`, `workdir` (diagnostic; the
+digest is path-relative), `verifier` (`name`, `sourcePath`, `layer`, `definitionDigest`),
+`verificationCmd`, `status` (`PASS`/`FAIL`/`RUNNING`), `startedAt`, `completedAt`
+(null while `RUNNING`) and `inputDigest` — the proof-input fingerprint (feature
+markdown + git tree of tracked sources, shared `ProofInputFingerprint` engine)
+captured at completion, i.e. the tree *after* the pass; completion re-checks it
+against current inputs. The script additionally captures a before digest around
+the pass and fails it when they disagree, but only the after-side digest is bound
+into the receipt.
 
 **Completion boundary.** `FeatureCheckService.check` validates the feature-latest copy
 when the transition target is `--as done` (plain on-disk `done` reads stay advisory —
@@ -296,8 +299,7 @@ error reasons, checked in order: `missing`, `malformed`, `cross-feature`, `diver
 not done, verifier digest mismatch, or receipt not registered as a run artifact —
 skipped when no run port is supplied), `contract-mismatch` (recorded verifier name/
 layer/digest or `verificationCmd` differs from the currently resolved `feature-verification`
-definition — `--cmd` overrides cannot forge a contract), and `stale` (digest drift: the
-`afterDigest` no longer matches the current tree). Git failure during digest capture is
+definition — `--cmd` overrides cannot forge a contract), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
 fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop and
 the engine `verifying→done` guard (`feature check --strict --as done`).
 

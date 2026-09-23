@@ -49,12 +49,15 @@ const COMPLETION_FINDING_CODES: ReadonlySet<FindingCode> = new Set([
     FINDING_CODES.L4_TESTING_VERDICT_STUB,
     FINDING_CODES.L4_UNCOVERED_TASK_SCENARIO,
     // Feature verification receipt rejections (D63 task 0915) — completion
-    // evidence that is missing, malformed, cross-feature, failed, stale or
-    // contract-mismatched can never satisfy the done boundary.
+    // evidence that is missing, malformed, cross-feature, divergent, failed,
+    // run-incomplete, stale or contract-mismatched can never satisfy the done
+    // boundary.
     FINDING_CODES.L4_FEATURE_RECEIPT_MISSING,
     FINDING_CODES.L4_FEATURE_RECEIPT_MALFORMED,
     FINDING_CODES.L4_FEATURE_RECEIPT_CROSS_FEATURE,
+    FINDING_CODES.L4_FEATURE_RECEIPT_DIVERGENT,
     FINDING_CODES.L4_FEATURE_RECEIPT_FAILED,
+    FINDING_CODES.L4_FEATURE_RECEIPT_RUN,
     FINDING_CODES.L4_FEATURE_RECEIPT_STALE,
     FINDING_CODES.L4_FEATURE_RECEIPT_CONTRACT,
     FINDING_CODES.L3_REVIEW_TESTING_CONTRADICTION,
