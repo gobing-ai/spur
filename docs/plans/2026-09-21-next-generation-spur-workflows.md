@@ -174,12 +174,12 @@ rerunnable migration: do not batch-create it again. Dependencies were applied th
 | Slice | Independently reviewable outcome | Depends on | Covers | Estimate |
 | --- | --- | --- | --- | --- |
 | W01 / 0914 | Installed inline execution uses the authoritative application boundary | Done; reconcile R1 feature-verdict mapping at W08 | R1 | 8h |
-| W02 / 0915 | Feature closure and wrapup consume current verification receipts | Design ready for coding handoff | R2 | 8h |
+| W02 / 0915 | Feature closure and wrapup consume current verification receipts | Ready: private receipt contract and application/plugin seam frozen | R2 | 8h |
 | W03 / 0916 | Canonical workflows declare and test safe interruption/replay behavior | 0914, 0915; reuse 0902/0911 | R3 | 6h |
 | W04 / 0917 | Validate the 0912 observability pilot; gate any later speed candidate on comparable real runs | 0914, 0915, 0912, 0913; separate pilot and speed decisions | R4 | 8h |
-| W05 / 0918 | Simplify idea authoring while preserving the complete planning handoff | 0914; own baseline and existing D62 promotion process | R5 | 8h |
+| W05 / 0918 | Simplify idea authoring while preserving the complete planning handoff | Ready: 0914 done; candidate and explicit evidence stop condition frozen | R5 | 8h |
 | W06 / 0919 | Bind batch continuation to its frozen plan and verified child results | 0914, 0915 | R6 | 6h |
-| W07 / 0920 | Remove model-only argument normalization from history orchestration | Own baseline and existing D62 promotion process; no W04 dependency | R7 | 6h |
+| W07 / 0920 | Remove model-only argument normalization from history orchestration | Ready: current-digest scope baseline and helper seam frozen; no W04 dependency | R7 | 6h |
 | W08 / 0921 | Complete catalogue migration and measured promotion/retirement | 0916–0920, 0912, 0913 | R8 | 6h |
 
 Approximate active engineering effort: **56 hours**, excluding the separately owned 0912/0913 work,
@@ -209,8 +209,8 @@ every YAML, command, test suite or documentation edit; those travel with their b
 5. **Closure:** W08 reconciles all ten definitions, every affected caller and remaining candidates.
    Deferred optimizations are explicitly retired/deferred with evidence, not marked implemented.
 
-Task readiness is separate from registration: 0914 is done; 0915, 0918 and 0920 are `todo` for
-their coding/refinement handoffs; 0916, 0917, 0919 and 0921 remain `blocked` on recorded prerequisites.
+Task readiness is separate from registration: 0914 is done; 0915, 0918 and 0920 are `todo` with
+implement-ready designs; 0916, 0917, 0919 and 0921 remain `blocked` on recorded prerequisites.
 The CLI creates populated batch items as `todo` and the current lifecycle has no `todo → backlog`
 edge, so dependent tasks use the supported `blocked` state instead of the originally proposed
 backlog state. A valid task batch is not execution readiness.
@@ -318,8 +318,10 @@ and the dependency table above. At registration, ready preparation was skipped. 
 0913 and 0914 completed independently. The 0912 outcome and 0913 evidence contract are now reflected
 in D63 R4 and 0917; neither an observability pilot nor a replay projection is a speed result.
 
-The next coding handoff is 0915. 0918 and 0920 can be refined in isolated worktrees without waiting
-for the task-pipeline pilot. Refine 0916/0919 after 0915's current-evidence contract lands; refine
+The next delegated handoffs are 0915, 0918 and 0920 in isolated worktrees. 0918's graph edit is not
+yet eligible: the currently selected idea definition has only one terminal done run. Its agent starts
+with the frozen evidence gate and may produce a documented no-change outcome. Refine 0916/0919 after 0915's
+current-evidence contract lands; refine
 0917 against observed post-instrumentation runs and the D62/P pilot receipt before any graph edit.
 Before D63 completion, reconcile 0914's feature-check warning: its done-task Testing rows do not
 currently map to D63 R1, so `feature check` cannot treat that scenario as verified.

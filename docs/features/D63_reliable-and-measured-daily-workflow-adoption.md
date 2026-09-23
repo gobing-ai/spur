@@ -6,7 +6,7 @@ status: active
 priority: P2
 tags: []
 created_at: "2026-09-22T02:55:20.144Z"
-updated_at: "2026-09-23T03:03:31.897Z"
+updated_at: "2026-09-23T03:24:31.516Z"
 ---
 
 # D63: Reliable and measured daily-workflow adoption
@@ -118,7 +118,7 @@ Feature: Reliable and measured daily-workflow adoption
 
 Architecture and eight-task breakdown accepted by Robin on 2026-09-21. Planning authority: docs/plans/2026-09-21-next-generation-spur-workflows.md. Registration itself did not execute the refactoring.
 
-0912 and 0913 are done under their own owners. 0912 selected an inline observability pilot, not a speed route; D63 R4 and task 0917 distinguish those decisions. Task 0914 is done. Tasks 0915, 0918 and 0920 are todo for coding or refinement; 0916, 0917, 0919 and 0921 remain blocked on recorded prerequisites. The independent idea/history baselines need not wait for 0917's observation window. Each candidate retains ADR-107 eligibility and ADR-076 promotion/retirement. The 56-hour estimate excludes observation and the separately owned 0912/0913 work.
+0912 and 0913 are done under their own owners. 0912 selected an inline observability pilot, not a speed route; D63 R4 and task 0917 distinguish those decisions. Task 0914 is done. Tasks 0915, 0918 and 0920 are todo with ready delegated designs; 0916, 0917, 0919 and 0921 remain blocked on recorded prerequisites. 0918's graph edit is not yet eligible: its selected definition has only one current-digest terminal done run, so its agent begins with the frozen evidence gate and may return a no-change result. The independent idea/history baselines need not wait for 0917's observation window. Each candidate retains ADR-107 eligibility and ADR-076 promotion/retirement. The 56-hour estimate excludes observation and the separately owned 0912/0913 work.
 
 Feature scenarios R1–R8 map in order to proposal labels W01–W08; task-local regression criteria supplement the stable scenario titles. A task's insufficient-evidence verdict does not assert a feature-level speed improvement.
 
