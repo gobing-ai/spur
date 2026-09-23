@@ -554,31 +554,32 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     options.acAltitude !== undefined ||
                     options.estimateHours !== undefined
                 ) {
-                    const key =
-                        options.feature !== undefined
-                            ? 'feature_id'
-                            : options.priority !== undefined
-                              ? 'priority'
-                              : options.acNumbering !== undefined
-                                ? 'ac_numbering'
-                                : options.acAltitude !== undefined
-                                  ? 'ac_altitude'
-                                  : 'estimate_hours';
-                    const value =
-                        options.feature ??
-                        options.priority ??
-                        options.acNumbering ??
-                        options.acAltitude ??
-                        options.estimateHours ??
-                        '';
-                    const result = await svc.updateField(wbs, key, value);
+                    // Every supplied field flag is applied; each write re-validates the task.
+                    const candidates: [string, string | undefined][] = [
+                        ['feature_id', options.feature],
+                        ['priority', options.priority],
+                        ['ac_numbering', options.acNumbering],
+                        ['ac_altitude', options.acAltitude],
+                        ['estimate_hours', options.estimateHours],
+                    ];
+                    const fields = candidates.filter((f): f is [string, string] => f[1] !== undefined);
+                    const warnings: string[] = [];
+                    let result: Awaited<ReturnType<typeof svc.updateField>> | undefined;
+                    for (const [key, value] of fields) {
+                        result = await svc.updateField(wbs, key, value);
+                        warnings.push(...(result.warnings ?? []));
+                    }
+                    if (result === undefined) return;
                     if (options.json) {
-                        context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
+                        const merged = warnings.length > 0 ? { ...result, warnings } : result;
+                        context.output.write(toEnvelopeJson(merged, { enveloped: options.jsonEnvelope }));
                     } else {
-                        for (const warning of result.warnings ?? []) {
+                        for (const warning of warnings) {
                             context.output.error(warning);
                         }
-                        context.output.write(`Set ${key}=${value} on task ${result.ref.id}`);
+                        for (const [key, value] of fields) {
+                            context.output.write(`Set ${key}=${value} on task ${result.ref.id}`);
+                        }
                     }
                 } else if (status !== undefined) {
                     // Canonicalize the target before any gate matches: the frontmatter

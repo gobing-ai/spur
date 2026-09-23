@@ -831,9 +831,17 @@ export class TaskService {
         if (!(key in allowed)) {
             throw new Error(`Field "${key}" is not settable via update; allowed: ${Object.keys(allowed).join(', ')}.`);
         }
+        // estimate_hours is a YAML number; a string write would quote it (`"4"`).
+        let fmValue: string | number = value;
+        if (key === 'estimate_hours') {
+            fmValue = Number(value);
+            if (value.trim() === '' || !Number.isFinite(fmValue) || fmValue <= 0) {
+                throw new Error(`estimate_hours must be a positive number, got "${value}".`);
+            }
+        }
         const filePath = await this.resolveTaskFile(wbs);
         const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: this.ctx.tasksDir };
-        let result = await this.writeService.updateFrontmatter(ref, key, value);
+        let result = await this.writeService.updateFrontmatter(ref, key, fmValue);
         // Attaching a feature AFTER the AC was written is the common idea-pipeline
         // order; re-run the DD-09 subset warning against the AC already on disk so the
         // orphan scenarios surface now rather than at the next `task check`.

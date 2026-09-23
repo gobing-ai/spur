@@ -1322,7 +1322,7 @@ ${U.trimEnd()}
 
 `},H=this._sections.length;for(let Z=0;Z<this._sections.length;Z++)if(this.canonicalSections.indexOf(this._sections[Z]?.name??"")>X){H=Z;break}this._sections.splice(H,0,Y)}replaceMarkerRegion($,U){this.validateSectionName($);let J=this.findSection($);if(J===void 0)throw Error(`Section "${$}" does not exist in this document.`);let G=J.modifiedText??J.originalText,X=Zt.exec(G),Y=Wt.exec(G);if(X===null||Y===null||X.index>=Y.index)throw Error(`No marker region found in section "${$}".`);let H=G.slice(0,X.index),Z=G.slice(Y.index+Y[0].length);J.modifiedText=`${H}${Yt}
 ${U}
-${Ht}${Z}`}setFrontmatterField($,U){let J=`${$}: ${zt(U)}`;if(this._frontmatter===null){let _=J;this._frontmatter={raw:_,data:{[$]:U}},this._frontmatterBlock=`---
+${Ht}${Z}`}setFrontmatterField($,U){let J=`${$}: ${typeof U==="number"?String(U):zt(U)}`;if(this._frontmatter===null){let _=J;this._frontmatter={raw:_,data:{[$]:U}},this._frontmatterBlock=`---
 ${_}
 ---
 

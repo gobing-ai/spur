@@ -1433,7 +1433,7 @@ ${U.trimEnd()}
 
 `},Y=this._sections.length;for(let H=0;H<this._sections.length;H++)if(this.canonicalSections.indexOf(this._sections[H]?.name??"")>J){Y=H;break}this._sections.splice(Y,0,G)}replaceMarkerRegion($,U){this.validateSectionName($);let X=this.findSection($);if(X===void 0)throw Error(`Section "${$}" does not exist in this document.`);let Z=X.modifiedText??X.originalText,J=l9$.exec(Z),G=i9$.exec(Z);if(J===null||G===null||J.index>=G.index)throw Error(`No marker region found in section "${$}".`);let Y=Z.slice(0,J.index),H=Z.slice(G.index+G[0].length);X.modifiedText=`${Y}${c9$}
 ${U}
-${d9$}${H}`}setFrontmatterField($,U){let X=`${$}: ${o9$(U)}`;if(this._frontmatter===null){let Q=X;this._frontmatter={raw:Q,data:{[$]:U}},this._frontmatterBlock=`---
+${d9$}${H}`}setFrontmatterField($,U){let X=`${$}: ${typeof U==="number"?String(U):o9$(U)}`;if(this._frontmatter===null){let Q=X;this._frontmatter={raw:Q,data:{[$]:U}},this._frontmatterBlock=`---
 ${Q}
 ---
 

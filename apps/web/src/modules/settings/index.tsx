@@ -4,6 +4,7 @@ import SettingsShell from './SettingsShell';
 export { default as AgentsView } from './AgentsView';
 export { default as GeneralView } from './GeneralView';
 export { default as SettingsShell } from './SettingsShell';
+export { default as WorkflowsView } from './WorkflowsView';
 export { default as YamlViewer } from './YamlViewer';
 
 /**

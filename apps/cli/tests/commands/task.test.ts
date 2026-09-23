@@ -1377,6 +1377,34 @@ describe('spur task CLI', () => {
         expect(output.messages[0] ?? '').toContain('Set priority=P0');
     });
 
+    test('update applies every field flag in one call and writes estimate_hours as a number', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Multi field update'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--priority', 'P0', '--estimate-hours', '4'], {
+            cwd,
+            output,
+        });
+        expect(exitCode).toBe(0);
+        const content = await Bun.file(join(cwd, 'docs', 'tasks', `${wbs}_multi-field-update.md`)).text();
+        expect(content).toContain('priority: P0');
+        expect(content).toMatch(/^estimate_hours: 4$/m);
+    });
+
+    test('update --estimate-hours rejects a non-positive value', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Bad estimate'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'update', wbs, '--estimate-hours', '0'], { cwd, output });
+        expect(exitCode).not.toBe(0);
+        const content = await Bun.file(join(cwd, 'docs', 'tasks', `${wbs}_bad-estimate.md`)).text();
+        expect(content).not.toContain('estimate_hours');
+    });
+
     test('update --ac-altitude sets ac_altitude frontmatter and the field persists (0600 R-fix)', async () => {
         const cOut = createCapturedOutput();
         await main(['task', 'create', '--skip-ready', 'Altitude update'], { cwd, output: cOut });

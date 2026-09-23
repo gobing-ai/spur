@@ -185,7 +185,7 @@ interface MutationDescriptor {
     body?: string;
     /** For updateFrontmatter/transition: the key and scalar value. */
     fmKey?: string;
-    fmValue?: string;
+    fmValue?: string | number;
     /** For updateFrontmatterArray: the key and string-array value (e.g. dependencies[]). */
     fmArrayValue?: string[];
     /** For transition: the actor string for the history line. */
@@ -305,7 +305,7 @@ export class PlanningWriteService {
      * @param key   Frontmatter key (e.g. `'status'`, `'priority'`).
      * @param value Scalar value to write after `<key>: `.
      */
-    async updateFrontmatter(ref: EntityRef, key: string, value: string): Promise<WriteResult> {
+    async updateFrontmatter(ref: EntityRef, key: string, value: string | number): Promise<WriteResult> {
         return this.executePipeline(ref, { kind: 'updateFrontmatter', fmKey: key, fmValue: value });
     }
 

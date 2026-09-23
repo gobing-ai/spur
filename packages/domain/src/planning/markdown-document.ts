@@ -497,11 +497,11 @@ export class MarkdownDocument {
      * in existing values are written verbatim.
      *
      * @param key - frontmatter key (matched at line start, before the first `:`)
-     * @param value - scalar value to write after `<key>: `
+     * @param value - scalar value to write after `<key>: `; a number is written as a bare YAML number
      */
 
-    setFrontmatterField(key: string, value: string): void {
-        const fieldLine = `${key}: ${escapeYamlValue(value)}`;
+    setFrontmatterField(key: string, value: string | number): void {
+        const fieldLine = `${key}: ${typeof value === 'number' ? String(value) : escapeYamlValue(value)}`;
 
         if (this._frontmatter === null) {
             const raw = fieldLine;

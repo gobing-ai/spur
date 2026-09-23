@@ -10,7 +10,36 @@ const workflowsUrl = () => `${resolveApiUrl()}/project/workflows`;
 /** localStorage key for the user's last-set detail-panel width (matching task details). */
 const DETAIL_WIDTH_KEY = 'spur:detail-width';
 
-export type WorkflowSubtab = 'yaml' | 'diagram';
+function getInitialDrawerWidth(): number {
+    if (typeof window === 'undefined') return 1728;
+    const maxAllowed = window.innerWidth * 0.8;
+    try {
+        const stored = Number.parseFloat(window.localStorage.getItem(DETAIL_WIDTH_KEY) ?? '');
+        if (Number.isFinite(stored) && stored > 0) {
+            return Math.min(stored, maxAllowed);
+        }
+    } catch {
+        // localStorage unavailable
+    }
+    return Math.min(1728, maxAllowed);
+}
+
+const STEP_LEGEND_ITEMS = [
+    {
+        label: '🤖 agent.run',
+        style: 'bg-[#e0e7ff] border-[#4f46e5] text-[#1e1b4b]',
+        title: 'Agent run (prompt / slash command)',
+    },
+    { label: '💻 shell', style: 'bg-[#ecfdf5] border-[#059669] text-[#064e3b]', title: 'Shell command execution' },
+    { label: '👤 hitl', style: 'bg-[#fdf4ff] border-[#9333ea] text-[#3b0764]', title: 'Human-in-the-loop decision' },
+    { label: '🔒 gate', style: 'bg-[#e8e8f8] border-[#5b5bd6] text-[#1a1a5e]', title: 'Structural gate or probe' },
+] as const;
+
+const STATE_LEGEND_ITEMS = [
+    { label: 'Initial', dot: 'bg-[#fff3cd] border-[#b8860b] rounded-full' },
+    { label: 'Done', dot: 'bg-[#d4edda] border-[#1e7e34] rounded-full' },
+    { label: 'Failed', dot: 'bg-[#f8d7da] border-[#c62828] rounded' },
+] as const;
 
 export default function WorkflowsView() {
     const [workflows, setWorkflows] = useState<WorkflowDefinitionDto[]>([]);
@@ -22,19 +51,7 @@ export default function WorkflowsView() {
     const [direction, setDirection] = useState<'TD' | 'LR'>('TD');
     const [showYamlModal, setShowYamlModal] = useState<boolean>(false);
     // Default matching task details: ~1728px clamped to 80vw, or user's stored width
-    const [drawerWidth, setDrawerWidth] = useState<number>(() => {
-        const fallback = typeof window !== 'undefined' ? Math.min(1728, window.innerWidth * 0.8) : 1728;
-        if (typeof window === 'undefined') return fallback;
-        try {
-            const stored = Number.parseFloat(window.localStorage.getItem(DETAIL_WIDTH_KEY) ?? '');
-            if (Number.isFinite(stored) && stored > 0) {
-                return Math.min(stored, window.innerWidth * 0.8);
-            }
-        } catch {
-            // localStorage unavailable
-        }
-        return fallback;
-    });
+    const [drawerWidth, setDrawerWidth] = useState<number>(getInitialDrawerWidth);
 
     useEffect(() => {
         if (typeof document !== 'undefined') {
@@ -97,12 +114,12 @@ export default function WorkflowsView() {
             shared: [],
         };
         for (const w of workflows) {
-            let layerList = groups[w.source];
-            if (!layerList) {
-                layerList = [];
-                groups[w.source] = layerList;
+            const list = groups[w.source];
+            if (list) {
+                list.push(w);
+            } else {
+                groups[w.source] = [w];
             }
-            layerList.push(w);
         }
         return groups;
     }, [workflows]);
@@ -422,26 +439,15 @@ export default function WorkflowsView() {
                                 <span className="font-semibold text-spur-text-secondary text-[10px] uppercase tracking-wider">
                                     Steps:
                                 </span>
-                                <div className="flex items-center gap-1.5" title="Agent run (prompt / slash command)">
-                                    <span className="px-1.5 py-0.5 rounded bg-[#e0e7ff] border border-[#4f46e5] text-[#1e1b4b] font-medium text-[10px]">
-                                        🤖 agent.run
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1.5" title="Shell command execution">
-                                    <span className="px-1.5 py-0.5 rounded bg-[#ecfdf5] border border-[#059669] text-[#064e3b] font-medium text-[10px]">
-                                        💻 shell
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1.5" title="Human-in-the-loop decision">
-                                    <span className="px-1.5 py-0.5 rounded bg-[#fdf4ff] border border-[#9333ea] text-[#3b0764] font-medium text-[10px]">
-                                        👤 hitl
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-1.5" title="Structural gate or probe">
-                                    <span className="px-1.5 py-0.5 rounded bg-[#e8e8f8] border border-[#5b5bd6] text-[#1a1a5e] font-medium text-[10px]">
-                                        🔒 gate
-                                    </span>
-                                </div>
+                                {STEP_LEGEND_ITEMS.map((item) => (
+                                    <div key={item.label} className="flex items-center gap-1.5" title={item.title}>
+                                        <span
+                                            className={`px-1.5 py-0.5 rounded border font-medium text-[10px] ${item.style}`}
+                                        >
+                                            {item.label}
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
 
                             {/* Transition Line Styles */}
@@ -467,18 +473,12 @@ export default function WorkflowsView() {
                                 <span className="font-semibold text-spur-text-secondary text-[10px] uppercase tracking-wider">
                                     State:
                                 </span>
-                                <div className="flex items-center gap-1">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-[#fff3cd] border border-[#b8860b]" />
-                                    <span>Initial</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-[#d4edda] border border-[#1e7e34]" />
-                                    <span>Done</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <span className="w-2.5 h-2.5 rounded bg-[#f8d7da] border border-[#c62828]" />
-                                    <span>Failed</span>
-                                </div>
+                                {STATE_LEGEND_ITEMS.map((item) => (
+                                    <div key={item.label} className="flex items-center gap-1">
+                                        <span className={`w-2.5 h-2.5 border ${item.dot}`} />
+                                        <span>{item.label}</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
