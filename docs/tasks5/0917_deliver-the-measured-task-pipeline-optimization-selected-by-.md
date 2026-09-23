@@ -4,7 +4,7 @@ name: Deliver the measured task-pipeline optimization selected by 0912
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.301Z
-updated_at: "2026-09-23T19:25:16.221Z"
+updated_at: "2026-09-23T19:27:13.204Z"
 feature_id: D63
 priority: P2
 tags:
@@ -90,11 +90,11 @@ R4 — contracts preserved. No YAML/graph change → ADR-107 eligibility, proof 
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
+| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
 
 ### References
 

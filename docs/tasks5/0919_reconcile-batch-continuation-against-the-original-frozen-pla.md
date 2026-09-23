@@ -4,7 +4,7 @@ name: Reconcile batch continuation against the original frozen plan
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T19:11:06.502Z"
+updated_at: "2026-09-23T19:27:12.947Z"
 feature_id: D63
 priority: P2
 tags:
@@ -89,11 +89,11 @@ Design compliance: runbook + static contract pins only — no batch YAML, coordi
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PASS)
+**SECU findings** (pipeline verify step — verdict: UNKNOWN)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
+| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
 
 ### References
 
