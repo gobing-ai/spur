@@ -3,7 +3,7 @@ template: feature-impl
 schema_version: 1
 name: Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation
 description: ""
-status: blocked
+status: cancelled
 type: task
 profile: standard
 feature_id: H1
@@ -12,12 +12,15 @@ priority: P3
 tags: []
 dependencies: []
 created_at: 2026-06-28T05:37:28.269Z
-updated_at: "2026-08-08T00:06:31.166Z"
+updated_at: "2026-09-23T06:58:52.633Z"
 ---
 
 ## 0142. Batch execution v2 — parallel runs (worktree isolation) + interactive within-step escalation
 
 ### Background
+
+**Superseded 2026-09-22 (H1 re-baseline); cancelled.** Slice A → 0931 (per-task worktrees, rebase + fast-forward integration; H1 R21–R25). Slice B → 0932 (`spur workflow continue --answer-text`) + 0933 (question-artifact escalation; H1 R26–R30). The Slice B hard blocker below is obsolete: the workspace/inbox/team-mode modules shipped (G3, M4, M) and were retired by ADR-116 (G64); escalation now uses the workflow pause + continue path. Kept below as historical design intent only.
+
 Task 0141 shipped batch task execution (`/sp:dev-runall` + the `sp:super-coder` orchestrator) with
 two slices **explicitly deferred** to keep v1 a solid, sequential slice. This task tracks those two
 follow-ups. Neither is buildable today without prerequisites; this is a backlog placeholder that
@@ -60,6 +63,7 @@ worktree create/merge/retain lifecycle, the `.spur/run/` state marker, and the r
 shape that this task's Slice A builds its per-task parallel isolation on top of. Slice A remains
 open here for the parallel case: per-task worktrees, the bounded scheduler, the join barrier, and
 the `--mode parallel` combination. See 0477 §"Relationship to task 0142" for the scope split.
+
 ### Acceptance Criteria
 ```gherkin
 Feature: Batch execution v2 — parallel runs + interactive within-step escalation
@@ -199,6 +203,9 @@ backlog.
 ### References
 
 ### History
+
 - 2026-06-28T05:39:44.679Z todo → blocked (system)
 - 2026-06-28T05:39:57.815Z blocked → todo (system)
 - 2026-06-28T16:53:38.429Z todo → blocked (system)
+- 2026-09-23T06:58:52.633Z blocked → cancelled (system)
+
