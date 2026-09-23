@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.79.0
+version: 1.80.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-09-19
+updated_at: 2026-09-22
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
@@ -43,6 +43,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Spur Team Mode — Design Document — **superseded by ADR-116** (the team-scoped composition proposal it describes was replaced by project-scoped fleets; current surface in [project-switcher.md](design/project-switcher.md)) | [spur-team-mode-design.md](design/spur-team-mode-design.md) |
 | Workflow run observability | [workflow-observability.md](design/workflow-observability.md) |
 | Workflow composition contract | [workflow-composition-contract.md](design/workflow-composition-contract.md) |
+| Workflow reading surface — server workflows endpoint + settings workflows tab (2026-09-22) | [workflows-reading-surface.md](design/workflows-reading-surface.md) |
 | Spur artifact composition and evolution: workflow layers, spur-composer, spur-doctor (feature I21) | [spur-artifact-evolution.md](design/spur-artifact-evolution.md) |
 | Workflow shell ownership surface (feature D6, task 0608; amended by 0625) | [workflow-shell-ownership.md](design/workflow-shell-ownership.md) |
 | Design — `/sp:dev-plan` design-doc generation (design by default / `--skip-design`) | [dev-plan-design-doc-generation.md](design/dev-plan-design-doc-generation.md) |
@@ -420,6 +421,17 @@ See [contract detail](design/project-switcher.md#processes-tab-0852).
 ## Board request envelope `SPUR-REQUEST/1` (0841)
 
 See [contract detail](design/project-switcher.md#request-envelope-0841).
+
+## Project workflows reading surface (server + web, 2026-09-22)
+
+`GET /api/workflows` (alias `/api/project/workflows`) returns `{ workflows, total }`; each entry
+carries `name, kind, version, description, path, source, valid, error, rawYaml, mermaidDiagram`,
+resolved via `registeredWorkflowPaths` + `workflowService().list` with mermaid rendered only for
+valid entries. Unreadable or unresolvable entries degrade to `valid: false`; the endpoint never
+throws. The web settings Workflows tab renders the payload as YAML + mermaid diagram with an
+orientation toggle. Read-only; no write surface.
+
+See [contract detail](design/workflows-reading-surface.md).
 
 ## Workflow execution economy (feature D62)
 
