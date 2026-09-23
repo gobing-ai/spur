@@ -4,7 +4,7 @@ name: Make history workflow scope normalization deterministic
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.303Z
-updated_at: "2026-09-23T18:20:07.487Z"
+updated_at: "2026-09-23T22:06:45.029Z"
 feature_id: D63
 priority: P2
 tags:
@@ -44,6 +44,7 @@ Read-only source-local trace inspection on 2026-09-22 found ten terminal runs fo
 - [x] AC3 — Executor choice (`agent` var + config override), role reviewer, and enrich/validate/correct calls preserved; only the model-only scope dispatch removed. (req: R3) — config/workflows/history-anatomy.yaml:186,223,278 unchanged.
 - [x] AC4 — Current-digest baseline (11 terminal real runs, 51,452 ms scope median) recorded and D62 candidate `history-anatomy-scope-inline` registered with deadline 2026-10-07 BEFORE the graph edit (config/workflow-candidates.json:6); tokens/cost labeled unknown in the candidate rationale. Realized comparison (≥5 comparable candidate runs → promote or retire) is deadline-bound by design and owned by `promotion evaluate`, consumed by 0921. (req: R4)
 - [x] AC5 — Diagnostics retain validity with fewer unnecessary model calls: modelQueries 4 → 3 recount with provenance (config/pipeline-budgets.json:38); probe/contract cache identity unchanged.
+- [x] AC5 — (covers: R7 — Diagnostics retain validity with fewer unnecessary model calls) The removed scope dispatch is the model-call reduction; validity is carried by AC1–AC3 and the measured promotion record. (req: R4)
 
 ### Q&A
 
@@ -94,6 +95,7 @@ Tests live in plugins/sp/tests/history-anatomy-cache.test.ts and the existing wo
 | R2 | MET | Diff is hunk-limited (git show audit): only the resolve-scope state deleted, resolve-paths command +3 flags, start edge merged. analyze still precedes cache-probe (`config/workflows/history-anatomy.yaml:117-137` -> `:139-153`; ADR-079 fresh-digest rule in header); cache-probe, validate, correct, stamp, publish states and their transitions byte-identical; bounds math unchanged (`dayBounds`/`zonedDayStart` :525-549). |
 | R3 | MET | Enrich (`config/workflows/history-anatomy.yaml:173-179`), validate (:210-216), correct (:265-271) each retain `agent: ${vars.agent}` (executor choice; config override still injected at workflow-service.ts:765-775 seam), `role: reviewer`, `expectFile`, `timeoutMs`; the independent-validation and bounded-correction (cap 2, shared counter) sequencing untouched; only the model-only resolve-scope dispatch removed. |
 | R4 | MET | Candidate `history-anatomy-scope-inline` (`config/workflow-candidates.json:6-31`): createdAt 2026-09-23, deadline 2026-10-07 = exactly +14 days (<= 14-day rule); 11 real terminal current-digest replay inputs — all 11 runIds verified read-only in /Users/robin/xprojects/spur-new/.spur/spur.db: exist, workflow_name=history-anatomy, status 4 done / 7 failed, definitionDigest sha256:2e3030ff…28eb (matches the claimed recount cohort); projected agent.run 3 -> 2 with the 3-state canonical note; >=25s stage floor vs the 51,452ms median on >=5 comparable runs at >=80% mapped coverage; token/cost explicitly labeled unknown in the rationale; `promotion check` PASS. Realized comparison is deadline-bound, owned by `promotion evaluate`, consumed by 0921. |
+| R7 — Diagnostics retain validity with fewer unnecessary model calls | MET | (feature-scenario key for this task's evidence above, Verdict: PASS); added for DD-09 traceability by task 0921. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

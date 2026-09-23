@@ -191,7 +191,8 @@ is `null` while pending and is filled by `promotion evaluate`.
 | `canonical` | the workflow definition the candidate changes (basename sans `.yaml`) |
 | `deadline` | the date (YYYY-MM-DD) by which it is promoted or deleted — named at creation |
 | `measurement.workflow` / `runIds` | the recorded real-run inputs the shadow-run replays |
-| `delta.agentRunCount` | the candidate's projected `agent.run` action count per run |
+| `delta.agentRunCount` | the candidate's projected `agent.run` action count per run, in the gate's declared-count vocabulary |
+| `delta.baselineAgentRunCount` | optional (0921): the incumbent's declared count at registration, pinning what the candidate replaces — the ADR-076 bar compares the projection against this baseline, so an already-applied change still evaluates against its origin; absent, the live canonical count is the comparator |
 | `verdict` | `null` pending; the shadow-run decision once evaluated |
 
 ### 5.2 Shadow-run comparison
@@ -200,9 +201,13 @@ The shadow run replays the recorded `action_runs`/`runs` history of the canonica
 per-run `agent.run` action count and summed duration over terminal, non-dry runs — rather than
 paying live model quota against a fixture. The verdict (R2) cites both measured quantities, and its
 promote/delete decision is the ADR-076 bar: a candidate is promoted only when it projects strictly
-fewer `agent.run` actions than the canonical definition declares; otherwise it is deleted. Duration
-is cited as measured context, never the decision — a candidate's duration is only knowable by
-running it, which the shadow run deliberately does not.
+fewer `agent.run` actions than the incumbent baseline (`delta.baselineAgentRunCount` when
+registered, 0921; otherwise the canonical definition's live declared count) declares; otherwise it
+is deleted. `promotion evaluate` additionally refuses (0921) when a registered baseline matches
+neither the live count (change not yet applied) nor the projection (change already applied) —
+registry/live drift must be re-registered, never evaluated. Duration is cited as measured context,
+never the decision — a candidate's duration is only knowable by running it, which the shadow run
+deliberately does not.
 
 ### 5.3 Deadline enforcement
 
