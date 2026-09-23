@@ -4,7 +4,7 @@ feature_id: E8
 tasks: [0626, 0627, 0628, 0629, 0630, 0634, 0635, 0636, 0637, 0638]
 owns: SURFACE + mechanism for the History Board module (conversation analytics, timeline, insights, and agent sources)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-31
+updated_at: 2026-09-22
 see_also: [design/history-board-tool-using-tab]
 ---
 
@@ -94,8 +94,8 @@ Feature **E81** (tasks 0724 / 0725). Detail: [`history-board-tool-using-tab.md`]
 - **Server-side filtering:** tool name, status (`all | ok | error`), and argument/error search are
   request parameters, so the metrics strip always reflects the filtered subset.
 - **Token shares are unrounded** so a message's items sum to its totals; rounding happens at render.
-- Distinct from the **Observability** module's Tool Using tab (`04_DESIGN` §7.8b), which tails the
-  indexed-context JSONL ledger rather than the imported forensic corpus.
+- This is the Board's current Tool Using view. J92 removed Observability's older ledger-backed
+  Tool Using tab; this tab reads the imported forensic corpus.
 
 ### 3.4 Tab 4: Sessions
 

@@ -28,13 +28,15 @@ registry enrichment are deferred.
 
 ### 7.8b Tool-use ledger (Observability → Tool Using)
 
-Tasks **0245** / **0246** / **0247** / **0248**. The Tool Using tab is a **read-only** tail of the
-project token ledger written by indexed-context hooks (task 0232) — not a second event store and not
-a control plane.
+Tasks **0245** / **0246** / **0247** / **0248** originally built a read-only Tool Using tab over the
+project token ledger written by indexed-context hooks (task 0232). J92 removed that tab from the
+Observability navigation; the API and legacy component remain, but the History Tool Using view is
+the Board's current user-facing surface. This ledger endpoint is not a second event store or a
+control plane.
 
-> This is the **Observability** module's tab. The History Board has a separate tab of the same name
-> (feature E81, `design/history-board-tool-using-tab.md`) reading the imported forensic corpus over
-> `POST /history/tool-sequence`. Different store, different surface — do not conflate them.
+> Historical UI contract below describes the removed Observability tab. The current History view
+> (feature E81, `design/history-board-tool-using-tab.md`) reads the imported forensic corpus over
+> `POST /history/tool-sequence`; E7 does not need to migrate or duplicate it.
 
 | Surface                                          | Contract                                                                                                                                                                                                                 |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

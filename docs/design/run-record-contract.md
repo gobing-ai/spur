@@ -1,19 +1,36 @@
 # Run record — two-file contract + the Observability read plane
 
 **Area:** `.spur/run` artifact consolidation (two-file run record), mid-run reader inventory, retention proposal, and the History/Observability read plane (tab dispositions + required contracts).
-**Status:** analysis + design (task 0598); no code ships.
+**Status:** historical 0598 analysis plus the current E7 contract below. Sections 0–9 retain the original design evidence; where they differ from the current contract, the current contract governs.
 **Authority:** elaborates `docs/04_DESIGN.md` §2.3 (run-artifact path model) and the E1/E2 history data plane. Cross-references `docs/design/event-tracking.md` (0597, event 5W1H SSOT) and `docs/design/dev-spine-cost-and-drift.md` (0594). On conflict, `04_DESIGN.md` wins (lower number wins on content, constitution §4.1).
 
 ---
 
-## 0. Settled rulings (do not re-open)
+## Current E7 contract (2026-09-22 rebaseline)
+
+The original 0598 snapshot predates the History Board, its `historyContract.getToolSequence` API and Tool Using tab (E8/E81), and the removal of Observability's old Tool Using tab (J92). E7 must not build another history contract, tool-use feed, board module, or Tool Using tab. `packages/contracts/src/history.ts`, `apps/web/src/modules/history/ToolUsingTab.tsx`, and `apps/web/src/modules/observability/tabs.ts` are the current baseline. The old tab's source-migration proposal in §5 and the absent-contract claim in §8 are superseded.
+
+E7's remaining outcome is a **workflow run record**: for a logging-enabled run, one append-only, redacted `.spur/run/<runId>.md` execution log and one schema-versioned `.spur/run/<runId>.state.json` machine-state file written by atomic replace. The pair is keyed by the authoritative workflow run ID across source, bundled, inline, subprocess and resume paths. `--no-log` remains an explicit compatibility exception; it must not be silently overridden or removed. Existing workflow DB trace/events, `.spur/workflow/` `--trace-file` output, task/feature verification evidence, and source-owned agent transcripts remain separately owned facts. The pair may refer to them but must not copy them merely to satisfy a file count. The historical ~30-kind table in §2 is a migration inventory, not a deletion list: re-inventory current readers and writers after D63 before moving any artifact.
+
+The run record is read through the existing Observability server boundary and linked from an existing run-inspection surface. A new History module or duplicate Tool Using tab is outside E7. Read by run ID only, reject traversal and symlink escapes from the project run directory, distinguish absent/legacy/incomplete records, and return only bounded redacted content. Report `expired` only with persisted cleanup evidence; the current `.log` cleaner leaves no tombstone, so absence alone cannot prove expiration. Preserve the existing workflow trace and current-input proof as the authoritative completion/recovery evidence; the markdown log is human inspection, not a replacement for those gates. Resume appends new sections and updates state without duplicating a prior side effect or presenting an incomplete run as done.
+
+Migration is additive first: old `.log` and sidecar consumers remain readable until the replacement reader/writer is proven on the canonical workflows and installed plugin. New runs should have no undeclared **run-record** sidecars at terminal state; independent task evidence and the explicit `--trace-file` projection do not count as run-record sidecars. Do not bulk-delete or rewrite historical artifacts. Retention for the new pair is a separate decision: `workflow.logRetentionDays` already defaults to 30 days for `.log` files, but extending that deletion policy to the pair requires operator ratification. Until then, the pair is not reclaimed. Once ratified, a dry run must report the same eligible pair set as an apply run; active/paused runs and independently owned proof artifacts are never reclaimed by pair GC.
+
+The 0594 injected-file-list cost idea is independent instrumentation, not a prerequisite for the run record. It remains outside E7 unless a later measured cost proposal gives it an owner.
+
+## 0. Historical 0598 rulings and snapshot
+
+The following records the original 0598 decision context. The current E7 contract above supersedes
+its Board placement, Tool Using, trace-file removal, artifact-deletion, and retention proposals.
 
 1. **No new board module.** History surfaces stay in `apps/web/src/modules/observability/`.
 2. **`Tool Using` must source from the `spur history import` → `analyze` plane**, not event tracking / `system_events` / token ledger.
 3. **`Tasks` and `Jobs` tabs are deferred** — inventory data gaps, no refactor design.
 4. Retention window is **map open question 3, owner: operator** — this doc proposes, does not decide, deletes nothing.
 
-Ground truth established at charting (verified this run, counts drifted up): `.spur/run` is **flat**, holds **1,576 files** today (1,518 at charting — growth is itself retention evidence), across ~30 artifact kinds. `.spur/workflow/` **does not exist on disk**.
+At 0598 charting, `.spur/run` was flat and held 1,576 files (1,518 at the earlier snapshot) across
+about 30 artifact kinds. The `.spur/workflow/` absence was a historical observation, not a current
+claim or permission to remove its live `--trace-file` surface.
 
 ---
 
@@ -80,14 +97,17 @@ Counts are a live `ls .spur/run/` grouping (1,576 files). The ~30 kinds fold int
 
 **Net:** every durable fact lands in one of the two files; the drops are all derived or transient. No artifact kind is silently lost — each drop names the surviving home of its durable content. Run-scoped artifacts and `agent-doctor.json` are disjoint: the cache never carries run linkage, so run-record consolidation ignores it.
 
-### 2.4 `.spur/workflow/` disposition — **remove the facility**
+### 2.4 Historical `.spur/workflow/` removal proposal — superseded
 
 `apps/cli/src/commands/workflow.ts:227` declares `--trace-file` writing a "redacted schema-versioned JSONL trace under `.spur/workflow/`"; the flag is wired (`:282` async propagation, `:357` `WorkflowTraceWriter`) but **never exercised** — the tree does not exist on disk. The trace need is already covered twice over:
 
 - the consolidated run log (`WorkflowRunLogSink`, `:374`), which this contract promotes to the append-only `<RUNID>.md`, and
 - the `system_events` ledger (task 0370), which made the JSONL trace redundant for server-side visibility (`docs/tasks3/0370_…md` records server-side ingestion of these traces was declined).
 
-**Disposition: delete the flag, `WorkflowTraceWriter`, and the `.spur/workflow/` doc references.** Do **not** adopt it as the JSON state cache — the cache must be co-located (`<RUNID>.state.json` next to `<RUNID>.md`); a second directory recreates the exact discoverability trap the two-file rule removes.
+**Historical disposition, no longer approved for E7:** the 0598 proposal was to delete the flag,
+`WorkflowTraceWriter`, and `.spur/workflow/` references. The current contract preserves them as
+an independent redacted trace projection. The run-record state cache is still co-located with its
+markdown log under `.spur/run/`.
 
 ---
 

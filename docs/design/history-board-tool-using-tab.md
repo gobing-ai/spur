@@ -4,7 +4,7 @@ feature_id: E81
 tasks: [0724, 0725]
 owns: SURFACE + mechanism for the History Board "Tool Using" tab (tool-invocation sequence, filters, inspection drawer)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-31
+updated_at: 2026-09-22
 ---
 
 # Design Satellite: History Board Tool Using Tab
@@ -13,9 +13,9 @@ updated_at: 2026-08-31
 **Status:** Built (0724, 0725)
 **Date:** 2026-08-31
 
-> Not to be confused with the **Observability** module's Tool Using tab (`04_DESIGN` §7.8b), which
-> tails the indexed-context JSONL ledger over `GET /api/observability/tool-use`. This tab reads the
-> imported forensic corpus (`history_tool_call` + `history_message`) over `POST /history/tool-sequence`.
+> This is the Board's Tool Using view. J92 removed the older Observability Tool Using tab, which
+> tailed the indexed-context ledger. This view reads the imported forensic corpus
+> (`history_tool_call` + `history_message`) over `POST /history/tool-sequence`.
 
 ## 1. Overview & Goal
 

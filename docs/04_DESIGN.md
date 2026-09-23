@@ -2,7 +2,7 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.80.0
+version: 1.81.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
 updated_at: 2026-09-22
@@ -75,7 +75,7 @@ Root [DESIGN.md](../DESIGN.md) owns visual and interaction design;
 | Inter-agent control plane | [inter-agent-control-plane.md](design/inter-agent-control-plane.md) |
 | Historical spine cost/drift measurement — analysis only | [dev-spine-cost-and-drift.md](design/dev-spine-cost-and-drift.md) |
 | Event tracking — System Event 5W1H SSOT | [event-tracking.md](design/event-tracking.md) |
-| Run-record proposal — implementation deferred | [run-record-contract.md](design/run-record-contract.md) |
+| E7 run-record contract — rebaselined, implementation deferred | [run-record-contract.md](design/run-record-contract.md) |
 | Board module-boundary recommendations — **superseded by ADR-116** (the Workspace/Inbox/Teams split is retired; current boundary in [project-switcher.md](design/project-switcher.md)) | [board-module-boundaries.md](design/board-module-boundaries.md) |
 | History Board module — Conversation Analytics & Agent Forensic Plane | [history-board-module.md](design/history-board-module.md) |
 | Design Satellite: History Board Tool Using Tab | [history-board-tool-using-tab.md](design/history-board-tool-using-tab.md) |
@@ -356,7 +356,7 @@ See [contract detail](design/planning-workflow-contracts.md#78-spdev--command-op
 
 See [contract detail](design/observability-contracts.md#78a-process-inventory-observability--processes).
 
-### 7.8b Tool-use ledger (Observability → Tool Using)
+### 7.8b Legacy tool-use ledger endpoint
 
 See [contract detail](design/observability-contracts.md#78b-tool-use-ledger-observability--tool-using).
 
