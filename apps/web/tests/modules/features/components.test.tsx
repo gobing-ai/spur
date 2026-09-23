@@ -816,9 +816,9 @@ describe('FeatureDetail', () => {
         // Portaled into the dock (mirror of the tree dock), not the component root.
         const panel = getByTestId('feature-metadata-panel');
         expect(panel.parentElement).toBe(dock);
-        // Mirror classes: right-anchored outside the body (100% + 12px gap), no overlap.
-        expect(panel.className).toContain('left-[calc(100%_+_12px)]');
-        expect(panel.className).toContain('w-72');
+        // Mirror classes: in-flow dock with responsive width.
+        expect(panel.className).toContain('w-64');
+        expect(panel.className).toContain('shrink-0');
         expect(panel.className).not.toContain('inset-y-0 right-0');
 
         // Folded by default in mirror mode too: hidden + no focusable rows.
@@ -1012,20 +1012,13 @@ describe('FeaturesShell', () => {
         const workspace = container.querySelector('[data-testid="detail-workspace"]');
         expect(dock).not.toBeNull();
         expect(workspace).not.toBeNull();
-        // The tree is a separate floating panel OUTSIDE the body panel — never contained
-        // by it, so it cannot consume the body's layout width.
+        // The tree is a separate panel OUTSIDE the detail workspace — never contained by it.
         expect(workspace?.contains(dock)).toBe(false);
-        // Floating overlay anchored to the body panel's left side, aligned to its
-        // top/bottom (below the module header).
         const dockClass = dock?.getAttribute('class') ?? '';
-        expect(dockClass).toContain('absolute');
-        expect(dockClass).toContain('z-20');
-        expect(dockClass).toContain('right-[calc(100%_+_12px)]');
-        expect(dockClass).toContain('top-0');
-        expect(dockClass).toContain('bottom-0');
-        expect(dockClass).not.toContain('shrink-0');
-        // The body keeps the full container width (matches the header width).
-        expect(workspace?.className).toContain('w-full');
+        expect(dockClass).toContain('w-64');
+        expect(dockClass).toContain('shrink-0');
+        // The detail workspace adapts dynamically via flex-1.
+        expect(workspace?.className).toContain('flex-1');
     });
     /**
      * Serve the detail endpoint with a status that changes after the first read, so a
@@ -1204,17 +1197,12 @@ describe('F841 Acceptance Criteria', () => {
         expect(detailWorkspace).not.toBeNull();
         expect(detailWorkspace?.contains(treeDock)).toBe(false);
 
-        // Floating overlay anchored to the body's left, aligned to its top/bottom
-        // (below the module header), not a layout sibling.
-        expect(treeDock?.className).toContain('absolute');
-        expect(treeDock?.className).toContain('z-20');
-        expect(treeDock?.className).toContain('right-[calc(100%_+_12px)]');
-        expect(treeDock?.className).toContain('top-0');
-        expect(treeDock?.className).toContain('bottom-0');
-        expect(treeDock?.className).not.toContain('shrink-0');
+        // The tree is docked in-flow with responsive width
+        expect(treeDock?.className).toContain('w-64');
+        expect(treeDock?.className).toContain('shrink-0');
 
-        // The body keeps the full container width (matches the header width).
-        expect(detailWorkspace?.className).toContain('w-full');
+        // The detail workspace adapts dynamically via flex-1.
+        expect(detailWorkspace?.className).toContain('flex-1');
 
         // Toggle tree closed via header toggle
         const toggle = getByLabelText('Collapse feature tree');

@@ -507,10 +507,10 @@ export default function FeatureDetail({
             aria-label="Feature metadata"
             aria-hidden={!showMetadata}
             hidden={isMetadataMirror && !showMetadata}
-            className={`flex flex-col overflow-hidden bg-base-200 shadow-xl ${
+            className={`flex flex-col overflow-hidden bg-base-200 ${
                 isMetadataMirror
-                    ? 'absolute top-0 bottom-0 left-[calc(100%_+_12px)] z-20 w-72 lg:w-80 rounded-lg border border-spur-border'
-                    : `absolute inset-y-0 right-0 z-30 w-80 max-w-full border-l border-spur-border transition-transform duration-200 ${
+                    ? `w-64 lg:w-72 shrink-0 rounded-lg border border-spur-border shadow-xs ${showMetadata ? 'flex' : 'hidden'}`
+                    : `absolute inset-y-0 right-0 z-30 w-80 max-w-full border-l border-spur-border shadow-xl transition-transform duration-200 ${
                           showMetadata ? 'translate-x-0' : 'translate-x-full'
                       }`
             }`}

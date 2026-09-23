@@ -290,15 +290,14 @@ export default function FeaturesShell() {
                         </div>
                     </header>
 
-                    {/* Body area — relative so the floating tree + metadata mirror align to
-                        the body panel (below the header). The body keeps the full header
-                        width. The tree floats in the left margin (right edge clear, no
-                        overlap); the metadata panel mirrors it in the right margin. */}
-                    <div className="relative flex-1 min-h-0" ref={bodyAreaRef}>
+                    {/* Body area — 3-zone adaptive layout fitting laptop and desktop screens */}
+                    <div className="flex-1 min-h-0 flex items-stretch gap-3 overflow-hidden" ref={bodyAreaRef}>
                         <div
                             id="feature-tree-dock"
                             hidden={!isTreeOpen}
-                            className="absolute right-[calc(100%_+_12px)] top-0 bottom-0 z-20 w-72 lg:w-80 flex flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xl"
+                            className={`${
+                                isTreeOpen ? 'w-64 lg:w-72 flex' : 'hidden'
+                            } shrink-0 flex-col overflow-hidden rounded-lg border border-spur-border bg-base-200 shadow-xs`}
                         >
                             <div className="flex items-center justify-between px-3 py-2 border-b border-spur-border bg-base-300/60 shrink-0">
                                 <span className="text-xs font-semibold text-spur-text flex items-center gap-1.5">
@@ -322,7 +321,7 @@ export default function FeaturesShell() {
                             </div>
                         </div>
                         <div
-                            className="w-full h-full overflow-hidden rounded-lg border border-spur-border bg-base-100 relative"
+                            className="flex-1 min-w-0 h-full overflow-hidden rounded-lg border border-spur-border bg-base-100 relative"
                             data-testid="detail-workspace"
                         >
                             <div className="w-full h-full overflow-y-auto">
