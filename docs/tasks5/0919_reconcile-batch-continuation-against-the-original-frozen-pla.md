@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Reconcile batch continuation against the original frozen plan
-status: testing
+status: done
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T19:10:49.501Z"
+updated_at: "2026-09-23T19:11:06.502Z"
 feature_id: D63
 priority: P2
 tags:
@@ -55,10 +55,10 @@ Extend or validate the existing frozen plan/report/checkpoint artifacts only whe
 
 ### Plan
 
-- [ ] 1. Trace current freeze, checkpoint, worktree marker and report persistence and reproduce an identity/reconciliation gap.
-- [ ] 2. Fix the shared continuation boundary and use existing run/receipt APIs for child-result checks.
-- [ ] 3. Exercise unrelated checkpoint, task added after freeze, changed dependencies, stale child PASS, lost worktree and mixed terminal results.
-- [ ] 4. Update runall/parallel/next guidance and verify evidence preservation and isolated opt-in execution.
+- [x] 1. Trace current freeze, checkpoint, worktree marker and report persistence and reproduce an identity/reconciliation gap.
+- [x] 2. Fix the shared continuation boundary and use existing run/receipt APIs for child-result checks.
+- [x] 3. Exercise unrelated checkpoint, task added after freeze, changed dependencies, stale child PASS, lost worktree and mixed terminal results.
+- [x] 4. Update runall/parallel/next guidance and verify evidence preservation and isolated opt-in execution.
 
 ### Solution
 
@@ -104,4 +104,5 @@ Design compliance: runbook + static contract pins only — no batch YAML, coordi
 - 2026-09-22T02:58:02.026Z todo → blocked (system)
 - 2026-09-23T18:57:36.977Z blocked → wip (system)
 - 2026-09-23T19:02:12.763Z wip → testing (system)
+- 2026-09-23T19:11:06.502Z testing → done (system)
 
