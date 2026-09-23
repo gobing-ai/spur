@@ -124,6 +124,11 @@ describe('execution-batch spec contract (task 0919 — batch continuation reconc
         expect(SPEC).toContain('Never treat an\n  unverified claim as done.');
     });
 
+    test('BC-1/BC-2 — changed dependencies and lost worktree produce explicit blocked outcomes', () => {
+        expect(SPEC).toContain('blocked (admission invalidated —\nre-plan required)');
+        expect(SPEC).toContain('(lost worktree, unresolvable marker), report `blocked` with the reason');
+    });
+
     test('BC-3 — resumed partial batch is never reported clean; evidence survives cleanup', () => {
         expect(SPEC).toContain('is never reported `clean`');
         expect(SPEC).toContain('task 0720 R3');
