@@ -1384,6 +1384,29 @@ ${MINIMAL_WORKFLOW_YAML}`,
             await rm(dir, { recursive: true, force: true });
         });
 
+        // 0916 R2/AC2: a run being driven by a live owner is refused at spur's
+        // resume boundary — the status pre-check IS the ownership guard here
+        // (deterministic, no timing races); the engine's claim CAS remains the
+        // backstop behind it (ADR-122), covered upstream.
+        test('R2: continuePaused refuses a run owned by a live concurrent resumer', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-continue-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const db = await ctx.getDb();
+            const runResult = await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'cas1' });
+            expect(runResult.status).toBe('paused');
+            // Simulate a live concurrent resumer holding the claim (0902 CAS:
+            // owner_attempt stamps the winner at the status mutation).
+            await db.run("UPDATE runs SET status = 'running', owner_attempt = 'live-owner' WHERE id = 'cas1'");
+            await expect(svc.continuePaused('cas1', { resumeOwner: { attemptId: 'second-resumer' } })).rejects.toThrow(
+                'is not resumable (status: running)',
+            );
+            await rm(dir, { recursive: true, force: true });
+        });
+
         // 0901 R2: non-resumable statuses keep refusing, with the widened message.
         test('R2: continuePaused refuses terminal and missing rows', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-continue-'));
