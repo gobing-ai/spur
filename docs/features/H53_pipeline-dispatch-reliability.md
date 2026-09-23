@@ -1,15 +1,15 @@
 ---
 schema_version: 1
-id: "P"
+id: "H53"
 name: "pipeline-dispatch-reliability"
 status: active
 priority: P2
 tags: []
 created_at: "2026-09-06T14:38:52.248Z"
-updated_at: "2026-09-17T23:04:26.937Z"
+updated_at: "2026-09-23T05:45:36.619Z"
 ---
 
-# P: pipeline-dispatch-reliability
+# H53: pipeline-dispatch-reliability
 
 ## Goal
 
@@ -52,7 +52,17 @@ _No linked tasks._
 
 ## Notes
 
+- 2026-09-22: Re-parented from root `P` to `H53` under H5 (reliable execution architecture), next to
+  H51 batch reliability guardrails. Only the ID changed; Goal/Scope/AC are unchanged.
+- Evidence already in the tree, to confirm during `/sp:dev-plan` rather than re-implement:
+  - **F10:** test-fix mutation-policy guard at `config/workflows/task-pipeline.yaml:76`, covered by
+    `plugins/sp/tests/task-pipeline-resilience.test.ts:76` (0777).
+  - **F5:** `docs/design/session-pinned-dispatch.md` §7 assigns `implementAgent=auto` semantics to B7
+    (done); confirm the resolution order is documented as the AC requires.
+  - **F7:** no run-id / log-mtime freshness check found in the batch driver — the remaining work.
+
 ## History
 
 - 2026-09-17T23:04:26.937Z backlog → active (system)
+- 2026-09-23T05:45:03.007Z moved P → H53 (system)
 

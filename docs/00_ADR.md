@@ -1871,7 +1871,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Consequence:** stage isolation is a policy, not a side effect of fresh processes — reviewer
   stages must stay fresh by default; a wrong ownership rule can re-enable an operator-disabled
   executor, so ownership lands before any automatic recovery; two upstream runner releases sit on the
-  critical path (capability record, session gaps); `implementAgent=auto` semantics (feature P F5)
+  critical path (capability record, session gaps); `implementAgent=auto` semantics (feature H53 F5, formerly P)
   are defined by the pin.
 - **Retains:** ADR-047 (affinity precedence: an explicit session pin never emits a global continue);
   ADR-057 (durable artifacts and identity-pinned waits, no terminal transport); ADR-087 (`inline`

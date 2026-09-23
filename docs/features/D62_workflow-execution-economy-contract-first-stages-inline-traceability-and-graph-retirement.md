@@ -6,7 +6,7 @@ status: done
 priority: P2
 tags: []
 created_at: "2026-09-16T10:34:18.496Z"
-updated_at: "2026-09-23T03:39:39.677Z"
+updated_at: "2026-09-23T05:45:36.407Z"
 ---
 
 # D62: Workflow execution economy: contract-first stages, inline traceability, and graph retirement
@@ -67,7 +67,7 @@ evidence standard ADR-076 set when it retired the previous parallel-pipeline pro
   separate work.
 - Any change to the dual-workflow engine's public action/guard kinds, the transport contracts in
   `packages/contracts`, or the domain schema.
-- The dispatch-reliability gaps owned by feature P (`implementAgent=auto` resolution order, watcher
+- The dispatch-reliability gaps owned by feature H53 (formerly P; `implementAgent=auto` resolution order, watcher
   report freshness, test-fix mutation policy).
 - Executor/model selection policy and role-routing attribution, owned by D6 and J6.
 - Board/web UI surfaces for the new progress data.

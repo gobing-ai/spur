@@ -125,7 +125,7 @@ Reset on supervisor restart, `agent stop`/`start`, or `MAX_CONSECUTIVE_FAILED_DR
 B8 (upstream, parallel) ─┐
 B6 ──────────────────────┼─▶ B7 ──▶ G66
 E6 (existing, measurement) ┘
-P (existing): F5 implementAgent=auto semantics lands with B7; F7 watcher freshness stays as scoped
+H53 (formerly P): F5 implementAgent=auto semantics lands with B7; F7 watcher freshness stays as scoped
 ```
 
 B6 first: it is the safety blocker for `auto`. B7 can start on today's `getAgentSessionCapability`; it re-reads the widened record when B8 lands.
