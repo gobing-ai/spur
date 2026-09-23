@@ -1,97 +1,121 @@
 ---
 schema_version: 1
 id: "E7"
-name: "Two-file run-record, history oRPC, and Tool Using source migration"
+name: Workflow run record and inspection
 status: backlog
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:32.698Z"
-updated_at: "2026-08-19T05:37:07.404Z"
+updated_at: "2026-09-23T05:21:35.257Z"
 ---
 
 # E7: Two-file run-record, history oRPC, and Tool Using source migration
 
 ## Goal
-Replace the flat `.spur/run` sprawl with the two-file run-record contract,
-expose that record (and the `spur history analyze` artifact) over a history
-oRPC contract, and point Observability `Tool Using` at the history plane
-with the token-ledger kept only as a live overlay.
+
+Produce a reliable, inspectable record for each workflow run without weakening the existing workflow trace, recovery state, or task/feature proof. After D63, a logging-enabled run has one redacted append-only execution log and one atomic machine-state file keyed by its authoritative run ID. Operators can inspect that record through the existing Board surface, including after a safe resume.
+
 ## Scope
-- In:
-    - Two-file run record: `<RUNID>.md` (append-only) + `<RUNID>.state.json`
-      (read/write cache), with the ~30 artifact-kind disposition in
-      `docs/design/run-record-contract.md` §2.
-    - History oRPC contract (`packages/contracts/src/history.ts`) for the
-      analyze artifact (Q1–Q10), per-call tool-use rows, and run-record read
-      (0598 R8 #1 — the L-sized first slice).
-    - `ToolUsingTab` source migration: paged/historical rows from the history
-      plane; `GET /api/observability/tool-use/stream` stays as a live overlay
-      on the token ledger (0598 §5).
-    - `RunRecordTab` (or SystemEventsTab extension) reading `<RUNID>.md`
-      inside `modules/observability/` — no new board module.
-    - Retention/GC of the two-file pair. Proposed default: 30 days via
-      widening `cleanRunLogs` (0598 §4). Map open question 3 is ratified
-      at kickoff; 0-day delete-on-success is rejected by the design.
-    - Record the injected file list per message so per-file spine cost is
-      measurable (0594 F3 — history-plane slice).
-- Out:
-    - A new History board module (operator ruling).
-    - `TasksTab` / `JobsTab` refactor (deferred; gaps named in 0598 §6).
-    - Implementing the event 5W1H payload fix (that is J9).
-    - Anything under `spur task` (F92).
-    - New CLI nouns. A `history` contract is not a new CLI noun.
+
+**In scope**
+
+- Re-inventory `.spur/run` readers/writers after D63 and migrate run-record-owned facts to `<runId>.md` (redacted, append-only) and `<runId>.state.json` (schema-versioned, atomic replacement). Keep the workflow DB trace/events and path-only artifact metadata authoritative for run status; keep task/feature verdicts and proof receipts with their current owners.
+- Preserve one run identity and append/update semantics across source and installed workflow execution, inline and subprocess paths, interruption, continue, and replay. Migrate current consumers before retiring any run-record sidecar; retain read compatibility for legacy `.log` runs and the existing `--no-log` and `--trace-file` options.
+- Expose a confined, bounded, redacted run-record read by run ID through the existing Observability server boundary and link it from an existing run-inspection view. Distinguish missing, legacy, and incomplete records without inventing success. Label a record expired only when persisted cleanup evidence proves that outcome; the current `.log` cleaner leaves no tombstone, so an absent file alone is missing.
+- Validate that current-input verification and completion gates, recovery, run trace, and installed/plugin-override behavior remain correct when record storage changes. The target is two **canonical run-record files** per logging-enabled run, not two files for every independent task or project artifact.
+
+**Out of scope**
+
+- Rebuilding the History oRPC module or Tool Using view: E8/E81 already ship `historyContract.getToolSequence` and the History Tool Using tab; J92 removed Observability's old Tool Using tab.
+- A new Board module or a duplicate Tool Using tab; a new public `spur` noun or verb; changing the workflow engine, task/feature evidence ownership, or source-owned agent transcripts.
+- Deleting `.spur/workflow/` traces or the existing `--trace-file` contract; bulk-rewriting or deleting historical `.spur/run` artifacts.
+- The 0594 injected-file-list cost idea. It needs a separately measured owner and is not needed for run-record inspection.
+- Automatic cleanup of the new pair until its retention policy is explicitly selected. Existing `.log` cleanup remains governed by `workflow.logRetentionDays`.
+
 ## Acceptance Criteria
+
 ```gherkin
-Feature: Two-file run-record, history oRPC, and Tool Using source migration
+Feature: E7 workflow run record and inspection
 
   @core
-  Scenario: R1 — a pipeline run writes exactly two durable files
-    Given a task-pipeline run with id RUNID
-    When the run finishes
-    Then `.spur/run/<RUNID>.md` is an append-only execution log
-    And `.spur/run/<RUNID>.state.json` is the mid-run cache
-    And the dropped artifact kinds named in the 0598 disposition table are not written
+  Scenario: R1 — A logging-enabled run writes one canonical two-file record
+    Given a workflow run with an authoritative run ID and logging enabled
+    When its source or installed execution writes the run record
+    Then `.spur/run/<runId>.md` is appended in execution order and never rewritten
+    And `.spur/run/<runId>.state.json` is schema-versioned and atomically replaced
+    And no undeclared run-record sidecar is required after terminal closure
+    And task evidence, workflow DB trace, and explicit trace-file output keep their own owners
 
   @core
-  Scenario: R2 — the history contract serves analyze + tool-use + run-record
-    Given `packages/contracts/src/history.ts` exists
-    When a client fetches tool-use rows and a run record
-    Then both shapes come from that contract
-    And `packages/contracts/src/` no longer lacks a history module
+  Scenario: R2 — Recording preserves privacy and current proof
+    Given workflow inputs, outputs, and a current-input verification receipt
+    When the record is persisted or read
+    Then configured secrets and sensitive content are redacted at the persistence boundary
+    And the record does not replace or invalidate the workflow trace or task/feature proof
+    And an inspection log alone never establishes completion
 
   @core
-  Scenario: R3 — Tool Using reads the history plane, not the ledger, for history
-    Given imported history and a current token-ledger tail
-    When the operator opens Observability → Tool Using
-    Then paged rows come from `spur history analyze` (per-call time + token)
-    And the live tail is the ledger overlay only
-    And the tab does not treat the ledger as the historical source
+  Scenario: R3 — Continue and replay retain run identity and state
+    Given an interrupted or paused workflow with an existing run record
+    When the supported continue or replay path runs
+    Then it keeps the original run ID and appends only new execution sections
+    And its state update is atomic and agrees with the authoritative trace outcome
+    And a previously completed external action or human decision is not repeated by record recovery
 
   @core
-  Scenario: R4 — the execution-log view reads the run record
-    Given a finished RUNID
-    When the operator opens the Observability run-record view
-    Then the original input/output log is served from `<RUNID>.md`
-    And the view lives under `modules/observability/`, not a new module
+  Scenario: R4 — Current callers survive the storage migration
+    Given the post-D63 inventory of run-scoped writers and readers
+    When the canonical pipelines and installed plugin use the two-file record
+    Then every declared mid-run reader obtains its needed state or a supported legacy artifact
+    And existing task gates, verdicts, workflow trace, follow output, and project overrides remain usable
+    And no old artifact is removed before its last supported reader is migrated
+
+  @core
+  Scenario: R5 — Operators inspect the record by run ID
+    Given a run with a persisted record
+    When an operator opens it from an existing Board run-inspection surface
+    Then the server rejects traversal and symlink escapes and returns bounded redacted content
+    And the view identifies the run's actual state without treating a partial log as success
+    And malformed IDs, absent records, and legacy records have explicit outcomes
+
+  @core
+  Scenario: R6 — Existing run surfaces retain compatibility
+    Given a legacy `.log` run, an explicit `--no-log` run, or a `--trace-file` run
+    When it is inspected or continued through a supported path
+    Then legacy records remain readable without bulk migration
+    And `--no-log` remains an explicit logging opt-out
+    And `--trace-file` continues to write its independent redacted projection
 
   @edge
-  Scenario: R5 — retention GC is dry-runnable and bounded
-    Given two-file records older than the configured window (default 30 days)
-    When GC runs
-    Then those pairs are removed
-    And files newer than the window are left
-    And a `--dry-run` reports the same set with zero deletes
+  Scenario: R7 — New record files are not silently reclaimed
+    Given a new two-file record and the existing `.log` retention setting
+    When workflow cleanup runs before the operator selects a pair-retention policy
+    Then neither new record file is deleted
+    And existing `.log` cleanup behavior remains unchanged
 ```
+
 ## Tasks
 
 <!-- AUTO-GENERATED by spur feature refresh -->
-_No linked tasks._
+| WBS | Task | Status |
+| --- | ---- | ------ |
+| 0925 | Persist redacted two-file workflow records for new runs | todo |
+| 0926 | Continue and inspect legacy workflow runs with stable identity | todo |
+| 0927 | Preserve task-pipeline proof while moving its run state to the pair | todo |
+| 0928 | Move the remaining canonical workflows to the run record | todo |
+| 0929 | Inspect a bounded run record from the existing Board | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
-Graduated from wayfinder map **I6** / task **0598** (plus 0594 F3).
-Contract: `docs/design/run-record-contract.md`. Graduation order in that
-doc §8: (1) history contract, (2) tool-use migration + overlay, (3)
-run-record read + state schema, (4) retention GC. Map open question 3
-(the window) is recommended at 30 days; the operator ratifies at kickoff.
+
+**2026-09-22 rebaseline.** The H1 heading and file slug retain the original title for link stability;
+the tool-owned `name` field now states the current scope. E8/E81 delivered the History Board,
+`historyContract.getToolSequence`, and the History Tool Using tab; J92 removed the obsolete
+Observability Tool Using tab. E7 owns the remaining workflow run-record and inspection outcome.
+Those delivered prerequisites are not tasks to regenerate.
+
+Design: `docs/design/run-record-contract.md` → **Current E7 contract (2026-09-22 rebaseline)**. The older §0–§9 material is historical inventory, not permission to remove current task evidence or `.spur/workflow/` traces. D63 completion is the implementation baseline because its inline, recovery, and proof contracts determine the final reader/writer inventory.
+
+Retention is intentionally undecided for the new pair. Current `cleanRunLogs` removes old `.log` files after `workflow.logRetentionDays` (default 30 days); that does not authorize deleting new records. Select the pair policy before adding pair GC. The feature can deliver durable records and inspection without an automatic pair-GC task.
+
 ## History
