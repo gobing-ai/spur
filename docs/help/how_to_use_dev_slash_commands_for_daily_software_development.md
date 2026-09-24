@@ -51,7 +51,7 @@ artifacts (with optional feature transition and irreversible branch cleanup).
 
 ## The command map
 
-The `sp` plugin provides **39 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
+The `sp` plugin provides **40 commands** across planning, execution, operations/hygiene, wrap-up, and authoring:
 
 | Command                 | Phase / Category | What it does                                                                                                                                                                           | Backed by                                        |
 | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
@@ -70,7 +70,9 @@ The `sp` plugin provides **39 commands** across planning, execution, operations/
 | `/sp:dev-verifyall`     | Exec (Batch)     | Batch-verify tasks against requirements and AC, producing consolidated report                                                                                                          | `sp:code-verification`                           |
 | `/sp:dev-refresh`       | Execution        | Refresh feature status by feature ID, task WBS, or batch sweep via `spur feature sync`                                                                                                 | `spur feature sync`                              |
 | `/sp:dev-feature-change` | Planning         | Restructure feature tree from a mapping file (CLI-gated moves + task edges)                                                                                                            | `sp:spur-cli` / inline procedure                 |
+| `/sp:dev-find-next`     | Planning         | Rank the feature frontier ("which feature next?") with evidence; emits tree-defect proposals for `dev-feature-change`                                                                  | `sp:next-feature`                                |
 | `/sp:dev-fixall`        | Hygiene          | Systematically loop lint, typecheck, and test checks until clean across working tree                                                                                                   | inline                                           |
+| `/sp:dev-refactor`      | Hygiene          | Lens-routed refactoring (`--focus api\|architect\|tests\|ui\|auto`) with a preservation contract; breaking changes pause for approval                                              | `sp:code-refactoring`                            |
 | `/sp:dev-simplify`      | Hygiene          | Simplify recently-changed code for clarity without changing behavior                                                                                                                   | `sp:code-simplification`                         |
 | `/sp:dev-debug`         | Operations       | Systematic debugging protocol — reproduce, isolate, diagnose root cause, apply minimal fix, and verify with regression tests                                                           | `sp:sys-debugging`                               |
 | `/sp:dev-daily`         | Operations       | Generate a daily summary report from agent usage data, git history, and notes (honors `SP_DAILY_SUMMARY_NO_PROMPT`)                                                                    | `sp:daily-summary`                               |
@@ -80,6 +82,9 @@ The `sp` plugin provides **39 commands** across planning, execution, operations/
 | `/sp:dev-review-session` | Operations      | Review the active conversation inline: outcomes, resolved/open issues with evidence, bounded improvement proposals, and next actions                                                  | `sp:session-review`                              |
 | `/sp:dev-arch`          | Operations       | Survey codebase for shallow modules and deepening opportunities                                                                                                                        | `sp:code-improvement`                            |
 | `/sp:dev-reverse`       | Operations       | Depth-driven codebase reverse engineering / HLD generation / audit                                                                                                                     | `sp:reverse-engineering`                         |
+| `/sp:dev-find-conflict` | Operations       | Authority-aware semantic audit across source, tasks, features, and authority docs; routes confirmed repairs to owner surfaces                                                          | `sp:conflict-finding`                            |
+| `/sp:dev-pr-review`     | Operations       | Review GitHub PRs with Codex; collect and fix findings (`full\|submit\|collect\|fix\|rerun\|status\|rules`)                                                                           | `sp:pr-reviewing`                                |
+| `/sp:dev-gtd`           | Operations       | Quality gate → fix → commit → push → `gh` verify in one flow (`--act` for local CI simulation, `--no-push`)                                                                          | inline                                           |
 | `/sp:dev-gitmsg`        | Operations       | Draft Conventional-Commits message from staged changes                                                                                                                                 | inline                                           |
 | `/sp:dev-changelog`     | Operations       | Generate a changelog from commit history                                                                                                                                               | inline                                           |
 | `/sp:dev-wrap`          | Wrap-up          | Wrap up a single completed task — learnings, metrics, doc-sync, optional feature transition + branch cleanup                                                                           | `spur workflow run wrapup-pipeline.yaml`         |
@@ -204,6 +209,44 @@ Use this when the idea is a single unit of work: "fix the flaky retry in the upl
 
 ---
 
+## Driving one existing task by hand
+
+The task already exists (say `0042`). Full `/sp:dev-run` **already includes verify** — its
+`task-pipeline.yaml` runs precheck → implement → quality gate → review → approve(HITL) →
+verify → record → done. Do **not** follow it with `/sp:dev-verify`; that only belongs after
+`--mode implement` (or when a task sits at `testing`).
+
+```bash
+# 0. (Optional) Spec incomplete or stale? Refine first; --depth ready also promotes backlog → todo.
+/sp:dev-refine 0042 --depth ready --auto
+
+# 1. Execute + verify + done in one pipeline (task should be at `todo`).
+/sp:dev-run 0042 [--auto] [--worktree]    # --auto skips the approve HITL gate
+
+# 2. Wrap up once the task is `done` (learnings, metrics, doc-sync).
+/sp:dev-wrap 0042 --auto                  # add --merge for branch cleanup (always pauses)
+```
+
+Lighter chain form (in-session implement → verify; skips the pipeline's quality-gate loop, review stage, and HITL approve):
+
+```bash
+/sp:dev-run 0042 --mode implement --auto --next
+#   → todo → wip → testing (guarded by `spur task check`), records the run-link provenance,
+#     then auto-invokes /sp:dev-verify 0042 --auto --next → PASS → done
+/sp:dev-wrap 0042 --auto
+```
+
+Keep `--next` on the implement hop: without it the task stays at `wip` and no run-link is
+recorded, so a later `/sp:dev-verify --next` cannot legally reach `done`. Call
+`/sp:dev-verify 0042 --auto --next` directly only to **re-verify** a task already at `testing`
+(e.g. after fixing a PARTIAL/FAIL); add `--force` to re-run an already-verified task.
+
+Shortcuts: `/sp:dev-run 0042 --auto --wrap` folds step 2 into step 1. Unsure of the current
+state? `/sp:dev-next 0042` reads the status and dispatches the right hop (backlog → refine,
+todo/wip → implement, testing → verify, done → wrap). Interrupted run: `/sp:dev-run 0042 --continue`.
+
+---
+
 ## The `--next` chain — one command, the whole loop
 
 Not sure which link a task is on? Start from the router instead: `/sp:dev-next <wbs>`
@@ -254,7 +297,7 @@ human gate:
 spur workflow run config/workflows/task-pipeline.yaml --vars '{"wbs":"0042","profile":"auto"}'
 ```
 
-Three bundled workflows cover the altitudes (the two new 0167 workflows are in italics):
+Four bundled workflows cover the altitudes (the two 0167 workflows are in italics):
 
 | Workflow                 | Drives                 | Shape                                                                                                                           |
 | ------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
@@ -367,7 +410,7 @@ captured the learnings and synced the docs.
 ```bash
 /sp:dev-unit 0042 --coverage 90      # generate/extend tests until coverage clears the bar
 /sp:dev-review 0042 --focus security # standalone SECU review (security lens only)
-/sp:dev-fixall "bun run check"       # loop lint+type+test until green
+/sp:dev-fixall "bun run spur-check"  # loop lint+type+test until green
 /sp:dev-handover "Blocked: the upstream rate-limiter has no test hook"  # honest handover when stuck
 /sp:dev-changelog --version 0.3.0    # changelog from commit history
 /sp:dev-dogfood "/sp:dev-run 0042 --auto" --max-retry 0  # observe-only; report always written (live + docs/dogfood)
@@ -382,10 +425,13 @@ model-backed commands: `dev-refine`, `dev-plan`, `dev-brainstorm` (the
 AC/decomposition/ideation synthesis), and `dev-run`, `dev-verify`, `dev-unit`,
 `dev-review` (the pipeline/verification steps). `inline` runs in-session, `auto`
 tier-resolves a subprocess executor, `<name>` pins that executor. See
-[cross-cutting.md](../../../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface)
+[cross-cutting.md](../../plugins/sp/skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface)
 for the full value-semantics contract (one rule, value table, executor precedence chain,
-`implementAgent` override). Inline commands run the model step in the current session;
-pipeline commands' spawned steps resolve to the configured default executor (`omp`).
+`implementAgent` override). Inline commands run the model step in the current session. `/sp:dev-run` with omit/`inline`
+drives `task-pipeline.yaml` in-session (eligible `agent.run` stages dispatch once to a native
+subagent); `auto`/a name, headless `spur workflow run`, and the workflow-backed `dev-wrap*`
+use subprocess executors resolved via `agent: auto` (`agent.default` role → tier → cheapest
+usable executor).
 
 > **Exception — `/sp:dev-dogfood --agent` is testee-scoped.** Because dogfood _drives_
 > other commands, its `--agent` sets the agent the **testee** runs under (forwarded into
