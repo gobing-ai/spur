@@ -2682,3 +2682,59 @@ Artifact written to `.spur/run/992bee7e-44f2-49a6-b2c4-1f4026783d28-wrapup-learn
 - Repair shape: one new satellite (`docs/design/workflows-reading-surface.md`, frontmatter in the `doc:/area:/status:` style) + 04 index row + 04 surface section + 04 frontmatter bump (1.79.0→1.80.0, updated_at 2026-09-22). Minimal correct repair; 00/03 needed nothing (no §6.1 architectural choice; server boundary unchanged by a read endpoint via `workflowService`).
 - Satellite `doc:` frontmatter is mixed-by-convention in docs/design/ — §4.3 governs the nine key docs only; do not mass-normalize satellites during a wrapup.
 - Cross-check false positives to remember: `docs/design/prototypes/` is a directory, not an unindexed satellite; a 04-index link-target regex must match `(...)` targets, not `[...]` labels.
+Doc-sync repair done and verified; learnings artifact written.
+
+**Drift report (task 0935 wrap · `sp-dev-evolve` §5/§6/§7 pass)**
+
+| # | Doc | Source says | Doc said | Authority | Repair |
+|---|---|---|---|---|---|
+| D1 | `docs/00_ADR.md` | ADR-124/125/126 dated 2026-09-23 | `version: 1.50.0`, `updated_at: 2026-09-21` | §4.3, T1 | → `1.51.0` / `2026-09-23` |
+| D2 | `docs/03_ARCHITECTURE.md` | ADR-124/125/126 change the workflow execution model | no section; §27 ends at ADR-117/118/119/123 | T1 + §6.4 ("mark unbuilt accepted designs explicitly") | added `§28 … accepted design, not built`, `1.51.0`→`1.52.0`, date→`2026-09-23` |
+| D3 | `docs/04_DESIGN.md` | index row added for the D64 satellite | `version: 1.81.0`, `updated_at: 2026-09-22` | §4.3, T9 | → `1.82.0` / `2026-09-23` |
+| D4 | `docs/04_DESIGN.md:130` | `cli-contracts.md:413` heading is `` `spur agent list [--json] [--specs] [--server <url>]` `` | anchor `#spur-agent-list---json---specs` (dead) | §7.1/§7.2 | anchor → `…---specs---server-url` |
+
+Checks run: `git status`/`git diff` (change set), `rg` (ADR ids 17/17 resolve; satellite §4/§5/§6 match all three `Detail:` pointers; `03` section refs from `00` are all ≤26 so appending is safe), frontmatter parse (§4.1/§4.3 rows match, one metadata block each), slug-accurate relative-link/anchor sweep over the four named owners → **225 links, 0 broken**.
+
+Left alone deliberately: satellite's `§10` forward reference (task 0946 R1 creates it — not drift); `docs/design/*` satellite formatting (no frontmatter by convention); D64 task/feature corpus (CLI-gated, untouched — mtimes 17:15–17:35 vs my 17:40–17:41 edits).
+
+Not claimed: no repo-wide audit — only the four named owners and their outbound references were checked (§7.1).
+
+---
+
+# Wrapup Learnings — run 99ace346 (task 0935 · feature D63)
+
+## 2026-09-23 · Task 0935 — Settle D63 0917 inline-run evidence debt and close the feature
+
+### Conventions
+
+- Doc-sync repair order is authority-first: `00` (WHY) → `03` (HOW) → `04` (index) → `docs/design/*` (detail). A new ADR landing in `00` obligates `03`/`04` in the same change (T1); the satellite carries the detail and `04` carries only the pointer (T9).
+- `03` groups an ADR *set* into one section, following the §27 precedent (ADR-117/118/119 share one section). One section per ADR would have added three sections for one feature.
+- Unbuilt accepted design must be labeled in the `03` heading itself — `## 28. Workflow Catalogue Refactor — accepted design, not built (ADR-124/125/126)` — because §6.4 makes built/unbuilt a load-bearing distinction, and §27's `— built` and §23's `— accepted design; enforcement pending` headers already establish that convention.
+- Section numbering in `03` is append-only: `00_ADR.md` points at `03 §20.3`, `§20.4`, `§21`, `§23`, `§24`, `§25`, `§26` as bare text anchors no link checker can repair. Appending `§28` costs nothing; inserting would silently break those references.
+- An ADR's `Detail: … §N` pointer must name a section that exists. Verified all three (ADR-124→§4, ADR-126→§5, ADR-125→§6) against real satellite headings, plus all 17 `Retains:` ADR ids against `00_ADR.md`.
+- §4.3 metadata is part of the change, not a follow-up: an ADR appended under the old `updated_at` is drift, and substantive content bumps the minor version (`00` 1.50.0/2026-09-21 → 1.51.0/2026-09-23; `03` 1.51.0/2026-09-20 → 1.52.0/2026-09-23; `04` 1.81.0/2026-09-22 → 1.82.0/2026-09-23). Already recorded as a general rule at `.spur/context/learnings.md:195` — this run applied it rather than re-deriving it.
+- Evidence-debt settlement appends a marker-anchored, dated re-evaluation to the original record (`spur:0935-r2-reevaluation`) instead of rewriting the earlier close. Preserve-don't-rewrite keeps the audit trail readable; 0921's review flagged this as the good archival pattern.
+
+### Errors fixed / avoided
+
+- **GitHub anchor slugs do not collapse consecutive hyphens.** A naive slugifier (lowercase → strip punctuation → `\s+`→`-`) reported 30 false broken anchors in `docs/04_DESIGN.md`. The real algorithm lowercases, strips everything but letters/digits/`-`/`_`, then maps each space to `-` without collapsing — 30 false positives became 1 genuine finding.
+- **Genuine broken anchor:** `docs/04_DESIGN.md:130` pointed at `design/cli-contracts.md#spur-agent-list---json---specs`, but that heading (`cli-contracts.md:413`) had grown `[--server <url>]` (ADR-121 session-pinned dispatch). Updated to `#spur-agent-list---json---specs---server-url`. A heading that gains a flag silently invalidates every anchor into it.
+- **Nearly "repaired" a correct forward reference.** The satellite's `Task 0946 adds the §10 reconciliation table` looked like a dangling anchor (the file ends at §9). Task 0946 R1 explicitly specifies "added as §10 'Catalogue reconciliation'", so the reference is the plan, not drift. Check the task record before repairing an anchor that points forward.
+- **Verification caveat:** the repo has no markdown link/anchor checker. `scripts/commands/link-check.ts` checks `bun link` `dist`/`src` staleness, not markdown, and `biome check` ignores markdown. Anchor integrity must be verified ad hoc — here, a small Node script over the named docs (225 relative links, 0 broken after repair).
+- **0917's INSUFFICIENT_EVIDENCE stands.** The new cohort (3 real terminal inline runs d6e3ec3f/a3e79428/75fed91a, 19 action_runs) measured a median 2 `agent.run` actions/run at a median 238,500 ms/run — no speed gain to claim. An observability improvement is not a measured speed improvement, so no speed candidate entered evaluation.
+- **Promotion-test degenerate assertion:** the `baseline == live` arm was pinned to exact phrasing (`workflow-promotion.test.ts:252,267`); fixture-derived strings are duplicated inline on purpose as a wording lock. That brittleness is intentional, not debt to clean up.
+
+### Patterns
+
+- **Detect deterministically, judge with the LLM** (skill R2). Every claim here came from a command: `git status`/`git diff` for the change set, `rg` for heading/anchor/ADR-id existence, a slug-accurate link script for references, frontmatter parsing for §4.3. A zero-finding result is only credible next to the command that produced zero.
+- **Drift-report shape:** `{ doc, what the source says, what the doc says, authority, repair }` — one row per finding, each citing the section that makes it drift (T1/§6.4 for the missing `03` section, §4.3 for stale metadata, §7.1 for the dead anchor).
+- **Scope discipline over completeness.** §7.1 makes a comprehensive audit separate scope, so this pass covered the four named owners plus their outbound references — not all 70 `docs/design/*` satellites. Unverified breadth is reported as unverified, not implied.
+- **A doc-only change needs no code gate.** With `git status` showing only markdown, `bun run lint` (biome + typecheck) and the test suites prove nothing about the diff. The proportionate verification is frontmatter parse + link/anchor resolution + diff review + proof that no corpus file was written.
+- **`docs/design/*` satellites carry no YAML frontmatter** — they open with `# Title` plus `**Area:**`/`**Status:**` or a bullet block. §4.3 frontmatter applies to the numbered docs (`00`–`05`, `99`) only; "fixing" a satellite to have frontmatter would itself be the drift.
+
+### Gotchas
+
+- **The wrapup's `doc-sync` step is a model pass over whatever is uncommitted.** The tree carried a prior session's in-flight D64 work (ADRs 124–126, the satellite, the `04` index row) while the wrapped task was `0935` (D63). The drift belonged to that in-flight set, not to the task's own commit — read `git status` before assuming the wrapped task caused the drift.
+- **One writer per working tree.** The repair touched only `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`; the uncommitted D64 task/feature corpus (0936–0947, `D64_*.md`, `INDEX.md`) was left byte-identical — verified by mtime, all 17:15–17:35 against the 17:40–17:41 edits.
+- **Corpus writes are CLI-gated.** No `spur task`/`spur feature` write was made and no task/feature file was edited; task receipts stay in task records (§8) and the learnings go to run-scoped storage.
+- **A "done" wrap hop still needs its substance checked.** The run log showed `doc-sync` reaching `agent.run` under `--model volc/deepseek-v4-1-flash-260910`. The non-empty `-wrapup-learnings.md` this run produces is the evidence the step ran — a green terminal alone is not evidence (same failure mode recorded at `.spur/context/learnings.md:845`).

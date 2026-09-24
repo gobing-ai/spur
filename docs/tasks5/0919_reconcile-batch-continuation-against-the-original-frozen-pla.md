@@ -4,7 +4,7 @@ name: Reconcile batch continuation against the original frozen plan
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T22:06:44.596Z"
+updated_at: "2026-09-23T22:51:08.483Z"
 feature_id: D63
 priority: P2
 tags:
@@ -79,22 +79,32 @@ Design compliance: runbook + static contract pins only — no batch YAML, coordi
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:968-983` (BC-1): selector+project/worktree identity re-derived from the persisted WT-3 marker `command`+`selector` and worktree name/branch (:969-972); frozen membership/order = the persisted batch report's `Plan:` row, "the resumed loop iterates exactly those WBS rows" (:973-976); selector re-run is "validation, not a re-definition" (:978-980); authorized set "never silently rewritten" (:982-983). Corresponding child-run evidence: skip gate requires the persisted PASS verdict artifact, invoking-tree or worktree-persisted path (:999-1001). Pins: `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:109-121` (identity-blind read removed; membership binding; post-freeze never joins). |
-| R2 | MET | `execution-batch.md:985-1006` (BC-2): candidate checkpoints selected by identity first — frontmatter `workflow` is `task-pipeline` and `feature_id`/`task_wbs` ∈ frozen plan; "Checkpoints matching neither rule are ignored regardless of recency" (:990-997) — hints only, `phase`/`next_action` surfaced, never the resume point by mtime (:987-989). Reconcile before skip/repeat: skip requires task file `done` AND PASS verdict artifact "consistent with the task's current metadata. Anything less is not a valid skip." (:999-1001); stale/mismatched (`source_commit`/`digest` drift, missing artifact, backwards task file) → `recheck` (:1002-1004); lost worktree/unresolvable marker → `blocked` (:1004-1005); "Never treat an unverified claim as done." (:1005-1006). Compositional engine half: `packages/app/src/workflow/checkpoint-contract.ts:141-143` owner-mismatch on `task_wbs`, :147-153 commit-drift on `source_commit`, :155-157 missing-artifact probe — tested by `packages/app/tests/workflow/checkpoint-contract.test.ts` (16 pass), incl. the owner-mismatch and commit-drift cases. Honest boundary: the `digest` comparison axis is runbook-side; `checkpointStaleness` parses but does not compare `digest`. |
-| R3 | MET | Preservation evidence (honest: no new fixture): `execution-batch.md:1008-1010` (BC-3) restates sequential dependency-correct default + opt-in `--mode parallel` with proven-independence and one writer per tree, deferring to Step 3 — unchanged by the diff (`:200-236` driver loop; `:937-951` § Parallel Execution; parallel-vs-sequential default at :947-949). Failure policy for mixed terminals deferred unchanged to Step 4 (:368-386; BC-3 :1011-1012). Flag surface consistent: `dev-operations.md:356` and `dev-runall.md:75-82` keep `--mode sequential\|parallel` default sequential. No new pin asserts ordering/one-writer — R3 is satisfied by restatement + untouched normative sections, the weakest evidence class in this task. |
-| R4 | MET | `execution-batch.md:1011-1018` (BC-3): per-task outcomes stay distinct incl. resume-only `recheck`/`not-admitted` (:1013-1014, matching Step 5 vocabulary :412-414); "a resumed, partially-complete batch is never reported `clean`" (:1014-1015); evidence survives cleanup "via the invoking-tree persistence in Step 5 (task 0720 R3)" (:1016) — the Step 5 section (:426-441) writes `.spur/run/worktree-<marker-id>-batch-report.md` + `worktree-<marker-id>-verdicts/<wbs>-verdict.json` before WT-4 removal (WT-4a ordering :710-713); persistence failure routes to WT-5 retain (:436-439, :1016-1017; WT-5 :796-828). Explicit stale reporting = `recheck` outcome. Pin: `execution-batch-contract.test.ts:123-127`. |
-| R6 — Batch continuation uses the original authorized set | MET | (feature-scenario key for this task's evidence above, Verdict: PASS); added for DD-09 traceability by task 0921. |
+| R1 | MET | BC-1 re-binds selector, project/worktree identity, frozen membership/order and child-run evidence from persisted artifacts at `plugins/sp/skills/spur-dev/references/execution-batch.md:968-983` (re-read: WT-3 marker, Plan-row membership, 'validation, not a re-definition', authorized set 'never silently rewritten'). Pins: `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:109-121`. Executed: `bun test tests/dogfood-testing/execution-batch-contract.test.ts` — 18 pass, 0 fail (this run). |
+| R2 | MET | Checkpoints treated as hints (identity-first selection; recency never resumes); skip requires reconciled current evidence, stale/mismatch → recheck, lost worktree → blocked. Engine half re-read at `packages/app/src/workflow/checkpoint-contract.ts:141-157` (owner-mismatch, commit-drift, missing-artifact). Executed: `cd packages/app && bun test tests/workflow/checkpoint-contract.test.ts` — 16 pass, 0 fail (this run). |
+| R3 | MET | Sequential dependency-correct default and opt-in one-writer parallel restated unchanged at execution-batch.md:1008-1012; normative sections untouched (preservation evidence class — honestly the weakest, as the prior verifier noted). Contract pins green (this run). |
+| R4 | MET | Partial/blocked/failed/stale outcomes stay distinct; resumed partial batch never reported clean; invoking-tree evidence persists before WT-4 removal (Step 5, WT-4a ordering); persistence failure → WT-5 retain. execution-batch.md:1011-1018; pin `execution-batch-contract.test.ts:123-127` (re-read; suite pass this run). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R6 — Batch continuation uses the original authorized set | MET | test | Frozen membership re-bound from persisted artifacts; post-freeze additions not-admitted; stale evidence rechecks — execution-batch-contract + checkpoint-contract suites, 34 pass total (this run). |
+| AC1 | MET | test | Resumed batch keeps original membership and worktree identity against differing listings/checkpoints — BC-1 pins (this run, pass). |
+| AC2 | MET | test | Only reconciled current child results skip; stale/mismatched evidence → explicit recheck/block — BC-2 pins + checkpoint-contract tests (this run, pass). |
+| AC3 | MET | static | Ordering and write ownership preserved for sequential and opt-in parallel — normative sections unchanged; restatement at :1008-1012 (re-read). |
+| AC4 | MET | test | Partial outcomes and invoking-tree evidence survive cleanup; batch never misreported clean — :1011-1018 + pin (this run, pass). |
+| AC5 | MET | test | Batch continuation uses the original authorized set — covered by this run's suites. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: UNKNOWN)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | — | — | No P1–P3 findings; verify verdict UNKNOWN |
+| P4 | design-conformance | — | Runbook contract + pin tests + checkpoint-contract engine behavior match the task's BC-1..BC-3 design; no new FSM. DONE. |
+| P4 | secua-review | — | Identity-pinned resume prevents unauthorized set mutation; one-writer rule preserved; no unsafe replay. No P1–P3 findings. |
+| P4 | coverage | — | Coverage: N/A (verdict-based re-verification; no runtime coverage measurement). |
 
 ### References
 

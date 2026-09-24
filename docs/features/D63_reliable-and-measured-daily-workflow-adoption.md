@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D63"
 name: "Reliable and measured daily-workflow adoption"
-status: blocked
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-22T02:55:20.144Z"
-updated_at: "2026-09-23T18:22:08.867Z"
+updated_at: "2026-09-24T00:35:33.685Z"
 ---
 
 # D63: Reliable and measured daily-workflow adoption
@@ -106,12 +106,14 @@ Feature: Reliable and measured daily-workflow adoption
 | --- | ---- | ------ |
 | 0914 | Make installed inline workflow execution use the authoritative application boundary | done |
 | 0915 | Bind feature completion and wrapup to current verification evidence | done |
-| 0916 | Make canonical workflow interruption and replay behavior explicit | blocked |
-| 0917 | Deliver the measured task-pipeline optimization selected by 0912 | blocked |
+| 0916 | Make canonical workflow interruption and replay behavior explicit | done |
+| 0917 | Deliver the measured task-pipeline optimization selected by 0912 | done |
 | 0918 | Simplify idea authoring without weakening the planning handoff | done |
-| 0919 | Reconcile batch continuation against the original frozen plan | blocked |
+| 0919 | Reconcile batch continuation against the original frozen plan | done |
 | 0920 | Make history workflow scope normalization deterministic | done |
-| 0921 | Complete measured workflow migration and catalogue reconciliation | blocked |
+| 0921 | Complete measured workflow migration and catalogue reconciliation | done |
+| 0935 | Settle D63 0917 inline-run evidence debt and close the feature | done |
+| 0936 | Preserve feature scenario-key rows when re-verifying and re-recording a task | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -126,4 +128,5 @@ Feature scenarios R1–R8 map in order to proposal labels W01–W08; task-local 
 
 - 2026-09-22T21:46:38.980Z backlog → active (system)
 - 2026-09-23T18:22:08.867Z active → blocked (system)
+- 2026-09-24T00:35:33.685Z blocked → active (system)
 

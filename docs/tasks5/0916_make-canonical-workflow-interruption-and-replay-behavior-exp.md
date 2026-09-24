@@ -4,7 +4,7 @@ name: Make canonical workflow interruption and replay behavior explicit
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.300Z
-updated_at: "2026-09-23T22:06:44.162Z"
+updated_at: "2026-09-23T22:45:38.851Z"
 feature_id: D63
 priority: P2
 tags:
@@ -78,11 +78,19 @@ Plan 2 disposition: no helper/declaration corrections demonstrated necessary. PR
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/tests/workflow/replay-matrix.test.ts:35-62 — declared matrix over all 10 canonical definitions (resumeRerunStates/pauseGates/entryClass); test :65 locks the exact definition set |
-| R2 | MET | replay-matrix.test.ts:67-84 (AC1: no unmarked rerun-enter) + packages/app/tests/services/workflow-service.test.ts:1385-1408 (live concurrent owner refused at resume boundary; engine CAS backstop per ADR-122) |
-| R3 | MET | plugins/sp/tests/pr-reviewing.test.ts:113 (exact-HEAD match), :130 (clean review at current HEAD only) — PR request replay does not duplicate, stale HEAD stays pending; pause gates at human boundaries locked by matrix test :86-105 |
-| R4 | MET | plugins/sp/skills/spur-cli/references/workflows.md:331-337 — refusal names next safe action (resume paused / clean sweeps to interrupted); rerun-enter opt-in requires demonstrated repeatability + conscious matrix update; no second FSM (diff is tests+docs only) |
-| R3 — Recovery preserves ownership and side effects | MET | (feature-scenario key for this task's evidence above, Verdict: PASS); added for DD-09 traceability by task 0921. |
+| R1 | MET | Declared replay classification matrix over all 10 canonical definitions at `packages/app/tests/workflow/replay-matrix.test.ts:35-62` (re-read: entryClass 'repeatable' \| 'identity-deduplicated' \| 'reconciliation-required'; definition set locked at :65). Executed: `cd packages/app && bun test tests/workflow/replay-matrix.test.ts …` — 133 pass, 0 fail (this run). |
+| R2 | MET | No unmarked rerun-enter in canonical workflows; live concurrent owner refused at the resume boundary (engine CAS backstop per ADR-122). `packages/app/tests/services/workflow-service.test.ts:1385-1408` (re-read: 'R2: continuePaused refuses a run owned by a live concurrent resumer'). Paused skip-enter and inline limitations unchanged. Tests pass (this run). |
+| R3 | MET | PR request identity bound to exact pushed HEAD; stale HEAD stays pending; human review does not satisfy the Codex-review gate. `plugins/sp/tests/pr-reviewing.test.ts:113` (re-read) and :130. Executed: `bun test tests/pr-reviewing.test.ts` — 59 pass, 0 fail (this run). |
+| R4 | MET | Refused/incomplete recovery names the next safe action (resume paused; clean sweeps crashed running → interrupted) in `plugins/sp/skills/spur-cli/references/workflows.md:331-337` (re-read). rerun-enter opt-in requires demonstrated repeatability + conscious matrix update; no second FSM. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R3 — Recovery preserves ownership and side effects | MET | test | Concurrent resume refused (ownership), PR replay non-duplicating (side effects), pause-gated human boundaries preserved — replay-matrix + workflow-service + pr-reviewing suites, 192 pass total (this run). |
+| AC1 | MET | test | Every canonical workflow has an evidenced entryClass; no unsafe action gains unconditional replay — replay-matrix.test.ts (this run, pass). |
+| AC2 | MET | test | Concurrent resume and paused fixtures preserve ownership/entry semantics — workflow-service.test.ts:1385 (this run, pass). |
+| AC3 | MET | test | PR replay does not duplicate; stale HEAD pending; human/research boundaries enforced — pr-reviewing.test.ts:113,130 (this run, pass). |
+| AC4 | MET | static | Refusal paths name the next safe action in current surfaces; no second recovery FSM — workflows.md:331-337 (re-read). |
+| AC5 | MET | test | Recovery preserves ownership and side effects — covered by this run's suites. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

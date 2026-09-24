@@ -4,7 +4,7 @@ name: Simplify idea authoring without weakening the planning handoff
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.302Z
-updated_at: "2026-09-23T22:06:44.378Z"
+updated_at: "2026-09-23T22:50:05.236Z"
 feature_id: D63
 priority: P2
 tags:
@@ -86,11 +86,19 @@ Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.tes
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Idea-specific baseline frozen and published: 79 rows classified by digest/dry-run/terminal (docs/reports/i31/0918-idea-cohort-eligibility.md:14-24); determination recorded — benefit not demonstrable at 0 real terminals; SQL re-run this session confirms 79 rows / 1 synthetic done at e455eab1. R1 does not demand a graph change; it demands the baseline-driven determination, which exists. |
-| R2 | MET | config/workflows/idea-pipeline.yaml absent from git diff 9e874de17~1..9e874de17 (only report + task file); verbatim intake (.spur/run/<runId>-idea-input.md), idea-ac-check/idea-coverage-check, taste gates (idea-eval, feature-check, design-approval) and corpus CLI write boundary all untouched by definition; idea-pipeline-definition.test.ts re-run 41 pass / 0 fail. |
-| R3 | MET | Graph untouched → task dependency ordering, ready-prepare preparation digest flow and the single handoff finalize path unchanged; same suite re-run green; `workflow show idea-pipeline --json` shows the unchanged e455eab1 graph with intact decompose → batch-create → batch-create-run → ready-prepare → handoff-finalize → handoff route. |
-| R4 | MET | Candidate registration is preconditioned on the eligible branch ("For an eligible cohort, register one candidate before changing the graph"); branch did not fire. config/workflow-candidates.json candidates: [] and unmodified by 9e874de17 → no candidate, no deadline; disposition INSUFFICIENT_EVIDENCE recorded (report Decision §, task Solution). The retire/reject path is moot with nothing registered, and the promotion process itself was honored by not bypassing it. |
-| R5 — Planning preserves intent through handoff | MET | (feature-scenario key for this task's evidence above, Verdict: PASS); added for DD-09 traceability by task 0921. |
+| R1 | MET | Idea-specific baseline frozen in `docs/reports/i31/0918-idea-cohort-eligibility.md:14-24` (re-read: 79 idea-pipeline rows classified by digest/dry-run/terminal; benefit not demonstrable at 0 real terminals). Determination exists as required; no graph change demanded. |
+| R2 | MET | idea-pipeline graph untouched: `spur workflow show idea-pipeline --json` digest still `sha256:e455eab1…` (this run, matches the report's frozen digest); intake/coverage/taste-gate/CLI-write surfaces unchanged by definition. Executed: `cd packages/app && bun test tests/workflow/idea-pipeline-definition.test.ts` — 41 pass, 0 fail (this run). |
+| R3 | MET | Graph untouched → dependency ordering, preparation digest flow and single handoff path preserved; definition digest re-verified identical (this run); definition suite green (41 pass). |
+| R4 | MET | Candidate registration precondition (eligible cohort) did not fire; `config/workflow-candidates.json` has `"candidates": []` (re-read) and was unmodified by 0918's commit `9e874de17` (report + task file only — `git show --stat` this run). INSUFFICIENT_EVIDENCE disposition recorded; promotion process honored by not bypassing it. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R5 — Planning preserves intent through handoff | MET | test | Unchanged idea-pipeline graph (digest re-verified) preserves verbatim intake, requirement coverage and the single handoff — idea-pipeline-definition.test.ts 41 pass (this run). |
+| AC1 | MET | static | Selected change cites the idea-specific baseline and remains unpromoted (benefit not demonstrable at 0 real terminals) — cohort report re-read. |
+| AC2 | MET | test | Input-clause coverage, invalid-AC refusal and unresolved-design prevention intact via untouched gates — definition suite (this run, pass). |
+| AC3 | MET | test | Preparation digest validity and single next-command handoff preserved — unchanged graph + suite green (this run). |
+| AC4 | MET | static | Parity/failure-path coverage and candidate disposition recorded; no standing parallel idea workflow; candidates [] — report + candidates.json re-read. |
+| AC5 | MET | test | Planning preserves intent through handoff — covered by this run's definition suite. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -101,7 +109,9 @@ Primary tests belong in packages/app/tests/workflow/idea-pipeline-definition.tes
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Audit/disposition deliverable: baseline report + INSUFFICIENT_EVIDENCE recording; no graph edit, no candidate. DONE. |
+| P4 | secua-review | — | Docs/report-only change; no runtime surface. No findings. |
+| P4 | coverage | — | Coverage: N/A (audit task; no runtime code path added). |
 
 ### References
 

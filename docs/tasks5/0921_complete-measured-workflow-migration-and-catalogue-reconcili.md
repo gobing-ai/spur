@@ -4,7 +4,7 @@ name: Complete measured workflow migration and catalogue reconciliation
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.303Z
-updated_at: "2026-09-23T22:12:38.561Z"
+updated_at: "2026-09-23T23:31:43.580Z"
 feature_id: D63
 priority: P2
 tags:
@@ -64,7 +64,7 @@ No new production YAML or permanent v2 is expected. Keep nine production definit
 
 ### Solution
 
-Gate-vocabulary fix (R3 core): `delta.baselineAgentRunCount` (incumbent declared count at registration) added to `WorkflowCandidateDelta` and validated as non-negative int — scripts/commands/workflow-promotion.ts:60-78. ADR-076 evaluate rule compares projection against the baseline (`measured.runs > 0 && candidateCount < baseline`, defaulting to the live canonical count when absent, preserving 0873 pins) — scripts/commands/workflow-promotion.ts:304-330. `promotion evaluate` refuses drifted registries: a baseline matching neither the live count (not yet applied) nor the projection (already applied) exits 1 — scripts/commands/workflow-promotion.ts:611-627. Candidate registry updated to `{agentRunCount: 3, baselineAgentRunCount: 4}` with verdict reset to null for re-evaluation under the corrected rule — config/workflow-candidates.json:6-12. Live outcome: `promotion evaluate` → verdict promote (3 < baseline 4; n=11, median 3 actions/run); `promotion resolve --decision promote` → resolved; `promotion check` → PASS (0 candidates, no parallel definitions). Reversibility: the canonical graph edit is single commit 8edb8aa4d and the registry splice is git-revertible (no promotions ledger by design).
+Gate-vocabulary fix (R3 core): `delta.baselineAgentRunCount` (incumbent declared count at registration) added to `WorkflowCandidateDelta` and validated as non-negative int — scripts/commands/workflow-promotion.ts:60-78. ADR-076 evaluate rule compares projection against the baseline (`measured.runs > 0 && candidateCount < baseline`, defaulting to the live canonical count when absent, preserving 0873 pins) — scripts/commands/workflow-promotion.ts:304-330. `promotion evaluate` refuses drifted registries: a baseline matching neither the live count (not yet applied) nor the projection (already applied) exits 1 — scripts/commands/workflow-promotion.ts:611-627. Candidate registry updated to `{agentRunCount: 3, baselineAgentRunCount: 4}` with verdict reset to null for re-evaluation under the corrected rule — recorded in commit f022203f6 (registry since emptied by the promotion resolution). Live outcome: `promotion evaluate` → verdict promote (3 < baseline 4; n=11, median 3 actions/run); `promotion resolve --decision promote` → resolved; `promotion check` → PASS (0 candidates, no parallel definitions). Reversibility: the canonical graph edit is single commit 8edb8aa4d and the registry splice is git-revertible (no promotions ledger by design).
 
 R1 disposition reconciliation: composition-contract inventory rows corrected for both gaps found — `planning-pipeline.yaml` struck as removed under 0872/commit 2dc86579a (retirements[] record), and `decision-routing-example.yaml` classified as a retained authoring example — docs/design/workflow-composition-contract.md:11-30. All ten tree definitions now carry rows; `promotion check` confirms no standing parallel graph.
 
@@ -82,8 +82,20 @@ Feature-check traceability repairs (DD-09): scenario-keyed MET rows appended to 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R4 — Task optimization earns promotion | MET | Candidate finished through measured promotion, not expiry: registry delta pinned to declared-count vocabulary with `baselineAgentRunCount` 4 → projection 3 — config/workflow-candidates.json:6-12; corrected ADR-076 rule `candidateCount < baseline` with canonical fallback — scripts/commands/workflow-promotion.ts:304-330; live `promotion evaluate` verdict promote (n=11 real runs, median 3 agent.run actions/run), `promotion resolve --decision promote` → resolved, `promotion check` → PASS with no parallel definitions. |
-| R8 — Migration preserves users and demonstrates outcomes | MET | Users' history runs and continuity preserved: changed-definition resume refuses unconfirmed drift — packages/app/tests/workflow/workflow-resolver.test.ts:169; identity binding fails closed — packages/app/tests/workflow/workflow-inventory.test.ts:60; replay entry-class matrix re-run green (31 pass across resolver/inventory/replay-matrix/composition-baseline). Outcomes demonstrated with measured citations: median 3 actions/run and 570,035 ms/run over 11 real runs in the promote verdict; reversal = git revert of 8edb8aa4d plus registry splice. |
+| R4 — Task optimization earns promotion | MET | Feature-scenario key (DD-09): the candidate finished through measured promotion with rollback evidence — baseline-pinned ADR-076 rule (`scripts/commands/workflow-promotion.ts:304-330`, re-read), promote verdict (3 < 4, n=11, median 3 actions/run), `promotion check` PASS with 0 candidates and no parallel definitions (this run). Task-local regression evidence: R1–R4 rows below. |
+| R1 | MET | All ten tree definitions carry final justified dispositions in `docs/design/workflow-composition-contract.md:11-30` (re-read: planning-pipeline struck under 0872/2dc86579a with retirements[] record; decision-routing-example classified as retained authoring example, task 0921). Deferred optimizations recorded, not claimed; `promotion check` confirms no standing parallel graph (this run). |
+| R2 | MET | Resolution precedence and changed-definition handling pinned: resumed run refuses unconfirmed drift — `packages/app/tests/workflow/workflow-resolver.test.ts:169` (re-read: 'R3: a resumed run is bound to the exact definition and refuses on unconfirmed drift'); identity binding fails closed — `workflow-inventory.test.ts:60`. Executed: `cd packages/app && bun test tests/workflow/workflow-resolver.test.ts tests/workflow/workflow-inventory.test.ts tests/workflow/replay-matrix.test.ts` — 26 pass; `bun test tests/workflow/composition-baseline.test.ts` — 5 pass (31 total, this run). |
+| R3 | MET | Candidate finished through measured promotion with its own baseline: `baselineAgentRunCount` pinned and ADR-076 rule `candidateCount < baseline` at `scripts/commands/workflow-promotion.ts:304-330` (re-read); drifted-registry refusal at :611-627. Verdict promote (3 < 4, n=11, median 3 actions/run); resolve → resolved; Executed: `bun scripts/commands/workflow-promotion.ts check` — PASS, 0 candidates, no parallel definitions (this run). Rollback = git revert of 8edb8aa4d plus registry splice. |
+| R4 | MET | Owner sync limited to changed surfaces: baseline semantics documented in `docs/design/workflow-composition-contract.md` and workflow-execution-economy.md §5.1/§5.2; decision-routing-example packaging/reference compatibility evidence in Solution R4 (budgets entry, parity/replay loaders, docs); `apps/cli/config` is gitignored build output (no tracked twin). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R8 — Migration preserves users and demonstrates outcomes | MET | test | Users' runs/continuity preserved (drift refusal, fails-closed identity binding — suites green this run); outcomes demonstrated (promote verdict cites 11 real runs, median 3 actions/run, 570,035 ms/run); reversal path recorded. |
+| AC1 | MET | static | Ten definitions + live callers have final dispositions; nothing deferred claimed as implemented — composition contract re-read. |
+| AC2 | MET | test | Installed/source/override precedence and changed-definition refusal — resolver/inventory suites (this run, pass). |
+| AC3 | MET | command | Measured promoted outcome with rollback evidence; no expired or standing parallel graph — `promotion check` PASS (this run). |
+| AC4 | MET | test | Changed owners agree; example packaging/reference checks and feature gates pass — composition-baseline suite (this run, pass). |
+| AC5 | MET | test | Migration preserves users and demonstrates outcomes — covered by this run's suites and the measured promote verdict. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -94,7 +106,9 @@ Feature-check traceability repairs (DD-09): scenario-keyed MET rows appended to 
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | Gate-vocabulary fix, disposition reconciliation, owner-limited sync all match the task Design; no scope creep. DONE. |
+| P4 | secua-review | — | Promotion gate fails closed on drifted registries and zero-run promotes; reversible migration path preserved. No P1–P3 findings. Prior P3/P4 record-keeping findings from 0921's Review are carried by task 0935 R7 (backlog), not re-litigated here. |
+| P4 | coverage | — | Coverage: N/A (verdict-based re-verification; no runtime coverage measurement). |
 
 ### References
 

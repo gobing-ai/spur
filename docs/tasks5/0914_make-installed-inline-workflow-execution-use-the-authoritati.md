@@ -4,7 +4,7 @@ name: Make installed inline workflow execution use the authoritative application
 status: done
 template: standard
 created_at: 2026-09-22T02:56:46.296Z
-updated_at: "2026-09-23T04:30:00.361Z"
+updated_at: "2026-09-23T22:42:22.633Z"
 feature_id: D63
 priority: P2
 tags:
@@ -88,19 +88,19 @@ Recovery: the original worktree under .spur was excluded by Biome; run d63-0914-
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 — Installed and source execution preserve authoritative identity | MET | `plugins/sp/tests/inline-run-installed.test.ts:8` — installed/source resolver identity equality, authoritative setup, fingerprint and closure (AC5); task requirements R1–R4 below are this scenario's task-local regression evidence. |
-| R1 | MET | `plugins/sp/tests/inline-run-installed.test.ts:8` — detached Node twin setup, fingerprint, action and closure passed in the final quality gate. Real compiled CLI smoke also passed. |
-| R2 | MET | `packages/app/tests/services/inline-run-setup.test.ts:49` — source identity, digest drift, malformed layer and actual workflow-kind refusal; existing attachment/workdir tests passed. |
-| R3 | MET | `plugins/sp/tests/inline-run-installed.test.ts:145` — missing action reports ok:false with exit0; missing closure exits1. |
-| R4 | MET | `scripts/commands/bundle-plugin-lib.ts:109` — generated application bridge; installation smoke, script contracts and workflow parity passed; no new public CLI noun/verb. |
+| R1 | MET | Bundle-only installed fixture performs setup, fingerprint, action and closure with resolver-identity equality and no checkout. `plugins/sp/tests/inline-run-installed.test.ts:8` (re-read: 'installed Node twin records identity, fingerprint, action and closure without a checkout'). Executed: `cd plugins/sp && bun test tests/inline-run-installed.test.ts tests/inline-run-setup.test.ts` — 10 pass, 0 fail. |
+| R2 | MET | Application resolver, run identity, persistence and fingerprint owners reused; layer precedence and incompatible-attachment refusal intact. `packages/app/tests/services/inline-run-setup.test.ts:49` (drift refusal before DB open) and `:118` (project/registered/shared precedence). Executed: `cd packages/app && bun test tests/services/inline-run-setup.test.ts` — 15 pass, 0 fail. |
+| R3 | MET | Action-observation failure stays distinct from mandatory closure failure: missing action exits 0 with ok:false, missing closure exits 1. `plugins/sp/tests/inline-run-installed.test.ts:145` (re-read this run). Unsupported inline capabilities remain documented in `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md`. |
+| R4 | MET | Generated application bridge `scripts/commands/bundle-plugin-lib.ts:109` (`bundleInlineRunLib`); driver, consumers and generated artifacts updated together; no new public CLI verb. Executed: `bun run plugin-smoke` (PASS), `bun run script-contract-check` (25 scripts, 0 violations), `bun run inline-pipeline-parity-check` (ok, 10 actions/4 guards across 10 workflows). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/inline-run-installed.test.ts:8` — detached fixture binds resolver identity and closes authoritative run; final suite PASS. |
-| AC2 | MET | test | `packages/app/tests/services/inline-run-setup.test.ts:118` — project/registered/shared precedence; companion identity tests reject incompatible attachment. Real compiled CLI layer fixtures also passed. |
-| AC3 | MET | test | `plugins/sp/tests/inline-run-installed.test.ts:145` — distinct action-observation and mandatory closure failure behavior. Unsupported inline engine resume/artifact-ledger/DecisionMaker remain documented. |
-| AC4 | MET | command | bun run plugin-smoke; bun run script-contract-check; bun run inline-pipeline-parity-check — PASS,24scripts and10workflows; generated-artifact regeneration also passed in full suite. |
-| AC5 | MET | test | `plugins/sp/tests/inline-run-installed.test.ts:8` — installed/source resolver identity equality and idempotent attachment passed. |
+| Scenario: R1 — installed and source execution preserve authoritative identity | MET | test | Detached fixture binds resolver identity and closes the authoritative run; drift re-attachment refused. `plugins/sp/tests/inline-run-installed.test.ts:8`. Executed: `bun test tests/inline-run-installed.test.ts` — pass (this run). |
+| AC1 | MET | test | Isolated installed-plugin fixture with no checkout performs authoritative setup and closure with the same definition identity as the application resolver. `plugins/sp/tests/inline-run-installed.test.ts:8` — 10 pass, 0 fail (this run). |
+| AC2 | MET | test | Project override, registered config and shared fallback follow application precedence; incompatible attachments refused. `packages/app/tests/services/inline-run-setup.test.ts:118` — 15 pass, 0 fail (this run). |
+| AC3 | MET | test | Failed action observation reported (ok:false, exit 0) without fabricating success for failed setup/closure (exit 1). `plugins/sp/tests/inline-run-installed.test.ts:145` (re-read). |
+| AC4 | MET | command | `bun run plugin-smoke` PASS; `bun run script-contract-check` 25 scripts 0 violations; `bun run inline-pipeline-parity-check` ok — all exit 0 this run. |
+| AC5 | MET | test | Installed and source execution preserve authoritative identity (idempotent attach, drift refused). `plugins/sp/tests/inline-run-installed.test.ts:8` — pass (this run). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
