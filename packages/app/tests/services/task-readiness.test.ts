@@ -12,7 +12,9 @@ import {
     computePlanningDigest,
     DEFAULT_READY_PREPARE_TIMEOUT_MS,
     extractBatchArray,
+    lintPremiseEvidence,
     PLANNING_DIGEST_SECTIONS,
+    type PremiseLintIo,
     prepareBatchTaskReady,
     prepareCreatedTaskReady,
     READY_CHECKLIST_IDS,
@@ -402,6 +404,80 @@ describe('task readiness — checklist verification (0788 R7)', () => {
 
     test('all seven ids passing with nonempty evidence verifies', () => {
         expect(verifyReadyChecks(allPassRows())).toEqual({ ok: true });
+    });
+});
+
+describe('task readiness — premises evidence lint (0947 R1b)', () => {
+    /** Table-driven stub io: files maps repo-root-relative path → line count. */
+    const stubIo = (files: Record<string, number>): PremiseLintIo => ({
+        fileExists: async (p) => p in files,
+        lineCount: async (p) => files[p] ?? -1,
+    });
+
+    test('no citation, missing file, and out-of-range line fail; verified citations pass', async () => {
+        const cases: Array<{
+            name: string;
+            evidence: string;
+            files: Record<string, number>;
+            ok: boolean;
+            reasonFragment?: string;
+        }> = [
+            {
+                name: 'no path:line citation fails',
+                evidence: 'premises verified by reading the task Background prose',
+                files: { 'src/a.ts': 10 },
+                ok: false,
+                reasonFragment: 'no path:line citation',
+            },
+            {
+                name: 'missing cited file fails',
+                evidence: 'premise verified at src/gone.ts:3',
+                files: {},
+                ok: false,
+                reasonFragment: 'src/gone.ts',
+            },
+            {
+                name: 'out-of-range cited line fails',
+                evidence: 'premise verified at src/a.ts:11',
+                files: { 'src/a.ts': 10 },
+                ok: false,
+                reasonFragment: 'src/a.ts:11',
+            },
+            {
+                name: 'verified citations pass',
+                evidence:
+                    'finalizeRun signature at ts-libs/packages/dual-workflow-engine/src/persistence.ts:103; gate at packages/app/src/workflow/idea-handoff.ts:297',
+                files: {
+                    'ts-libs/packages/dual-workflow-engine/src/persistence.ts': 400,
+                    'packages/app/src/workflow/idea-handoff.ts': 500,
+                },
+                ok: true,
+            },
+        ];
+        for (const c of cases) {
+            const result = await lintPremiseEvidence(c.evidence, stubIo(c.files));
+            expect(result.ok).toBe(c.ok);
+            if (!c.ok) expect(result.reasons.join(' | ')).toContain(c.reasonFragment ?? '');
+        }
+    });
+
+    test('one bad citation among valid ones still fails and names the bad token', async () => {
+        const result = await lintPremiseEvidence(
+            'good at src/a.ts:2 and stale at src/b.ts:99',
+            stubIo({ 'src/a.ts': 5, 'src/b.ts': 10 }),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.reasons.join(' | ')).toContain('src/b.ts:99');
+        expect(result.reasons.join(' | ')).not.toContain('src/a.ts');
+    });
+
+    test('line 0 and an unreadable file (lineCount -1) count as out of range', async () => {
+        const zero = await lintPremiseEvidence('premise at src/a.ts:0', stubIo({ 'src/a.ts': 10 }));
+        expect(zero.ok).toBe(false);
+        const unreadable: PremiseLintIo = { fileExists: async () => true, lineCount: async () => -1 };
+        const result = await lintPremiseEvidence('premise at src/a.ts:1', unreadable);
+        expect(result.ok).toBe(false);
+        expect(result.reasons.join(' | ')).toContain('src/a.ts:1');
     });
 });
 

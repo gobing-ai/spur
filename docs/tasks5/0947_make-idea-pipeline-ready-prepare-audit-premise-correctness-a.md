@@ -4,7 +4,7 @@ name: Make idea-pipeline ready-prepare audit premise correctness and re-stamp ev
 status: todo
 template: issue
 created_at: 2026-09-24T00:36:30.606Z
-updated_at: "2026-09-24T00:44:01.465Z"
+updated_at: "2026-09-24T16:59:16.930Z"
 feature_id: D64
 
 estimate_hours: 6
@@ -55,12 +55,12 @@ the run's binding identifier (`spur feature show O` → not found) silently drif
 
 ### Requirements
 
-- [ ] R1a. The Step 5.6 "Ready preparation" contract in `plugins/sp/skills/spur-dev/references/planning-workflow.md` states that the `premises` check row passes only when each material premise was read against the current tree and its evidence cites at least one verified `path:line`; the ready-prepare `agent.run` input in `config/workflows/idea-pipeline.yaml` and the `prepareTaskBatch` prompt in `packages/app/src/services/task-readiness.ts` carry the same instruction.
-- [ ] R1b. A new exported `lintPremiseEvidence(evidence, io)` in `packages/app/src/services/task-readiness.ts` returns failing reasons when the `premises` row evidence contains no `path:line` citation, or when any cited file is missing or the line is out of range; `io` (file-exists + line-count) is injected for testability, matching the existing `ReadyPostCheck` seam style.
-- [ ] R1c. `finalizeIdeaHandoff` in `packages/app/src/workflow/idea-handoff.ts` runs R1b on every task's `premises` check row; a lint failure degrades that task to a precise preparation action (existing `/sp:dev-refine <wbs> --auto --depth ready` path), never a silent execution handoff.
-- [ ] R2. `finalizeIdeaHandoff` re-reads each task's frontmatter and degrades with reason `feature drift — task feature_id <x> != run feature <y>` when they differ (evidence strings stay advisory and are never auto-rewritten).
-- [ ] R3. Regression tests: `packages/app/tests/services/task-readiness.test.ts` covers `lintPremiseEvidence` (no citation → fail; missing file → fail; out-of-range line → fail; valid citations → pass); `packages/app/tests/workflow/idea-handoff.test.ts` covers the premises-lint degrade and the feature-drift degrade paths.
-- [ ] R4. No new public `spur` noun/verb; no new checklist id (the seven `READY_CHECKLIST_IDS` are unchanged); evidence rows keep their existing shape.
+- [x] R1a. The Step 5.6 "Ready preparation" contract in `plugins/sp/skills/spur-dev/references/planning-workflow.md` states that the `premises` check row passes only when each material premise was read against the current tree and its evidence cites at least one verified `path:line`; the ready-prepare `agent.run` input in `config/workflows/idea-pipeline.yaml` and the `prepareTaskBatch` prompt in `packages/app/src/services/task-readiness.ts` carry the same instruction.
+- [x] R1b. A new exported `lintPremiseEvidence(evidence, io)` in `packages/app/src/services/task-readiness.ts` returns failing reasons when the `premises` row evidence contains no `path:line` citation, or when any cited file is missing or the line is out of range; `io` (file-exists + line-count) is injected for testability, matching the existing `ReadyPostCheck` seam style.
+- [x] R1c. `finalizeIdeaHandoff` in `packages/app/src/workflow/idea-handoff.ts` runs R1b on every task's `premises` check row; a lint failure degrades that task to a precise preparation action (existing `/sp:dev-refine <wbs> --auto --depth ready` path), never a silent execution handoff.
+- [x] R2. `finalizeIdeaHandoff` re-reads each task's frontmatter and degrades with reason `feature drift — task feature_id <x> != run feature <y>` when they differ (evidence strings stay advisory and are never auto-rewritten).
+- [x] R3. Regression tests: `packages/app/tests/services/task-readiness.test.ts` covers `lintPremiseEvidence` (no citation → fail; missing file → fail; out-of-range line → fail; valid citations → pass); `packages/app/tests/workflow/idea-handoff.test.ts` covers the premises-lint degrade and the feature-drift degrade paths.
+- [x] R4. No new public `spur` noun/verb; no new checklist id (the seven `READY_CHECKLIST_IDS` are unchanged); evidence rows keep their existing shape.
 
 ### Acceptance Criteria
 
@@ -180,7 +180,24 @@ Definition of done: R1a–R4 checked, new tests green, `spur-check` green, bundl
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Two-layer fix, same-process; no new deps, no new public surface (R4), seven checklist ids unchanged.
+
+**Layer 1 — stamp-time contract (R1a)**
+- `config/workflows/idea-pipeline.yaml`: ready-prepare `agent.run` input now states the `premises` row passes only when each material premise was verified against the current tree and cites a verified `path:line`; state description notes handoff-finalize verifies feature binding too.
+- `packages/app/src/services/task-readiness.ts` `prepareTaskBatch` prompt: same instruction carried into the generated prompt.
+- `plugins/sp/skills/spur-dev/references/planning-workflow.md` § Step 5.6: contract updated with the read-then-cite procedure.
+
+**Layer 2 — verify-time lint (R1b/R1c) + drift guard (R2)**
+- New exported `lintPremiseEvidence(evidence, io)` (`packages/app/src/services/task-readiness.ts:479`) with injected `PremiseLintIo` (fileExists + lineCount, matching the `ReadyPostCheck` seam style): fails when evidence has no `path:line` citation, a cited file is missing, or a cited line is out of range.
+- `finalizeIdeaHandoff` (`packages/app/src/workflow/idea-handoff.ts:358`) lints every task's `premises` row before handoff; lint failure degrades to the existing `/sp:dev-refine <wbs> --auto --depth ready` path, never a silent execution handoff.
+- Frontmatter re-read per task: `feature_id` mismatch vs the run feature degrades with `feature drift — task feature_id <x> != run feature <y>` (`idea-handoff.ts:349`); evidence strings stay advisory and are never auto-rewritten.
+- Regenerated mirror: `plugins/sp/lib/idea-handoff.generated.mjs`.
+
+**Regression tests (R3)**
+- `packages/app/tests/services/task-readiness.test.ts`: 5 `lintPremiseEvidence` cases — no citation → fail; missing file → fail; out-of-range line → fail; valid citations → pass (+ boundary).
+- `packages/app/tests/workflow/idea-handoff.test.ts`: premises-lint degrade path and feature-drift degrade path.
+
+**Verification**: focused `(cd packages/app && bun test tests/services/task-readiness.test.ts tests/workflow/idea-handoff.test.ts)` → 43 pass / 0 fail; full `bun run spur-check` from the worktree root → lint/typecheck clean, 8885 tests pass / 0 fail, post-check rules 0 violations.
 
 ### Testing
 

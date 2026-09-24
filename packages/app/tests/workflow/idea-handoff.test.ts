@@ -12,13 +12,22 @@ describe('finalizeIdeaHandoff', () => {
     async function writeReadyFixture(
         runId: string,
         wbss: string[],
-        opts?: { status?: string; digestOverride?: (body: string) => string; omitSidecar?: boolean },
+        opts?: {
+            status?: string;
+            digestOverride?: (body: string) => string;
+            omitSidecar?: boolean;
+            /** Premises row evidence override (0947 lint scenarios). */
+            premisesEvidence?: string;
+            /** Frontmatter `feature_id` stamped into each task doc (0947 drift scenarios). */
+            taskFeatureId?: string;
+        },
     ): Promise<Record<string, string>> {
         const runDir = '.spur/run';
         const paths: Record<string, string> = {};
         const tasks = [];
         for (const wbs of wbss) {
-            const body = `---\nstatus: todo\nwbs: ${wbs}\n---\n\n## Background\n\nPrepared background.\n\n## Acceptance Criteria\n\n- [ ] Scenario one.\n`;
+            const featureLine = opts?.taskFeatureId !== undefined ? `feature_id: ${opts.taskFeatureId}\n` : '';
+            const body = `---\nstatus: todo\nwbs: ${wbs}\n${featureLine}---\n\n## Background\n\nPrepared background.\n\n## Acceptance Criteria\n\n- [ ] Scenario one.\n`;
             const p = `${runDir}/${runId}-${wbs}.md`;
             await fs.writeFile(p, body);
             paths[wbs] = p;
@@ -26,7 +35,14 @@ describe('finalizeIdeaHandoff', () => {
                 wbs,
                 status: opts?.status ?? 'ready',
                 planningDigest: opts?.digestOverride ? opts.digestOverride(body) : computePlanningDigest(body),
-                checks: READY_IDS.map((id) => ({ id, pass: true, evidence: `${id} verified` })),
+                checks: READY_IDS.map((id) => ({
+                    id,
+                    pass: true,
+                    evidence:
+                        id === 'premises'
+                            ? (opts?.premisesEvidence ?? `premises verified at ${runDir}/${runId}-${wbs}.md:1`)
+                            : `${id} verified`,
+                })),
             });
         }
         if (opts?.omitSidecar !== true) {
@@ -240,7 +256,11 @@ describe('finalizeIdeaHandoff', () => {
                         wbs: '0601',
                         status: 'ready',
                         planningDigest: computePlanningDigest(preDepsBody),
-                        checks: READY_IDS.map((id) => ({ id, pass: true, evidence: `${id} verified` })),
+                        checks: READY_IDS.map((id) => ({
+                            id,
+                            pass: true,
+                            evidence: id === 'premises' ? `premises verified at ${taskPath}:1` : `${id} verified`,
+                        })),
                     },
                 ],
             }),
@@ -276,6 +296,81 @@ describe('finalizeIdeaHandoff', () => {
                 `${runDir}/${runId}-idea-task-order.json`,
                 res.reportPath,
                 res2.reportPath,
+            ],
+        );
+    });
+
+    // ── task 0947: premise-correctness lint + feature drift at the handoff gate ──
+    test('premises evidence without a path:line citation degrades to refineall (0947 R1c)', async () => {
+        const runId = 'test-idea-run-premise-lint';
+        const featureId = 'D5';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+        const paths = await writeReadyFixture(runId, ['0601'], {
+            premisesEvidence: 'premises verified by reading the Background prose',
+        });
+
+        const res = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            processExecutor: evidenceAwareExecutor(paths),
+        });
+
+        expect(res.ok).toBe(true);
+        expect(res.nextCommand).toContain('/sp:dev-refineall --feature D5 --auto --depth ready');
+        const report = await fs.readFile(res.reportPath);
+        expect(report).toContain('UNREADY');
+        expect(report).toContain('no path:line citation');
+        expect(report).toContain('/sp:dev-refine 0601 --auto --depth ready');
+
+        await cleanupRun(
+            runId,
+            ['0601'],
+            [
+                `${runDir}/${runId}-idea-task-batch.json`,
+                `${runDir}/${runId}-idea-batch-create-result.json`,
+                `${runDir}/${runId}-idea-task-order.json`,
+                res.reportPath,
+            ],
+        );
+    });
+
+    test('feature drift between task frontmatter and the run degrades with a precise reason (0947 R2)', async () => {
+        const runId = 'test-idea-run-drift';
+        const featureId = 'D64';
+        const runDir = '.spur/run';
+        await fs.ensureDir(runDir);
+
+        await fs.writeFile(`${runDir}/${runId}-idea-task-batch.json`, JSON.stringify([{ name: 'Task A' }]));
+        await fs.writeFile(`${runDir}/${runId}-idea-batch-create-result.json`, JSON.stringify({ wbs: ['0601'] }));
+        await fs.writeFile(`${runDir}/${runId}-idea-task-order.json`, JSON.stringify([{ name: 'Task A' }]));
+        const paths = await writeReadyFixture(runId, ['0601'], { taskFeatureId: 'O' });
+
+        const res = await finalizeIdeaHandoff({
+            runId,
+            featureId,
+            processExecutor: evidenceAwareExecutor(paths),
+        });
+
+        expect(res.ok).toBe(true);
+        expect(res.nextCommand).toContain('/sp:dev-refineall --feature D64 --auto --depth ready');
+        const report = await fs.readFile(res.reportPath);
+        expect(report).toContain('UNREADY');
+        expect(report).toContain('feature drift — task feature_id O != run feature D64');
+        expect(report).toContain('/sp:dev-refine 0601 --auto --depth ready');
+
+        await cleanupRun(
+            runId,
+            ['0601'],
+            [
+                `${runDir}/${runId}-idea-task-batch.json`,
+                `${runDir}/${runId}-idea-batch-create-result.json`,
+                `${runDir}/${runId}-idea-task-order.json`,
+                res.reportPath,
             ],
         );
     });
