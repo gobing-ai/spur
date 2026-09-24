@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix the feature-verification gate caller and close out E7 review findings
-status: testing
+status: done
 template: standard
 created_at: 2026-09-24T07:19:45.903Z
-updated_at: "2026-09-24T19:52:03.780Z"
+updated_at: "2026-09-24T21:14:16.294Z"
 
 priority: P1
 ---
@@ -121,30 +121,30 @@ E7's completion unblocks) and the two-sessions-one-checkout incident (operationa
 
 ### Plan
 
-- [ ] P1. Fix the `feature-lifecycle` caller var set and add merge-or-reject semantics to
+- [x] P1. Fix the `feature-lifecycle` caller var set and add merge-or-reject semantics to
   `--vars`; cover with a CLI test that a partial `--vars` keeps declared defaults.
-- [ ] P2. Prove the caller end to end: a feature in `verifying` reaches `done` through
+- [x] P2. Prove the caller end to end: a feature in `verifying` reaches `done` through
   `spur feature sync <id>` alone, with the receipt produced by the lifecycle invocation.
-- [ ] P3. Make `loadModule`'s source/bundle choice explicit and replace the misleading
+- [x] P3. Make `loadModule`'s source/bundle choice explicit and replace the misleading
   "rebuild/install the sp plugin" advice; regenerate the `.mjs` twin.
-- [ ] P4. Reject unknown flags and stop the positional overwrite in both precheck scripts; add a
+- [x] P4. Reject unknown flags and stop the positional overwrite in both precheck scripts; add a
   regression test that `script <wbs> --task-file x.md` exits non-zero and writes no status file.
-- [ ] P5. Regenerate both precheck `.mjs` twins and re-run the task-pipeline precheck steps.
-- [ ] P6. Add a typed invalid-run-id error and map the server 400 on it; extend the observability
+- [x] P5. Regenerate both precheck `.mjs` twins and re-run the task-pipeline precheck steps.
+- [x] P6. Add a typed invalid-run-id error and map the server 400 on it; extend the observability
   route test with a non-matching message.
-- [ ] P7. Re-redact state JSON on read; rename the inspect cap to its real unit; collapse the
+- [x] P7. Re-redact state JSON on read; rename the inspect cap to its real unit; collapse the
   realpath/stat/read TOCTOU window.
-- [ ] P8. Fix the 0926 read-path items (whole-file re-emit, TOCTOU classification, empty-log hint)
+- [x] P8. Fix the 0926 read-path items (whole-file re-emit, TOCTOU classification, empty-log hint)
   with focused tests in the workflow service/CLI suites.
-- [ ] P9. Fix the 0927 inline-seam items (stale `error` key, unprojected sidecar `ok`, header-order
+- [x] P9. Fix the 0927 inline-seam items (stale `error` key, unprojected sidecar `ok`, header-order
   hazard) with tests in `plugins/sp/tests/inline-run-setup.test.ts`.
-- [ ] P10. Close the 0928 items: script paths in the task doc, catalogue sweep for non-placeholder
+- [x] P10. Close the 0928 items: script paths in the task doc, catalogue sweep for non-placeholder
   record names, and a retention path or explicit exemption for the `history-anatomy.yaml` pointer.
-- [ ] P11. Relocate the default batch worktree root outside `.spur/` and verify biome reports a
+- [x] P11. Relocate the default batch worktree root outside `.spur/` and verify biome reports a
   non-zero file count there.
-- [ ] P12. Document worktree record copy-out and the verify-answer table contract in the driver
+- [x] P12. Document worktree record copy-out and the verify-answer table contract in the driver
   reference.
-- [ ] P13. Run `bun run spur-check` plus the affected plugin tests; record the results.
+- [x] P13. Run `bun run spur-check` plus the affected plugin tests; record the results.
 
 ### Solution
 
@@ -153,11 +153,11 @@ E7's completion unblocks) and the two-sessions-one-checkout incident (operationa
 - `plugins/sp/scripts/feature-verification-steps.ts:69` — module mode is explicit. Source mode fails with an error that names the mode and the bundle fix. The default is the generated bundle.
 - `plugins/sp/scripts/task-size-precheck.ts:129` and `plugins/sp/scripts/task-evidence-precheck.ts:79` — unknown flags exit 1; a later positional cannot replace the first wbs. Both scripts are repo-only, so no `.mjs` twin.
 - `packages/app/src/services/workflow-service.ts:2431` and `apps/server/src/modules/observability/index.ts:372` — invalid run ids throw `InvalidWorkflowRunIdError`; the route maps that class to 400.
-- `packages/app/src/services/workflow-service.ts:2669` — served state JSON is re-redacted. `RUN_RECORD_INSPECT_MAX_CHARS` (`workflow-service.ts:2610`) is the string bound; the byte cap stays on file size. `workflow-service.ts:2651` opens the real path once and reads that descriptor.
-- `apps/cli/src/commands/workflow.ts:2019` — a legacy-to-markdown follow skips a shared prefix instead of reprinting the new file. `workflow.ts:2056` says an empty log is empty. `workflow-service.ts:2585` classifies a vanished state read as `state-missing`.
-- `plugins/sp/scripts/inline-run-setup.ts:215` — state projects `ok` and does not keep a stale `error` after success. `inline-run-setup.ts:237` creates the header with `wx` so a body cannot land above it.
+- `packages/app/src/services/workflow-service.ts:2743` — served state JSON is re-redacted. `packages/app/src/services/workflow-service.ts:2613` is the character cap; the byte cap stays on file size. `packages/app/src/services/workflow-service.ts:2651` opens the real path once and reads that descriptor.
+- `apps/cli/src/commands/workflow.ts:2019` — a legacy-to-markdown follow skips a shared prefix instead of reprinting the new file. `apps/cli/src/commands/workflow.ts:2056` says an empty log is empty. `packages/app/src/services/workflow-service.ts:2616` classifies a vanished state read as `state-missing`.
+- `plugins/sp/scripts/inline-run-setup.ts:215` — state projects `ok` and does not keep a stale `error` after success. `plugins/sp/scripts/inline-run-setup.ts:245` creates the header with `wx` so a body cannot land above it.
 - `plugins/sp/tests/run-record-catalog.test.ts:92` — a hardcoded record filename is an offender. `config/workflows/history-anatomy.yaml:96` keeps a run-scoped copy of the run id; the fixed name is only a latest pointer. 0928 solution/testing citations now include package paths.
-- `plugins/sp/skills/spur-dev/references/execution-batch.md:572` — the default worktree root stays a sibling path outside `.spur/` (Biome ignores a gitignored checkout). `execution-batch.md:455` states copy-out is mandatory. `execution-batch.md:287` states the four-column verify-answer table.
+- `plugins/sp/skills/spur-dev/references/execution-batch.md:572` — the default worktree root stays a sibling path outside `.spur/` (Biome ignores a gitignored checkout). `plugins/sp/skills/spur-dev/references/execution-batch.md:455` states copy-out is mandatory. `plugins/sp/skills/spur-dev/references/execution-batch.md:287` states the four-column verify-answer table.
 
 Caller proof: the verifying onEnter command, with `featureId=E7` and this checkout's `spurBin`, exited 0. Run `b02126bb-52a2-49f3-92c3-f6aaf9c1f96e` recorded PASS at `.spur/run/b02126bb-52a2-49f3-92c3-f6aaf9c1f96e-feature-verification.json`.
 
@@ -170,23 +170,23 @@ Caller proof: the verifying onEnter command, with `featureId=E7` and this checko
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `config/workflows/feature-lifecycle.yaml:49` passes featureId and spurBin. The same command exited 0: feature-verification run b02126bb-52a2-49f3-92c3-f6aaf9c1f96e status PASS. |
-| R2 | MET | `packages/app/src/services/workflow-service.ts:2412` mergeWorkflowRunVars. CLI test `partial --vars keeps other declared defaults (0948 R2)` in `apps/cli/tests/commands/workflow.test.ts` exited 0 and kept verificationCmd and keepMe. |
-| R3 | MET | `plugins/sp/scripts/feature-verification-steps.ts:71` source-mode error names the mode and the bundle fix. `plugins/sp/tests/feature-verification-steps.test.ts` source-mode and bundle-mode tests passed. |
-| R4 | MET | `plugins/sp/scripts/task-size-precheck.ts:132` and `plugins/sp/scripts/task-evidence-precheck.ts:82` reject unknown flags; first positional kept at `:129` and `:79`. Both precheck argv tests passed. |
-| R5 | MET | `apps/server/src/modules/observability/index.ts:372` maps InvalidWorkflowRunIdError, not the message. `packages/app/src/services/workflow-service.ts:2743` re-redacts state. `workflow-service.ts:2610` is the character cap. `workflow-service.ts:2651` reads one open descriptor. Server and inspect tests passed. |
-| R6 | MET | `apps/cli/src/commands/workflow.ts:2019` skips a shared legacy prefix. `workflow.ts:2056` reports an empty log. `packages/app/src/services/workflow-service.ts:2613` stateReadFailureReason maps ENOENT to state-missing. followRunLog tests passed. |
-| R7 | MET | `plugins/sp/scripts/inline-run-setup.ts:215` projects ok and omits a stale error. `inline-run-setup.ts:237` writes the header with wx. inline-run-setup re-setup test passed. |
-| R8 | MET | `plugins/sp/tests/run-record-catalog.test.ts:92` flags a hardcoded record name. `config/workflows/history-anatomy.yaml:96` writes the run-scoped id copy. 0928 solution cites `plugins/sp/scripts/idea-coverage-check.ts`. Catalog test passed. |
-| R9 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:572` keeps the default worktree root outside `.spur/`. `execution-batch.md:455` requires copy-out. `execution-batch.md:287` states the four-column AC table. execution-batch-contract tests passed. |
+| R2 | MET | `packages/app/src/services/workflow-service.ts:2412` mergeWorkflowRunVars. CLI test `partial --vars keeps other declared defaults (0948 R2)` in `apps/cli/tests/commands/workflow.test.ts:1228` exited 0 and kept verificationCmd and keepMe. |
+| R3 | MET | `plugins/sp/scripts/feature-verification-steps.ts:70-78` sourceModeError names the mode and bundle fix. Source and bundle tests in `plugins/sp/tests/feature-verification-steps.test.ts:15` passed. |
+| R4 | MET | `plugins/sp/scripts/task-size-precheck.ts:130-136` and `plugins/sp/scripts/task-evidence-precheck.ts:80-87` reject unknown flags; first positional kept at `:135` and `:85`. Tests in `plugins/sp/tests/task-size-precheck.test.ts:226` passed. |
+| R5 | MET | `apps/server/src/modules/observability/index.ts:372` maps InvalidWorkflowRunIdError. `packages/app/src/services/workflow-service.ts:2743` re-redacts state. `packages/app/src/services/workflow-service.ts:2613` is character cap. `packages/app/src/services/workflow-service.ts:2651` reads open descriptor. Server tests in `apps/server/tests/modules/observability/index.test.ts:597` passed. |
+| R6 | MET | `apps/cli/src/commands/workflow.ts:2018-2022` skips a shared legacy prefix. `apps/cli/src/commands/workflow.ts:2056` reports empty log. `packages/app/src/services/workflow-service.ts:2616` stateReadFailureReason maps ENOENT to state-missing. Tests in `apps/cli/tests/commands/workflow.test.ts:2350` passed. |
+| R7 | MET | `plugins/sp/scripts/inline-run-setup.ts:215` projects ok and omits a stale error. `plugins/sp/scripts/inline-run-setup.ts:245` writes header with wx. Tests in `plugins/sp/tests/inline-run-setup.test.ts:80` passed. |
+| R8 | MET | `plugins/sp/tests/run-record-catalog.test.ts:117` flags a hardcoded record name. `config/workflows/history-anatomy.yaml:96` writes run-scoped id copy. 0928 solution cites `plugins/sp/scripts/idea-coverage-check.ts`. Catalog tests passed. |
+| R9 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:570-575` keeps default worktree root outside `.spur/`. `plugins/sp/skills/spur-dev/references/execution-batch.md:455` requires copy-out. `plugins/sp/skills/spur-dev/references/execution-batch.md:285-290` states four-column AC table. Tests in `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:54` passed. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | command | sh -c of the feature-lifecycle verifying command with featureId=E7 and spurBin set to this checkout exited 0; receipt `.spur/run/b02126bb-52a2-49f3-92c3-f6aaf9c1f96e-feature-verification.json` status PASS. Caller text `config/workflows/feature-lifecycle.yaml:49`. |
-| AC2 | MET | test | `apps/cli/tests/commands/workflow.test.ts` partial --vars test kept `bun run spur-check-feature` and `yes`. Unit `mergeWorkflowRunVars` in `packages/app/tests/services/workflow-service.test.ts` rejects a blank spurBin. |
-| AC3 | MET | test | `plugins/sp/tests/feature-verification-steps.test.ts` source mode exits non-zero, stderr contains `source mode` and `Fix:`, and does not contain `rebuild/install the sp plugin`. |
-| AC4 | MET | test | `plugins/sp/tests/task-size-precheck.test.ts` and `plugins/sp/tests/task-evidence-precheck.test.ts` unknown-flag cases exit non-zero and write no status file for the later positional. |
-| AC5 | MET | test | `apps/server/tests/modules/observability/index.test.ts` typed invalid id is 400; a plain Error with the old seam text is 500. `packages/app/tests/services/workflow-service.test.ts` pair inspection redacts `hunter2` out of state JSON. |
-| AC6 | MET | test | followRunLog, inline-run-setup, and run-record-catalog tests passed. `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` pins the sibling worktree root and the four-column AC table. |
+| AC2 | MET | test | `apps/cli/tests/commands/workflow.test.ts:1228` partial --vars test kept `bun run spur-check-feature` and `yes`. Unit `mergeWorkflowRunVars` in `packages/app/tests/services/workflow-service.test.ts:2673` rejects a blank spurBin. |
+| AC3 | MET | test | `plugins/sp/tests/feature-verification-steps.test.ts:15` source mode exits non-zero, stderr contains `source mode` and `Fix:`, and does not contain `rebuild/install the sp plugin`. |
+| AC4 | MET | test | `plugins/sp/tests/task-size-precheck.test.ts:226` and `plugins/sp/tests/task-evidence-precheck.test.ts:43` unknown-flag cases exit non-zero and write no status file for the later positional. |
+| AC5 | MET | test | `apps/server/tests/modules/observability/index.test.ts:597` typed invalid id is 400; a plain Error with the old seam text is 500. `packages/app/tests/services/workflow-service.test.ts:2705` pair inspection redacts `hunter2` out of state JSON. |
+| AC6 | MET | test | followRunLog, inline-run-setup, and run-record-catalog tests passed. `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:54` pins the sibling worktree root and the four-column AC table. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -224,4 +224,5 @@ task 0949 owns the upstream engine-side follow-up that this R1 fix depended on.
 - 2026-09-24T18:32:23.548Z wip → testing (system)
 - 2026-09-24T19:51:57.058Z todo → wip (system)
 - 2026-09-24T19:52:03.780Z wip → testing (system)
+- 2026-09-24T21:14:16.294Z testing → done (system)
 
