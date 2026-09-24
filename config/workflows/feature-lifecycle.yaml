@@ -42,7 +42,11 @@ states:
       # feature-scoped pass instead of only passively reading its status file.
       - kind: shell
         options:
-          command: '$spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\"}"'
+          # Pass featureId and spurBin together. A partial --vars map used to be
+          # applied as a replacement, so the inner run lost spurBin and loadModule
+          # fell into source mode (0948 R1). The nested JSON is shell-expanded:
+          # $spurBin inside the double quotes keeps a multi-word invocation intact.
+          command: '$spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\",\"spurBin\":\"$spurBin\"}"'
   - id: blocked
     description: Impediment; work suspended.
   - id: done
