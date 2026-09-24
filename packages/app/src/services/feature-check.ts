@@ -1235,11 +1235,34 @@ function rowMatchesScenario(id: string, sc: { title: string; normalized: string;
  * surfacing only as opaque `L4.scenario-unverified` findings there (dogfood 2026-08-15, feature I3).
  */
 export function verdictRowsMatchScenarios(rows: Array<{ id: string }>, ac: string): boolean {
-    const scenarios = [...ac.matchAll(/^[ \t]*Scenario:[ \t]*(.+)$/gm)].map((m, i) => ({
+    const scenarios = indexScenarioAliases(ac);
+    if (scenarios.length === 0 || rows.length === 0) return true;
+    return rows.some((row) => scenarios.some((sc) => rowMatchesScenario(row.id, sc)));
+}
+
+/**
+ * 0936 R1: the feature scenario keys (AC scenario titles) matched by at least one
+ * **MET-status** verdict row — the carry-forward set a `record` re-transcription
+ * must preserve. Same `rowMatchesScenario` + AC-N alias indexing the satisfaction
+ * gate uses (`checkScenarioSatisfaction`), so record-time matching stays
+ * feature-check's single normalization implementation.
+ *
+ * MET-rows-only (0936 Q&A): a scenario whose previous match was not MET was never
+ * verified, so there is nothing to lose — comparing all rows would warn on
+ * non-load-bearing churn. Empty rows / no scenarios → `[]`.
+ */
+export function matchedScenarioKeys(rows: Array<{ id: string; status: string }>, ac: string): string[] {
+    const scenarios = indexScenarioAliases(ac);
+    if (scenarios.length === 0 || rows.length === 0) return [];
+    const met = rows.filter((r) => r.status === 'MET');
+    return scenarios.filter((sc) => met.some((r) => rowMatchesScenario(r.id, sc))).map((sc) => sc.title);
+}
+
+/** Index `Scenario:` lines of an AC body with their 1-based AC-N aliases. */
+function indexScenarioAliases(ac: string): Array<{ title: string; normalized: string; alias: string }> {
+    return [...ac.matchAll(/^[ \t]*Scenario:[ \t]*(.+)$/gm)].map((m, i) => ({
         title: (m[1] ?? '').trim(),
         normalized: normalizeTitle((m[1] ?? '').trim()),
         alias: `AC-${i + 1}`,
     }));
-    if (scenarios.length === 0 || rows.length === 0) return true;
-    return rows.some((row) => scenarios.some((sc) => rowMatchesScenario(row.id, sc)));
 }

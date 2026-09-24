@@ -30,6 +30,7 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
+import { matchedScenarioKeys } from './feature-check';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import { type CheckFindings, FINDING_CODES, type SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
@@ -41,6 +42,7 @@ import {
     flipVerifiedCheckboxes,
     gitDiffU0,
     isRecordAuthoredReview,
+    parseTesting,
     type RecordOptions,
     type RecordResult,
     readVerdict,
@@ -49,6 +51,7 @@ import {
     renderTesting,
 } from './task-record';
 import { evaluateTaskSize } from './task-size-precheck';
+import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
 
 /**
  * Error thrown by `mutateDependencies` for any validation failure (R2).
@@ -1282,43 +1285,111 @@ export class TaskService {
     private async checkAcSubsetWarning(taskFilePath: string, acBody: string): Promise<string[]> {
         try {
             const raw = await this.ctx.fs.readFile(taskFilePath);
-            const doc = MarkdownDocument.parse(raw, 'task');
-            const fm = doc.frontmatterData ?? {};
-            const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
-            if (!featureId || featureId.length === 0) return [];
-
-            const tasksDir = dirname(taskFilePath);
-            const featuresDir = join(tasksDir, '..', 'features');
-            // Feature files are named `<id>_<slug>.md` (e.g. `H1_spur-dev-skill.md`), so resolve by
-            // prefix scan — matching `task-check.ts` findFeatureFile. Probing `<id>_feature.md` /
-            // `<id>.md` never matches a real file and silently disabled this warning (0479 R3).
-            const featurePath = await (async (): Promise<string | null> => {
-                try {
-                    for (const name of await this.ctx.fs.readDir(featuresDir)) {
-                        if (name.startsWith(`${featureId}_`) && name.endsWith('.md')) {
-                            return `${featuresDir}/${name}`;
-                        }
-                    }
-                } catch {
-                    // Directory missing or unreadable — no warning to emit.
-                }
-                return null;
-            })();
-            if (featurePath === null) return [];
-
-            const featureRaw = await this.ctx.fs.readFile(featurePath);
-            const featureDoc = MarkdownDocument.parse(featureRaw, 'feature');
-            const featureAc = stripAcFence(featureDoc.getSection('Acceptance Criteria') ?? '');
-            if (!featureAc.trim()) return [];
+            const fm = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+            const resolved = await this.resolveFeatureAcBody(taskFilePath);
+            if (resolved === null) return [];
 
             const taskAc = stripAcFence(acBody);
             const taskChecklist = parseChecklist(taskAc);
             const acAltitude = fm.ac_altitude as 'graduating' | 'task-local' | undefined;
-            const coverage = checkAcCoverage(featureAc, taskAc, taskChecklist, acAltitude);
+            const coverage = checkAcCoverage(resolved.ac, taskAc, taskChecklist, acAltitude);
 
             const warnings: string[] = [];
             for (const scenario of coverage.uncovered) {
-                warnings.push(`Task scenario "${scenario}" is not in feature "${featureId}"'s AC (DD-09 subset rule)`);
+                warnings.push(
+                    `Task scenario "${scenario}" is not in feature "${resolved.featureId}"'s AC (DD-09 subset rule)`,
+                );
+            }
+            return warnings;
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Resolve the linked feature's Acceptance Criteria body for a task file —
+     * frontmatter `feature_id` → prefix-scan `<tasksDir>/../features/<id>_*.md`.
+     * Shared by {@link checkAcSubsetWarning} and {@link checkScenarioKeyRegression}
+     * (0936 R1: extracted behavior-preserving from the subset warning). Returns
+     * null on any miss — no feature_id, no feature file, empty AC — so both
+     * callers stay silent in the same cases.
+     */
+    private async resolveFeatureAcBody(taskFilePath: string): Promise<{ featureId: string; ac: string } | null> {
+        const raw = await this.ctx.fs.readFile(taskFilePath);
+        const doc = MarkdownDocument.parse(raw, 'task');
+        const fm = doc.frontmatterData ?? {};
+        const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
+        if (!featureId || featureId.length === 0) return null;
+
+        const tasksDir = dirname(taskFilePath);
+        const featuresDir = join(tasksDir, '..', 'features');
+        // Feature files are named `<id>_<slug>.md` (e.g. `H1_spur-dev-skill.md`), so resolve by
+        // prefix scan — matching `task-check.ts` findFeatureFile. Probing `<id>_feature.md` /
+        // `<id>.md` never matches a real file and silently disabled this warning (0479 R3).
+        const featurePath = await (async (): Promise<string | null> => {
+            try {
+                for (const name of await this.ctx.fs.readDir(featuresDir)) {
+                    if (name.startsWith(`${featureId}_`) && name.endsWith('.md')) {
+                        return `${featuresDir}/${name}`;
+                    }
+                }
+            } catch {
+                // Directory missing or unreadable — no resolution to make.
+            }
+            return null;
+        })();
+        if (featurePath === null) return null;
+
+        const featureRaw = await this.ctx.fs.readFile(featurePath);
+        const featureDoc = MarkdownDocument.parse(featureRaw, 'feature');
+        const featureAc = stripAcFence(featureDoc.getSection('Acceptance Criteria') ?? '');
+        return featureAc.trim() ? { featureId, ac: featureAc } : null;
+    }
+
+    /**
+     * 0936 R1: record-time scenario-key carry-forward guard. Compares the feature
+     * scenario keys the previous `## Testing` body matched with MET rows against
+     * the keys the new verdict artifact matches with MET rows, and warns (never
+     * blocks) on each dropped key — the write that would otherwise silently
+     * regress `feature check` to `L4.scenario-unverified`. Also warns, in parity
+     * with the `L4.verdict-rows-match-no-scenario` wording (0700 R3), when the
+     * new artifact's rows match no feature scenario at all. Matching is owned by
+     * feature-check's {@link matchedScenarioKeys} — no second normalization.
+     */
+    private async checkScenarioKeyRegression(
+        wbs: string,
+        taskFilePath: string,
+        prevTestingBody: string,
+        verdict: CanonicalVerifyVerdict,
+    ): Promise<string[]> {
+        try {
+            const resolved = await this.resolveFeatureAcBody(taskFilePath);
+            if (resolved === null) return [];
+
+            const prev = parseTesting(prevTestingBody, wbs);
+            const prevRows =
+                prev.kind === 'valid' ? [...prev.verdict.requirements, ...prev.verdict.acceptanceCriteria] : [];
+            const newRows = [...verdict.requirements, ...(verdict.acceptanceCriteria ?? [])];
+
+            const prevKeys = matchedScenarioKeys(prevRows, resolved.ac);
+            const newKeys = matchedScenarioKeys(newRows, resolved.ac);
+
+            const warnings: string[] = [];
+            for (const key of prevKeys) {
+                if (newKeys.includes(key)) continue;
+                warnings.push(
+                    `Task ${wbs} record drops scenario key "${key}": the previous ## Testing section matched it ` +
+                        `with a MET row but the new verdict artifact has no MET row for it — re-key a row by ` +
+                        `scenario title or AC-N alias to preserve the feature "${resolved.featureId}" ` +
+                        `satisfaction edge (L4.scenario-unverified regresses otherwise).`,
+                );
+            }
+            // No-match parity with `task verdict` / L4.verdict-rows-match-no-scenario.
+            if (newRows.length > 0 && newKeys.length === 0) {
+                warnings.push(
+                    `Task ${wbs} verdict evidence carries ${newRows.length} row(s) matching no scenario of this ` +
+                        `feature — key rows by scenario title or AC-N alias (repair: /sp:dev-verify ${wbs})`,
+                );
             }
             return warnings;
         } catch {
@@ -1365,6 +1436,16 @@ export class TaskService {
         // Mirrors the Review fallback-only precedent (0593 R1): with a real verdict
         // (PASS/PARTIAL/FAIL) record still owns Testing.
         if (!(verdict.verdict === 'UNKNOWN' && !sectionIsBare(doc, 'Testing'))) {
+            // 0936 R1: compare feature scenario keys before overwriting Testing so a
+            // re-transcription that drops a previously-carried MET-matched key warns
+            // at this write instead of at the next `feature check`.
+            const scenarioWarnings = await this.checkScenarioKeyRegression(
+                wbs,
+                filePath,
+                doc.getSection('Testing') ?? '',
+                verdict,
+            );
+            if (scenarioWarnings.length > 0) result.scenarioWarnings = scenarioWarnings;
             const testingBody = renderTesting(verdict);
             await this.writeService.updateSection(ref, 'Testing', testingBody);
             result.testingWritten = true;

@@ -1182,6 +1182,125 @@ describe('TaskService.record', () => {
             rmSync(root, { recursive: true, force: true });
         }
     });
+
+    describe('scenario-key carry-forward guard (0936 R1)', () => {
+        const root = () => tasksDir.replace('/tasks', '');
+
+        async function seedRecordFeature(id: string, scenarios: string[]): Promise<void> {
+            const fs = createNodeFileSystem(root());
+            const featuresDir = join(root(), 'features');
+            await fs.ensureDir(featuresDir);
+            const body = scenarios.map((s) => `  Scenario: ${s}\n    Given x\n    Then y`).join('\n\n');
+            await fs.writeFile(
+                join(featuresDir, `${id}_record-guard.md`),
+                `---\nid: ${id}\nname: "record-guard"\n---\n\n# ${id}\n\n## Acceptance Criteria\n\n\`\`\`gherkin\n${body}\n\`\`\`\n`,
+            );
+        }
+
+        async function writeVerdictRows(
+            wbs: string,
+            requirements: Array<{ id: string; status: string }>,
+            verdict = 'PASS',
+        ): Promise<string> {
+            const fs = createNodeFileSystem(root());
+            const verdictPath = join(root(), '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(
+                verdictPath,
+                JSON.stringify({
+                    wbs,
+                    verdict,
+                    requirements: requirements.map((r) => ({ ...r, evidence: 'ev' })),
+                    checks: [],
+                }),
+            );
+            return verdictPath;
+        }
+
+        test('dropped MET-matched scenario key warns and names the scenario; Review backfill unchanged', async () => {
+            await seedRecordFeature('Z1', ['Record preserves scenario keys', 'Second scenario stays verified']);
+            const wbs = await createTask(svc);
+            await svc.updateField(wbs, 'feature_id', 'Z1');
+            // First record: Testing carries MET rows for both feature scenarios.
+            const first = await writeVerdictRows(wbs, [
+                { id: 'Scenario: Record preserves scenario keys', status: 'MET' },
+                { id: 'AC-2', status: 'MET' },
+            ]);
+            await svc.record(wbs, { verdictFile: first });
+
+            // Re-record from a fresh artifact that re-keys scenario 1 to a bare R-id
+            // (the 0921 regression shape) while scenario 2 stays keyed — no parity warning.
+            const second = await writeVerdictRows(wbs, [
+                { id: 'R1', status: 'MET' },
+                { id: 'AC-2', status: 'MET' },
+            ]);
+            const result = await svc.record(wbs, { verdictFile: second });
+
+            expect(result.testingWritten).toBe(true);
+            expect(result.scenarioWarnings).toHaveLength(1);
+            expect(result.scenarioWarnings?.[0]).toContain('Record preserves scenario keys');
+            expect(result.scenarioWarnings?.[0]).toContain('Z1');
+            // The bare-placeholder Review backfill (F92 0593 R1) is unchanged by the guard.
+            expect(result.reviewWritten).toBe(true);
+            const fs = createNodeFileSystem(root());
+            const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
+            expect(raw).toContain('### Review');
+        });
+
+        test('preserved scenario key stays silent', async () => {
+            await seedRecordFeature('Z2', ['Only scenario']);
+            const wbs = await createTask(svc);
+            await svc.updateField(wbs, 'feature_id', 'Z2');
+            const first = await writeVerdictRows(wbs, [{ id: 'AC-1', status: 'MET' }]);
+            await svc.record(wbs, { verdictFile: first });
+
+            const second = await writeVerdictRows(wbs, [{ id: 'Scenario: Only scenario', status: 'MET' }]);
+            const result = await svc.record(wbs, { verdictFile: second });
+
+            expect(result.scenarioWarnings).toBeUndefined();
+        });
+
+        test('MET-only comparison: a previously non-MET match lost is silent', async () => {
+            await seedRecordFeature('Z3', ['Scenario one', 'Scenario two']);
+            const wbs = await createTask(svc);
+            await svc.updateField(wbs, 'feature_id', 'Z3');
+            // Scenario 1 matched only by an UNMET row — never verified, nothing to lose.
+            const first = await writeVerdictRows(
+                wbs,
+                [
+                    { id: 'AC-1', status: 'UNMET' },
+                    { id: 'AC-2', status: 'MET' },
+                ],
+                'PARTIAL',
+            );
+            await svc.record(wbs, { verdictFile: first });
+
+            const second = await writeVerdictRows(wbs, [{ id: 'AC-2', status: 'MET' }]);
+            const result = await svc.record(wbs, { verdictFile: second });
+
+            expect(result.scenarioWarnings).toBeUndefined();
+        });
+
+        test('no feature_id stays silent', async () => {
+            const wbs = await createTask(svc);
+            const verdictPath = await writeVerdictRows(wbs, [{ id: 'R1', status: 'MET' }]);
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+            expect(result.scenarioWarnings).toBeUndefined();
+        });
+
+        test('rows matching no feature scenario warn in parity with task verdict', async () => {
+            await seedRecordFeature('Z5', ['Only scenario']);
+            const wbs = await createTask(svc);
+            await svc.updateField(wbs, 'feature_id', 'Z5');
+            const verdictPath = await writeVerdictRows(wbs, [
+                { id: 'R1', status: 'MET' },
+                { id: 'R2', status: 'MET' },
+            ]);
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            expect(result.scenarioWarnings).toHaveLength(1);
+            expect(result.scenarioWarnings?.[0]).toContain('matching no scenario of this feature');
+        });
+    });
 });
 
 describe('sectionIsBare (existing integration)', () => {

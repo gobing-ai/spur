@@ -6,6 +6,7 @@ import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
     type CheckFeatureResult,
     FeatureCheckService,
+    matchedScenarioKeys,
     verdictRowsMatchScenarios,
 } from '../../src/services/feature-check';
 import { FINDING_CODES } from '../../src/services/finding-codes';
@@ -3344,6 +3345,53 @@ describe('verdictRowsMatchScenarios (dogfood 2026-08-15, feature I3)', () => {
     test('0561 R1: an alias row id with a trailing Gherkin body matches via bodyStripped === alias', () => {
         // Pins the alias side of the additive change (`AC-N (Given …)` → bodyStripped === sc.alias).
         expect(verdictRowsMatchScenarios([{ id: 'AC-1 (Given x / When y / Then z)' }], ac)).toBe(true);
+    });
+});
+
+describe('matchedScenarioKeys (0936 R1)', () => {
+    const ac = [
+        'Feature: record guard',
+        '  Scenario: Record preserves scenario keys',
+        '    Given a task',
+        '  Scenario: [doc-only] Second scenario stays verified',
+        '    Given another task',
+    ].join('\n');
+
+    test('matches by title, Scenario: prefix, bracket tag, and AC-N alias', () => {
+        expect(matchedScenarioKeys([{ id: 'Record preserves scenario keys', status: 'MET' }], ac)).toEqual([
+            'Record preserves scenario keys',
+        ]);
+        expect(matchedScenarioKeys([{ id: 'Scenario: Record preserves scenario keys', status: 'MET' }], ac)).toEqual([
+            'Record preserves scenario keys',
+        ]);
+        expect(matchedScenarioKeys([{ id: '[doc-only] Second scenario stays verified', status: 'MET' }], ac)).toEqual([
+            '[doc-only] Second scenario stays verified',
+        ]);
+        expect(matchedScenarioKeys([{ id: 'AC-2', status: 'MET' }], ac)).toEqual([
+            '[doc-only] Second scenario stays verified',
+        ]);
+    });
+
+    test('MET-only: non-MET rows match nothing (a never-verified key is nothing to lose)', () => {
+        for (const status of ['UNMET', 'PARTIAL', 'N/A']) {
+            expect(matchedScenarioKeys([{ id: 'AC-1', status }], ac)).toEqual([]);
+        }
+        // A MET row for one key does not lift a non-MET row for another.
+        expect(
+            matchedScenarioKeys(
+                [
+                    { id: 'AC-1', status: 'MET' },
+                    { id: 'AC-2', status: 'UNMET' },
+                ],
+                ac,
+            ),
+        ).toEqual(['Record preserves scenario keys']);
+    });
+
+    test('bare R-style ids match no scenario key; empty inputs return []', () => {
+        expect(matchedScenarioKeys([{ id: 'R1', status: 'MET' }], ac)).toEqual([]);
+        expect(matchedScenarioKeys([], ac)).toEqual([]);
+        expect(matchedScenarioKeys([{ id: 'AC-1', status: 'MET' }], 'Feature: x')).toEqual([]);
     });
 });
 

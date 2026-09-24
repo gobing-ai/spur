@@ -86,6 +86,13 @@ export interface RecordResult {
     reviewWritten: boolean;
     solutionBackfilled: boolean;
     transitionedTo?: string;
+    /**
+     * 0936 R1: scenario-key carry-forward warnings from the Testing
+     * re-transcription guard — one per dropped MET-matched feature scenario key,
+     * plus the no-match parity warning. Warn-only (exit 0); the CLI prints each
+     * to stderr and `--json` carries the array. Absent when silent.
+     */
+    scenarioWarnings?: string[];
 }
 
 // ─── R1: Verdict reader ─────────────────────────────────────────────────
