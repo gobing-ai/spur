@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Preserve feature scenario-key rows when re-verifying and re-recording a task
-status: todo
+status: done
 template: standard
 created_at: 2026-09-23T23:05:36.805Z
-updated_at: "2026-09-23T23:47:48.766Z"
+updated_at: "2026-09-24T01:53:03.749Z"
 feature_id: D63
 
 priority: P2
@@ -26,15 +26,15 @@ Evidence: `.spur/run/0921-verdict.json` (restored scenario-key requirements row)
 
 ### Requirements
 
-- [ ] R1. Make the verify→record path preserve feature scenario-title rows: when `spur task record --verdict-file` re-transcribes `## Testing` and the new artifact lacks a MET-row match for a feature scenario title (or `AC-N` alias) that the previous Testing section matched with a MET row, warn loudly on stderr (exit 0) naming each dropped scenario; additionally warn when the new artifact's rows match no feature scenario at all (parity with the existing `task verdict` warning). Surface the warnings in `RecordResult.scenarioWarnings` and `--json`. Owner seam: `TaskService.record()` (`packages/app/src/services/task-service.ts:1339`) with matching owned by a new exported `matchedScenarioKeys` helper in `feature-check.ts` — no second normalization implementation.
-- [ ] R2. Cover the behavior with focused tests in `packages/app/tests/services/task-record.test.ts`: dropped-key warns and names the scenario; preserved-key stays silent; MET-only comparison; no-feature_id silent; no-match-parity warns; the bare-placeholder Review backfill is unchanged.
-- [ ] R3. Document the scenario-key carry-forward rule in `plugins/sp/skills/code-verification/SKILL.md` Step 10 so standalone `--force` re-verifies copy existing scenario-title rows into the fresh verdict artifact.
+- [x] R1. Make the verify→record path preserve feature scenario-title rows: when `spur task record --verdict-file` re-transcribes `## Testing` and the new artifact lacks a MET-row match for a feature scenario title (or `AC-N` alias) that the previous Testing section matched with a MET row, warn loudly on stderr (exit 0) naming each dropped scenario; additionally warn when the new artifact's rows match no feature scenario at all (parity with the existing `task verdict` warning). Surface the warnings in `RecordResult.scenarioWarnings` and `--json`. Owner seam: `TaskService.record()` (`packages/app/src/services/task-service.ts:1339`) with matching owned by a new exported `matchedScenarioKeys` helper in `feature-check.ts` — no second normalization implementation.
+- [x] R2. Cover the behavior with focused tests in `packages/app/tests/services/task-record.test.ts`: dropped-key warns and names the scenario; preserved-key stays silent; MET-only comparison; no-feature_id silent; no-match-parity warns; the bare-placeholder Review backfill is unchanged.
+- [x] R3. Document the scenario-key carry-forward rule in `plugins/sp/skills/code-verification/SKILL.md` Step 10 so standalone `--force` re-verifies copy existing scenario-title rows into the fresh verdict artifact.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A fixture re-record whose verdict artifact drops a MET-matched feature scenario-title row prints the R1 stderr warning naming that scenario, still exits 0, and carries the warning in `RecordResult.scenarioWarnings` / `--json`; a subsequent `spur feature check` no longer regresses to `L4.scenario-unverified` without a record-time signal. (req: R1)
-- [ ] AC2 — The focused tests for dropped-key warning, preserved-key silence, MET-only comparison, no-feature silence, no-match parity, and unchanged Review backfill all pass. (req: R2)
-- [ ] AC3 — `plugins/sp/skills/code-verification/SKILL.md` Step 10 names the carry-forward rule where a standalone verifier reads it. (req: R3)
+- [x] AC1 — A fixture re-record whose verdict artifact drops a MET-matched feature scenario-title row prints the R1 stderr warning naming that scenario, still exits 0, and carries the warning in `RecordResult.scenarioWarnings` / `--json`; a subsequent `spur feature check` no longer regresses to `L4.scenario-unverified` without a record-time signal. (req: R1)
+- [x] AC2 — The focused tests for dropped-key warning, preserved-key silence, MET-only comparison, no-feature silence, no-match parity, and unchanged Review backfill all pass. (req: R2)
+- [x] AC3 — `plugins/sp/skills/code-verification/SKILL.md` Step 10 names the carry-forward rule where a standalone verifier reads it. (req: R3)
 
 ### Q&A
 
@@ -71,23 +71,70 @@ Add a record-time scenario-coverage guard to `TaskService.record()` so a re-tran
 
 ### Plan
 
-- [ ] 1. Export `matchedScenarioKeys(rows, ac)` from `packages/app/src/services/feature-check.ts` (pure, built on `rowMatchesScenario` + the `AC-N` alias indexing); add a barrel export only if consumers outside `services/` need it. Unit-test title / `Scenario:`-prefix / alias / MET-filter behavior in the feature-check test suite.
-- [ ] 2. Extract `resolveFeatureAcBody(taskFilePath)` from `checkAcSubsetWarning` in `packages/app/src/services/task-service.ts` (behavior-preserving), then implement `checkScenarioKeyRegression` and wire it into `record()` between the verdict read and the Testing write; extend `RecordResult` with `scenarioWarnings?: string[]`.
-- [ ] 3. Print the warnings to stderr (exit 0) and into `--json` output in the CLI `task record` command (`apps/cli/src/commands/task.ts`), matching the `updateSection` warnings precedent.
-- [ ] 4. Add the `task-record.test.ts` cases from Design (dropped-key warns / preserved-key silent / MET-only / no-feature silent / no-match-parity / Review backfill unchanged) and run the narrow suite, then the `record`-adjacent app+CLI tests per the changed-path matrix.
-- [ ] 5. Add the scenario-key carry-forward rule to `plugins/sp/skills/code-verification/SKILL.md` Step 10 (standalone re-verify copies existing scenario-title rows into the fresh verdict artifact) and run `bun run spur-check` once as the final gate.
+- [x] 1. Export `matchedScenarioKeys(rows, ac)` from `packages/app/src/services/feature-check.ts` (pure, built on `rowMatchesScenario` + the `AC-N` alias indexing); add a barrel export only if consumers outside `services/` need it. Unit-test title / `Scenario:`-prefix / alias / MET-filter behavior in the feature-check test suite.
+- [x] 2. Extract `resolveFeatureAcBody(taskFilePath)` from `checkAcSubsetWarning` in `packages/app/src/services/task-service.ts` (behavior-preserving), then implement `checkScenarioKeyRegression` and wire it into `record()` between the verdict read and the Testing write; extend `RecordResult` with `scenarioWarnings?: string[]`.
+- [x] 3. Print the warnings to stderr (exit 0) and into `--json` output in the CLI `task record` command (`apps/cli/src/commands/task.ts`), matching the `updateSection` warnings precedent.
+- [x] 4. Add the `task-record.test.ts` cases from Design (dropped-key warns / preserved-key silent / MET-only / no-feature silent / no-match-parity / Review backfill unchanged) and run the narrow suite, then the `record`-adjacent app+CLI tests per the changed-path matrix.
+- [x] 5. Add the scenario-key carry-forward rule to `plugins/sp/skills/code-verification/SKILL.md` Step 10 (standalone re-verify copies existing scenario-title rows into the fresh verdict artifact) and run `bun run spur-check` once as the final gate.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented the record-time scenario-key carry-forward guard exactly per Design.
+
+| Change (`file:line`) | What |
+| --- | --- |
+| `packages/app/src/services/feature-check.ts:1262` | New exported pure `matchedScenarioKeys(rows, ac)` — MET-status rows only, built on the existing `rowMatchesScenario` (`:1206`) and the shared AC-N alias indexing (extracted `indexScenarioAliases`, now also used by `verdictRowsMatchScenarios` — no second normalization implementation). |
+| `packages/app/src/services/task-record.ts:84` | `RecordResult` gains `scenarioWarnings?: string[]`. |
+| `packages/app/src/services/task-service.ts:1320` | Extracted shared private `resolveFeatureAcBody(taskFilePath)` from `checkAcSubsetWarning` (behavior-preserving; both warnings consume it). |
+| `packages/app/src/services/task-service.ts:1359` | New private `checkScenarioKeyRegression(wbs, taskFilePath, prevTestingBody, verdict)` — previous Testing rows via `parseTesting` vs new artifact `requirements` + `acceptanceCriteria`; one warning per dropped MET-matched scenario key naming it, plus the no-match parity warning mirroring the 0700 R3 `task verdict` wording. Warn-only, swallows to `[]` on any miss. |
+| `packages/app/src/services/task-service.ts:1478` | `record()` wires the guard inside the Testing re-transcription branch (before the overwrite), so UNKNOWN-verdict authored-Testing preservation and Review `sectionIsBare` fallback behave exactly as today. |
+| `apps/cli/src/commands/task.ts:1242` | `spur task record` prints each scenario warning to stderr (exit 0, both modes); `--json` carries the array on `scenarioWarnings`. |
+| `packages/app/tests/services/task-record.test.ts:1187` | Five focused record cases: dropped-key warns+names scenario (Review backfill asserted unchanged), preserved-key silent, MET-only comparison, no-feature_id silent, no-match parity warns. |
+| `packages/app/tests/services/feature-check.test.ts:3350` | `matchedScenarioKeys` unit tests: title/`Scenario:`-prefix/bracket-tag/alias matching, MET-filter, empty inputs. |
+| `plugins/sp/skills/code-verification/SKILL.md:269` | Step 10 documents the scenario-key carry-forward rule for standalone `--force` re-verifies (R3). |
+
+Rationale: detection moved from the next `feature check` to the write that causes the regression; matching stays owned by feature-check; warnings never block the write (reversible, per Q&A).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Anchors re-read this run: exported pure `matchedScenarioKeys` at `packages/app/src/services/feature-check.ts:1254` (MET-rows-only, built on `rowMatchesScenario` + shared `indexScenarioAliases` `:1262` — single normalization implementation); `checkScenarioKeyRegression` at `packages/app/src/services/task-service.ts:1359` wired into `record()` before the Testing overwrite (`:1442-1448`), swallow-to-`[]` warn-only; `RecordResult.scenarioWarnings` at `packages/app/src/services/task-record.ts:84`; CLI prints each warning to stderr exit-0 with `--json` carrying the array (`apps/cli/src/commands/task.ts:1242-1247`). Live demonstration: this very re-record via the source CLI emitted the no-match parity warning on stderr, exit 0. |
+| R2 | MET | Five focused record cases re-read at `packages/app/tests/services/task-record.test.ts:1219-1300` (dropped-key warns+names scenario `:1219`, preserved-key silent `:1249`, MET-only comparison `:1262`, no-feature_id silent `:1283`, no-match parity `:1290`) with Review-backfill-unchanged assertions (`:1242`); `matchedScenarioKeys` units (`feature-check.test.ts:3350`). Fresh in-workspace runs this turn: task-record **87 pass / 0 fail** (204 expects), feature-check **110 pass / 0 fail** (523 expects). |
+| R3 | MET | Carry-forward blockquote re-read at `plugins/sp/skills/code-verification/SKILL.md:268-275` — Step 10, immediately after the Corrections note a standalone verifier reads; ratchet bump with dated comment at `plugins/sp/tests/skill-structure.test.ts:858-860` (30_488 → 31_203, +715B), skill-structure suite fresh **89 pass / 0 fail**. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Dropped-key test (`task-record.test.ts:1219`) asserts `scenarioWarnings` length 1 naming the scenario + feature id with `testingWritten: true` (exit-0 warn-only); service-level `RecordResult.scenarioWarnings` is the `--json` payload. Live: this re-record printed the parity warning on stderr via `bun run apps/cli/src/index.ts`, exit 0; `spur feature check D63 --json` → pass, 0 findings. |
+| AC2 | MET | test | All six focused behaviors pass fresh this run: task-record 87/0, feature-check 110/0, skill-structure 89/0; biome check clean on the four changed source files. |
+| AC3 | MET | test | `SKILL.md:268-275` Step 10 carry-forward block re-read (names the rule, the `L4.scenario-unverified` regression class, and the record-time warnings); `plugins/sp/tests/skill-structure.test.ts` ratchet pins the file at 31_203 with dated comment — fresh suite run **89 pass / 0 fail**. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**Review coordinator:** inline pipeline driver (super-planner), single-pass SECUA + traceability over the 8-file diff.
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | Process | `plugins/sp/tests/skill-structure.test.ts:858` | `code-verification` SKILL.md baseline bumped 30_488 → 31_203 (+715B) for the R3 Step-10 rule; ratchet convention honored with a split candidate noted (`references/verdict-schema.md`). |
+| P4 | Quality | `apps/cli/src/commands/task.ts:1242` | Scenario warnings print to stderr in both human and `--json` modes — deliberate: R1's "warn loudly on stderr" is unconditional and stdout JSON stays machine-clean. Diverges from the human-mode-only gating of the updateSection precedent. |
+| P4 | — | — | No P1–P3 findings. |
+
+**Traceability (R{n} → evidence):**
+
+- R1 → `packages/app/src/services/task-service.ts:1359` (`checkScenarioKeyRegression`) wired into `record()` before the Testing overwrite (`:1478`); matching owned by exported pure `matchedScenarioKeys` (`packages/app/src/services/feature-check.ts:1254`, built on `rowMatchesScenario` + shared `indexScenarioAliases` — no second normalization); MET-rows-only per Q&A; two exit-0 warnings (per dropped key naming it; no-match parity mirroring the 0700 R3 wording); surfaced via `RecordResult.scenarioWarnings` (`task-record.ts:84`) → CLI stderr + `--json` (`apps/cli/src/commands/task.ts:1242`). MET.
+- R2 → `packages/app/tests/services/task-record.test.ts:1188` — five cases (dropped-key warns+names scenario / preserved-key silent / MET-only / no-feature_id silent / no-match parity) plus Review-backfill-unchanged assertions; `feature-check.test.ts:3350` — title/prefix/bracket/alias + MET-filter + empty-input units. 87 + 110 + 125 in-workspace tests pass. MET.
+- R3 → `plugins/sp/skills/code-verification/SKILL.md:269` — Step 10 scenario-key carry-forward block where a standalone `--force` re-verifier reads it. MET.
+
+**Design conformance:** `resolveFeatureAcBody` extraction is behavior-preserving (subset-warning tests green); UNKNOWN-verdict authored-Testing preservation and Review `sectionIsBare` fallback untouched; no FSM/gate/verdict-schema change; no new CLI noun/verb; warn-only never blocks the write.
+
+**Residual risk:** warn-only by design — a deliberate re-key still lands (Q&A accepted; refusal mode is additive later). The record-time guard resolves the feature via `<tasksDir>/../features` prefix scan, same reach as the existing subset warning.
+
+**Disposition:** approved for verify.
 
 ### References
 
@@ -101,4 +148,7 @@ Add a record-time scenario-coverage guard to `TaskService.record()` so a re-tran
 ### History
 
 - 2026-09-23T23:46:35.664Z backlog → todo (system)
+- 2026-09-24T01:25:16.434Z todo → wip (system)
+- 2026-09-24T01:37:48.097Z wip → testing (system)
+- 2026-09-24T01:37:48.381Z testing → done (system)
 

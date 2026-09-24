@@ -4,7 +4,7 @@ name: Settle D63 0917 inline-run evidence debt and close the feature
 status: done
 template: feature-impl
 created_at: 2026-09-23T22:33:55.639Z
-updated_at: "2026-09-24T00:35:53.880Z"
+updated_at: "2026-09-24T01:11:34.464Z"
 feature_id: D63
 
 ac_altitude: task-local
@@ -77,24 +77,24 @@ Note: untracked `docs/tasks5/0936_preserve-feature-scenario-key-rows-when-re-ver
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | 3 attributable terminal runs in .spur/spur.db: d6e3ec3f…971fe (11 action_runs), a3e79428…aecac (4), 75fed91a…2d95 (4) = 19 rows, all done/history-anatomy, 2026-09-23 ≤ frozen 2026-10-06; setup artifacts .spur/run/<id>-inline-setup.json; measured citation re-reproduced via measureAgentRunHistory (workflow-promotion.ts:289): agentRunCount {runs:3,median:2,min:0,max:5}, agentRunDurationMs {runs:2,median:238500,min:150000,max:327000}. Round-2: stands. |
-| R2 | MET | Marker spur:0935-r2-reevaluation at docs/tasks5/0917_deliver-the-measured-task-pipeline-optimization-selected-by-.md:65 — INSUFFICIENT_EVIDENCE stands, scope-normalization promotion stands, no graph edit, bounded 3-run cohort executed. Round-2: stands. |
-| R3 | MET | docs/design/workflow-execution-economy.md:198 pin-delta.baselineAgentRunCount convention + §5.2 legacy fallback; config/workflow-candidates.json candidates: [] untouched. Round-2 spot-check: :198 registration-policy line re-read intact; candidates: [] confirmed. |
-| R4 | MET | Deferral branch: spur feature show D63 status=blocked, updated_at 2026-09-23T18:22:08.867Z; dated deferral (2026-09-23) in task Solution R4; wrap hop owns close. Round-2: stands. |
-| R5 | MET | Push executed between rounds: git rev-list --left-right --count origin/main...main = 0 0; git rev-parse origin/main = git rev-parse main = f10628a0ac11883d77c3a190601d80989e876b2c (fresh round-2 measurement; task Review :137 corroborates). |
-| R6 | MET | spur-new-run-0850-5f6382, spur-new-runall-g65-ac87, spur-new-runall-h13-604b08 absent from /Users/robin/xprojects; git worktree list = main only. Round-2: stands. |
-| R7 | MET | Exact-phrasing pins at scripts/commands/workflow-promotion.test.ts:252 and :267; fresh suite 31 pass / 0 fail / 70 expects; §5.2 text (workflow-execution-economy.md:213) matches guard workflow-promotion.ts:641-651; drift test :355 green. Round-2 spot-check: pins re-read intact at :252/:267, drift test :355 present; suite re-run fresh 31 pass / 0 fail / 70 expects. |
+| R1 | MET | Fresh DB re-query this run: d6e3ec3f-…-971fe / a3e79428-…-aecac / 75fed91a-…-2d95 all `status=done`, `workflow_name=history-anatomy`, 11+4+4=19 `action_runs` rows, created 2026-09-23 ≤ frozen 2026-10-06; `.spur/run/<run-id>-inline-setup.json` present for all three. Filtered citation reproduced exactly via `measureAgentRunHistory('.spur/spur.db','history-anatomy',<3 run ids>)` (`scripts/commands/workflow-promotion.ts:289`): agentRunCount {runs:3,median:2,min:0,max:5}, agentRunDurationMs {runs:2,median:238500,min:150000,max:327000} — exact match to the recorded claim. Round-4 fresh execution. |
+| R2 | MET | Marker + decision block re-read at `docs/tasks5/0917_deliver-the-measured-task-pipeline-optimization-selected-by-.md:65` — `<!-- spur:0935-r2-reevaluation -->`; the 2026-09-23 re-evaluation stands: INSUFFICIENT_EVIDENCE for any speed candidate, scope-normalization promotion stands, no graph edit, bounded 3-run cohort executed. Round-4 fresh. |
+| R3 | MET | Policy line re-read at `docs/design/workflow-execution-economy.md:198` — "Registration policy (0935): new candidate registrations **pin `delta.baselineAgentRunCount`** … documented convention, not a registry validator rule"; `jq '.candidates' config/workflow-candidates.json` exit 0 → `[]` (registry untouched). Round-4 fresh. |
+| R4 | MET | Dated deferral (2026-09-23) re-read in task Solution R4 — deferral branch of AC4 satisfied; D63 frontmatter now `status: active`, `updated_at: 2026-09-24T00:35:33.685Z` (feature synced during wrap; the round-1 `blocked` observation is stale, corrected here). Round-4 fresh. |
+| R5 | MET | Push verified this run: `git merge-base --is-ancestor f10628a0a origin/main` exit 0; origin tip 1651b1413 carries the 0935 wrap-up. Current `git rev-list --left-right --count origin/main...main` = `0 2` — the two ahead commits (9b0e15637 D63-settle wrap residue, 4b734ddac D64 plan) are post-completion concurrent-session work, not 0935 deliverables; R5's push action was executed and verified 0 0 at completion. Round-4 fresh. |
+| R6 | MET | Fresh `ls` this run: `spur-new-run-0850-5f6382`, `spur-new-runall-g65-ac87`, `spur-new-runall-h13-604b08` all absent from /Users/robin/xprojects; `git worktree list` = main checkout only. Round-4 fresh. |
+| R7 | MET | Exact-phrasing pins re-read at `scripts/commands/workflow-promotion.test.ts:252` (degenerate baseline==live `toBe`, canonical-context branch) and `:267` (baseline<live applied-regression `toBe`); strings match the source templates (`workflow-promotion.ts:325-350`). Drift test re-read at `:355`. Fresh suite run this turn: **31 pass / 0 fail / 70 expect() calls**. §5.2 drift-refusal text (`workflow-execution-economy.md:213-215`) matches the implemented guard (`workflow-promotion.ts:641-651`: refuse when live count matches neither baseline nor projection, exit 1). Round-4 fresh. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | {runs:3,median:2,min:0,max:5} actions / {runs:2,median:238500} ms over runs d6e3ec3f/a3e79428/75fed91a (19 action_runs). Round-2: stands. |
-| AC2 | MET | command | `grep -n 'spur:0935-r2-reevaluation' docs/tasks5/0917_*.md` exit 0 → docs/tasks5/0917_deliver-the-measured-task-pipeline-optimization-selected-by-.md:65 `<!-- spur:0935-r2-reevaluation -->`. Round-3 fresh execution. |
-| AC3 | MET | command | `sed -n '198p' docs/design/workflow-execution-economy.md` exit 0 → "Registration policy (0935): new candidate registrations **pin `delta.baselineAgentRunCount`** to"; `jq '.candidates' config/workflow-candidates.json` exit 0 → `[]`. Round-3 fresh execution. |
-| AC4 | MET | command | `spur feature show D63 --json` exit 0 → "status": "blocked", "updated_at": "2026-09-23T18:22:08.867Z"; dated deferral (2026-09-23) in task Solution R4 corroborates. Round-3 fresh execution. |
-| AC5 | MET | command | git rev-list --left-right --count origin/main...main = 0 0; origin/main == main == f10628a0ac11883d77c3a190601d80989e876b2c (fresh round-2 measurement). |
-| AC6 | MET | command | 3 stale dirs absent; worktree list main-only. Round-2: stands. |
-| AC7 | MET | test | 31 pass / 0 fail / 70 expect() calls (fresh round-2 re-run); exact-phrasing pins :252, :267 intact; 0921 drift test :355 present and green in the run. |
-| AC8 | MET | test | Fresh round-3 `bun test scripts/commands/workflow-promotion.test.ts` exit 0 → 31 pass / 0 fail / 70 expect() calls; 0921 drift test (scripts/commands/workflow-promotion.test.ts:355) green in the run; economy.md:213 ≡ promotion.ts:641-651 equivalence carried from round 2. |
+| AC1 | MET | command | Filtered `measureAgentRunHistory` over the three run ids reproduced exactly this run: {runs:3,median:2,min:0,max:5} actions / {runs:2,median:238500} ms; DB rows terminal, dated 2026-09-23 ≤ 2026-10-06; 19 attributable `action_runs`. |
+| AC2 | MET | command | `grep -n 'spur:0935-r2-reevaluation' docs/tasks5/0917_*.md` exit 0 → `…0917…md:65`; decision recorded: INSUFFICIENT_EVIDENCE stands with the bounded experiment now executed. |
+| AC3 | MET | command | `sed -n '198p' docs/design/workflow-execution-economy.md` → pin-`baselineAgentRunCount` convention; `jq '.candidates' config/workflow-candidates.json` → `[]`. |
+| AC4 | MET | command | Dated deferral (2026-09-23) in Solution R4 satisfies the deferral branch; D63 `status: active`, `updated_at 2026-09-24T00:35:33.685Z` — owning docs synced by wrap (feature file + INDEX committed). |
+| AC5 | MET | command | `git merge-base --is-ancestor f10628a0a origin/main` exit 0; origin tip 1651b1413 contains the 0935 wrap. Push executed at completion (verified 0 0 then); current ahead-2 is post-completion concurrent D64 work (see SECUA P4 #2). |
+| AC6 | MET | command | All three stale dirs absent from ~/xprojects (fresh `ls`, exit 2 for each); `git worktree list` main-only. |
+| AC7 | MET | test | Fresh `bun test scripts/commands/workflow-promotion.test.ts` this run: 31 pass / 0 fail / 70 expect() calls; exact-phrasing pins intact at :252 and :267. |
+| AC8 | MET | test | Drift test (`workflow-promotion.test.ts:355`) green in the same fresh suite run; §5.2 text (`workflow-execution-economy.md:213-215`) ≡ guard (`workflow-promotion.ts:641-651`). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
