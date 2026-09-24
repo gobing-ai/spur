@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.52.0
+version: 1.53.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-23
+updated_at: 2026-09-24
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -896,9 +896,13 @@ proof bracket and the standard verdict artifact (tasks 0704/0769).
 Only `verified(D)` may cross the completion boundary, and the boundary re-captures D immediately
 before transition. This statically disqualified the former `task-pipeline2.yaml`: both its
 editing-capable verify action and post-PASS residual `agent.run` could mutate proof inputs before
-record. That graph was deleted rather than promoted (ADR-076, 2026-08-20). The rule stands for any
-future candidate: residual logic must be read-only or loop through remediation and the entire proof
-chain.
+record. That graph was deleted rather than promoted (ADR-076, 2026-08-20). The canonical task
+pipeline now carries residual completeness under this rule (F96): a deterministic `residual-scan`
+runs inside `verify` after the digest bracket with evidence writes confined to `.spur/run/`, and a
+blocking residual folds a failing `residual-sweep` check into the verdict and downgrades PASS to
+PARTIAL onto the existing bounded `verify → test-fix` loop; follow-up filing and staging cleanup
+are confined to `done` entry, after certification. Shapes live in
+`docs/design/task-residual-sweep.md`.
 
 Enforceable invariants:
 

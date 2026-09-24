@@ -2,10 +2,10 @@
 doc: 04_DESIGN
 owns: SURFACE — index of non-UI CLI, API, config, schema and boundary contracts
 authority: derived
-version: 1.82.0
+version: 1.83.0
 derived_from: [03_ARCHITECTURE, codebase]
 owner: Robin Min
-updated_at: 2026-09-23
+updated_at: 2026-09-24
 read_before: changing a command, flag, env var, or schema
 edit_rules: 99 §6.5
 sync: [T3, T9]
