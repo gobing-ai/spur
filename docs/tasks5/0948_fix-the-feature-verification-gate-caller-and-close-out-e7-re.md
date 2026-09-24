@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix the feature-verification gate caller and close out E7 review findings
-status: todo
+status: testing
 template: standard
 created_at: 2026-09-24T07:19:45.903Z
-updated_at: "2026-09-24T07:29:16.470Z"
+updated_at: "2026-09-24T19:52:03.780Z"
 
 priority: P1
 ---
@@ -33,38 +33,38 @@ E7's completion unblocks) and the two-sessions-one-checkout incident (operationa
 
 ### Requirements
 
-- [ ] R1. `config/workflows/feature-lifecycle.yaml:45` passes only `featureId` to the nested
+- [x] R1. `config/workflows/feature-lifecycle.yaml:45` passes only `featureId` to the nested
   `feature-verification.yaml` run, so the inner `spurBin` var is empty, `loadModule` falls back to
   source mode and the pass fails with `application entry is missing feature-verification seams`.
   Make the documented caller work end to end.
-- [ ] R2. `spur workflow run --vars` replaces the workflow var map instead of merging it, so a
+- [x] R2. `spur workflow run --vars` replaces the workflow var map instead of merging it, so a
   partial override silently drops every other var (`spurBin` included). Either merge with the
   definition's declared defaults or reject a var set that leaves declared vars unset.
-- [ ] R3. `feature-verification-steps.ts` `loadModule` prefers `packages/app/src/index.ts` whenever a
+- [x] R3. `feature-verification-steps.ts` `loadModule` prefers `packages/app/src/index.ts` whenever a
   source checkout is detected, but that entry does not re-export `splitLaunchCommand` /
   `ArtifactDao` (0 matches; the generated bundle does), and the thrown advice ("rebuild/install the
   sp plugin") cannot fix a source-tree gap.
-- [ ] R4. `plugins/sp/scripts/task-size-precheck.ts` and `task-evidence-precheck.ts` `parseArgs`
+- [x] R4. `plugins/sp/scripts/task-size-precheck.ts` and `task-evidence-precheck.ts` `parseArgs`
   ignore unknown `--flags` (`else { i++; }`) and let any later positional overwrite `wbs`, so
   `script 0926 --task-file x.md` fetches `x.md`, writes a garbage-named status file and FAILs.
   Reject unknown flags and keep the first positional.
-- [ ] R5. 0929 inspection hardening: the server maps 400 by string-matching the seam error message
+- [x] R5. 0929 inspection hardening: the server maps 400 by string-matching the seam error message
   `Invalid workflow run id` (`apps/server/src/modules/observability/index.ts`), so wording drift
   yields a 500; state JSON is served parse-trusted without read-side re-redaction
   (`packages/app/src/services/workflow-service.ts`); the cap is named as bytes but applied to a
   string bound; realpath/stat/read TOCTOU windows remain.
-- [ ] R6. 0926 legacy continue/read: a mid-follow legacy→`.md` transition re-emits the whole file
+- [x] R6. 0926 legacy continue/read: a mid-follow legacy→`.md` transition re-emits the whole file
   from the top; `existsSync`/`readFileSync` TOCTOU classifies a vanished pair as `state-invalid`
   instead of `state-missing`; an empty legacy `.log` yields a misleading `--no-log` hint.
-- [ ] R7. 0927 inline seam: a re-setup after failure can leave a stale `error` key in `.state.json`
+- [x] R7. 0927 inline seam: a re-setup after failure can leave a stale `error` key in `.state.json`
   (no retry-with-same-id flow); the retired sidecar `ok` value is not projected; the
   `inline-run-setup.ts` header-ordering hazard (`!existsSync(markdownPath)` before the identity
   write) can invert the header/body order.
-- [ ] R8. 0928 docs and catalogue: the task doc cites scripts without their package paths; the
+- [x] R8. 0928 docs and catalogue: the task doc cites scripts without their package paths; the
   `run-record-catalog` sweep strips only placeholder-prefixed run ids (a literally hardcoded record
   name would evade it); `config/workflows/history-anatomy.yaml` points at a fixed-name record under
   `.spur/run` that has no retention path.
-- [ ] R9. Batch-driver surface: the default worktree path under `.spur/` breaks biome vcs-root
+- [x] R9. Batch-driver surface: the default worktree path under `.spur/` breaks biome vcs-root
   detection ("Checked 0 files", worked around by relocating to `.wt-e7-*`); a batch's own
   `.spur/run` records are removed with the worktree (copy-out is undocumented); and the driver doc
   does not state the verify-answer table contract (AC table must be 4 columns with the
@@ -72,18 +72,18 @@ E7's completion unblocks) and the two-sessions-one-checkout incident (operationa
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A feature in `verifying` reaches `done` via `spur feature sync <id>` alone, with the
+- [x] AC1 — A feature in `verifying` reaches `done` via `spur feature sync <id>` alone, with the
   receipt written by the `feature-lifecycle` invocation (no manual pass run). Covers R1, R2.
-- [ ] AC2 — `spur workflow run <wf> --vars '{"one":"x"}'` leaves every other declared var at its
+- [x] AC2 — `spur workflow run <wf> --vars '{"one":"x"}'` leaves every other declared var at its
   definition default, or is rejected with a message naming the missing vars; a CLI test proves it.
   Covers R2.
-- [ ] AC3 — A source checkout's pass script fails with an error that names the mode and the fix
+- [x] AC3 — A source checkout's pass script fails with an error that names the mode and the fix
   (not "rebuild/install the sp plugin"), and a targeted test asserts it. Covers R3.
-- [ ] AC4 — Both precheck scripts exit non-zero on an unknown flag and ignore a later positional;
+- [x] AC4 — Both precheck scripts exit non-zero on an unknown flag and ignore a later positional;
   a regression test fails against the current implementation. Covers R4.
-- [ ] AC5 — The observability run-record route returns 400 for an invalid id without matching the
+- [x] AC5 — The observability run-record route returns 400 for an invalid id without matching the
   seam's message text, and the served state JSON is re-redacted on read. Covers R5.
-- [ ] AC6 — The 0926/0927/0928 items each carry a focused test or a recorded, justified exemption,
+- [x] AC6 — The 0926/0927/0928 items each carry a focused test or a recorded, justified exemption,
   and the default worktree root no longer breaks biome. Covers R6–R9.
 
 ### Q&A
@@ -148,15 +148,57 @@ E7's completion unblocks) and the two-sessions-one-checkout incident (operationa
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `config/workflows/feature-lifecycle.yaml:49` — verifying onEnter passes `featureId` and `spurBin` together so the nested feature-verification run is not a partial var map.
+- `packages/app/src/services/workflow-service.ts:2412` — `mergeWorkflowRunVars` overlays caller vars on declared defaults and rejects an empty string that would blank a declared var.
+- `plugins/sp/scripts/feature-verification-steps.ts:69` — module mode is explicit. Source mode fails with an error that names the mode and the bundle fix. The default is the generated bundle.
+- `plugins/sp/scripts/task-size-precheck.ts:129` and `plugins/sp/scripts/task-evidence-precheck.ts:79` — unknown flags exit 1; a later positional cannot replace the first wbs. Both scripts are repo-only, so no `.mjs` twin.
+- `packages/app/src/services/workflow-service.ts:2431` and `apps/server/src/modules/observability/index.ts:372` — invalid run ids throw `InvalidWorkflowRunIdError`; the route maps that class to 400.
+- `packages/app/src/services/workflow-service.ts:2669` — served state JSON is re-redacted. `RUN_RECORD_INSPECT_MAX_CHARS` (`workflow-service.ts:2610`) is the string bound; the byte cap stays on file size. `workflow-service.ts:2651` opens the real path once and reads that descriptor.
+- `apps/cli/src/commands/workflow.ts:2019` — a legacy-to-markdown follow skips a shared prefix instead of reprinting the new file. `workflow.ts:2056` says an empty log is empty. `workflow-service.ts:2585` classifies a vanished state read as `state-missing`.
+- `plugins/sp/scripts/inline-run-setup.ts:215` — state projects `ok` and does not keep a stale `error` after success. `inline-run-setup.ts:237` creates the header with `wx` so a body cannot land above it.
+- `plugins/sp/tests/run-record-catalog.test.ts:92` — a hardcoded record filename is an offender. `config/workflows/history-anatomy.yaml:96` keeps a run-scoped copy of the run id; the fixed name is only a latest pointer. 0928 solution/testing citations now include package paths.
+- `plugins/sp/skills/spur-dev/references/execution-batch.md:572` — the default worktree root stays a sibling path outside `.spur/` (Biome ignores a gitignored checkout). `execution-batch.md:455` states copy-out is mandatory. `execution-batch.md:287` states the four-column verify-answer table.
+
+Caller proof: the verifying onEnter command, with `featureId=E7` and this checkout's `spurBin`, exited 0. Run `b02126bb-52a2-49f3-92c3-f6aaf9c1f96e` recorded PASS at `.spur/run/b02126bb-52a2-49f3-92c3-f6aaf9c1f96e-feature-verification.json`.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `config/workflows/feature-lifecycle.yaml:49` passes featureId and spurBin. The same command exited 0: feature-verification run b02126bb-52a2-49f3-92c3-f6aaf9c1f96e status PASS. |
+| R2 | MET | `packages/app/src/services/workflow-service.ts:2412` mergeWorkflowRunVars. CLI test `partial --vars keeps other declared defaults (0948 R2)` in `apps/cli/tests/commands/workflow.test.ts` exited 0 and kept verificationCmd and keepMe. |
+| R3 | MET | `plugins/sp/scripts/feature-verification-steps.ts:71` source-mode error names the mode and the bundle fix. `plugins/sp/tests/feature-verification-steps.test.ts` source-mode and bundle-mode tests passed. |
+| R4 | MET | `plugins/sp/scripts/task-size-precheck.ts:132` and `plugins/sp/scripts/task-evidence-precheck.ts:82` reject unknown flags; first positional kept at `:129` and `:79`. Both precheck argv tests passed. |
+| R5 | MET | `apps/server/src/modules/observability/index.ts:372` maps InvalidWorkflowRunIdError, not the message. `packages/app/src/services/workflow-service.ts:2743` re-redacts state. `workflow-service.ts:2610` is the character cap. `workflow-service.ts:2651` reads one open descriptor. Server and inspect tests passed. |
+| R6 | MET | `apps/cli/src/commands/workflow.ts:2019` skips a shared legacy prefix. `workflow.ts:2056` reports an empty log. `packages/app/src/services/workflow-service.ts:2613` stateReadFailureReason maps ENOENT to state-missing. followRunLog tests passed. |
+| R7 | MET | `plugins/sp/scripts/inline-run-setup.ts:215` projects ok and omits a stale error. `inline-run-setup.ts:237` writes the header with wx. inline-run-setup re-setup test passed. |
+| R8 | MET | `plugins/sp/tests/run-record-catalog.test.ts:92` flags a hardcoded record name. `config/workflows/history-anatomy.yaml:96` writes the run-scoped id copy. 0928 solution cites `plugins/sp/scripts/idea-coverage-check.ts`. Catalog test passed. |
+| R9 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:572` keeps the default worktree root outside `.spur/`. `execution-batch.md:455` requires copy-out. `execution-batch.md:287` states the four-column AC table. execution-batch-contract tests passed. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | sh -c of the feature-lifecycle verifying command with featureId=E7 and spurBin set to this checkout exited 0; receipt `.spur/run/b02126bb-52a2-49f3-92c3-f6aaf9c1f96e-feature-verification.json` status PASS. Caller text `config/workflows/feature-lifecycle.yaml:49`. |
+| AC2 | MET | test | `apps/cli/tests/commands/workflow.test.ts` partial --vars test kept `bun run spur-check-feature` and `yes`. Unit `mergeWorkflowRunVars` in `packages/app/tests/services/workflow-service.test.ts` rejects a blank spurBin. |
+| AC3 | MET | test | `plugins/sp/tests/feature-verification-steps.test.ts` source mode exits non-zero, stderr contains `source mode` and `Fix:`, and does not contain `rebuild/install the sp plugin`. |
+| AC4 | MET | test | `plugins/sp/tests/task-size-precheck.test.ts` and `plugins/sp/tests/task-evidence-precheck.test.ts` unknown-flag cases exit non-zero and write no status file for the later positional. |
+| AC5 | MET | test | `apps/server/tests/modules/observability/index.test.ts` typed invalid id is 400; a plain Error with the old seam text is 500. `packages/app/tests/services/workflow-service.test.ts` pair inspection redacts `hunter2` out of state JSON. |
+| AC6 | MET | test | followRunLog, inline-run-setup, and run-record-catalog tests passed. `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` pins the sibling worktree root and the four-column AC table. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
@@ -165,4 +207,6 @@ E7's completion unblocks) and the two-sessions-one-checkout incident (operationa
 ### History
 
 - 2026-09-24T07:29:16.470Z backlog → todo (system)
+- 2026-09-24T19:51:57.058Z todo → wip (system)
+- 2026-09-24T19:52:03.780Z wip → testing (system)
 
