@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D63"
 name: "Reliable and measured daily-workflow adoption"
-status: verifying
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-22T02:55:20.144Z"
-updated_at: "2026-09-24T19:57:52.583Z"
+updated_at: "2026-09-24T19:59:44.152Z"
 ---
 
 # D63: Reliable and measured daily-workflow adoption
@@ -130,4 +130,5 @@ Feature scenarios R1–R8 map in order to proposal labels W01–W08; task-local 
 - 2026-09-23T18:22:08.867Z active → blocked (system)
 - 2026-09-24T00:35:33.685Z blocked → active (system)
 - 2026-09-24T19:57:52.583Z active → verifying (system)
+- 2026-09-24T19:59:44.152Z verifying → active (system)
 
