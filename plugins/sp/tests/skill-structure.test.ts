@@ -857,7 +857,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             'dogfood-testing': 39_266,
             // 0936 R3: +715B scenario-key carry-forward rule in Step 10 (record-time
             // warnings pointer). Not permanent — candidate for references/verdict-schema.md.
-            'code-verification': 31_203,
+            // 0951 R1: +943B standalone Step 10 residual fold contract (scan+fold before
+            // record, superskill script-path resolution, settle on done). Not permanent —
+            // candidate for references/verdict-schema.md.
+            'code-verification': 32_146,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.

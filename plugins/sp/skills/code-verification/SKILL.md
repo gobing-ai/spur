@@ -259,8 +259,20 @@ the deterministic Testing writer `spur task record` (section authorship never ha
 
 ```bash
 # write .spur/run/<wbs>-verdict.json (shape in references/verdict-schema.md), then:
+# F96 residual sweep (observe-only): scan + fold BEFORE record, under every --fix mode.
+RESIDUAL=$(superskill script path sp residual-scan.mjs)
+node "$RESIDUAL" scan --wbs <wbs> --base .spur/run/<wbs>-base.sha
+node "$RESIDUAL" fold --wbs <wbs> --verdict .spur/run/<wbs>-verdict.json
 spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ## Testing
 ```
+
+> **Residual fold (F96).** `scan` reads `.spur/run/` artifacts and writes `residuals.json` +
+> `residual-report.md`; `fold` rewrites the **just-written** verdict artifact's `residual-sweep`
+> check in place (PASS → PARTIAL when a blocking residual exists), so `record` transcribes the
+> downgraded verdict — a manual verify cannot certify what the pipeline would reject. Resolve the
+> script via `superskill script path sp residual-scan.mjs`; shipped surfaces never reference
+> `plugins/sp/scripts/` directly (script-contract-check rule 4). When the task reaches `done`
+> through `--next`, run `residual-scan settle` (links follow-up tasks; best-effort).
 
 > **Corrections: the answer file is the source of truth.** `spur task record` re-transcribes
 > `## Testing` from the verdict artifact — direct `--section Testing` writes are futile. Fix

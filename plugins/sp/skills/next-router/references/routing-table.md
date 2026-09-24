@@ -113,6 +113,13 @@ token, deterministic).
 | C3 | A5/A6 when Testing empty/N/A **and** verify would fail for missing tests — only if prior implement claims code exists | Coverage/test signal: `bun test` fail attributed to task paths OR explicit "insufficient tests" in prior verify verdict artifact `.spur/run/<wbs>-verdict.json` | test fail / coverage gap | `/sp:dev-unit <wbs> --auto` | continue |
 | C4 | A3/A5/A6 when operator or task tags mention rules, OR `spur rule run` last report dirty in `.spur/` if present | `spur rule run` (default project preset) non-zero with findings | rule findings | **HITL STOP** — print rule summary; suggest `/sp:rule-scan` or `rule-add`/`rule-refine` (do not auto-author rules) | continue |
 | C5 | A6 only | Existing `.spur/run/<wbs>-verdict.json` with FAIL and findings pointing at coverage | verdict artifact | `/sp:dev-unit <wbs>` then re-verify on next invocation (`--once` friendly) | `/sp:dev-verify …` |
+| C6 | A4/A5 | `.spur/run/<wbs>-verdict.json` has a failing (PARTIAL/FAIL) `residual-sweep` check — the bounded remediation loop already ran and failed (F96) | folded verdict artifact | **HITL STOP** — print `.spur/run/<wbs>-residual-report.md` and the recovery command `/sp:dev-run <wbs>`; never auto-dispatch a fix (repeating the loop unattended burns quota without new information) | continue |
+
+**C-row precedence note (F96):** C6 outranks C2/C3/C5 for the same task — a residual-sweep failure
+means the workspace holds unfinished task residue, so fixall/unit reruns would either clean it
+unintentionally or re-certify a folded verdict. C6 fires before any fix/unit dispatch; recovery is
+the operator re-running the pipeline (`/sp:dev-run <wbs>`), which re-enters the normal
+verify → test-fix remediation budget.
 
 **Explicit non-probes in v1:** no freeform chat history; no always-on full `bun run test` for every
 call; no git dirtiness as a route (optional advisory print only).

@@ -40,6 +40,15 @@ See `sp:code-verification` § Shippable readiness gate.
 
 - Apply the [inline-default execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
 - `Skill(skill="sp:code-verification", args="verify $ARGUMENTS")`
+- **Residual sweep (F96 R1):** after the verify answer is written and `task verdict` derives
+  `.spur/run/<wbs>-verdict.json`, run `residual-scan scan` + `fold` (observe-only; folds the
+  verdict's `residual-sweep` check, PASS → PARTIAL when a blocking residual exists) — under every
+  `--fix` mode — before `spur task record`. Resolve the script via `superskill script path sp
+  residual-scan.mjs`; never reference `plugins/sp/scripts/` in shipped surfaces
+  (script-contract-check rule 4). When the task reaches `done` through `--next`, run
+  `residual-scan settle` (best-effort). On a folded PARTIAL: the bounded remediation loop has
+  already run — a residual-failed task is routed to router C6 (HITL STOP), never another
+  automatic fix loop.
 
 **Flags:**
 
