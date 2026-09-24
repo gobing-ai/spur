@@ -20,7 +20,7 @@ Wraps the **sp:spur-dev** skill.
 | `--auto` | Skip objective HITL gates. | off |
 | `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below)). `auto`, a name, parallel mode, and headless invocation use subprocesses. | omit |
 | `--json` | Emit structured JSON. | off |
-| `--wrap` | Run the wrap hop per task. The `--agent` selector is preserved into each `/sp:dev-wrap <wbs>` handoff when supplied; omission remains omission. | off |
+| `--wrap` | Run the wrap hop **once for the batch** over the `done` subset only (Step 6 of execution-batch.md): `vars.feature` is passed only when every frozen task is `done`/`cancelled`; an empty done subset skips the wrap with a reason. The `--agent` selector is preserved into the `/sp:dev-wrap` handoff when supplied; omission remains omission. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--continue` | Resume an interrupted batch. | off |
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |

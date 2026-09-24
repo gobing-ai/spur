@@ -285,7 +285,10 @@ silent bad `done`.
 
 After `done`, **wrap up** with `/sp:dev-wrap <wbs>` (or `/sp:dev-wrapall --feature <id>`
 for the whole feature) to capture learnings, sync docs, and (optionally) advance the
-feature and clean up the branch.
+feature and clean up the branch. For `/sp:dev-runall --wrap`/`--next` the wrap runs
+**once for the batch** over the `done` subset: unfinished tasks are listed in the batch
+report with their recovery commands, the feature advances only when the whole frozen set
+finished, and an empty done subset skips the wrap with a reason.
 
 ---
 

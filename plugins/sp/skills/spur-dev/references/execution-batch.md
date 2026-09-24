@@ -436,7 +436,19 @@ not mutate the corpus (the pipeline's `record` step already wrote per-task resul
 | 0060 | blocked | unmet out-of-set dep: 0099 is wip |
 
 **Next:** <one-line action — pick up halted run / resolve 0099 / all green, feature H1 complete>
+
+**Excluded from wrap** (only under `--wrap`/`--next`, when some batch tasks are not `done`):
+
 ```
+| WBS | Status | Recovery |
+|-----|--------|--------|
+| 0042 | failed | C6 recovery: /sp:dev-run 0042 (residual report: .spur/run/0042-residual-report.md) |
+| 0050 | not-attempted | /sp:dev-next 0050 |
+```
+
+A task with a residual report (failing `residual-sweep` check in its verdict artifact) uses the
+C6 recovery line (re-run the pipeline); every other excluded task uses the next-router A-row
+command for its status (F96 task 0952 R2).
 
 The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`,
 plus the resume-only `recheck` (stale/mismatched evidence — pipeline re-run) and `not-admitted`
@@ -478,6 +490,27 @@ therefore leaves no per-stage run record in the invoking tree unless it is copie
 auditing "what did this batch actually run?" must copy those records out **before** WT-4 removal —
 the E7 batch lost exactly this evidence this way. The rule is the same one above: copy out first,
 then remove; a copy failure retains the worktree.
+
+## Step 6 — Batch wrap (`--wrap` / `--next`) (F96 task 0952 R1)
+
+Run **once for the batch**, after the Step 5 report — never per task (dev-operations.md §runall
+agrees; the old "per task" flag-row wording in dev-runall.md was a contradiction, now fixed).
+
+The wrap receives only what it would accept:
+
+1. `vars.tasks` = the JSON-encoded array of batch WBS whose terminal status is `done`. A task that
+   is `failed`/`blocked`/`skipped`/`not-attempted`/`recheck`/`not-admitted` is **excluded** —
+   `wrapup task-resolve` refuses non-done members (wrapup-steps.ts task-resolve), so the driver
+   simply stops handing the wrap tasks it would refuse.
+2. `vars.feature` = the batch feature **only when every task in the frozen batch is `done` or
+   `cancelled`**. Otherwise omit it and print `feature lifecycle not advanced: <n> task(s)
+   unfinished` — advancing a feature while some of its batch tasks are unfinished would overstate
+   completion. Learnings/metrics capture still happens for the done subset.
+3. When the done subset is **empty**, skip the wrap entirely with the reason (e.g. `batch wrap
+   skipped: no done tasks`) instead of invoking wrapup-pipeline on an empty set.
+
+Filtering lives here, in the batch driver — no change to wrapup-pipeline.yaml or wrapup-steps.ts;
+the wrap's refusal of non-done tasks remains the hard invariant.
 
 ## Worktree isolation (`--worktree [<name>]`)
 
