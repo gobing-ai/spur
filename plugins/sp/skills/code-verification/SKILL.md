@@ -266,6 +266,15 @@ spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ##
 > `## Testing` from the verdict artifact — direct `--section Testing` writes are futile. Fix
 > `.spur/run/<wbs>-verify-answer.txt` → `spur task verdict <wbs> --from-answer <file>` → re-record.
 
+> **Scenario-key carry-forward (standalone `--force` re-verifies).** When you author a fresh
+> verdict artifact for a task whose `## Testing` already carries feature scenario-title rows
+> (`Scenario: <title>` / `AC-N` keys with MET status), **copy those rows into the new artifact**
+> keyed the same way — record re-transcribes `## Testing` wholesale, so a fresh artifact keyed by
+> bare `R1`-style ids drops the scenario keys `spur feature check` needs for satisfaction
+> (`L4.scenario-unverified` regresses; 0921/D63). Since 0936, `record` warns on stderr (exit 0)
+> for each dropped MET-matched scenario key and when the new rows match no feature scenario —
+> treat those warnings as a re-key instruction, not noise.
+
 > **Do not write `## Review` directly, ever.** The `## Review` section is owned by the
 > `review` coordinator (`/sp:dev-review` → `sp:super-reviewer`), which merges
 > `functional-review` + `code-verification` review mode + `code-improvement` fragments. The

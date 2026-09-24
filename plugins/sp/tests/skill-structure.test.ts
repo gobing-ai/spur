@@ -855,7 +855,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // 0913 R3/R5: +~160B for the evidence-based reuse + pipeline-provenance rule
             // pointers; the rule bodies live in references/monitor-ledger.md. Not permanent.
             'dogfood-testing': 39_266,
-            'code-verification': 30_488,
+            // 0936 R3: +715B scenario-key carry-forward rule in Step 10 (record-time
+            // warnings pointer). Not permanent — candidate for references/verdict-schema.md.
+            'code-verification': 31_203,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
