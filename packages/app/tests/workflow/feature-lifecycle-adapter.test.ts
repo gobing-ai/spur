@@ -189,6 +189,9 @@ function makeFixtureAdapter(root: string, db: DbAdapter): LifecycleAdapter {
         workflowPath: WORKFLOW_PATH,
         cwd: root,
         spurBin: `${process.execPath} ${join(repoRoot, 'apps', 'cli', 'src', 'index.ts')}`,
+        // These fixtures assert guards. The real verifying onEnter is the repo-wide
+        // pass; leave it off so a hop into verifying does not start that pass.
+        runEnterActions: false,
     };
     return new LifecycleAdapter(opts);
 }
@@ -406,6 +409,124 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         if (!passing.allowed)
             throw new Error(`expected verifying→done allowed once PASS is recorded: ${passing.report}`);
 
+        db.close();
+        rmSync(root, { recursive: true, force: true });
+    });
+
+    test('0948 AC1: an allowed hop runs the target onEnter shell with vars as environment', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-0948-enter-'));
+        const marker = join(root, 'entered.txt');
+        const workflowPath = join(root, 'enter.yaml');
+        const spurBin = 'bun $(echo pwned)';
+        writeFileSync(
+            workflowPath,
+            [
+                '$schema: "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+                'kind: state-machine',
+                'name: enter-probe',
+                'version: "1"',
+                'description: 0948 onEnter probe',
+                'initialState: active',
+                'vars:',
+                '  spurBin: spur',
+                '  featureId: X',
+                'states:',
+                '  - id: active',
+                '    description: start',
+                '  - id: verifying',
+                '    description: caller runs on entry',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                '          command: \'printf %s "$spurBin" > entered.txt\'',
+                'transitions:',
+                '  - from: active',
+                '    to: verifying',
+                '    description: enter',
+                '    guard:',
+                '      kind: always',
+                '',
+            ].join('\n'),
+        );
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const adapter = new LifecycleAdapter({
+            profile: FEATURE_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (inner) => new TaskRunLinkDao(inner),
+            workflowPath,
+            cwd: root,
+            spurBin,
+        });
+        const result = await adapter.requestTransition(makeRef('E7'), 'active', 'verifying');
+        expect(result.allowed, result.report ?? 'no report').toBe(true);
+        expect(readFileSync(marker, 'utf8')).toBe(spurBin);
+
+        const skipped = new LifecycleAdapter({
+            profile: FEATURE_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (inner) => new TaskRunLinkDao(inner),
+            workflowPath,
+            cwd: root,
+            spurBin,
+            runEnterActions: false,
+        });
+        writeFileSync(marker, 'stale');
+        const skippedResult = await skipped.requestTransition(makeRef('E8'), 'active', 'verifying');
+        expect(skippedResult.allowed, skippedResult.report ?? 'no report').toBe(true);
+        expect(readFileSync(marker, 'utf8')).toBe('stale');
+
+        db.close();
+        rmSync(root, { recursive: true, force: true });
+    });
+
+    test('0948 AC1: a failing onEnter shell denies the hop', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-0948-enter-fail-'));
+        const workflowPath = join(root, 'enter.yaml');
+        writeFileSync(
+            workflowPath,
+            [
+                '$schema: "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"',
+                'kind: state-machine',
+                'name: enter-probe-fail',
+                'version: "1"',
+                'description: 0948 onEnter failure probe',
+                'initialState: active',
+                'vars:',
+                '  spurBin: spur',
+                '  featureId: X',
+                'states:',
+                '  - id: active',
+                '    description: start',
+                '  - id: verifying',
+                '    description: caller fails',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                "          command: 'printf fail >&2; exit 9'",
+                'transitions:',
+                '  - from: active',
+                '    to: verifying',
+                '    description: enter',
+                '    guard:',
+                '      kind: always',
+                '',
+            ].join('\n'),
+        );
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const adapter = new LifecycleAdapter({
+            profile: FEATURE_LIFECYCLE_PROFILE,
+            getDb: async () => db,
+            taskRunLinkDao: (inner) => new TaskRunLinkDao(inner),
+            workflowPath,
+            cwd: root,
+            spurBin: 'spur',
+        });
+        const result = await adapter.requestTransition(makeRef('E9'), 'active', 'verifying');
+        expect(result.allowed).toBe(false);
+        expect(result.report ?? '').toContain('exit 9');
+        expect(result.report ?? '').toContain('fail');
         db.close();
         rmSync(root, { recursive: true, force: true });
     });

@@ -25,6 +25,7 @@ import { createNodeFileSystem, NodeProcessExecutor } from '@gobing-ai/ts-runtime
 import type { EntityRef, LifecyclePort, TransitionResult } from '../services/planning-write-service';
 import { extractReviewSectionBody, hasPopulatedPriorityTable } from '../services/task-check';
 import { createRunLogTraceFailureRecorder, withActionTrace } from './action-trace';
+import { StreamingShellActionRunner } from './actions/shell';
 import { EnvShellGuardRunner } from './guards/shell';
 
 /**
@@ -88,6 +89,14 @@ export interface LifecycleAdapterOptions {
      * stays recorded and audited exactly as before. Absent/false keeps the gate strict.
      */
     provenanceBypass?: boolean;
+    /**
+     * Run the target state's `onEnter` shell actions after the engine accepts the hop
+     * and before the file write is allowed (0948 AC1). The engine's external
+     * `requestTransition` commits the hop and does not execute `onEnter`; feature
+     * lifecycle's verifying caller is that shell. Default true. Fixture guard tests
+     * set false so they do not start the repo-wide pass.
+     */
+    runEnterActions?: boolean;
 }
 
 /**
@@ -209,6 +218,14 @@ export class LifecycleAdapter implements LifecyclePort {
         // ── R2: request the transition; map the engine result to the port ──
         const result = await svc.requestTransition(workflow, runId, to, { workdir: this.opts.cwd });
         if (result.allowed) {
+            // The engine's external hop does not run onEnter. Feature-lifecycle's
+            // verifying caller is an onEnter shell (0948 R1/AC1); run it before the
+            // file write is allowed. A failure leaves the file at `currentStatus`.
+            // The next transition reseeds from that file (DD-04).
+            const enterFailure = await this.runTargetEnterActions(workflow, to, runId);
+            if (enterFailure !== null) {
+                return { allowed: false, from: currentStatus, to, report: enterFailure };
+            }
             // F16/F17: finalize the durable run when the entity lands in a terminal-ish
             // resting state so it never reads `running` forever. `done` is deliberately
             // re-enterable in the workflow defs, but a parked entity has no in-flight work; a
@@ -232,6 +249,52 @@ export class LifecycleAdapter implements LifecyclePort {
             to,
             report: this.formatDenialWithLegalPaths(result, workflow, currentStatus, ref.id),
         };
+    }
+
+    /**
+     * Execute the target state's onEnter shell actions with workflow vars exported
+     * into the child environment. `$spurBin` stays a shell variable so a multi-word
+     * invocation is not pasted into the command string (0948 R1). Returns a denial
+     * report, or null when there is nothing to run or every shell exits 0.
+     */
+    private async runTargetEnterActions(
+        workflow: StateMachineWorkflowDef,
+        to: string,
+        runId: string,
+    ): Promise<string | null> {
+        if (this.opts.runEnterActions === false) return null;
+        const actions = workflow.states.find((state) => state.id === to)?.onEnter ?? [];
+        if (actions.length === 0) return null;
+        const runner = new StreamingShellActionRunner(new NodeProcessExecutor());
+        const vars = workflow.vars ?? {};
+        for (const [index, action] of actions.entries()) {
+            if (action.kind !== 'shell') {
+                return `State "${to}" onEnter[${index}] is kind "${action.kind}"; the lifecycle caller only runs shell onEnter actions.`;
+            }
+            const command = action.options?.command;
+            if (typeof command !== 'string' || command.trim() === '') {
+                return `State "${to}" onEnter[${index}] has no shell command.`;
+            }
+            const result = await runner.execute(
+                { ...action.options },
+                {
+                    runId,
+                    workdir: this.opts.cwd,
+                    stateOrNodeId: to,
+                    vars,
+                    env: {},
+                },
+            );
+            if (!result.ok) {
+                const stderr = typeof result.data?.stderr === 'string' ? result.data.stderr.trim() : '';
+                const tail = stderr.length > 2000 ? stderr.slice(-2000) : stderr;
+                const exitCode = result.data?.exitCode ?? 'unknown';
+                return [`State "${to}" onEnter shell failed (exit ${String(exitCode)}).`, result.error ?? '', tail]
+                    .filter((part) => part !== '')
+                    .join(' ');
+            }
+        }
+        return null;
     }
 
     /**
