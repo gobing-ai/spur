@@ -211,6 +211,8 @@ function writeOutcome(runId: string, outcome: SetupOutcome): void {
         ...(outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {}),
         ...(outcome.layer !== undefined ? { layer: outcome.layer } : {}),
         ...(outcome.workdir !== undefined ? { workdir: outcome.workdir } : {}),
+        // Project the retired sidecar `ok` and drop a stale error on a later success (0948 R7).
+        ok: outcome.ok,
         ...(outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}),
     };
     const temp = `${statePath}.tmp`;
@@ -226,11 +228,17 @@ function writeOutcome(runId: string, outcome: SetupOutcome): void {
             // Nothing to clean (temp was never created).
         }
     }
-    if (!existsSync(markdownPath)) {
-        appendFileSync(
+    // Exclusive create so a body written between a stat and an append cannot
+    // land above the header (0948 R7). An existing file keeps its bytes.
+    try {
+        writeFileSync(
             markdownPath,
             `# spur inline run ${runId} — ${outcome.workflowName ?? 'unknown workflow'} — setup ${at}\n`,
+            { flag: 'wx' },
         );
+    } catch {
+        // EEXIST: the file already has bytes (often a body). Do not append the
+        // header after them. Any other write failure is best-effort too.
     }
 }
 

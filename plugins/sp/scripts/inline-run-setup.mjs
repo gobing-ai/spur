@@ -95,6 +95,7 @@ function writeOutcome(runId, outcome) {
     ...outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {},
     ...outcome.layer !== undefined ? { layer: outcome.layer } : {},
     ...outcome.workdir !== undefined ? { workdir: outcome.workdir } : {},
+    ok: outcome.ok,
     ...outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}
   };
   const temp = `${statePath}.tmp`;
@@ -107,10 +108,10 @@ function writeOutcome(runId, outcome) {
       unlinkSync(temp);
     } catch {}
   }
-  if (!existsSync(markdownPath)) {
-    appendFileSync(markdownPath, `# spur inline run ${runId} \u2014 ${outcome.workflowName ?? "unknown workflow"} \u2014 setup ${at}
-`);
-  }
+  try {
+    writeFileSync(markdownPath, `# spur inline run ${runId} \u2014 ${outcome.workflowName ?? "unknown workflow"} \u2014 setup ${at}
+`, { flag: "wx" });
+  } catch {}
 }
 async function printFingerprint(taskFile, featureFile, spurBin) {
   const { entry } = resolveAppEntry(spurBin);
