@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Settle D63 0917 inline-run evidence debt and close the feature
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-09-23T22:33:55.639Z
-updated_at: "2026-09-23T22:43:30.112Z"
+updated_at: "2026-09-23T23:48:14.833Z"
 feature_id: D63
 
 ac_altitude: task-local
@@ -53,7 +53,21 @@ Filed by the 2026-09-23 session review (--triage) after D63 round 3 (task 0921) 
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+R1 — three real terminal inline history-anatomy runs through the 0914 bridge (2026-09-23, before the frozen 2026-10-06 deadline). Run ids and shapes: `d6e3ec3f-3e0f-4155-bd6b-c23134a971fe` (cache miss: render→enrich→structure-gate FAIL→correct→gate PASS→validate FAIL→correct→gate/validate PASS→stamp→publish), `a3e79428-a30e-4e68-9d9d-d138461aecac` (cache miss `data-changed`: full path, gates PASS first pass), `75fed91a-be3c-4d32-be64-fd6b48502d95` (same-day cache `hit`: refresh-provenance→publish, zero model hops). All three rows are terminal `status=done` with 19 attributable `action_runs` rows in `.spur/spur.db` (bridge modes used: setup/`--action`/`--close`, entry `plugins/sp/scripts/inline-run-setup.ts:78`; identity outcome artifacts `.spur/run/<run-id>-inline-setup.json`). Measured citation via the gate's own owner `measureAgentRunHistory` (`scripts/commands/workflow-promotion.ts:289`) over the three run ids: **3 real run(s), median 2 agent.run action(s)/run, median 238,500 ms/run** (runs=3 for count; duration folded over the 2 runs carrying model hops — the cache-hit run honestly recorded 0 `agent.run` actions; min 0 / max 5 actions). Run 1 exercised both bounded-correction loops for real (structure-gate TODO-wording hit; validate caught an "all 30 tools" overreach — both repaired under the shared cap). Reports published through the workflow's own validate gate to `docs/report/2026-09-23-history-anatomy.md:1` (twice published, once provenance-refreshed).
+
+R2 — re-evaluation recorded in 0917's Solution (`docs/tasks5/0917_deliver-the-measured-task-pipeline-optimization-selected-by-.md:65`): INSUFFICIENT_EVIDENCE stands for any speed candidate with the cohort now measured — no repeatable model-cost bottleneck a graph edit could remove (the same-day cache hit already records zero model hops; remaining enrichment/validation hops are what a legitimate forensic report costs); scope-normalization promotion stands as applied; no graph edit.
+
+R3 — registration-baseline policy recorded in the owning design: `docs/design/workflow-execution-economy.md:198` — new candidate registrations pin `delta.baselineAgentRunCount` as a documented convention (not a validator rule; legacy unpinned records stay loadable and fall back to the live canonical comparator per §5.2). The resolved `history-anatomy-scope-inline` candidate was not re-opened (`config/workflow-candidates.json` untouched).
+
+R4 — dated deferral recorded: feature D63's final close/transition is owned by the pipeline's post-record wrap hop (this implement stage writes neither lifecycle transitions nor feature records); pre-conditions are now in place (R1–R2 recorded this pass; owning-doc sync = R3's §5 edit). Deferral dated 2026-09-23; the wrap hop must close D63 without claiming speed gains.
+
+R5 — push state prepared, push NOT executed (external action, explicit operator confirmation required in the host session): main @ 08be6cf2 is **84 ahead / 0 behind** origin/main; working tree carries this task's diff only.
+
+R6 — the three stale sibling directories under `~/xprojects/` (`spur-new-run-0850-5f6382`, `spur-new-runall-g65-ac87`, `spur-new-runall-h13-604b08`) removed after verification: `git worktree list` shows only the main checkout (none registered), and none contains a git repository anymore (`not a git repository` from `git -C` in each), so zero commits exist to be absent from main — the recorded zero-missing-commits check holds trivially. Two dirs were fully empty; the third held only a worktree `.spur` copy (3 files: spur.db + 2 logs; the 0917 audit had already verified that DB copy as legacy-only). All three removed; nothing else touched.
+
+R7 — P4 closure: degenerate assertions pinned to exact phrasing in `scripts/commands/workflow-promotion.test.ts:252` (baseline==live — takes the canonical-context branch, phrasing intentionally differs) and `scripts/commands/workflow-promotion.test.ts:267` (baseline<live applied-regression — incumbent-baseline phrasing); full promotion suite green (31 pass / 0 fail). P3 closure: §5.2 drift-refusal text verified against the implemented guard — doc sentence ("refuses when a registered baseline matches neither the live count nor the projection") matches the implemented guard at `scripts/commands/workflow-promotion.ts:644-651` (refusal condition + re-register message + exit 1), covered by the green drift test at `scripts/commands/workflow-promotion.test.ts:355`; no drift found, no correction needed; drift-guard coupling stays.
+
+Note: untracked `docs/tasks5/0936_preserve-feature-scenario-key-rows-when-re-verifying-and-re-.md` predates this pass (created 23:05Z, before dispatch) — foreign D63 triage output, preserved untouched.
 
 ### Testing
 
@@ -61,7 +75,60 @@ Filed by the 2026-09-23 session review (--triage) after D63 round 3 (task 0921) 
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0935 (pipeline Phase 7, --auto)
+
+**Scope:** working-tree diff vs pre-task state, 0935-attributable set only: `scripts/commands/workflow-promotion.test.ts`, `docs/design/workflow-execution-economy.md`, `docs/report/2026-09-23-history-anatomy.md` (gitignored by convention, `.gitignore:192`), task 0935 record, the marker-anchored 0917 re-evaluation block (`docs/tasks5/0917_deliver-the-measured-task-pipeline-optimization-selected-by-.md:65`), and 3 removed sibling dirs under ~/xprojects. Excluded as starting changes: `docs/tasks5/0914`–`0921` corpus re-verification rewrites (except the 0917 marker block). Foreign riders noted, not attributed: `AGENTS.md:169`, `plugins/sp/skills/spur-dev/references/cross-cutting.md:515`.
+
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+
+**Verdict:** PASS — no blocker/major findings. Functional traceability 7/8 ACs MET, AC5 PENDING (external operator-gated push, honestly recorded). All evidence below re-verified fresh this review (DB queries, `measureAgentRunHistory` reproduction, test-suite run, filesystem checks) — none taken from the implement transcript.
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | correctness | AC5/R5 not executed: origin/main sync is prepared (main @ 08be6cf2, 84 ahead / 0 behind — fresh `git rev-list --left-right --count origin/main...main` = `0 84`) but the push awaits explicit operator confirmation, and the working tree (incl. this task's deliverables) is uncommitted. The wrap hop must disposition the foreign riders, commit, obtain confirmation, and push. External action by design, not a work-product defect. | `docs/tasks5/0935_settle-d63-0917-inline-run-evidence-debt-and-close-the-featu.md` (Solution R5) |
+| 2 | P4 (advisory) | scope | Foreign riders in the working tree: `AGENTS.md` and `cross-cutting.md` add coherent subshell-`cd` test guidance (cwd-persistence caveat). Benign content, but not 0935 deliverables and unreviewed by this task's gates — operator must disposition (commit separately or revert) before the R5 push. | `AGENTS.md:169`, `plugins/sp/skills/spur-dev/references/cross-cutting.md:515` |
+| 3 | P4 (advisory) | correctness | "Inline" provenance nuance: the 0914 bridge writes `runs.mode='state-machine'` for bridge-created runs, so the DB mode column cannot certify inline origin; attribution rests on `.spur/run/<run-id>-inline-setup.json` artifacts + run-id citations — all three verified present and matching this review. | `packages/app/src/services/inline-run-setup.ts:284` |
+| 4 | P4 (advisory) | functional | The three cohort runs carry no `task_run_links` rows binding them to wbs 0935; attribution is via Solution/0917 run-id citations + setup artifacts (verified). Acceptable, but a links row would make the attribution chain self-contained in the DB. | `.spur/spur.db` `task_run_links` (0 rows for the 3 run ids) |
+| 5 | P4 (advisory) | correctness | R6's zero-missing-commits check is vacuous as performed post-removal (dirs no longer contain git repos, so "no missing commits" holds trivially); the Solution discloses exactly this ("holds trivially") and the substantive pre-checks (`git worktree list`, not-a-git-repo) are recorded. Honest, but the record should not be cited as a positive unmerged-work proof. | `docs/tasks5/0935_*.md` (Solution R6) |
+| 6 | P4 (advisory) | architecture | Starting changes ride the same tree: 0914–0921 diffs are corpus re-verification rewrites from an earlier pass; only 0917's `spur:0935-r2-reevaluation` block is 0935-attributable; untracked `docs/tasks5/0936_*.md` is foreign D63 triage output (pre-dispatch, 23:05Z), correctly preserved untouched. | `docs/tasks5/0917_*.md:65` |
+| 7 | P4 (advisory) | architecture | Exact-phrasing pins intentionally duplicate fixture-derived strings (11 runs / 3 actions / 400000 ms) inline — brittle by design (wording lock, per 0921 P4 intent). The marker-anchored re-evaluation append in 0917 (preserve-don't-rewrite) is a good archival pattern. | `scripts/commands/workflow-promotion.test.ts:252,267` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | 3 bridge runs in `.spur/spur.db`: all `status=done`, `workflow_name=history-anatomy`, current digest `sha256:ce65aeb7…`, 19 `action_runs` rows (11/4/4). Measured citation reproduced this review via the gate's own `measureAgentRunHistory` (`scripts/commands/workflow-promotion.ts:289`): `{"runs":3,"median":2,"min":0,"max":5}` actions, duration `{"runs":2,"median":238500}` ms — exact match to the recorded claim. Setup artifacts `.spur/run/<run-id>-inline-setup.json` present; dated 2026-09-23 ≤ frozen 2026-10-06. |
+| R2 | MET | Re-evaluation recorded at `docs/tasks5/0917_*.md:65` (marker `spur:0935-r2-reevaluation`, anchor verified): INSUFFICIENT_EVIDENCE stands for any speed candidate, scope-normalization promotion stands, bounded experiment executed. |
+| R3 | MET | `docs/design/workflow-execution-economy.md:198` — pin-`baselineAgentRunCount` convention (not validator rule; legacy fallback per §5.2); `config/workflow-candidates.json` untouched (`candidates: []`, absent from git status). |
+| R4 | MET | Deferral branch: D63 feature record still `blocked` (unchanged, `updated_at 2026-09-23T18:22`); dated deferral 2026-09-23 in Solution R4; close owned by the wrap hop without speed-gain claims. |
+| R5 | PENDING | Push prepared, not executed (see finding 1). |
+| R6 | MET | Three stale dirs absent from `~/xprojects` (fresh `ls`); `git worktree list` = main checkout only. |
+| R7 | MET | Exact-phrasing tests at `workflow-promotion.test.ts:252` (baseline==live) and `:267` (baseline<live); fresh suite run: **31 pass / 0 fail** (70 expect calls). §5.2 drift-refusal text matches the guard at `scripts/commands/workflow-promotion.ts:644-651` (condition + re-register message + exit 1); drift test `:355` green in the same suite. |
+
+| AC | Status | Evidence |
+|----|--------|----------|
+| AC1 | MET | see R1 |
+| AC2 | MET | see R2 |
+| AC3 | MET | see R3 |
+| AC4 | MET | dated deferral branch satisfied (see R4) |
+| AC5 | PENDING | external operator-gated push (see R5 / finding 1) |
+| AC6 | MET | see R6 |
+| AC7 | MET | see R7 |
+| AC8 | MET | see R7 |
+
+##### SECUA Quality
+
+No runtime surface changed (test + docs only). Correctness: the two new pins verified by execution against `evaluateCandidate`'s string template (`workflow-promotion.ts:335-344`) — suite green. Security: no new inputs, no interpolation, no public surface. Efficiency: n/a. Usability: §5.1 policy text and §5.2 refusal text are precise and match implementation behavior. No P1–P3 findings.
+
+##### Architecture Depth
+
+Pins lock the verdict-string contract that downstream consumers and corpus checks depend on — deepening, not churn. Policy documented once at the owning design surface (§5.1) with the convention-vs-validator tradeoff stated. 0917 marker-append preserves the historical audit record instead of rewriting it. Residual P4s only (findings 6–7).
+
+**Residual risk:** AC5 remains open until the operator-gated push; the foreign riders (finding 2) will enter whatever commit is made next unless dispositioned first.
+
+**Next:** wrap hop — operator dispositions the two riders, wrap commits the 0935 deliverable set, obtains explicit confirmation, executes the R5 push, then closes feature D63 without speed-gain claims.
 
 ### References
 
@@ -75,4 +142,5 @@ Filed by the 2026-09-23 session review (--triage) after D63 round 3 (task 0921) 
 ### History
 
 - 2026-09-23T22:40:27.217Z backlog → todo (system)
+- 2026-09-23T23:33:56.590Z todo → wip (system)
 

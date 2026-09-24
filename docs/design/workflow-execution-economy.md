@@ -195,6 +195,13 @@ is `null` while pending and is filled by `promotion evaluate`.
 | `delta.baselineAgentRunCount` | optional (0921): the incumbent's declared count at registration, pinning what the candidate replaces — the ADR-076 bar compares the projection against this baseline, so an already-applied change still evaluates against its origin; absent, the live canonical count is the comparator |
 | `verdict` | `null` pending; the shadow-run decision once evaluated |
 
+Registration policy (0935): new candidate registrations **pin `delta.baselineAgentRunCount`** to
+the incumbent's declared `agent.run` count at registration time. This is a documented convention,
+not a registry validator rule — `validateCandidate` still accepts absence so legacy records stay
+loadable, and absent a pin the live canonical count remains the comparator (§5.2). The pin is what
+lets an already-applied change keep evaluating against its origin instead of silently comparing the
+projection to itself.
+
 ### 5.2 Shadow-run comparison
 
 The shadow run replays the recorded `action_runs`/`runs` history of the canonical workflow — the

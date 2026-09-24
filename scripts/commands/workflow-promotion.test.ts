@@ -245,7 +245,11 @@ describe('evaluateCandidate (0921 declared-count baseline)', () => {
         expect(v.reason).toContain('canonical task-pipeline count of 3');
     });
 
-    test('deletes when the projection does not beat the incumbent baseline (no model-hop reduction)', () => {
+    // 0935 R7 (0921 Review P4): the degenerate and applied-regression deletes pin the gate's
+    // exact reason phrasing, so a wording change in the verdict strings cannot slip through.
+    // Note the degenerate case takes the canonical-context branch (baseline === live), so its
+    // phrasing intentionally differs from the applied-regression case below.
+    test('deletes the degenerate baseline==live case with the exact rejection phrasing', () => {
         const v = evaluateCandidate(
             candidate({ delta: { agentRunCount: 3, baselineAgentRunCount: 3 } }),
             measured,
@@ -253,7 +257,26 @@ describe('evaluateCandidate (0921 declared-count baseline)', () => {
             'x',
         );
         expect(v.decision).toBe('delete');
-        expect(v.reason).toContain('not fewer than');
+        expect(v.reason).toBe(
+            'candidate projects 3 agent.run action(s), not fewer than the canonical task-pipeline ' +
+                'count of 3 (11 real run(s), median 3 agent.run action(s)/run, ' +
+                'median 400000 ms/run) — ADR-076 rejected a graph adding a model hop',
+        );
+    });
+
+    test('deletes a baseline<live applied-regression case with the exact rejection phrasing', () => {
+        const v = evaluateCandidate(
+            candidate({ delta: { agentRunCount: 4, baselineAgentRunCount: 3 } }),
+            measured,
+            4,
+            'x',
+        );
+        expect(v.decision).toBe('delete');
+        expect(v.reason).toBe(
+            'candidate projects 4 agent.run action(s), not fewer than the incumbent baseline of 3 ' +
+                '(canonical task-pipeline now declares 4) (11 real run(s), median 3 agent.run action(s)/run, ' +
+                'median 400000 ms/run) — ADR-076 rejected a graph adding a model hop',
+        );
     });
 });
 
