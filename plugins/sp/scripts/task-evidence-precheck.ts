@@ -75,10 +75,12 @@ function parseArgs(argv: string[]): { wbs: string; spurBin: string } {
             spurBin = argv[i + 1] ?? defaultSpurBin();
             i += 2;
         } else if (!arg.startsWith('--')) {
-            wbs = arg;
+            // Keep the first positional. A later one must not overwrite wbs (0948 R4).
+            if (wbs === '') wbs = arg;
             i++;
         } else {
-            i++;
+            console.error(`unknown flag: ${arg}`);
+            usage();
         }
     }
     if (!wbs) usage();

@@ -8,7 +8,16 @@
 
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
@@ -286,4 +295,21 @@ describe('0726 pipeline wiring', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+});
+
+test('unknown flag exits non-zero and writes no status file (0948 R4)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-evidence-precheck-argv-'));
+    try {
+        const result = Bun.spawnSync(['bun', SCRIPT, '0926', '--task-file', 'x.md'], {
+            cwd: dir,
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        expect(result.exitCode).not.toBe(0);
+        expect(result.stderr.toString()).toContain('unknown flag');
+        expect(existsSync(join(dir, '.spur/run/0926-precheck-evidence.status'))).toBe(false);
+        expect(existsSync(join(dir, '.spur/run/x.md-precheck-evidence.status'))).toBe(false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });

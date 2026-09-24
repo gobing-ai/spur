@@ -160,6 +160,24 @@ test('a task above the doubled ceiling fails closed with default limits', () => 
     }
 });
 
+test('unknown flag exits non-zero and a later positional does not become wbs (0948 R4)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-argv-'));
+    try {
+        const unknown = runPrecheck(dir, ['0926', '--task-file', 'x.md']);
+        expect(unknown.status).toBe('');
+        expect(unknown.stderr).toContain('unknown flag');
+        expect(existsSync(join(dir, '.spur/run/x.md-precheck-size.status'))).toBe(false);
+
+        const fakeSpur = writeFakeSpur(dir, WITHIN_LIMITS_BODY);
+        const later = runPrecheck(dir, ['0926', 'x.md', '--spur-bin', fakeSpur]);
+        expect(later.status).toBe('PASS\n');
+        expect(existsSync(join(dir, '.spur/run/0926-precheck-size.status'))).toBe(true);
+        expect(existsSync(join(dir, '.spur/run/x.md-precheck-size.status'))).toBe(false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('a task within the default ceiling passes without any limit flag', () => {
     const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-defaults-'));
     try {
