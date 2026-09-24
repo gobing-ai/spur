@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.50.0
+version: 1.51.0
 owner: Robin Min
-updated_at: 2026-09-21
+updated_at: 2026-09-23
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1897,3 +1897,52 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Retains:** ADR-021 (application logic), ADR-027 (one config loader), ADR-122 (engine-owned recovery and explicit resume boundary).
 - **Detail:** [CLI contracts](design/cli-contracts.md#optional-decisionmaker-for-executed-hitl-actions).
 - **Clarification (2026-09-21, task 0911):** Decision participation is now an explicit per-action opt-in via the `decision` option on `hitl.confirm`/`hitl.select`: `mode: never` pins the action to the human responder (DecisionMaker bypassed even when enabled), and `mode: evidence` answers only from verified action evidence of declared producer nodes — acceptance requires confidence ≥ 0.9 and, when a summary artifact is declared, that it resolves to a registered artifact matching the producer's recorded redacted outcome; anything else defers (answer var cleared, `statusVar` records `deferred`). Actions without `decision` keep the 0910 default (implicit DecisionMaker participation when enabled) unchanged — the historical default is preserved, not rewritten. Evidence mode is rejected in `pause: true` states/nodes, is limited to one action per state/node, and `decision` is rejected on `hitl.input`. These constraints are enforced by the shared workflow validator for both `validate` and `run`.
+
+## ADR-124: Task Checks Are Fingerprint-Bound Receipts Reused Across Stages
+
+- **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64
+- **Decision:** Task-local checking runs through one two-tier primitive (`spur-check`: `light`
+  accumulative during development, `full` once at the task quality boundary) whose result is a
+  receipt bound to the shared `ProofInputFingerprint`. A later stage reuses a PASS receipt whose
+  digest equals the current fingerprint and re-runs `full` otherwise; stages never invoke gate
+  commands directly. Alternatives rejected: per-stage gates with caching inside each script (keeps N
+  writers of check truth), and a single end-of-run gate only (loses early feedback during implement).
+- **Why:** the gate re-runs at `test-recheck` and inside model review checklists on an unchanged
+  tree; binding reuse to the same fingerprint the feature verification receipt uses
+  removes the duplication without weakening the "review only after a green full gate" invariant.
+- **Consequence:** check truth has one writer per task; a stale or mismatched receipt forces a full
+  run, so correctness never depends on cache freshness. A public `spur check` verb needs separate consent.
+- **Retains:** ADR-119 (repo-wide checks stay feature-scoped), ADR-118 (stage outcomes).
+- **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §4.
+
+## ADR-125: Fuzzy Workflow Branching Uses a Non-Pausing `decide` Action With a Deterministic Default
+
+- **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64
+- **Decision:** Workflows express fuzzy classification through a first-class `decide` action that
+  wraps upstream DecisionMaker (opt-in via `workflow.decideDecisionMaker`), writes its
+  value/confidence/backend/degraded reason to a result file that guards read, and falls back to a declared default when no backend is configured, it errors, or
+  confidence is below threshold. It never pauses, and deterministic facts stay with commands.
+  Alternatives rejected: extending ADR-123's HITL decoration (conflates operator pauses with
+  routing), and classification inside `agent.run` prompts (invisible, unmeasurable).
+- **Why:** hidden prompt-side branching and blind retry caps are the main unobservable cost in the
+  task pipeline; an explicit, traced, degradable decision makes branching measurable and portable.
+- **Consequence:** inline and subprocess drivers must execute `decide` through one app service for
+  parity; a wrong default is a routing bug, so defaults choose the conservative lane.
+- **Retains:** ADR-123 (operator pauses keep their responder), ADR-117 (surface parity).
+- **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §6.
+
+## ADR-126: The Agent Fleet Is an Opt-In Third Executor Surface for `agent.run`
+
+- **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64
+- **Decision:** When `agent.fleet.enabled` and the operator selects it (`--agent fleet` or
+  `executor: fleet`), `agent.run` dispatches to a role-resolved fleet member through the G4 control
+  plane and waits on its durable artifact; the traditional inline and subprocess surfaces stay
+  default and unchanged. An unavailable fleet fails explicitly unless a traditional fallback is
+  declared and recorded. Alternatives rejected: a separate fleet-only workflow catalogue (duplicate
+  definitions) and fleet as default (unproven reliability).
+- **Why:** the fleet is ready but unused by workflows; routing at the action surface reuses every
+  workflow definition and keeps both paths comparable under the same metrics.
+- **Consequence:** fleet runs must record the same identity, evidence and terminal reason as other
+  surfaces, and reviewer stages keep fresh-session isolation.
+- **Retains:** ADR-057 (durable artifacts, no terminal transport), ADR-087, ADR-116, ADR-121.
+- **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §5.

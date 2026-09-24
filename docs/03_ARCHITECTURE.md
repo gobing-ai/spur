@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.51.0
+version: 1.52.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-20
+updated_at: 2026-09-23
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1089,3 +1089,32 @@ existing built-in actions keep ownership of events and answer variables. Spur se
 run outcomes and applies fallback policy; upstream A2 supplies validated provider-neutral decisions.
 Activation and limits are defined in [CLI contracts](design/cli-contracts.md#optional-decisionmaker-for-executed-hitl-actions)
 and [ADR-123](00_ADR.md#adr-123-optional-decisionmaker-policy-decorates-spurs-existing-hitl-responder).
+
+## 28. Workflow Catalogue Refactor — accepted design, not built (ADR-124/125/126)
+
+Feature D64's three choices are accepted and **not implemented**; nothing here is shipped behavior,
+and each is additive or opt-in, so the canonical catalogue of §20/§27 keeps running unchanged until
+its phase lands.
+
+- **Check receipts (ADR-124).** One two-tier primitive owns task-local checking — `light` accumulates
+  during development, `full` runs once at the task quality boundary. Its result is a receipt bound to
+  the same `ProofInputFingerprint` the feature verification receipt uses: a later stage reuses a PASS
+  receipt only while that digest still matches and otherwise re-runs `full`, and stages never invoke
+  gate commands directly. Check truth therefore has one writer per task, and a stale receipt can only
+  cost a re-run, never correctness. `bun run spur-check` stays the `full` chain, ADR-119 keeps
+  repo-wide checks feature-scoped, and a public `spur check` verb needs separate consent.
+- **`decide` action (ADR-125).** A first-class non-pausing action wraps the upstream DecisionMaker
+  behind `workflow.decideDecisionMaker` (default off), writes value, confidence, backend, degraded
+  flag and reason to a declared `resultFile` that guards read, and falls back to a declared default
+  when no backend is configured, the backend errors, or confidence is below threshold. It complements
+  ADR-123, which decorates *pausing* HITL actions, and leaves deterministic facts with commands.
+  Inline and subprocess drivers must execute it through one application service for parity.
+- **Fleet executor surface (ADR-126).** When `agent.fleet.enabled` and the operator selects it
+  (`--agent fleet` or `executor: fleet`), `agent.run` dispatches through the G4 control plane (§17)
+  and waits on the member's durable artifact, while inline and subprocess remain the default
+  surfaces. An unavailable fleet fails explicitly unless a declared traditional fallback is recorded;
+  the action never launches a member (ADR-116) and reviewer/verify stages keep fresh sessions
+  (ADR-121).
+
+Mechanisms, per-phase sequencing and the measured-promotion gate:
+[workflow catalogue refactor](design/workflow-catalogue-refactor.md).
