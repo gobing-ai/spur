@@ -22,22 +22,40 @@ import { join } from 'node:path';
 const REPO_ROOT = join(import.meta.dir, '../../..');
 const CATALOG_DIR = join(REPO_ROOT, 'config', 'workflows');
 
-/** Run-record file names — owned by the engine sink / inline setup seam, never a workflow. */
-const RECORD_NAMES = new Set(['.md', '.state.json', '.log']);
-
 /**
  * Pull every `.spur/run/<segment>` reference (doc prose included) from a
  * definition, reduced to its record-name form: the leading run-id placeholder
  * (`${vars.__runId}`, `$__runId`, `<runId>`, `<RUNID>`, `<run-id>`) is stripped
  * so only an EXACT record file (no `-`-suffixed workflow artifact) matches.
  */
+const PLACEHOLDER = /^(\$\{vars\.[A-Za-z0-9_]+\}|\$[A-Za-z0-9_]+|<[A-Za-z0-9_-]+>)/;
+
+function isExactRecordSuffix(rest: string): boolean {
+    const name = rest.toLowerCase();
+    return name === '.md' || name === '.log' || name === '.state.json';
+}
+
+/**
+ * Record-name offenders. A placeholder prefix (`$__runId`, `${vars.__runId}`,
+ * `<runId>`) still reduces to the exact suffix. A literally hardcoded record
+ * filename (no placeholder) is an offender too — stripping only the placeholder
+ * form let `.spur/run/fixed-run.md` through (0948 R8).
+ * Placeholder-suffixed artifacts (`$__runId-idea-handoff.md`) stay ignored.
+ */
 function recordNameSegments(text: string): string[] {
     const segments: string[] = [];
     for (const match of text.matchAll(/\.spur\/run\/([^\s"'`),:]+)/g)) {
         const segment = match[1];
         if (segment === undefined) continue;
-        const name = segment.replace(/^\$\{vars\.[A-Za-z0-9_]+\}|^\$[A-Za-z0-9_]+|^<[A-Za-z0-9_-]+>/, '');
-        segments.push(name.toLowerCase());
+        const placeholder = segment.match(PLACEHOLDER);
+        if (placeholder?.[1] !== undefined) {
+            const rest = segment.slice(placeholder[1].length);
+            if (isExactRecordSuffix(rest)) segments.push(rest.toLowerCase());
+            continue;
+        }
+        if (/\.(?:md|log)$/i.test(segment) || /\.state\.json$/i.test(segment)) {
+            segments.push(segment.toLowerCase());
+        }
     }
     return segments;
 }
@@ -66,10 +84,25 @@ describe('canonical workflow catalog run-record classification (0928)', () => {
     for (const file of files) {
         test(`${file} never names the run record or a legacy single-file run state`, () => {
             const text = readFileSync(join(CATALOG_DIR, file), 'utf8');
-            const offenders = recordNameSegments(text).filter((name) => RECORD_NAMES.has(name));
+            const offenders = recordNameSegments(text);
             expect(offenders).toEqual([]);
         });
     }
+
+    test('a hardcoded record filename is an offender; a placeholder-suffixed artifact is not (0948 R8)', () => {
+        const offenders = recordNameSegments(
+            [
+                '.spur/run/fixed-run.md',
+                '.spur/run/$__runId-idea-handoff.md',
+                `.spur/run/${'$'}{vars.__runId}.md`,
+                '.spur/run/history-anatomy-run.id',
+            ].join(' '),
+        );
+        expect(offenders).toContain('fixed-run.md');
+        expect(offenders).toContain('.md');
+        expect(offenders).not.toContain('-idea-handoff.md');
+        expect(offenders).not.toContain('history-anatomy-run.id');
+    });
 
     test('idea-pipeline driver artifacts keep their declared owners (audited no-change)', () => {
         const text = readFileSync(join(CATALOG_DIR, 'idea-pipeline.yaml'), 'utf8');
