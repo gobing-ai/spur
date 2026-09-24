@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Settle D63 0917 inline-run evidence debt and close the feature
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-09-23T22:33:55.639Z
-updated_at: "2026-09-23T23:48:14.833Z"
+updated_at: "2026-09-24T00:35:53.880Z"
 feature_id: D63
 
 ac_altitude: task-local
@@ -18,24 +18,24 @@ Filed by the 2026-09-23 session review (--triage) after D63 round 3 (task 0921) 
 
 ### Requirements
 
-- [ ] R1. Produce at least three real terminal inline history-anatomy runs (attributable DB rows, not estimated) through the 0914 bridge before the frozen 2026-10-06 deadline, and record their measured citations (agent.run actions/run, ms/run) as the post-adoption cohort evidence 0917 lacked.
-- [ ] R2. Re-evaluate 0917's INSUFFICIENT_EVIDENCE close against the new cohort and record the inline-run decision: confirm the scope-normalization promotion stands with the smallest bounded experiment named, or propose the one bounded speed candidate with predeclared primary metric, threshold, reliability floor, exclusions, sample requirement, owner and deadline. An observability improvement is not a measured speed improvement.
-- [ ] R3. Decide and record the candidate-registration policy follow-up from 0921's Review P3: whether future registrations must pin `delta.baselineAgentRunCount` (registry validator rule or documented convention in workflow-execution-economy.md §5). Do not re-open the resolved history-anatomy-scope-inline candidate.
-- [ ] R4. When R1–R2 are recorded, close feature D63 through the wrap process (task done → feature sync/transition plus final owning-doc sync). Do not claim speed gains the evidence does not show.
-- [ ] R5. Sync origin/main: after representative gates pass, push the accumulated local commits (83 ahead as of 2026-09-23) so the branch is no longer ahead; obtain explicit operator confirmation immediately before the push (external action).
-- [ ] R6. Remove the three stale sibling worktree directories in ~/xprojects — `spur-new-run-0850-5f6382`, `spur-new-runall-g65-ac87`, `spur-new-runall-h13-604b08` — only after verifying none contains unmerged work (no commits absent from main; not registered in `git worktree list`).
-- [ ] R7. Carry the 0921 Review record-keeping findings to closure: strengthen the promotion test's degenerate baseline==live assertion to pin exact phrasing (P4), and re-verify workflow-execution-economy.md §5.2 drift-refusal text matches the implemented guard (P3, drift-guard coupling is intentional and stays).
+- [x] R1. Produce at least three real terminal inline history-anatomy runs (attributable DB rows, not estimated) through the 0914 bridge before the frozen 2026-10-06 deadline, and record their measured citations (agent.run actions/run, ms/run) as the post-adoption cohort evidence 0917 lacked.
+- [x] R2. Re-evaluate 0917's INSUFFICIENT_EVIDENCE close against the new cohort and record the inline-run decision: confirm the scope-normalization promotion stands with the smallest bounded experiment named, or propose the one bounded speed candidate with predeclared primary metric, threshold, reliability floor, exclusions, sample requirement, owner and deadline. An observability improvement is not a measured speed improvement.
+- [x] R3. Decide and record the candidate-registration policy follow-up from 0921's Review P3: whether future registrations must pin `delta.baselineAgentRunCount` (registry validator rule or documented convention in workflow-execution-economy.md §5). Do not re-open the resolved history-anatomy-scope-inline candidate.
+- [x] R4. When R1–R2 are recorded, close feature D63 through the wrap process (task done → feature sync/transition plus final owning-doc sync). Do not claim speed gains the evidence does not show.
+- [x] R5. Sync origin/main: after representative gates pass, push the accumulated local commits (83 ahead as of 2026-09-23) so the branch is no longer ahead; obtain explicit operator confirmation immediately before the push (external action).
+- [x] R6. Remove the three stale sibling worktree directories in ~/xprojects — `spur-new-run-0850-5f6382`, `spur-new-runall-g65-ac87`, `spur-new-runall-h13-604b08` — only after verifying none contains unmerged work (no commits absent from main; not registered in `git worktree list`).
+- [x] R7. Carry the 0921 Review record-keeping findings to closure: strengthen the promotion test's degenerate baseline==live assertion to pin exact phrasing (P4), and re-verify workflow-execution-economy.md §5.2 drift-refusal text matches the implemented guard (P3, drift-guard coupling is intentional and stays).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — At least three attributable real inline runs exist with measured citations (actions/run, ms/run) recorded as post-adoption cohort evidence, dated on or before 2026-10-06. (req: R1)
-- [ ] AC2 — 0917's close carries a recorded decision: INSUFFICIENT_EVIDENCE stands with a named bounded experiment, or one predeclared speed candidate enters evaluation through the existing process. (req: R2)
-- [ ] AC3 — Registration-baseline policy decision recorded in the owning design: require pinned `baselineAgentRunCount` for new candidates, or an explicit documented convention. (req: R3)
-- [ ] AC4 — Feature D63 transitioned per the wrap process with owning docs synced, or a dated deferral recorded. (req: R4)
-- [ ] AC5 — origin/main contains every local commit: `git status` on main clean and ahead-count 0 after push. (req: R5)
-- [ ] AC6 — The three stale directories are gone from ~/xprojects with a recorded unmerged-work check showing zero missing commits. (req: R6)
-- [ ] AC7 — workflow-promotion.test.ts pins exact phrasing for both baseline==live and baseline<live outcomes; promotion suite green. (req: R7)
-- [ ] AC8 — §5.2 drift-refusal documentation verified against implementation behavior and corrected if drifted. (req: R7)
+- [x] AC1 — At least three attributable real inline runs exist with measured citations (actions/run, ms/run) recorded as post-adoption cohort evidence, dated on or before 2026-10-06. (req: R1)
+- [x] AC2 — 0917's close carries a recorded decision: INSUFFICIENT_EVIDENCE stands with a named bounded experiment, or one predeclared speed candidate enters evaluation through the existing process. (req: R2)
+- [x] AC3 — Registration-baseline policy decision recorded in the owning design: require pinned `baselineAgentRunCount` for new candidates, or an explicit documented convention. (req: R3)
+- [x] AC4 — Feature D63 transitioned per the wrap process with owning docs synced, or a dated deferral recorded. (req: R4)
+- [x] AC5 — origin/main contains every local commit: `git status` on main clean and ahead-count 0 after push. (req: R5)
+- [x] AC6 — The three stale directories are gone from ~/xprojects with a recorded unmerged-work check showing zero missing commits. (req: R6)
+- [x] AC7 — workflow-promotion.test.ts pins exact phrasing for both baseline==live and baseline<live outcomes; promotion suite green. (req: R7)
+- [x] AC8 — §5.2 drift-refusal documentation verified against implementation behavior and corrected if drifted. (req: R7)
 
 ### Q&A
 
@@ -71,7 +71,31 @@ Note: untracked `docs/tasks5/0936_preserve-feature-scenario-key-rows-when-re-ver
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | 3 attributable terminal runs in .spur/spur.db: d6e3ec3f…971fe (11 action_runs), a3e79428…aecac (4), 75fed91a…2d95 (4) = 19 rows, all done/history-anatomy, 2026-09-23 ≤ frozen 2026-10-06; setup artifacts .spur/run/<id>-inline-setup.json; measured citation re-reproduced via measureAgentRunHistory (workflow-promotion.ts:289): agentRunCount {runs:3,median:2,min:0,max:5}, agentRunDurationMs {runs:2,median:238500,min:150000,max:327000}. Round-2: stands. |
+| R2 | MET | Marker spur:0935-r2-reevaluation at docs/tasks5/0917_deliver-the-measured-task-pipeline-optimization-selected-by-.md:65 — INSUFFICIENT_EVIDENCE stands, scope-normalization promotion stands, no graph edit, bounded 3-run cohort executed. Round-2: stands. |
+| R3 | MET | docs/design/workflow-execution-economy.md:198 pin-delta.baselineAgentRunCount convention + §5.2 legacy fallback; config/workflow-candidates.json candidates: [] untouched. Round-2 spot-check: :198 registration-policy line re-read intact; candidates: [] confirmed. |
+| R4 | MET | Deferral branch: spur feature show D63 status=blocked, updated_at 2026-09-23T18:22:08.867Z; dated deferral (2026-09-23) in task Solution R4; wrap hop owns close. Round-2: stands. |
+| R5 | MET | Push executed between rounds: git rev-list --left-right --count origin/main...main = 0 0; git rev-parse origin/main = git rev-parse main = f10628a0ac11883d77c3a190601d80989e876b2c (fresh round-2 measurement; task Review :137 corroborates). |
+| R6 | MET | spur-new-run-0850-5f6382, spur-new-runall-g65-ac87, spur-new-runall-h13-604b08 absent from /Users/robin/xprojects; git worktree list = main only. Round-2: stands. |
+| R7 | MET | Exact-phrasing pins at scripts/commands/workflow-promotion.test.ts:252 and :267; fresh suite 31 pass / 0 fail / 70 expects; §5.2 text (workflow-execution-economy.md:213) matches guard workflow-promotion.ts:641-651; drift test :355 green. Round-2 spot-check: pins re-read intact at :252/:267, drift test :355 present; suite re-run fresh 31 pass / 0 fail / 70 expects. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | {runs:3,median:2,min:0,max:5} actions / {runs:2,median:238500} ms over runs d6e3ec3f/a3e79428/75fed91a (19 action_runs). Round-2: stands. |
+| AC2 | MET | command | `grep -n 'spur:0935-r2-reevaluation' docs/tasks5/0917_*.md` exit 0 → docs/tasks5/0917_deliver-the-measured-task-pipeline-optimization-selected-by-.md:65 `<!-- spur:0935-r2-reevaluation -->`. Round-3 fresh execution. |
+| AC3 | MET | command | `sed -n '198p' docs/design/workflow-execution-economy.md` exit 0 → "Registration policy (0935): new candidate registrations **pin `delta.baselineAgentRunCount`** to"; `jq '.candidates' config/workflow-candidates.json` exit 0 → `[]`. Round-3 fresh execution. |
+| AC4 | MET | command | `spur feature show D63 --json` exit 0 → "status": "blocked", "updated_at": "2026-09-23T18:22:08.867Z"; dated deferral (2026-09-23) in task Solution R4 corroborates. Round-3 fresh execution. |
+| AC5 | MET | command | git rev-list --left-right --count origin/main...main = 0 0; origin/main == main == f10628a0ac11883d77c3a190601d80989e876b2c (fresh round-2 measurement). |
+| AC6 | MET | command | 3 stale dirs absent; worktree list main-only. Round-2: stands. |
+| AC7 | MET | test | 31 pass / 0 fail / 70 expect() calls (fresh round-2 re-run); exact-phrasing pins :252, :267 intact; 0921 drift test :355 present and green in the run. |
+| AC8 | MET | test | Fresh round-3 `bun test scripts/commands/workflow-promotion.test.ts` exit 0 → 31 pass / 0 fail / 70 expect() calls; 0921 drift test (scripts/commands/workflow-promotion.test.ts:355) green in the run; economy.md:213 ≡ promotion.ts:641-651 equivalence carried from round 2. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -130,6 +154,15 @@ Pins lock the verdict-string contract that downstream consumers and corpus check
 
 **Next:** wrap hop — operator dispositions the two riders, wrap commits the 0935 deliverable set, obtains explicit confirmation, executes the R5 push, then closes feature D63 without speed-gain claims.
 
+#### Round-2 re-entry confirmation — pipeline run d58920e8, delta re-review after the test-fix remediation hop
+
+**Verdict:** PASS — round-1 verdict holds on the pushed state; zero new findings (no P1–P4).
+
+- **Push verified (AC5/R5 now MET):** `git rev-list --left-right --count origin/main...main` = `0 0`; `git rev-parse origin/main main` both = `f10628a0a`; both round-2 commits are the tip of origin/main. Residual working-tree dirt is concurrent-session D64 work (out of scope per dispatch), not 0935 deliverables — every 0935 file is committed and pushed. Round-1 finding 1 (P3) resolved. Requirements checkbox status remains wrap-hop-owned (review writes Review only).
+- **Commit f10628a0a (deliverable set):** matches the round-1-reviewed diff. Pinned strings verified character-for-character against the source templates: countContext branches at `scripts/commands/workflow-promotion.ts:331-335` and the rejection reason at `:344` reproduce both exact-`toBe` pins (`workflow-promotion.test.ts:252` baseline==live canonical-context, `:267` baseline<live applied-regression); fixture values (`workflow-promotion.test.ts:228-229`: runs 11 / median 3 / median 400000 ms) match the cited measured citation. Drift-refusal test `:355` (exit 1, verdict stays null) matches the guard at `scripts/commands/workflow-promotion.ts:643-651`. Fresh suite run this review: **31 pass / 0 fail** (70 expect() calls). Quality gate re-ran green (probe-then-full, PASS) per dispatch.
+- **Commit 4c84ec3c5 (foreign riders):** dispositioned exactly as round-1 finding 2 prescribed — separate chore commit. `AGENTS.md:166-175` adds subshell/absolute-path mechanics to the existing run-inside-workspace rule (no conflict with the hook-bypass prohibition at `:168` or the root coverage-denominator rule); `plugins/sp/skills/spur-dev/references/cross-cutting.md:514-518` adds the same sourced friction note (dated 2026-09-23) to step 1 of the iterate-to-green rule without altering rule order or authority. Benign learnings-class; no rule/authority conflicts.
+- **SECUA/architecture delta lenses:** nothing off — delta is test-string pins + docs only, no runtime surface; pins remain wording-lock deepening (round-1 finding 7 unchanged).
+
 ### References
 
 - docs/tasks5/0917_* — frozen 2026-10-06 decision date, ≥3 real terminal inline runs target, INSUFFICIENT_EVIDENCE close (:23-40).
@@ -143,4 +176,6 @@ Pins lock the verdict-string contract that downstream consumers and corpus check
 
 - 2026-09-23T22:40:27.217Z backlog → todo (system)
 - 2026-09-23T23:33:56.590Z todo → wip (system)
+- 2026-09-24T00:35:32.974Z wip → testing (system)
+- 2026-09-24T00:35:53.880Z testing → done (system)
 
