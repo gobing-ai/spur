@@ -35,7 +35,7 @@ import {
     renameSync,
     writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar } from '../lib/env';
 
@@ -55,29 +55,48 @@ interface VerificationModule {
     ) => { record: (input: { runId: string; path: string; kind: string }) => Promise<unknown> };
 }
 
-/** Repo checkout → app package source; installed layout → the generated bundle. */
-async function loadModule(spurBin: string): Promise<VerificationModule> {
-    const candidates =
-        spurBin !== '' ? [spurBin] : [fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url))];
-    for (const candidate of candidates) {
-        const mainModule = candidate
-            .split(/\s+/)
-            .filter(Boolean)
-            .reverse()
-            .find((t) => t.endsWith('.ts'));
-        if (mainModule === undefined || !existsSync(mainModule)) continue;
-        const appEntry = resolve(dirname(mainModule), '..', '..', '..', 'packages', 'app', 'src', 'index.ts');
-        if (existsSync(appEntry)) return requireModule(appEntry);
-    }
-    const bundle = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
+/** Explicit module surface. Source is not the contract; the generated bundle is (0948 R3). */
+type ModuleMode = 'source' | 'bundle';
+
+function bundleEntry(): string {
+    return fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
+}
+
+/**
+ * Source mode names the mode and the fix. The app source entry does not export
+ * the verification seams, and "rebuild/install the sp plugin" cannot add them.
+ */
+function sourceModeError(spurBin: string): Error {
+    return new Error(
+        `source mode: refusing to load packages/app/src/index.ts (spurBin=${JSON.stringify(spurBin)}). ` +
+            'That entry is not the feature-verification contract surface — it does not export ' +
+            'splitLaunchCommand / ArtifactDao. Fix: run in bundle mode so ' +
+            'plugins/sp/lib/inline-run.generated.mjs is loaded (omit --module-mode, or pass --module-mode bundle) ' +
+            'and regenerate that bundle if it is missing. Reinstalling the sp plugin does not add these seams to the app source entry.',
+    );
+}
+
+function resolveModuleMode(raw: string): ModuleMode {
+    if (raw === '' || raw === 'bundle') return 'bundle';
+    if (raw === 'source') return 'source';
+    throw new Error(`unknown --module-mode ${JSON.stringify(raw)}; expected "source" or "bundle"`);
+}
+
+/** Bundle mode loads the generated inline bundle. Source mode fails closed with a named fix. */
+async function loadModule(spurBin: string, mode: ModuleMode): Promise<VerificationModule> {
+    if (mode === 'source') throw sourceModeError(spurBin);
+    const bundle = bundleEntry();
     if (!existsSync(bundle)) {
-        throw new Error('inline application bundle is missing — rebuild/install the sp plugin before running inline');
+        throw new Error(
+            'bundle mode: inline application bundle is missing at plugins/sp/lib/inline-run.generated.mjs. ' +
+                'Fix: regenerate the bundle before running feature verification in bundle mode.',
+        );
     }
-    return requireModule(bundle);
+    return requireModule(bundle, 'bundle');
 }
 
 /** Dynamic-import the entry and refuse modules missing the verification seams. */
-async function requireModule(entry: string): Promise<VerificationModule> {
+async function requireModule(entry: string, mode: ModuleMode): Promise<VerificationModule> {
     const mod = (await import(entry)) as Partial<VerificationModule> & Record<string, unknown>;
     const missing = (
         [
@@ -92,7 +111,8 @@ async function requireModule(entry: string): Promise<VerificationModule> {
     ).filter((k) => typeof mod[k] !== 'function');
     if (missing.length > 0) {
         throw new Error(
-            `application entry is missing feature-verification seams (${missing.join(', ')}) — rebuild/install the sp plugin`,
+            `${mode} mode: application entry is missing feature-verification seams (${missing.join(', ')}). ` +
+                'Fix: regenerate plugins/sp/lib/inline-run.generated.mjs so it exports those seams.',
         );
     }
     return mod as VerificationModule;
@@ -131,11 +151,17 @@ const nodeFsShim = {
 } as never;
 
 /** One full verification pass for one feature. Always exits 0. */
-async function verify(featureId: string, runId: string, cmdOverride: string, spurBin: string): Promise<void> {
+async function verify(
+    featureId: string,
+    runId: string,
+    cmdOverride: string,
+    spurBin: string,
+    mode: ModuleMode,
+): Promise<void> {
     assertSafeId('feature id', featureId);
     assertSafeId('run id', runId);
     const cwd = process.cwd();
-    const mod = await loadModule(spurBin);
+    const mod = await loadModule(spurBin, mode);
     const runDir = join(cwd, '.spur', 'run');
     mkdirSync(runDir, { recursive: true });
 
@@ -230,6 +256,7 @@ function main(): void {
         flag('--run-id') || getEnvVar('__runId') || '',
         flag('--cmd') || getEnvVar('verificationCmd') || '',
         flag('--spur-bin') || getEnvVar('spurBin') || '',
+        resolveModuleMode(flag('--module-mode')),
     )
         .then(() => process.exit(0))
         .catch((err: unknown) => {
