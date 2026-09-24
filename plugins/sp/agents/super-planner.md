@@ -86,7 +86,10 @@ You own the spaces **between** task runs:
 - **Parallelize only when requested** by applying `sp:parallel-execution` to a proven-independent
   subset (Step 3 optional path). Serialize when dependency, file-overlap, or budget checks fail.
   Preflight still runs per WBS before fan-out; recovery stays sequential.
-- **Inspect** each terminal state + `.spur/run/<wbs>-verdict.json` (Step 3.3).
+- **Inspect** each terminal state via `spur workflow trace "$RUN" --follow --timeout 600000` (a
+  timeout prints one checkpoint and exits 1; the run continues, never cancelled or relaunched) plus
+  `.spur/run/<wbs>-verdict.json`, accepted only when the trace's `.run.runId` equals the dispatched
+  run and the verdict's mtime ≥ the trace's `.run.startedAt` — otherwise `stale-evidence` (Step 3.3).
 - **One-shot recovery (optional)** - on non-PASS / stuck status, consult next-router **once** for that
   WBS (`recoveryHint` / dry-run plan): print the child command, or dispatch once only when the batch
   was started with `--auto` and cardinality is 1. Never self-loop until done.

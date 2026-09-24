@@ -162,9 +162,10 @@ CLI does.
 - Before accepting a child/watcher result, compare its run ID with the dispatched run ID and check
   current trace state through Spur. If using a run log as evidence, require its mtime to be at least
   the dispatch time. A mismatch or stale timestamp is not completion evidence. Do not scrape terminals.
-  Bound each watch invocation to 10 minutes or 20 polls, whichever comes first; persist the last
-  confirmed identity/state and report a checkpoint before continuing. A watcher timeout does not
-  cancel the owned run or authorize launching a replacement.
+  Bound each watch invocation to `spur workflow trace <run-id> --follow --timeout 600000` — one
+  bounded call, no hand-rolled poll loop; a timeout prints one checkpoint line and exits 1 while the
+  run continues, so persist the last confirmed identity/state and report the checkpoint before
+  continuing. A watcher timeout does not cancel the owned run or authorize launching a replacement.
 - Mark superseded scratch with `SUPERSEDED` and a pointer to the authoritative task Design. Never
   let a scratch instruction override the live task, even when its old run is still readable.
 - Checker-policy changes require one explicit unsuppressed audit (T10); ordinary corpus commit

@@ -114,7 +114,7 @@ The skill's logic divides by **whether the LLM adds value**:
 | `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
 | `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--logs] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed **and** reclaim retained run logs older than `workflow.logRetentionDays` (30d default) |
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
-| `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output]` | Run history list or per-run timeline |
+| `trace` | `spur workflow trace` (CLI) | `[run-id] [--workflow <n>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>]` | Run history list or per-run timeline |
 | `progress` | `spur workflow progress` (CLI) | `<run-id>` | The `projectWorkflowProgress` projection for that run — current state, per-action attempts, candidate next transitions, diagnostics. Read-only; the verb renders, `packages/app` derives. Unknown run id exits 1 with `Run <id> not found.` |
 | `add` | agent procedure | `"<nl-description>" [--kind <state-machine\|transition-flow>] [--file <path>]` | **Mode chosen (confirmed)** → first reconciled against existing workflows (extend an existing flow rather than duplicate) → YAML authored in real schema shape → **validated AND dry-run** (reaches the expected terminal state) → [add](workflows/operations.md#add) |
 | `refine` | agent procedure | `<workflow-file> [--intent "<goal>"] [--dry-run]` | Smallest change meeting the intent, re-validated and re-dry-run; `--dry-run` emits a diff only → [refine](workflows/operations.md#refine) |
@@ -264,7 +264,7 @@ spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--async] [--
 spur workflow cancel   <run-id> [--json]
 spur workflow clean    [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]
 spur workflow list     [--json]
-spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]
+spur workflow trace    [run-id] [--workflow <name>] [--status <s>] [--since <iso>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]
 spur workflow progress <run-id> [--json]
 ```
 
@@ -303,12 +303,18 @@ Follow a live run to terminal (human streaming mode):
 spur workflow trace <run-id> --follow            # stream until terminal (default 1000ms poll)
 spur workflow trace <run-id> --follow --poll 500 # poll every 500ms
 spur workflow trace <run-id> --follow --output   # stream .spur/run/<RUNID>.md instead of the DB timeline
+spur workflow trace <run-id> --follow --timeout 600000 # bound the watch; timeout → one checkpoint, run continues, exit 1
 ```
 
 - **`--follow`** replays a run timeline and polls persisted state until it becomes terminal. It
   requires a `run-id` (exit `2` without one) and cannot combine with `--json` (exit `2` - it is a
   human streaming mode).
 - **`--poll <ms>`** sets the follow polling interval (default `1000`, minimum `50`; exit `2` otherwise).
+- **`--timeout <ms>`** (requires `--follow`, positive integer; otherwise exit `1` with `VALIDATION_FAILED`)
+  bounds the watch (0930): when the deadline passes before the run is terminal — including the `Run not
+  found` registration retry window — the follow prints one checkpoint naming the run id and last observed
+  status and exits `1`. A watch timeout never cancels or relaunches the run; resume by re-running the same
+  follow command.
 - **`--output`** swaps the follow source from the structured DB timeline to the human run record
   (`.spur/run/<RUNID>.md`, tail -f equivalent), streaming new lines as they land and exiting at
   terminal status. A pre-0925 run with only a legacy `<RUNID>.log` is followed in place (read-only

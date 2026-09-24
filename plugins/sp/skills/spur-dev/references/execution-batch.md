@@ -212,8 +212,11 @@ for wbs in plan:                                       # default sequential mode
              inline-pipeline-driver(task-pipeline.yaml, wbs)
          else:
              spur workflow run task-pipeline.yaml --vars <vars> --async --json
-             follow trace until terminal
+             follow trace until terminal    # spur workflow trace "$RUN" --follow --timeout 600000
+                                            # (timeout → one checkpoint, exit 1; run continues — never cancel/relaunch)
     inspect terminal state + .spur/run/<wbs>-verdict.json
+                                           # accept only if trace .run.runId == $RUN AND verdict mtime ≥ .run.startedAt
+                                           # (else outcome = stale-evidence, non-done; failure policy applies)
     report += outcome(wbs)
     if terminal == failed OR stuck status:
         recovery = recoveryHint(status, wbs)           # Step 3.3b — at most once
@@ -239,14 +242,20 @@ Each task runs through the **standard single-task pipeline** — `task-pipeline.
 execution invokes the workflow engine. The batch loop inspects the result and never redefines a
 step.
 
-**Explicit/parallel path: launch async and poll the trace** (per execution-workflow.md §"Step 2"): a pipeline with
-`agent.run` stages runs for many minutes. Always use `--async` + `spur workflow trace` polling:
+**Explicit/parallel path: launch async, then one bounded follow** (per execution-workflow.md §"Step 2"): a pipeline with
+`agent.run` stages runs for many minutes. Always use `--async` + `spur workflow trace`. The watch is a
+single bounded call — `--timeout 600000` (10 minutes) is the one bound; a hand-rolled poll loop (and the
+retired "10 minutes or 20 polls" rule) is not needed:
 
 ```bash
 RUN=$(spur workflow run task-pipeline.yaml \
   --vars '{"wbs":"<wbs>","profile":"auto","agent":"claude"}' --async --json | jq -r '.runId')
-spur workflow trace "$RUN" --json | jq '{runId, status, terminalState}'   # poll until status is terminal (done/failed)
+spur workflow trace "$RUN" --follow --timeout 600000   # single bounded watch to terminal; checkpoint + exit 1 on timeout
+spur workflow trace "$RUN" --json | jq '.run | {runId, status, startedAt}'   # inspect: identity, status, freshness anchor
 ```
+
+A timed-out follow prints one checkpoint naming the run id and last status and exits 1; the run itself
+continues — never cancel or relaunch it over a watch timeout. Resume the watch with the same command.
 
 ### 3.2 Flag → `--vars` passthrough (R4.2, R4.3)
 
@@ -272,6 +281,19 @@ Each pipeline run ends in one of two terminal states:
 - **`failed`** → the pipeline hit a gate failure (precheck, verify verdict ≠ PASS, or an
   `onEnter` exception). Record `failed` with the blocking reason from the trace. This triggers the
   failure policy.
+
+**Driver acceptance (0930 R3).** The trace row and `.spur/run/<wbs>-verdict.json` are accepted as
+terminal evidence only if BOTH hold:
+
+1. **Identity** — the accepted run is the dispatched run: the **trace's** `.run.runId` equals
+   `$RUN` (compare against `spur workflow trace "$RUN" --json | jq -r '.run.runId'`). The verdict
+   artifact itself carries no runId — it is WBS-keyed, so it binds to this run only through the
+   trace identity plus the freshness check below.
+2. **Freshness** — the verdict file's mtime is at least the trace's `.run.startedAt` (a verdict
+   written before this run started is a stale child result, not completion evidence).
+
+Otherwise record outcome **`stale-evidence`** (non-`done`); the failure policy applies. A stale or
+mismatched artifact never authorizes cancelling or relaunching the run.
 
 ### 3.3b One-shot recovery (task 0279 — next-router consumer)
 
@@ -349,16 +371,16 @@ subagents are meant to hold (task 0508's dispatch contract is preserved unchange
   dep-status lookups (Step 1), and any other controller-side `task show`. A status-only lookup may
   narrow further (`| jq '.status'`), but never widen.
 
-- Green-path trace observation projects to `{runId, status, terminalState}` only:
+- Green-path trace observation projects to `.run | {runId, status, startedAt}` only:
 
   ```bash
-  spur workflow trace "$RUN" --json | jq '{runId, status, terminalState}'
+  spur workflow trace "$RUN" --json | jq '.run | {runId, status, startedAt}'
   ```
 
-  The controller decides continue/halt from `status`/`terminalState` (ADR-044: judge a run by
-  `status === 'done'`, never by string-matching a `finalState` name) plus the bounded verdict
-  artifact `.spur/run/<wbs>-verdict.json`. It never streams or re-reads a full trace merely to
-  summarize status.
+  The controller decides continue/halt from `.run.status` (ADR-044: judge a run by
+  `status === 'done'`, never by string-matching a `finalState` name) plus the accepted verdict
+  artifact `.spur/run/<wbs>-verdict.json` under the §3.3 acceptance rule (identity + freshness).
+  It never streams or re-reads a full trace merely to summarize status.
 
 **Failure-path reads are bounded.** On a failed/blocked task, request only the terminal error and
 the minimal anchor set the batch report needs (e.g. the blocking finding line, the unmet-dep WBS,

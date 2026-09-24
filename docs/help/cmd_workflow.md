@@ -270,7 +270,8 @@ spur workflow trace [options] [run-id]
 | `--last <n>` | `20` | Limit results |
 | `--follow` | — | Replay timeline and poll until terminal (requires `run-id`; human stream, not with `--json`) |
 | `--poll <ms>` | `1000` | Follow polling interval (min `50`) |
-| `--output` | — | With `--follow`: stream `.spur/run/<RUNID>.log` instead of the DB timeline |
+| `--output` | — | With `--follow`: stream `.spur/run/<RUNID>.md` instead of the DB timeline |
+| `--timeout <ms>` | — | With `--follow`: bound the wait; on expiry print a checkpoint line (run ID, last status, elapsed) and exit `1` without cancelling the run |
 | `--json` | — | Output machine-readable JSON |
 
 No argument: list recent runs (default last 20, newest first). With `<run-id>`: per-run timeline
@@ -282,6 +283,7 @@ of state entries, transitions, and action executions.
 spur workflow trace <run-id> --follow            # stream until terminal
 spur workflow trace <run-id> --follow --poll 500
 spur workflow trace <run-id> --follow --output   # tail the consolidated run log
+spur workflow trace <run-id> --follow --timeout 600000  # bounded wait; timeout never cancels the run
 ```
 
 ## spur workflow progress

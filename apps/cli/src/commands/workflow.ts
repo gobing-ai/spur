@@ -1480,6 +1480,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option('--follow', 'Replay a run timeline and poll persisted state until it becomes terminal')
         .option(...SHARED_OPTIONS.pollWorkflow, '1000')
         .option('--output', 'With --follow: stream .spur/run/<RUNID>.md instead of the DB timeline')
+        .option(...SHARED_OPTIONS.timeout)
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
@@ -1521,6 +1522,24 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 context.setExitCode(1);
                 return;
             }
+            // 0930 R2: the caller deadline bounds a --follow watch; without --follow there is
+            // nothing to bound, and a non-positive/non-integer value is a caller bug.
+            if (options.timeout !== undefined && options.follow !== true) {
+                writeJsonError(context.output, options, '--timeout requires --follow', 'VALIDATION_FAILED');
+                context.setExitCode(1);
+                return;
+            }
+            const timeoutMs = options.timeout === undefined ? undefined : Number(options.timeout);
+            if (timeoutMs !== undefined && (!Number.isInteger(timeoutMs) || timeoutMs <= 0)) {
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--timeout must be a positive integer of milliseconds',
+                    'VALIDATION_FAILED',
+                );
+                context.setExitCode(1);
+                return;
+            }
             if (options.output === true && options.json === true) {
                 writeJsonError(
                     context.output,
@@ -1542,11 +1561,30 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 return;
             }
             if (options.follow === true && runId !== undefined) {
-                if (options.output === true) {
-                    await followRunLog(svc, runId, context.cwd, pollMs, (line) => context.output.write(line));
-                } else {
-                    await followTrace(svc, runId, pollMs, (line) => context.output.write(line));
-                }
+                // 0930 R1: a deadline expiry stops the watch with a checkpoint; the run itself
+                // is never cancelled or relaunched — exit 1 is the watcher's, not the run's.
+                const timedOut =
+                    options.output === true
+                        ? await followRunLog(
+                              svc,
+                              runId,
+                              context.cwd,
+                              pollMs,
+                              (line) => context.output.write(line),
+                              undefined,
+                              undefined,
+                              timeoutMs,
+                          )
+                        : await followTrace(
+                              svc,
+                              runId,
+                              pollMs,
+                              (line) => context.output.write(line),
+                              undefined,
+                              undefined,
+                              timeoutMs,
+                          );
+                if (timedOut) context.setExitCode(1);
                 return;
             }
             const result = runId
@@ -1814,10 +1852,20 @@ function formatTimelineEvent(event: TimelineEvent): string {
     return lines.join('\n');
 }
 
+/** 0930 R1: the single checkpoint line a deadline-expired follow writes before returning. */
+function followDeadlineLine(runId: string, elapsedMs: number, status: string): string {
+    return `Follow timed out after ${elapsedMs}ms: run ${runId} status=${status} — run continues; resume with spur workflow trace ${runId} --follow`;
+}
+
 /**
  * Replay persisted timeline rows, then poll for inserts/updates until the run is
  * terminal. Updated action rows are emitted again (in-flight → finished), while
  * identical snapshots are deduplicated by a stable serialized fingerprint.
+ *
+ * With `deadlineMs` (0930 R1), a caller deadline measured from follow start — including
+ * the `Run not found` retry window — stops a non-terminal follow with a single
+ * checkpoint line; the run is never cancelled or relaunched. Returns whether the
+ * deadline expired (the caller maps it to exit code 1); a terminal run returns false.
  */
 export async function followTrace(
     service: Pick<WorkflowAppService, 'trace'>,
@@ -1825,7 +1873,11 @@ export async function followTrace(
     pollMs: number,
     write: (line: string) => void,
     wait: (ms: number) => Promise<unknown> = (ms) => sleep(ms),
-): Promise<void> {
+    now: () => number = Date.now,
+    deadlineMs?: number,
+): Promise<boolean> {
+    const start = now();
+    const deadline = deadlineMs === undefined ? Number.POSITIVE_INFINITY : start + deadlineMs;
     let missingAttempts = 0;
     let timeline: WorkflowTraceTimeline;
     while (true) {
@@ -1836,12 +1888,16 @@ export async function followTrace(
             if (!String(error).includes('Run not found') || missingAttempts >= 20) throw error;
             missingAttempts++;
             await wait(pollMs);
+            if (now() >= deadline) {
+                write(followDeadlineLine(runId, now() - start, 'pending'));
+                return true;
+            }
         }
     }
 
     write(formatTraceTimeline(timeline));
     const seen = new Set(timeline.events.map((event) => JSON.stringify(event)));
-    if (isTerminalTraceStatus(timeline.run.status)) return;
+    if (isTerminalTraceStatus(timeline.run.status)) return false;
 
     while (true) {
         await wait(pollMs);
@@ -1859,7 +1915,12 @@ export async function followTrace(
             if (next.run.nextAction !== undefined) {
                 write(`Next: ${next.run.nextAction.label} — ${next.run.nextAction.value}`);
             }
-            return;
+            return false;
+        }
+        const at = now();
+        if (at >= deadline) {
+            write(followDeadlineLine(runId, at - start, next.run.status));
+            return true;
         }
     }
 }
@@ -1906,6 +1967,10 @@ function readRunLogChunk(logPath: string, offset: number): { exists: boolean; li
  * (e.g. the run was started with `--no-log`), surface a clear message after
  * terminal status rather than hanging forever. This is a distinct source from
  * `followTrace`'s DB timeline — the two never interleave.
+ *
+ * With `deadlineMs` (0930 R1), the same caller-deadline contract as `followTrace`:
+ * counted from follow start (including a not-yet-persisted run), expiry on a
+ * non-terminal run writes one checkpoint line and returns true — never cancels.
  */
 export async function followRunLog(
     service: Pick<WorkflowAppService, 'trace'>,
@@ -1914,7 +1979,11 @@ export async function followRunLog(
     pollMs: number,
     write: (line: string) => void,
     wait: (ms: number) => Promise<unknown> = (ms) => sleep(ms),
-): Promise<void> {
+    now: () => number = Date.now,
+    deadlineMs?: number,
+): Promise<boolean> {
+    const start = now();
+    const deadline = deadlineMs === undefined ? Number.POSITIVE_INFINITY : start + deadlineMs;
     // 0926 R3: the record format is re-detected every poll. A legacy `.log` run
     // that gets continued mid-follow gains a `.md` under the same run id — the
     // tail must switch to it (once, from the top) instead of tracking the stale
@@ -1926,6 +1995,9 @@ export async function followRunLog(
     let record: WorkflowRunRecordRead = { kind: 'missing' };
     let offset = 0;
     let everRead = false;
+    // 0930 R1: last observed status for the deadline checkpoint; a run not yet
+    // persisted is pending registration.
+    let lastStatus = 'pending';
     while (true) {
         record = readWorkflowRunRecord(runDir, runId);
         const target =
@@ -1947,7 +2019,9 @@ export async function followRunLog(
 
         let terminal = false;
         try {
-            terminal = isTerminalTraceStatus((await service.trace(runId)).run.status);
+            const observed = (await service.trace(runId)).run.status;
+            lastStatus = observed;
+            terminal = isTerminalTraceStatus(observed);
         } catch (error) {
             // Run not persisted yet — keep waiting inside the follow window.
             if (!String(error).includes('Run not found')) throw error;
@@ -1962,7 +2036,12 @@ export async function followRunLog(
             } else if (!everRead) {
                 write(`No run log at ${logPath} — the run may have been started with --no-log.`);
             }
-            return;
+            return false;
+        }
+        const at = now();
+        if (at >= deadline) {
+            write(followDeadlineLine(runId, at - start, lastStatus));
+            return true;
         }
         await wait(pollMs);
     }

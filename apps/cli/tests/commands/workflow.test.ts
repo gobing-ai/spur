@@ -1602,6 +1602,34 @@ failureStates:
         ).toBe(1);
     });
 
+    test('0930 R2 — trace rejects --timeout without --follow (VALIDATION_FAILED)', async () => {
+        const output = createCapturedOutput();
+        expect(await main(['workflow', 'trace', 'run-1', '--timeout', '5000'], { output, dbUrl: ':memory:' })).toBe(1);
+        expect(output.errors.join('')).toContain('--timeout requires --follow');
+
+        const jsonOutput = createCapturedOutput();
+        expect(
+            await main(['workflow', 'trace', 'run-1', '--timeout', '5000', '--json', '--json-envelope'], {
+                output: jsonOutput,
+                dbUrl: ':memory:',
+            }),
+        ).toBe(1);
+        expect(JSON.parse(jsonOutput.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+    });
+
+    test('0930 R2 — trace rejects a --timeout that is not a positive integer of milliseconds', async () => {
+        for (const bad of ['0', '-5', 'abc', '1.5', '']) {
+            const output = createCapturedOutput();
+            expect(
+                await main(['workflow', 'trace', 'run-1', '--follow', '--timeout', bad, '--json', '--json-envelope'], {
+                    output,
+                    dbUrl: ':memory:',
+                }),
+            ).toBe(1);
+            expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+        }
+    });
+
     test('trace subcommand rejects invalid --status', async () => {
         const exitCode = await main(['workflow', 'trace', '--status', 'bogus'], {
             output: nullOutput(),
@@ -2273,6 +2301,43 @@ failureStates:
         expect(output.messages.some((m) => m.includes('No run log') && m.includes('--no-log'))).toBe(true);
         await rm(cwd, { recursive: true, force: true });
     });
+
+    test('0930 R1/AC1 — trace --follow --timeout stops at the deadline: checkpoint, exit 1, run untouched', async () => {
+        const cwd = await createTempProject();
+        const dbPath = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur'), { recursive: true });
+        const db = await createMigratedDb({ url: dbPath });
+        const now = Date.now();
+        await db.run(
+            'INSERT INTO runs (id, workflow_name, mode, status, started_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            ['timeout-run-1', 'test-flow', 'sync', 'running', now, '{}', now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['workflow', 'trace', 'timeout-run-1', '--follow', '--poll', '50', '--timeout', '60'],
+            {
+                output,
+                cwd,
+                dbUrl: dbPath,
+            },
+        );
+
+        expect(exitCode).toBe(1);
+        const checkpoints = output.messages.filter((m) => m.startsWith('Follow timed out'));
+        expect(checkpoints).toHaveLength(1);
+        expect(checkpoints[0]).toContain('run timeout-run-1');
+        expect(checkpoints[0]).toContain('status=running');
+        expect(checkpoints[0]).toContain('resume with spur workflow trace timeout-run-1 --follow');
+
+        // The timeout is the watcher's, never the run's: the run row stays `running`.
+        const after = createCapturedOutput();
+        await main(['workflow', 'trace', 'timeout-run-1', '--json'], { output: after, cwd, dbUrl: dbPath });
+        const trace = JSON.parse(after.messages.at(-1) ?? '{}') as { run: { status: string } };
+        expect(trace.run.status).toBe('running');
+        await rm(cwd, { recursive: true, force: true });
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -2774,6 +2839,109 @@ describe('followTrace', () => {
         expect(writes.some((line) => line.includes('60000ms'))).toBe(true);
         expect(writes.at(-1)).toBe('Run finalized: done — outcome=success duration=60000ms');
     });
+
+    /** Minimal non-terminal timeline fixture for the 0930 deadline tests. */
+    function runningTimeline(runId: string): WorkflowTraceTimeline {
+        return {
+            run: {
+                runId,
+                workflowName: 'wf',
+                mode: 'sync',
+                status: 'running',
+                startedAt: '2026-01-15T10:00:00.000Z',
+                completedAt: null,
+                isDryRun: false,
+                project: { name: 'project', root: '/project' },
+                durationMs: null,
+                outcome: 'running',
+            },
+            events: [],
+        };
+    }
+
+    test('0930 R1 — deadline hit on a non-terminal run writes one checkpoint, never cancels, and reports timeout', async () => {
+        let traceCalls = 0;
+        let clock = 1000;
+        const writes: string[] = [];
+        const timedOut = await followTrace(
+            {
+                trace: async () => {
+                    traceCalls++;
+                    return runningTimeline('r1');
+                },
+            } as never,
+            'r1',
+            2000,
+            (line) => writes.push(line),
+            async () => {
+                clock += 2000;
+            },
+            () => clock,
+            5000,
+        );
+
+        expect(timedOut).toBe(true);
+        expect(writes.filter((line) => line.startsWith('Follow timed out'))).toEqual([
+            'Follow timed out after 6000ms: run r1 status=running — run continues; resume with spur workflow trace r1 --follow',
+        ]);
+        // Deadline checks ride the poll cycle: observe → wait → observe → wait → observe → stop.
+        expect(traceCalls).toBe(4);
+    });
+
+    test('0930 R2 — without a deadline the follow stays unbounded until terminal', async () => {
+        let polls = 0;
+        let clock = 0;
+        const writes: string[] = [];
+        const timedOut = await followTrace(
+            {
+                trace: async () => {
+                    polls++;
+                    if (polls <= 8) return runningTimeline('r2');
+                    const done = runningTimeline('r2');
+                    return { ...done, run: { ...done.run, status: 'done', outcome: 'success', durationMs: 1 } };
+                },
+            } as never,
+            'r2',
+            1,
+            (line) => writes.push(line),
+            async () => {
+                clock += 1_000_000;
+            },
+            () => clock,
+        );
+
+        expect(timedOut).toBe(false);
+        expect(writes.some((line) => line.startsWith('Follow timed out'))).toBe(false);
+        expect(writes.at(-1)).toBe('Run finalized: done — outcome=success duration=1ms');
+    });
+
+    test('0930 R1 — the Run-not-found retry window counts against the deadline', async () => {
+        let attempts = 0;
+        let clock = 0;
+        const writes: string[] = [];
+        const timedOut = await followTrace(
+            {
+                trace: async () => {
+                    attempts++;
+                    throw new Error(`Run not found: ghost-run (attempt ${attempts})`);
+                },
+            } as never,
+            'ghost-run',
+            500,
+            (line) => writes.push(line),
+            async () => {
+                clock += 500;
+            },
+            () => clock,
+            1200,
+        );
+
+        expect(timedOut).toBe(true);
+        expect(writes).toEqual([
+            'Follow timed out after 1500ms: run ghost-run status=pending — run continues; resume with spur workflow trace ghost-run --follow',
+        ]);
+        expect(attempts).toBeLessThan(20);
+    });
 });
 
 describe('followRunLog', () => {
@@ -2885,6 +3053,34 @@ describe('followRunLog', () => {
         expect(writes).toEqual([
             'record body',
             `Run record incomplete (state-missing) at ${join(dir, '.spur', 'run', 'r13.state.json')} — the workflow DB trace remains the completion authority.`,
+        ]);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('0930 R1 — deadline hit on a non-terminal run writes one checkpoint and reports timeout', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'run', 'r14.md'), 'section one\n');
+
+        const writes: string[] = [];
+        let clock = 0;
+        const timedOut = await followRunLog(
+            { trace: async () => ({ run: { status: 'running' } }) as never },
+            'r14',
+            dir,
+            1,
+            (line) => writes.push(line),
+            async () => {
+                clock += 2000;
+            },
+            () => clock,
+            5000,
+        );
+
+        expect(timedOut).toBe(true);
+        expect(writes).toEqual([
+            'section one',
+            'Follow timed out after 6000ms: run r14 status=running — run continues; resume with spur workflow trace r14 --follow',
         ]);
         await rm(dir, { recursive: true, force: true });
     });

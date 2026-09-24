@@ -636,9 +636,9 @@ overrides the global root and suppresses the bundled fallback for a hermetic run
   explicit unavailable data without failing the command. Existing JSON keys remain present.
   Backed by `ts-rule-engine`. Help dispatch per §1.0.
 
-<a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json--spur-workflow-progress-run-id---json"></a>
+<a id="spur-workflow-show-workflowyaml---format-mermaidtodo---json--spur-workflow-validate-workflowyaml---json---no-schema--spur-workflow-run-workflowyaml---run-id-id---vars-json---dry-run---async---no-plan---detail-minimalinvocationfull---quiet--silent--verbose---trace-file---steer---no-log---json--spur-workflow-continue-run-id---yes---answer-yesnocancel---json--spur-workflow-cancel-run-id---json--spur-workflow-list---json--spur-workflow-trace-run-id---workflow-name---status-s---since-date---last-n---follow---poll-ms---output---timeout-ms---json--spur-workflow-clean---older-than-minutes---force---logs---dry-run---json--spur-workflow-progress-run-id---json"></a>
 
-#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--async] [--no-log] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
+#### `spur workflow show <workflow.yaml> [--format <mermaid|todo>] [--json]` · `spur workflow validate <workflow.yaml> [--json] [--no-schema]` · `spur workflow run <workflow.yaml> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--detail <minimal|invocation|full>] [--quiet|--silent|--verbose] [--trace-file] [--steer] [--no-log] [--json]` · `spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--async] [--no-log] [--json]` · `spur workflow cancel <run-id> [--json]` · `spur workflow list [--json]` · `spur workflow trace [run-id] [--workflow <name>] [--status <s>] [--since <date>] [--last <n>] [--follow] [--poll <ms>] [--output] [--timeout <ms>] [--json]` · `spur workflow clean [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]` · `spur workflow progress <run-id> [--json]`
 
 > **Shipped surface (ADR-045 / feature D2, tasks 0426–0429):** `run --no-log` opts out of the
 > consolidated `.spur/run/<RUNID>.log` (retained by default otherwise); `trace --follow --output`
@@ -749,7 +749,12 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   human stream and cannot be combined with `--json`. `--output` (requires `--follow`) swaps the
   follow source to a raw tail of `.spur/run/<RUNID>.log` (tail -f equivalent), also a human stream
   rejected with `--json`; a run started with `--no-log` prints a clear no-log message at terminal
-  status instead of hanging. List/detail/follow share project, run timing/duration/outcome, and exact
+  status instead of hanging. `--timeout <ms>` (0930, requires `--follow`, positive integer) bounds
+  the watch: when the deadline passes before the run is terminal — including the `Run not found`
+  registration retry window — the follow writes one checkpoint line naming the run id and last
+  observed status (`Follow timed out after <ms>ms: run <id> status=<status> — run continues; resume
+  with spur workflow trace <id> --follow`) and exits 1; the run itself is never cancelled or
+  relaunched by a watch timeout. List/detail/follow share project, run timing/duration/outcome, and exact
   next-action fields. Detail transitions show both endpoints and their persisted time; actions show
   id/node/status/timestamps, allow-listed invocation metadata, bounded error, cost, and existing run
   or partial-work artifacts. Arbitrary action stdout/stderr/argv is never projected; malformed

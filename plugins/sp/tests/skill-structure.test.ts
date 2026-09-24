@@ -1960,8 +1960,8 @@ describe('task 0510 — batch-run hardening (feature preflight, changed-path mat
         expect(executionBatch).toContain('Metadata-only host controller');
         // task-show projection shape.
         expect(executionBatch).toContain('{wbs, status, dependencies, feature_id}');
-        // trace observation projection shape.
-        expect(executionBatch).toContain('{runId, status, terminalState}');
+        // trace observation projection shape (task 0930 corrected the run-level jq defect).
+        expect(executionBatch).toContain('.run | {runId, status, startedAt}');
         // Failure reads are bounded — never re-stream a whole trace to summarize status.
         expect(executionBatch).toContain('never streams or re-reads a full trace');
         // task 0508 native-subagent dispatch is preserved, not replaced by a cache/parser.
