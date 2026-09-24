@@ -41,7 +41,7 @@ describe('Workflow composition digest', () => {
         const facts = extractResolvedWorkflowFacts(await loadDef('task-pipeline.yaml'));
         expect(facts.terminalStates).toEqual(['done', 'failed', 'cancelled']);
         expect(facts.modelQueries).toEqual(['implement', 'test-fix', 'review', 'verify']);
-        expect(facts.actions['implement:onEnter:0']?.kind).toBe('agent.run');
+        expect(facts.actions['implement:onEnter:1']?.kind).toBe('agent.run');
     });
 
     test('extractResolvedWorkflowFacts walks onExit actions (0775: no live onExit fixture remains)', () => {

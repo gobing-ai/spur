@@ -1,216 +1,4 @@
 {
-    "idea-pipeline": [
-        {
-            "from": "start",
-            "to": "discovery",
-            "kind": "shell",
-            "command": "test \"$(cat .spur/run/$__runId-idea-precheck-doctor.status 2>/dev/null)\" = PASS"
-        },
-        {
-            "from": "start",
-            "to": "failed",
-            "kind": "always",
-            "command": null
-        },
-        {
-            "from": "discovery",
-            "to": "feature-create",
-            "kind": "shell",
-            "command": "test \"$profile\" = auto && test \"$idea_approved\" = true"
-        },
-        {
-            "from": "discovery",
-            "to": "idea-eval",
-            "kind": "always",
-            "command": null
-        },
-        {
-            "from": "idea-eval",
-            "to": "feature-create",
-            "kind": "shell",
-            "command": "test \"$profile\" = auto && test \"$idea_approved\" = true"
-        },
-        {
-            "from": "idea-eval",
-            "to": "feature-create",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = yes"
-        },
-        {
-            "from": "idea-eval",
-            "to": "cancelled",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = no || test \"$__hitlAnswer\" = cancel"
-        },
-        {
-            "from": "feature-create",
-            "to": "ac-generate",
-            "kind": "always",
-            "command": null
-        },
-        {
-            "from": "ac-generate",
-            "to": "system-design",
-            "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\"; test \"$profile\" = auto -a \"$ac_status\" = PASS && test \"$cov_status\" = PASS && test \"$design\" = auto -a \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" != false"
-        },
-        {
-            "from": "ac-generate",
-            "to": "decompose",
-            "kind": "shell",
-            "command": "test \"$profile\" = auto && test \"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" = PASS && test \"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\" = PASS && test \"$design\" = skip -o \"$design\" = auto -a \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" = false"
-        },
-        {
-            "from": "ac-generate",
-            "to": "ac-generate",
-            "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\" retry=\"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\"; { test \"$ac_status\" != PASS || test \"$cov_status\" != PASS; } && test \"$profile\" = auto -a \"$retry\" -lt 3"
-        },
-        {
-            "from": "ac-generate",
-            "to": "failed",
-            "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" cov_status=\"$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)\" retry=\"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\"; { test \"$ac_status\" != PASS || test \"$cov_status\" != PASS; } && test \"$profile\" = auto -a \"$retry\" -ge 3"
-        },
-        {
-            "from": "ac-generate",
-            "to": "feature-check",
-            "kind": "always",
-            "command": null
-        },
-        {
-            "from": "feature-check",
-            "to": "system-design",
-            "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\"; test \"$__hitlAnswer\" = yes && test \"$ac_status\" = PASS && test \"$design\" = auto && test \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" != false"
-        },
-        {
-            "from": "feature-check",
-            "to": "decompose",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = yes && test \"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\" = PASS && (test \"$design\" = skip || (test \"$design\" = auto && test \"$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)\" = false))"
-        },
-        {
-            "from": "feature-check",
-            "to": "ac-generate",
-            "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\"; (test \"$__hitlAnswer\" = no || test \"$ac_status\" != PASS) && test \"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\" -lt 3"
-        },
-        {
-            "from": "feature-check",
-            "to": "failed",
-            "kind": "shell",
-            "command": "ac_status=\"$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)\"; (test \"$__hitlAnswer\" = no || test \"$ac_status\" != PASS) && test \"$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)\" -ge 3"
-        },
-        {
-            "from": "feature-check",
-            "to": "cancelled",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = cancel"
-        },
-        {
-            "from": "system-design",
-            "to": "decompose",
-            "kind": "shell",
-            "command": "test \"$profile\" = auto && test \"$design_approved\" = true && test \"$(cat .spur/run/$__runId-idea-design-check.status 2>/dev/null)\" = PASS"
-        },
-        {
-            "from": "system-design",
-            "to": "design-approval",
-            "kind": "always",
-            "command": null
-        },
-        {
-            "from": "design-approval",
-            "to": "decompose",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = yes && test \"$(cat .spur/run/$__runId-idea-design-check.status 2>/dev/null)\" = PASS"
-        },
-        {
-            "from": "design-approval",
-            "to": "feature-check",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = yes && test \"$(cat .spur/run/$__runId-idea-design-check.status 2>/dev/null)\" != PASS"
-        },
-        {
-            "from": "design-approval",
-            "to": "system-design",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = no && test \"$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0)\" -le 1"
-        },
-        {
-            "from": "design-approval",
-            "to": "failed",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = no && test \"$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0)\" -gt 1"
-        },
-        {
-            "from": "design-approval",
-            "to": "cancelled",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = cancel"
-        },
-        {
-            "from": "decompose",
-            "to": "batch-create-run",
-            "kind": "shell",
-            "command": "test \"$profile\" = auto"
-        },
-        {
-            "from": "decompose",
-            "to": "batch-create",
-            "kind": "always",
-            "command": null
-        },
-        {
-            "from": "batch-create",
-            "to": "batch-create-run",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = yes"
-        },
-        {
-            "from": "batch-create",
-            "to": "decompose",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = no"
-        },
-        {
-            "from": "batch-create",
-            "to": "cancelled",
-            "kind": "shell",
-            "command": "test \"$__hitlAnswer\" = cancel"
-        },
-        {
-            "from": "batch-create-run",
-            "to": "ready-prepare",
-            "kind": "shell",
-            "command": "test -f .spur/run/$__runId-idea-batch-create.done"
-        },
-        {
-            "from": "ready-prepare",
-            "to": "handoff-finalize",
-            "kind": "always",
-            "command": null
-        },
-        {
-            "from": "batch-create-run",
-            "to": "decompose",
-            "kind": "shell",
-            "command": "test -f .spur/run/$__runId-idea-batch-create.failed && test \"$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0)\" -lt 3"
-        },
-        {
-            "from": "batch-create-run",
-            "to": "failed",
-            "kind": "shell",
-            "command": "test -f .spur/run/$__runId-idea-batch-create.failed && test \"$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0)\" -ge 3"
-        },
-        {
-            "from": "handoff-finalize",
-            "to": "handoff",
-            "kind": "always",
-            "command": null
-        }
-    ],
     "task-pipeline": [
         {
             "from": "precheck",
@@ -226,9 +14,33 @@
         },
         {
             "from": "implement",
+            "to": "failed",
+            "kind": "shell",
+            "command": "n=\"$(cat .spur/run/$wbs-escalation-count 2>/dev/null || echo 0)\"; test \"$n\" -ge \"$maxEscalations\" -a -s .spur/run/$wbs-question.md"
+        },
+        {
+            "from": "implement",
+            "to": "escalate",
+            "kind": "shell",
+            "command": "test -s .spur/run/$wbs-question.md"
+        },
+        {
+            "from": "implement",
             "to": "test",
             "kind": "always",
             "command": null
+        },
+        {
+            "from": "escalate",
+            "to": "implement",
+            "kind": "shell",
+            "command": "test -n \"$__hitlInput\""
+        },
+        {
+            "from": "escalate",
+            "to": "failed",
+            "kind": "shell",
+            "command": "test -z \"$__hitlInput\""
         },
         {
             "from": "test",

@@ -764,8 +764,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // 1) Pipeline agent.run input is a pure slash command that already selects implement mode.
         // 2) The recursive-launch prohibition lives in the command/skill SSOT, not multi-line
         //    essays bolted onto the slash line (that fights centralized agentic structure).
-        // Pure slash form (literal ${vars.wbs} in the YAML source).
-        const pureImplementInput = `input: /sp:dev-run --mode implement $${'{vars.wbs}'} --auto`;
+        // Pure slash form (literal ${vars.wbs} in the YAML source). The 0933 escalation
+        // flag is part of the pinned contract: the implement agent always receives the
+        // transcript path (absent file = no prior escalations).
+        const pureImplementInput = `input: /sp:dev-run --mode implement $${'{vars.wbs}'} --auto --escalation-file .spur/run/$${'{vars.wbs}'}-escalation.md`;
         expect(implementBlock).toContain(pureImplementInput);
         expect(implementBlock).toContain('requireDiff: true');
         // Input must not re-introduce free-form anti-recursion prose next to the slash.

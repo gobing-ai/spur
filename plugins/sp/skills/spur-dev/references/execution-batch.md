@@ -214,6 +214,10 @@ for wbs in plan:                                       # default sequential mode
              spur workflow run task-pipeline.yaml --vars <vars> --async --json
              follow trace until terminal    # spur workflow trace "$RUN" --follow --timeout 600000
                                             # (timeout → one checkpoint, exit 1; run continues — never cancel/relaunch)
+    if run paused (escalate HITL ask (0933) or standard-profile approve):
+        surface the paused prompt (escalate: .spur/run/<wbs>-question.md via workflow.hitl.ask)
+        operator answers: spur workflow continue --answer-text <answer> "$RUN" (escalate) | continue "$RUN" (approve)
+        resume the SAME run (never relaunch); maxEscalations (default 2) bounds the ask loop
     inspect terminal state + .spur/run/<wbs>-verdict.json
                                            # accept only if trace .run.runId == $RUN AND verdict mtime ≥ .run.startedAt
                                            # (else outcome = stale-evidence, non-done; failure policy applies)
@@ -416,9 +420,12 @@ derivable from the same dependency graph built in Step 2.
 
 ## Step 5 — Batch report (R5.2)
 
-When the batch finishes — clean (all `done`), halted (default failure policy), or aborted (cycle /
-unknown selector) — emit a structured report. The report is the orchestrator's sole output; it does
-not mutate the corpus (the pipeline's `record` step already wrote per-task results).
+When the batch finishes — clean (all `done`), halted (default failure policy), parked (`paused`:
+one or more tasks sit on an operator question (escalate, 0933) or an approval gate), or aborted
+(cycle / unknown selector) — emit a structured report. The report is the orchestrator's sole
+output; it does not mutate the corpus (the pipeline's `record` step already wrote per-task
+results). A `paused` task is non-terminal — the report marks it `paused` (never `done`) and names
+the resume command.
 
 ```
 ## Batch Report — <selector>
@@ -978,13 +985,6 @@ While the batch runs, corpus writes (`spur task update`, `spur feature update`) 
 **worktree copy**; the operator's main tree still shows pre-run task statuses. This is expected —
 the merge (WT-4) or manual integration (WT-5) propagates the writes back. Worth one line in each
 command doc so it does not read as a bug.
-
-## Still out of scope
-
-- **Interactive within-step Q&A** — a headless subprocess `agent.run` agent asking the operator a
-  real question. This waits for the workspace module + inbox module + the agent fleet.
-  `sp:super-planner` surfaces blockers/HITL only at the **batch boundary** (between task runs), not
-  from inside a pipeline step.
 
 ## Gate preflight (dogfood 2026-08-21, feature A3)
 

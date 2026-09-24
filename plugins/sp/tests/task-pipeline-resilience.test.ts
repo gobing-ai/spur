@@ -16,7 +16,7 @@ import { parse } from 'yaml';
 
 interface PipelineAction {
     kind: string;
-    options?: { command?: string };
+    options?: { command?: string; file?: string; var?: string; escalationFile?: string; prompt?: string };
 }
 
 interface PipelineState {
@@ -24,8 +24,15 @@ interface PipelineState {
     onEnter?: PipelineAction[];
 }
 
+interface PipelineTransition {
+    from: string;
+    to: string;
+    guard?: PipelineAction;
+}
+
 interface PipelineDefinition {
     states: PipelineState[];
+    transitions?: PipelineTransition[];
     vars?: Record<string, string>;
 }
 
@@ -421,6 +428,146 @@ esac`,
             if (existsSync(reportPath)) {
                 expect(readFileSync(reportPath, 'utf8')).not.toContain('Orphan task 0931');
             }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 0933 — operator-question escalation (implement → escalate → implement)
+// ---------------------------------------------------------------------------
+
+describe('0933 operator-question escalation', () => {
+    const guardFor = (from: string, to: string): PipelineTransition['guard'] =>
+        PIPELINE.transitions?.find((t) => t.from === from && t.to === to)?.guard;
+    // Workflow template syntax, not a JS template literal — built by concatenation so the source
+    // doesn't contain a `${` that Biome's noTemplateCurlyInString would (correctly) flag
+    // (mirrors packages/app/tests/workflow/builtins.test.ts).
+    const tpl = (name: string): string => ['$' + '{vars.', name, '}'].join('');
+
+    test('escalate state: bounded counter, question surfacing, and hitl.input pause', () => {
+        const escalate = PIPELINE.states.find((s) => s.id === 'escalate');
+        expect(escalate).toBeDefined();
+        const kinds = escalate?.onEnter?.map((a) => a.kind) ?? [];
+        // Counter first, then the question read, then the pause.
+        expect(kinds).toEqual(['shell', 'file.read.into-var', 'hitl.input']);
+        const counter = commandFor('escalate', 0);
+        expect(counter).toContain('.spur/run/$wbs-escalation-count');
+        const read = escalate?.onEnter?.find((a) => a.kind === 'file.read.into-var');
+        expect(read?.options?.file).toBe(`.spur/run/${tpl('wbs')}-question.md`);
+        expect(read?.options?.var).toBe('escalationQuestion');
+        const pause = escalate?.onEnter?.find((a) => a.kind === 'hitl.input');
+        expect(pause?.options?.prompt).toBe(tpl('escalationQuestion'));
+    });
+
+    test('escalation edges are declared before the implement→test always edge (bound first, then question)', () => {
+        const transitions = PIPELINE.transitions ?? [];
+        const idx = (from: string, to: string): number => {
+            const i = transitions.findIndex((t) => t.from === from && t.to === to);
+            if (i < 0) throw new Error(`missing transition ${from}→${to}`);
+            return i;
+        };
+        const bound = idx('implement', 'failed');
+        const ask = idx('implement', 'escalate');
+        const body = idx('implement', 'test');
+        expect(bound).toBeLessThan(ask);
+        expect(ask).toBeLessThan(body);
+        // Bound guard requires the escalation count AND a fresh question file; the report
+        // note lives in the failed state's onEnter (guards stay thin, ADR-115).
+        const boundCmd = guardFor('implement', 'failed')?.options?.command ?? '';
+        expect(boundCmd).toContain('-ge "$maxEscalations"');
+        expect(boundCmd).toContain('-s .spur/run/$wbs-question.md');
+        expect(boundCmd).not.toContain('$wbs-report.md');
+        expect(guardFor('implement', 'escalate')?.options?.command).toContain('test -s .spur/run/$wbs-question.md');
+        // The Q/A transcript append + question consumption live in implement's onEnter
+        // first action, not in the escalate→implement guard.
+        const implement = PIPELINE.states.find((s) => s.id === 'implement');
+        const append = implement?.onEnter?.[0];
+        expect(append?.kind).toBe('shell');
+        const appendCmd = append?.options?.command ?? '';
+        expect(appendCmd).toContain('.spur/run/$wbs-escalation.md');
+        expect(appendCmd).toContain('rm -f .spur/run/$wbs-question.md');
+        // The bound note is a conditional shell in the failed state's onEnter.
+        expect(commandFor('failed', 0) ?? '').toContain('Escalation bound reached');
+    });
+
+    test('escalate routing: answered → implement; empty → failed (guards stay thin predicates)', () => {
+        const resume = guardFor('escalate', 'implement')?.options?.command ?? '';
+        expect(resume).toContain('test -n "$__hitlInput"');
+        // Appending/consuming is implement onEnter's job, not the guard's.
+        expect(resume).not.toContain('.spur/run/$wbs-escalation.md');
+        expect(guardFor('escalate', 'failed')?.options?.command).toContain('test -z "$__hitlInput"');
+    });
+
+    test('implement agent.run declares the escalation contract and names the transcript in its input', () => {
+        const implement = PIPELINE.states.find((s) => s.id === 'implement');
+        const agentRun = implement?.onEnter?.find((a) => a.kind === 'agent.run');
+        // The agent.run option names the QUESTION file (the pause signal, deleted
+        // pre-dispatch for freshness); the transcript reaches the agent via --escalation-file.
+        expect(agentRun?.options?.escalationFile).toBe(`.spur/run/${tpl('wbs')}-question.md`);
+        const input = String((agentRun?.options as Record<string, unknown> | undefined)?.input ?? '');
+        expect(input).toContain(`--escalation-file .spur/run/${tpl('wbs')}-escalation.md`);
+        expect(PIPELINE.vars?.maxEscalations).toBe('2');
+    });
+
+    test('bound guard routes at bound + fresh question; the failed onEnter writes the report note', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'pipeline-esc-bound-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const cmd = guardFor('implement', 'failed')?.options?.command ?? '';
+            // Under bound with a fresh question → not a bound failure.
+            writeFileSync(join(dir, '.spur/run/0933-escalation-count'), '1');
+            writeFileSync(join(dir, '.spur/run/0933-question.md'), 'Q3: again?');
+            expect(runShell(cmd, dir, { wbs: '0933', maxEscalations: '2' }).exitCode).toBe(1);
+            // At bound but NO fresh question (completed implement) → not a bound failure.
+            writeFileSync(join(dir, '.spur/run/0933-escalation-count'), '2');
+            rmSync(join(dir, '.spur/run/0933-question.md'));
+            expect(runShell(cmd, dir, { wbs: '0933', maxEscalations: '2' }).exitCode).toBe(1);
+            // At bound WITH a fresh question → routes to failed (guard is a pure predicate).
+            writeFileSync(join(dir, '.spur/run/0933-question.md'), 'Q3: again?');
+            expect(runShell(cmd, dir, { wbs: '0933', maxEscalations: '2' }).exitCode).toBe(0);
+            // The failed state's onEnter writes the report note (no-op on ordinary failures).
+            // R2: the note lands in the task report (report.txt) and carries the question.
+            const note = commandFor('failed', 0);
+            expect(runShell(note, dir, { wbs: '0933', maxEscalations: '2' }).exitCode).toBe(0);
+            const report = readFileSync(join(dir, '.spur/run/0933-report.txt'), 'utf8');
+            expect(report).toContain('Escalation bound reached');
+            expect(report).toContain('Q3: again?');
+            // Ordinary failure (no pending question) → note stays a no-op.
+            const plain = mkdtempSync(join(tmpdir(), 'pipeline-esc-plain-'));
+            try {
+                mkdirSync(join(plain, '.spur', 'run'), { recursive: true });
+                runShell(note, plain, { wbs: '0933', maxEscalations: '2' });
+                expect(existsSync(join(plain, '.spur/run/0933-report.txt'))).toBe(false);
+            } finally {
+                rmSync(plain, { recursive: true, force: true });
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('implement onEnter records the Q/A transcript and consumes the question on a resume entry', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'pipeline-esc-resume-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            // First entry (no pending question, empty answer) → no-op, no transcript.
+            const cmd = commandFor('implement', 0);
+            expect(runShell(cmd, dir, { wbs: '0933', __hitlInput: '' }).exitCode).toBe(0);
+            expect(existsSync(join(dir, '.spur/run/0933-escalation.md'))).toBe(false);
+            // Resume entry → guard already passed (non-empty answer + fresh question);
+            // onEnter appends Q1/A1 and consumes the question file.
+            writeFileSync(join(dir, '.spur/run/0933-question.md'), 'which auth scheme?');
+            writeFileSync(join(dir, '.spur/run/0933-escalation-count'), '1');
+            expect(guardFor('escalate', 'implement')?.options?.command).toContain('test -n "$__hitlInput"');
+            expect(runShell(cmd, dir, { wbs: '0933', __hitlInput: 'oauth2 device flow' }).exitCode).toBe(0);
+            const transcript = readFileSync(join(dir, '.spur/run/0933-escalation.md'), 'utf8');
+            expect(transcript).toContain('## Q1');
+            expect(transcript).toContain('which auth scheme?');
+            expect(transcript).toContain('## A1');
+            expect(transcript).toContain('oauth2 device flow');
+            expect(existsSync(join(dir, '.spur/run/0933-question.md'))).toBe(false);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

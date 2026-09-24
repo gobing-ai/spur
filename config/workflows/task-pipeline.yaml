@@ -6,7 +6,7 @@
 # through the normal `spur task update <wbs> <status>` verb so the lifecycle guards
 # (0055) apply identically. Run linkage is written to `task_run_links` (kind=pipeline).
 #
-# Shape: precheck → implement → test[→test-fix↔test-recheck] → review → approve(HITL)
+# Shape: precheck → implement[→escalate] → test[→test-fix↔test-recheck] → review → approve(HITL)
 #        → verify → record → done
 #        (precheck failure short-circuits to `failed`; approve routes to `failed` on
 #        operator rejection or `cancelled` on operator cancel — R1, bug-750).
@@ -26,6 +26,7 @@
 #   implementTimeoutMs        — implement agent.run budget (ms)
 #   qualityGateCmd            — project gate (default: bun run spur-check)
 #   qualityGateMaxFixAttempts — max /sp:dev-fixall hops after a red gate (default: 2)
+#   maxEscalations            — max operator-question pauses per implement chain (default: 2)
 #
 # Seeded by `spur init`. agent.run inputs are pure slash commands (ADR-043).
 
@@ -95,6 +96,10 @@ vars:
     # Answer captured by the approve gate's hitl.confirm (R1): "yes" | "no" | "cancel".
     # Empty by default; only meaningful once the approve state has been entered.
     __hitlAnswer: ""
+    # Operator answer captured by the escalate hop's hitl.input (0933). Empty by
+    # default; set by `spur workflow continue --answer-text` after the pause and read
+    # by the escalate→implement / escalate→failed guards. Non-empty = answered.
+    __hitlInput: ""
     # Proof-state bracket (task 0612, ADR-071; restructured by task 0703). `proofDigest` is the
     # canonical capture taken at quality-gate ENTRY — immediately before the evidence-producing
     # final chain (quality → review → verify) — and re-captured at `test-recheck` when bounded
@@ -139,6 +144,14 @@ vars:
     # Max /sp:dev-fixall attempts after a red quality-gate probe/recheck (bounded; no thrash).
     # Attempt counter: .spur/run/<wbs>-test-fix-attempt. Default 2 = two fixall hops before failed.
     qualityGateMaxFixAttempts: "2"
+    # Max operator-question pauses (0933) before the implement chain routes to failed.
+    # Escalation counter: .spur/run/<wbs>-escalation-count. Default 2 = two answered
+    # questions; a third pause routes to failed with a report note.
+    maxEscalations: "2"
+    # Runtime-written, 0933: the escalate hop's file.read.into-var fills this from
+    # .spur/run/<wbs>-question.md; the hitl.input prompt below references it. Declared
+    # here (empty) so the static var-reference validator sees the template source.
+    escalationQuestion: ""
     # Post-implement auto-format. Overridable like qualityGateCmd so a non-Bun seeded
     # project can point it at its own formatter; invoked best-effort (a missing or
     # failing formatter must never abort a run — the quality gate is the real gate).
@@ -239,6 +252,20 @@ states:
           that command DRIVES this pipeline, so calling it here recurses.
           --mode implement is the single-step implement entry.
       onEnter:
+          # 0933 R27 (guard-lines compression): the transcript append lives HERE, on
+          # (re-)entry, not in the escalate→implement guard. On first entry there is no
+          # pending question (no-op); on a resume entry the guard already confirmed a
+          # non-empty $__hitlInput and a fresh question file, so this shell records the
+          # Q/A pair (## Q<n>/## A<n>, R3) and consumes the question file before the
+          # agent.run re-dispatches — which also disarms the implement→escalate edge.
+          - kind: shell
+            options:
+                command: >-
+                    test -n "$__hitlInput" -a -s .spur/run/$wbs-question.md || exit 0;
+                    qn="$(cat .spur/run/$wbs-escalation-count 2>/dev/null || echo 0)";
+                    printf '## Q%s\n%s\n\n## A%s\n%s\n' "$qn" "$(cat .spur/run/$wbs-question.md 2>/dev/null)" "$qn" "$__hitlInput" >> .spur/run/$wbs-escalation.md;
+                    rm -f .spur/run/$wbs-question.md;
+                    exit 0
           - kind: agent.run
             options:
                 agent: ${vars.implementAgent}
@@ -249,13 +276,23 @@ states:
                 # resumes the implement session instead of re-reading the task cold.
                 session: reuse
                 # lives in /sp:dev-run --mode implement → sp:code-implementation, not YAML prose.
-                input: /sp:dev-run --mode implement ${vars.wbs} --auto
+                # 0933 R28: --escalation-file names the Q/A transcript the implement
+                # agent appends to when pausing and reads back on re-dispatch; absent
+                # on a first attempt means "no prior escalations".
+                input: /sp:dev-run --mode implement ${vars.wbs} --auto --escalation-file .spur/run/${vars.wbs}-escalation.md
                 timeoutMs: ${vars.implementTimeoutMs}
                 # R3 (task 0424): empty-implement no-op guard — the agent.run action
                 # fails the step when exit 0 produced zero non-corpus file changes, so
                 # a silent no-op routes the run to `failed` here instead of drifting
                 # into test/review and being caught a full pass later.
                 requireDiff: true
+                # 0933 R26: escalation contract — the agent.run option names the QUESTION
+                # file (the pause signal, deleted pre-dispatch for freshness); a paused
+                # attempt (agent wrote its question there and exited 0) succeeds with
+                # data.escalated=true and skips requireDiff for THAT attempt only. The
+                # Q/A transcript (.spur/run/<wbs>-escalation.md) is separate: it reaches
+                # the agent via --escalation-file in the input below.
+                escalationFile: .spur/run/${vars.wbs}-question.md
                 # 0706 R6: this stage mutates the working tree unattended under the
                 # auto profile, so it declares minimum execution-capability
                 # requirements. Dispatch fails closed (before spawn) when the
@@ -289,6 +326,39 @@ states:
           - kind: shell
             options:
                 command: "$formatCmd ; exit 0"
+
+    # ── escalate hop (operator-question pause, 0933) ──────────────────────────
+    # The implement agent paused on an operator question: it wrote
+    # .spur/run/<wbs>-question.md and exited 0 (agent.run reported
+    # data.escalated=true, skipping requireDiff for that attempt). This hop bounds
+    # the asks (counter), surfaces the question verbatim through the HITL responder
+    # (the run pauses here), and — after `spur workflow continue --answer-text <a>`
+    # delivers __hitlInput — resumes implement with the Q/A transcript
+    # (.spur/run/<wbs>-escalation.md) named in the implement input via
+    # --escalation-file. The transcript append + question-file consumption happen in
+    # the escalate→implement guard so a stale question can never re-trigger the hop
+    # after the answered attempt.
+    - id: escalate
+      description: >-
+          Operator-question pause (0933): the implement agent asked a question
+          headlessly; surface it to the operator and resume implement with the answer.
+      onEnter:
+          # Bounded asks: increment the per-task escalation counter before pausing.
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; n="$(cat .spur/run/$wbs-escalation-count 2>/dev/null || echo 0)"; echo $((n + 1)) > .spur/run/$wbs-escalation-count; exit 0
+          # The agent's question, verbatim, becomes the pause prompt.
+          - kind: file.read.into-var
+            options:
+                file: .spur/run/${vars.wbs}-question.md
+                var: escalationQuestion
+          # Pause for the operator (responder pause:true stops the run after this
+          # onEnter; `spur workflow continue --answer-text <answer>` writes
+          # __hitlInput and re-evaluates the escalate guards).
+          - kind: hitl.input
+            options:
+                prompt: "${vars.escalationQuestion}"
 
     # ── test hop (quality gate + bounded auto-fix) ─────────────────────────────
     # NOT /sp:dev-unit. That command (sp:code-testing) *extends/generates* tests toward
@@ -668,7 +738,8 @@ states:
     - id: failed
       description: >
           Terminal — precheck, quality-gate exhaustion, verify non-PASS, record check
-          failure, or operator rejection; reported, not advanced.
+          failure, or operator rejection; reported, not advanced. Also receives an
+          escalation-bound pause or an operator give-up (0933).
       onEnter:
           # (d) F96 R5 (0950): residual-scan.ts owns the report; shell only resolves it.
           # Soft (exit 0): a run that exhausts its fix budget on residuals leaves the
@@ -677,6 +748,19 @@ states:
             options:
                 command: >-
                     S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" report "$wbs" --spur-bin "$spurBin" || echo "residual-report failed — re-run: residual-scan report $wbs" >&2; else echo "residual-scan not staged — report skipped — re-run: residual-scan report $wbs" >&2; fi; exit 0
+      onEnter:
+          # 0933 R30 (guard-lines compression): the escalation-bound report note lives
+          # here as a conditional — no-op unless the run reached failed with a pending
+          # question at (or above) the ask bound (bound pause or final give-up). The
+          # unanswered question itself is appended to the task report (report.txt, R2).
+          - kind: shell
+            options:
+                command: >-
+                    n="$(cat .spur/run/$wbs-escalation-count 2>/dev/null || echo 0)";
+                    test "$n" -ge "$maxEscalations" -a -s .spur/run/$wbs-question.md || exit 0;
+                    printf '\n## Escalation bound reached\n\nThe implement step asked an operator question %s times (bound %s) and ended without a resumable answer. Unanswered question:\n\n' "$n" "$maxEscalations" >> .spur/run/$wbs-report.txt;
+                    cat .spur/run/$wbs-question.md >> .spur/run/$wbs-report.txt;
+                    exit 0
 
     - id: cancelled
       description: Terminal — pipeline cancelled by operator at the approval gate (R1).
@@ -700,12 +784,54 @@ transitions:
       guard:
           kind: always
 
+    # ── implement routing: escalation first (0933 R26/R30), then the linear body ──
+    # Declaration order matters: the escalation bound is checked FIRST — a paused
+    # attempt that already exhausted its maxEscalations asks routes to failed (with a
+    # report note appended in the same guard) instead of asking forever; then the
+    # question-presence hop; then the normal always edge. The bound guard requires a
+    # fresh question file so a COMPLETED implement after max asks still routes to test.
+    - from: implement
+      to: failed
+      description: Escalation bound exhausted — the agent paused again after maxEscalations operator answers.
+      # 0933 R30 (guard-lines compression): thin predicate; the report note is written
+      # by the failed state's onEnter when it observes a bound-exhausted pause.
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  n="$(cat .spur/run/$wbs-escalation-count 2>/dev/null || echo 0)";
+                  test "$n" -ge "$maxEscalations" -a -s .spur/run/$wbs-question.md
+    - from: implement
+      to: escalate
+      description: Implement agent paused on an operator question (non-empty question file) — pause for an answer.
+      guard:
+          kind: shell
+          options:
+              command: 'test -s .spur/run/$wbs-question.md'
     # ── linear body ──
     - from: implement
       to: test
       description: Implementation done — quality-gate probe.
       guard:
           kind: always
+    # escalate branching (0933 R27): an answered pause resumes implement — the transcript
+    # append and question consumption happen in implement's onEnter (guards stay thin
+    # under ADR-115 guard-lines caps); an empty answer is an operator give-up → failed
+    # (question + transcript preserved as evidence).
+    - from: escalate
+      to: implement
+      description: Operator answered — re-enter implement, which records the Q/A transcript and consumes the question.
+      guard:
+          kind: shell
+          options:
+              command: 'test -n "$__hitlInput"'
+    - from: escalate
+      to: failed
+      description: Empty operator answer — give-up routes to failed (question + transcript preserved as evidence).
+      guard:
+          kind: shell
+          options:
+              command: 'test -z "$__hitlInput"'
     # Soft probe branching (declaration order: PASS first, then FAIL, then defense).
     - from: test
       to: verify

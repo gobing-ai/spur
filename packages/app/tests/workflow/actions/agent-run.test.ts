@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    utimesSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
@@ -909,6 +918,126 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         const runner = new AgentRunActionRunner(svc);
         const result = await runner.execute({ role: 'coder', input: 'implement', cwd: dir }, makeCtx());
         expect(result.ok).toBe(true);
+    });
+
+    // 0933 R26/R1: escalationFile — an exit-0 attempt that wrote a non-empty
+    // escalation file paused on an operator question instead of finishing. The file
+    // is deleted before dispatch (0751 R3 freshness): only a question written by the
+    // CURRENT attempt can pause it.
+    describe('escalationFile (0933 R26)', () => {
+        test('exit-0 + non-empty escalation file written by this attempt → ok:true with data.escalated', async () => {
+            dir = mkdtempSync(join(tmpdir(), 'agent-run-esc-'));
+            const escFile = join(dir, 'question.md');
+            // The agent writes its question during the run (pre-dispatch there is none).
+            const svc = svcWithEffect(() => {
+                writeFileSync(escFile, 'which auth scheme — oauth2 device flow or session cookie?');
+            });
+            const runner = new AgentRunActionRunner(svc);
+            const result = await runner.execute(
+                { role: 'coder', input: 'implement', escalationFile: 'question.md', cwd: dir },
+                makeCtx(),
+            );
+            expect(result.ok).toBe(true);
+            expect(result.data).toMatchObject({ escalated: true, escalationFile: 'question.md' });
+            expect(readFileSync(escFile, 'utf8')).toContain('oauth2 device flow');
+        });
+
+        test('escalated attempt skips requireDiff (that attempt only)', async () => {
+            dir = mkdtempSync(join(tmpdir(), 'agent-run-esc-diff-'));
+            const escFile = join(dir, 'question.md');
+            const svc = svcWithEffect(() => {
+                writeFileSync(escFile, 'pick a color — blue or green?');
+            });
+            // Not a git repo and the agent changed nothing — without the skip this
+            // is the empty-implement contract violation from the suite above.
+            const runner = new AgentRunActionRunner(svc);
+            const result = await runner.execute(
+                { role: 'coder', input: 'implement', requireDiff: true, escalationFile: 'question.md', cwd: dir },
+                makeCtx(),
+            );
+            expect(result.ok).toBe(true);
+            expect(result.data).toMatchObject({ escalated: true });
+        });
+
+        test('escalation file declared but absent/empty → normal post-exit chain (requireDiff fires)', async () => {
+            dir = mkdtempSync(join(tmpdir(), 'agent-run-esc-empty-'));
+            const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+            const runner = new AgentRunActionRunner(svc);
+            const result = await runner.execute(
+                {
+                    role: 'coder',
+                    input: 'implement',
+                    requireDiff: true,
+                    escalationFile: 'missing-question.md',
+                    cwd: dir,
+                },
+                makeCtx(),
+            );
+            expect(result.ok).toBe(false);
+            expect(result.error).toContain('empty implement');
+        });
+
+        test('stale escalation file is deleted before dispatch (0751 R3 freshness, 0933 R1)', async () => {
+            dir = mkdtempSync(join(tmpdir(), 'agent-run-esc-stale-'));
+            const escFile = join(dir, 'question.md');
+            writeFileSync(escFile, 'STALE question from a prior run');
+            let dispatchSawStale: boolean | undefined;
+            const svc: AgentService = {
+                runTraced: async () => {
+                    dispatchSawStale = existsSync(escFile);
+                    return { exitCode: 0, stdout: '', invocation: invocation() };
+                },
+            } as unknown as AgentService;
+            const runner = new AgentRunActionRunner(svc);
+            const result = await runner.execute(
+                { role: 'coder', input: 'implement', escalationFile: 'question.md', cwd: dir },
+                makeCtx(),
+            );
+            expect(result.ok).toBe(true);
+            // Deleted pre-dispatch and never rewritten → no escalation, normal completion.
+            expect(dispatchSawStale).toBe(false);
+            expect(result.data).not.toHaveProperty('escalated');
+        });
+
+        test('undeletable stale escalation file fails the step before dispatch', async () => {
+            dir = mkdtempSync(join(tmpdir(), 'agent-run-esc-undeletable-'));
+            const escFile = join(dir, 'question.md');
+            writeFileSync(escFile, 'STALE');
+            chmodSync(escFile, 0o444);
+            chmodSync(dir, 0o555); // read-only dir → delete fails
+            try {
+                const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+                const runner = new AgentRunActionRunner(svc);
+                const result = await runner.execute(
+                    { role: 'coder', input: 'implement', escalationFile: 'question.md', cwd: dir },
+                    makeCtx(),
+                );
+                expect(result.ok).toBe(false);
+                expect(result.error).toContain('escalationFile');
+                expect(result.error).toContain('could not be removed before dispatch');
+            } finally {
+                chmodSync(dir, 0o755);
+                chmodSync(escFile, 0o644);
+            }
+        });
+
+        test('non-exit-0 with a non-empty escalation file is still a failure (escalation signals on success only)', async () => {
+            dir = mkdtempSync(join(tmpdir(), 'agent-run-esc-fail-'));
+            const escFile = join(dir, 'question.md');
+            const svc = svcWithEffect(
+                () => {
+                    writeFileSync(escFile, 'retry?');
+                },
+                { exitCode: 2, stdout: '', invocation: invocation() },
+            );
+            const runner = new AgentRunActionRunner(svc);
+            const result = await runner.execute(
+                { role: 'coder', input: 'implement', escalationFile: 'question.md', cwd: dir },
+                makeCtx(),
+            );
+            expect(result.ok).toBe(false);
+            expect(result.data).not.toHaveProperty('escalated');
+        });
     });
 
     test('subprocess failure error names the partial-work artifact path and the resume runbook (R2)', async () => {

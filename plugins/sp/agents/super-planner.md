@@ -267,8 +267,10 @@ Report using the batch-report template from execution-batch.md §5:
 **Next:** <one-line action>
 ```
 
-Per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`, plus
-the parallel-only `integration-conflict` ([execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel)).
+Per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `paused` (0933: parked on
+an operator question — escalate hop — or an approval gate; non-terminal, never `done`) |
+`not-attempted`, plus the parallel-only `integration-conflict`
+([execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel)).
 Batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
@@ -278,8 +280,10 @@ With `--json`, emit the same shape as a JSON object for machine consumption.
 
 - **Parallel execution** - `--mode parallel` isolates each task in its own worktree with
   rebase-and-FF integration; see [execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel).
-- **Interactive within-step escalation** - waits for the workspace module + inbox module +
-  `spur agent` team mode. You surface blockers only at the batch boundary.
+- **Interactive within-step escalation** — implemented (0933): the pipeline's `escalate` hop
+  pauses on the implement agent's operator question; the operator answers via
+  `spur workflow continue --answer-text` and the run resumes implement with the Q/A transcript
+  (bounded by `maxEscalations`). See [execution-batch.md Step 3](../skills/spur-dev/references/execution-batch.md#step-3--the-driver-loop-r3-r4).
 
 ## Platform Notes
 

@@ -23,7 +23,7 @@ the resolved actions and guards of every `.spur/workflows/*.yaml`; any element p
 in one and absent in the other fails the check. Add a new kind here when the driver
 implements it; remove the entry when the corresponding kind is dropped from the YAML.
 
-**Actions:** `shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `hitl.select` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate`
+**Actions:** `shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `hitl.input` · `hitl.select` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate`
 
 **Guards (transitions):** `always` · `shell` · `action-ok` · `contract-violation`
 
@@ -244,10 +244,19 @@ Action semantics come from the YAML and the workflow action contract:
   actions/guards.
 - `hitl.confirm` — under `profile=auto`, follow the YAML's auto-skip transition. Otherwise pause,
   surface the prompt, and resume from the same state with the operator's answer.
+- `hitl.input` — pause, surface the declared prompt (the agent's operator question, 0933), and
+  resume from the same state with the operator's answer written into the declared var (default
+  `__hitlInput`); the subsequent guards route on answer presence exactly as the engine does.
+  **Host-session exception (0933 R5):** because a host session can talk to the operator
+  directly, do NOT pause the run at `hitl.input` — ask the question in the session, write the
+  answer into the declared var, and continue. The same 2-escalation bound applies: after the
+  bound the ask routes to `failed` like the engine does.
 - `agent.run` — execute the action's input in the host session. Task execution may use the native
   subagent eligibility below; idea/plan never dispatch a native subagent unless the operator
   explicitly requested delegation. Do not call `spur agent run` or re-enter a full pipeline. Preserve the YAML options: capture
-  `answerFile`; assert `expectFile`; enforce `requireDiff` against a pre-action git snapshot,
+  `answerFile`; assert `expectFile`; honor `escalationFile` (a non-empty file after exit 0 means
+  the agent paused on an operator question — treat the attempt as succeeded-with-escalation and
+  skip `requireDiff` for that attempt only); enforce `requireDiff` against a pre-action git snapshot,
   including the task-scope guard; honor declared error policy. `timeoutMs` is recorded as not
   applicable because the host session has no independent kill boundary.
 - `run.artifact` — the engine's ledger registration has **no inline execution surface** (0808 R4).

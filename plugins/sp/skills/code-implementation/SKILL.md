@@ -52,6 +52,23 @@ When this skill is entered via `/sp:dev-run --mode implement <wbs>` (the form
 The structural guard is the slash form itself (`--mode implement`). Prose in the workflow YAML
 `agent.run` `input` is the wrong place for this rule; it belongs here and in `dev-run.md`.
 
+## Escalation contract (task 0933, implement step only)
+
+When the pipeline runs implement headless, you have a bounded channel to surface a question
+instead of guessing. The rules, in decision order:
+
+- **Decide without asking** when the answer follows from the task's frozen Design /
+  Requirements / Q&A, the project and global instructions, or the codebase itself. Ambiguity
+  you can resolve from evidence is not a question.
+- **Escalate only when a requirement or design ambiguity would change scope, correctness, or
+  authorization.** Style preferences, implementation details, and curiosity are not escalations.
+- **To escalate:** write ONE concise question — with options and a recommendation — to the
+  escalation file, then exit 0 **without further edits**. The pipeline pauses the run and an
+  operator answers; the transcript of prior Q/A pairs lives at the `--escalation-file` path
+  (the ask loop is bounded, default 2 — a third pause fails the task).
+- **Read `--escalation-file` if it exists and treat its answers as binding.** They are the
+  operator's recorded decisions for this pass, not suggestions.
+
 ## One WBS per implement pass (task 0487 R1)
 
 The target WBS is the **only** task you implement. Sibling tasks in the corpus are context you do

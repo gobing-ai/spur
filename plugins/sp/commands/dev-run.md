@@ -41,6 +41,12 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 **Flags:**
 
 - `--auto` | `--agent <inline|auto|name>` — Skip objective HITL confirmations (taste/irreversible gates still pause). `--agent` names who does the model-bearing work. Interactive omit/`inline` keeps the controller and implement-only stages in this session; full mode reads `task-pipeline.yaml` as the SSOT and interprets its actions/guards through the inline driver, whose eligible `agent.run` stages dispatch once to a native subagent and otherwise run in the host (0508 eligibility — task 0687 resolved-inline) It records `stage <id> executed inline in session <session-id>` or `stage <id> executed via subagent <agent-id> (host session <session-id>)` in the run log. `auto` or a name is merged into `vars.agent` and `vars.implementAgent` and keeps the existing subprocess workflow. Headless `spur workflow run` / `spur agent run` is unchanged. See the [execution-surface contract](../skills/spur-dev/references/cross-cutting.md#inline-default-execution-surface).
+- `--escalation-file <path>` (implement step only, 0933) — names the Q/A escalation transcript
+  (default `.spur/run/<wbs>-escalation.md`). Absent on a first attempt means "no prior
+  escalations". When the implement agent needs an operator decision it appends its question to
+  `.spur/run/<wbs>-question.md` and exits 0 — the pipeline's `escalate` hop surfaces the question,
+  the operator answers via `spur workflow continue --answer-text`, and the guard appends the Q/A
+  pair to this transcript before re-entering implement, where the agent reads it and resumes.
 
 `--worktree` `[<name>]` (run the task's pipeline in an isolated git worktree — FF-merge onto the
 base ref on full success, retain intact on any failure/halt/non-FF; bare form creates a fresh tree,

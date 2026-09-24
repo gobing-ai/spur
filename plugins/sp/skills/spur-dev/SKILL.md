@@ -92,8 +92,14 @@ pick task (spur task list --json)
 The pipeline (`kind: state-machine`) runs the work loop:
 
 ```
-precheck → implement → test → review → approve(HITL) → verify → record → done
+precheck → implement[→escalate(HITL)] → test → review → approve(HITL) → verify → record → done
 ```
+
+**Escalation contract (0933).** The implement agent may pause on an operator question: it writes
+`.spur/run/<wbs>-question.md` and exits 0; the `escalate` hop surfaces it via HITL and pauses the
+run. Resume with `spur workflow continue --answer-text <answer>` — the guard appends the Q/A to
+`.spur/run/<wbs>-escalation.md` and re-enters implement (transcript via `--escalation-file`).
+`maxEscalations` (default 2) bounds the loop; exhausted or empty answer → `failed`. Implement only.
 
 Full procedure: **[references/execution-workflow.md](references/execution-workflow.md)**.
 Host-session procedure: **[references/inline-pipeline-driver.md](references/inline-pipeline-driver.md)**.

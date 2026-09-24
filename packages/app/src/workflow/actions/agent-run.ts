@@ -40,7 +40,7 @@ export const AGENT_RUN_PROGRESS_INTERVAL_MS = 30_000;
 const KIND = 'agent.run';
 
 /** A declared `agent.run` post-condition (ADR-118). */
-type ContractName = 'answerFile' | 'expectFile' | 'requireDiff' | 'requiresCapabilities';
+type ContractName = 'answerFile' | 'escalationFile' | 'expectFile' | 'requireDiff' | 'requiresCapabilities';
 
 /** Config slice injected at composition root for agent.run steps (R1, task 0451). */
 export interface AgentRunAgentConfig {
@@ -122,6 +122,19 @@ export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
  *   defects (R6-S2a). Relative paths resolve against `cwd`. The target is deleted
  *   before dispatch (task 0751 R3): a file left by a prior run can never satisfy
  *   the assertion — only an artifact produced by the current run can.
+ * - `escalationFile` (string): opt-in escalation contract (0933 R26). After a
+ *   successful (exit-0) run, a NON-EMPTY file at this path means the agent paused
+ *   the step on an operator question instead of finishing: the step succeeds with
+ *   `data.escalated = true` and `requireDiff` (incl. the 0487 scope guard) is
+ *   skipped for that attempt only — an escalated implement legitimately ends
+ *   without task changes. When the file is absent or empty the attempt was a
+ *   normal completion and the post-exit chain (expectFile/requireDiff) applies
+ *   unchanged. Like `expectFile`, the target is deleted before dispatch (0933 R1
+ *   freshness rule, 0751 R3): a stale question left by a prior run can never pause
+ *   this run — only a question written by the current attempt can. On a resume
+ *   re-entry the pipeline's onEnter shell consumes the question first (appends the
+ *   Q/A to the transcript and removes the file), so the pre-dispatch delete no-ops.
+ *   Relative paths resolve against `cwd`.
  * - `requireDiff` (boolean): post-exit verification — after a successful (exit-0)
  *   agent run, fail the step unless the working tree has non-corpus changes
  *   (untracked/staged/unstaged, docs/tasks3|docs/features excluded). Catches the
@@ -500,6 +513,7 @@ export class AgentRunActionRunner implements ActionRunner {
         // e.g. the verify step writing its PASS/FAIL verdict artifact).
         const answerFile = asOptionalString(options.answerFile);
         const expectFile = asOptionalString(options.expectFile);
+        const escalationFile = asOptionalString(options.escalationFile);
         const requireDiff = asOptionalBoolean(options.requireDiff);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
 
@@ -596,6 +610,26 @@ export class AgentRunActionRunner implements ActionRunner {
         }
         if (Object.keys(requiresCapabilities.requires).length > 0) {
             flags.requiresCapabilities = JSON.stringify(requiresCapabilities.requires);
+        }
+
+        // R3 (task 0751) freshness, applied to the escalationFile question signal too
+        // (0933 R1): a question file left by a PRIOR run must not pause this run, so the
+        // target is removed before dispatch; presence after exit-0 proves THIS attempt
+        // paused. On a resume re-entry the pipeline consumes the question in its onEnter
+        // shell before this delete, so the delete is a no-op there.
+        if (escalationFile !== undefined) {
+            const target = isAbsolute(escalationFile) ? escalationFile : join(cwd, escalationFile);
+            const fs = createNodeFileSystem(cwd);
+            if (await fs.exists(target)) {
+                try {
+                    await fs.deleteFile(target);
+                } catch (error) {
+                    return {
+                        ok: false,
+                        error: `agent.run: escalationFile ${escalationFile} exists from a previous run and could not be removed before dispatch: ${(error as Error).message}`,
+                    };
+                }
+            }
         }
 
         // R3 (task 0751): delete-before-invoke. A verifier answer file left by a PRIOR run must
@@ -854,8 +888,22 @@ export class AgentRunActionRunner implements ActionRunner {
                 );
             }
 
+            // 0933 R26: escalation contract detection. After exit-0, a non-empty
+            // escalationFile means the agent paused the step on an operator
+            // question instead of finishing. The step succeeds with
+            // `data.escalated = true`; expectFile and requireDiff (incl. the 0487
+            // scope guard) are skipped for THAT attempt only. Absent/empty file →
+            // normal completion, post-exit chain unchanged below.
+            let escalated = false;
+            if (ok && escalationFile !== undefined) {
+                const target = isAbsolute(escalationFile) ? escalationFile : join(cwd, escalationFile);
+                const fs = createNodeFileSystem(cwd);
+                const stat = await fs.stat(target);
+                escalated = stat !== null && stat.size > 0;
+            }
+
             // R6-S2a: verify expected side-effect artifact exists after exit-0.
-            if (ok && expectFile !== undefined) {
+            if (ok && !escalated && expectFile !== undefined) {
                 const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
                 const fs = createNodeFileSystem(cwd);
                 if (!(await fs.exists(target))) {
@@ -918,7 +966,7 @@ export class AgentRunActionRunner implements ActionRunner {
             // writes docs/tasks3|docs/features). Tree-level approximation: a
             // pre-existing dirty tree reads as non-empty — safe direction, a false
             // pass would silently certify an empty implement.
-            if (ok && requireDiff === true) {
+            if (ok && !escalated && requireDiff === true) {
                 const changed =
                     diffBaseline === undefined
                         ? await gitNonCorpusChangedFiles(cwd, this.agentConfig.excludeGlobs)
@@ -1052,6 +1100,12 @@ export class AgentRunActionRunner implements ActionRunner {
                 ok && affinityOn && !freshSession && resumeSupported && storedSessionId !== undefined;
             resultData.session = resumedDispatch ? ('reused' as const) : ('fresh' as const);
             resultData.sessionSource = sessionDeclared ? ('declared' as const) : ('default' as const);
+            // 0933 R26: surface the escalation on the result record — the pipeline
+            // escalate state keys off the file, but traces/progress read data.
+            if (escalated) {
+                resultData.escalated = true;
+                resultData.escalationFile = escalationFile;
+            }
             // B7 R1 (0894): record the actually dispatched model (pin or step override).
             if (model !== undefined) resultData.model = model;
             // B7 R6/R7 (0895): trace columns — the dispatched executor, the session
