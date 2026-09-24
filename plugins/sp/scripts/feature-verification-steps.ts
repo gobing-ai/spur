@@ -172,7 +172,7 @@ async function verify(featureId: string, runId: string, cmdOverride: string, spu
         verificationCmd: effectiveCmd,
         inputDigest: beforeDigest,
     });
-    const db = mod.openInlineRunProjectDb(cwd);
+    const db = await mod.openInlineRunProjectDb(cwd);
     try {
         await new mod.ArtifactDao(db.adapter as never).record({
             runId,

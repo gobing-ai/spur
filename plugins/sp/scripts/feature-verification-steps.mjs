@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 // @bun
 
 // plugins/sp/scripts/feature-verification-steps.ts
@@ -113,7 +113,7 @@ async function verify(featureId, runId, cmdOverride, spurBin) {
     verificationCmd: effectiveCmd,
     inputDigest: beforeDigest
   });
-  const db = mod.openInlineRunProjectDb(cwd);
+  const db = await mod.openInlineRunProjectDb(cwd);
   try {
     await new mod.ArtifactDao(db.adapter).record({
       runId,
