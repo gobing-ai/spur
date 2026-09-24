@@ -204,3 +204,56 @@ test('a prose line starting `R1 ` with no list marker is not a requirement', () 
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('0948 R4: an unknown flag exits non-zero and writes no status file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-unknown-flag-'));
+    try {
+        const fakeSpur = writeFakeSpur(dir, WITHIN_LIMITS_BODY);
+        const r = Bun.spawnSync({
+            cmd: [
+                'bun',
+                join(import.meta.dir, '..', 'scripts', 'task-size-precheck.ts'),
+                '0926',
+                '--task-file',
+                'x.md',
+                '--spur-bin',
+                fakeSpur,
+            ],
+            cwd: dir,
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        expect(r.exitCode).not.toBe(0);
+        expect(new TextDecoder().decode(r.stderr ?? new Uint8Array())).toContain('unknown flag: --task-file');
+        // The refusal happens before any write: no garbage-named status file, no masked exit code.
+        expect(existsSync(join(dir, '.spur/run/0926-precheck-size.status'))).toBe(false);
+        expect(existsSync(join(dir, '.spur/run/x.md-precheck-size.status'))).toBe(false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('0948 R4: the first positional wins — a later positional never overwrites wbs', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'task-size-precheck-positional-'));
+    try {
+        const fakeSpur = writeFakeSpur(dir, WITHIN_LIMITS_BODY);
+        const r = Bun.spawnSync({
+            cmd: [
+                'bun',
+                join(import.meta.dir, '..', 'scripts', 'task-size-precheck.ts'),
+                '0926',
+                'x.md',
+                '--spur-bin',
+                fakeSpur,
+            ],
+            cwd: dir,
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        expect(r.exitCode).toBe(0);
+        expect(readFileSync(join(dir, '.spur/run/0926-precheck-size.status'), 'utf8')).toBe('PASS\n');
+        expect(existsSync(join(dir, '.spur/run/x.md-precheck-size.status'))).toBe(false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

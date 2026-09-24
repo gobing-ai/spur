@@ -2612,6 +2612,23 @@ terminalStates:
             await rm(dir, { recursive: true, force: true });
         });
 
+        // 0948 R6: the read used to be `existsSync` → `readFileSync`, so a pair that vanished
+        // between the two calls was reported as `state-invalid` (a corruption signal) instead
+        // of `state-missing`. Only ENOENT means missing; every other read failure stays invalid.
+        test('0948 R6: a non-ENOENT state read failure stays state-invalid', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(join(runDir, 'r8.state.json'), { recursive: true });
+            await writeFile(join(runDir, 'r8.md'), '# record');
+
+            // The state path exists but is a DIRECTORY — a read failure that is not ENOENT.
+            const record = readWorkflowRunRecord(runDir, 'r8');
+            expect(record.kind).toBe('incomplete');
+            if (record.kind !== 'incomplete') throw new Error('expected an incomplete record');
+            expect(record.reason).toBe('state-invalid');
+            await rm(dir, { recursive: true, force: true });
+        });
+
         test('legacy-log: a .log-only run stays readable in place (no bulk migration)', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
             const runDir = join(dir, '.spur', 'run');
@@ -2660,6 +2677,55 @@ terminalStates:
             expect(outcome.markdown).toContain('# record');
             expect(outcome.markdown).not.toContain('hunter2');
             expect(outcome.state).toMatchObject({ runId: 'r1', status: 'done' });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        // 0948 R5 / AC5: the markdown was scrubbed on read while the parsed state JSON was
+        // served parse-trusted, so a secret persisted into `.state.json` left the process.
+        test('0948 R5: the served state JSON is re-redacted on read, including nested values and keys', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r6.md'), '# record');
+            await writeFile(
+                join(runDir, 'r6.state.json'),
+                JSON.stringify({
+                    runId: 'r6',
+                    token: 'hunter2',
+                    nested: { deep: ['a', 'hunter2'] },
+                    'hunter2-key': 'plain',
+                }),
+            );
+
+            const outcome = inspectWorkflowRunRecord(runDir, 'r6', { secretValues: ['hunter2'] });
+            expect(outcome.status).toBe('record');
+            if (outcome.status !== 'record') throw new Error('expected a record outcome');
+            const serialized = JSON.stringify(outcome.state);
+            expect(serialized).not.toContain('hunter2');
+            expect(serialized).toContain('[REDACTED]');
+            expect(outcome.state.runId).toBe('r6');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        // 0948 R5: bytes and characters are different units. `maxBytes` gates the FILE size;
+        // `maxChars` bounds the redacted TEXT. A byte cap must not be silently reused as a
+        // character bound, and the char bound must still apply independently.
+        test('0948 R5: maxBytes gates the file size and maxChars bounds the served text separately', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r7.md'), `# ${'x'.repeat(200)}`);
+            await writeFile(join(runDir, 'r7.state.json'), '{"runId":"r7"}');
+
+            // Char bound truncates the served markdown (with the ellipsis marker).
+            const bounded = inspectWorkflowRunRecord(runDir, 'r7', { maxChars: 10 });
+            expect(bounded.status).toBe('record');
+            if (bounded.status !== 'record') throw new Error('expected a record outcome');
+            expect(bounded.markdown.endsWith('…')).toBe(true);
+
+            // Byte bound is a size gate: the same file is oversized, never truncated.
+            const oversized = inspectWorkflowRunRecord(runDir, 'r7', { maxBytes: 10 });
+            expect(oversized.status).toBe('oversized');
             await rm(dir, { recursive: true, force: true });
         });
 

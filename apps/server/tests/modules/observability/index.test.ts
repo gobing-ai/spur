@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import { InvalidWorkflowRunIdError } from '@gobing-ai/spur-app';
 import { Hono } from 'hono';
 import type { ServerContext } from '../../../src/context';
 import {
@@ -593,7 +594,7 @@ describe('observability routing-summary (task 0552)', () => {
         test('a traversal-shaped run id is a 400, not a 500', async () => {
             const app = mountWithWorkflowService({
                 inspectRunRecord: () => {
-                    throw new Error('Invalid workflow run id: "../escape"');
+                    throw new InvalidWorkflowRunIdError('../escape');
                 },
             });
 
@@ -602,6 +603,26 @@ describe('observability routing-summary (task 0552)', () => {
             const body = (await res.json()) as { code: string; error: string };
             expect(body.code).toBe('invalid-run-id');
             expect(body.error).toContain('Invalid workflow run id');
+        });
+
+        // 0948 R5 / AC5: the mapping is on the typed `code`, never on message text. A plain
+        // Error carrying the OLD message must NOT be reclassified — otherwise a future wording
+        // change silently flips a correct 400 into a 500, which is the defect this pins.
+        test('a message-only lookalike error is not reclassified as a 400', async () => {
+            const app = mountWithWorkflowService({
+                inspectRunRecord: () => {
+                    throw new Error('Invalid workflow run id: "../escape"');
+                },
+            });
+
+            const res = await app.request('/api/observability/run-record/%2e%2e%2fescape');
+            expect(res.status).toBe(500);
+        });
+
+        test('the typed error carries the stable invalid-run-id code', () => {
+            const err = new InvalidWorkflowRunIdError('../escape');
+            expect((err as { code?: unknown }).code).toBe('invalid-run-id');
+            expect(err.message).toContain('Invalid workflow run id');
         });
 
         test('unavailable outcomes stay 200 with an explicit status', async () => {

@@ -40,9 +40,13 @@ states:
     onEnter:
       # Caller wiring (task 0880, ADR-119): entering verification RUNS the
       # feature-scoped pass instead of only passively reading its status file.
+      # 0948 R1: pass BOTH vars the inner workflow needs. `--vars` was documented as
+      # replace-not-merge and a partial override silently blanked `spurBin`; the engine
+      # merges declared defaults today (0948 R2), but the caller stays explicit so the
+      # nested run is self-sufficient under either semantic.
       - kind: shell
         options:
-          command: '$spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\"}"'
+          command: '$spurBin workflow run feature-verification.yaml --vars "{\"featureId\":\"$featureId\",\"spurBin\":\"$spurBin\"}"'
   - id: blocked
     description: Impediment; work suspended.
   - id: done

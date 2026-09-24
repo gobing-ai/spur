@@ -20,8 +20,9 @@
  *
  * Always exits 0 after verify; the transition guard reads the status file and
  * the completion boundary validates the receipt (fail-closed). Unsafe ids are
- * refused outright. Node-builtin imports only (ADR-065); application seams come
- * from the repo app source (checkout) or the generated inline bundle (installed).
+ * refused outright. Node-builtin imports only (ADR-065); the application seams come
+ * from the generated inline bundle (`plugins/sp/lib/inline-run.generated.mjs`) — never
+ * from `packages/app/src/index.ts`, which is not a plugin-script contract surface (0948 R3).
  */
 
 import { spawnSync } from 'node:child_process';
@@ -35,7 +36,7 @@ import {
     renameSync,
     writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar } from '../lib/env';
 
@@ -55,29 +56,33 @@ interface VerificationModule {
     ) => { record: (input: { runId: string; path: string; kind: string }) => Promise<unknown> };
 }
 
-/** Repo checkout → app package source; installed layout → the generated bundle. */
+/**
+ * Load the verification seams from the plugin's GENERATED inline bundle.
+ *
+ * Mode is explicit (0948 R3): plugin scripts consume the generated bundle — the
+ * contract surface ADR-065 gives them — and never `packages/app/src/index.ts`.
+ * The app source entry is not a plugin-script surface and does not re-export every
+ * seam (`splitLaunchCommand`, `ArtifactDao`), so loading it produced a misleading
+ * "rebuild/install the sp plugin" failure that no rebuild could fix. The bundle is
+ * tracked, so a source checkout has it without an install step.
+ *
+ * `spurBin` no longer selects the module (it named the *caller's* CLI entry, not this
+ * script's runtime surface); it is kept only to make the failure message actionable.
+ */
 async function loadModule(spurBin: string): Promise<VerificationModule> {
-    const candidates =
-        spurBin !== '' ? [spurBin] : [fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url))];
-    for (const candidate of candidates) {
-        const mainModule = candidate
-            .split(/\s+/)
-            .filter(Boolean)
-            .reverse()
-            .find((t) => t.endsWith('.ts'));
-        if (mainModule === undefined || !existsSync(mainModule)) continue;
-        const appEntry = resolve(dirname(mainModule), '..', '..', '..', 'packages', 'app', 'src', 'index.ts');
-        if (existsSync(appEntry)) return requireModule(appEntry);
-    }
     const bundle = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
     if (!existsSync(bundle)) {
-        throw new Error('inline application bundle is missing — rebuild/install the sp plugin before running inline');
+        throw new Error(
+            `feature-verification-steps: mode=bundle — the generated inline bundle is missing at ${bundle}` +
+                `${spurBin === '' ? '' : ` (spurBin=${spurBin})`}. ` +
+                'Fix: in a source checkout run `bun run build:bundle`; for an installed plugin reinstall it.',
+        );
     }
-    return requireModule(bundle);
+    return requireModule(bundle, 'bundle');
 }
 
 /** Dynamic-import the entry and refuse modules missing the verification seams. */
-async function requireModule(entry: string): Promise<VerificationModule> {
+async function requireModule(entry: string, mode: 'bundle'): Promise<VerificationModule> {
     const mod = (await import(entry)) as Partial<VerificationModule> & Record<string, unknown>;
     const missing = (
         [
@@ -92,7 +97,8 @@ async function requireModule(entry: string): Promise<VerificationModule> {
     ).filter((k) => typeof mod[k] !== 'function');
     if (missing.length > 0) {
         throw new Error(
-            `application entry is missing feature-verification seams (${missing.join(', ')}) — rebuild/install the sp plugin`,
+            `feature-verification-steps: mode=${mode} — application entry ${entry} is missing feature-verification seams (${missing.join(', ')}). ` +
+                'Fix: the generated inline bundle is stale or incomplete — run `bun run build:bundle` in a source checkout, or reinstall the sp plugin.',
         );
     }
     return mod as VerificationModule;

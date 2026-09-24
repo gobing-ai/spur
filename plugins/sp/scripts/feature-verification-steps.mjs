@@ -13,7 +13,7 @@ import {
   renameSync,
   writeFileSync
 } from "fs";
-import { dirname, join, resolve } from "path";
+import { join } from "path";
 import { fileURLToPath } from "url";
 
 // plugins/sp/lib/env.ts
@@ -25,22 +25,13 @@ function getEnvVar(name, fallback) {
 // plugins/sp/scripts/feature-verification-steps.ts
 var SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 async function loadModule(spurBin) {
-  const candidates = spurBin !== "" ? [spurBin] : [fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url))];
-  for (const candidate of candidates) {
-    const mainModule = candidate.split(/\s+/).filter(Boolean).reverse().find((t) => t.endsWith(".ts"));
-    if (mainModule === undefined || !existsSync(mainModule))
-      continue;
-    const appEntry = resolve(dirname(mainModule), "..", "..", "..", "packages", "app", "src", "index.ts");
-    if (existsSync(appEntry))
-      return requireModule(appEntry);
-  }
   const bundle = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
   if (!existsSync(bundle)) {
-    throw new Error("inline application bundle is missing \u2014 rebuild/install the sp plugin before running inline");
+    throw new Error(`feature-verification-steps: mode=bundle \u2014 the generated inline bundle is missing at ${bundle}` + `${spurBin === "" ? "" : ` (spurBin=${spurBin})`}. ` + "Fix: in a source checkout run `bun run build:bundle`; for an installed plugin reinstall it.");
   }
-  return requireModule(bundle);
+  return requireModule(bundle, "bundle");
 }
-async function requireModule(entry) {
+async function requireModule(entry, mode) {
   const mod = await import(entry);
   const missing = [
     "startFeatureVerificationReceipt",
@@ -52,7 +43,7 @@ async function requireModule(entry) {
     "ArtifactDao"
   ].filter((k) => typeof mod[k] !== "function");
   if (missing.length > 0) {
-    throw new Error(`application entry is missing feature-verification seams (${missing.join(", ")}) \u2014 rebuild/install the sp plugin`);
+    throw new Error(`feature-verification-steps: mode=${mode} \u2014 application entry ${entry} is missing feature-verification seams (${missing.join(", ")}). ` + "Fix: the generated inline bundle is stale or incomplete \u2014 run `bun run build:bundle` in a source checkout, or reinstall the sp plugin.");
   }
   return mod;
 }

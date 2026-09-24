@@ -462,6 +462,15 @@ batch can never destroy its own evidence. Reuse mode retains its operator-owned 
 persists the Step 5 report under the invoking tree; the reused tree's `.spur/run/` remains the live
 copy while that tree lives on.
 
+**Stage records are worktree-local too (0948 R9, E7 Finding 5).** The persisted report and verdict
+JSONs above are the batch's *summary* evidence. Each task's own per-stage run record
+(`.spur/run/<runId>.md` + `.state.json`, plus gate/answer artifacts) is written inside the
+worktree's `.spur/run/` and **is removed with the worktree** in create mode. A merged batch
+therefore leaves no per-stage run record in the invoking tree unless it is copied out. Anything
+auditing "what did this batch actually run?" must copy those records out **before** WT-4 removal —
+the E7 batch lost exactly this evidence this way. The rule is the same one above: copy out first,
+then remove; a copy failure retains the worktree.
+
 ## Worktree isolation (`--worktree [<name>]`)
 
 When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
@@ -548,6 +557,14 @@ in [§ Name resolution](#name-resolution---worktree-name) below; this section co
 Create one worktree on a new branch cut from the current HEAD's ref (the **base ref** — often a
 `feat/…` branch, not literally `main`). Location follows the sibling-directory convention in
 [worktree-patterns.md](../../branch-workflow/references/worktree-patterns.md):
+
+**Location rule (0948 R9) — never under `.spur/`.** The default root is the **sibling** directory
+(`../<repo>-<command>-<selector-slug>-<short-id>`). A worktree nested under `.spur/` breaks Biome's
+vcs-root detection: `bunx biome check .` inside it reports `Checked 0 files`, so lint/format silently
+no-op for the whole run. Verified in both directions — a sibling worktree reports a non-zero file
+count (`Checked 1076 files` at the time of the fix) while a `.spur/`-nested one reports
+`Checked 0 files`. If a project's tooling needs a custom root, keep it **outside** any path that a
+VCS-root-detecting tool treats as ignorable.
 
 ```bash
 BASE_REF=$(git rev-parse --abbrev-ref HEAD)

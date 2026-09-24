@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, openSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
@@ -2502,6 +2502,23 @@ async function outputArtifactForRun(cwd: string, runId: string): Promise<string 
     return undefined;
 }
 
+/**
+ * Raised when a run id is traversal-shaped, so no run-record path may be built (0929 R1).
+ *
+ * Typed in 0948 R5: the server used to map its 400 by string-matching the message, so
+ * any wording change turned a correct 400 into a 500. `code` is the stable machine key
+ * the server maps on — `message` is presentation only.
+ */
+export class InvalidWorkflowRunIdError extends Error {
+    /** Stable machine-readable code; map on THIS, never on `message`. */
+    readonly code = 'invalid-run-id';
+
+    constructor(runId: string) {
+        super(`Invalid workflow run id: ${JSON.stringify(runId)}`);
+        this.name = 'InvalidWorkflowRunIdError';
+    }
+}
+
 /** Explicit outcome of reading a run's persisted record from disk (E7 / task 0926 R3). */
 export type WorkflowRunRecordRead =
     | { kind: 'pair'; markdownPath: string; statePath: string; state: Record<string, unknown> }
@@ -2526,16 +2543,30 @@ export type WorkflowRunRecordRead =
 export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRunRecordRead {
     // Run ids key file names under the run dir — reject traversal before any path is built.
     if (runId.includes('/') || runId.includes('\\') || runId.includes('..')) {
-        throw new Error(`Invalid workflow run id: ${JSON.stringify(runId)}`);
+        throw new InvalidWorkflowRunIdError(runId);
     }
     const markdownPath = join(runDir, `${runId}.md`);
     const statePath = join(runDir, `${runId}.state.json`);
     if (existsSync(markdownPath)) {
-        if (!existsSync(statePath)) {
-            return { kind: 'incomplete', markdownPath, statePath, reason: 'state-missing' };
+        // 0948 R6: read the state file directly instead of `existsSync` → `readFileSync`.
+        // That two-call sequence raced a concurrent writer, so a pair that vanished between
+        // the calls was classified `state-invalid` (a corruption signal) when the honest
+        // outcome is `state-missing`. ENOENT is the missing signal; anything else — bad JSON,
+        // wrong shape — stays invalid.
+        let raw: string;
+        try {
+            raw = readFileSync(statePath, 'utf8');
+        } catch (error) {
+            const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
+            return {
+                kind: 'incomplete',
+                markdownPath,
+                statePath,
+                reason: missing ? 'state-missing' : 'state-invalid',
+            };
         }
         try {
-            const state: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+            const state: unknown = JSON.parse(raw);
             if (state !== null && typeof state === 'object' && !Array.isArray(state)) {
                 return { kind: 'pair', markdownPath, statePath, state: state as Record<string, unknown> };
             }
@@ -2549,8 +2580,15 @@ export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRu
     return { kind: 'missing' };
 }
 
-/** Byte cap for a Board run-record inspection (0929 R2) — one bounded JSON response. */
+/** Byte cap on one served run-record FILE (0929 R2) — one bounded JSON response. */
 export const RUN_RECORD_INSPECT_MAX_BYTES = 256 * 1024;
+
+/**
+ * Character cap for the redacted TEXT bound (0948 R5). Bytes and characters are different
+ * units: the file gate measures the file size in bytes while `redactAndBound` measures
+ * `string.length` in characters, so a single constant could not honestly name both.
+ */
+export const RUN_RECORD_INSPECT_MAX_CHARS = 256 * 1024;
 
 /** Explicit bounded outcome of a Board run-record inspection (0929 R2). */
 export type WorkflowRunRecordInspection =
@@ -2567,20 +2605,57 @@ export type WorkflowRunRecordInspection =
 type ConfinedRunFile = { text: string } | { oversized: number } | undefined;
 
 /**
- * Read one run-record file only if it resolves beneath the run directory
- * (0929 R1): a symlink escape never serves content, and a file that grew past
- * the byte cap between detection and read is `oversized`, never truncated.
+ * Read one run-record file only if it is a regular file at the confined path.
+ *
+ * 0948 R5 collapses the realpath → stat → read TOCTOU window: one `open` (with
+ * `O_NOFOLLOW`, so a symlinked final component is refused atomically rather than
+ * followed) pins the inode, and every subsequent check and the read itself use THAT
+ * descriptor. The old sequence re-resolved the path three times, so the bytes served
+ * need not have been the bytes whose size and location were checked.
+ *
+ * Confinement rests on the caller: `realRunDir` is already fully resolved and the
+ * final component is a validated single run-id segment.
  */
 function readConfinedRunFile(realRunDir: string, path: string, maxBytes: number): ConfinedRunFile {
+    let fd: number | undefined;
     try {
+        // 0948 R5: `open` FIRST, so the descriptor pins the inode the moment the path is
+        // resolved. `O_NOFOLLOW` refuses a symlinked final component outright (the escape
+        // vector, since the run-id component itself is already validated). The confined
+        // realpath is then checked AND its identity compared to the descriptor we hold —
+        // a swap between open and check is caught by dev/ino instead of being read.
+        fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
         const real = realpathSync(path);
         if (real !== realRunDir && !real.startsWith(realRunDir + sep)) return undefined;
-        const size = statSync(real).size;
-        if (size > maxBytes) return { oversized: size };
-        return { text: readFileSync(real, 'utf8') };
+        const opened = fstatSync(fd);
+        const confined = statSync(real);
+        if (opened.dev !== confined.dev || opened.ino !== confined.ino) return undefined;
+        if (!opened.isFile()) return undefined;
+        if (opened.size > maxBytes) return { oversized: opened.size };
+        return { text: readFileSync(fd, 'utf8') };
     } catch {
-        return undefined; // vanished (or unreadable) between detection and read → missing
+        return undefined; // escaped (symlink), vanished, or unreadable → missing
+    } finally {
+        if (fd !== undefined) closeSync(fd);
     }
+}
+
+/**
+ * Re-redact a parsed JSON value (0948 R5): the run-record state is served from disk, so
+ * it must pass the same read-side scrub as the markdown. Strings are redacted and
+ * bounded; object keys are scrubbed too (a secret can be a key).
+ */
+function redactJsonValue(value: unknown, secrets: readonly string[], maxChars: number): unknown {
+    if (typeof value === 'string') return redactAndBound(value, secrets, maxChars);
+    if (Array.isArray(value)) return value.map((item) => redactJsonValue(item, secrets, maxChars));
+    if (value !== null && typeof value === 'object') {
+        const out: Record<string, unknown> = {};
+        for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+            out[redactAndBound(key, secrets, maxChars)] = redactJsonValue(item, secrets, maxChars);
+        }
+        return out;
+    }
+    return value;
 }
 
 /**
@@ -2598,9 +2673,10 @@ function readConfinedRunFile(realRunDir: string, path: string, maxBytes: number)
 export function inspectWorkflowRunRecord(
     runDir: string,
     runId: string,
-    opts: { secretValues?: readonly string[]; maxBytes?: number } = {},
+    opts: { secretValues?: readonly string[]; maxBytes?: number; maxChars?: number } = {},
 ): WorkflowRunRecordInspection {
     const maxBytes = opts.maxBytes ?? RUN_RECORD_INSPECT_MAX_BYTES;
+    const maxChars = opts.maxChars ?? RUN_RECORD_INSPECT_MAX_CHARS;
     const secrets = opts.secretValues ?? [];
     const record = readWorkflowRunRecord(runDir, runId); // rejects traversal-shaped ids
     if (record.kind === 'missing') return { status: 'missing' };
@@ -2615,12 +2691,12 @@ export function inspectWorkflowRunRecord(
         if (file === undefined) return { status: 'missing' };
         if ('oversized' in file) return { status: 'oversized', sizeBytes: file.oversized };
         // The legacy `.log` predates write-time redaction — scrub it again on read.
-        return { status: 'legacy', content: redactAndBound(file.text, secrets, maxBytes) };
+        return { status: 'legacy', content: redactAndBound(file.text, secrets, maxChars) };
     }
     const mdFile = readConfinedRunFile(realRunDir, record.markdownPath, maxBytes);
     if (mdFile === undefined) return { status: 'missing' };
     if ('oversized' in mdFile) return { status: 'oversized', sizeBytes: mdFile.oversized };
-    const markdown = redactAndBound(mdFile.text, secrets, maxBytes);
+    const markdown = redactAndBound(mdFile.text, secrets, maxChars);
     if (record.kind === 'incomplete') {
         return { status: 'incomplete', markdown, reason: record.reason };
     }
@@ -2631,7 +2707,13 @@ export function inspectWorkflowRunRecord(
         return { status: 'incomplete', markdown, reason: 'state-invalid' };
     }
     if ('oversized' in stateFile) return { status: 'oversized', sizeBytes: stateFile.oversized };
-    return { status: 'record', markdown, state: record.state };
+    // 0948 R5: the state JSON is served from disk and must not bypass read-side redaction —
+    // `markdown` was scrubbed while `state` was served parse-trusted.
+    return {
+        status: 'record',
+        markdown,
+        state: redactJsonValue(record.state, secrets, maxChars) as Record<string, unknown>,
+    };
 }
 
 /**

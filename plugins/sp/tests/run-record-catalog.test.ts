@@ -22,14 +22,13 @@ import { join } from 'node:path';
 const REPO_ROOT = join(import.meta.dir, '../../..');
 const CATALOG_DIR = join(REPO_ROOT, 'config', 'workflows');
 
-/** Run-record file names — owned by the engine sink / inline setup seam, never a workflow. */
-const RECORD_NAMES = new Set(['.md', '.state.json', '.log']);
+/** Record-file suffixes — a `.spur/run` segment ending in one of these names a record FILE. */
+const RECORD_SUFFIXES = ['.state.json', '.md', '.log'] as const;
 
 /**
  * Pull every `.spur/run/<segment>` reference (doc prose included) from a
  * definition, reduced to its record-name form: the leading run-id placeholder
- * (`${vars.__runId}`, `$__runId`, `<runId>`, `<RUNID>`, `<run-id>`) is stripped
- * so only an EXACT record file (no `-`-suffixed workflow artifact) matches.
+ * (`${vars.__runId}`, `$__runId`, `<runId>`, `<RUNID>`, `<run-id>`) is stripped.
  */
 function recordNameSegments(text: string): string[] {
     const segments: string[] = [];
@@ -40,6 +39,25 @@ function recordNameSegments(text: string): string[] {
         segments.push(name.toLowerCase());
     }
     return segments;
+}
+
+/**
+ * Is this `.spur/run/<segment>` reference a run-record FILE (as opposed to a declared
+ * workflow artifact)?
+ *
+ * A workflow artifact is run-id-SUFFIXED: `<placeholder>-<name>.<ext>`, so after the
+ * placeholder is stripped the remainder starts with `-` (e.g. `-idea-handoff.md`,
+ * `-feature-verification.status`). A record reference either has the placeholder as its
+ * entire stem (`<runId>.md` → `.md`) or names the file literally (`history-anatomy.md`),
+ * so the remainder never starts with `-` and always ends in a record suffix.
+ *
+ * 0948 R8: the earlier rule matched the stripped-placeholder form ONLY (equality against
+ * `RECORD_NAMES`), so a LITERALLY HARDCODED record name evaded the sweep entirely — the
+ * one gap that made this catalogue attestation weaker than it claimed.
+ */
+function isRecordName(segment: string): boolean {
+    if (segment.startsWith('-')) return false; // run-id-suffixed workflow artifact
+    return RECORD_SUFFIXES.some((suffix) => segment.endsWith(suffix));
 }
 
 describe('canonical workflow catalog run-record classification (0928)', () => {
@@ -66,10 +84,27 @@ describe('canonical workflow catalog run-record classification (0928)', () => {
     for (const file of files) {
         test(`${file} never names the run record or a legacy single-file run state`, () => {
             const text = readFileSync(join(CATALOG_DIR, file), 'utf8');
-            const offenders = recordNameSegments(text).filter((name) => RECORD_NAMES.has(name));
+            const offenders = recordNameSegments(text).filter(isRecordName);
             expect(offenders).toEqual([]);
         });
     }
+
+    // 0948 R8: the previous rule reduced only `<placeholder>.md` to `.md`, so a literally
+    // hardcoded record name produced `history-anatomy.md` and slipped through. This mutation
+    // check pins the strengthened rule from BOTH sides — a hardcoded name is caught, and a
+    // run-id-suffixed declared artifact is still exempt.
+    test('0948 R8: a literally hardcoded record name is caught, an artifact is not', () => {
+        expect(recordNameSegments('echo x > .spur/run/history-anatomy.md').filter(isRecordName)).toEqual([
+            'history-anatomy.md',
+        ]);
+        expect(recordNameSegments('echo x > .spur/run/history-anatomy.state.json').filter(isRecordName)).toEqual([
+            'history-anatomy.state.json',
+        ]);
+        // Declared artifacts stay exempt: run-id-suffixed, and the pointer is not a record file.
+        expect(recordNameSegments('echo x > .spur/run/$__runId-idea-handoff.md').filter(isRecordName)).toEqual([]);
+        expect(recordNameSegments('echo x > .spur/run/$__runId-verdict.json').filter(isRecordName)).toEqual([]);
+        expect(recordNameSegments('echo x > .spur/run/history-anatomy-run.id').filter(isRecordName)).toEqual([]);
+    });
 
     test('idea-pipeline driver artifacts keep their declared owners (audited no-change)', () => {
         const text = readFileSync(join(CATALOG_DIR, 'idea-pipeline.yaml'), 'utf8');

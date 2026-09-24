@@ -378,6 +378,14 @@ A behavioral AC marked MET requires executable evidence (test | command);
 static-ref or llm-judge alone cannot carry it.
 ```
 
+**AC table shape (0948 R9).** The AC table must be exactly **4 columns** and **cell 3 must hold a
+single evidence-type token** from the allowlist above. The token is *isolated* — never merged or
+concatenated with another token or with prose (`static-reftest` is a lint failure, not a shorthand
+for "static-ref + test"). Evidence detail belongs in cell 4. The verify-answer linter rejects a
+merged token, and `spur task verdict` then derives the wrong artifact — this exact shape failed the
+0926 verify lint once before it was canonicalized, so it is stated here rather than left implicit in
+the header row.
+
 **Review-stage artifact contract.** A review handoff carries the Review output contract owned by
 `plugins/sp/agents/super-reviewer.md` — native `P1 (blocker)` / `P2 (major)` / `P3 (minor)` /
 `P4 (advisory)` priority cells and section-relative headings — **not** the verify answer schema.

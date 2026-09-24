@@ -124,10 +124,15 @@ function parseArgs(argv: string[]): {
         } else if (arg === '--max-plan-items') {
             maxPlanItems = Number(argv[i + 1]) || 16;
             i += 2;
-        } else if (!arg.startsWith('--')) {
-            wbs = arg;
-            i++;
+        } else if (arg.startsWith('-')) {
+            // 0948 R4: an unknown flag is a mis-invocation, not something to swallow.
+            // The old `else { i++; }` let `script 0926 --task-file x.md` run against x.md.
+            console.error(`task-size-precheck: unknown flag: ${arg}`);
+            usage();
         } else {
+            // 0948 R4: first positional wins — a later positional must never overwrite
+            // `wbs` (it used to write a garbage-named status file and mask the exit code).
+            if (wbs === '') wbs = arg;
             i++;
         }
     }

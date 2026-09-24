@@ -8,7 +8,16 @@
 
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
@@ -282,6 +291,45 @@ describe('0726 pipeline wiring', () => {
             expect(result.exitCode).toBe(0);
             expect(`${result.stdout.toString()}${result.stderr.toString()}`).toContain('failed closed');
             expect(readFileSync(join(dir, '.spur/run/0726-precheck-evidence.status'), 'utf8')).toBe('FAIL\n');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('0948 R4 — argv hygiene', () => {
+    test('an unknown flag exits non-zero and writes no status file', () => {
+        const dir = makeSandbox('{"content":"### Requirements\\n- [ ] R1. x"}');
+        try {
+            const spurBin = join(dir, 'spur-fake');
+            const r = Bun.spawnSync({
+                cmd: ['bun', SCRIPT, '0926', '--task-file', 'x.md', '--spur-bin', `sh ${spurBin}`],
+                cwd: dir,
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            expect(r.exitCode).not.toBe(0);
+            expect(r.stderr.toString()).toContain('unknown flag: --task-file');
+            expect(existsSync(join(dir, '.spur/run/0926-precheck-evidence.status'))).toBe(false);
+            expect(existsSync(join(dir, '.spur/run/x.md-precheck-evidence.status'))).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('the first positional wins — a later positional never overwrites wbs', () => {
+        const dir = makeSandbox('{"content":"### Requirements\\n- [ ] R1. x"}');
+        try {
+            const spurBin = join(dir, 'spur-fake');
+            const r = Bun.spawnSync({
+                cmd: ['bun', SCRIPT, '0926', 'x.md', '--spur-bin', `sh ${spurBin}`],
+                cwd: dir,
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            expect(r.exitCode).toBe(0);
+            expect(readFileSync(join(dir, '.spur/run/0926-precheck-evidence.status'), 'utf8')).toBe('PASS\n');
+            expect(existsSync(join(dir, '.spur/run/x.md-precheck-evidence.status'))).toBe(false);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

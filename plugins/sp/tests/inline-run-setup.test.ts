@@ -60,6 +60,63 @@ test('a valid run id passes the guard and reaches the normal fail-closed path (n
     }
 }, 30_000);
 
+// ── 0948 R7 — inline-seam items ───────────────────────────────────────────────────
+
+/** Minimal resolvable workflow so a setup can reach the success path. */
+const MINIMAL_WF = `name: inline-setup-r7
+kind: state-machine
+initialState: start
+terminalStates: [done]
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+    guard:
+      kind: always
+`;
+
+test('0948 R7: a successful re-setup drops the stale error key and projects ok', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-r7-'));
+    try {
+        const runId = 'r7-resetup';
+        const statePath = join(dir, '.spur', 'run', `${runId}.state.json`);
+        const markdownPath = join(dir, '.spur', 'run', `${runId}.md`);
+
+        // 1. A failing setup records the failure.
+        const failed = spawnSync('bun', [SCRIPT, '--run-id', runId, '--file', 'no-such-workflow'], {
+            cwd: dir,
+            stdio: 'pipe',
+            encoding: 'utf8',
+        });
+        expect(failed.status).toBe(1);
+        const first = JSON.parse(readFileSync(statePath, 'utf8')) as { ok?: boolean; error?: string };
+        expect(first.ok).toBe(false);
+        expect(first.error).toContain('could not resolve the workflow definition');
+
+        // 2. A successful re-setup under the SAME run id must not carry the old error.
+        writeFileSync(join(dir, 'wf.yaml'), MINIMAL_WF);
+        const ok = spawnSync('bun', [SCRIPT, '--run-id', runId, '--file', 'wf.yaml'], {
+            cwd: dir,
+            stdio: 'pipe',
+            encoding: 'utf8',
+        });
+        expect(ok.status).toBe(0);
+        const second = JSON.parse(readFileSync(statePath, 'utf8')) as { ok?: boolean; error?: string };
+        expect(second.ok).toBe(true);
+        expect('error' in second).toBe(false);
+
+        // 3. Exactly ONE header: the exclusive create is idempotent across setups.
+        const headers = readFileSync(markdownPath, 'utf8')
+            .split('\n')
+            .filter((line) => line.startsWith('# spur inline run '));
+        expect(headers.length).toBe(1);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}, 30_000);
+
 // ── Delegate cleanup (task 0809 R2/AC2) ───────────────────────────────────────────
 // The REAL delegate must close each opened project DB exactly once BEFORE process
 // termination — on setup success (exit 0), a returned `ok: false` refusal (exit 1) and a

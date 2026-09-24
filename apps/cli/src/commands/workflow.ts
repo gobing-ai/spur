@@ -2034,7 +2034,14 @@ export async function followRunLog(
                     `Run record incomplete (${record.reason}) at ${record.statePath} — the workflow DB trace remains the completion authority.`,
                 );
             } else if (!everRead) {
-                write(`No run log at ${logPath} — the run may have been started with --no-log.`);
+                // 0948 R6: an EXISTING but empty record is not a `--no-log` run — the old
+                // message sent the operator hunting for a flag that was never passed.
+                const present = record.kind === 'legacy-log' || readRunLogChunk(logPath, 0).exists;
+                write(
+                    present
+                        ? `Run record at ${logPath} is empty — no output was written to it.`
+                        : `No run log at ${logPath} — the run may have been started with --no-log.`,
+                );
             }
             return false;
         }

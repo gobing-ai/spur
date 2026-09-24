@@ -2302,6 +2302,35 @@ failureStates:
         await rm(cwd, { recursive: true, force: true });
     });
 
+    // 0948 R6: an EXISTING but empty legacy `.log` used to fall into the same branch as an
+    // absent record, so the operator was told to look for a `--no-log` flag that was never
+    // passed. The empty case must name the real condition.
+    test('0948 R6 — an empty legacy .log reports an empty record, not the --no-log hint', async () => {
+        const cwd = await createTempProject();
+        const dbPath = join(cwd, '.spur', 'spur.db');
+        await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
+        await writeFile(join(cwd, '.spur', 'run', 'empty-legacy-run.log'), '');
+        const db = await createMigratedDb({ url: dbPath });
+        const now = Date.now();
+        await db.run(
+            'INSERT INTO runs (id, workflow_name, mode, status, started_at, completed_at, metadata_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            ['empty-legacy-run', 'test-flow', 'sync', 'done', now, now, '{}', now, now],
+        );
+        db.close();
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['workflow', 'trace', '--follow', '--output', 'empty-legacy-run', '--poll', '50'], {
+            output,
+            cwd,
+            dbUrl: dbPath,
+        });
+
+        expect(exitCode).toBe(0);
+        expect(output.messages.some((m) => m.includes('is empty'))).toBe(true);
+        expect(output.messages.some((m) => m.includes('--no-log'))).toBe(false);
+        await rm(cwd, { recursive: true, force: true });
+    });
+
     test('0930 R1/AC1 — trace --follow --timeout stops at the deadline: checkpoint, exit 1, run untouched', async () => {
         const cwd = await createTempProject();
         const dbPath = join(cwd, '.spur', 'spur.db');

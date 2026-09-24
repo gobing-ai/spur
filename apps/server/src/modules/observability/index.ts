@@ -369,7 +369,9 @@ export const observabilityModule: ServerModule = {
             } catch (err) {
                 // The shared reader seam rejects traversal-shaped ids before any
                 // path is built — surface that as a 400, not a 500 (0929 R1).
-                if (err instanceof Error && err.message.includes('Invalid workflow run id')) {
+                // 0948 R5: map on the typed error's stable `code`, never on message text —
+                // wording drift must not turn a correct 400 into a 500.
+                if (err instanceof Error && (err as { code?: unknown }).code === 'invalid-run-id') {
                     return c.json({ error: err.message, code: 'invalid-run-id', runId }, 400);
                 }
                 throw err;

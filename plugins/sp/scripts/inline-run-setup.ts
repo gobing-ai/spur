@@ -50,7 +50,18 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+    appendFileSync,
+    closeSync,
+    existsSync,
+    mkdirSync,
+    openSync,
+    readFileSync,
+    renameSync,
+    unlinkSync,
+    writeFileSync,
+    writeSync,
+} from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar } from '../lib/env';
@@ -211,6 +222,11 @@ function writeOutcome(runId: string, outcome: SetupOutcome): void {
         ...(outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {}),
         ...(outcome.layer !== undefined ? { layer: outcome.layer } : {}),
         ...(outcome.workdir !== undefined ? { workdir: outcome.workdir } : {}),
+        // 0948 R7: project the setup outcome itself, so the retired `-inline-setup.json`
+        // sidecar's `ok` is still readable from the pair, and a SUCCESSFUL re-setup
+        // explicitly drops any prior `error` — a stale failure message must not outlive
+        // the failure it described (the state object is rebuilt, never merged with `prior`).
+        ok: outcome.ok,
         ...(outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}),
     };
     const temp = `${statePath}.tmp`;
@@ -226,11 +242,22 @@ function writeOutcome(runId: string, outcome: SetupOutcome): void {
             // Nothing to clean (temp was never created).
         }
     }
-    if (!existsSync(markdownPath)) {
-        appendFileSync(
-            markdownPath,
+    // 0948 R7: create the header with `wx` (O_EXCL) instead of `existsSync` → `appendFileSync`.
+    // The check-then-append pair could append a SECOND header when two setups raced, and it
+    // kept "header present" as a separate fact from the identity write. One exclusive create
+    // makes exactly-one-header atomic; EEXIST just means it is already there.
+    let headerFd: number | undefined;
+    try {
+        headerFd = openSync(markdownPath, 'wx');
+        writeSync(
+            headerFd,
             `# spur inline run ${runId} — ${outcome.workflowName ?? 'unknown workflow'} — setup ${at}\n`,
         );
+    } catch {
+        // EEXIST (already written) or an unwritable path — the human header is not the setup
+        // identity, so this stays best-effort exactly like the state write above.
+    } finally {
+        if (headerFd !== undefined) closeSync(headerFd);
     }
 }
 

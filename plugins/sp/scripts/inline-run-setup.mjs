@@ -3,7 +3,18 @@
 
 // plugins/sp/scripts/inline-run-setup.ts
 import { spawnSync } from "child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "fs";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+  writeSync
+} from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -95,6 +106,7 @@ function writeOutcome(runId, outcome) {
     ...outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {},
     ...outcome.layer !== undefined ? { layer: outcome.layer } : {},
     ...outcome.workdir !== undefined ? { workdir: outcome.workdir } : {},
+    ok: outcome.ok,
     ...outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}
   };
   const temp = `${statePath}.tmp`;
@@ -107,9 +119,14 @@ function writeOutcome(runId, outcome) {
       unlinkSync(temp);
     } catch {}
   }
-  if (!existsSync(markdownPath)) {
-    appendFileSync(markdownPath, `# spur inline run ${runId} \u2014 ${outcome.workflowName ?? "unknown workflow"} \u2014 setup ${at}
+  let headerFd;
+  try {
+    headerFd = openSync(markdownPath, "wx");
+    writeSync(headerFd, `# spur inline run ${runId} \u2014 ${outcome.workflowName ?? "unknown workflow"} \u2014 setup ${at}
 `);
+  } catch {} finally {
+    if (headerFd !== undefined)
+      closeSync(headerFd);
   }
 }
 async function printFingerprint(taskFile, featureFile, spurBin) {

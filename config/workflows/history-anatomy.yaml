@@ -92,6 +92,11 @@ states:
             mkdir -p .spur/run;
             if [ -z "$__runId" ]; then __runId=$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8); fi;
             echo "$__runId" > .spur/run/history-anatomy-run.id
+          # 0948 R8 retention disposition: `history-anatomy-run.id` is a SINGLE fixed-name
+          # pointer that is overwritten every run — it does not accumulate, so it needs no
+          # reclamation path (unlike the run-record pair and legacy `.log` files, which
+          # `spur workflow clean --logs` owns). It is deliberately NOT a run record and is
+          # exempt from the catalog record-name sweep (see run-record-catalog.test.ts).
 
 
   - id: resolve-paths
