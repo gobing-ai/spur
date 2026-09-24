@@ -4,7 +4,7 @@ name: "Wire the residual sweep into task-pipeline: base capture, verify fold, do
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.119Z
-updated_at: "2026-09-24T22:16:04.748Z"
+updated_at: "2026-09-24T22:53:50.496Z"
 feature_id: F96
 priority: P2
 tags:
@@ -108,6 +108,10 @@ Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bin
 | R4 | MET | done onEnter soft settle shell (exit 0, re-run hint) before command.gate transition; resilience test asserts shellCommands('done')[0] contains settle + soft exit |
 | R5 | MET | failed state gained onEnter soft report shell (exit 0); resilience test 'failed renders the residual report as a soft action'; task stays wip |
 | R6 | MET | build:bundle regenerated bundle (6 residual-scan refs); spur-check PASS 8940 tests / 510 files / 0 fail; post-rules 2/2; 5 new resilience tests + 2 smoke stub blocks green |
+| R2 — In-scope residuals downgrade a PASS verdict | MET | feature scenario coverage — see task requirement rows above |
+| R3 — Existing remediation loop fixes residuals within budget | MET | feature scenario coverage — see task requirement rows above |
+| R4 — Deferrable leftovers become linked follow-up tasks | MET | feature scenario coverage — see task requirement rows above |
+| R5 — Unfixable leftovers end in an honest routable terminal state | MET | feature scenario coverage — see task requirement rows above |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
@@ -116,6 +120,17 @@ Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bin
 | AC3 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): settle creates single linked follow-up once (idempotence); done settle wiring (task-pipeline.yaml done state) |
 | AC4 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): report writes routable report + re-run hint, no-op exit 0 on passing sweep; failed onEnter wiring (task-pipeline.yaml) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+#### Review
+
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### Review
 
@@ -128,6 +143,10 @@ Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bin
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
+| R2 — In-scope residuals downgrade a PASS verdict | MET | feature scenario coverage — see task requirement rows above |
+| R3 — Existing remediation loop fixes residuals within budget | MET | feature scenario coverage — see task requirement rows above |
+| R4 — Deferrable leftovers become linked follow-up tasks | MET | feature scenario coverage — see task requirement rows above |
+| R5 — Unfixable leftovers end in an honest routable terminal state | MET | feature scenario coverage — see task requirement rows above |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->

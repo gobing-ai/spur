@@ -4,7 +4,7 @@ name: "Residual scanner script: scan, fold, settle and report modes"
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.116Z
-updated_at: "2026-09-24T21:51:05.562Z"
+updated_at: "2026-09-24T22:53:50.770Z"
 feature_id: F96
 priority: P2
 tags:
@@ -99,11 +99,24 @@ Rationale: scan is observe-only (ADR-071) — writes only under `.spur/run/`; se
 | R5 | MET | settleMode: single followUp (prior.followUp guard), Background via --from-file, re-run hint on all 5 failure paths, cleanup scoped <tmpDir>/<wbs>-* regular files; test 'settle files follow-up once (idempotent) and cleans only wbs-prefixed tmp files' |
 | R6 | MET | reportMode renders counts+table, no-op exit 0 on passing sweep; test 'report is no-op on passing sweep, writes on failing' |
 | R7 | MET | config/plugin-scripts.json standard entry + twin; package.json build:scripts convert; script-contract-check PASS (26 scripts, 0 violations); verdict-schema.md residual-sweep row |
+| R1 — Deterministic residual scan classifies task leftovers | MET | feature scenario coverage — see task requirement rows above |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): 19 pass / 0 fail; repo gate .spur/run/0949-test-gate.status=PASS (8935 tests, proof-digest sha256:cf4c9f43...) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+#### Review
+
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:cf4c9f4368e77dd90ebb5fb54b69d15bc8483974f894114820112ac4fa2b89a8 |
 
 ### Review
 
@@ -117,6 +130,7 @@ Rationale: scan is observe-only (ADR-071) — writes only under `.spur/run/`; se
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 | P4 | proof-input-digest | — | sha256:cf4c9f4368e77dd90ebb5fb54b69d15bc8483974f894114820112ac4fa2b89a8 |
 
+| R1 — Deterministic residual scan classifies task leftovers | MET | feature scenario coverage — see task requirement rows above |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
