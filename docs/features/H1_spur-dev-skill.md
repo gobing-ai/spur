@@ -2,11 +2,11 @@
 schema_version: 1
 id: H1
 name: spur-dev umbrella skill
-status: active
+status: verifying
 priority: P1
 tags: [rd3-migration, wave-3]
 created_at: 2026-06-12T23:45:00.000Z
-updated_at: "2026-09-23T06:50:10.743Z"
+updated_at: "2026-09-24T21:57:21.033Z"
 ---
 
 # H1: spur-dev umbrella skill
@@ -602,10 +602,10 @@ Feature: spur-dev umbrella skill
 | 0589 | Raise process-inspector coverage to the 90% gate threshold | cancelled |
 | 0590 | Fix task-verdict answer parser consuming SECUA rows as AC rows | done |
 | 0800 | Close the residue that pipeline completion leaves behind: Plan checkboxes, review sub-heading level, docs/help drift, and the task-list status contract | done |
-| 0931 | Isolate parallel batch tasks in per-task worktrees with rebase-and-fast-forward integration | todo |
-| 0932 | Add --answer-text to spur workflow continue for input gates | todo |
-| 0933 | Pause headless pipeline steps on an operator question and resume with the answer | todo |
-| 0934 | Re-verify legacy H1 umbrella scenarios and close out the feature | todo |
+| 0931 | Isolate parallel batch tasks in per-task worktrees with rebase-and-fast-forward integration | done |
+| 0932 | Add --answer-text to spur workflow continue for input gates | done |
+| 0933 | Pause headless pipeline steps on an operator question and resume with the answer | done |
+| 0934 | Re-verify legacy H1 umbrella scenarios and close out the feature | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -622,14 +622,13 @@ decided per candidate by the ADR-016 test (task 0065).
 - Task 0800 is `done` (commit `fa3453412`); the Tasks table showed `testing` only because it had not
   been refreshed.
 - Task 0142 was a placeholder, not a buildable task. Its Slice A (parallel worktree isolation) never
-  shipped: `--worktree` is sequential-only and `--worktree --mode parallel` is rejected
-  (`plugins/sp/skills/spur-dev/references/execution-batch.md:872`, `plugins/sp/commands/dev-runall.md:59`),
-  while `--mode parallel` without it runs concurrent pipelines in one shared tree
-  (`execution-batch.md:935-947`), breaking the one-writer-per-working-tree rule. Its Slice B blocker
-  (workspace + inbox + team mode) is obsolete: those modules shipped (G3, M4, M) and were retired by
-  ADR-116 (G64). The workflow engine already has `hitl.input` (`packages/app/src/workflow/actions/hitl-input.ts`),
-  but headless `spur workflow continue` only answers yes/no/cancel (`apps/cli/src/commands/workflow.ts:1047`).
-  R21–R30 replace 0142's R6/R7; 0142 is cancelled as superseded once the replacement tasks exist.
+  shipped at re-baseline time: `--worktree` was sequential-only and `--worktree --mode parallel` was
+  rejected, while `--mode parallel` without it ran concurrent pipelines in one shared tree, breaking
+  the one-writer-per-working-tree rule. Its Slice B blocker (workspace + inbox + team mode) is
+  obsolete: those modules shipped (G3, M4, M) and were retired by ADR-116 (G64). The workflow engine
+  already had `hitl.input` (`packages/app/src/workflow/actions/hitl-input.ts`), but headless
+  `spur workflow continue` only answered yes/no/cancel. R21–R30 replaced 0142's R6/R7; 0142 is
+  cancelled as superseded once the replacement tasks exist.
 - Operator decisions 2026-09-22: Slice A integrates by rebase + fast-forward with no auto-resolve;
   Slice B adds `--answer-text` to `spur workflow continue` (public-surface consent granted).
 - Scenario bodies updated without title changes (links preserved): "Commands are thin wrappers"
@@ -638,10 +637,25 @@ decided per candidate by the ADR-016 test (task 0065).
 - Known residual warnings: 52 `L4.scenario-unverified` and 3 `L4.evidence-not-recoverable` come from
   tasks that predate durable verdict artifacts (0141, 0161, 0477, 0482 and others); they are not
   re-verified retroactively. The four scenarios with no linked task (the three original umbrella
-  scenarios and R9) are re-verified by the H1 close-out task.
-- Stale docs to fix with Slice A/B: `plugins/sp/agents/super-planner.md:276` (out-of-scope list),
-  `execution-batch.md:446,872,887`, `plugins/sp/commands/dev-runall.md:59`,
-  `plugins/sp/skills/spur-dev/references/flag-glossary.md:434`.
+  scenarios and R9) were re-verified with automated assertions by the H1 close-out task 0934.
+- Stale docs listed at re-baseline (`plugins/sp/agents/super-planner.md`, `execution-batch.md`,
+  `plugins/sp/commands/dev-runall.md`, `plugins/sp/skills/spur-dev/references/flag-glossary.md`)
+  were rewritten by Slice A (task 0931, commit `8dabc1e3b`).
+
+**Close-out (2026-09-24).** The 0142 replacement slices landed: Slice A parallel worktree isolation
+(0931, commit `8dabc1e3b`), `spur workflow continue --answer-text` (0932, commit `14d6fea63`), and
+headless pause/resume on an operator question via `hitl.input` + `escalationFile` (0933, commit
+`e9f7d8b4`). Task 0934 re-verified the four legacy scenarios with durable automated assertions
+(`command-contract.test.ts`, `skill-structure.test.ts`, `task-service.test.ts`) and confirmed the
+drift sweep clean. All fourteen scenarios covered by 0931–0934 now map to scenario-keyed PASS
+verdict artifacts, the batch dogfood report exists (`docs/dogfood/2026-09-24-H1-runall-worktree-batch-dogfood.md`),
+and `feature check H1` is down to the accepted pre-durable residuals (52 `scenario-unverified` +
+3 `evidence-not-recoverable` on 0141/0161/0477/0482 — warnings at `verifying`, fatal only at the
+done gate). H1 therefore parks in `verifying` pending an operator decision: authorize the bounded
+retroactive scenario-mapping pass (plus a `feature-verification` source-checkout seams fix — the
+receipt workflow fails in source checkouts because `packages/app/src/index.ts` lacks the
+`splitLaunchCommand`/`ArtifactDao` re-exports the step script demands, run `2496c9e8`), or accept
+the residuals as final.
 
 - H81/H82/H83 are separate features; closing them does not close the H1 umbrella.
 - Feature edges count tasks in every configured folder (`docs/tasks2`–`docs/tasks5`); `docs/tasks5` is
@@ -653,4 +667,5 @@ decided per candidate by the ADR-016 test (task 0065).
 - 2026-08-08T20:21:45.518Z backlog → active (system)
 - 2026-08-24T17:41:22.436Z active → blocked (system)
 - 2026-09-08T00:09:43.138Z blocked → active (system)
+- 2026-09-24T21:37:53.976Z active → verifying (system)
 

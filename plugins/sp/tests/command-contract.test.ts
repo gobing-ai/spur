@@ -1276,3 +1276,26 @@ describe('(j) task 0318 — least-privilege allowed-tools sweep', () => {
         }
     });
 });
+
+// 0934 AC3 — thin-wrapper invariant across the whole shipped command set: every
+// command's ## Implementation delegates — via `Skill(skill="sp:")` dispatch, a link to the
+// owning skill (../skills/<skill>/SKILL.md), or the authoritative procedure reference
+// (../skills/spur-dev/references/…, the scribe trio dev-changelog/dev-gitmsg/dev-handover —
+// no standalone sp: skill exists, and R16b forbids referencing one that doesn't). No command
+// may embed pipeline state-machine logic (which belongs to the bundled workflow definitions + the skills).
+describe('0934 AC3 — commands are thin wrappers', () => {
+    test('every command ## Implementation delegates and carries no state machine', () => {
+        const files = listCommandFiles();
+        expect(files.length).toBeGreaterThan(0);
+        for (const file of files) {
+            const raw = readFileSync(join(COMMANDS_DIR, file), 'utf8');
+            const impl = implSection(raw);
+            const delegates = impl.includes('Skill(skill="sp:') || /\]\(\.\.\/skills\//.test(impl);
+            expect(delegates, `${file} ## Implementation must delegate to a skill or authoritative reference`).toBe(
+                true,
+            );
+            expect(raw, `${file} must not embed a state machine`).not.toContain('kind: state-machine');
+            expect(raw, `${file} must not embed transitions`).not.toContain('transitions:');
+        }
+    });
+});

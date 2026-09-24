@@ -93,7 +93,7 @@
         ├── [verifying] **G65**: Fleet declaration in spur config ([G65_fleet-declaration-in-spur-config.md](./G65_fleet-declaration-in-spur-config.md))
         └── [done] **G66**: Persistent fleet member: one agent session per member across inbox drains ([G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md](./G66_persistent-fleet-member-one-agent-session-per-member-across-inbox-drains.md))
 [done] **H**: Agent integration ([H_agent-integration.md](./H_agent-integration.md))
-    ├── [active] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
+    ├── [verifying] **H1**: spur-dev umbrella skill ([H1_spur-dev-skill.md](./H1_spur-dev-skill.md))
         ├── [verifying] **H11**: Semantic conflict finder: authority-aware indexed audit and confirmed remediation ([H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md](./H11_semantic-conflict-finder-authority-aware-indexed-audit-and-confirmed-remediation.md))
         ├── [done] **H12**: Feature frontier prioritizer: derived importance/urgency ranking and structure-defect proposals ([H12_feature-frontier-prioritizer-derived-importance-urgency-ranking-and-structure-defect-proposals.md](./H12_feature-frontier-prioritizer-derived-importance-urgency-ranking-and-structure-defect-proposals.md))
         └── [done] **H13**: dev-refactor: lens-routed refactoring command with preservation contract ([H13_dev-refactor-lens-routed-refactoring-command-with-preservation-contract.md](./H13_dev-refactor-lens-routed-refactoring-command-with-preservation-contract.md))

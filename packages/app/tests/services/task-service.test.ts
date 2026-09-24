@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MarkdownDocument } from '@gobing-ai/spur-domain';
@@ -991,6 +991,31 @@ describe('TaskService', () => {
                 const err: unknown = await isolateSvc.batchCreate(batchFile).catch((e: unknown) => e);
                 expect(err).toBeInstanceOf(TaskCandidateInvalidError);
                 expect(err instanceof Error ? err.message : '').toMatch(/batch item 2\/2/);
+            } finally {
+                rmSync(root, { recursive: true, force: true });
+            }
+        });
+
+        test('a schema-invalid batch is rejected with findings before any write (0934 AC2)', async () => {
+            // Violates task-batch.schema.json (item.name must be a string), so
+            // safeParse fails inside batchCreate BEFORE WBS allocation or any file
+            // write. The error message is the findings payload (zod issue list).
+            const root = mkdtempSync(join(tmpdir(), 'spur-task-svc-schemabad-'));
+            const dir = join(root, 'tasks');
+            const isolateFs = createNodeFileSystem(root);
+            await isolateFs.ensureDir(dir);
+            const isolateSvc = new TaskService({
+                fs: isolateFs,
+                tasksDir: dir,
+                writeService: new PlanningWriteService({ fs: isolateFs }),
+                sectionMatrix: TEST_SECTION_MATRIX,
+            });
+            try {
+                const batchFile = join(dir, 'batch-schema-invalid.json');
+                await isolateFs.writeFile(batchFile, JSON.stringify([{ name: 42 }]));
+                const err: unknown = await isolateSvc.batchCreate(batchFile).catch((e: unknown) => e);
+                expect(err instanceof Error ? err.message : '').toContain('batch validation failed');
+                expect(readdirSync(dir).filter((f) => f.endsWith('.md'))).toEqual([]);
             } finally {
                 rmSync(root, { recursive: true, force: true });
             }

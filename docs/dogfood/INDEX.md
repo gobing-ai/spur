@@ -48,3 +48,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-09-23-E7-run-record-gate-dogfood.md`
 - `2026-09-24-H53-pipeline-dispatch-reliability-dogfood.md`
 - `2026-09-24-sp-dev-runall-feature-F96-dogfood.md`
+- `2026-09-24-H1-runall-worktree-batch-dogfood.md`

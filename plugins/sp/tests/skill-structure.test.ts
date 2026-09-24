@@ -2321,3 +2321,23 @@ describe('task 0827 — spur-doctor judges workflows by composition findings and
         expect(doctor).toContain('spur workflow trace');
     });
 });
+
+// 0934 — H1 umbrella close-out invariants (legacy scenarios re-verified against
+// the current tree with durable, automated evidence).
+describe('0934 — legacy H1 scenario contracts', () => {
+    test('AC1 — planning-workflow Step 3 states the feature-check loop-until-clean rule', () => {
+        const md = readFileSync(join(SKILLS_DIR, 'spur-dev', 'references', 'planning-workflow.md'), 'utf8');
+        const step3 = md.slice(md.indexOf('## Step 3'));
+        expect(step3).toContain('## Step 3: Feature check gate (loop)');
+        expect(step3).toContain('Loop until exit 0');
+    });
+
+    test('AC4 — test-driven-development remains a referenced discipline skill (not absorbed)', () => {
+        const tdd = join(SKILLS_DIR, 'test-driven-development', 'SKILL.md');
+        expect(existsSync(tdd)).toBe(true);
+        for (const ref of ['code-implementation', 'code-testing']) {
+            const raw = readFileSync(join(SKILLS_DIR, ref, 'SKILL.md'), 'utf8');
+            expect(raw, `${ref} must reference sp:test-driven-development`).toContain('sp:test-driven-development');
+        }
+    });
+});

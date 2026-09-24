@@ -27,11 +27,7 @@ For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag
 
 ## Implementation
 
-Under the pipeline, the `test-recheck` state runs the full gate immediately after this hop — that is
-the deciding run. When `--gate-log` is set (the pipeline signal), fixall runs **no full gate at
-all**: targeted probes (`bun test <file> --test-name-pattern <test>`) during fix loops, then one
-`bun run lint` before returning. Invoked standalone, it keeps the single confirming run (R4, task
-0483). `qualityGateCmd` itself is unchanged so `test-recheck` still runs the full gate.
+Follow the inline procedure in [dev-operations.md](../skills/spur-dev/references/dev-operations.md#10-fixall) (fixall). Pipeline signal: when `--gate-log` is set (the `test-fix` hop), run no full gate — the `test-recheck` state immediately after is the deciding run (R4, task 0483).
 
 When dispatched from the pipeline's test-fix stage (F96, task 0950), the gate log carries a
 `residual artifact` block (`<wbs>-residuals.json`) and the findings file already
