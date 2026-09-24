@@ -75,6 +75,11 @@
             "twin": "quality-gate.mjs"
         },
         {
+            "rel": "residual-scan.ts",
+            "contract": "standard",
+            "twin": "residual-scan.mjs"
+        },
+        {
             "rel": "script-contract-check.ts",
             "contract": "repo-only"
         },
