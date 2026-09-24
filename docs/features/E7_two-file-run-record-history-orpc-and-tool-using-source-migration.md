@@ -2,11 +2,11 @@
 schema_version: 1
 id: "E7"
 name: Workflow run record and inspection
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-08-19T05:34:32.698Z"
-updated_at: "2026-09-24T06:01:39.268Z"
+updated_at: "2026-09-24T06:45:26.146Z"
 ---
 
 # E7: Two-file run-record, history oRPC, and Tool Using source migration
@@ -122,4 +122,5 @@ Retention is intentionally undecided for the new pair. Current `cleanRunLogs` re
 
 - 2026-09-24T03:30:09.851Z backlog → active (system)
 - 2026-09-24T06:01:39.268Z active → verifying (system)
+- 2026-09-24T06:45:26.146Z verifying → done (system)
 
