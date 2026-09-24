@@ -2738,3 +2738,168 @@ Not claimed: no repo-wide audit — only the four named owners and their outboun
 - **One writer per working tree.** The repair touched only `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`; the uncommitted D64 task/feature corpus (0936–0947, `D64_*.md`, `INDEX.md`) was left byte-identical — verified by mtime, all 17:15–17:35 against the 17:40–17:41 edits.
 - **Corpus writes are CLI-gated.** No `spur task`/`spur feature` write was made and no task/feature file was edited; task receipts stay in task records (§8) and the learnings go to run-scoped storage.
 - **A "done" wrap hop still needs its substance checked.** The run log showed `doc-sync` reaching `agent.run` under `--model volc/deepseek-v4-1-flash-260910`. The non-empty `-wrapup-learnings.md` this run produces is the evidence the step ran — a green terminal alone is not evidence (same failure mode recorded at `.spur/context/learnings.md:845`).
+Drift audit complete. Batch WBS 0931–0934 read from the validated capture; no task/feature corpus was written.
+
+**Drift found and repaired** (committed as `c5f6be38` `docs(h1): record ADR-127 and sync 03/04 satellites with batch 0931-0933`):
+
+| Doc | Drift | Repair |
+|---|---|---|
+| `docs/00_ADR.md` | 0931 shipped a cross-cutting execution-model change (per-task worktree isolation, rebase+ff integration, deferred corpus sync) with no decision recorded — T1 violation | Added **ADR-127** (next free number), version 1.51.0→1.52.0, `updated_at` 2026-09-24 |
+| `docs/03_ARCHITECTURE.md` | No runtime-model entry for parallel batch execution; §6.2 resume contract omitted the escalation pause | New §29; escalation-pause sentence in §6.2; version 1.52.0→1.53.0 |
+| `docs/design/planning-workflow-contracts.md` | Task-pipeline shape stale (missing `[→ escalate]`); vars list missing `maxEscalations`/`escalationQuestion`/`deferFeatureSync`/`__hitlInput`; no escalation contract | Shape + contract paragraph + vars |
+| `docs/design/workflow-execution-economy.md` | §3 post-condition enumeration and outcome table omitted the `escalationFile` question signal | Added contract + "escalated (paused)" row |
+| `docs/design/workflow-composition-contract.md` | Fact 6 "every step leaves a checked result" had no escalation exception | Added the exception |
+
+**Verified clean / no change needed:** `docs/04_DESIGN.md` (no satellite pointer changed, §4.5); `cli-contracts.md`, `cmd_workflow.md`, `harness-surface-governance.md`, `workflows.md` (already synced in 0932); `harness-surface-governance.md` §1.2 output-check row still matches the validator; frontmatter `owns` paraphrases are the established convention, not drift.
+
+**Verification:** `bun run link-check` OK · `test-pre-check` 47/47 · `test-post-check` 2/2 · `repo-wide-tests/adr-supersession.test.ts` 7/7 · `git status` clean.
+
+**Notes, not commits:** `workflow-shell-ownership.md` per-hook table is a dated snapshot with pre-existing index drift; `e2e-workflow-for-system-development.md`'s "required flags" column legitimately omits optional flags. The 2026-09-24 H1 dogfood report's §2 file-list claim for 0931 is contradicted by the commit stat and code — flagged, not rewritten.
+
+Artifact written to `/Users/robin/xprojects/spur-new-runall-h1-0c62/.spur/run/128dbd87-ec0f-4c1a-a1a6-c7abb3bfc311-wrapup-learnings.md`.
+
+# Wrapup Learnings — H1 batch (0931–0934)
+
+Run: 128dbd87-ec0f-4c1a-a1a6-c7abb3bfc311 · Feature H1 (spur-dev skill umbrella) ·
+Batch tasks 0931 → 0932 → 0933 → 0934 (dependency-ordered linear chain) · All four `done`.
+
+## 2026-09-24 · 0931 — Per-task worktrees for parallel batches
+
+Conventions
+- A parallel batch makes the **task** the isolation unit: one create-mode worktree per concurrent
+  task, cut from the base-ref tip, with its own batch marker carrying a shared `batchId`.
+- Integration is **rebase-then-fast-forward only** (`git -C <wt> rebase <BASE_REF>` then
+  `merge --ff-only`), serialized in completion order. A batch never creates a merge commit.
+- Dependency eligibility is "**integrated onto the base ref**", not "finished" — a task may start
+  only when its in-set dependencies have landed on the base ref.
+- Generated corpus regions stay single-writer: task pipelines run with the new `deferFeatureSync`
+  pipeline var (`"true"` under parallel), so branches never touch feature files or
+  `docs/features/INDEX.md`; the orchestrator runs the bounded feature sync plus one
+  `spur feature refresh` per touched feature on the base ref after the last integration and commits
+  it as one `chore(corpus)` commit.
+- Flag surface: `--mode parallel` now **implies** per-task worktrees; `--worktree` with
+  `--mode parallel` is rejected ("parallel mode already isolates each task in its own worktree");
+  `--concurrency <n>` (default 2, `n ≥ 1`) bounds in-flight pipelines and is a no-op in sequential
+  mode.
+
+Errors fixed / gotchas
+- `deferFeatureSync` had to be threaded through the record step's post-record sync
+  (`config/workflows/task-pipeline.yaml`), because that is the only per-task writer of the feature
+  file — `spur task update` never touches the feature `## Tasks` table.
+- On rebase conflict: `rebase --abort`, **retain** worktree + branch + marker (`retained`,
+  outcome `integration-conflict`), block the dependent subtree under the normal failure policy.
+  No auto-resolution, ever.
+- New portable plugin script `record-feature-sync.ts` (+ `.mjs` twin) needed a
+  `config/plugin-scripts.json` entry; the standalone contract (only `node:*`/`bun:*` builtins,
+  relative paths, or `import type`) is the constraint that bites here.
+
+## 2026-09-24 · 0932 — `--answer-text` for input gates
+
+Conventions
+- New flag on an existing verb needs the full T3 set: governance ledger row, the
+  `docs/design/cli-contracts.md` synopsis, `docs/help/cmd_workflow.md`, and the
+  `plugins/sp/skills/spur-cli/references/workflows.md` table/synopsis.
+- Gate-kind validation happens **before** any resume claim: `--answer-text` requires a pending
+  `hitl.input` gate, `--answer` requires a pending confirm/select gate, passing both is rejected.
+  A mismatch is `VALIDATION_FAILED` (exit 2), the run stays `paused`, and no ownership claim or
+  metadata mutation happens.
+- The answer var is read from the gate's `options.var`, falling back to the kind's default —
+  this also fixed the hard-coded `__hitlAnswer` bug for `--answer`.
+
+Errors fixed / gotchas
+- Empty `--answer-text` is rejected (`VALIDATION_FAILED`); the text is otherwise stored verbatim.
+- The headless guard (0901 R3) must accept **either** answer flag and name both in its message.
+- `--async` validates first, then forwards `--answer-text` to the worker exactly like `--answer`.
+- A run paused with no gate action (e.g. `interrupted`) accepts neither flag and resumes as today.
+- Reuse, don't fork: the per-state action-site walk was extracted to one exported helper and
+  shared with the existing violation collector; `pendingGate` resolves the definition through the
+  same path `continuePaused` already used.
+
+## 2026-09-24 · 0933 — Pause headless implement on an operator question
+
+Conventions
+- `agent.run` gains an opt-in **question signal**, `escalationFile`, as a new member of the
+  post-exit contract set (`answerFile | escalationFile | expectFile | requireDiff |
+  requiresCapabilities`). A non-empty file after exit-0 means the agent paused instead of
+  finishing: the attempt **succeeds** with `data.escalated = true`, and `expectFile`/`requireDiff`
+  (including the 0487 scope guard) are skipped for that attempt only.
+- It is not a `contract-violation` (nothing was violated) and not an executor failure — it is a
+  third thing: a **bounded, non-terminal pause**. The run stays `paused`.
+- Freshness rule (0751 R3) applies to the question file too: delete-before-dispatch, so a question
+  left by a prior run can never pause the current one.
+- The pipeline's `escalate` state is a `hitl.input` gate; its transcript consumer appends Q/A to
+  `.spur/run/<wbs>-escalation.md`, removes the question file, and `escalate → implement` re-enters
+  the step. `maxEscalations` (default 2) bounds the pause count; exhausting it routes to `failed`
+  with the unanswered question appended to the run report.
+- Declaration order in the implement routing matters: the escalation bound is checked **first**, so
+  an already-exhausted pause routes to `failed` instead of asking forever.
+
+Errors fixed / gotchas
+- Extending an observability contract union (`WorkflowAgentContractViolationEvent.contract`) is a
+  real doc-visible change; the composition/guard parity baseline had to be regenerated.
+- The mechanism touches many parity surfaces at once: `execution-batch.md`,
+  `inline-pipeline-driver.md`, the `code-implementation` and `spur-dev` skills, `dev-run.md`, and
+  `super-planner.md` all had to move together, or the inline and subprocess drivers diverge.
+
+## 2026-09-24 · 0934 — Re-verify legacy umbrella scenarios, close the batch
+
+Conventions
+- Durable tests are the artifact; a feature-level `verifying → done` sync is a separate gate that a
+  task-level re-verify does not clear on its own.
+- Scenario-keyed evidence: re-keying verdict artifacts with scenario-titled MET rows is the
+  documented repair path (`feature-check.ts:927`) for `scenario-unverified` /
+  `verdict-rows-match-no-scenario` findings.
+
+Errors fixed / gotchas
+- The verify-answer header row is load-bearing: `| AC1 | Status | …` silently parses as **0** AC
+  rows (lint: "0 AC row(s)"). Headers must be bare column names.
+- `spur task record` before the verdict exists leaves an `L4.testing-verdict-stub`; re-run
+  `task record --transition testing` after `task verdict`.
+- Inline (host-orchestrated) runs have no pipeline-run row, so `spur task done` needs
+  `--provenance-bypass`.
+- Rule `sp-runtime-path` fires on **prose**: the literal `config/workflows` in a test comment trips
+  it; reword to "bundled workflow definitions".
+- `verifying → done` is denied by unsuppressible completion findings on pre-durable-era tasks
+  (52 `scenario-unverified` + 3 `evidence-not-recoverable`); this is a policy gap, surfaced for an
+  operator decision rather than papered over.
+- The sanctioned receipt producer (`spur workflow run feature-verification.yaml`) fails in a source
+  checkout: the inline launcher resolves `spur` to the source CLI, and `feature-verification-steps.ts`
+  `loadModule` maps it to `packages/app/src/index.ts`, which lacks the `splitLaunchCommand` /
+  `ArtifactDao` seams that only the generated bundle re-exports.
+
+## 2026-09-24 · Wrapup doc-sync (doc-evolve)
+
+Conventions
+- T1 admission: parallel per-task worktree isolation passes §6.1 ("runtime or shared execution
+  model") and binds the batch driver + the shared task pipeline + the corpus generated regions, so
+  it was recorded as **ADR-127** (next free number; never reuse/renumber).
+- Drift owners for a `task-pipeline.yaml` change: shape + vars + state contracts live in
+  `docs/design/planning-workflow-contracts.md` §7.5; ADR-118 stage contracts live in
+  `docs/design/workflow-execution-economy.md` §3; composition facts in
+  `docs/design/workflow-composition-contract.md`.
+- Frontmatter `owns` is a **paraphrase-in-meaning** of constitution §4.1 across every key doc — that
+  is the convention, so an inexact paraphrase is not drift and needs no churn (§6.0).
+- An index (`04_DESIGN.md`) changes only when its own pointer/title/indexed state changes; a
+  satellite edit with an unchanged pointer is already synchronized (§4.5).
+
+Errors fixed / gotchas
+- Repo-wide `repo-wide-tests/adr-supersession.test.ts` (e) asserts that the **unstaged** diff of
+  `docs/00_ADR.md` only adds lines inside a static amended-ADR allowlist. A brand-new ADR therefore
+  fails `spur-check-feature` until it is committed — the test's own comment states the assertion is
+  vacuous once committed. Commit the ADR; do not widen the allowlist for a new entry.
+- `rg -rn '<pattern>'` is a trap: `-r` is `--replace`, so `-rn` replaces every match with the
+  literal `n` and silently corrupts the output. Use `rg -n`.
+- Verified (not assumed) CLI surface before "fixing" docs: there is **no** `--worktree` flag on
+  `spur workflow run`; `--worktree` is a `dev-runall` batch flag. The 2026-09-24 H1 dogfood report's
+  §2 claim that 0931 "included `workflow run` surface (T3 docs: cli-contracts, cmd_workflow,
+  harness-surface-governance)" is contradicted by the commit stat and by the code — treat a report's
+  file-list claim as unverified until the commit confirms it.
+- `docs/design/harness-surface-governance.md` §1.2 "`agent.run` output check" is still accurate:
+  the composition measure keys only on `expectFile`/`requireDiff`, so `escalationFile` does not
+  change that row.
+- Left as out-of-scope notes, not commits: the `docs/design/workflow-shell-ownership.md` per-hook
+  table is a dated 67-program snapshot whose `implement:onEnter` indices drifted before this batch;
+  `docs/design/e2e-workflow-for-system-development.md`'s "required flags/options" column omits the
+  optional `--concurrency`/`--worktree` by design.
+- `.spur/run/` is gitignored, so run-scoped artifacts (verdicts, reports, these learnings) never
+  enter the commit; the doc repair was committed separately as `docs(h1): record ADR-127 …`.
