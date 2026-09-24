@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
@@ -769,9 +769,15 @@ export class WorkflowAppService {
         // (0485 R2) `implementAgent` is injected on the same seam so `agent.default` also
         // governs the implement hop; a stale default warns instead of failing dispatch.
         const warnings: string[] = [];
+        // Declared defaults are the base. Caller --vars overlay them; an explicit
+        // empty string that would blank a declared var is rejected (0948 R2).
+        // The engine also merges, but the map handed to it is already complete so
+        // a replace-style consumer cannot drop a declared var the caller omitted.
         const runVars = {
-            ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, opts.vars, (m) => warnings.push(m)),
-            ...(opts.vars ?? {}),
+            ...mergeWorkflowRunVars(workflow.vars as Record<string, unknown> | undefined, {
+                ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, opts.vars, (m) => warnings.push(m)),
+                ...(opts.vars ?? {}),
+            }),
             __runId: runId,
             // 0759 R5: inject the canonical definition digest on the same seam as __runId so a
             // pipeline can stamp it into its verdict proof block — verified-outcome then binds
@@ -2395,6 +2401,43 @@ export {
 } from '../workflow/workflow-resolver';
 
 /**
+ * Overlay caller `--vars` on a workflow's declared defaults (0948 R2).
+ *
+ * Omitted keys keep the definition default. An explicit empty string for a key
+ * the definition already set to a non-empty value is a blanking override and is
+ * rejected by name — a partial map must not silently empty `spurBin` or any
+ * other declared var. Non-string declared values are ignored; workflow vars are
+ * `Record<string, string>`.
+ */
+export function mergeWorkflowRunVars(
+    declared: Record<string, unknown> | undefined,
+    overrides: Record<string, string> | undefined,
+): Record<string, string> {
+    const base: Record<string, string> = {};
+    if (declared !== undefined) {
+        for (const [key, value] of Object.entries(declared)) {
+            if (typeof value === 'string') base[key] = value;
+        }
+    }
+    const user = overrides ?? {};
+    const blanked = Object.keys(user).filter((key) => user[key] === '' && (base[key] ?? '') !== '');
+    if (blanked.length > 0) {
+        throw new Error(`--vars leaves declared vars unset: ${blanked.sort().join(', ')}`);
+    }
+    return { ...base, ...user };
+}
+
+/** Thrown when a run id cannot be used as a single path segment under `.spur/run` (0948 R5). */
+export class InvalidWorkflowRunIdError extends Error {
+    readonly code = 'invalid-run-id' as const;
+
+    constructor(runId: string) {
+        super(`Invalid workflow run id: ${JSON.stringify(runId)}`);
+        this.name = 'InvalidWorkflowRunIdError';
+    }
+}
+
+/**
  * Resolve the `agent` / `implementAgent` run vars from `.spur/config.yaml`
  * `agent.default`, so the configured default executor reaches a workflow's
  * `agent.run` steps — including the implement hop, which previously read only the
@@ -2526,7 +2569,7 @@ export type WorkflowRunRecordRead =
 export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRunRecordRead {
     // Run ids key file names under the run dir — reject traversal before any path is built.
     if (runId.includes('/') || runId.includes('\\') || runId.includes('..')) {
-        throw new Error(`Invalid workflow run id: ${JSON.stringify(runId)}`);
+        throw new InvalidWorkflowRunIdError(runId);
     }
     const markdownPath = join(runDir, `${runId}.md`);
     const statePath = join(runDir, `${runId}.state.json`);
@@ -2534,8 +2577,16 @@ export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRu
         if (!existsSync(statePath)) {
             return { kind: 'incomplete', markdownPath, statePath, reason: 'state-missing' };
         }
+        let raw: string;
         try {
-            const state: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+            raw = readFileSync(statePath, 'utf8');
+        } catch (err) {
+            // Vanished between the exists check and the read is missing, not invalid (0948 R6).
+            const reason = stateReadFailureReason(err);
+            return { kind: 'incomplete', markdownPath, statePath, reason };
+        }
+        try {
+            const state: unknown = JSON.parse(raw);
             if (state !== null && typeof state === 'object' && !Array.isArray(state)) {
                 return { kind: 'pair', markdownPath, statePath, state: state as Record<string, unknown> };
             }
@@ -2549,8 +2600,22 @@ export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRu
     return { kind: 'missing' };
 }
 
-/** Byte cap for a Board run-record inspection (0929 R2) — one bounded JSON response. */
+/** Byte cap for a Board run-record inspection (0929 R2) — file size, not a string length. */
 export const RUN_RECORD_INSPECT_MAX_BYTES = 256 * 1024;
+
+/**
+ * Character cap applied to redacted text (0948 R5). Distinct from
+ * {@link RUN_RECORD_INSPECT_MAX_BYTES}: `redactAndBound` bounds by string length.
+ */
+export const RUN_RECORD_INSPECT_MAX_CHARS = 256 * 1024;
+
+/** ENOENT between exists and read is a vanished file; every other read failure is invalid. */
+export function stateReadFailureReason(err: unknown): 'state-missing' | 'state-invalid' {
+    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === 'ENOENT') {
+        return 'state-missing';
+    }
+    return 'state-invalid';
+}
 
 /** Explicit bounded outcome of a Board run-record inspection (0929 R2). */
 export type WorkflowRunRecordInspection =
@@ -2572,15 +2637,58 @@ type ConfinedRunFile = { text: string } | { oversized: number } | undefined;
  * the byte cap between detection and read is `oversized`, never truncated.
  */
 function readConfinedRunFile(realRunDir: string, path: string, maxBytes: number): ConfinedRunFile {
+    // Open once, then fstat and read that descriptor (0948 R5). realpath/stat/read
+    // as three separate path lookups let a local swap change which bytes were served.
+    let real: string;
     try {
-        const real = realpathSync(path);
-        if (real !== realRunDir && !real.startsWith(realRunDir + sep)) return undefined;
-        const size = statSync(real).size;
-        if (size > maxBytes) return { oversized: size };
-        return { text: readFileSync(real, 'utf8') };
+        real = realpathSync(path);
     } catch {
-        return undefined; // vanished (or unreadable) between detection and read → missing
+        return undefined;
     }
+    if (real !== realRunDir && !real.startsWith(realRunDir + sep)) return undefined;
+    let fd: number;
+    try {
+        fd = openSync(real, 'r');
+    } catch {
+        return undefined;
+    }
+    try {
+        const size = fstatSync(fd).size;
+        if (size > maxBytes) return { oversized: size };
+        const buffer = Buffer.alloc(size);
+        const read = readSync(fd, buffer, 0, size, 0);
+        return { text: buffer.subarray(0, read).toString('utf8') };
+    } catch {
+        return undefined;
+    } finally {
+        closeSync(fd);
+    }
+}
+
+/** Re-redact every string in a parsed state object before it is served (0948 R5). */
+function redactStateRecord(
+    state: Record<string, unknown>,
+    secrets: readonly string[],
+    maxChars: number,
+): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(state)) {
+        out[key] = redactJsonValue(value, secrets, maxChars);
+    }
+    return out;
+}
+
+function redactJsonValue(value: unknown, secrets: readonly string[], maxChars: number): unknown {
+    if (typeof value === 'string') return redactAndBound(value, secrets, maxChars);
+    if (Array.isArray(value)) return value.map((entry) => redactJsonValue(entry, secrets, maxChars));
+    if (value !== null && typeof value === 'object') {
+        const out: Record<string, unknown> = {};
+        for (const [key, entry] of Object.entries(value)) {
+            out[key] = redactJsonValue(entry, secrets, maxChars);
+        }
+        return out;
+    }
+    return value;
 }
 
 /**
@@ -2598,9 +2706,10 @@ function readConfinedRunFile(realRunDir: string, path: string, maxBytes: number)
 export function inspectWorkflowRunRecord(
     runDir: string,
     runId: string,
-    opts: { secretValues?: readonly string[]; maxBytes?: number } = {},
+    opts: { secretValues?: readonly string[]; maxBytes?: number; maxChars?: number } = {},
 ): WorkflowRunRecordInspection {
     const maxBytes = opts.maxBytes ?? RUN_RECORD_INSPECT_MAX_BYTES;
+    const maxChars = opts.maxChars ?? RUN_RECORD_INSPECT_MAX_CHARS;
     const secrets = opts.secretValues ?? [];
     const record = readWorkflowRunRecord(runDir, runId); // rejects traversal-shaped ids
     if (record.kind === 'missing') return { status: 'missing' };
@@ -2615,12 +2724,12 @@ export function inspectWorkflowRunRecord(
         if (file === undefined) return { status: 'missing' };
         if ('oversized' in file) return { status: 'oversized', sizeBytes: file.oversized };
         // The legacy `.log` predates write-time redaction — scrub it again on read.
-        return { status: 'legacy', content: redactAndBound(file.text, secrets, maxBytes) };
+        return { status: 'legacy', content: redactAndBound(file.text, secrets, maxChars) };
     }
     const mdFile = readConfinedRunFile(realRunDir, record.markdownPath, maxBytes);
     if (mdFile === undefined) return { status: 'missing' };
     if ('oversized' in mdFile) return { status: 'oversized', sizeBytes: mdFile.oversized };
-    const markdown = redactAndBound(mdFile.text, secrets, maxBytes);
+    const markdown = redactAndBound(mdFile.text, secrets, maxChars);
     if (record.kind === 'incomplete') {
         return { status: 'incomplete', markdown, reason: record.reason };
     }
@@ -2631,7 +2740,7 @@ export function inspectWorkflowRunRecord(
         return { status: 'incomplete', markdown, reason: 'state-invalid' };
     }
     if ('oversized' in stateFile) return { status: 'oversized', sizeBytes: stateFile.oversized };
-    return { status: 'record', markdown, state: record.state };
+    return { status: 'record', markdown, state: redactStateRecord(record.state, secrets, maxChars) };
 }
 
 /**

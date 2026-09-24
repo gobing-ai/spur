@@ -687,6 +687,7 @@ export type {
     WorkflowValidateResult,
 } from './services/workflow-service';
 export {
+    InvalidWorkflowRunIdError,
     type ResolvedWorkflowDefinition,
     type ResolveWorkflowDefinitionOptions,
     type ResolveWorkflowFileResult,

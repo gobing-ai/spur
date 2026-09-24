@@ -22,11 +22,13 @@ import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import {
     inspectWorkflowRunRecord,
+    mergeWorkflowRunVars,
     readWorkflowRunRecord,
     resolveOutputLogConfig,
     resolveWorkflowDefinition,
     resolveWorkflowFile,
     resolveWorkflowLogRetentionDays,
+    stateReadFailureReason,
     WorkflowAppService,
     type WorkflowListResult,
 } from '../../src/services/workflow-service';
@@ -2644,6 +2646,23 @@ terminalStates:
             }
             await rm(dir, { recursive: true, force: true });
         });
+
+        test('a vanished state file is state-missing; a parse error is state-invalid (0948 R6)', () => {
+            expect(stateReadFailureReason(Object.assign(new Error('gone'), { code: 'ENOENT' }))).toBe('state-missing');
+            expect(stateReadFailureReason(new SyntaxError('bad json'))).toBe('state-invalid');
+        });
+    });
+
+    test('mergeWorkflowRunVars keeps omitted declared defaults and rejects a blanking override (0948 R2)', () => {
+        expect(
+            mergeWorkflowRunVars(
+                { featureId: 'X', spurBin: 'spur', verificationCmd: 'bun run spur-check-feature' },
+                { featureId: 'E7' },
+            ),
+        ).toEqual({ featureId: 'E7', spurBin: 'spur', verificationCmd: 'bun run spur-check-feature' });
+        expect(() => mergeWorkflowRunVars({ spurBin: 'spur' }, { spurBin: '' })).toThrow(
+            /--vars leaves declared vars unset: spurBin/,
+        );
     });
 
     describe('inspectWorkflowRunRecord (E7 / task 0929 R1/R2 — confined Board read)', () => {
@@ -2652,7 +2671,7 @@ terminalStates:
             const runDir = join(dir, '.spur', 'run');
             await mkdir(runDir, { recursive: true });
             await writeFile(join(runDir, 'r1.md'), '# record\nsecret=hunter2');
-            await writeFile(join(runDir, 'r1.state.json'), '{"runId":"r1","status":"done"}');
+            await writeFile(join(runDir, 'r1.state.json'), '{"runId":"r1","status":"done","note":"hunter2"}');
 
             const outcome = inspectWorkflowRunRecord(runDir, 'r1', { secretValues: ['hunter2'] });
             expect(outcome.status).toBe('record');
@@ -2660,6 +2679,7 @@ terminalStates:
             expect(outcome.markdown).toContain('# record');
             expect(outcome.markdown).not.toContain('hunter2');
             expect(outcome.state).toMatchObject({ runId: 'r1', status: 'done' });
+            expect(JSON.stringify(outcome.state)).not.toContain('hunter2');
             await rm(dir, { recursive: true, force: true });
         });
 

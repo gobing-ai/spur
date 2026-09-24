@@ -1,4 +1,4 @@
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { closeSync, fstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -1995,6 +1995,10 @@ export async function followRunLog(
     let record: WorkflowRunRecordRead = { kind: 'missing' };
     let offset = 0;
     let everRead = false;
+    let sawFile = false;
+    // Text already emitted, so a legacy→.md switch can skip a shared prefix
+    // instead of reprinting the new file from byte 0 (0948 R6).
+    let carried = '';
     // 0930 R1: last observed status for the deadline checkpoint; a run not yet
     // persisted is pending registration.
     let lastStatus = 'pending';
@@ -2009,11 +2013,23 @@ export async function followRunLog(
         if (target !== logPath) {
             logPath = target;
             offset = 0;
+            if (carried !== '') {
+                try {
+                    const nextText = readFileSync(target, 'utf8');
+                    if (nextText.startsWith(carried)) offset = Buffer.byteLength(carried);
+                } catch {
+                    offset = 0;
+                }
+            }
         }
         const chunk = readRunLogChunk(logPath, offset);
+        if (chunk.exists) sawFile = true;
         if (chunk.exists && (chunk.lines.length > 0 || chunk.offset > offset)) {
             everRead = true;
-            for (const line of chunk.lines) write(line);
+            for (const line of chunk.lines) {
+                write(line);
+                carried += `${line}\n`;
+            }
             offset = chunk.offset;
         }
 
@@ -2034,7 +2050,12 @@ export async function followRunLog(
                     `Run record incomplete (${record.reason}) at ${record.statePath} — the workflow DB trace remains the completion authority.`,
                 );
             } else if (!everRead) {
-                write(`No run log at ${logPath} — the run may have been started with --no-log.`);
+                // An empty legacy log is a present file, not a missing --no-log run (0948 R6).
+                write(
+                    sawFile
+                        ? `Run log at ${logPath} is empty.`
+                        : `No run log at ${logPath} — the run may have been started with --no-log.`,
+                );
             }
             return false;
         }

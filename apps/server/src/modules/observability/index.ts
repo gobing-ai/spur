@@ -1,4 +1,4 @@
-import type { ToolUseEvent } from '@gobing-ai/spur-app';
+import { InvalidWorkflowRunIdError, type ToolUseEvent } from '@gobing-ai/spur-app';
 import type { ObservabilitySummaryResponse } from '@gobing-ai/spur-contracts';
 import { queueJobKpis, type RoutingSummaryQuery, roleTokenSummary } from '@gobing-ai/spur-domain';
 import type { Context, Hono } from 'hono';
@@ -367,10 +367,10 @@ export const observabilityModule: ServerModule = {
             try {
                 return c.json(ctx.workflowService().inspectRunRecord(runId));
             } catch (err) {
-                // The shared reader seam rejects traversal-shaped ids before any
-                // path is built — surface that as a 400, not a 500 (0929 R1).
-                if (err instanceof Error && err.message.includes('Invalid workflow run id')) {
-                    return c.json({ error: err.message, code: 'invalid-run-id', runId }, 400);
+                // Map the typed seam error, not its message text (0948 R5). A
+                // wording change must not turn this 400 into a 500.
+                if (err instanceof InvalidWorkflowRunIdError) {
+                    return c.json({ error: err.message, code: err.code, runId }, 400);
                 }
                 throw err;
             }
