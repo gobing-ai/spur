@@ -741,14 +741,6 @@ states:
           failure, or operator rejection; reported, not advanced. Also receives an
           escalation-bound pause or an operator give-up (0933).
       onEnter:
-          # (d) F96 R5 (0950): residual-scan.ts owns the report; shell only resolves it.
-          # Soft (exit 0): a run that exhausts its fix budget on residuals leaves the
-          # report + recovery line while the task stays `wip`.
-          - kind: shell
-            options:
-                command: >-
-                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" report "$wbs" --spur-bin "$spurBin" || echo "residual-report failed — re-run: residual-scan report $wbs" >&2; else echo "residual-scan not staged — report skipped — re-run: residual-scan report $wbs" >&2; fi; exit 0
-      onEnter:
           # 0933 R30 (guard-lines compression): the escalation-bound report note lives
           # here as a conditional — no-op unless the run reached failed with a pending
           # question at (or above) the ask bound (bound pause or final give-up). The
@@ -761,6 +753,13 @@ states:
                     printf '\n## Escalation bound reached\n\nThe implement step asked an operator question %s times (bound %s) and ended without a resumable answer. Unanswered question:\n\n' "$n" "$maxEscalations" >> .spur/run/$wbs-report.txt;
                     cat .spur/run/$wbs-question.md >> .spur/run/$wbs-report.txt;
                     exit 0
+          # (d) F96 R5 (0950): residual-scan.ts owns the report; shell only resolves it.
+          # Soft (exit 0): a run that exhausts its fix budget on residuals leaves the
+          # report + recovery line while the task stays `wip`.
+          - kind: shell
+            options:
+                command: >-
+                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" report "$wbs" --spur-bin "$spurBin" || echo "residual-report failed — re-run: residual-scan report $wbs" >&2; else echo "residual-scan not staged — report skipped — re-run: residual-scan report $wbs" >&2; fi; exit 0
 
     - id: cancelled
       description: Terminal — pipeline cancelled by operator at the approval gate (R1).

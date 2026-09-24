@@ -365,6 +365,8 @@ esac`,
         const report = cmds.find((c) => c.includes('residual-scan') && c.includes('report'));
         expect(report).toBeDefined();
         expect(report?.trim().endsWith('exit 0')).toBe(true);
+    });
+
     // 0931 R5: parallel batches launch each pipeline with deferFeatureSync "true" so a task
     // branch never touches feature files; the record-step sync shell must skip cleanly. The
     // default "false" keeps sequential/inline behavior unchanged — the sync is owned by
