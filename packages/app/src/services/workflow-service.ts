@@ -44,6 +44,7 @@ import {
     type ProcessExecutor,
     parseYamlObject,
 } from '@gobing-ai/ts-runtime';
+import { ValidationError } from '@gobing-ai/ts-utils';
 import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import { createRunLogTraceFailureRecorder, withActionTrace } from '../workflow/action-trace';
@@ -61,6 +62,7 @@ import { computeDefinitionDigest } from '../workflow/composition-baseline';
 import type { SummaryResolver } from '../workflow/decision-evidence';
 import { type DecisionEvaluator, evaluateDecision, parseDecisionConfig } from '../workflow/decision-hitl-responder';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
+import { projectWorkflowProgress } from '../workflow/progress-projection';
 import type { WorkflowSteeringController } from '../workflow/steering';
 import {
     type ResolvedWorkflowDefinition,
@@ -1153,21 +1155,7 @@ export class WorkflowAppService {
      * @param runId The run to resume.
      * @param opts Optional HITL answer to inject before guard re-evaluation.
      */
-    async continuePaused(
-        runId: string,
-        opts?: {
-            hitlAnswer?: 'yes' | 'no' | 'cancel';
-            hitlVar?: string;
-            allowDigestMismatch?: boolean;
-            force?: boolean;
-            /** 0901 R5: redactor applied to persisted action results (shell tails). */
-            redactor?: ActionRedactor;
-            /** 0901 R2/R4: resume ownership claim; async workers pass their own attempt+pid. */
-            resumeOwner?: ResumeOwnership;
-            /** 0901 R4: the async continue worker stamps its pid at the resume claim. */
-            recordSelfPid?: boolean;
-        },
-    ): Promise<WorkflowRunResult> {
+    async continuePaused(runId: string, opts?: ContinuePausedOptions): Promise<WorkflowRunResult> {
         // Same dual-bus wiring as run() (task 0370): adapter verb-form events via
         // observabilityBus inside createEngineService, engine-native names via the
         // resume options `events` field. CLI attaches a SystemEventDao tap to both.
@@ -1203,35 +1191,9 @@ export class WorkflowAppService {
             }
         };
 
-        // 0784 R1/R2: honor the recorded launch source. A present-but-malformed
-        // definitionSource fails rather than silently degrading to legacy lookup.
-        let pinned: RunDefinitionSource | null = null;
-        const rawSource: unknown = rawMeta.definitionSource;
-        if (rawSource !== undefined) {
-            if (rawSource === null || typeof rawSource !== 'object' || Array.isArray(rawSource)) {
-                throw new Error(
-                    `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected {path, layer, workdir}). Resume refused.`,
-                );
-            }
-            const candidate = rawSource as Record<string, unknown>;
-            const sourcePath = candidate.path;
-            const sourceWorkdir = candidate.workdir;
-            // 0819 R4: the layer vocabulary is project|registered|shared; a pre-rename row
-            // carrying the legacy `bundled` alias still resumes and reads as `shared`.
-            const sourceLayer = normalizePersistedWorkflowLayer(candidate.layer);
-            if (
-                typeof sourcePath !== 'string' ||
-                sourcePath === '' ||
-                sourceLayer === null ||
-                typeof sourceWorkdir !== 'string' ||
-                sourceWorkdir === ''
-            ) {
-                throw new Error(
-                    `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected an absolute path, a project|registered|shared layer — legacy "bundled" accepted — and a workdir). Resume refused.`,
-                );
-            }
-            pinned = { path: sourcePath, layer: sourceLayer, workdir: sourceWorkdir };
-        }
+        // 0784 R1/R2: honor the recorded launch source (shared with pendingGate,
+        // 0932, so gate inspection and resume agree on the launch identity).
+        const pinned = this.pinnedLaunchSource(runId, rawMeta);
 
         // Launch workdir grounds checkpoint artifacts, git freshness, and the
         // engine resume snapshot (0784 R3) — never the ambient process cwd.
@@ -1240,44 +1202,9 @@ export class WorkflowAppService {
         // R5: Resume validates checkpoint freshness on the resume side (ADR-099).
         await this.validateResumeCheckpointFreshness(runId, row, launchWorkdir);
 
-        // R1/R4 + 0784 R1/R2: resolve the launched definition. With a recorded
-        // source, verify the file still exists BEFORE invoking the resolver so a
-        // deleted source can never silently resolve a same-named replacement;
-        // require resolution to land exactly on the recorded path. Without one,
-        // retain legacy name-only lookup with an explicit degraded-identity warning.
-        let resolved: ResolvedWorkflowDefinition;
-        if (pinned !== null) {
-            const fs = createNodeFileSystem();
-            if (!fs.exists(pinned.path)) {
-                throw new Error(
-                    `Cannot resume run "${runId}": recorded launch source "${pinned.path}" no longer exists. Repair the source or start a new run; name-based fallback is refused.`,
-                );
-            }
-            resolved = await resolveWorkflowDefinition(pinned.workdir, pinned.path, {
-                validateSchema: true,
-                embeddedSchemas: this.ctx.embeddedSchemas?.(),
-            });
-            if (resolved.path !== pinned.path) {
-                throw new Error(
-                    `Cannot resume run "${runId}": definition resolved to "${resolved.path}" instead of the recorded launch source "${pinned.path}". Resume refused.`,
-                );
-            }
-        } else {
-            try {
-                resolved = await resolveWorkflowDefinition(this.ctx.cwd, row.workflow_name, {
-                    validateSchema: true,
-                    embeddedSchemas: this.ctx.embeddedSchemas?.(),
-                    registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
-                });
-            } catch {
-                throw new Error(
-                    `Cannot resume run "${runId}": workflow definition "${row.workflow_name}" not found in the workflow search paths.`,
-                );
-            }
-            emitWarning(
-                `Run "${runId}" resumed by workflow name "${row.workflow_name}" (no recorded launch source — pre-source-pin run); identity checks run against the name-resolved definition.`,
-            );
-        }
+        // R1/R4 + 0784 R1/R2: resolve the launched definition. Shared with
+        // pendingGate (0932) so the inspected gate is the gate a resume executes.
+        const resolved = await this.resolveResumableDefinition(runId, row, pinned, emitWarning);
 
         // R3: Compare persisted definitionDigest against re-resolved definition.
         const persistedDigest = typeof rawMeta.definitionDigest === 'string' ? rawMeta.definitionDigest : null;
@@ -1296,6 +1223,16 @@ export class WorkflowAppService {
                 `Cannot resume run "${runId}": workflow definition drift detected (identity-stamped run has no recorded definition digest, currently ${resolved.digest}). Resume refused.`,
             );
         }
+        // R1 of 0433: inject the operator's HITL answer into resume vars so guard
+        // re-evaluation sees the override, not the stale headless default. The
+        // engine's resumeRun merges options.vars over the persisted snapshot
+        // (caller overrides win - ts-dual-workflow-engine service.ts:127).
+        // 0932 R2: the answer is validated against the pending gate HERE — before
+        // the drift-consent and stale-consent metadata writes below — so a rejected
+        // answer never mutates the run record (R2: no status, var or metadata
+        // change). The engine re-checks defensively inside resumeRun's ownership
+        // claim window, closing the inspect-vs-resume race.
+        const resumeVars: Record<string, string> = await this.resolveResumeAnswerVars(runId, opts);
         if (persistedDigest !== null && persistedDigest !== resolved.digest) {
             if (opts?.allowDigestMismatch !== true && opts?.force !== true) {
                 const prompt = `Workflow definition drift detected for run "${runId}": launched with ${persistedDigest}, currently ${resolved.digest}. Continue with modified definition?`;
@@ -1342,15 +1279,9 @@ export class WorkflowAppService {
             ...(opts?.recordSelfPid === true ? { recordSelfPid: true } : {}),
         });
         const workflow = resolved.workflow;
-        // R1 of 0433: inject the operator's HITL answer into resume vars so guard
-        // re-evaluation sees the override, not the stale headless default. The
-        // engine's resumeRun merges options.vars over the persisted snapshot
-        // (caller overrides win - ts-dual-workflow-engine service.ts:127).
         // 0784 R2: on consented drift the executed digest overrides the proof
-        // binding var (__definitionDigest) for this resume only.
-        const hitlVar = opts?.hitlVar ?? '__hitlAnswer';
-        const resumeVars: Record<string, string> = {};
-        if (opts?.hitlAnswer !== undefined) resumeVars[hitlVar] = opts.hitlAnswer;
+        // binding var (__definitionDigest) for this resume only. (Answer vars were
+        // resolved and validated above, before any metadata mutation.)
         if (persistedDigest !== null && persistedDigest !== resolved.digest && 'resumeDefinitionDigest' in rawMeta) {
             resumeVars.__definitionDigest = resolved.digest;
         }
@@ -1382,6 +1313,186 @@ export class WorkflowAppService {
         // 0784 R2: surface degraded/consented-drift resume diagnostics.
         if (warnings.length > 0) (runResult as Record<string, unknown>).warnings = warnings;
         return runResult;
+    }
+
+    /**
+     * Read-only gate inspection (0932 R2): the HITL gate action pending at the
+     * run's current state, or `null` when the run is not resumable (missing or
+     * terminal), projects no current state, or that state declares no gate
+     * action. The CLI calls this before both the sync and `--async` continue
+     * paths so a mismatched answer flag fails with `VALIDATION_FAILED` before
+     * the TTY confirmation, the async spawn, or any resume claim;
+     * `continuePaused` re-checks it defensively. The definition is resolved
+     * exactly like a resume (recorded launch source honored — shared helpers
+     * with `continuePaused`), so the inspected gate is the gate a resume would
+     * actually execute.
+     */
+    async pendingGate(runId: string): Promise<PendingGate | null> {
+        const db = await this.ctx.getDb();
+        const row = await new RunDao(db).traceRowById(runId);
+        if (row?.status !== 'paused' && row?.status !== 'interrupted') return null;
+        let rawMeta: Record<string, unknown> = {};
+        try {
+            rawMeta = JSON.parse(row.metadata_json || '{}');
+        } catch {
+            rawMeta = {};
+        }
+        const pinned = this.pinnedLaunchSource(runId, rawMeta);
+        // Inspection is silent: the legacy name-only warning stays owned by the
+        // resume path, which surfaces it when the resume actually proceeds.
+        const resolved = await this.resolveResumableDefinition(runId, row, pinned, () => {});
+        const projection = await projectWorkflowProgress(runId, {
+            db,
+            projectRoot: this.ctx.cwd,
+            workflowDef: resolved.workflow,
+        });
+        const stateId = projection.currentState;
+        if (stateId === null) return null;
+        const site = gateSitesForState(resolved.workflow, stateId)[0];
+        if (site === undefined) return null;
+        return {
+            stateId,
+            kind: site.kind as GateActionKind,
+            answerVar: hitlAnswerVar(site.kind, site.options),
+        };
+    }
+
+    /**
+     * Parse a run's persisted `definitionSource` metadata into a pinned launch
+     * source (0784 R1). A present-but-malformed record throws — resuming (or
+     * inspecting, 0932) a run must never silently degrade to legacy name lookup.
+     */
+    private pinnedLaunchSource(runId: string, rawMeta: Record<string, unknown>): RunDefinitionSource | null {
+        const rawSource: unknown = rawMeta.definitionSource;
+        if (rawSource === undefined) return null;
+        if (rawSource === null || typeof rawSource !== 'object' || Array.isArray(rawSource)) {
+            throw new Error(
+                `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected {path, layer, workdir}). Resume refused.`,
+            );
+        }
+        const candidate = rawSource as Record<string, unknown>;
+        const sourcePath = candidate.path;
+        const sourceWorkdir = candidate.workdir;
+        // 0819 R4: the layer vocabulary is project|registered|shared; a pre-rename row
+        // carrying the legacy `bundled` alias still resumes and reads as `shared`.
+        const sourceLayer = normalizePersistedWorkflowLayer(candidate.layer);
+        if (
+            typeof sourcePath !== 'string' ||
+            sourcePath === '' ||
+            sourceLayer === null ||
+            typeof sourceWorkdir !== 'string' ||
+            sourceWorkdir === ''
+        ) {
+            throw new Error(
+                `Cannot resume run "${runId}": recorded definitionSource metadata is malformed (expected an absolute path, a project|registered|shared layer — legacy "bundled" accepted — and a workdir). Resume refused.`,
+            );
+        }
+        return { path: sourcePath, layer: sourceLayer, workdir: sourceWorkdir };
+    }
+
+    /**
+     * Resolve the definition a resume of this run would execute (0784 R1/R2).
+     * With a recorded source, verify the file still exists BEFORE invoking the
+     * resolver so a deleted source can never silently resolve a same-named
+     * replacement; require resolution to land exactly on the recorded path.
+     * Without one, retain legacy name-only lookup with an explicit
+     * degraded-identity warning. Shared by `continuePaused` (resume) and
+     * `pendingGate` (read-only gate inspection, 0932) so both walk the same
+     * definition.
+     */
+    private async resolveResumableDefinition(
+        runId: string,
+        row: { workflow_name: string },
+        pinned: RunDefinitionSource | null,
+        emitWarning: (message: string) => void,
+    ): Promise<ResolvedWorkflowDefinition> {
+        if (pinned !== null) {
+            const fs = createNodeFileSystem();
+            if (!fs.exists(pinned.path)) {
+                throw new Error(
+                    `Cannot resume run "${runId}": recorded launch source "${pinned.path}" no longer exists. Repair the source or start a new run; name-based fallback is refused.`,
+                );
+            }
+            const resolved = await resolveWorkflowDefinition(pinned.workdir, pinned.path, {
+                validateSchema: true,
+                embeddedSchemas: this.ctx.embeddedSchemas?.(),
+            });
+            if (resolved.path !== pinned.path) {
+                throw new Error(
+                    `Cannot resume run "${runId}": definition resolved to "${resolved.path}" instead of the recorded launch source "${pinned.path}". Resume refused.`,
+                );
+            }
+            return resolved;
+        }
+        let resolved: ResolvedWorkflowDefinition;
+        try {
+            resolved = await resolveWorkflowDefinition(this.ctx.cwd, row.workflow_name, {
+                validateSchema: true,
+                embeddedSchemas: this.ctx.embeddedSchemas?.(),
+                registered: registeredWorkflowPaths(this.ctx.spurConfig ?? null),
+            });
+        } catch {
+            throw new Error(
+                `Cannot resume run "${runId}": workflow definition "${row.workflow_name}" not found in the workflow search paths.`,
+            );
+        }
+        emitWarning(
+            `Run "${runId}" resumed by workflow name "${row.workflow_name}" (no recorded launch source — pre-source-pin run); identity checks run against the name-resolved definition.`,
+        );
+        return resolved;
+    }
+
+    /**
+     * 0932 R1/R2: validate the operator's answer flags against the gate the run
+     * is actually paused on, then build the resume vars that inject the answer.
+     * Called BEFORE `svc.resumeRun`, so a rejected call never reaches the
+     * resume-ownership claim and mutates nothing.
+     *
+     * - `--answer-text` (free text, R1) requires a pending `hitl.input` gate;
+     *   the text is stored verbatim under the gate's answer var (`options.var`,
+     *   else `__hitlInput`) and an empty string is rejected.
+     * - `--answer` (yes|no|cancel) requires a pending `hitl.confirm` or
+     *   `hitl.select` gate and lands in the gate's answer var — no longer the
+     *   hard-coded `__hitlAnswer` (R2).
+     * - Both flags together are rejected; a kind mismatch throws the typed
+     *   `ValidationError` every transport maps to `VALIDATION_FAILED`.
+     * - A resumable run with no pending gate action (for example `interrupted`)
+     *   has no gate contract to match and resumes exactly as before, with the
+     *   legacy var defaults.
+     * - `hitlVar` stays an explicit override for tests: it names the var
+     *   directly and skips the gate-kind check.
+     */
+    private async resolveResumeAnswerVars(
+        runId: string,
+        opts?: ContinuePausedOptions,
+    ): Promise<Record<string, string>> {
+        const resumeVars: Record<string, string> = {};
+        const answerText = opts?.answerText;
+        const hitlAnswer = opts?.hitlAnswer;
+        if (answerText !== undefined && hitlAnswer !== undefined) {
+            throw new ValidationError(
+                'Pass either --answer <yes|no|cancel> or --answer-text <text>, not both (0932 R2).',
+            );
+        }
+        if (answerText !== undefined) {
+            if (answerText === '') {
+                throw new ValidationError('--answer-text must be a non-empty string (0932 R1).');
+            }
+            const gate = await this.pendingGate(runId);
+            if (gate !== null && gate.kind !== 'hitl.input') {
+                throw new ValidationError(pendingGateMismatchMessage(runId, gate, '--answer-text'));
+            }
+            resumeVars[opts?.hitlVar ?? gate?.answerVar ?? hitlAnswerVar('hitl.input', undefined)] = answerText;
+            return resumeVars;
+        }
+        if (hitlAnswer !== undefined) {
+            const gate = await this.pendingGate(runId);
+            if (gate !== null && gate.kind !== 'hitl.confirm' && gate.kind !== 'hitl.select') {
+                throw new ValidationError(pendingGateMismatchMessage(runId, gate, '--answer'));
+            }
+            resumeVars[opts?.hitlVar ?? gate?.answerVar ?? hitlAnswerVar('hitl.confirm', undefined)] = hitlAnswer;
+        }
+        return resumeVars;
     }
 
     /**
@@ -2033,7 +2144,39 @@ const HITL_ANSWER_VAR_DEFAULTS: Record<string, string> = {
     'hitl.input': '__hitlInput',
 };
 
-interface HitlActionSite {
+/** The three gate action kinds that carry an operator answer (0932). */
+export type GateActionKind = 'hitl.confirm' | 'hitl.select' | 'hitl.input';
+
+/** The gate action pending at a resumable run's current state (0932 R2). */
+export interface PendingGate {
+    /** State/node the run is paused at. */
+    readonly stateId: string;
+    /** The pending gate action kind. */
+    readonly kind: GateActionKind;
+    /** The var the gate writes its answer into (`options.var`, else the kind default). */
+    readonly answerVar: string;
+}
+
+/** Continue/resume options shared by the CLI and the async worker (0901/0932). */
+export interface ContinuePausedOptions {
+    /** 0433 R1: yes|no|cancel gate answer injected before guard re-evaluation. */
+    readonly hitlAnswer?: 'yes' | 'no' | 'cancel';
+    /** 0932 R1: free-text answer for a pending hitl.input gate, stored verbatim. */
+    readonly answerText?: string;
+    /** Explicit var override for tests; names the var and skips the gate-kind check. */
+    readonly hitlVar?: string;
+    readonly allowDigestMismatch?: boolean;
+    readonly force?: boolean;
+    /** 0901 R5: redactor applied to persisted action results (shell tails). */
+    readonly redactor?: ActionRedactor;
+    /** 0901 R2/R4: resume ownership claim; async workers pass their own attempt+pid. */
+    readonly resumeOwner?: ResumeOwnership;
+    /** 0901 R4: the async continue worker stamps its pid at the resume claim. */
+    readonly recordSelfPid?: boolean;
+}
+
+/** One gate action site in a definition (the 0911 decision walk / 0932 inspection). */
+export interface HitlActionSite {
     readonly stateOrNodeId: string;
     readonly paused: boolean;
     readonly kind: string;
@@ -2041,6 +2184,62 @@ interface HitlActionSite {
     readonly options: Record<string, unknown> | undefined;
 }
 
+/**
+ * The var a gate writes its answer into: `options.var` when a non-empty string,
+ * else the kind default (0932 R1/R2). Shared with the 0911 decision walk so
+ * validation, inspection and execution agree on one answer-var rule.
+ */
+export function hitlAnswerVar(kind: string, options: Record<string, unknown> | undefined): string {
+    return typeof options?.var === 'string' && options.var.trim() !== ''
+        ? options.var
+        : (HITL_ANSWER_VAR_DEFAULTS[kind] ?? '__hitlAnswer');
+}
+
+/**
+ * Every gate action site declared by one state/node, in declaration order
+ * (onEnter before onExit; 0932). Shared by the 0911 decision walk and
+ * `pendingGate` — one site walk, never a copied second one.
+ */
+export function gateSitesForState(def: WorkflowDef, stateId: string): HitlActionSite[] {
+    const sites: HitlActionSite[] = [];
+    const visitAction = (paused: boolean, action: ActionDef, idx: number): void => {
+        if (!HITL_DECISION_KINDS.has(action.kind)) return;
+        sites.push({ stateOrNodeId: stateId, paused, kind: action.kind, index: idx, options: action.options });
+    };
+
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        const flowDef = def as TransitionFlowWorkflowDef;
+        const node = (flowDef.nodes ?? []).find((n) => n.id === stateId);
+        if (node?.action) visitAction(node.pause === true, node.action, 0);
+    } else {
+        const smDef = def as StateMachineWorkflowDef;
+        const state = (smDef.states ?? []).find((s) => s.id === stateId);
+        if (state === undefined) return sites;
+        for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.pause === true, action, i);
+        for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.pause === true, action, i);
+    }
+    return sites;
+}
+
+/**
+ * 0932 R2: the rejection message for an answer flag that does not match the
+ * gate the run is actually paused on — it names the pending gate kind and state.
+ */
+function pendingGateMismatchMessage(
+    runId: string,
+    gate: PendingGate | null,
+    flag: '--answer' | '--answer-text',
+): string {
+    const pending =
+        gate === null
+            ? 'the run has no pending gate action'
+            : `the run is paused at state "${gate.stateId}" on a ${gate.kind} gate`;
+    const requires =
+        flag === '--answer-text'
+            ? '--answer-text requires a pending hitl.input gate'
+            : '--answer requires a pending hitl.confirm or hitl.select gate';
+    return `Cannot resume run "${runId}": ${pending} — ${requires} (0932 R2). Resume refused; nothing was mutated.`;
+}
 /**
  * Post-schema policy walk (0911 D2/D5): every hitl.confirm/select/input `decision:` option is
  * parsed with the same runtime parser, and evidence-mode declarations get structural checks that
@@ -2053,25 +2252,18 @@ export function collectHitlDecisionViolations(def: WorkflowDef): string[] {
     const stateIds = new Set<string>();
     const sites: HitlActionSite[] = [];
 
-    const visitAction = (stateOrNodeId: string, paused: boolean, action: ActionDef, idx: number): void => {
-        if (!HITL_DECISION_KINDS.has(action.kind)) return;
-        sites.push({ stateOrNodeId, paused, kind: action.kind, index: idx, options: action.options });
-    };
-
     if (def.kind === 'transition-flow' || def.kind === undefined) {
         const flowDef = def as TransitionFlowWorkflowDef;
         for (const node of flowDef.nodes ?? []) {
             stateIds.add(node.id);
-            if (node.action) visitAction(node.id, node.pause === true, node.action, 0);
+            // 0932: the per-state site walk is shared with pendingGate, not copied.
+            sites.push(...gateSitesForState(def, node.id));
         }
     } else {
         const smDef = def as StateMachineWorkflowDef;
         for (const state of smDef.states ?? []) {
             stateIds.add(state.id);
-            for (const [i, action] of (state.onEnter ?? []).entries())
-                visitAction(state.id, state.pause === true, action, i);
-            for (const [i, action] of (state.onExit ?? []).entries())
-                visitAction(state.id, state.pause === true, action, i);
+            sites.push(...gateSitesForState(def, state.id));
         }
     }
 
@@ -2079,10 +2271,7 @@ export function collectHitlDecisionViolations(def: WorkflowDef): string[] {
     const evidencePerState = new Map<string, number>();
     for (const site of sites) {
         const location = `${site.stateOrNodeId}/${site.kind}[${site.index}]`;
-        const answerVar =
-            typeof site.options?.var === 'string' && site.options.var.trim() !== ''
-                ? site.options.var
-                : (HITL_ANSWER_VAR_DEFAULTS[site.kind] ?? '__hitlAnswer');
+        const answerVar = hitlAnswerVar(site.kind, site.options);
         const kindName = site.kind === 'hitl.confirm' ? 'confirm' : site.kind === 'hitl.select' ? 'select' : 'input';
         const parsed = parseDecisionConfig(site.options ?? {}, answerVar, kindName);
         if (!parsed.ok) {

@@ -16,6 +16,7 @@ import * as loaderModule from '@gobing-ai/spur-config/loader';
 import { ActionRunDao, createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
 import { EventBus } from '@gobing-ai/ts-infra';
+import { ValidationError } from '@gobing-ai/ts-utils';
 import { parse as yamlParse } from 'yaml';
 import { WorkflowRunLogSink } from '../../src/observability/workflow-run-log-sink';
 import type { AgentService } from '../../src/services/agent-service';
@@ -1735,6 +1736,293 @@ failureStates:
             await rm(dir, { recursive: true, force: true });
         });
     });
+    // 0932: free-text answers for input gates and gate-kind validation.
+    // `pendingGate` is the read-only inspection the CLI (and `continuePaused`
+    // defensively) use to match an answer flag against the gate the run is
+    // actually paused on; `answerText` carries the operator's free text.
+    describe('continue - pending gate inspection and answer validation (0932)', () => {
+        const CONFIRM_GATE_YAML = `name: confirm-gate-0932
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve?"
+  - id: approved
+  - id: rejected
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: approved
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+  - from: gate
+    to: rejected
+    guard: { kind: always }
+terminalStates:
+  - approved
+  - rejected
+`;
+
+        // R2: --answer must honor the gate's options.var, not the hard-coded
+        // __hitlAnswer default.
+        const CONFIRM_CUSTOM_VAR_YAML = `name: confirm-var-gate-0932
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve?"
+          var: approvalX
+  - id: approved
+  - id: denied
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: approved
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.approvalX}" = yes'
+  - from: gate
+    to: denied
+    guard: { kind: always }
+terminalStates:
+  - approved
+  - denied
+`;
+
+        const INPUT_GATE_YAML = `name: input-gate-0932
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.input
+        options:
+          prompt: "Token?"
+  - id: answered
+  - id: fallback
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: answered
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlInput}" = "tok-7"'
+  - from: gate
+    to: fallback
+    guard: { kind: always }
+terminalStates:
+  - answered
+  - fallback
+`;
+
+        // R1: the answer var is the gate's options.var when declared.
+        const INPUT_CUSTOM_VAR_YAML = `name: input-var-gate-0932
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.input
+        options:
+          prompt: "Token?"
+          var: answerX
+  - id: answered
+  - id: fallback
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: answered
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.answerX}" = "tok-7"'
+  - from: gate
+    to: fallback
+    guard: { kind: always }
+terminalStates:
+  - answered
+  - fallback
+`;
+
+        /** Seed a paused run for one fixture and hand back the service + raw db access. */
+        async function seed(yaml: string, file: string, runId: string) {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0932-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, file), yaml);
+            const ctx = makeCtx(dir);
+            const svc = new WorkflowAppService(ctx);
+            const run = await svc.run(join(wfDir, file), { runId });
+            expect(run.status).toBe('paused');
+            expect(run.finalState).toBe('gate');
+            return { svc, ctx, dir };
+        }
+
+        async function runRow(ctx: Awaited<ReturnType<typeof makeCtx>>, runId: string) {
+            return (await ctx.getDb()).queryFirst<Record<string, unknown>>('SELECT * FROM runs WHERE id = ?', runId);
+        }
+
+        test('pendingGate reports the paused gate kind and answer var (confirm, input default, input custom)', async () => {
+            const confirm = await seed(CONFIRM_GATE_YAML, 'confirm.yaml', 'pg-confirm');
+            expect(await confirm.svc.pendingGate('pg-confirm')).toEqual({
+                stateId: 'gate',
+                kind: 'hitl.confirm',
+                answerVar: '__hitlAnswer',
+            });
+
+            const input = await seed(INPUT_GATE_YAML, 'input.yaml', 'pg-input');
+            expect(await input.svc.pendingGate('pg-input')).toEqual({
+                stateId: 'gate',
+                kind: 'hitl.input',
+                answerVar: '__hitlInput',
+            });
+
+            const custom = await seed(INPUT_CUSTOM_VAR_YAML, 'input-x.yaml', 'pg-input-x');
+            expect(await custom.svc.pendingGate('pg-input-x')).toEqual({
+                stateId: 'gate',
+                kind: 'hitl.input',
+                answerVar: 'answerX',
+            });
+
+            await rm(confirm.dir, { recursive: true, force: true });
+            await rm(input.dir, { recursive: true, force: true });
+            await rm(custom.dir, { recursive: true, force: true });
+        });
+
+        test('pendingGate returns null for a gate-less pause, a done run, and a missing run', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-0932-gateless-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_YAML);
+            const svc = new WorkflowAppService(makeCtx(dir));
+            await svc.run(join(wfDir, 'pauser.yaml'), { runId: 'pg-none' });
+
+            expect(await svc.pendingGate('pg-none')).toBeNull();
+            expect(await svc.pendingGate('no-such-run')).toBeNull();
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R1: continuePaused answerText injects the free text into the input gate var and routes on it', async () => {
+            const { svc, dir } = await seed(INPUT_GATE_YAML, 'input.yaml', 'in-1');
+            // The headless default persisted a non-matching answer ('yes'); the
+            // operator's free text must override it before guards re-evaluate.
+            const resumed = await svc.continuePaused('in-1', { answerText: 'tok-7' });
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('answered');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R1: continuePaused answerText honors the gate custom var (answerX)', async () => {
+            const { svc, dir } = await seed(INPUT_CUSTOM_VAR_YAML, 'input-x.yaml', 'in-2');
+            const resumed = await svc.continuePaused('in-2', { answerText: 'tok-7' });
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('answered');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R2: --answer honors the gate custom var (approvalX) instead of the hard-coded __hitlAnswer', async () => {
+            const { svc, dir } = await seed(CONFIRM_CUSTOM_VAR_YAML, 'confirm-x.yaml', 'cv-1');
+            // The headless default persisted approvalX=yes; the operator's `no`
+            // must land in approvalX (the gate's var) and take the denied edge.
+            const resumed = await svc.continuePaused('cv-1', { hitlAnswer: 'no' });
+            expect(resumed.status).toBe('done');
+            expect(resumed.finalState).toBe('denied');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R2: answerText on a confirm gate throws before the claim - the run row is unchanged', async () => {
+            const { svc, ctx, dir } = await seed(CONFIRM_GATE_YAML, 'confirm.yaml', 'mm-1');
+            const before = await runRow(ctx, 'mm-1');
+            await expect(svc.continuePaused('mm-1', { answerText: 'tok-7' })).rejects.toThrow(
+                /paused at state "gate" on a hitl\.confirm gate.*--answer-text requires a pending hitl\.input gate/s,
+            );
+            await expect(svc.continuePaused('mm-1', { answerText: 'tok-7' })).rejects.toBeInstanceOf(ValidationError);
+            expect(await runRow(ctx, 'mm-1')).toEqual(before);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R2: hitlAnswer on an input gate throws before the claim - the run row is unchanged', async () => {
+            const { svc, ctx, dir } = await seed(INPUT_GATE_YAML, 'input.yaml', 'mm-2');
+            const before = await runRow(ctx, 'mm-2');
+            await expect(svc.continuePaused('mm-2', { hitlAnswer: 'yes' })).rejects.toThrow(
+                /paused at state "gate" on a hitl\.input gate.*--answer requires a pending hitl\.confirm or hitl\.select gate/s,
+            );
+            expect(await runRow(ctx, 'mm-2')).toEqual(before);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R2: passing both answer flags throws and mutates nothing', async () => {
+            const { svc, ctx, dir } = await seed(INPUT_GATE_YAML, 'input.yaml', 'mm-3');
+            const before = await runRow(ctx, 'mm-3');
+            await expect(svc.continuePaused('mm-3', { hitlAnswer: 'yes', answerText: 'tok-7' })).rejects.toThrow(
+                /not both/,
+            );
+            expect(await runRow(ctx, 'mm-3')).toEqual(before);
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('R2: answer validation precedes the stale-consent metadata cleanup (review P2 corner)', async () => {
+            const { svc, ctx, dir } = await seed(INPUT_GATE_YAML, 'input.yaml', 'mm-4');
+            // Stamp a stale consented-drift identity so the resume's stale-consent
+            // cleanup WOULD write metadata if answer validation ran after it.
+            const db = await ctx.getDb();
+            const row = await db.queryFirst<{ metadata_json: string }>(
+                'SELECT metadata_json FROM runs WHERE id = ?',
+                'mm-4',
+            );
+            const meta = JSON.parse(row?.metadata_json || '{}') as Record<string, unknown>;
+            meta.resumeDefinitionDigest = 'sha256:stale-consent';
+            meta.resumeWorkflowVersion = '1.0.0-stale';
+            await db.run('UPDATE runs SET metadata_json = ? WHERE id = ?', [JSON.stringify(meta), 'mm-4']);
+            const before = await runRow(ctx, 'mm-4');
+            await expect(svc.continuePaused('mm-4', { hitlAnswer: 'yes' })).rejects.toBeInstanceOf(ValidationError);
+            expect(await runRow(ctx, 'mm-4')).toEqual(before);
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
     // R8 (0366): WorkflowAppService.run() injects __runId into workflow vars so
     // discovery artifacts can stamp run provenance. The var must be observable
     // by shell actions and survive the full run.

@@ -110,7 +110,7 @@ The skill's logic divides by **whether the LLM adds value**:
 | --------- | --------- | ----- | ------------------ |
 | `validate` | `spur workflow validate` (CLI) | `<file> [--no-schema]` | Schema + semantic verdict |
 | `run` | `spur workflow run` (CLI) | `<file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer]` | Terminal state reached (sync) or run started (async); trace readable |
-| `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes] [--answer <yes\|no\|cancel>] [--async] [--no-log]` | Resume a paused or interrupted run (omit id -> most recent resumable); `--answer` injects a gate answer before guard re-evaluation and is required headless (0901 R3); `--async` detaches the resume (0901 R4) |
+| `continue` | `spur workflow continue` (CLI) | `[run-id] [--yes] [--answer <yes\|no\|cancel>] [--answer-text <text>] [--async] [--no-log]` | Resume a paused or interrupted run (omit id -> most recent resumable); `--answer` injects a confirm/select gate answer and `--answer-text` answers an input gate with free text (H1 R27), both before guard re-evaluation; one of them is required headless (0901 R3) and each is validated against the pending gate kind; `--async` detaches the resume (0901 R4) |
 | `cancel` | `spur workflow cancel` (CLI) | `<run-id>` | Single non-terminal run marked failed (SIGTERM async worker when live) |
 | `clean` | `spur workflow clean` (CLI) | `[--older-than <min>] [--force] [--logs] [--dry-run]` | Bulk-finalize stale `running`/`pending` runs as failed **and** reclaim retained run logs older than `workflow.logRetentionDays` (30d default) |
 | `list` | `spur workflow list` (CLI) | — | Available workflow **YAML definition files** (not run records) |
@@ -260,7 +260,7 @@ the operator accepts it, and never hot-edit a running workflow's shell in place.
 spur workflow validate <file> [--no-schema] [--json]
 spur workflow show      <file> [--format <mermaid|todo>] [--json]
 spur workflow run      <file> [--run-id <id>] [--vars <json>] [--dry-run] [--async] [--no-plan] [--quiet/--silent/--verbose] [--detail <level>] [--trace-file] [--no-log] [--steer] [--json]
-spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--async] [--no-log] [--json]
+spur workflow continue [run-id] [--yes] [--answer <yes|no|cancel>] [--answer-text <text>] [--async] [--no-log] [--json]
 spur workflow cancel   <run-id> [--json]
 spur workflow clean    [--older-than <minutes>] [--force] [--logs] [--dry-run] [--json]
 spur workflow list     [--json]
@@ -325,11 +325,15 @@ spur workflow trace <run-id> --follow --timeout 600000 # bound the watch; timeou
 
 HITL pause/resume: a run that hits a HITL action pauses; resume with `spur workflow continue [run-id]`
 (`--yes` skips confirmation). A headless `hitl.confirm` persists a default `no` before pausing -
-use `--answer yes|no|cancel` to inject the operator's gate answer before guard re-evaluation (0433).
-`--answer` is distinct from `--yes`: `--yes` skips the CLI resume prompt, `--answer` sets the HITL
-gate answer. 0901: resumes accept interrupted runs too (rerun-enter re-executes the interrupted
+use `--answer yes|no|cancel` to inject the operator's gate answer before guard re-evaluation (0433),
+or `--answer-text <text>` to answer an input gate with free text (H1 R27). `--answer` is distinct from
+`--yes`: `--yes` skips the CLI resume prompt, the answer flags set the HITL gate answer. Answer flags
+are validated against the pending gate kind (`--answer` requires a confirm/select gate,
+`--answer-text` an input gate; both together are rejected; a mismatch exits 2 with the run still
+paused), and `--answer`/`--answer-text` honor the gate's `options.var` instead of assuming the
+default var. 0901: resumes accept interrupted runs too (rerun-enter re-executes the interrupted
 node and needs `resumeRerun: true` on the target state); a headless (`--json`/non-TTY) continue
-without `--answer` is refused (exit 2); `--async` detaches the resume and reports started/failed
+without `--answer` or `--answer-text` is refused (exit 2); `--async` detaches the resume and reports started/failed
 after the worker claims the run; resumed runs write the consolidated run log and pass shell
 streams through the secret redactor + 64 KiB tail unless `--no-log`. Cancel one live/paused run
 with `cancel <run-id>`; bulk-finalize orphans stuck in

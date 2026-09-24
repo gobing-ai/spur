@@ -191,7 +191,8 @@ spur workflow continue [options] [run-id]
 |---|---|
 | `--yes` | Skip the CLI resume confirmation only (does **not** set the HITL gate answer) |
 | `--force` | Proceed with resume even if workflow definition drift is detected |
-| `--answer <yes\|no\|cancel>` | Inject a HITL gate answer into resume vars as `__hitlAnswer` before guards re-evaluate (0433). Does **not** imply `--yes`. Invalid values exit `2`. Required for headless (`--json` / non-TTY) resumes (0901 R3). |
+| `--answer <yes\|no\|cancel>` | Inject a HITL gate answer into resume vars before guards re-evaluate (0433): the value lands in the pending gate's answer var (`options.var`, else `__hitlAnswer`; 0932 R2). Does **not** imply `--yes`. Invalid values exit `2`. Required for headless (`--json` / non-TTY) resumes (0901 R3). |
+| `--answer-text <text>` | Answer a pending `hitl.input` gate with free text (H1 R27): the text lands in the gate's answer var (`options.var`, else `__hitlInput`) before guards re-evaluate. Mutually exclusive with `--answer` (exit `2`); each answer flag is validated against the pending gate kind, so a mismatch exits `2` with the run still paused. Counts toward the headless guard (0901 R3); forwarded by `--async`. |
 | `--async` | Detach the resume into a background worker process and report started/failed after the worker claims the run (0901 R4). |
 | `--no-log` | Skip writing the consolidated run log for the resumed run (0901 R6). |
 | `--json` | Output machine-readable JSON |

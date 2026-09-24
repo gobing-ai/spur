@@ -1052,6 +1052,10 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             '--answer <yes|no|cancel>',
             'Inject a HITL gate answer before guard re-evaluation (0433). Does not imply --yes.',
         )
+        .option(
+            '--answer-text <text>',
+            'Answer a pending input-gate action gate with free text (H1 R27). Does not imply --yes.',
+        )
         .option('--async', 'Detach: resume in a background worker and report started/failed (0901 R4).')
         .option('--no-log', 'Opt out of appending to the two-file run record .spur/run/<RUNID>.md + .state.json')
         .option(...SHARED_OPTIONS.jsonSupported)
@@ -1074,16 +1078,43 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                 }
                 hitlAnswer = v;
             }
+            // H1 R2: --answer-text targets input gates exclusively; the two answer flags are
+            // mutually exclusive and the text must be non-empty (an empty answer is a typo,
+            // not a decision).
+            let answerText: string | undefined;
+            if (options.answerText !== undefined) {
+                if (hitlAnswer !== undefined) {
+                    writeJsonError(
+                        context.output,
+                        options,
+                        'Use either --answer or --answer-text, not both - they target different gate kinds (confirm/select vs input).',
+                        'VALIDATION_FAILED',
+                    );
+                    context.setExitCode(2);
+                    return;
+                }
+                if (String(options.answerText).length === 0) {
+                    writeJsonError(
+                        context.output,
+                        options,
+                        'Invalid --answer-text value "": the text must be non-empty.',
+                        'VALIDATION_FAILED',
+                    );
+                    context.setExitCode(2);
+                    return;
+                }
+                answerText = String(options.answerText);
+            }
             // 0901 R3: a headless continue without an explicit --answer would silently
             // take the persisted headless default (or wedge on the gate). Flat rule —
             // the check does not inspect whether a gate is actually pending. --yes is
             // the CLI resume confirmation and never answers gates. The detached async
             // worker always passes --answer explicitly, so it clears this guard.
-            if ((json || !process.stdout.isTTY) && hitlAnswer === undefined) {
+            if ((json || !process.stdout.isTTY) && hitlAnswer === undefined && answerText === undefined) {
                 writeJsonError(
                     context.output,
                     options,
-                    'Refusing headless `workflow continue` without --answer: a non-interactive resume must answer the pending HITL gate explicitly (--answer yes|no|cancel). --yes only skips the CLI resume confirmation and does not answer gates.',
+                    'Refusing headless `workflow continue` without --answer or --answer-text: a non-interactive resume must answer the pending HITL gate explicitly (--answer yes|no|cancel for confirm/select gates, --answer-text <text> for input gates). --yes only skips the CLI resume confirmation and does not answer gates.',
                     'VALIDATION_FAILED',
                 );
                 context.setExitCode(2);
@@ -1135,6 +1166,31 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                         }
                     }
                 }
+                // H1 R2: gate-kind validation before any resume claim or metadata mutation.
+                // Before the --async spawn always; before the TTY confirmation for
+                // explicit-run-id resumes (the no-run-id discovery path prompts first).
+                // Either way a mismatched flag fails fast with the run untouched.
+                if (hitlAnswer !== undefined || answerText !== undefined) {
+                    const gate = await svc.pendingGate(targetId);
+                    const expectingInput = answerText !== undefined;
+                    // A run paused with no gate action (e.g. interrupted) resumes as today:
+                    // answer flags are inert there and must not be rejected (0901 R3 relies on
+                    // --answer for headless resumes of interrupted runs).
+                    const gateMatches =
+                        gate === null || (expectingInput ? gate.kind === 'hitl.input' : gate.kind !== 'hitl.input');
+                    if (!gateMatches) {
+                        const pending = `state '${gate?.stateId}' waits on a ${gate?.kind} gate`;
+                        const use = expectingInput ? '--answer yes|no|cancel' : '--answer-text <text>';
+                        writeJsonError(
+                            context.output,
+                            options,
+                            `--${expectingInput ? 'answer-text' : 'answer'} does not match the pending gate: ${pending}; use ${use}.`,
+                            'VALIDATION_FAILED',
+                        );
+                        context.setExitCode(2);
+                        return;
+                    }
+                }
                 const result = await (async () => {
                     // 0901 R4: async resume. The target is resolved here (arg or
                     // discovery) so the worker never re-discovers a different run;
@@ -1145,6 +1201,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     if (options.async === true) {
                         const cmd = ['workflow', 'continue', targetId, '--yes'];
                         if (hitlAnswer !== undefined) cmd.push('--answer', hitlAnswer);
+                        if (answerText !== undefined) cmd.push('--answer-text', answerText);
                         if (options.force === true) cmd.push('--force');
                         if (json) cmd.push('--json');
                         if (options.jsonEnvelope === true) cmd.push('--json-envelope');
@@ -1204,6 +1261,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     try {
                         const result = await svc.continuePaused(targetId, {
                             hitlAnswer,
+                            answerText,
                             force: options.force === true ? true : undefined,
                             // 0901 R5: persisted shell results keep a secret-redacted
                             // byte tail instead of the engine's full-output default.

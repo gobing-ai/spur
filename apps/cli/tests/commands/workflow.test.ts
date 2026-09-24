@@ -3,7 +3,7 @@
  * Behavioral tests for WorkflowAppService live in packages/app/tests/services/workflow-service.test.ts.
  */
 import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { appendFile, chmod, exists, mkdir, mkdtemp, readFile, realpath, rm, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -2828,6 +2828,265 @@ describe('continue headless guard (0901 R3)', () => {
         expect(exitCode).not.toBe(2);
         expect(output.messages.join('\n')).not.toContain('Refusing headless');
         await rm(dir, { recursive: true, force: true });
+    });
+});
+
+// ── continue --answer-text (H1 R27/R28) ──
+const INPUT_GATE_CLI_YAML = `name: cli-input-gate
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.input
+        options:
+          prompt: "Preferred flavor?"
+  - id: vanilla
+  - id: chocolate
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: vanilla
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlInput}" = vanilla'
+  - from: gate
+    to: chocolate
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlInput}" = chocolate'
+terminalStates:
+  - vanilla
+  - chocolate
+`;
+
+const CONFIRM_GATE_CLI_YAML = `name: cli-confirm-gate
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: note
+        options:
+          message: go
+  - id: gate
+    pause: true
+    onEnter:
+      - kind: hitl.confirm
+        options:
+          prompt: "Approve?"
+  - id: approved
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: approved
+    guard:
+      kind: shell
+      options:
+        command: 'test "\${vars.__hitlAnswer}" = yes'
+terminalStates:
+  - approved
+`;
+
+/** Run a fixture workflow until it pauses at its gate; assert the pause.
+ *  Mains run on `dbUrl` (they close whichever connection they open); the returned
+ *  handle is opened independently so post-continue assertions stay valid. */
+async function pauseAtGate(runId: string, yaml: string, file: string) {
+    const dir = await createTempProject();
+    const wfDir = join(dir, '.spur', 'workflows');
+    await mkdir(wfDir, { recursive: true });
+    const wf = join(wfDir, file);
+    await writeFile(wf, yaml);
+    const dbUrl = join(dir, 'spur.db');
+    await main(['workflow', 'run', '--run-id', runId, wf, '--json'], {
+        output: nullOutput(),
+        cwd: dir,
+        dbUrl,
+    });
+    const db = await createMigratedDb({ url: dbUrl });
+    const row = await db.queryFirst<{ status: string }>('SELECT status FROM runs WHERE id = ?', runId);
+    if (row?.status !== 'paused')
+        throw new Error(`fixture failed: run ${runId} is ${row?.status ?? 'missing'}, not paused`);
+    return { dir, db, dbUrl, wf };
+}
+
+describe('continue --answer-text (H1 R27/R28)', () => {
+    test('headless --json --answer-text answers the input gate and routes on the text (AC1)', async () => {
+        const { dir, dbUrl } = await pauseAtGate('in-1', INPUT_GATE_CLI_YAML, 'input-gate.yaml');
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'in-1', '--yes', '--answer-text', 'vanilla', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl,
+        });
+        expect(exit).toBe(0);
+        const parsed = JSON.parse(out.messages.at(-1) ?? '{}');
+        expect(parsed.status).toBe('done');
+        expect(parsed.finalState).toBe('vanilla');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('--async validates gate kind first and forwards --answer-text to the spawned worker (AC1)', async () => {
+        const { dir, dbUrl } = await pauseAtGate('in-2', INPUT_GATE_CLI_YAML, 'input-gate.yaml');
+        const out = createCapturedOutput();
+        let workerLine = '';
+        let mockDb: Awaited<ReturnType<typeof createMigratedDb>> | undefined;
+        // The mock worker claims the resume by leaving `paused`, satisfying
+        // waitForResumeClaim; the captured sh -c line proves flag forwarding.
+        // A lazily-opened second connection writes the claim — main() closes
+        // whichever connection it opens itself.
+        const runSpy = spyOn(NodeProcessExecutor.prototype, 'run').mockImplementation(async (opts) => {
+            workerLine = String((opts as { args?: string[] }).args?.[1] ?? '');
+            mockDb ??= await createMigratedDb({ url: dbUrl });
+            await mockDb.run('UPDATE runs SET status = ?, updated_at = ? WHERE id = ?', [
+                'running',
+                Date.now(),
+                'in-2',
+            ]);
+            return { exitCode: 0 } as never;
+        });
+        try {
+            const exit = await main(
+                ['workflow', 'continue', 'in-2', '--yes', '--answer-text', 'mocha', '--json', '--async'],
+                { output: out, cwd: dir, dbUrl },
+            );
+            expect(exit).toBe(0);
+            const parsed = JSON.parse(out.messages.at(-1) ?? '{}');
+            expect(parsed.status).toBe('started');
+            // shQuote wraps each argv token, so the quoted pair is what lands in the sh -c line.
+            expect(workerLine).toContain("'--answer-text' 'mocha'");
+        } finally {
+            runSpy.mockRestore();
+        }
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('--answer-text on a confirm gate: exit 2, VALIDATION_FAILED, run row unchanged (AC2)', async () => {
+        const { dir, db } = await pauseAtGate('mis-1', CONFIRM_GATE_CLI_YAML, 'confirm-gate.yaml');
+        const before = await db.queryFirst<{ status: string; metadata_json: string }>(
+            'SELECT status, metadata_json FROM runs WHERE id = ?',
+            'mis-1',
+        );
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'mis-1', '--yes', '--answer-text', 'yes', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exit).toBe(2);
+        const errText = out.errors.join('\n');
+        expect(errText).toContain("state 'gate' waits on a hitl.confirm gate");
+        expect(errText).toContain('use --answer yes|no|cancel');
+        // The machine-readable envelope carries the error code (0930 pattern).
+        const envOut = createCapturedOutput();
+        await main(['workflow', 'continue', 'mis-1', '--yes', '--answer-text', 'yes', '--json', '--json-envelope'], {
+            output: envOut,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(JSON.parse(envOut.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+        const after = await db.queryFirst<{ status: string; metadata_json: string }>(
+            'SELECT status, metadata_json FROM runs WHERE id = ?',
+            'mis-1',
+        );
+        expect(after).toEqual(before);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('--answer on an input gate: exit 2, VALIDATION_FAILED, run row unchanged (AC2)', async () => {
+        const { dir, db } = await pauseAtGate('mis-2', INPUT_GATE_CLI_YAML, 'input-gate.yaml');
+        const before = await db.queryFirst<{ status: string; metadata_json: string }>(
+            'SELECT status, metadata_json FROM runs WHERE id = ?',
+            'mis-2',
+        );
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'mis-2', '--yes', '--answer', 'yes', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exit).toBe(2);
+        const errText = out.errors.join('\n');
+        expect(errText).toContain("state 'gate' waits on a hitl.input gate");
+        expect(errText).toContain('--answer-text <text>');
+        // The machine-readable envelope carries the error code (0930 pattern).
+        const envOut = createCapturedOutput();
+        await main(['workflow', 'continue', 'mis-2', '--yes', '--answer', 'yes', '--json', '--json-envelope'], {
+            output: envOut,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(JSON.parse(envOut.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+        const after = await db.queryFirst<{ status: string; metadata_json: string }>(
+            'SELECT status, metadata_json FROM runs WHERE id = ?',
+            'mis-2',
+        );
+        expect(after).toEqual(before);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('passing both --answer and --answer-text: exit 2 before any run access (AC2)', async () => {
+        const dir = await createTempProject();
+        const out = createCapturedOutput();
+        const exit = await main(
+            ['workflow', 'continue', 'any-run', '--yes', '--answer', 'yes', '--answer-text', 'text', '--json'],
+            { output: out, cwd: dir, dbUrl: join(dir, 'spur.db') },
+        );
+        expect(exit).toBe(2);
+        expect(out.errors.join('\n')).toContain('not both');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('empty --answer-text is rejected: exit 2 (AC2)', async () => {
+        const dir = await createTempProject();
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'any-run', '--yes', '--answer-text', '', '--json'], {
+            output: out,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exit).toBe(2);
+        expect(out.errors.join('\n')).toContain('non-empty');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('the headless guard message names both answer flags (R3)', async () => {
+        const dir = await createTempProject();
+        const out = createCapturedOutput();
+        const exit = await main(['workflow', 'continue', 'any-run', '--json', '--yes'], {
+            output: out,
+            cwd: dir,
+            dbUrl: join(dir, 'spur.db'),
+        });
+        expect(exit).toBe(2);
+        const errText = out.errors.join('\n');
+        expect(errText).toContain('Refusing headless');
+        expect(errText).toContain('--answer');
+        expect(errText).toContain('--answer-text');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('--answer-text is documented in cli-contracts.md and spur-cli workflows.md (AC2)', async () => {
+        const repoRoot = join(import.meta.dir, '..', '..', '..', '..');
+        const contracts = readFileSync(join(repoRoot, 'docs', 'design', 'cli-contracts.md'), 'utf8');
+        const workflowsRef = readFileSync(
+            join(repoRoot, 'plugins', 'sp', 'skills', 'spur-cli', 'references', 'workflows.md'),
+            'utf8',
+        );
+        expect(contracts).toContain('--answer-text <text>');
+        expect(workflowsRef).toContain('--answer-text');
     });
 });
 
