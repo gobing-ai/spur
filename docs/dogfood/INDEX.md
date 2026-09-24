@@ -46,3 +46,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-09-21-D-0911-decisionmaker-policy-dogfood.md`
 - `2026-09-22-K3-project-registry-freshness-dogfood.md`
 - `2026-09-23-E7-run-record-gate-dogfood.md`
+- `2026-09-24-H53-pipeline-dispatch-reliability-dogfood.md`

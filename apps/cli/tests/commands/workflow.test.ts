@@ -1620,13 +1620,14 @@ failureStates:
     test('0930 R2 — trace rejects a --timeout that is not a positive integer of milliseconds', async () => {
         for (const bad of ['0', '-5', 'abc', '1.5', '']) {
             const output = createCapturedOutput();
+            // Omit --json: --follow --json is rejected first and would hide this guard.
             expect(
-                await main(['workflow', 'trace', 'run-1', '--follow', '--timeout', bad, '--json', '--json-envelope'], {
+                await main(['workflow', 'trace', 'run-1', '--follow', '--timeout', bad], {
                     output,
                     dbUrl: ':memory:',
                 }),
             ).toBe(1);
-            expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+            expect(output.errors.join('')).toContain('--timeout must be a positive integer of milliseconds');
         }
     });
 
