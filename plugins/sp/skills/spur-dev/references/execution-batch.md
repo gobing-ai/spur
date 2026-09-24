@@ -282,6 +282,13 @@ Each pipeline run ends in one of two terminal states:
   `onEnter` exception). Record `failed` with the blocking reason from the trace. This triggers the
   failure policy.
 
+**Verify-answer table contract (0948 R9).** A verify stage's
+`.spur/run/<wbs>-verify-answer.txt` AC table is exactly four columns:
+`| AC | Status | Evidence Type | Evidence |`. The evidence-type token
+(`test`, `command`, `static-ref`, `manual-review`, `llm-judge`, `n/a`, or a `+`
+compound) is isolated in cell 3. A token merged into the evidence cell fails
+`verify-answer-lint`.
+
 **Driver acceptance (0930 R3).** The trace row and `.spur/run/<wbs>-verdict.json` are accepted as
 terminal evidence only if BOTH hold:
 
@@ -445,8 +452,9 @@ written for a batch with nothing to run. The early-exit report carries zero per-
 terminal action runs. A contract test pins this
 (`plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts`).
 
-**Evidence persistence (worktree batches — task 0720 R3).** A worktree batch's Step 5 report and
-verdict artifacts live in the worktree's own `.spur/run/` while the batch runs — exactly the tree
+**Evidence persistence (worktree batches — task 0720 R3).** Copy-out is mandatory.
+A worktree batch's Step 5 report, verdict artifacts, and the batch's own
+`.spur/run` records live in the worktree while the batch runs — exactly the tree
 create-mode WT-4 deletes. Before any WT-4 removal, persist them into the **invoking** tree, which
 survives removal:
 
@@ -560,6 +568,13 @@ BRANCH="sp/<command>-<selector-slug>-<short-id>"     # e.g. sp/runall-h1-a3f2
 git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "$BASE_REF" \
   || { git branch -D "$BRANCH"; false; }
 ```
+
+**Worktree root is outside `.spur/` (0948 R9).** The default create path is that
+sibling directory, which sits next to the repository and not under it. Do not
+put the default root at `.spur/worktrees` or any other gitignored path: Biome's
+`vcs.useIgnoreFile` then treats the checkout as empty ("Checked 0 files") and
+the quality gate cannot see the tree. Same class as the eval-pipeline worktree
+move off `.spur/tmp/` (task 0610).
 
 Branch and directory names are derived (command + selector slug + short id); the create path never
 takes an operator-supplied name (R8.3 — no create-with-name; `--worktree <name>` where `<name>` does

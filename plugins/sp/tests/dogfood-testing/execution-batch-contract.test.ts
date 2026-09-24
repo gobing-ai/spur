@@ -50,6 +50,22 @@ describe('execution-batch spec contract (task 0701)', () => {
     });
 });
 
+describe('execution-batch spec contract (task 0948 R9)', () => {
+    test('default worktree root is a sibling path, not under .spur/', () => {
+        expect(SPEC).toContain('git worktree add "../<repo>-<command>-<selector-slug>-<short-id>"');
+        expect(SPEC).toContain('Worktree root is outside `.spur/`');
+        expect(SPEC).toContain('Checked 0 files');
+        expect(SPEC).not.toContain('git worktree add ".spur/');
+        expect(SPEC).not.toContain('git worktree add `.spur/');
+    });
+
+    test('copy-out is mandatory and the verify-answer table is four columns', () => {
+        expect(SPEC).toContain('Copy-out is mandatory');
+        expect(SPEC).toContain('| AC | Status | Evidence Type | Evidence |');
+        expect(SPEC).toContain('isolated in cell 3');
+    });
+});
+
 describe('execution-batch spec contract (task 0720)', () => {
     test('Step 5 — worktree evidence persists to the invoking tree before removal', () => {
         expect(SPEC).toContain('Evidence persistence (worktree batches');
