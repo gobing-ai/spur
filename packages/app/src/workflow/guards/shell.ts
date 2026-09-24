@@ -53,6 +53,12 @@ export class EnvShellGuardRunner implements GuardRunner {
         for (const [key, value] of Object.entries({ ...getEnvVars(), ...context.vars })) {
             if (value !== undefined) env[key] = String(value);
         }
+        const wfShellEnv = options.__wfShellEnv;
+        if (wfShellEnv !== null && typeof wfShellEnv === 'object') {
+            for (const [k, v] of Object.entries(wfShellEnv as Record<string, unknown>)) {
+                if (typeof v === 'string') env[k] = v;
+            }
+        }
         const result = await this.processExecutor.run({
             command: spawn.command,
             args: spawn.args,

@@ -104,6 +104,12 @@ export class StreamingShellActionRunner implements ActionRunner {
         // the command string (engine template pre-resolution) is the bug this replaces; the
         // engine still pre-resolves `${vars.*}` in any option, so shell commands must use `$NAME`.
         const env = childProcessEnv(context.vars);
+        const wfShellEnv = options.__wfShellEnv;
+        if (wfShellEnv !== null && typeof wfShellEnv === 'object') {
+            for (const [k, v] of Object.entries(wfShellEnv)) {
+                if (typeof v === 'string') env[k] = v;
+            }
+        }
         const pipe = this.processExecutor.runStreaming({
             command: spawn.command,
             args: spawn.args,

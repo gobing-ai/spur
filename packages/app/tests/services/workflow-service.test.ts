@@ -88,7 +88,12 @@ class TestProcessExecutor implements ProcessExecutor {
         // Handle echo redirects: echo "text" > file or echo "text" >> file
         const echoMatch = cmd.match(/^echo\s+"?([^">]*)"?\s*(>>|>)\s*(.+)$/);
         if (echoMatch) {
-            const text = echoMatch[1] ?? '';
+            let text = echoMatch[1] ?? '';
+            if (options.env !== undefined) {
+                for (const [k, v] of Object.entries(options.env)) {
+                    text = text.replaceAll(`\${${k}}`, v).replaceAll(`$${k}`, v);
+                }
+            }
             const op = echoMatch[2] ?? '>';
             const file = echoMatch[3] ?? '';
             const targetPath = resolve(cwd, file.trim());

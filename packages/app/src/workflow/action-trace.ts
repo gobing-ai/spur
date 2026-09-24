@@ -175,7 +175,10 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
      * error just passes through. Only the action boundary stays best-effort (R3/R12).
      */
     async finalizeRun(runId: string, status: WorkflowStatus, completedAt: string): Promise<void> {
-        return this.inner.finalizeRun(runId, status, completedAt);
+        // Engine 0.5.5 widens `finalizeRun` to `Promise<boolean | void>` (fenced ownership
+        // CAS). This decorator's contract is the 3-arg pass-through, so the flag is
+        // discarded — same shape as ObservableWorkflowAdapter.finalizeRun.
+        await this.inner.finalizeRun(runId, status, completedAt);
     }
 
     /** Ownership/interruption CAS — straight pass-through per the class contract (ADR-025). */
