@@ -13,6 +13,11 @@
 #        `test` is the project quality gate (shell + bounded /sp:dev-fixall), not
 #        /sp:dev-unit (coverage gap-fill; router C3/C5).
 #
+# F96 residual sweep (0950): precheck captures the resume-safe base commit; verify
+# scans and folds residuals between the verdict and the proof bind (blocking leftovers
+# downgrade PASS → PARTIAL and take the existing remediation edge); done settles
+# deferrals; failed renders the recovery report. No new state, edge, or model query.
+#
 # Vars (passed as a JSON object via `--vars`):
 #   wbs                       — task WBS (required)
 #   profile                   — "auto" skips HITL approve (R4)
@@ -189,6 +194,12 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; S=plugins/sp/scripts/task-evidence-precheck.ts; [ -f "$S" ] || S="$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin"; else echo "task-evidence-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-evidence.status"; fi; exit 0
+          # (e) F96 R1 (0950): capture the run's base commit once — a resumed or re-entered run
+          # keeps its original base so residual scans stay anchored to the same diff.
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; [ -f ".spur/run/$wbs-base.sha" ] || git rev-parse HEAD > ".spur/run/$wbs-base.sha"; exit 0
           # (e) route-reason lookup and routes log; proportional-routing tests locate it
           # (0759 R1/R5 run-scoped artifact; 0804 R8 run-id safety — one line, no in-scalar `#`).
           - kind: shell
@@ -358,6 +369,14 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; A=".spur/run/$wbs-test-fix-attempt"; n=$(cat "$A" 2>/dev/null || echo 0); printf '%s\n' "$((n + 1))" > "$A"; [ ! -f ".spur/run/$wbs-verdict.json" ] || { echo '--- verify verdict (remediation input, task 0703 R4) ---'; cat ".spur/run/$wbs-verdict.json"; } >> ".spur/run/$wbs-test-gate.log"; exit 0
+          # (d) F96 R3 (0950): hand the residual list to the remediation loop — dev-fixall
+          # treats residual items as fix targets and may defer P3/markers to
+          # residual-deferrals.json (see dev-fixall.md). Fold already merged the anchors
+          # into <wbs>-test-gate.findings; this carries the structured artifact too.
+          - kind: shell
+            options:
+                command: >-
+                    [ ! -f ".spur/run/$wbs-residuals.json" ] || { echo '--- residual artifact (F96 fix targets; deferrals go to residual-deferrals.json, P3/markers only) ---'; cat ".spur/run/$wbs-residuals.json"; } >> ".spur/run/$wbs-test-gate.log"; exit 0
           # R3 (0482): project the extracted gate anchors into a var so the dispatch input
           # can NAME the failing file:line, not merely point at a log. A vars template cannot
           # run a shell, so the read is an action, not an inline `$(cat ...)` substitution.
@@ -530,6 +549,16 @@ states:
           - kind: shell
             options:
                 command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"
+          # (d) F96 R2 (0950): residual-scan.ts owns the sweep; shell only resolves it.
+          # ONE hard action (scan+fold): a scanner crash fails verify closed — the
+          # verify→failed catch-all routes a missing/malformed verdict. Runs AFTER
+          # `task verdict` and BEFORE the jq bind so a blocking residual turns PASS
+          # into PARTIAL (fold rewrites the verdict artifact) and takes the existing
+          # verify→test-fix edge while attempts remain.
+          - kind: shell
+            options:
+                command: >-
+                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ ! -f "$S" ]; then echo "residual-scan failed closed — scanner not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'" >&2; exit 1; fi; case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" scan "$wbs" --spur-bin "$spurBin" && "$RUNNER" "$S" fold "$wbs" --spur-bin "$spurBin"
           # (e) one jq mutation binds the verdict to the proof digest (0703 R3; runId 0730 §B.2 /
           # 0757 R4; definitionDigest 0759 R5; honest review stamp 0785 R4; soft action + hard guard).
           - kind: shell
@@ -595,6 +624,13 @@ states:
           guard runs `spur task check` before certifying; a genuinely non-compliant
           task routes to `failed` instead of a silent bad `done`.
       onEnter:
+          # (d) F96 R4 (0950): residual-scan.ts owns the settle; shell only resolves it.
+          # Soft best-effort (exit 0) — runs after certification and must never change
+          # the outcome; failure prints the re-run command.
+          - kind: shell
+            options:
+                command: >-
+                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" settle "$wbs" --spur-bin "$spurBin" || echo "residual-settle failed — re-run: residual-scan settle $wbs" >&2; else echo "residual-scan not staged — settle skipped — re-run: residual-scan settle $wbs" >&2; fi; exit 0
           # (c) command.gate owns the done transition with classified transient retry.
           - kind: command.gate
             options:
@@ -621,6 +657,14 @@ states:
       description: >
           Terminal — precheck, quality-gate exhaustion, verify non-PASS, record check
           failure, or operator rejection; reported, not advanced.
+      onEnter:
+          # (d) F96 R5 (0950): residual-scan.ts owns the report; shell only resolves it.
+          # Soft (exit 0): a run that exhausts its fix budget on residuals leaves the
+          # report + recovery line while the task stays `wip`.
+          - kind: shell
+            options:
+                command: >-
+                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" report "$wbs" --spur-bin "$spurBin" || echo "residual-report failed — re-run: residual-scan report $wbs" >&2; else echo "residual-scan not staged — report skipped — re-run: residual-scan report $wbs" >&2; fi; exit 0
 
     - id: cancelled
       description: Terminal — pipeline cancelled by operator at the approval gate (R1).

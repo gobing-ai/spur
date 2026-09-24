@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Wire the residual sweep into task-pipeline: base capture, verify fold, done settle, failed report"
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.119Z
-updated_at: "2026-09-24T19:00:55.509Z"
+updated_at: "2026-09-24T22:16:04.748Z"
 feature_id: F96
 priority: P2
 tags:
@@ -34,19 +34,19 @@ Premises (verified 2026-09-24):
 
 ### Requirements
 
-- [ ] R1. precheck writes `git rev-parse HEAD` to `.spur/run/<wbs>-base.sha` only when that file is absent, so a resumed or re-entered run keeps its original base.
-- [ ] R2. verify runs `residual-scan scan` and `residual-scan fold` (repo-first, then superskill twin, failing closed like quality-gate) after `task verdict` and before the jq proof bind. A blocking residual therefore turns PASS into PARTIAL and takes the existing verify→test-fix edge while attempts remain.
-- [ ] R3. test-fix passes the residual list to `/sp:dev-fixall` through the merged `<wbs>-test-gate.findings` anchors and by appending `<wbs>-residuals.json` to the gate log. dev-fixall.md documents that residual items are fix targets and that the fixer may write `.spur/run/<wbs>-residual-deferrals.json` `{id, reason}` entries only for P3 findings or diff markers it cannot fix inside the task.
-- [ ] R4. done entry runs `residual-scan settle <wbs>` after the done transition as a best-effort action (exit 0; failure printed with a re-run command).
-- [ ] R5. failed entry runs `residual-scan report <wbs>` (exit 0), so a run that exhausts its fix budget on residuals leaves the report and a recovery line while the task stays `wip`.
-- [ ] R6. Regenerate bundled workflow copies and keep all existing task-pipeline definition and resilience tests green; add tests for the new actions and edges.
+- [x] R1. precheck writes `git rev-parse HEAD` to `.spur/run/<wbs>-base.sha` only when that file is absent, so a resumed or re-entered run keeps its original base.
+- [x] R2. verify runs `residual-scan scan` and `residual-scan fold` (repo-first, then superskill twin, failing closed like quality-gate) after `task verdict` and before the jq proof bind. A blocking residual therefore turns PASS into PARTIAL and takes the existing verify→test-fix edge while attempts remain.
+- [x] R3. test-fix passes the residual list to `/sp:dev-fixall` through the merged `<wbs>-test-gate.findings` anchors and by appending `<wbs>-residuals.json` to the gate log. dev-fixall.md documents that residual items are fix targets and that the fixer may write `.spur/run/<wbs>-residual-deferrals.json` `{id, reason}` entries only for P3 findings or diff markers it cannot fix inside the task.
+- [x] R4. done entry runs `residual-scan settle <wbs>` after the done transition as a best-effort action (exit 0; failure printed with a re-run command).
+- [x] R5. failed entry runs `residual-scan report <wbs>` (exit 0), so a run that exhausts its fix budget on residuals leaves the report and a recovery line while the task stays `wip`.
+- [x] R6. Regenerate bundled workflow copies and keep all existing task-pipeline definition and resilience tests green; add tests for the new actions and edges.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — In-scope residuals downgrade a PASS verdict (req: R2)
-- [ ] AC2 — Existing remediation loop fixes residuals within budget (req: R2, R3)
-- [ ] AC3 — Deferrable leftovers become linked follow-up tasks (req: R4)
-- [ ] AC4 — Unfixable leftovers end in an honest routable terminal state (req: R5)
+- [x] AC1 — In-scope residuals downgrade a PASS verdict (req: R2)
+- [x] AC2 — Existing remediation loop fixes residuals within budget (req: R2, R3)
+- [x] AC3 — Deferrable leftovers become linked follow-up tasks (req: R4)
+- [x] AC4 — Unfixable leftovers end in an honest routable terminal state (req: R5)
 
 Task-only checks: base capture is resume-safe (R1); the state and edge set is unchanged (R6).
 
@@ -69,26 +69,72 @@ Decisions:
 
 ### Plan
 
-- [ ] Read the pipeline definition tests (`plugins/sp/tests/task-pipeline-resilience.test.ts` and the apps/cli workflow definition tests) and add failing assertions: base.sha action in precheck, scan+fold ordered between `task verdict` and the jq bind, settle in done after the transition, report in failed.
-- [ ] Edit config/workflows/task-pipeline.yaml (precheck, verify, done, failed) and the header shape comment.
-- [ ] Update plugins/sp/commands/dev-fixall.md with the residual-target and deferral-file contract.
-- [ ] Run `bun run --filter @gobing-ai/spur build:bundle`, then `bun run spur-check`.
-- [ ] Dry-run the definition with `spur workflow show config/workflows/task-pipeline.yaml --format todo --json` and confirm state and edge counts are unchanged.
+- [x] Read the pipeline definition tests (`plugins/sp/tests/task-pipeline-resilience.test.ts` and the apps/cli workflow definition tests) and add failing assertions: base.sha action in precheck, scan+fold ordered between `task verdict` and the jq bind, settle in done after the transition, report in failed.
+- [x] Edit config/workflows/task-pipeline.yaml (precheck, verify, done, failed) and the header shape comment.
+- [x] Update plugins/sp/commands/dev-fixall.md with the residual-target and deferral-file contract.
+- [x] Run `bun run --filter @gobing-ai/spur build:bundle`, then `bun run spur-check`.
+- [x] Dry-run the definition with `spur workflow show config/workflows/task-pipeline.yaml --format todo --json` and confirm state and edge counts are unchanged.
 
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
+| File | Change |
+| --- | --- |
+| config/workflows/task-pipeline.yaml:31-35 | Header: F96 sweep note (no new state/edge/model query). |
+| config/workflows/task-pipeline.yaml:197-201 | precheck R1: `[ -f base.sha ] \|\|` rev-parse capture (resume-safe). |
+| config/workflows/task-pipeline.yaml:546-556 | verify R2: hard scan+fold shell between `task verdict` and the jq proof bind; repo-first/superskill twin, fail-closed, `.mjs`→node runner case. |
+| config/workflows/task-pipeline.yaml:385-391 | test-fix R3: separate shell appends `-residuals.json` block to `-test-gate.log` (composition-limit: own action ≤10 commands). |
+| config/workflows/task-pipeline.yaml:626-632 | done R4: soft settle shell before the `command.gate` done transition; failure prints re-run command; exit 0. |
+| config/workflows/task-pipeline.yaml:659-670 | failed R5: new onEnter soft report shell; exit 0. |
+| plugins/sp/commands/dev-fixall.md:60-67 | Implementation section: residual fix-target + deferral contract (`{id, reason}`, P3/markers only). |
+| plugins/sp/tests/task-pipeline-resilience.test.ts:292-353 | F96 describe: base-capture guard regex, verify ordering (verdict < scan+fold < `+ {proof:` bind), hard-action no-exit-0, twin fallback string, test-fix artifact append, done settle index 0, failed report soft. |
+| plugins/sp/tests/inline-pipeline-driver.test.ts:246-255 | Smoke stubs (0823 pattern): scan+fold simulates clean-tree empty list; settle/report exit 0. |
+
+Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bind certifies the downgraded (PARTIAL) verdict and the existing verify→test-fix edge remediates within the existing budget — zero new state.
+
+
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | task-pipeline.yaml precheck F96 R1 shell: '[ -f ".spur/run/$wbs-base.sha" ] \|\| git rev-parse HEAD > ...' (resume-safe); resilience test 'precheck captures base.sha only when absent' |
+| R2 | MET | task-pipeline.yaml verify: hard scan+fold shell ordered after 'task verdict' and before '+ {proof:' jq bind (resilience test asserts index ordering, fail-closed exit, superskill twin string); blocking residual → fold rewrites verdict PASS→PARTIAL → existing verify→test-fix edge |
+| R3 | MET | test-fix separate shell appends '-residuals.json' block to '-test-gate.log'; fold merges anchors into '-test-gate.findings'; dev-fixall.md Implementation documents residual fix targets + residual-deferrals.json {id, reason} (P3/markers only) |
+| R4 | MET | done onEnter soft settle shell (exit 0, re-run hint) before command.gate transition; resilience test asserts shellCommands('done')[0] contains settle + soft exit |
+| R5 | MET | failed state gained onEnter soft report shell (exit 0); resilience test 'failed renders the residual report as a soft action'; task stays wip |
+| R6 | MET | build:bundle regenerated bundle (6 residual-scan refs); spur-check PASS 8940 tests / 510 files / 0 fail; post-rules 2/2; 5 new resilience tests + 2 smoke stub blocks green |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | resilience verify-ordering test + (cd plugins/sp && bun test tests/task-pipeline-residual tests green); repo gate .spur/run/0950-test-gate.status=PASS (8940 tests, digest sha256:6fde54d8...) — fold downgrade path exercised at unit level in residual-scan.test.ts |
+| AC2 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): fold downgrade + anchors merge; test-fix hands residuals.json + merged anchors to fixall within qualityGateMaxFixAttempts (task-pipeline.yaml test-fix; dev-fixall.md) |
+| AC3 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): settle creates single linked follow-up once (idempotence); done settle wiring (task-pipeline.yaml done state) |
+| AC4 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): report writes routable report + re-run hint, no-op exit 0 on passing sweep; failed onEnter wiring (task-pipeline.yaml) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-24T22:11:51.547Z todo → wip (system)
+- 2026-09-24T22:16:04.408Z wip → testing (system)
+- 2026-09-24T22:16:04.748Z testing → done (system)
+
