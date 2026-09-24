@@ -263,3 +263,9 @@
 
 | 22:00 | A21 batch wrap: 0813 done; feature A21 done (4 Scenario-keyed AC rows repaired guard); batch commit 6e9788522 on sp/runall-a21-50e6; merged into main f2265f4d7 (gate PASS incl. spur migrate for ts-libs 0.4.59 importer schema); ts-libs A21 merged a0aa9a0 + released 0.4.59; all trees clean | docs/tasks4/081{0-3}, docs/features/A21_*, packages/app execution-policy.ts, bounded-child-run.ts, serve.ts, db.ts | PASS — full gate exit 0, feature A21 done, merge f2265f4d7 two parents | ~180k |
 | 01:20 | G61 batch wrap (run 20260911T221702Z-202FCEF2): 4 tasks (0831–0834) done, ~4 gates rc0, 3 published package versions total (0.4.64 ts-db, 0.4.65 ts-db; ts-libs aggregate); residual findings carried (P3s → 0834/0838, P4s → 0844); feature G61 verifying→done (dogfood ledger entry added); docs/features INDEX refreshed; no commits/merge (parent owns) | docs/tasks4/083{1-4}, docs/features/G61_* + INDEX.md, docs/dogfood/INDEX.md, docs/help/cmd_message.md | PASS — feature done, wrap complete | ~n/a |
+
+## Session: 2026-09-24
+
+| Time | Action | File(s) | Outcome | ~Tokens |
+|------|--------|---------|---------|--------|
+| 15:48 | dev-runall --feature H1 aborted at strict feature-check gate (task 0510 R2): 3x L4.evidence-not-recoverable (0141/0161/0482 legacy done-tasks, pre-durable-recording evidence) | .spur/run/runall-h1-aborted.json | verdict=aborted, 0 tasks started, no worktree created; candidates 0931-0934 (todo) unresolved; resume after evidence repair | ~15k |
