@@ -161,6 +161,12 @@ vars:
     # (default) = on; set to "off" to bypass:
     # `--vars '{"implementScopeGuard":"off"}'`.
     implementScopeGuard: ""
+    # 0931 R5: parallel batches defer the per-task feature sync so a task branch never
+    # touches feature files or docs/features/INDEX.md. When "true", the record step's
+    # post-record shell appends a deferral note and skips the sync; the parallel batch
+    # orchestrator runs the sync + `spur feature refresh` once per touched feature on the
+    # base ref after integration. Sequential/inline keep the default "false" (unchanged).
+    deferFeatureSync: "false"
 
 states:
     - id: precheck
@@ -613,10 +619,16 @@ states:
           # (d) feature-sync-bounded.ts owns the sync; shell adds the orphan note and fallbacks
           # (0411 retry-suppression; 0328 / ADR-0322). Best-effort `exit 0` — feature status sync is a
           # follow-up, not a completion gate; `record → done` runs `spur task check`.
+          # 0931 R5: with deferFeatureSync "true" (parallel mode) the deferral note lands in the
+          # task report and the sync is skipped entirely, so task branches never touch feature
+          # corpus files; the batch orchestrator performs the deferred sync on the base ref.
+          # The sync itself is owned by record-feature-sync.ts (ADR-115: the guard plus the old
+          # inline chain cannot share one shell); resolution follows the standard in-repo-first,
+          # superskill-staged fallback used by every pipeline checker.
           - kind: shell
             options:
                 command: >-
-                    FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null); if [ -z "$FID" ]; then echo "Orphan task $wbs — no feature_id linked — proposal: consider linking to a parent feature." >> ".spur/run/$wbs-report.txt"; elif [ -f plugins/sp/scripts/feature-sync-bounded.ts ]; then bun plugins/sp/scripts/feature-sync-bounded.ts "$FID" --spur-bin "$spurBin" --json; elif M="$(superskill script path sp feature-sync-bounded.mjs 2>/dev/null)" && [ -f "$M" ]; then node "$M" "$FID" --spur-bin "$spurBin" --json; else $spurBin feature sync "$FID" --json; fi; exit 0
+                    S=plugins/sp/scripts/record-feature-sync.ts; [ -f "$S" ] || S="$(superskill script path sp record-feature-sync.mjs 2>/dev/null)"; [ "$deferFeatureSync" = "true" ] && echo "feature sync deferred to batch integration" >> ".spur/run/$wbs-report.txt" || if [ -f "$S" ]; then bun "$S" --spur-bin "$spurBin"; else echo "feature sync skipped — record-feature-sync not found in plugins/sp/scripts/ nor staged" >> ".spur/run/$wbs-report.txt"; fi; exit 0
 
     - id: done
       description: >

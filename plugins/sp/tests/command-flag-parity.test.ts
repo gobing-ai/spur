@@ -245,4 +245,30 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
             false,
         );
     });
+
+    // ---------- task 0931 (feature H1): --concurrency, the parallel worker bound ----------
+    //
+    // --concurrency is dev-runall-only and deliberately stays OUT of the argument-hint: the
+    // R8 gate derives membership from hints, and the dev-operations.md row (out of this task's
+    // scope) would drift. It is documented in the command's Argument Flags table + flag notes
+    // and defined once in flag-glossary.md.
+
+    test('0931 — dev-runall documents --concurrency <n> in its Argument Flags table and flag notes', () => {
+        const raw = readFileSync(join(COMMANDS_DIR, 'dev-runall.md'), 'utf8');
+        expect(raw).toMatch(/\| `--concurrency` `<n>` \|[^\n]+\| 2 \|/);
+        expect(raw).toContain('`--concurrency <n>`\n(parallel-mode worker bound');
+        // Only dev-runall carries it.
+        for (const file of commandFiles) {
+            if (file === 'dev-runall.md') continue;
+            const other = readFileSync(join(COMMANDS_DIR, file), 'utf8');
+            expect(other.includes('--concurrency'), `${file} unexpectedly declares --concurrency`).toBe(false);
+        }
+    });
+
+    test('0931 — flag-glossary.md defines --concurrency exactly once, keyed on its anchor', () => {
+        expect(glossaryEntryCount('--concurrency')).toBe(1);
+        const glossary = readFileSync(GLOSSARY_PATH, 'utf8');
+        expect(glossary).toContain('**Anchor:** `#flag-concurrency`.');
+        expect(glossary).toContain('(default 2, `n ≥ 1`)');
+    });
 });

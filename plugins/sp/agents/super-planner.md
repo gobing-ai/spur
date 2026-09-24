@@ -267,7 +267,8 @@ Report using the batch-report template from execution-batch.md §5:
 **Next:** <one-line action>
 ```
 
-Per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`.
+Per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`, plus
+the parallel-only `integration-conflict` ([execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel)).
 Batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
@@ -275,7 +276,8 @@ With `--json`, emit the same shape as a JSON object for machine consumption.
 
 ## Out of scope (deferred)
 
-- **Parallel execution** - needs git-worktree isolation; v1 is sequential.
+- **Parallel execution** - `--mode parallel` isolates each task in its own worktree with
+  rebase-and-FF integration; see [execution-batch.md § Parallel isolation](../skills/spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel).
 - **Interactive within-step escalation** - waits for the workspace module + inbox module +
   `spur agent` team mode. You surface blockers only at the batch boundary.
 

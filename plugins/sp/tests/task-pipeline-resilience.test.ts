@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
@@ -17,6 +26,7 @@ interface PipelineState {
 
 interface PipelineDefinition {
     states: PipelineState[];
+    vars?: Record<string, string>;
 }
 
 const ROOT = join(import.meta.dir, '..', '..', '..');
@@ -348,5 +358,71 @@ esac`,
         const report = cmds.find((c) => c.includes('residual-scan') && c.includes('report'));
         expect(report).toBeDefined();
         expect(report?.trim().endsWith('exit 0')).toBe(true);
+    // 0931 R5: parallel batches launch each pipeline with deferFeatureSync "true" so a task
+    // branch never touches feature files; the record-step sync shell must skip cleanly. The
+    // default "false" keeps sequential/inline behavior unchanged — the sync is owned by
+    // record-feature-sync.ts (ADR-115 moved the old inline chain out of the shell).
+    test('deferFeatureSync "true" skips the record-step feature sync and notes the deferral (0931 R5)', () => {
+        expect(PIPELINE.vars?.deferFeatureSync).toBe('false');
+
+        const sync = commandFor('record', 0);
+        expect(sync.startsWith('S=plugins/sp/scripts/record-feature-sync.ts;')).toBe(true);
+        expect(sync).toContain('record-feature-sync.mjs');
+        expect(sync).toContain('[ "$deferFeatureSync" = "true" ]');
+        expect(sync).toContain('feature sync deferred to batch integration');
+        expect(sync).toContain('bun "$S" --spur-bin "$spurBin"');
+
+        // Behavioral: with deferFeatureSync=true the (canary) spurBin is never invoked.
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0931-defer-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const spurBin = executable(dir, 'spur-bin-canary', 'echo "CANARY INVOKED" >&2; exit 42');
+            const result = runShell(sync, dir, {
+                deferFeatureSync: 'true',
+                wbs: '0931',
+                spurBin,
+            });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.output).not.toContain('CANARY INVOKED');
+            const report = readFileSync(join(dir, '.spur', 'run', '0931-report.txt'), 'utf8');
+            expect(report).toContain('feature sync deferred to batch integration');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('deferFeatureSync default delegates the sync to record-feature-sync (0931 R5 default)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0931-default-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            // Stage the owner script exactly as the pipeline finds it in-repo, so the shell
+            // actually delegates. The script imports ../lib/env (getEnvVar) — stage it too
+            // (self-contained node builtins). Canary: `task show` yields a feature_id -> the
+            // owner runs the bare-spur last resort (no bounded wrapper / staged module here).
+            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
+            mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
+            copyFileSync(
+                join(import.meta.dir, '..', 'scripts', 'record-feature-sync.ts'),
+                join(dir, 'plugins', 'sp', 'scripts', 'record-feature-sync.ts'),
+            );
+            copyFileSync(join(import.meta.dir, '..', 'lib', 'env.ts'), join(dir, 'plugins', 'sp', 'lib', 'env.ts'));
+            const spurBin = executable(
+                dir,
+                'spur-bin-empty',
+                'if [ "$1" = "task" ]; then echo \'{"feature_id":"F1"}\'; else echo "SYNC $*"; fi',
+            );
+            const result = runShell(commandFor('record', 0), dir, { wbs: '0931', spurBin });
+
+            expect(result.exitCode).toBe(0);
+            expect(result.output).not.toContain('deferred');
+            expect(result.output).toContain('SYNC feature sync F1');
+            const reportPath = join(dir, '.spur', 'run', '0931-report.txt');
+            if (existsSync(reportPath)) {
+                expect(readFileSync(reportPath, 'utf8')).not.toContain('Orphan task 0931');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });

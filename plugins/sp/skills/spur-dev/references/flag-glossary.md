@@ -126,6 +126,17 @@ Batch operation only (`dev-refineall`, `dev-runall`). When a task in the batch
 fails, skip its in-batch dependents and continue the independent ones, instead of the default
 halt-on-first-failure. Never silently retried; the failure is still reported.
 
+### `--concurrency <n>` — parallel batch worker bound
+
+**Anchor:** `#flag-concurrency`.
+
+`dev-runall` under `--mode parallel` (task 0931): at most `<n>` task pipelines run at once
+(default 2, `n ≥ 1`). A dependent task starts only after every in-set dependency has been
+**integrated** onto the base ref — see
+[execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---mode-parallel).
+Ignored in sequential mode. Each worker is one more concurrent quality gate; raise it only when
+the host has the CPU for it.
+
 ### `--continue` — resume an interrupted batch from checkpoint
 
 **Anchor:** `#flag-continue`.
@@ -431,8 +442,9 @@ merges but never removes. This keeps the continue-the-work loop stable — after
 `-`**, so `--worktree --auto` is the bare create form and `--agent`/`--feature`/etc. are never
 swallowed as the name. `--worktree=<name>` is the unambiguous spelling. `/sp:dev-next` does not get
 the flag (single _step_; not worth the worktree cost — unlike `dev-run`, which isolates a whole
-task pipeline), `--worktree --mode parallel` is rejected (per-task parallel isolation stays task
-0142), and `--worktree --mode implement` is rejected on `dev-run` (that mode _is_ the pipeline's
+task pipeline), `--worktree --mode parallel` is rejected (parallel mode already isolates each task
+in its own worktree — [execution-batch.md § Parallel isolation](execution-batch.md#parallel-isolation---mode-parallel)),
+and `--worktree --mode implement` is rejected on `dev-run` (that mode _is_ the pipeline's
 implement stage and runs in the driver's tree). The full lifecycle — name resolution, dirty-tree
 precheck, creation or adoption, crash-safe marker, merge-or-retain, and `--continue` re-entry — is
 specified in [execution-batch.md § Worktree isolation](execution-batch.md#worktree-isolation---worktree-name).

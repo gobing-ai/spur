@@ -24,6 +24,7 @@ Wraps the **sp:spur-dev** skill.
 | `--next` | Chain-to-completion via the next-router. | off |
 | `--continue` | Resume an interrupted batch. | off |
 | `--worktree` `[<name>]` | Run the batch in an isolated git worktree; FF-merge on success, retain on failure. Bare `--worktree` creates a fresh tree; `--worktree <name>` adopts an existing worktree by name/path/branch. | off |
+| `--concurrency` `<n>` | Parallel-mode worker bound: at most `<n>` task pipelines run at once (task 0931); a dependent starts only after its in-set dependencies are integrated onto the base ref. No-op in sequential mode (ignored). | 2 |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
@@ -41,7 +42,9 @@ structured findings, before any task pipeline action, task 0510 R2; scoped: `L4.
 (the expected pre-run state of any not-yet-run feature) is reported verbatim but does not abort —
 any other strict error aborts), `--mode`
 `<sequential|parallel>` (default `sequential`; `parallel` fans out a proven-independent subset —
-see `execution-batch.md` § Parallel Execution), `--keep-going`
+see `execution-batch.md` § Parallel isolation), `--concurrency <n>`
+(parallel-mode worker bound — at most <n> task pipelines at once, default 2; a dependent task starts
+only after its in-set dependencies are **integrated** onto the base ref), `--keep-going`
 (batch failure policy — skip a failed task's in-batch dependents, continue independents; default
 halts on first failure), `--auto`
 (sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <inline|auto|name>`
@@ -56,9 +59,10 @@ FF-merge onto the base ref on full success, retain intact on any failure/halt/no
 creates a fresh tree, `<name>` form adopts an existing worktree by name/path/branch; see
 `execution-batch.md` § Worktree isolation).
 
-**`--worktree` is sequential-only.** `--worktree --mode parallel` is **rejected**. This flag gives
-the batch *one* worktree for the whole run; per-task worktrees and parallel isolation remain task
-0142 Slice A. Run parallel batches without `--worktree`, or run them sequentially with it.
+**`--worktree` and parallel mode.** `--worktree --mode parallel` is **rejected** — parallel mode
+already isolates each task in its own worktree (see `execution-batch.md` § Parallel isolation), and
+reuse mode (`--worktree <name>`) has no per-task meaning. Run parallel batches without
+`--worktree`, or run them sequentially with it.
 
 **`--worktree` corpus visibility.** While the batch runs in a worktree, corpus writes (task
 statuses, kanban) land in the worktree copy; your main tree still shows pre-run statuses until the

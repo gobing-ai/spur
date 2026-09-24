@@ -40,7 +40,7 @@ and no command-derived number or `file:line` citation is a defect in the report,
 ## The gated list
 
 Gated features are listed **separately, never ranked**, each with its gate reason from the
-actionability pass (`blocked: 0142 — external trigger` / `no open tasks` / `all tasks terminal`).
+actionability pass (`blocked: <wbs> — external trigger` / `no open tasks` / `all tasks terminal`).
 Features whose gate reason is "all tasks terminal" are T4 candidates — say so once, in the sync-first
 block, rather than repeating per row.
 

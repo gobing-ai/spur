@@ -37,7 +37,7 @@ native subagent.
 | 1 | **Different model or coding agent required** | The step needs a model or a coding agent the host session cannot provide (`--model`, `--agent`). | "verify on o3" where the host is Claude Code; "run this through omp" from a non-omp host. |
 | 2 | **Headless or unattended step** | The step must run without a live session - scheduled, detached, or driven by a non-interactive caller. | A batch launched by `spur workflow run --async` with no operator attached. |
 | 3 | **Durable auditable run record required** | The dispatch must produce a persisted run record (cost ledger, trace, exit code) for after-the-fact audit. | `spur agent run` writes `.spur/run/` artifacts; a native subagent does not. |
-| 4 | **Workspace or credential isolation required** | The step must run in a separate workspace, worktree, or credential scope from the orchestrating session. | A destructive step isolated to a throwaway worktree; a step that must not inherit the session's `cwd` secrets. |
+| 4 | **Workspace or credential isolation required** | The step must run in a separate workspace, worktree, or credential scope from the orchestrating session. | A destructive step isolated to a throwaway worktree; a step that must not inherit the session's `cwd` secrets; `--mode parallel` batch fan-out, one worktree per task ([execution-batch.md § Parallel isolation](../../spur-dev/references/execution-batch.md#parallel-isolation---mode-parallel)). |
 
 ## The naming requirement
 

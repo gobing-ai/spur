@@ -228,11 +228,12 @@ for wbs in plan:                                       # default sequential mode
 emit batch report (per-task outcome + preflight skips + recovery hints + batch verdict)
 ```
 
-Parallel mode keeps the same lifecycle but swaps the inner loop for the independent-task batch
-pattern in [sp:parallel-execution](../../parallel-execution/SKILL.md): identify a zero-edge,
+Parallel mode keeps the same lifecycle but swaps the inner loop for the per-task-worktree fan-out
+specified in [§ Parallel isolation](#parallel-isolation---mode-parallel): identify a zero-edge,
 non-overlapping subset; **preflight each** selected task; run each ready task's `task-pipeline.yaml`
-invocation in its own subagent/worktree-safe context; synthesize outcomes; recovery stays
-**sequential** (one WBS). If any decision-framework check fails, serialize and record the reason.
+invocation in its own create-mode worktree; integrate by rebase + `--ff-only` as tasks finish;
+recovery stays **sequential** (one WBS). If any decision-framework check fails, serialize and
+record the reason.
 
 ### 3.1 Per-task execution reuses the pipeline verbatim (R4)
 
@@ -451,8 +452,10 @@ C6 recovery line (re-run the pipeline); every other excluded task uses the next-
 command for its status (F96 task 0952 R2).
 
 The per-task outcome vocabulary: `done` | `failed` | `blocked` | `skipped` | `not-attempted`,
-plus the resume-only `recheck` (stale/mismatched evidence — pipeline re-run) and `not-admitted`
-(post-freeze selector match, never executed — task 0919 BC-1/BC-2).
+plus the resume-only `recheck` (stale/mismatched evidence — pipeline re-run), `not-admitted`
+(post-freeze selector match, never executed — task 0919 BC-1/BC-2), and the parallel-only
+`integration-conflict` (rebase conflict retained for manual integration — task 0931 R4,
+[§ Parallel isolation](#parallel-isolation---mode-parallel)).
 The batch verdict: `clean` (all attempted tasks `done`) | `halted` (a failure stopped the batch) |
 `aborted` (cycle or selector error before any run).
 
@@ -517,8 +520,9 @@ the wrap's refusal of non-done tasks remains the hard invariant.
 When a batch command (`dev-runall`, `dev-refineall`, `dev-verifyall`) is invoked with
 [`--worktree [<name>]`](flag-glossary.md#flag-worktree), the entire driver loop runs inside an
 isolated git worktree instead of the operator's working directory. This section owns the worktree
-lifecycle for the sequential batch loop. Per-task worktrees and `--mode parallel` isolation stay out
-of scope (task 0142 Slice A); `--worktree --mode parallel` is rejected.
+lifecycle for the sequential batch loop. `--mode parallel` has its own per-task isolation — see
+[§ Parallel isolation](#parallel-isolation---mode-parallel); `--worktree --mode parallel` is
+rejected there (parallel mode already isolates each task in its own worktree).
 
 **Startup ordering (task 0814 R3).** Resolve the selector/status filter and run the quick
 command-aware readiness (the `quickReadiness` contract in `batch-preflight.ts`) **before** creating
@@ -958,8 +962,10 @@ fallback, because `<name>` was explicit and unambiguous intent.
 - **`dev-next`** does not get `--worktree` — it dispatches a single step; per-step isolation is not
   worth the worktree cost. `dev-run` is different: it drives a whole task pipeline, so it does get
   the flag.
-- **`--mode parallel`** is rejected when combined with `--worktree` — per-task worktrees and
-  parallel isolation remain task 0142 Slice A.
+- **`--mode parallel`** is rejected when combined with `--worktree` — parallel mode already
+  isolates each task in its own worktree
+  ([§ Parallel isolation](#parallel-isolation---mode-parallel)), and reuse mode
+  (`--worktree <name>`) has no per-task meaning.
 - **`--mode implement`** is rejected when combined with `--worktree` on `dev-run` — that mode *is*
   the pipeline's implement stage (bug-742) and runs in whatever tree the driver set up; a second
   worktree would split one task's evidence across two trees.
@@ -1021,21 +1027,107 @@ time. Before launching a full `spur-check-new`:
 | 0510 R2 (feature-derived strict preflight) | Step 1 — "Feature-derived strict preflight (R2, task 0510)" |
 | 0510 R5 (metadata-only host controller) | Step 3.4 + projected `task show` / trace snippets in Step 1, 2.3, 3.1 |
 
-## Parallel Execution
+## Parallel isolation (`--mode parallel`)
 
-When a batch contains tasks with **zero dependency edges between them** and **no file-overlap conflicts**, the orchestrator can fan them out in parallel instead of running them sequentially. This is an **orchestrator-level optimization** — the per-task pipeline (`task-pipeline.yaml`) is unchanged; only the execution order differs.
+Under `--mode parallel` (task 0931) every concurrently running task gets its **own create-mode git
+worktree** (`sp/run-<wbs>-<short-id>`, cut from the current base-ref tip). Two task pipelines never
+share a working tree, and the main tree receives no task writes while the batch runs. The per-task
+pipeline (`task-pipeline.yaml`) is unchanged — only where it runs and when dependents may start
+differ. The fan-out decision framework (independence, overlap, budget) stays owned by
+[sp:parallel-execution](../../parallel-execution/SKILL.md); this section owns the isolation +
+integration lifecycle and reuses WT-1…WT-5 by reference — it defines no new worktree mechanics.
 
-**Decision framework:** `sp:parallel-execution` owns the full fan-out decision logic and patterns. Consult its [fan-out-patterns.md](../../parallel-execution/references/fan-out-patterns.md) before parallelizing. The orchestrator's responsibility is:
+### Driver loop
 
-1. Identify the independent subset from the topo-sorted batch (tasks with no edges to each other).
-2. Check for file-overlap conflicts (two tasks touching the same `file:line` range must serialize).
-3. Verify token budget supports N-way fan-out.
-4. Dispatch via `spur agent run` per task (trigger 4: workspace isolation required for parallel fan-out).
-5. Synthesize results per the [result-synthesis contract](../../parallel-execution/references/result-synthesis.md).
+```
+WT-1 once on the main tree (dirty → abort)          # one precheck for the whole batch, not per task
+ready = topo frontier; running = {}; integrated = set()
+while ready or running:
+    while |running| < CONCURRENCY and ready has t with deps(t) ⊆ integrated:
+        WT-2 create  sp/run-<wbs>-<short-id> (branch sp/run-<wbs>-<short-id>) from BASE_REF tip
+        WT-3 marker  {command: dev-runall, selector: <wbs>, batchId: <batchId>}
+                     # WT-3 schema fields (path, branch, baseRef, baseSha) + batchId shared by every marker
+        RUN[t] = (cd "$WT" && spur workflow run task-pipeline.yaml \
+                  --vars '{"wbs":"<wbs>","deferFeatureSync":"true",...}' --async --json)
+    wait for any RUN terminal        # trace poll --follow --timeout 600000; stale-evidence rule applies
+    on done:    WT-3b commit on $BRANCH → integrate(t)
+    on failed:  WT-5 retain (marker retained); failure policy — stop-the-batch default / --keep-going subtree skip
+    on timeout/paused:  WT-5 retain; run is non-terminal (HITL approve pause or poll bound) — stop-the-batch
+                        default / --keep-going subtree skip; the report marks the task `non-terminal`, never `done`
+post: feature sync + refresh per touched feature, one chore(corpus) commit (generated regions, R5)
+emit batch report (per-task outcomes + preflight skips + recovery hints + batch verdict)
+```
 
-**Parallel vs. sequential:** the default is sequential (topo-sort order). Parallel is an opt-in via `--mode parallel` on `sp:super-planner` or `/sp:dev-parallel`. When in doubt, run sequentially — parallel is only beneficial when tasks are provably independent.
+- **Bound (R2).** `CONCURRENCY` is the [`--concurrency <n>`](flag-glossary.md#flag-concurrency)
+  value: default **2**, `n ≥ 1`; at most that many pipelines run at once.
+- **Eligibility (R2).** A task becomes eligible only when all of its in-set dependencies are
+  **integrated** onto the base ref — pipeline-terminal is not enough, because its branch must
+  rebase over theirs. Omitting `--mode` stays sequential; this loop is entered only via
+  `--mode parallel` on `/sp:dev-runall`.
+- **Workdir.** `spur workflow run` records the launch workdir (0784 R1), so launch with `cwd` = the
+  task worktree: resume and `.spur/run/` artifact paths resolve there. Read the verdict from
+  `$WT/.spur/run/<wbs>-verdict.json` before integration; WT-4a persists it into the invoking tree.
 
-**See also:** `sp:parallel-execution` skill, `sp:super-planner` agent (parallel mode), `/sp:dev-parallel` command.
+### Integration — rebase, then fast-forward only (R3)
+
+Pipeline-terminal is not terminal under parallel mode. The orchestrator integrates each succeeded
+task from the main tree; integrations are **serialized** (one at a time) in completion order:
+
+```
+integrate(t):
+  git -C "$WT" rebase "$BASE_REF"                # replay onto the CURRENT base tip (re-read per integration)
+  ├─ rebase fails → git -C "$WT" rebase --abort → conflict path (R4) below
+  └─ rebase clean → git checkout "$BASE_REF" → zero-commit guard → git merge --ff-only "$BRANCH"
+                    → WT-4a verdict persist → WT-4b holders → WT-4c registry
+                    → git worktree remove → git branch -d → marker merged
+```
+
+The merge is always `--ff-only`: a base that will not fast-forward after a clean rebase is a
+conflict (R4). The pipeline never creates a merge commit, and no conflict is ever resolved
+automatically. `BASE_REF` is re-read at each integration so a task that finished late rebases over
+everything integrated before it.
+
+### Conflict — retain, report, block (R4)
+
+A failed rebase is aborted (`git -C "$WT" rebase --abort`), which leaves the worktree clean on its
+original branch tip. The worktree and branch are **retained** (WT-5, marker `retained`) and the
+task's outcome is `integration-conflict`. There is no auto-resolution — not for generated paths,
+not for anything. The batch report's row names the worktree path, the branch, and the manual
+commands:
+
+```
+resume:  cd <worktree-path> && git rebase <BASE_REF>   # the operator resolves, never the driver
+merge:   git checkout <BASE_REF> && git merge --ff-only <branch>
+discard: git worktree remove <worktree-path> && git branch -D <branch> && spur projects remove <worktree-path>
+```
+
+The task's dependent subtree is blocked under the normal failure policy (Step 4). Resuming a
+retained parallel batch with `--continue` is future work; today a retained task is resumed
+per-task with `/sp:dev-run <wbs> --worktree <branch>`.
+
+### Generated regions — defer the sync, regenerate once (R5)
+
+The only per-task writer of feature files is the `record` step's post-record feature sync
+(`task-pipeline.yaml`, the `feature-sync-bounded` wrapper). Parallel launches set
+the pipeline var `deferFeatureSync: "true"` (default `"false"`): the record step appends
+`feature sync deferred to batch integration` to the task report and skips the sync, so task
+branches never touch feature files or `docs/features/INDEX.md`. After the last integration, on the
+base ref, the orchestrator runs the same bounded wrapper plus `spur feature refresh --feature <f>`
+once per touched feature and commits the result as one `chore(corpus)` commit. Sequential and
+inline runs keep the default `"false"` and are unchanged. Any rebase conflict — on a generated
+path or any other — is an R4 `integration-conflict`; there is no path-based exception.
+
+**Report.** Step 5's per-task outcome vocabulary gains the parallel-only `integration-conflict`;
+its row carries `worktree`, `branch`, and the manual commands above. Under parallel mode `done`
+means **integrated onto the base ref**, not merely pipeline-terminal.
+
+**`--worktree` is rejected under parallel mode.** `--worktree --mode parallel` fails with
+"parallel mode already isolates each task in its own worktree" — reuse mode (`--worktree <name>`)
+has no per-task meaning (WT-7). Run parallel batches without `--worktree`, or run them sequentially
+with it.
+
+**See also:** `sp:parallel-execution` skill (fan-out decision framework), `sp:super-planner` agent
+(parallel mode), `execution-batch.md` § Worktree isolation (WT-1…WT-7 mechanics).
 
 ## Subagent execution disciplines
 

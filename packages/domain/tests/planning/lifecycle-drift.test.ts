@@ -167,7 +167,9 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
         // Proof certification + record step + post-record feature sync (task 0328 / ADR-0322,
         // task 0612 / ADR-071; 0785 R3 replaced the bare fingerprint compare with the bound
-        // run.artifact registration, which re-captures the proof inputs itself).
+        // run.artifact registration, which re-captures the proof inputs itself). 0931 R5 moved
+        // the sync chain into record-feature-sync.ts and added the deferFeatureSync guard in
+        // the shell; certification stays FIRST and the sync stays last.
         expect(record?.onEnter ?? []).toHaveLength(3);
         // Certification must be FIRST: it refuses unless the verdict artifact's proof block
         // certifies a fresh capture over the canonical task spec (+ linked feature) — so it has
@@ -193,7 +195,14 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         // The post-record hop must still sync feature status, but the mechanism is free: task 0411
         // routes it through `feature-sync-bounded.ts`, which wraps `spur feature sync --json` with
         // retry suppression. Assert the intent (a feature-sync hop exists), not one spelling.
-        expect(cmds.some((c) => c.includes('feature sync') || c.includes('feature-sync-bounded'))).toBe(true);
+        expect(
+            cmds.some(
+                (c) =>
+                    c.includes('feature sync') ||
+                    c.includes('feature-sync-bounded') ||
+                    c.includes('record-feature-sync'),
+            ),
+        ).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {
@@ -259,7 +268,9 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
             .map((a) => String(a.options?.command ?? ''));
         const spurShellingScripts = allCmds.filter(
             (c) =>
-                c.includes('bun plugins/sp/scripts/') &&
+                // Literal form and 0931's resolver form (`S=plugins/sp/scripts/x.ts; … bun "$S"`)
+                // both shell spur through a bundled script.
+                (c.includes('bun plugins/sp/scripts/') || c.includes('S=plugins/sp/scripts/')) &&
                 // 0823 (d): quality-gate.ts never shells spur (it runs the gate command),
                 // so it needs no --spur-bin.
                 !c.includes('quality-gate.ts'),
