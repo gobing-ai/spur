@@ -277,6 +277,11 @@ design, plan, acceptance criteria, decisions, dependencies and premises present 
 non-placeholder so `spur task check <wbs> --json` exits 0. Write planning sections only, through
 `spur task update <wbs> --section <Name> --from-file <file>` — never Solution, Testing, Review
 or History. Record one checklist row per id, with concrete evidence of how you verified it.
+The `premises` row passes only when each material premise was read against the current tree:
+identify each material premise in the task Background, open the cited file at the cited line and
+confirm the claim, then record the evidence as verified `path:line` citations — handoff-finalize
+lints the row and degrades the task to ready refine when the evidence carries no citation or
+cites a missing file or an out-of-range line.
 Compute the planning digest with the project's own implementation when this is a monorepo
 checkout — resolve the file with `spur task path <wbs> --json`, then run:
 

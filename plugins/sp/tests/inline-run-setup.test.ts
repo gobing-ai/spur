@@ -216,6 +216,7 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
             status: 'running',
             definitionDigest: `sha256:${'a'.repeat(64)}`,
             layer: 'project',
+            ok: true,
         });
         expect(readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')).toContain(
             `# spur inline run ${runId} — fixture`,
@@ -235,6 +236,13 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
                 startedAt?: string;
             }
         ).startedAt;
+        // A prior failure's error key must not survive a successful re-setup (0948 R7).
+        const seeded = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as Record<
+            string,
+            unknown
+        >;
+        seeded.error = 'stale failure';
+        writeFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), `${JSON.stringify(seeded)}\n`);
         const rerun = runDelegate(workdir, runId, stub.appEntry);
         expect(rerun.status).toBe(0);
         const headers = readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')
@@ -246,6 +254,8 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
             startedAt?: string;
         };
         expect(stateAfter.startedAt).toBe(startedBefore);
+        expect((stateAfter as { ok?: boolean; error?: string }).ok).toBe(true);
+        expect((stateAfter as { error?: string }).error).toBeUndefined();
     } finally {
         cleanup();
         stub.cleanup();

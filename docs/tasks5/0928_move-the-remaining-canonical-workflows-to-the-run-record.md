@@ -4,7 +4,7 @@ name: Move the remaining canonical workflows to the run record
 status: done
 template: feature-impl
 created_at: 2026-09-23T05:09:42.309Z
-updated_at: "2026-09-24T17:38:59.586Z"
+updated_at: "2026-09-24T19:50:42.713Z"
 feature_id: E7
 priority: P2
 tags:

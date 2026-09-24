@@ -107,5 +107,8 @@ describe('feature-verification scope split (task 0872)', () => {
         ).find((s) => s.id === 'verifying');
         const commands = (verifying?.onEnter ?? []).map((a) => a.options?.command ?? '');
         expect(commands.some((c) => c.includes('workflow run feature-verification.yaml'))).toBe(true);
+        const caller = commands.find((c) => c.includes('workflow run feature-verification.yaml')) ?? '';
+        expect(caller).toContain('featureId\\":\\"$featureId');
+        expect(caller).toContain('spurBin\\":\\"$spurBin');
     });
 });

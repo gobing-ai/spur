@@ -24,12 +24,27 @@ function getEnvVar(name, fallback) {
 
 // plugins/sp/scripts/feature-verification-steps.ts
 var SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-async function loadModule(spurBin) {
-  const bundle = fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
+function bundleEntry() {
+  return fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url));
+}
+function sourceModeError(spurBin) {
+  return new Error(`source mode: refusing to load packages/app/src/index.ts (spurBin=${JSON.stringify(spurBin)}). ` + "That entry is not the feature-verification contract surface \u2014 it does not export " + "splitLaunchCommand / ArtifactDao. Fix: run in bundle mode so " + "plugins/sp/lib/inline-run.generated.mjs is loaded (omit --module-mode, or pass --module-mode bundle) " + "and regenerate that bundle if it is missing. Reinstalling the sp plugin does not add these seams to the app source entry.");
+}
+function resolveModuleMode(raw) {
+  if (raw === "" || raw === "bundle")
+    return "bundle";
+  if (raw === "source")
+    return "source";
+  throw new Error(`unknown --module-mode ${JSON.stringify(raw)}; expected "source" or "bundle"`);
+}
+async function loadModule(spurBin, mode) {
+  if (mode === "source")
+    throw sourceModeError(spurBin);
+  const bundle = bundleEntry();
   if (!existsSync(bundle)) {
     throw new Error(`feature-verification-steps: mode=bundle \u2014 the generated inline bundle is missing at ${bundle}` + `${spurBin === "" ? "" : ` (spurBin=${spurBin})`}. ` + "Fix: in a source checkout run `bun run build:bundle`; for an installed plugin reinstall it.");
   }
-  return requireModule(bundle, "bundle");
+  return requireModule(bundle, mode);
 }
 async function requireModule(entry, mode) {
   const mod = await import(entry);
@@ -72,11 +87,11 @@ var nodeFsShim = {
     return readFileSync(path, "utf8");
   }
 };
-async function verify(featureId, runId, cmdOverride, spurBin) {
+async function verify(featureId, runId, cmdOverride, spurBin, mode) {
   assertSafeId("feature id", featureId);
   assertSafeId("run id", runId);
   const cwd = process.cwd();
-  const mod = await loadModule(spurBin);
+  const mod = await loadModule(spurBin, mode);
   const runDir = join(cwd, ".spur", "run");
   mkdirSync(runDir, { recursive: true });
   const selected = await mod.resolveWorkflowDefinition(cwd, "feature-verification");
@@ -151,7 +166,7 @@ function main() {
     console.error("Usage: feature-verification-steps.ts verify --feature-id <id> --run-id <id> [--cmd <command>]");
     process.exit(2);
   }
-  verify(flag("--feature-id") || getEnvVar("featureId") || "", flag("--run-id") || getEnvVar("__runId") || "", flag("--cmd") || getEnvVar("verificationCmd") || "", flag("--spur-bin") || getEnvVar("spurBin") || "").then(() => process.exit(0)).catch((err) => {
+  verify(flag("--feature-id") || getEnvVar("featureId") || "", flag("--run-id") || getEnvVar("__runId") || "", flag("--cmd") || getEnvVar("verificationCmd") || "", flag("--spur-bin") || getEnvVar("spurBin") || "", resolveModuleMode(flag("--module-mode"))).then(() => process.exit(0)).catch((err) => {
     console.error(`feature-verification-steps: ${String(err)}`);
     process.exit(1);
   });

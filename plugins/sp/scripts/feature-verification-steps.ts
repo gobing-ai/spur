@@ -56,21 +56,42 @@ interface VerificationModule {
     ) => { record: (input: { runId: string; path: string; kind: string }) => Promise<unknown> };
 }
 
+/** Explicit module surface. Source is not the contract; the generated bundle is (0948 R3). */
+type ModuleMode = 'source' | 'bundle';
+
+function bundleEntry(): string {
+    return fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
+}
+
 /**
- * Load the verification seams from the plugin's GENERATED inline bundle.
- *
- * Mode is explicit (0948 R3): plugin scripts consume the generated bundle — the
- * contract surface ADR-065 gives them — and never `packages/app/src/index.ts`.
- * The app source entry is not a plugin-script surface and does not re-export every
- * seam (`splitLaunchCommand`, `ArtifactDao`), so loading it produced a misleading
- * "rebuild/install the sp plugin" failure that no rebuild could fix. The bundle is
- * tracked, so a source checkout has it without an install step.
+ * Source mode names the mode and the fix. The app source entry does not export
+ * the verification seams, and "rebuild/install the sp plugin" cannot add them.
+ */
+function sourceModeError(spurBin: string): Error {
+    return new Error(
+        `source mode: refusing to load packages/app/src/index.ts (spurBin=${JSON.stringify(spurBin)}). ` +
+            'That entry is not the feature-verification contract surface — it does not export ' +
+            'splitLaunchCommand / ArtifactDao. Fix: run in bundle mode so ' +
+            'plugins/sp/lib/inline-run.generated.mjs is loaded (omit --module-mode, or pass --module-mode bundle) ' +
+            'and regenerate that bundle if it is missing. Reinstalling the sp plugin does not add these seams to the app source entry.',
+    );
+}
+
+function resolveModuleMode(raw: string): ModuleMode {
+    if (raw === '' || raw === 'bundle') return 'bundle';
+    if (raw === 'source') return 'source';
+    throw new Error(`unknown --module-mode ${JSON.stringify(raw)}; expected "source" or "bundle"`);
+}
+
+/**
+ * Bundle mode loads the generated inline bundle. Source mode fails closed with a named fix.
  *
  * `spurBin` no longer selects the module (it named the *caller's* CLI entry, not this
  * script's runtime surface); it is kept only to make the failure message actionable.
  */
-async function loadModule(spurBin: string): Promise<VerificationModule> {
-    const bundle = fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url));
+async function loadModule(spurBin: string, mode: ModuleMode): Promise<VerificationModule> {
+    if (mode === 'source') throw sourceModeError(spurBin);
+    const bundle = bundleEntry();
     if (!existsSync(bundle)) {
         throw new Error(
             `feature-verification-steps: mode=bundle — the generated inline bundle is missing at ${bundle}` +
@@ -78,11 +99,11 @@ async function loadModule(spurBin: string): Promise<VerificationModule> {
                 'Fix: in a source checkout run `bun run build:bundle`; for an installed plugin reinstall it.',
         );
     }
-    return requireModule(bundle, 'bundle');
+    return requireModule(bundle, mode);
 }
 
 /** Dynamic-import the entry and refuse modules missing the verification seams. */
-async function requireModule(entry: string, mode: 'bundle'): Promise<VerificationModule> {
+async function requireModule(entry: string, mode: ModuleMode): Promise<VerificationModule> {
     const mod = (await import(entry)) as Partial<VerificationModule> & Record<string, unknown>;
     const missing = (
         [
@@ -137,11 +158,17 @@ const nodeFsShim = {
 } as never;
 
 /** One full verification pass for one feature. Always exits 0. */
-async function verify(featureId: string, runId: string, cmdOverride: string, spurBin: string): Promise<void> {
+async function verify(
+    featureId: string,
+    runId: string,
+    cmdOverride: string,
+    spurBin: string,
+    mode: ModuleMode,
+): Promise<void> {
     assertSafeId('feature id', featureId);
     assertSafeId('run id', runId);
     const cwd = process.cwd();
-    const mod = await loadModule(spurBin);
+    const mod = await loadModule(spurBin, mode);
     const runDir = join(cwd, '.spur', 'run');
     mkdirSync(runDir, { recursive: true });
 
@@ -236,6 +263,7 @@ function main(): void {
         flag('--run-id') || getEnvVar('__runId') || '',
         flag('--cmd') || getEnvVar('verificationCmd') || '',
         flag('--spur-bin') || getEnvVar('spurBin') || '',
+        resolveModuleMode(flag('--module-mode')),
     )
         .then(() => process.exit(0))
         .catch((err: unknown) => {

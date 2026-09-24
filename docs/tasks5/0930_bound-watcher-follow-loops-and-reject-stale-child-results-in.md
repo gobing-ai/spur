@@ -4,7 +4,7 @@ name: Bound watcher follow loops and reject stale child results in batch runs
 status: done
 template: feature-impl
 created_at: 2026-09-23T05:54:04.867Z
-updated_at: "2026-09-24T08:41:14.357Z"
+updated_at: "2026-09-24T15:32:20.321Z"
 feature_id: H53
 
 dependencies: ["0928", "0929"]
@@ -136,17 +136,17 @@ Validation: 156/156 `apps/cli` workflow tests green (incl. 7 new 0930 tests); pl
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | workflow.ts:1867-1926/:1984-2047 deadlineMs into followTrace/followRunLog incl. Run-not-found retry window; :1587 timedOut -> setExitCode(1), no cancel; workflow.test.ts:2305-2346 |
-| R2 | MET | workflow.ts:1526-1543 --timeout requires --follow + positive-integer guards; no-flag = Number.POSITIVE_INFINITY (:1880/:1986); workflow.test.ts:1605-1627/:2891-2916 |
-| R3 | MET | execution-batch.md:285-294 trace .run.runId identity + verdict mtime >= .run.startedAt freshness -> stale-evidence, never cancel/relaunch; super-planner.md:89-92 |
-| R4 | MET | SKILL.md:162-167 Gotcha --follow --timeout 600000; execution-batch.md:213-219/:244-253; batch-watch-bound-contract.test.ts:36-42 |
-| R5 | MET | citations-only verified: cross-cutting.md:53/:161, session-pinned-dispatch.md:128, task-pipeline.yaml:77, task-pipeline-resilience.test.ts:76 — all present, none modified |
+| R1 | MET | `apps/cli/src/commands/workflow.ts:1483` adds SHARED_OPTIONS.timeout; `apps/cli/src/commands/workflow.ts:1563-1588` passes deadlineMs into followTrace and followRunLog and maps a true return to setExitCode(1) with no cancel; `apps/cli/src/commands/workflow.ts:1855-1925` and `apps/cli/src/commands/workflow.ts:1975-2044` write one checkpoint with run id, status, and elapsed ms, including the Run-not-found window. `apps/cli/tests/commands/workflow.test.ts:2305-2338` (exit 1, status=running, follow-up trace still running) and `apps/cli/tests/commands/workflow.test.ts:2862-2943` plus `apps/cli/tests/commands/workflow.test.ts:3060-3085`. Re-verified 2026-09-24; artifacts .spur/run/0930-verify-answer.txt and .spur/run/0930-verdict.json. |
+| R2 | MET | `apps/cli/src/commands/workflow.ts:1525-1541` rejects --timeout without --follow and non-positive integers as VALIDATION_FAILED exit 1; `apps/cli/src/commands/workflow.ts:1880` and `apps/cli/src/commands/workflow.ts:1986` keep an omitted deadline unbounded. `apps/cli/tests/commands/workflow.test.ts:1605-1617` and `apps/cli/tests/commands/workflow.test.ts:1620-1631` (integer cases now assert the integer message; --json omitted so --follow --json cannot hide the guard). `apps/cli/tests/commands/workflow.test.ts:2891-2915`. CLI: `bun apps/cli/src/index.ts workflow trace no-such-run --timeout 5000 --json --json-envelope` exit 1 code VALIDATION_FAILED message "--timeout requires --follow"; human `--follow --timeout abc` and `--follow --timeout 0` exit 1 message "--timeout must be a positive integer of milliseconds". |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:285-296` accepts a verdict only when trace `.run.runId` equals the dispatched run and verdict mtime is at least `.run.startedAt`, otherwise outcome stale-evidence and never cancel or relaunch. `plugins/sp/agents/super-planner.md:89-92` states the same rule. `plugins/sp/tests/batch-watch-bound-contract.test.ts:29-35` passed this run. |
+| R4 | MET | `plugins/sp/skills/spur-dev/SKILL.md:165-168` Gotcha uses `spur workflow trace <run-id> --follow --timeout 600000` and says a timeout does not cancel or relaunch. `plugins/sp/skills/spur-dev/references/execution-batch.md:244-258` is the single bounded watch. `plugins/sp/agents/super-planner.md:89-92` carries the same bound. `plugins/sp/tests/batch-watch-bound-contract.test.ts:38-45` passed this run (retired poll-count wording absent from SKILL.md and super-planner.md). |
+| R5 | MET | Solution cites `plugins/sp/skills/spur-dev/references/cross-cutting.md:53` (auto row: host session cannot supply the pinned agent/model), `plugins/sp/skills/spur-dev/references/cross-cutting.md:161` (model_policy then agent.default then tier priority, before merge), and `docs/design/session-pinned-dispatch.md:128` (H53 F5 lands with B7). F10 cites `config/workflows/task-pipeline.yaml:77` mutationPolicy code and `plugins/sp/tests/task-pipeline-resilience.test.ts:76`. None of those files are in commit f2866492a. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | workflow.test.ts:1605,:2305,:2862,:2891,:2918,:3060 + batch-watch-bound-contract.test.ts:16-42 |
-| AC2 | MET | citation | cross-cutting.md:53/:161 + session-pinned-dispatch.md:128 (unmodified in diff) |
-| AC3 | MET | citation | task-pipeline.yaml:77 + task-pipeline-resilience.test.ts:76 (green in focused plugin run) |
+| Watcher reports are identity-fresh | MET | test | `apps/cli/tests/commands/workflow.test.ts:2305` checkpoint exit 1 run still running; `apps/cli/tests/commands/workflow.test.ts:2862` and `apps/cli/tests/commands/workflow.test.ts:3060` injected clock; `apps/cli/tests/commands/workflow.test.ts:2891` unbounded without a deadline; `apps/cli/tests/commands/workflow.test.ts:1605` and `apps/cli/tests/commands/workflow.test.ts:1620` validation; `plugins/sp/tests/batch-watch-bound-contract.test.ts:16` stale-evidence contract. 7/7 workflow 0930 tests and 3/3 contract tests passed this run. |
+| Auto resolution semantics are documented | MET | command | Solution F5 block cites `plugins/sp/skills/spur-dev/references/cross-cutting.md:53`, `plugins/sp/skills/spur-dev/references/cross-cutting.md:161`, and `docs/design/session-pinned-dispatch.md:128`. Those lines name the auto resolution order and the host-session exclusion, and the B7 pin. No behavior change in those files (absent from f2866492a). |
+| Classification-only tasks never receive source edits from test-fix | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:76` passed this run (exit 0, source.ts unchanged, mutationPolicy none refuses). Cited from Solution; `config/workflows/task-pipeline.yaml:77` unchanged in f2866492a. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -157,9 +157,12 @@ Validation: 156/156 `apps/cli` workflow tests green (incl. 7 new 0930 tests); pl
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | quality-gate | — | bun run spur-check exit 0 (8880+ tests), .spur/run/0930-test-gate.status |
-| P4 | focused-tests | — | 156/156 cli workflow tests incl. 7 new 0930 tests; 89/89 skill-structure; contract 3/3 |
-| P4 | verify-guard | — | proof.digest sha256:2585209809e59f16ca5636503f63c7db5c721f842d515d44b0a780e57a291668 == gate-entry digest; runId + definitionDigest bound |
+| P4 | spur task check | — | task check passed |
+| P4 | design-conformance | — | CLI deadline, both follow loops, validation, driver acceptance, single --timeout 600000 bound, governance ledger `docs/design/harness-surface-governance.md:122`, synopsis `docs/design/cli-contracts.md:641`, workflows reference `plugins/sp/skills/spur-cli/references/workflows.md:313-317`. All design claims DONE. |
+| P4 | scope-creep | — | skill-structure.test.ts jq expectation and docs/help timeout row follow the jq repair and the new flag. |
+| P4 | cli-golden-path-present | — | bun apps/cli/src/index.ts workflow trace no-such-run --timeout 5000 --json --json-envelope exit 1 VALIDATION_FAILED "--timeout requires --follow". |
+| P4 | secu-review | — | No P1-P3 findings. Integer-timeout test fixed at workflow.test.ts:1620. cli-contracts.md:749-751 now names the .md run record. |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 

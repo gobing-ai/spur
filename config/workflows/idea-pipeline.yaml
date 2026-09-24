@@ -461,10 +461,12 @@ states:
       plan, ac, decisions, dependencies, premises) so the deterministic task
       check passes, then writes the run-scoped ready evidence sidecar
       (.spur/run/${vars.__runId}-idea-ready.json) with one row per task: wbs,
-      status (ready|failed|skipped), planningDigest, and seven check rows.
-      Handoff-finalize verifies presence, digest and checklist evidence before
-      recommending auto runall; missing or failing evidence never fails the
-      run — it degrades the recommendation to ready-depth refineall.
+      status (ready|failed|skipped), planningDigest, and seven check rows,
+      with the premises row carrying tree-verified path:line citations
+      (0947). Handoff-finalize verifies presence, digest, feature binding and
+      checklist evidence before recommending auto runall; missing or failing
+      evidence never fails the run — it degrades the recommendation to
+      ready-depth refineall.
     onEnter:
       - kind: agent.run
         options:
@@ -483,7 +485,9 @@ states:
             for feature ${vars.featureId} per sp:spur-dev
             references/planning-workflow.md § Step 5.6 (Ready preparation): read
             .spur/run/${vars.__runId}-idea-batch-create-result.json and write
-            .spur/run/${vars.__runId}-idea-ready.json.
+            .spur/run/${vars.__runId}-idea-ready.json. The premises check row passes only
+            when each material premise was verified against the current tree and its evidence
+            cites at least one verified path:line (handoff-finalize lints it; task 0947).
           answerFile: .spur/run/${vars.__runId}-ready-prepare-answer.txt
           expectFile: .spur/run/${vars.__runId}-ready-prepare-answer.txt
       # Fail-closed shape validation (mirrors the order-sidecar guard). Absence is

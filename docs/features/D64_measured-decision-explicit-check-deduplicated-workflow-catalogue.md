@@ -2,11 +2,11 @@
 schema_version: 1
 id: "D64"
 name: "Measured, decision-explicit, check-deduplicated workflow catalogue"
-status: backlog
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-24T00:07:59.728Z"
-updated_at: "2026-09-24T00:15:32.526Z"
+updated_at: "2026-09-24T17:32:09.158Z"
 ---
 
 # D64: Measured, decision-explicit, check-deduplicated workflow catalogue
@@ -139,6 +139,7 @@ Feature: Measured, decision-explicit, check-deduplicated workflow catalogue
 | 0944 | Skip clean model passes in wrapup doc-sync and history-anatomy | todo |
 | 0945 | Make idea-pipeline guards legible with terminal reasons on failure edges | todo |
 | 0946 | Reconcile the workflow catalogue with keep, fix or retire decisions | todo |
+| 0947 | Make idea-pipeline ready-prepare audit premise correctness and re-stamp evidence after re-parenting | wip |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -146,4 +147,5 @@ Feature: Measured, decision-explicit, check-deduplicated workflow catalogue
 ## History
 
 - 2026-09-24T00:15:32.526Z moved O → D64 (system)
+- 2026-09-24T17:32:09.158Z backlog → active (system)
 

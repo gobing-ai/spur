@@ -769,9 +769,15 @@ export class WorkflowAppService {
         // (0485 R2) `implementAgent` is injected on the same seam so `agent.default` also
         // governs the implement hop; a stale default warns instead of failing dispatch.
         const warnings: string[] = [];
+        // Declared defaults are the base. Caller --vars overlay them; an explicit
+        // empty string that would blank a declared var is rejected (0948 R2).
+        // The engine also merges, but the map handed to it is already complete so
+        // a replace-style consumer cannot drop a declared var the caller omitted.
         const runVars = {
-            ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, opts.vars, (m) => warnings.push(m)),
-            ...(opts.vars ?? {}),
+            ...mergeWorkflowRunVars(workflow.vars as Record<string, unknown> | undefined, {
+                ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, opts.vars, (m) => warnings.push(m)),
+                ...(opts.vars ?? {}),
+            }),
             __runId: runId,
             // 0759 R5: inject the canonical definition digest on the same seam as __runId so a
             // pipeline can stamp it into its verdict proof block — verified-outcome then binds
@@ -2395,6 +2401,43 @@ export {
 } from '../workflow/workflow-resolver';
 
 /**
+ * Overlay caller `--vars` on a workflow's declared defaults (0948 R2).
+ *
+ * Omitted keys keep the definition default. An explicit empty string for a key
+ * the definition already set to a non-empty value is a blanking override and is
+ * rejected by name — a partial map must not silently empty `spurBin` or any
+ * other declared var. Non-string declared values are ignored; workflow vars are
+ * `Record<string, string>`.
+ */
+export function mergeWorkflowRunVars(
+    declared: Record<string, unknown> | undefined,
+    overrides: Record<string, string> | undefined,
+): Record<string, string> {
+    const base: Record<string, string> = {};
+    if (declared !== undefined) {
+        for (const [key, value] of Object.entries(declared)) {
+            if (typeof value === 'string') base[key] = value;
+        }
+    }
+    const user = overrides ?? {};
+    const blanked = Object.keys(user).filter((key) => user[key] === '' && (base[key] ?? '') !== '');
+    if (blanked.length > 0) {
+        throw new Error(`--vars leaves declared vars unset: ${blanked.sort().join(', ')}`);
+    }
+    return { ...base, ...user };
+}
+
+/** Thrown when a run id cannot be used as a single path segment under `.spur/run` (0948 R5). */
+export class InvalidWorkflowRunIdError extends Error {
+    readonly code = 'invalid-run-id' as const;
+
+    constructor(runId: string) {
+        super(`Invalid workflow run id: ${JSON.stringify(runId)}`);
+        this.name = 'InvalidWorkflowRunIdError';
+    }
+}
+
+/**
  * Resolve the `agent` / `implementAgent` run vars from `.spur/config.yaml`
  * `agent.default`, so the configured default executor reaches a workflow's
  * `agent.run` steps — including the implement hop, which previously read only the
@@ -2502,23 +2545,6 @@ async function outputArtifactForRun(cwd: string, runId: string): Promise<string 
     return undefined;
 }
 
-/**
- * Raised when a run id is traversal-shaped, so no run-record path may be built (0929 R1).
- *
- * Typed in 0948 R5: the server used to map its 400 by string-matching the message, so
- * any wording change turned a correct 400 into a 500. `code` is the stable machine key
- * the server maps on — `message` is presentation only.
- */
-export class InvalidWorkflowRunIdError extends Error {
-    /** Stable machine-readable code; map on THIS, never on `message`. */
-    readonly code = 'invalid-run-id';
-
-    constructor(runId: string) {
-        super(`Invalid workflow run id: ${JSON.stringify(runId)}`);
-        this.name = 'InvalidWorkflowRunIdError';
-    }
-}
-
 /** Explicit outcome of reading a run's persisted record from disk (E7 / task 0926 R3). */
 export type WorkflowRunRecordRead =
     | { kind: 'pair'; markdownPath: string; statePath: string; state: Record<string, unknown> }
@@ -2556,14 +2582,10 @@ export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRu
         let raw: string;
         try {
             raw = readFileSync(statePath, 'utf8');
-        } catch (error) {
-            const missing = (error as NodeJS.ErrnoException).code === 'ENOENT';
-            return {
-                kind: 'incomplete',
-                markdownPath,
-                statePath,
-                reason: missing ? 'state-missing' : 'state-invalid',
-            };
+        } catch (err) {
+            // Vanished between the exists check and the read is missing, not invalid (0948 R6).
+            const reason = stateReadFailureReason(err);
+            return { kind: 'incomplete', markdownPath, statePath, reason };
         }
         try {
             const state: unknown = JSON.parse(raw);
@@ -2589,6 +2611,14 @@ export const RUN_RECORD_INSPECT_MAX_BYTES = 256 * 1024;
  * `string.length` in characters, so a single constant could not honestly name both.
  */
 export const RUN_RECORD_INSPECT_MAX_CHARS = 256 * 1024;
+
+/** ENOENT between exists and read is a vanished file; every other read failure is invalid. */
+export function stateReadFailureReason(err: unknown): 'state-missing' | 'state-invalid' {
+    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === 'ENOENT') {
+        return 'state-missing';
+    }
+    return 'state-invalid';
+}
 
 /** Explicit bounded outcome of a Board run-record inspection (0929 R2). */
 export type WorkflowRunRecordInspection =
@@ -2617,13 +2647,13 @@ type ConfinedRunFile = { text: string } | { oversized: number } | undefined;
  * final component is a validated single run-id segment.
  */
 function readConfinedRunFile(realRunDir: string, path: string, maxBytes: number): ConfinedRunFile {
+    // 0948 R5: `open` FIRST, so the descriptor pins the inode the moment the path is
+    // resolved. `O_NOFOLLOW` refuses a symlinked final component outright (the escape
+    // vector, since the run-id component itself is already validated). The confined
+    // realpath is then checked AND its identity compared to the descriptor we hold —
+    // a swap between open and check is caught by dev/ino instead of being read.
     let fd: number | undefined;
     try {
-        // 0948 R5: `open` FIRST, so the descriptor pins the inode the moment the path is
-        // resolved. `O_NOFOLLOW` refuses a symlinked final component outright (the escape
-        // vector, since the run-id component itself is already validated). The confined
-        // realpath is then checked AND its identity compared to the descriptor we hold —
-        // a swap between open and check is caught by dev/ino instead of being read.
         fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
         const real = realpathSync(path);
         if (real !== realRunDir && !real.startsWith(realRunDir + sep)) return undefined;

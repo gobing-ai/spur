@@ -747,8 +747,8 @@ clean` reclaims retained logs older than `workflow.logRetentionDays` (default 30
   `--follow` requires a run id, replays that durable timeline, polls every `--poll` milliseconds
   (default 1000; minimum 50), emits changed action rows, and exits at terminal status. It is a
   human stream and cannot be combined with `--json`. `--output` (requires `--follow`) swaps the
-  follow source to a raw tail of `.spur/run/<RUNID>.log` (tail -f equivalent), also a human stream
-  rejected with `--json`; a run started with `--no-log` prints a clear no-log message at terminal
+  follow source to a raw tail of the run record `.spur/run/<RUNID>.md` (legacy `.log` fallback),
+  also a human stream rejected with `--json`; a run started with `--no-log` prints a clear no-log message at terminal
   status instead of hanging. `--timeout <ms>` (0930, requires `--follow`, positive integer) bounds
   the watch: when the deadline passes before the run is terminal — including the `Run not found`
   registration retry window — the follow writes one checkpoint line naming the run id and last

@@ -1225,6 +1225,47 @@ failureStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    test('partial --vars keeps other declared defaults (0948 R2)', async () => {
+        const dir = await createTempProject();
+        const workflowFile = join(dir, 'workflow.yaml');
+        const outFile = join(dir, 'vars.out');
+        await writeFile(
+            workflowFile,
+            [
+                'name: vars-merge',
+                'kind: state-machine',
+                'initialState: start',
+                'vars:',
+                '  featureId: "X"',
+                '  verificationCmd: "bun run spur-check-feature"',
+                '  keepMe: "yes"',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                `          command: 'printf "%s\\n" "$verificationCmd" "$keepMe" > ${outFile}'`,
+                '  - id: done',
+                'transitions:',
+                '  - from: start',
+                '    to: done',
+                '    guard:',
+                '      kind: always',
+                'terminalStates:',
+                '  - done',
+                '',
+            ].join('\n'),
+        );
+        const output = createCapturedOutput();
+        const exitCode = await main(
+            ['workflow', 'run', '--run-id', 'vars-merge-0948', '--vars', '{"featureId":"E7"}', workflowFile],
+            { output, cwd: dir, dbUrl: ':memory:' },
+        );
+        expect(exitCode).toBe(0);
+        expect(await readFile(outFile, 'utf8')).toBe('bun run spur-check-feature\nyes\n');
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('run subcommand accepts a valid --vars override and completes', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
@@ -1620,13 +1661,14 @@ failureStates:
     test('0930 R2 — trace rejects a --timeout that is not a positive integer of milliseconds', async () => {
         for (const bad of ['0', '-5', 'abc', '1.5', '']) {
             const output = createCapturedOutput();
+            // Omit --json: --follow --json is rejected first and would hide this guard.
             expect(
-                await main(['workflow', 'trace', 'run-1', '--follow', '--timeout', bad, '--json', '--json-envelope'], {
+                await main(['workflow', 'trace', 'run-1', '--follow', '--timeout', bad], {
                     output,
                     dbUrl: ':memory:',
                 }),
             ).toBe(1);
-            expect(JSON.parse(output.messages.at(-1) ?? '{}')).toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+            expect(output.errors.join('')).toContain('--timeout must be a positive integer of milliseconds');
         }
     });
 
@@ -3067,6 +3109,46 @@ describe('followRunLog', () => {
 
         // The tail moved to the new record instead of tracking the stale legacy file.
         expect(writes).toEqual(['legacy', 'resumed section']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('0948 R6 — a legacy→md switch does not reprint a shared prefix', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'run', 'r15.log'), 'legacy\n');
+
+        const writes: string[] = [];
+        let stepped = false;
+        const wait = async () => {
+            if (!stepped) {
+                stepped = true;
+                await writeFile(join(dir, '.spur', 'run', 'r15.md'), 'legacy\nresumed section\n');
+                await writeFile(join(dir, '.spur', 'run', 'r15.state.json'), '{"runId":"r15"}');
+            }
+        };
+        let traceCalls = 0;
+        const trace = async () => {
+            traceCalls++;
+            return { run: { status: traceCalls >= 4 ? 'done' : 'running' } } as never;
+        };
+
+        await followRunLog({ trace }, 'r15', dir, 5, (line) => writes.push(line), wait);
+
+        expect(writes).toEqual(['legacy', 'resumed section']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('0948 R6 — an empty legacy log is not described as --no-log', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'run', 'r16.log'), '');
+
+        const writes: string[] = [];
+        await followRunLog({ trace: serviceTrace(() => true) }, 'r16', dir, 5, (line) => writes.push(line));
+
+        expect(writes).toHaveLength(1);
+        expect(writes[0]).toContain('is empty');
+        expect(writes[0]).not.toContain('--no-log');
         await rm(dir, { recursive: true, force: true });
     });
 

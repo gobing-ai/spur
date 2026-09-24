@@ -85,13 +85,16 @@ states:
     description: >
       Allocate the run-scoped id and root. Every analyze/render path in this workflow writes to
       an explicit unique path under this run id — no stage reads the mutable latest.json pointer.
+      The retained identity is `.spur/run/<runId>-history-anatomy-run.id` (0948 R8). The fixed
+      `history-anatomy-run.id` name is only a latest pointer and is overwritten by the next run.
     onEnter:
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run;
             if [ -z "$__runId" ]; then __runId=$(uuidgen | tr 'A-Z' 'a-z' | cut -c1-8); fi;
-            echo "$__runId" > .spur/run/history-anatomy-run.id
+            echo "$__runId" > ".spur/run/$__runId-history-anatomy-run.id";
+            cp ".spur/run/$__runId-history-anatomy-run.id" .spur/run/history-anatomy-run.id
           # 0948 R8 retention disposition: `history-anatomy-run.id` is a SINGLE fixed-name
           # pointer that is overwritten every run — it does not accumulate, so it needs no
           # reclamation path (unlike the run-record pair and legacy `.log` files, which

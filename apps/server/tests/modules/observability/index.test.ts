@@ -591,7 +591,7 @@ describe('observability routing-summary (task 0552)', () => {
             expect(await res.json()).toEqual(outcome);
         });
 
-        test('a traversal-shaped run id is a 400, not a 500', async () => {
+        test('a typed invalid run id is a 400 without matching the seam message text', async () => {
             const app = mountWithWorkflowService({
                 inspectRunRecord: () => {
                     throw new InvalidWorkflowRunIdError('../escape');
@@ -602,7 +602,19 @@ describe('observability routing-summary (task 0552)', () => {
             expect(res.status).toBe(400);
             const body = (await res.json()) as { code: string; error: string };
             expect(body.code).toBe('invalid-run-id');
-            expect(body.error).toContain('Invalid workflow run id');
+            expect(body.error).toContain('../escape');
+        });
+
+        test('a plain Error whose message merely contains the old seam text is not a 400', async () => {
+            const app = mountWithWorkflowService({
+                inspectRunRecord: () => {
+                    throw new Error('Invalid workflow run id: wording drift');
+                },
+            });
+            app.onError(() => new Response(JSON.stringify({ error: 'internal' }), { status: 500 }));
+
+            const res = await app.request('/api/observability/run-record/r1');
+            expect(res.status).toBe(500);
         });
 
         // 0948 R5 / AC5: the mapping is on the typed `code`, never on message text. A plain

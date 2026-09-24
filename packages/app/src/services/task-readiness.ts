@@ -333,6 +333,8 @@ export async function prepareBatchTaskReady(opts: {
         'premises). Read the batch file, assess and synthesize every candidate item in input order, preserving ' +
         'names, feature_id, parent_wbs and authored constraints, and fill Requirements, Design, Plan and Acceptance ' +
         'Criteria substantively (never placeholders). Never author Solution, Testing or Review sections. ' +
+        'The premises check row passes only when each material premise was read against the current tree and its ' +
+        'evidence cites at least one verified path:line (handoff-finalize lints it; task 0947). ' +
         'Print ONLY the prepared JSON array — no prose, no code fence.\n' +
         `Batch file: ${opts.batchPath}\n` +
         `Batch contents:\n${opts.batchSource}`;
@@ -447,4 +449,51 @@ export function verifyReadyChecks(checks: ReadyCheckRow[] | undefined): { ok: bo
         }
     }
     return { ok: true };
+}
+
+/** Citation token in ready-checklist `premises` evidence: `<path>.<ext>:<start line>` (task 0947). */
+const PREMISE_CITATION_PATTERN = /[\w./@-]+\.(?:ts|tsx|yaml|yml|json|md|sql):(\d+)/g;
+
+/** Injected fs seam for `lintPremiseEvidence` (same async testability style as `ReadyPostCheck`). */
+export interface PremiseLintIo {
+    /** Whether the repo-root-relative path exists. */
+    fileExists(path: string): Promise<boolean>;
+    /** Number of lines in the file; -1 when unreadable (fails closed). */
+    lineCount(path: string): Promise<number>;
+}
+
+/** Verdict of `lintPremiseEvidence`. */
+export interface PremiseLintResult {
+    ok: boolean;
+    /** Empty when ok; the first entry is the degrade reason surfaced by callers. */
+    reasons: string[];
+}
+
+/**
+ * Lint a ready-checklist `premises` row evidence string (task 0947): the row
+ * must carry at least one `path:line` citation, and every cited file must
+ * exist (repo-root relative) with the cited line in range. This enforces the
+ * evidence QUALITY the Step 5.6 contract requires — `verifyReadyChecks` only
+ * enforces presence. Pure function; fs access is injected for tests.
+ */
+export async function lintPremiseEvidence(evidence: string, io: PremiseLintIo): Promise<PremiseLintResult> {
+    const citations = [...evidence.matchAll(PREMISE_CITATION_PATTERN)];
+    if (citations.length === 0) {
+        return { ok: false, reasons: ['premises evidence carries no path:line citation'] };
+    }
+    const reasons: string[] = [];
+    for (const citation of citations) {
+        const token = citation[0];
+        const path = token.slice(0, token.lastIndexOf(':'));
+        const line = Number(citation[1]);
+        if (!(await io.fileExists(path))) {
+            reasons.push(`cited file missing: ${path}`);
+            continue;
+        }
+        const count = await io.lineCount(path);
+        if (count < 0 || line < 1 || line > count) {
+            reasons.push(`cited line out of range: ${token}`);
+        }
+    }
+    return { ok: reasons.length === 0, reasons };
 }

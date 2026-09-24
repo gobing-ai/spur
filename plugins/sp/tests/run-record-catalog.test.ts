@@ -30,13 +30,34 @@ const RECORD_SUFFIXES = ['.state.json', '.md', '.log'] as const;
  * definition, reduced to its record-name form: the leading run-id placeholder
  * (`${vars.__runId}`, `$__runId`, `<runId>`, `<RUNID>`, `<run-id>`) is stripped.
  */
+const PLACEHOLDER = /^(\$\{vars\.[A-Za-z0-9_]+\}|\$[A-Za-z0-9_]+|<[A-Za-z0-9_-]+>)/;
+
+function isExactRecordSuffix(rest: string): boolean {
+    const name = rest.toLowerCase();
+    return name === '.md' || name === '.log' || name === '.state.json';
+}
+
+/**
+ * Record-name offenders. A placeholder prefix (`$__runId`, `${vars.__runId}`,
+ * `<runId>`) still reduces to the exact suffix. A literally hardcoded record
+ * filename (no placeholder) is an offender too — stripping only the placeholder
+ * form let `.spur/run/fixed-run.md` through (0948 R8).
+ * Placeholder-suffixed artifacts (`$__runId-idea-handoff.md`) stay ignored.
+ */
 function recordNameSegments(text: string): string[] {
     const segments: string[] = [];
     for (const match of text.matchAll(/\.spur\/run\/([^\s"'`),:]+)/g)) {
         const segment = match[1];
         if (segment === undefined) continue;
-        const name = segment.replace(/^\$\{vars\.[A-Za-z0-9_]+\}|^\$[A-Za-z0-9_]+|^<[A-Za-z0-9_-]+>/, '');
-        segments.push(name.toLowerCase());
+        const placeholder = segment.match(PLACEHOLDER);
+        if (placeholder?.[1] !== undefined) {
+            const rest = segment.slice(placeholder[1].length);
+            if (isExactRecordSuffix(rest)) segments.push(rest.toLowerCase());
+            continue;
+        }
+        if (/\.(?:md|log)$/i.test(segment) || /\.state\.json$/i.test(segment)) {
+            segments.push(segment.toLowerCase());
+        }
     }
     return segments;
 }

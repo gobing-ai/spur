@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import {
     createNodeFileSystem,
     type FileSystem,
@@ -6,7 +7,13 @@ import {
     type ProcessExecutor,
     type ProcessResult,
 } from '@gobing-ai/ts-runtime';
-import { computePlanningDigest, readyRefineCommand, verifyReadyChecks } from '../services/task-readiness';
+import {
+    computePlanningDigest,
+    lintPremiseEvidence,
+    type PremiseLintIo,
+    readyRefineCommand,
+    verifyReadyChecks,
+} from '../services/task-readiness';
 import { splitLaunchCommand } from './split-launch-command';
 
 /**
@@ -50,6 +57,35 @@ export interface FinalizeIdeaHandoffResult {
  */
 function processEvidence(r: ProcessResult): string {
     return `exit=${r.exitCode ?? 'null'}${r.signal ? ` signal=${r.signal}` : ''}: ${r.stderr.trim() || 'no stderr'}`;
+}
+
+/**
+ * Frontmatter `feature_id` of a task document, or null when absent/blank.
+ * Parsed with the same MarkdownDocument machinery as `computePlanningDigest`.
+ */
+function taskFrontmatterFeatureId(raw: string): string | null {
+    const data = MarkdownDocument.parse(raw, 'task').frontmatterData ?? {};
+    const value = data.feature_id;
+    return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * Premise-citation lint IO over the injected FileSystem (task 0947): cited
+ * paths resolve repo-root relative; an unreadable file reports -1 so its
+ * citations fail closed instead of passing.
+ */
+function premiseLintIo(root: string, fs: FileSystem): PremiseLintIo {
+    return {
+        fileExists: async (p) => fs.exists(resolve(root, p)),
+        lineCount: async (p) => {
+            try {
+                const lines = (await fs.readFile(resolve(root, p))).split('\n');
+                return lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;
+            } catch {
+                return -1;
+            }
+        },
+    };
 }
 
 /**
@@ -279,8 +315,10 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                     reason = 'task path output carried no filePath';
                 } else {
                     let digest: string | undefined;
+                    let taskRaw: string | undefined;
                     try {
-                        digest = computePlanningDigest(await fs.readFile(filePath));
+                        taskRaw = await fs.readFile(filePath);
+                        digest = computePlanningDigest(taskRaw);
                     } catch {
                         digest = undefined;
                     }
@@ -295,12 +333,32 @@ export async function finalizeIdeaHandoff(options: FinalizeIdeaHandoffOptions): 
                         } else if (typeof row.planningDigest !== 'string' || row.planningDigest !== digest) {
                             reason = 'planning digest stale — task content changed after preparation';
                         } else {
-                            const verdict = verifyReadyChecks(
-                                Array.isArray(row.checks)
-                                    ? (row.checks as Array<{ id: string; pass: boolean; evidence: string }>)
-                                    : undefined,
-                            );
-                            if (!verdict.ok) reason = verdict.reason;
+                            const checks = Array.isArray(row.checks)
+                                ? (row.checks as Array<{ id: string; pass: boolean; evidence: string }>)
+                                : undefined;
+                            const verdict = verifyReadyChecks(checks);
+                            if (!verdict.ok) {
+                                reason = verdict.reason;
+                            } else {
+                                // task 0947 R2: the run's feature binding must still match the
+                                // task frontmatter after any operator re-parent — drift degrades
+                                // instead of blessing stale handoff evidence (prose is never
+                                // rewritten; evidence strings stay advisory).
+                                const fmFeatureId = taskRaw === undefined ? null : taskFrontmatterFeatureId(taskRaw);
+                                if (fmFeatureId !== null && fmFeatureId !== featureId) {
+                                    reason = `feature drift — task feature_id ${fmFeatureId} != run feature ${featureId}`;
+                                }
+                            }
+                            if (reason === undefined && checks !== undefined) {
+                                // task 0947 R1c: a structurally passing `premises` row is not
+                                // semantic readiness — its evidence must cite existing tree
+                                // locations; the first lint failure becomes the degrade reason.
+                                const premises = checks.find((c) => c.id === 'premises');
+                                if (premises !== undefined) {
+                                    const lint = await lintPremiseEvidence(premises.evidence, premiseLintIo(root, fs));
+                                    if (!lint.ok) reason = lint.reasons[0];
+                                }
+                            }
                         }
                     }
                 }
