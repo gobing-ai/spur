@@ -269,3 +269,4 @@
 | Time | Action | File(s) | Outcome | ~Tokens |
 |------|--------|---------|---------|--------|
 | 15:48 | dev-runall --feature H1 aborted at strict feature-check gate (task 0510 R2): 3x L4.evidence-not-recoverable (0141/0161/0482 legacy done-tasks, pre-durable-recording evidence) | .spur/run/runall-h1-aborted.json | verdict=aborted, 0 tasks started, no worktree created; candidates 0931-0934 (todo) unresolved; resume after evidence repair | ~15k |
+| 09:18 | Evidence repair for H1 gate: verdict artifacts via 'spur task verdict --from-answer' for 0141 (16 rows), 0161 (14), 0482 (5), all PASS, fresh 2026-09-24 anchors; strict check ENR 3→0, SU 66→31 (0477:17 + 0931-34:14, non-aborting) | .spur/run/{0141,0161,0482}-verify-answer.txt + verdict.json | feature check H1 --strict: 31 SU-only, gate clear; NOTE 0477 covers 17 SU scenarios — will resurface at feature-done | ~40k |
