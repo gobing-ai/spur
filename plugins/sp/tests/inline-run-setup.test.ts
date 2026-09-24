@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 /**
- * Task 0804 R8/P2 (SECUA): the inline run setup delegate writes
- * `.spur/run/<run-id>-inline-setup.json`, so `--run-id` must be validated as a single safe
- * filename component BEFORE any outcome write — the same refusal class the task-pipeline
- * route-reason shell action applies to `$__runId` (task 0804 R8): path separators, dot
- * traversal and unresolved interpolation exit nonzero without an artifact.
+ * Task 0804 R8/P2 (SECUA): the inline run setup delegate writes the two-file run record
+ * (`.spur/run/<run-id>.state.json` + `.spur/run/<run-id>.md`, task 0927), so `--run-id` must be
+ * validated as a single safe filename component BEFORE any outcome write — the same refusal
+ * class the task-pipeline route-reason shell action applies to `$__runId` (task 0804 R8):
+ * path separators, dot traversal and unresolved interpolation exit nonzero without an artifact.
  */
 
 const SCRIPT = join(import.meta.dir, '..', 'scripts', 'inline-run-setup.ts');
@@ -27,7 +27,7 @@ test('an unsafe run id refuses with exit 1 and writes no outcome artifact', () =
             expect(proc.stderr, `expected actionable refusal for ${unsafeId}`).toContain('refusing unsafe run id');
 
             // The guard fires before any file work: no `.spur` tree (and therefore no
-            // `.spur/run/<id>-inline-setup.json`, at the traversal target either).
+            // `.spur/run/<id>.state.json` / `<id>.md`, at the traversal target either).
             expect(existsSync(join(dir, '.spur')), `no artifact for ${unsafeId}`).toBe(false);
         }
     } finally {
@@ -49,12 +49,12 @@ test('a valid run id passes the guard and reaches the normal fail-closed path (n
         expect(proc.status).toBe(1);
         expect(proc.stderr).not.toContain('refusing unsafe run id');
         expect(proc.stderr).toContain('could not resolve the workflow definition');
-        const outcome = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${runId}-inline-setup.json`), 'utf8')) as {
-            ok: boolean;
+        const state = JSON.parse(readFileSync(join(dir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+            runId: string;
             error?: string;
         };
-        expect(outcome.ok).toBe(false);
-        expect(outcome.error).toContain('could not resolve the workflow definition');
+        expect(state.runId).toBe(runId);
+        expect(state.error).toContain('could not resolve the workflow definition');
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
@@ -108,7 +108,9 @@ function makeDelegateFixture(behavior: DelegateBehavior) {
     mkdirSync(join(repoRoot, 'packages', 'app', 'src'), { recursive: true });
     writeFileSync(
         join(repoRoot, 'apps', 'cli', 'src', 'index.ts'),
-        'console.log(JSON.stringify({ source: { path: "fixture", layer: "project" } }));\n',
+        // The canary stands in for a secret inside the resolved definition body: the setup
+        // delegate receives the inventory but must never copy its contents into the record.
+        'console.log(JSON.stringify({ source: { path: "fixture", layer: "project" }, body: "SPUR-CANARY-0927" }));\n',
     );
     writeFileSync(join(repoRoot, 'packages', 'app', 'src', 'index.ts'), fixtureAppSource(behavior, markerFile));
     return {
@@ -145,12 +147,48 @@ test('delegate cleanup: setup success closes the DB exactly once and exits 0 (08
         expect(proc.status).toBe(0);
         expect(proc.stderr).toContain('created run');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
-        const outcome = JSON.parse(
-            readFileSync(join(workdir, '.spur', 'run', `${runId}-inline-setup.json`), 'utf8'),
-        ) as {
-            ok: boolean;
+        // 0927 R1: the setup outcome lives in the run-record pair.
+        const state = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as Record<
+            string,
+            unknown
+        >;
+        expect(state).toMatchObject({
+            schemaVersion: 1,
+            runId,
+            workflowName: 'fixture',
+            status: 'running',
+            definitionDigest: `sha256:${'a'.repeat(64)}`,
+            layer: 'project',
+        });
+        expect(readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')).toContain(
+            `# spur inline run ${runId} — fixture`,
+        );
+        // 0927 AC2: the canary in the resolved inventory never reaches the pair.
+        expect(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')).not.toContain(
+            'SPUR-CANARY-0927',
+        );
+        expect(readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')).not.toContain('SPUR-CANARY-0927');
+        // 0927 R4: the retired sidecars stay retired for new runs — a consumer still
+        // expecting `<run-id>-inline-setup.json` or `<run-id>.log` fails here.
+        expect(existsSync(join(workdir, '.spur', 'run', `${runId}-inline-setup.json`))).toBe(false);
+        expect(existsSync(join(workdir, '.spur', 'run', `${runId}.log`))).toBe(false);
+        // A re-setup of the same run id rewrites the state but appends no second header.
+        const startedBefore = (
+            JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+                startedAt?: string;
+            }
+        ).startedAt;
+        const rerun = runDelegate(workdir, runId, stub.appEntry);
+        expect(rerun.status).toBe(0);
+        const headers = readFileSync(join(workdir, '.spur', 'run', `${runId}.md`), 'utf8')
+            .split('\n')
+            .filter((line) => line.startsWith('# spur inline run'));
+        expect(headers).toHaveLength(1);
+        // 0927 R2: re-setup carries the original startedAt forward instead of resetting it.
+        const stateAfter = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+            startedAt?: string;
         };
-        expect(outcome.ok).toBe(true);
+        expect(stateAfter.startedAt).toBe(startedBefore);
     } finally {
         cleanup();
         stub.cleanup();
@@ -166,14 +204,12 @@ test('delegate cleanup: a returned ok:false refusal closes the DB exactly once a
         expect(proc.status).toBe(1);
         expect(proc.stderr).toContain('fixture returned refusal');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
-        const outcome = JSON.parse(
-            readFileSync(join(workdir, '.spur', 'run', `${runId}-inline-setup.json`), 'utf8'),
-        ) as {
-            ok: boolean;
+        const state = JSON.parse(readFileSync(join(workdir, '.spur', 'run', `${runId}.state.json`), 'utf8')) as {
+            runId: string;
             error?: string;
         };
-        expect(outcome.ok).toBe(false);
-        expect(outcome.error).toContain('fixture returned refusal');
+        expect(state.runId).toBe(runId);
+        expect(state.error).toContain('fixture returned refusal');
     } finally {
         cleanup();
         stub.cleanup();
@@ -188,8 +224,9 @@ test('delegate cleanup: a thrown failure after the DB opens still closes it exac
         expect(proc.status).toBe(1);
         expect(proc.stderr).toContain('fixture thrown failure');
         expect(stub.markers()).toEqual(['open', 'setup', 'close']);
-        // A thrown failure keeps the stderr failure behavior and writes no outcome document.
-        expect(existsSync(join(workdir, '.spur', 'run', '0809-delegate-throw-inline-setup.json'))).toBe(false);
+        // A thrown failure keeps the stderr failure behavior and writes no record files.
+        expect(existsSync(join(workdir, '.spur', 'run', '0809-delegate-throw.state.json'))).toBe(false);
+        expect(existsSync(join(workdir, '.spur', 'run', '0809-delegate-throw.md'))).toBe(false);
     } finally {
         cleanup();
         stub.cleanup();

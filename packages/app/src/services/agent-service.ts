@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
+import { basename, join } from 'node:path';
 import { isatty } from 'node:tty';
 import {
     type ExecutorAvailability,
@@ -74,6 +75,7 @@ import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
 import { FleetService } from './fleet-service';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
+import { readWorkflowRunRecord } from './workflow-service';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -2540,15 +2542,22 @@ export class AgentService {
     /**
      * Collect path-only artifact refs for a finished run (design §4). Probes
      * project-relative paths that exist on disk; never embeds file bodies.
+     *
+     * Read through the shared two-file record seam (task 0927 R4 — the last declared
+     * `.log` reader migrated): a pair record refs the `<runId>.md` human log; a run
+     * that predates the pair keeps its legacy `<runId>.log` ref in place. Missing
+     * record → no ref.
      */
     private async resolveArtifactRefs(runId: string): Promise<CoordinationArtifactRef[]> {
         const refs: CoordinationArtifactRef[] = [];
-        const logPath = `.spur/run/${runId}.log`;
-        try {
-            await createNodeFileSystem(this.ctx.cwd).stat(logPath);
-            refs.push({ kind: 'log', path: logPath });
-        } catch {
-            // missing file → no ref
+        // 0927: read through the shared two-file record seam; keep the persisted ref
+        // path project-relative, exactly as the legacy `.log` probe reported it.
+        const runDir = join(this.ctx.cwd, '.spur', 'run');
+        const record = readWorkflowRunRecord(runDir, runId);
+        if (record.kind === 'pair' || record.kind === 'incomplete') {
+            refs.push({ kind: 'log', path: join('.spur', 'run', basename(record.markdownPath)) });
+        } else if (record.kind === 'legacy-log') {
+            refs.push({ kind: 'log', path: join('.spur', 'run', basename(record.logPath)) });
         }
         return refs;
     }

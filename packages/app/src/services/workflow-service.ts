@@ -1,4 +1,4 @@
-import { realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
@@ -949,6 +949,10 @@ export class WorkflowAppService {
      * the only gate — a still-running run whose log is old enough is reclaimed
      * too (rare, and acceptable under the policy). A missing run dir is a no-op.
      *
+     * Scope is legacy `.log` names only (0925 R4): the two-file run record
+     * (`<runId>.md` + `<runId>.state.json`) is NOT reclaimed until a pair
+     * retention policy is selected.
+     *
      * @param retentionDays Logs older than this many days are reclaimed. Default 30.
      * @param dryRun When true, report what would be removed without unlinking.
      */
@@ -1538,6 +1542,17 @@ export class WorkflowAppService {
             return this.traceRun(db, runIdOrFilter);
         }
         return this.traceList(db, runIdOrFilter ?? {});
+    }
+
+    /**
+     * Bounded run-record inspection for the Board run detail (0929 R1/R2) —
+     * the confined, redacted, bounded read over this project's `.spur/run`
+     * directory. Read-only; the DB trace remains the lifecycle authority.
+     */
+    inspectRunRecord(runId: string): WorkflowRunRecordInspection {
+        return inspectWorkflowRunRecord(join(this.ctx.cwd, '.spur', 'run'), runId, {
+            secretValues: this.ctx.secretValues,
+        });
     }
     private async traceList(db: DbAdapter, filter: WorkflowTraceFilter): Promise<WorkflowTraceListResult> {
         const dao = new RunDao(db);
@@ -2473,12 +2488,150 @@ export function resolveOutputLogConfig(config: SpurConfig | null): WorkflowRunLo
 }
 
 /**
- * Relative path to a run's consolidated all-in-one log
- * (`.spur/run/<runId>.log`, feature D2 / task 0426), when the file exists.
+ * Relative path to a run's human run record — `.spur/run/<runId>.md` for new
+ * runs (E7 / task 0925), with the legacy `.spur/run/<runId>.log` (feature D2 /
+ * task 0426) as a read-only fallback — for `run.artifact` metadata. The pair's
+ * `.state.json` is intentionally not linked here; the DB trace stays the
+ * completion authority (0925 R2/R3).
  */
 async function outputArtifactForRun(cwd: string, runId: string): Promise<string | undefined> {
-    const relative = join('.spur', 'run', `${runId}.log`);
-    return (await fileExists(join(cwd, relative))) ? relative : undefined;
+    for (const name of [`${runId}.md`, `${runId}.log`]) {
+        const relative = join('.spur', 'run', name);
+        if (await fileExists(join(cwd, relative))) return relative;
+    }
+    return undefined;
+}
+
+/** Explicit outcome of reading a run's persisted record from disk (E7 / task 0926 R3). */
+export type WorkflowRunRecordRead =
+    | { kind: 'pair'; markdownPath: string; statePath: string; state: Record<string, unknown> }
+    | {
+          kind: 'incomplete';
+          markdownPath: string;
+          statePath: string;
+          reason: 'state-missing' | 'state-invalid';
+      }
+    | { kind: 'legacy-log'; logPath: string }
+    | { kind: 'missing' };
+
+/**
+ * Detect a run's record format and read its machine state (E7 / task 0926 — the
+ * shared reader seam behind the workflow service for the follow tail and the
+ * 0927/0929 surfaces). Precedence: a valid pair wins; a `.md` whose state file
+ * is missing or unparseable is an explicit INCOMPLETE record — never success,
+ * never synthesized from the markdown; a historical `.log`-only run stays
+ * readable in place with no bulk migration; the DB trace remains the lifecycle
+ * authority regardless of what is on disk.
+ */
+export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRunRecordRead {
+    // Run ids key file names under the run dir — reject traversal before any path is built.
+    if (runId.includes('/') || runId.includes('\\') || runId.includes('..')) {
+        throw new Error(`Invalid workflow run id: ${JSON.stringify(runId)}`);
+    }
+    const markdownPath = join(runDir, `${runId}.md`);
+    const statePath = join(runDir, `${runId}.state.json`);
+    if (existsSync(markdownPath)) {
+        if (!existsSync(statePath)) {
+            return { kind: 'incomplete', markdownPath, statePath, reason: 'state-missing' };
+        }
+        try {
+            const state: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+            if (state !== null && typeof state === 'object' && !Array.isArray(state)) {
+                return { kind: 'pair', markdownPath, statePath, state: state as Record<string, unknown> };
+            }
+        } catch {
+            // Unparseable state → explicit invalid outcome below.
+        }
+        return { kind: 'incomplete', markdownPath, statePath, reason: 'state-invalid' };
+    }
+    const legacyLogPath = join(runDir, `${runId}.log`);
+    if (existsSync(legacyLogPath)) return { kind: 'legacy-log', logPath: legacyLogPath };
+    return { kind: 'missing' };
+}
+
+/** Byte cap for a Board run-record inspection (0929 R2) — one bounded JSON response. */
+export const RUN_RECORD_INSPECT_MAX_BYTES = 256 * 1024;
+
+/** Explicit bounded outcome of a Board run-record inspection (0929 R2). */
+export type WorkflowRunRecordInspection =
+    | { status: 'record'; markdown: string; state: Record<string, unknown> }
+    | { status: 'incomplete'; markdown: string; reason: 'state-missing' | 'state-invalid' }
+    | { status: 'legacy'; content: string }
+    | { status: 'oversized'; sizeBytes: number }
+    | { status: 'missing' };
+
+/**
+ * Outcome of reading one run-record file under confinement: the text, an
+ * explicit oversized signal, or nothing (escaped/vanished → missing).
+ */
+type ConfinedRunFile = { text: string } | { oversized: number } | undefined;
+
+/**
+ * Read one run-record file only if it resolves beneath the run directory
+ * (0929 R1): a symlink escape never serves content, and a file that grew past
+ * the byte cap between detection and read is `oversized`, never truncated.
+ */
+function readConfinedRunFile(realRunDir: string, path: string, maxBytes: number): ConfinedRunFile {
+    try {
+        const real = realpathSync(path);
+        if (real !== realRunDir && !real.startsWith(realRunDir + sep)) return undefined;
+        const size = statSync(real).size;
+        if (size > maxBytes) return { oversized: size };
+        return { text: readFileSync(real, 'utf8') };
+    } catch {
+        return undefined; // vanished (or unreadable) between detection and read → missing
+    }
+}
+
+/**
+ * Confined, redacted, bounded run-record inspection behind the Board read
+ * route (E7 / task 0929 R1/R2). Builds on the shared {@link readWorkflowRunRecord}
+ * seam — no second format parser — and adds the remote-read guarantees: every
+ * served file must resolve beneath the run directory, text is re-redacted
+ * against the caller's secrets and capped before it leaves the process, and
+ * the outcome is an explicit union — a present pair, a legacy-only log, an
+ * incomplete record, oversized content, or missing. `expired` is reserved for
+ * persisted cleanup evidence; the current log cleaner leaves no tombstone, so
+ * absence alone is `missing`. Completion stays a DB-trace fact; nothing here
+ * infers status from the record text.
+ */
+export function inspectWorkflowRunRecord(
+    runDir: string,
+    runId: string,
+    opts: { secretValues?: readonly string[]; maxBytes?: number } = {},
+): WorkflowRunRecordInspection {
+    const maxBytes = opts.maxBytes ?? RUN_RECORD_INSPECT_MAX_BYTES;
+    const secrets = opts.secretValues ?? [];
+    const record = readWorkflowRunRecord(runDir, runId); // rejects traversal-shaped ids
+    if (record.kind === 'missing') return { status: 'missing' };
+    let realRunDir: string;
+    try {
+        realRunDir = realpathSync(runDir);
+    } catch {
+        return { status: 'missing' }; // run dir vanished between detection and read
+    }
+    if (record.kind === 'legacy-log') {
+        const file = readConfinedRunFile(realRunDir, record.logPath, maxBytes);
+        if (file === undefined) return { status: 'missing' };
+        if ('oversized' in file) return { status: 'oversized', sizeBytes: file.oversized };
+        // The legacy `.log` predates write-time redaction — scrub it again on read.
+        return { status: 'legacy', content: redactAndBound(file.text, secrets, maxBytes) };
+    }
+    const mdFile = readConfinedRunFile(realRunDir, record.markdownPath, maxBytes);
+    if (mdFile === undefined) return { status: 'missing' };
+    if ('oversized' in mdFile) return { status: 'oversized', sizeBytes: mdFile.oversized };
+    const markdown = redactAndBound(mdFile.text, secrets, maxBytes);
+    if (record.kind === 'incomplete') {
+        return { status: 'incomplete', markdown, reason: record.reason };
+    }
+    const stateFile = readConfinedRunFile(realRunDir, record.statePath, maxBytes);
+    if (stateFile === undefined) {
+        // The state file cannot be served (escaped or vanished) — the record
+        // degrades to incomplete, never to a synthesized state (0929 R2).
+        return { status: 'incomplete', markdown, reason: 'state-invalid' };
+    }
+    if ('oversized' in stateFile) return { status: 'oversized', sizeBytes: stateFile.oversized };
+    return { status: 'record', markdown, state: record.state };
 }
 
 /**

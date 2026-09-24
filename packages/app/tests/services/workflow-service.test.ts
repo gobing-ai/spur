@@ -15,10 +15,14 @@ import {
 import * as loaderModule from '@gobing-ai/spur-config/loader';
 import { ActionRunDao, createMigratedDb, RunDao, TaskRunLinkDao } from '@gobing-ai/spur-domain';
 import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
+import { EventBus } from '@gobing-ai/ts-infra';
 import { parse as yamlParse } from 'yaml';
+import { WorkflowRunLogSink } from '../../src/observability/workflow-run-log-sink';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import {
+    inspectWorkflowRunRecord,
+    readWorkflowRunRecord,
     resolveOutputLogConfig,
     resolveWorkflowDefinition,
     resolveWorkflowFile,
@@ -26,6 +30,7 @@ import {
     WorkflowAppService,
     type WorkflowListResult,
 } from '../../src/services/workflow-service';
+import type { WorkflowObservabilityEventMap } from '../../src/workflow/observability';
 
 const PAUSING_YAML = `name: pauser-svc
 kind: state-machine
@@ -2517,6 +2522,33 @@ terminalStates:
             await rm(dir, { recursive: true, force: true });
         });
 
+        test('0925 R4 — the two-file run record is never reclaimed by .log cleanup', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-log-'));
+            const oldLog = await seedLog(dir, 'run_old', Date.now() - 40 * DAY);
+            const runDir = join(dir, '.spur', 'run');
+            const mdPath = join(runDir, 'run_old.md');
+            const statePath = join(runDir, 'run_old.state.json');
+            await writeFile(mdPath, 'record');
+            await writeFile(statePath, '{"status":"done"}');
+            const old = new Date(Date.now() - 40 * DAY);
+            await utimes(mdPath, old, old);
+            await utimes(statePath, old, old);
+
+            // Dry-run reports only the eligible .log.
+            const dry = await new WorkflowAppService(makeCtx(dir)).cleanRunLogs(30, true);
+            expect(dry.reclaimed.map((r) => r.runId)).toEqual(['run_old']);
+            expect(await readFile(mdPath, 'utf8')).toBe('record');
+            expect(await readFile(statePath, 'utf8')).toContain('done');
+
+            // Apply deletes only the eligible .log; both pair files remain.
+            const apply = await new WorkflowAppService(makeCtx(dir)).cleanRunLogs(30, false);
+            expect(apply.reclaimed.map((r) => r.runId)).toEqual(['run_old']);
+            await expect(readFile(oldLog, 'utf8')).rejects.toThrow();
+            expect(await readFile(mdPath, 'utf8')).toBe('record');
+            expect(await readFile(statePath, 'utf8')).toContain('done');
+            await rm(dir, { recursive: true, force: true });
+        });
+
         test('ignores non-log files in the run dir', async () => {
             const dir = await mkdtemp(join(tmpdir(), 'spur-wf-log-'));
             await seedLog(dir, 'run_old', Date.now() - 40 * DAY);
@@ -2526,6 +2558,289 @@ terminalStates:
 
             expect(result.reclaimed.map((r) => r.runId)).toEqual(['run_old']);
             expect(await readFile(join(dir, '.spur', 'run', 'README.md'), 'utf8')).toBe('keep me');
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    describe('readWorkflowRunRecord (E7 / task 0926 R3 — shared reader seam)', () => {
+        test('pair: markdown + valid state reads as a pair', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r1.md'), '# record');
+            await writeFile(join(runDir, 'r1.state.json'), '{"schemaVersion":1,"runId":"r1","status":"done"}');
+
+            const record = readWorkflowRunRecord(runDir, 'r1');
+            expect(record.kind).toBe('pair');
+            if (record.kind !== 'pair') throw new Error('expected a pair record');
+            expect(record.state).toMatchObject({ runId: 'r1', status: 'done' });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('incomplete: a missing state file is an explicit incomplete record, not success', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r2.md'), '# record');
+
+            const record = readWorkflowRunRecord(runDir, 'r2');
+            expect(record).toEqual({
+                kind: 'incomplete',
+                markdownPath: join(runDir, 'r2.md'),
+                statePath: join(runDir, 'r2.state.json'),
+                reason: 'state-missing',
+            });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('incomplete: an unparseable state file reads as state-invalid, never synthesized', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r3.md'), '# record');
+            await writeFile(join(runDir, 'r3.state.json'), '{ not json');
+
+            const record = readWorkflowRunRecord(runDir, 'r3');
+            expect(record.kind).toBe('incomplete');
+            if (record.kind !== 'incomplete') throw new Error('expected an incomplete record');
+            expect(record.reason).toBe('state-invalid');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('legacy-log: a .log-only run stays readable in place (no bulk migration)', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r4.log'), 'legacy');
+
+            expect(readWorkflowRunRecord(runDir, 'r4')).toEqual({
+                kind: 'legacy-log',
+                logPath: join(runDir, 'r4.log'),
+            });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('missing: nothing on disk reads as missing', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+
+            expect(readWorkflowRunRecord(runDir, 'r5')).toEqual({ kind: 'missing' });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('rejects traversal run ids before any path is built', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+
+            for (const bad of ['../escape', 'a/b', 'a\\b', '..']) {
+                expect(() => readWorkflowRunRecord(runDir, bad)).toThrow(/Invalid workflow run id/);
+            }
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    describe('inspectWorkflowRunRecord (E7 / task 0929 R1/R2 — confined Board read)', () => {
+        test('pair: serves the bounded, re-redacted markdown with the parsed machine state', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r1.md'), '# record\nsecret=hunter2');
+            await writeFile(join(runDir, 'r1.state.json'), '{"runId":"r1","status":"done"}');
+
+            const outcome = inspectWorkflowRunRecord(runDir, 'r1', { secretValues: ['hunter2'] });
+            expect(outcome.status).toBe('record');
+            if (outcome.status !== 'record') throw new Error('expected a record outcome');
+            expect(outcome.markdown).toContain('# record');
+            expect(outcome.markdown).not.toContain('hunter2');
+            expect(outcome.state).toMatchObject({ runId: 'r1', status: 'done' });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('legacy: a .log-only run is re-redacted on read and capped', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r2.log'), 'legacy line\ntoken=hunter2');
+
+            const outcome = inspectWorkflowRunRecord(runDir, 'r2', { secretValues: ['hunter2'] });
+            expect(outcome.status).toBe('legacy');
+            if (outcome.status !== 'legacy') throw new Error('expected a legacy outcome');
+            expect(outcome.content).toContain('legacy line');
+            expect(outcome.content).not.toContain('hunter2');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('missing: an absent record is missing — absence alone is never expired', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+
+            expect(inspectWorkflowRunRecord(runDir, 'r3')).toEqual({ status: 'missing' });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('incomplete: missing or invalid state keeps the human log under an explicit incomplete label', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r4.md'), '# record');
+            await writeFile(join(runDir, 'r5.md'), '# record');
+            await writeFile(join(runDir, 'r5.state.json'), '{ not json');
+
+            expect(inspectWorkflowRunRecord(runDir, 'r4', { maxBytes: 1024 })).toEqual({
+                status: 'incomplete',
+                markdown: '# record',
+                reason: 'state-missing',
+            });
+            const outcome = inspectWorkflowRunRecord(runDir, 'r5', { maxBytes: 1024 });
+            expect(outcome.status).toBe('incomplete');
+            if (outcome.status !== 'incomplete') throw new Error('expected an incomplete outcome');
+            expect(outcome.reason).toBe('state-invalid');
+            expect(outcome.markdown).toBe('# record');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('oversized: a file past the cap is an explicit oversized outcome, not truncated content', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            const big = 'x'.repeat(64);
+            await writeFile(join(runDir, 'r6.md'), big);
+            await writeFile(join(runDir, 'r6.state.json'), '{}');
+
+            const outcome = inspectWorkflowRunRecord(runDir, 'r6', { maxBytes: 8 });
+            expect(outcome).toEqual({ status: 'oversized', sizeBytes: 64 });
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('symlink escape: a record resolving outside the run dir is missing and never served', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(dir, 'outside.md'), '# escaped');
+            await symlink(join(dir, 'outside.md'), join(runDir, 'r7.md'));
+            await writeFile(join(runDir, 'r7.state.json'), '{}');
+
+            expect(inspectWorkflowRunRecord(runDir, 'r7')).toEqual({ status: 'missing' });
+            // An escaped (but valid) state file degrades the pair to incomplete
+            // instead of serving content from outside the run dir.
+            await writeFile(join(dir, 'outside.state.json'), '{"leaked":true}');
+            await writeFile(join(runDir, 'r8.md'), '# record');
+            await symlink(join(dir, 'outside.state.json'), join(runDir, 'r8.state.json'));
+            const outcome = inspectWorkflowRunRecord(runDir, 'r8');
+            expect(outcome.status).toBe('incomplete');
+            if (outcome.status !== 'incomplete') throw new Error('expected an incomplete outcome');
+            expect(outcome.reason).toBe('state-invalid');
+            expect(JSON.stringify(outcome)).not.toContain('leaked');
+            await rm(dir, { recursive: true, force: true });
+        });
+
+        test('traversal run ids are rejected before any path is built', () => {
+            for (const bad of ['../escape', 'a/b', 'a\\b', '..']) {
+                expect(() => inspectWorkflowRunRecord('/tmp/spur-run', bad)).toThrow(/Invalid workflow run id/);
+            }
+        });
+
+        test('WorkflowAppService.inspectRunRecord reads beneath ctx.cwd/.spur/run', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-inspect-'));
+            const runDir = join(dir, '.spur', 'run');
+            await mkdir(runDir, { recursive: true });
+            await writeFile(join(runDir, 'r9.md'), 'pw=hunter2');
+            await writeFile(join(runDir, 'r9.state.json'), '{"status":"done"}');
+
+            const svc = new WorkflowAppService(makeCtx(dir));
+            const outcome = svc.inspectRunRecord('r9');
+            expect(outcome.status).toBe('record');
+            if (outcome.status !== 'record') throw new Error('expected a record outcome');
+            expect(outcome.markdown).toBe('pw=hunter2');
+            expect(outcome.state).toMatchObject({ status: 'done' });
+            await rm(dir, { recursive: true, force: true });
+        });
+    });
+
+    describe('continue — run-record identity on resume (E7 / task 0926 AC1)', () => {
+        // A workflow that records an external side effect (counter append), then
+        // PAUSES at the gate, then finishes on resume.
+        const RECORD_RESUME_YAML = `name: resume-record-flow
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: 'echo "tick" >> counter.txt'
+  - id: gate
+    pause: true
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+        test('resume keeps the run id, appends only new sections, settles state from the trace, and never repeats the recorded effect', async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'spur-wf-record-'));
+            const wfDir = join(dir, '.spur', 'workflows');
+            await mkdir(wfDir, { recursive: true });
+            const wfPath = join(wfDir, 'record.yaml');
+            await writeFile(wfPath, RECORD_RESUME_YAML);
+            const bus = new EventBus<WorkflowObservabilityEventMap>();
+            const svc = new WorkflowAppService({ ...makeCtx(dir), observabilityBus: () => bus });
+            const runDir = join(dir, '.spur', 'run');
+            const counter = join(dir, 'counter.txt');
+            const readCounter = async (): Promise<string[]> => {
+                const text = await readFile(counter, 'utf8');
+                return text.trim().split('\n');
+            };
+
+            // First run: records the side effect once, then pauses.
+            const firstSink = new WorkflowRunLogSink({ bus, dir: runDir, runId: 'rec1' });
+            const first = await svc.run(wfPath, { runId: 'rec1' });
+            expect(first.status).toBe('paused');
+            firstSink.close();
+
+            const mdPath = join(runDir, 'rec1.md');
+            const mdAfterRun = await readFile(mdPath, 'utf8');
+            const stateAfterRun = JSON.parse(await readFile(join(runDir, 'rec1.state.json'), 'utf8')) as Record<
+                string,
+                unknown
+            >;
+            expect(stateAfterRun).toMatchObject({ runId: 'rec1', status: 'paused' });
+            expect(await readCounter()).toEqual(['tick']);
+
+            // Supported resume path: a NEW sink on the same bus, same run id (the
+            // `workflow continue` wiring).
+            const resumeSink = new WorkflowRunLogSink({ bus, dir: runDir, runId: 'rec1' });
+            const resumed = await svc.continuePaused('rec1');
+            expect(resumed.status).toBe('done');
+            resumeSink.close();
+
+            // Append-only record: every original byte intact, new sections after.
+            const mdAfterResume = await readFile(mdPath, 'utf8');
+            expect(mdAfterResume.startsWith(mdAfterRun)).toBe(true);
+            expect(mdAfterResume.length).toBeGreaterThan(mdAfterRun.length);
+            // Record recovery does not repeat the prior external effect.
+            expect(await readCounter()).toEqual(['tick']);
+            // State agrees with the DB trace and keeps the original identity.
+            const stateAfterResume = JSON.parse(await readFile(join(runDir, 'rec1.state.json'), 'utf8')) as Record<
+                string,
+                unknown
+            >;
+            expect(stateAfterResume).toMatchObject({
+                schemaVersion: 1,
+                runId: 'rec1',
+                workflowName: 'resume-record-flow',
+                status: 'done',
+            });
+            expect(stateAfterResume.startedAt).toBe(stateAfterRun.startedAt);
             await rm(dir, { recursive: true, force: true });
         });
     });

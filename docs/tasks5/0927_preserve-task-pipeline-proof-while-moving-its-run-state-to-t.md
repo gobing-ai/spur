@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Preserve task-pipeline proof while moving its run state to the pair
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-23T05:09:42.308Z
-updated_at: "2026-09-23T05:19:49.058Z"
+updated_at: "2026-09-24T04:56:44.028Z"
 feature_id: E7
 priority: P2
 tags:
@@ -23,21 +23,21 @@ Covers E7 R4 and reinforces R2 for the highest-risk canonical workflow. `task-pi
 
 ### Requirements
 
-- [ ] R1. Migrate only task-pipeline-owned run state and run-log sidecars to the pair; keep WBS-keyed verdict, proof, and gate evidence at their independent authoritative paths.
-- [ ] R2. Preserve precheck, quality, review, verify, record, terminal closure, and safe resume decisions against the same current-input digest.
-- [ ] R3. Prove source and bundle-only installed execution produce the same run identity and record behavior, including a project override.
-- [ ] R4. Remove an old run-record sidecar only after its last declared reader is migrated, with a test that fails if a consumer still expects it.
+- [x] R1. Migrate only task-pipeline-owned run state and run-log sidecars to the pair; keep WBS-keyed verdict, proof, and gate evidence at their independent authoritative paths.
+- [x] R2. Preserve precheck, quality, review, verify, record, terminal closure, and safe resume decisions against the same current-input digest.
+- [x] R3. Prove source and bundle-only installed execution produce the same run identity and record behavior, including a project override.
+- [x] R4. Remove an old run-record sidecar only after its last declared reader is migrated, with a test that fails if a consumer still expects it.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Current callers survive the storage migration (req: R1)
+- [x] AC1 — Current callers survive the storage migration (req: R1)
   Given task-pipeline's post-D63 run-directory writer/reader inventory
   When source and installed inline or subprocess execution reaches terminal status or resumes after interruption
   Then record-owned data uses the shared pair and every task-proof consumer still reads its authoritative evidence
   And an obsolete sidecar is retired only after a test proves no declared consumer needs it
   Verify with task-pipeline and plugin smoke fixtures, including a project override and a real current-input digest.
 
-- [ ] AC2 — Recording preserves privacy and current proof (req: R2)
+- [x] AC2 — Recording preserves privacy and current proof (req: R2)
   Given a canary secret and a task whose proof is bound to the current input and definition digest
   When task-pipeline records and inspects a run
   Then the canary is absent from the pair and the current-input, `run.artifact`, verdict, and DB trace checks still control completion
@@ -66,15 +66,38 @@ Covers E7 R4 and reinforces R2 for the highest-risk canonical workflow. `task-pi
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+R1 — inline/plugin drivers now produce the shared two-file record: `plugins/sp/scripts/inline-run-setup.ts:41` (and its regenerated bundled twin `inline-run-setup.mjs`) writes `.spur/run/<runId>.state.json` (schemaVersion 1, atomic temp+rename; identity fields workflowName/status/attached/workflowVersion/resolvedPath/layer/definitionDigest, startedAt preserved on re-setup) plus a one-line run-start header in `.spur/run/<runId>.md`; trace failure lines append to the same `.md`. R2 — same-digest re-setup reattaches and the `.md` keeps exactly one header. R3 — installed (bundle-only) parity extended with a project-layer override scenario: the source CLI resolves `<project>/.spur/workflows/installed-smoke.yaml` (layer project, distinct digest) and the Node twin records the identical identity shape in the pair. R4 — the `-inline-setup.json` sidecar and driver `.log` writes are retired; the legacy `.log` is read-only fallback for pre-0927 runs via `readWorkflowRunRecord` (`packages/app/src/services/workflow-service.ts:2515`), and the last declared reader, `AgentService.resolveArtifactRefs` (`packages/app/src/services/agent-service.ts:2551`), now reads the seam (pair → `.md` ref, legacy → `.log` ref, none → no ref; ref paths stay project-relative). task-pipeline.yaml is deliberately unchanged: its YAML action outputs and WBS-keyed verdict/gate evidence are live run-scoped workflow data with existing readers; migrating them would need a new public API (0926 deferred). `-idea-*` idea-pipeline driver artifacts are 0928 scope.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | test + static-ref — plugins/sp/scripts/inline-run-setup.ts:186-235, plugins/sp/tests/inline-run-setup.test.ts:150-174, plugins/sp/tests/inline-run-trace.test.ts:150-158 |
+| R2 | MET | test + static-ref — plugins/sp/tests/inline-run-setup.test.ts:175-190, plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:91-93,266-271, plugins/sp/scripts/inline-run-setup.ts:201-206 |
+| R3 | MET | test + static-ref — plugins/sp/tests/inline-run-installed.test.ts:103-150, plugins/sp/scripts/inline-run-setup.mjs:72-113 |
+| R4 | MET | test + static-ref — packages/app/src/services/agent-service.ts:2551-2560, packages/app/src/services/workflow-service.ts:2515-2547, plugins/sp/tests/inline-run-setup.test.ts:172-174, plugins/sp/tests/inline-run-installed.test.ts:98-99, packages/app/tests/services/agent-service.test.ts:3266-3299 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | All current callers survive: engine path writes the pair (workflow-run-log-sink.ts:85-180, atomic state replace + .md), inline path writes the same pair (inline-run-setup.ts:186-235), followRunLog re-detects record format per poll and switches legacy .log → .md mid-follow (apps/cli/src/commands/workflow.ts:1918-1936), resolveArtifactRefs migrated (agent-service.ts:2551-2560). Terminal and resume behavior covered (inline-run-trace.test.ts:88-110 DB queryability, workflow-service.test.ts resume test, apps/cli workflow.test.ts continue-keeps-identity test). Obsolete sidecar retired only after the last reader migrated, guarded by absence assertions (inline-run-setup.test.ts:172-174, inline-run-installed.test.ts:98-99, override-run 137-150). Fixtures are real: inline-pipeline-driver.test.ts:53 loads config/workflows/task-pipeline.yaml; inline-run-installed.test.ts uses a real workflow-show projection digest incl. the project override. |
+| AC2 | MET | test | Canary SPUR-CANARY-0927 planted in the resolved definition body (inline-run-setup.test.ts:111-113) never reaches either pair file (assertions at :166-170); engine-path canary spur-canary-secret-9f2c never reaches .md or .state.json (workflow-run-log-sink.test.ts 0925-AC2 canary test, redaction at sink write — workflow-run-log-sink.ts:320-326). Proof stays current-input bound: driver identity-agreement STOP preserved (inline-pipeline-driver.md:266-271 reading .state.json), run.artifact metadata prefers .md then legacy .log (workflow-service.ts:2487-2490), verdict/DB-trace authority untouched (task-pipeline.yaml unchanged; inline-run-trace.test.ts:91-110 queries action_runs without any record-file read); record/proof readers exercised unmocked (installed test runs the real bundled twin; agent-service test drives the real service against on-disk fixtures). |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:62bc4639fa4675cf5ba992a110f55505854c61a7bdfbb88eb0274e5226538057 |
 
 ### References
 
@@ -83,3 +106,8 @@ Covers E7 R4 and reinforces R2 for the highest-risk canonical workflow. `task-pi
 - D63 is active in a separate worktree at refinement time. Recheck the merged YAML, inline driver, plugin bundle, and 0925–0926 contracts before implementation.
 
 ### History
+
+- 2026-09-24T04:08:31.384Z todo → wip (system)
+- 2026-09-24T04:56:42.072Z wip → testing (system)
+- 2026-09-24T04:56:44.028Z testing → done (system)
+

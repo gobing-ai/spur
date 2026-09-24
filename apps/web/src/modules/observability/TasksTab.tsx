@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Card, CardBody, Loading } from '@/ui';
+import { Badge, Button, Card, CardBody, Loading } from '@/ui';
 import { fetchWithTimeout, resolveApiUrl } from '../../lib/rpc-client';
 import { formatDuration, parseHistoryResponse, type SystemEventRow } from './SystemEventsTab';
 
@@ -203,6 +203,34 @@ function parseWbsLinksResponse(v: unknown): WbsLink[] | null {
         links.push({ runId: o.runId, kind: o.kind, linkedAt: o.linkedAt, run: parseRunListEntry(o.run) });
     }
     return links;
+}
+
+/** Wire shape of GET /api/observability/run-record/:runId (0929 R2). */
+type RunRecordOutcome =
+    | { status: 'record'; markdown: string; state: Record<string, unknown> }
+    | { status: 'incomplete'; markdown: string; reason: string }
+    | { status: 'legacy'; content: string }
+    | { status: 'oversized'; sizeBytes: number }
+    | { status: 'missing' };
+
+function parseRunRecordOutcome(v: unknown): RunRecordOutcome | null {
+    if (v === null || typeof v !== 'object') return null;
+    const o = v as Record<string, unknown>;
+    if (o.status === 'missing') return { status: 'missing' };
+    if (o.status === 'oversized') {
+        return isOptNum(o.sizeBytes) && o.sizeBytes !== null ? { status: 'oversized', sizeBytes: o.sizeBytes } : null;
+    }
+    if (o.status === 'legacy') return isStr(o.content) ? { status: 'legacy', content: o.content } : null;
+    if (o.status === 'incomplete') {
+        if (!isStr(o.markdown) || !isStr(o.reason)) return null;
+        return { status: 'incomplete', markdown: o.markdown, reason: o.reason };
+    }
+    if (o.status === 'record') {
+        if (!isStr(o.markdown)) return null;
+        if (o.state === null || typeof o.state !== 'object' || Array.isArray(o.state)) return null;
+        return { status: 'record', markdown: o.markdown, state: o.state as Record<string, unknown> };
+    }
+    return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -713,8 +741,134 @@ function RunDetailPanel({ detail }: { detail: RunDetail }) {
                 </div>
             )}
 
+            {/* Run record (0929 R3) — content only; status stays DB-trace derived */}
+            <RunRecordSection runId={detail.run.id} traceStatus={detail.run.status} />
             {detail.phases.length === 0 && detail.actions.length === 0 && detail.transitions.length === 0 && (
                 <div className="text-xs text-spur-text-muted italic">No phase or action detail available.</div>
+            )}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// RunRecordSection - bounded run-record inspection (0929 R1-R3)
+// ---------------------------------------------------------------------------
+
+function RunRecordSection({ runId, traceStatus }: { runId: string; traceStatus: string }) {
+    const [outcome, setOutcome] = useState<RunRecordOutcome | null>(null);
+    const [phase, setPhase] = useState<'idle' | 'loading' | 'error'>('idle');
+    const [error, setError] = useState<string | null>(null);
+
+    const load = useCallback(() => {
+        setPhase('loading');
+        setError(null);
+        (async () => {
+            try {
+                const res = await fetchWithTimeout(new Request(`${resolveApiUrl()}/observability/run-record/${runId}`));
+                const body = (await res.json().catch(() => null)) as unknown;
+                if (!res.ok) {
+                    const msg =
+                        body !== null && typeof body === 'object' ? (body as Record<string, unknown>).error : null;
+                    throw new Error(typeof msg === 'string' ? msg : `run record fetch failed: ${res.status}`);
+                }
+                const parsed = parseRunRecordOutcome(body);
+                if (!parsed) throw new Error('run record response failed schema validation');
+                setOutcome(parsed);
+                setPhase('idle');
+            } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+                setPhase('error');
+            }
+        })();
+    }, [runId]);
+
+    return (
+        <div data-run-record>
+            <div className="text-[10px] uppercase text-spur-text-muted font-semibold mb-1">
+                Run Record{' '}
+                <span className="normal-case font-normal">
+                    — status (DB trace):{' '}
+                    <Badge variant={statusBadgeVariant(traceStatus)} size="xs">
+                        {traceStatus}
+                    </Badge>
+                </span>
+            </div>
+            {phase === 'idle' && outcome === null && (
+                <Button variant="outline" size="xs" onClick={load} aria-label={`View run record for run ${runId}`}>
+                    View run record
+                </Button>
+            )}
+            {phase === 'loading' && (
+                <div
+                    className="flex items-center gap-2 text-xs text-spur-text-muted py-1"
+                    aria-live="polite"
+                    aria-busy="true"
+                >
+                    <Loading size="xs" /> Loading run record…
+                </div>
+            )}
+            {phase === 'error' && (
+                <div className="text-xs text-error py-1" role="alert">
+                    Failed to load run record: {error}
+                    <Button variant="ghost" size="xs" className="ml-2" onClick={load}>
+                        Retry
+                    </Button>
+                </div>
+            )}
+            {outcome !== null && (
+                <div aria-live="polite">
+                    {outcome.status === 'record' && (
+                        <>
+                            <pre
+                                data-run-record-text
+                                className="text-[11px] bg-base-300 rounded p-2 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap"
+                            >
+                                {outcome.markdown}
+                            </pre>
+                            <details className="text-[11px]">
+                                <summary className="cursor-pointer text-spur-text-muted">Machine state</summary>
+                                <pre className="bg-base-300 rounded p-2 overflow-x-auto max-h-64 overflow-y-auto">
+                                    {JSON.stringify(outcome.state, null, 2)}
+                                </pre>
+                            </details>
+                        </>
+                    )}
+                    {outcome.status === 'incomplete' && (
+                        <>
+                            <p className="text-xs text-warning py-1">
+                                Run record is incomplete ({outcome.reason}); the human log is shown, but completion is
+                                only proven by the DB trace.
+                            </p>
+                            <pre
+                                data-run-record-text
+                                className="text-[11px] bg-base-300 rounded p-2 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap"
+                            >
+                                {outcome.markdown}
+                            </pre>
+                        </>
+                    )}
+                    {outcome.status === 'legacy' && (
+                        <>
+                            <p className="text-xs text-spur-text-muted py-1">
+                                Legacy .log record (re-redacted on read).
+                            </p>
+                            <pre
+                                data-run-record-text
+                                className="text-[11px] bg-base-300 rounded p-2 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap"
+                            >
+                                {outcome.content}
+                            </pre>
+                        </>
+                    )}
+                    {outcome.status === 'oversized' && (
+                        <p className="text-xs text-warning py-1">
+                            Run record is too large to display ({outcome.sizeBytes} bytes).
+                        </p>
+                    )}
+                    {outcome.status === 'missing' && (
+                        <p className="text-xs text-spur-text-muted italic py-1">No run record found on disk.</p>
+                    )}
+                </div>
             )}
         </div>
     );

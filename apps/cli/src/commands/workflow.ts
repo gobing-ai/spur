@@ -14,6 +14,7 @@ import {
     parseWorkflowInventory,
     projectWorkflowProgress,
     type ResolvedWorkflowDefinition,
+    readWorkflowRunRecord,
     redactAndBound,
     registeredWorkflowPaths,
     renderActionHeartbeat,
@@ -33,6 +34,7 @@ import {
     type WorkflowOutputDetail,
     type WorkflowProgressProjection,
     WorkflowRunLogSink,
+    type WorkflowRunRecordRead,
     WorkflowSteeringController,
     type WorkflowTraceListResult,
     type WorkflowTraceTimeline,
@@ -528,7 +530,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.verboseWorkflow)
         .option('--detail <level>', 'Human detail level: minimal, invocation, or full')
         .option('--trace-file', 'Append a redacted schema-versioned JSONL trace under .spur/workflow/')
-        .option('--no-log', 'Opt out of writing the consolidated .spur/run/<RUNID>.log')
+        .option('--no-log', 'Opt out of writing the two-file run record .spur/run/<RUNID>.md + .state.json')
         .option('--steer', 'Accept local in-process steering commands on stdin at declared action boundaries')
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
@@ -882,10 +884,12 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                     }
                 }
             }
-            // Consolidated all-in-one run log (feature D2 / task 0426): a read-only
-            // subscriber on the bus that appends `.spur/run/<RUNID>.log` from creation
-            // to terminal status. Built by default (retained after the run ends);
+            // Two-file run record (E7 / task 0925, on the feature D2 / 0426 sink): a
+            // read-only subscriber on the bus that appends `.spur/run/<RUNID>.md` and
+            // atomically replaces `.spur/run/<RUNID>.state.json` from creation to
+            // terminal status. Built by default (retained after the run ends);
             // `--no-log` (task 0427) opts out entirely so no file is opened or written.
+            // Configured secrets are re-scrubbed at the sink's persistence boundary.
             const runLog =
                 options.log === false
                     ? undefined
@@ -894,6 +898,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                           dir: join(context.cwd, '.spur', 'run'),
                           runId,
                           ...(planPreview !== undefined ? { planPreview } : {}),
+                          secrets: configuredSecretValues(context.env),
                           ...resolveOutputLogConfig(context.spurConfig ?? null),
                       });
             // Escalation packets (task 0709): project the canonical packet on
@@ -1048,7 +1053,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
             'Inject a HITL gate answer before guard re-evaluation (0433). Does not imply --yes.',
         )
         .option('--async', 'Detach: resume in a background worker and report started/failed (0901 R4).')
-        .option('--no-log', 'Opt out of appending to the consolidated .spur/run/<RUNID>.log')
+        .option('--no-log', 'Opt out of appending to the two-file run record .spur/run/<RUNID>.md + .state.json')
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
@@ -1193,6 +1198,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
                                   bus,
                                   dir: join(context.cwd, '.spur', 'run'),
                                   runId: targetId,
+                                  secrets: configuredSecretValues(context.env),
                                   ...resolveOutputLogConfig(context.spurConfig ?? null),
                               });
                     try {
@@ -1473,7 +1479,7 @@ export function registerWorkflowCommand(program: Command, context: CliContext): 
         .option(...SHARED_OPTIONS.last, '20')
         .option('--follow', 'Replay a run timeline and poll persisted state until it becomes terminal')
         .option(...SHARED_OPTIONS.pollWorkflow, '1000')
-        .option('--output', 'With --follow: stream .spur/run/<RUNID>.log instead of the DB timeline')
+        .option('--output', 'With --follow: stream .spur/run/<RUNID>.md instead of the DB timeline')
         .option(...SHARED_OPTIONS.jsonSupported)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (runId, options) => {
@@ -1894,7 +1900,8 @@ function readRunLogChunk(logPath: string, offset: number): { exists: boolean; li
 }
 
 /**
- * Tail `.spur/run/<RUNID>.log` (read-only) as the run progresses, then exit once
+ * Tail the run record `.spur/run/<RUNID>.md` (legacy `.log` fallback; read-only)
+ * as the run progresses, then exit once
  * the run reaches a terminal status. Best-effort: if the log never appears
  * (e.g. the run was started with `--no-log`), surface a clear message after
  * terminal status rather than hanging forever. This is a distinct source from
@@ -1908,10 +1915,29 @@ export async function followRunLog(
     write: (line: string) => void,
     wait: (ms: number) => Promise<unknown> = (ms) => sleep(ms),
 ): Promise<void> {
-    const logPath = join(dir, '.spur', 'run', `${runId}.log`);
+    // 0926 R3: the record format is re-detected every poll. A legacy `.log` run
+    // that gets continued mid-follow gains a `.md` under the same run id — the
+    // tail must switch to it (once, from the top) instead of tracking the stale
+    // legacy file forever. When no record exists yet, expect the new `.md` so a
+    // follow that starts before the run writes picks up the new record.
+    const runDir = join(dir, '.spur', 'run');
+    const pendingMdPath = join(runDir, `${runId}.md`);
+    let logPath: string | undefined;
+    let record: WorkflowRunRecordRead = { kind: 'missing' };
     let offset = 0;
     let everRead = false;
     while (true) {
+        record = readWorkflowRunRecord(runDir, runId);
+        const target =
+            record.kind === 'legacy-log'
+                ? record.logPath
+                : 'markdownPath' in record
+                  ? record.markdownPath
+                  : pendingMdPath;
+        if (target !== logPath) {
+            logPath = target;
+            offset = 0;
+        }
         const chunk = readRunLogChunk(logPath, offset);
         if (chunk.exists && (chunk.lines.length > 0 || chunk.offset > offset)) {
             everRead = true;
@@ -1927,7 +1953,13 @@ export async function followRunLog(
             if (!String(error).includes('Run not found')) throw error;
         }
         if (terminal) {
-            if (!everRead) {
+            if (everRead && record.kind === 'incomplete') {
+                // A pair record whose state never landed is an explicit incomplete
+                // record — never a successful old run (0926 AC2).
+                write(
+                    `Run record incomplete (${record.reason}) at ${record.statePath} — the workflow DB trace remains the completion authority.`,
+                );
+            } else if (!everRead) {
                 write(`No run log at ${logPath} — the run may have been started with --no-log.`);
             }
             return;

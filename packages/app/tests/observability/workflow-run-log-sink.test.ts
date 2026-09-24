@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventBus } from '@gobing-ai/ts-infra';
@@ -422,6 +422,143 @@ describe('WorkflowRunLogSink contract-violation events (task 0870)', () => {
         );
         expect(text).toContain('contract-violation requireDiff observed=out-of-scope: src/other.ts');
         expect(text).toContain('task=0870');
+        rmSync(dir, { recursive: true, force: true });
+    });
+});
+
+describe('WorkflowRunLogSink two-file run record (E7 / task 0925)', () => {
+    const CANARY = 'spur-canary-secret-9f2c';
+
+    test('0925 AC1 — a logging-enabled run records the canonical pair keyed to the run id, never a .log', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        const sink = new WorkflowRunLogSink({ bus, dir, runId: 'run-925', planPreview: 'plan: a → b' });
+        await bus.emit('workflow.run.started', { ...base('run-925'), workflowName: 'pair-flow' });
+        await bus.emit('workflow.phase', { ...base('run-925'), phase: 'start', status: 'running' });
+        sink.close();
+
+        expect(existsSync(join(dir, 'run-925.log'))).toBe(false);
+        const md = readFileSync(sink.filePath, 'utf8');
+        expect(md).toContain('# spur workflow run run-925 — pair-flow — started');
+        const state = JSON.parse(readFileSync(sink.statePath, 'utf8')) as Record<string, unknown>;
+        expect(state).toMatchObject({
+            schemaVersion: 1,
+            runId: 'run-925',
+            workflowName: 'pair-flow',
+            status: 'running',
+            startedAt: '2026-08-02T00:00:00.000Z',
+        });
+        // Atomic replace leaves no temp file behind.
+        expect(readdirSync(dir).some((name) => name.endsWith('.tmp'))).toBe(false);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('0925 AC1 — state.json is atomically replaced with the terminal trace status', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        const sink = new WorkflowRunLogSink({ bus, dir, runId: 'run-925b' });
+        await bus.emit('workflow.run.started', { ...base('run-925b'), workflowName: 'flow' });
+        await bus.emit('workflow.run.finalized', {
+            ...base('run-925b', '2026-08-02T00:00:09.000Z'),
+            status: 'failed',
+        });
+        sink.close();
+
+        const state = JSON.parse(readFileSync(sink.statePath, 'utf8')) as Record<string, unknown>;
+        // Status copies the trace event verbatim — never stronger than the trace.
+        expect(state).toMatchObject({ status: 'failed', finalizedAt: '2026-08-02T00:00:09.000Z' });
+        expect(existsSync(join(dir, 'run-925b.state.json.tmp'))).toBe(false);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('0925 AC2 — a configured canary in input, output, and error text never reaches either file', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        // Real files, real redactor — the persistence boundary is under test, not mocked.
+        const sink = new WorkflowRunLogSink({
+            bus,
+            dir,
+            runId: 'run-canary',
+            planPreview: `run with ${CANARY}`,
+            secrets: [CANARY],
+        });
+        await bus.emit('workflow.run.started', { ...base('run-canary'), workflowName: `flow ${CANARY}` });
+        await bus.emit('workflow.agent', makeAgentOutputEvent(`stdout says ${CANARY}`));
+        await bus.emit('workflow.agent.contract-violation', {
+            schemaVersion: 1,
+            eventId: 'e-cv',
+            runId: 'run-canary',
+            at: '2026-08-02T00:00:05.000Z',
+            severity: 'warning',
+            node: 'implement',
+            kind: 'agent.run',
+            agent: 'claude',
+            contract: 'expectFile',
+            observed: `error mentions ${CANARY}`,
+        });
+        await bus.emit('workflow.steering', makeSteeringAck({ note: `steer with ${CANARY}` }));
+        await bus.emit('workflow.run.finalized', {
+            ...base('run-canary', '2026-08-02T00:00:09.000Z'),
+            status: 'done',
+        });
+        sink.close();
+
+        const md = readFileSync(sink.filePath, 'utf8');
+        const state = readFileSync(sink.statePath, 'utf8');
+        expect(md).toContain('[REDACTED]');
+        expect(md).not.toContain(CANARY);
+        expect(state).not.toContain(CANARY);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('0926 AC1 — a resumed run carries workflowName/startedAt forward from the prior state', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        // First run: paused at a gate (pair state settled by the trace finalize).
+        const first = new WorkflowRunLogSink({ bus, dir, runId: 'run-926' });
+        await bus.emit('workflow.run.started', { ...base('run-926'), workflowName: 'flow-a' });
+        await bus.emit('workflow.run.finalized', {
+            ...base('run-926', '2026-08-02T00:00:04.000Z'),
+            status: 'paused',
+        });
+        first.close();
+
+        // Resume: a NEW sink instance never sees `workflow.run.started` (resume
+        // creates no run row), yet the state must not lose the original identity.
+        const second = new WorkflowRunLogSink({ bus, dir, runId: 'run-926' });
+        await bus.emit('workflow.phase', {
+            ...base('run-926', '2026-08-02T00:00:06.000Z'),
+            phase: 'gate',
+            status: 'running',
+        });
+        await bus.emit('workflow.run.finalized', {
+            ...base('run-926', '2026-08-02T00:00:09.000Z'),
+            status: 'done',
+        });
+        second.close();
+
+        const state = JSON.parse(readFileSync(second.statePath, 'utf8')) as Record<string, unknown>;
+        expect(state).toMatchObject({
+            schemaVersion: 1,
+            runId: 'run-926',
+            workflowName: 'flow-a',
+            status: 'done',
+            // Original launch time, not the resume/finalize timestamp.
+            startedAt: '2026-08-02T00:00:00.000Z',
+        });
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('0926 R1 — a failed state replace degrades best-effort and leaves no .tmp residue', async () => {
+        const dir = tempDir();
+        const bus = makeBus();
+        // Occupy the state path with a directory so the atomic rename fails.
+        mkdirSync(join(dir, 'run-926r.state.json'), { recursive: true });
+        const sink = new WorkflowRunLogSink({ bus, dir, runId: 'run-926r' });
+        await bus.emit('workflow.run.started', { ...base('run-926r'), workflowName: 'flow-r' });
+        sink.close();
+
+        expect(readdirSync(dir).filter((name) => name.endsWith('.tmp'))).toEqual([]);
         rmSync(dir, { recursive: true, force: true });
     });
 });

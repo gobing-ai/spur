@@ -359,5 +359,21 @@ export const observabilityModule: ServerModule = {
         app.get('/api/observability/tool-use/stream', handleToolUseStream(ctx));
         app.get('/api/observability/routing-summary', handleRoutingSummary(ctx));
         app.get('/api/observability/summary', handleObservabilitySummary(ctx));
+        // GET /api/observability/run-record/:runId — bounded, confined run-record
+        // inspection for the Tasks run detail (0929 R1/R2). Read-only; text is
+        // re-redacted and capped in the application layer before it is served.
+        app.get('/api/observability/run-record/:runId', (c) => {
+            const runId = c.req.param('runId');
+            try {
+                return c.json(ctx.workflowService().inspectRunRecord(runId));
+            } catch (err) {
+                // The shared reader seam rejects traversal-shaped ids before any
+                // path is built — surface that as a 400, not a 500 (0929 R1).
+                if (err instanceof Error && err.message.includes('Invalid workflow run id')) {
+                    return c.json({ error: err.message, code: 'invalid-run-id', runId }, 400);
+                }
+                throw err;
+            }
+        });
     },
 };

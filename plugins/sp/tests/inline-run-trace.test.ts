@@ -88,7 +88,7 @@ test('R4: setup → --action → --close lands an action_runs row queryable by r
         expect(close.status, close.stderr).toBe(0);
         expect(JSON.parse(close.stdout)).toMatchObject({ ok: true, runId });
 
-        // Queryable by run id through the DB — no `.spur/run/<run-id>.log` read (R2).
+        // Queryable by run id through the DB — no run-record file read at all (R2).
         const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
         try {
             const rows = db
@@ -147,13 +147,15 @@ test('R12: an unresolvable writer fails the emission open — recorded to the ru
         expect(proc.status, proc.stderr).toBe(0);
         expect(JSON.parse(proc.stdout)).toMatchObject({ ok: false, runId });
 
-        // And the failure is recorded where the driver can see it.
-        const logPath = join(p.workdir, '.spur', 'run', `${runId}.log`);
+        // And the failure is recorded where the driver can see it — the run-record
+        // markdown (task 0927 R1; a fresh run has no legacy `.log` to fall back to).
+        const logPath = join(p.workdir, '.spur', 'run', `${runId}.md`);
         expect(existsSync(logPath)).toBe(true);
         const log = readFileSync(logPath, 'utf8');
         expect(log).toContain('trace-emission-failed');
         expect(log).toContain(`run=${runId}`);
         expect(log).toContain('node=implement');
+        expect(existsSync(join(p.workdir, '.spur', 'run', `${runId}.log`))).toBe(false);
     } finally {
         p.cleanup();
     }

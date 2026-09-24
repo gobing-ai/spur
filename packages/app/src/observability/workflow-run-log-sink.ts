@@ -1,4 +1,13 @@
-import { closeSync, mkdirSync, openSync, writeSync } from 'node:fs';
+import {
+    closeSync,
+    mkdirSync,
+    openSync,
+    readFileSync,
+    renameSync,
+    unlinkSync,
+    writeFileSync,
+    writeSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type {
     WorkflowAgentBudgetEvent,
@@ -12,7 +21,7 @@ import type {
 import { bounded } from '../workflow/observability';
 import type { SteeringAck } from '../workflow/steering';
 import { renderStepLine, type StepEvent } from '../workflow/step-reporter';
-import type { AgentExecutionEvent } from './agent-execution';
+import { type AgentExecutionEvent, redactAndBound } from './agent-execution';
 
 /** Configurable bounds for the per-run all-in-one log (feature D2 / ADR-045). */
 export interface WorkflowRunLogConfig {
@@ -32,23 +41,35 @@ const TRUNCATION_MARKER =
     '\n=== [truncated] consolidated run log reached its configured bound; further lines were not written ===\n';
 
 /**
- * Consolidated all-in-one per-run workflow run log (feature D2, task 0426).
- * A read-only subscriber on the {@link WorkflowObservabilityBus} that appends the
- * already-redacted, already-bounded event stream to `.spur/run/<RUNID>.log` from
- * run creation to terminal status, subsuming the agent-output-only `RunOutputSink`.
+ * Two-file workflow run record for logging-enabled runs (E7 / task 0925, on the
+ * feature D2 / 0426 sink): a read-only subscriber on the
+ * {@link WorkflowObservabilityBus} that appends the human run log to
+ * `.spur/run/<RUNID>.md` and atomically replaces the machine state at
+ * `.spur/run/<RUNID>.state.json`, from run creation to terminal status.
  *
- * The log carries the same content the foreground human renderer emits (plan
- * preview, per-step progress, transitions, final summary) plus child-agent
- * stdout/stderr and consumed steering commands. It is best-effort: an unwritable
- * `.spur/run/` dir or failing disk degrades the log, never the run.
+ * Privacy is enforced at this persistence boundary (0925 R3): upstream event
+ * redaction is best-effort, so every appended line and the state projection are
+ * scrubbed against the configured secrets again before either file is written.
+ * Both files are keyed to the authoritative run ID and never replace the DB
+ * trace, `run.artifact` metadata, task/feature verdicts, or explicit
+ * `--trace-file` output — the markdown log is evidence, never a completion
+ * proof. Like the run itself, writes are best-effort: an unwritable
+ * `.spur/run/` dir or failing disk degrades the record, never the run.
  */
 export class WorkflowRunLogSink {
-    /** Absolute path of the log file. */
+    /** Absolute path of the append-only human run log. */
     readonly filePath: string;
+
+    /** Absolute path of the atomically replaced machine state projection. */
+    readonly statePath: string;
 
     private readonly maxBytes: number;
     private readonly maxLines: number | undefined;
     private readonly planPreview?: string;
+    private readonly secrets: readonly string[];
+    private readonly runId: string;
+    private workflowName: string | undefined;
+    private startedAt: string | undefined;
     private fd: number | undefined;
     private bytes = 0;
     private lines = 0;
@@ -64,12 +85,17 @@ export class WorkflowRunLogSink {
             dir: string;
             runId: string;
             planPreview?: string;
+            /** Configured secret values scrubbed at this persistence boundary (0925 R3). */
+            secrets?: readonly string[];
         } & WorkflowRunLogConfig,
     ) {
-        this.filePath = join(options.dir, `${options.runId}.log`);
+        this.filePath = join(options.dir, `${options.runId}.md`);
+        this.statePath = join(options.dir, `${options.runId}.state.json`);
         this.maxBytes = options.maxBytes ?? DEFAULT_RUN_LOG_MAX_BYTES;
         this.maxLines = options.maxLines;
         this.planPreview = options.planPreview;
+        this.secrets = options.secrets ?? [];
+        this.runId = options.runId;
         try {
             mkdirSync(options.dir, { recursive: true });
             this.fd = openSync(this.filePath, 'a');
@@ -130,8 +156,11 @@ export class WorkflowRunLogSink {
         // once, at run creation.
         if (this.headerWritten) return;
         this.headerWritten = true;
+        this.workflowName = event.workflowName;
+        this.startedAt = event.at;
         this.append(`# spur workflow run ${event.runId} — ${event.workflowName} — started ${event.at}\n`);
         if (this.planPreview !== undefined) this.append(`# ${this.planPreview}\n`);
+        this.writeState('running', event.at);
     }
 
     private onProgress(event: StepEvent): void {
@@ -142,6 +171,65 @@ export class WorkflowRunLogSink {
 
     private onRunFinalized(event: WorkflowRunFinalizedEvent): void {
         this.append(`\n=== workflow run ${event.runId} finished — status ${event.status} — ${event.at} ===\n`);
+        // State copies the terminal status verbatim from the trace event: the DB
+        // trace stays the lifecycle authority, state only summarizes it (0925 R2).
+        this.writeState(event.status, event.at);
+    }
+
+    /**
+     * Atomically replace `.spur/run/<RUNID>.state.json` (0925 R1). Minimal
+     * private projection: schema version, authoritative run identity, and the
+     * run status (`running` until the trace event settles a terminal value).
+     * Same-directory temp file + rename, so readers never see a partial JSON;
+     * the append-only `.md` log is NOT atomic by design. Best-effort (R8).
+     */
+    private writeState(status: 'running' | WorkflowRunFinalizedEvent['status'], at: string): void {
+        // A resumed run never re-emits `workflow.run.started` (resume creates no
+        // run row), so this sink instance lacks the original `workflowName` and
+        // `startedAt`. Carry those two forward from the prior VALID state file —
+        // never from the markdown (0926 R3: no synthesis from the log). A missing
+        // or invalid prior state stays an explicit gap: fall back to this event's
+        // timestamp rather than inventing an identity.
+        if (this.startedAt === undefined || this.workflowName === undefined) {
+            try {
+                const prior: unknown = JSON.parse(readFileSync(this.statePath, 'utf8'));
+                if (prior !== null && typeof prior === 'object' && !Array.isArray(prior)) {
+                    const record = prior as Record<string, unknown>;
+                    if (this.startedAt === undefined && typeof record.startedAt === 'string') {
+                        this.startedAt = record.startedAt;
+                    }
+                    if (this.workflowName === undefined && typeof record.workflowName === 'string') {
+                        this.workflowName = record.workflowName;
+                    }
+                }
+            } catch {
+                // No prior state (legacy run) or unreadable file — proceed with event-derived fields.
+            }
+        }
+        const state = {
+            schemaVersion: 1 as const,
+            runId: this.runId,
+            ...(this.workflowName !== undefined
+                ? { workflowName: redactAndBound(this.workflowName, this.secrets, Number.MAX_SAFE_INTEGER) }
+                : {}),
+            status,
+            startedAt: this.startedAt ?? at,
+            updatedAt: at,
+            ...(status !== 'running' ? { finalizedAt: at } : {}),
+        };
+        const temp = `${this.statePath}.tmp`;
+        try {
+            writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`);
+            renameSync(temp, this.statePath);
+        } catch {
+            // Best-effort (R8): a failing state write degrades the record, never the
+            // run — and never leaves `.tmp` residue behind (0926 R1).
+            try {
+                unlinkSync(temp);
+            } catch {
+                // Nothing to clean (temp was never created).
+            }
+        }
     }
 
     private onSteering(ack: SteeringAck): void {
@@ -211,8 +299,13 @@ export class WorkflowRunLogSink {
 
     private append(text: string): void {
         if (this.fd === undefined || this.closed || this.truncated) return;
-        const textBytes = Buffer.byteLength(text);
-        const textLines = countNewlines(text);
+        // Persistence-boundary redaction (0925 R3): upstream `bounded()` is
+        // best-effort, so every line is scrubbed against the configured secrets
+        // again before it can reach disk. MAX_SAFE_INTEGER → no extra bound; the
+        // sink's own byte/line accounting below stays the truncation authority.
+        const redacted = redactAndBound(text, this.secrets, Number.MAX_SAFE_INTEGER);
+        const textBytes = Buffer.byteLength(redacted);
+        const textLines = countNewlines(redacted);
         if (
             this.bytes + textBytes > this.maxBytes ||
             (this.maxLines !== undefined && this.lines + textLines > this.maxLines)
@@ -227,7 +320,7 @@ export class WorkflowRunLogSink {
             return;
         }
         try {
-            writeSync(this.fd, text);
+            writeSync(this.fd, redacted);
             this.bytes += textBytes;
             this.lines += textLines;
         } catch {

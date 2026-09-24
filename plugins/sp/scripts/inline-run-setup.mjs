@@ -3,7 +3,7 @@
 
 // plugins/sp/scripts/inline-run-setup.ts
 import { spawnSync } from "child_process";
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
@@ -72,8 +72,45 @@ function writeOutcome(runId, outcome) {
   const runDir = join(process.cwd(), ".spur", "run");
   if (!existsSync(runDir))
     mkdirSync(runDir, { recursive: true });
-  writeFileSync(join(runDir, `${runId}-inline-setup.json`), `${JSON.stringify(outcome, null, 4)}
+  const statePath = join(runDir, `${runId}.state.json`);
+  const markdownPath = join(runDir, `${runId}.md`);
+  let prior = {};
+  try {
+    const parsed = JSON.parse(readFileSync(statePath, "utf8"));
+    if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      prior = parsed;
+    }
+  } catch {}
+  const at = new Date().toISOString();
+  const state = {
+    schemaVersion: 1,
+    runId,
+    ...outcome.workflowName !== undefined ? { workflowName: outcome.workflowName } : {},
+    ...outcome.status !== undefined ? { status: outcome.status } : {},
+    startedAt: typeof prior.startedAt === "string" ? prior.startedAt : at,
+    updatedAt: at,
+    ...outcome.attached !== undefined ? { attached: outcome.attached } : {},
+    ...outcome.definitionDigest !== undefined ? { definitionDigest: outcome.definitionDigest } : {},
+    ...outcome.workflowVersion !== undefined ? { workflowVersion: outcome.workflowVersion } : {},
+    ...outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {},
+    ...outcome.layer !== undefined ? { layer: outcome.layer } : {},
+    ...outcome.workdir !== undefined ? { workdir: outcome.workdir } : {},
+    ...outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}
+  };
+  const temp = `${statePath}.tmp`;
+  try {
+    writeFileSync(temp, `${JSON.stringify(state, null, 4)}
 `);
+    renameSync(temp, statePath);
+  } catch {
+    try {
+      unlinkSync(temp);
+    } catch {}
+  }
+  if (!existsSync(markdownPath)) {
+    appendFileSync(markdownPath, `# spur inline run ${runId} \u2014 ${outcome.workflowName ?? "unknown workflow"} \u2014 setup ${at}
+`);
+  }
 }
 async function printFingerprint(taskFile, featureFile, spurBin) {
   const { entry } = resolveAppEntry(spurBin);
@@ -98,6 +135,13 @@ async function printFingerprint(taskFile, featureFile, spurBin) {
 }
 var CLOSE_STATUSES = new Set(["done", "failed", "paused"]);
 var ACTION_STATUSES = new Set(["done", "failed"]);
+function runRecordLogPath(runDir, runId) {
+  const markdownPath = join(runDir, `${runId}.md`);
+  const legacyLogPath = join(runDir, `${runId}.log`);
+  if (existsSync(legacyLogPath) && !existsSync(markdownPath))
+    return legacyLogPath;
+  return markdownPath;
+}
 function appendTraceFailureLine(runId, detail) {
   try {
     const runDir = join(process.cwd(), ".spur", "run");
@@ -105,7 +149,7 @@ function appendTraceFailureLine(runId, detail) {
       mkdirSync(runDir, { recursive: true });
     const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, "_");
     const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
-    appendFileSync(join(runDir, `${safeRunId}.log`), `[${stamp}] ${detail}
+    appendFileSync(runRecordLogPath(runDir, safeRunId), `[${stamp}] ${detail}
 `);
   } catch {}
 }

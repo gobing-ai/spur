@@ -153,7 +153,8 @@ function runInlineSmoke(
         FIXTURE_TASK_SPEC: options.unresolvableTask === true ? '' : taskSpecPath,
     };
     const runId = 'inline-smoke-run';
-    const logPath = join(cwd, `.spur/run/${runId}.log`);
+    // The driver doc (task 0927) appends host provenance lines to the run-record markdown.
+    const logPath = join(cwd, `.spur/run/${runId}.md`);
     mkdirSync(dirname(logPath), { recursive: true });
     const sessionId = resolveSessionId(cwd);
     expect(

@@ -565,4 +565,57 @@ describe('observability routing-summary (task 0552)', () => {
             expect(body.kpis.successRatePct).toBe(0);
         });
     });
+
+    describe('GET /api/observability/run-record/:runId (task 0929 R1/R2)', () => {
+        function mountWithWorkflowService(service: Record<string, unknown>): Hono {
+            const app = new Hono();
+            const ctx = {
+                workflowService: () => service,
+            } as unknown as ServerContext;
+            observabilityModule.mount(app, ctx);
+            return app;
+        }
+
+        test('serves the application inspection outcome as JSON', async () => {
+            const outcome = { status: 'record', markdown: '# record', state: { runId: 'r1' } };
+            const app = mountWithWorkflowService({
+                inspectRunRecord: (runId: string) => {
+                    expect(runId).toBe('r1');
+                    return outcome;
+                },
+            });
+
+            const res = await app.request('/api/observability/run-record/r1');
+            expect(res.status).toBe(200);
+            expect(await res.json()).toEqual(outcome);
+        });
+
+        test('a traversal-shaped run id is a 400, not a 500', async () => {
+            const app = mountWithWorkflowService({
+                inspectRunRecord: () => {
+                    throw new Error('Invalid workflow run id: "../escape"');
+                },
+            });
+
+            const res = await app.request('/api/observability/run-record/%2e%2e%2fescape');
+            expect(res.status).toBe(400);
+            const body = (await res.json()) as { code: string; error: string };
+            expect(body.code).toBe('invalid-run-id');
+            expect(body.error).toContain('Invalid workflow run id');
+        });
+
+        test('unavailable outcomes stay 200 with an explicit status', async () => {
+            for (const outcome of [
+                { status: 'missing' },
+                { status: 'oversized', sizeBytes: 42 },
+                { status: 'legacy', content: 'legacy' },
+                { status: 'incomplete', markdown: '# partial', reason: 'state-missing' },
+            ]) {
+                const app = mountWithWorkflowService({ inspectRunRecord: () => outcome });
+                const res = await app.request('/api/observability/run-record/r2');
+                expect(res.status).toBe(200);
+                expect(await res.json()).toEqual(outcome);
+            }
+        });
+    });
 });

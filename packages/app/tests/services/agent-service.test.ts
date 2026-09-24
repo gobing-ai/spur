@@ -3166,10 +3166,11 @@ async function makeDbService(
     env: Record<string, string | undefined> = {},
     output: AgentServiceOutput = nullOutput(),
     agentConfig?: AgentConfig,
+    cwd: string = process.cwd(),
 ) {
     const adapter = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
     await applyCliMigrations(adapter);
-    const svc = new AgentService({ cwd: process.cwd(), env, output, agentConfig, getDb: async () => adapter });
+    const svc = new AgentService({ cwd, env, output, agentConfig, getDb: async () => adapter });
     return { svc, adapter, output };
 }
 
@@ -3260,6 +3261,44 @@ describe('AgentService coordination (G4 / ADR-057 wave 1)', () => {
         expect(run?.status).toBe('errored');
 
         adapter.close();
+    });
+
+    // Task 0927 R4: the last declared `<runId>.log` reader migrated to the shared
+    // two-file record seam — a pair record refs the `.md`; a legacy run keeps its
+    // `.log` ref in place; no record → no ref. A consumer that regresses to probing
+    // only the legacy `.log` fails the pair case below (no `.log` exists there).
+    test('artifact refs read the run-record pair, legacy log in place, none when missing', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'agent-artifact-refs-'));
+        const { writeFileSync } = await import('node:fs');
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            writeFileSync(
+                join(dir, '.spur', 'run', 'refs-pair-run.md'),
+                '# spur workflow run refs-pair-run — task-pipeline — started 2026-09-24T00:00:00Z\n',
+            );
+            writeFileSync(
+                join(dir, '.spur', 'run', 'refs-pair-run.state.json'),
+                '{"schemaVersion":1,"runId":"refs-pair-run","status":"running"}\n',
+            );
+            writeFileSync(join(dir, '.spur', 'run', 'refs-legacy-run.log'), '[2026-09-24T00:00:00Z] legacy line\n');
+
+            const { svc, adapter } = await makeDbService({}, nullOutput(), undefined, dir);
+            for (const runId of ['refs-pair-run', 'refs-legacy-run', 'refs-none-run']) {
+                const code = await svc.run('hello', { agent: 'pi', 'spec-id': runId, 'run-id': runId }, piDeps());
+                expect(code).toBe(0);
+            }
+
+            const pair = await svc.getCoordinationRun('refs-pair-run');
+            expect(pair?.artifactRefs).toEqual([{ kind: 'log', path: '.spur/run/refs-pair-run.md' }]);
+            const legacy = await svc.getCoordinationRun('refs-legacy-run');
+            expect(legacy?.artifactRefs).toEqual([{ kind: 'log', path: '.spur/run/refs-legacy-run.log' }]);
+            const missing = await svc.getCoordinationRun('refs-none-run');
+            expect(missing?.artifactRefs).toEqual([]);
+
+            adapter.close();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
 

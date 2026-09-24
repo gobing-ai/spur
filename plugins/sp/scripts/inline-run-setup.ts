@@ -17,10 +17,12 @@
  * workflow-show projection selects the CLI's definition; the bundled app revalidates its
  * schema and digest before recording the selected layer. It never creates an unbound run.
  *
- * Outcome JSON is written to `.spur/run/<run-id>-inline-setup.json` so the driver can
- * seed the inline var overlay (`__runId`, `__definitionDigest`) that proof capture and
- * bound registration verify against. Exit 0 = authoritative identity ready (created or
- * idempotently attached); exit 1 = fail closed, the driver must stop.
+ * The setup outcome is written into the two-file run record (task 0927 R1) — machine state
+ * at `.spur/run/<run-id>.state.json` (atomic replace) plus the `.spur/run/<run-id>.md`
+ * run-start header — so the driver can seed the inline var overlay (`__runId`,
+ * `__definitionDigest`) that proof capture and bound registration verify against. The
+ * pre-0927 `<run-id>-inline-setup.json` sidecar is no longer written. Exit 0 = authoritative
+ * identity ready (created or idempotently attached); exit 1 = fail closed, the driver must stop.
  *
  * Standard script (ADR-065): the generated Node-runnable twin re-enters Bun for the
  * existing SQLite runtime. Bun on PATH is required; a monorepo checkout is not.
@@ -39,7 +41,7 @@
  * 0868): `--action` records one completed action boundary as an `action_runs` row through the
  * shared `WorkflowActionTraceWriter`, `--close` marks the run row terminal through the same
  * writer. `--action` is best-effort: a persistence failure is appended to
- * `.spur/run/<run-id>.log` and the script still exits 0 with `{"ok":false}` on stdout, so
+ * `.spur/run/<run-id>.md` and the script still exits 0 with `{"ok":false}` on stdout, so
  * observation never wedges the run. `--close` is NOT best-effort: the run-row closure is
  * bookkeeping, so a missing run row or a persistence failure exits 1 with a named error.
  * Exit 2 is reserved for usage errors.
@@ -48,12 +50,12 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar } from '../lib/env';
 
-/** Outcome document written to `.spur/run/<run-id>-inline-setup.json`. */
+/** Setup outcome projected into the run-record state `.spur/run/<run-id>.state.json` (0927 R1). */
 interface SetupOutcome {
     readonly ok: boolean;
     readonly runId: string;
@@ -86,8 +88,8 @@ function usage(): never {
 }
 
 /**
- * The run id becomes a filename under `.spur/run/` (`<run-id>-inline-setup.json`), so it must be a
- * single safe filename component before anything is written — the same guard class the
+ * The run id becomes filenames under `.spur/run/` (`<run-id>.state.json` + `<run-id>.md`),
+ * so it must be a single safe filename component before anything is written — the same guard class the
  * task-pipeline.yaml route-reason action applies to `$__runId` (task 0804 R8). The allowlist
  * refuses path separators, dot traversal (leading `.`), unresolved interpolation (`$`/`{`/`}`) and
  * every other shell/unspecified metachar; valid UUID/timestamp-slug ids pass.
@@ -96,7 +98,7 @@ const SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 function refuseUnsafeRunId(runId: string): never {
     // Refuse BEFORE any outcome write: an unsafe id must never reach
-    // `.spur/run/<run-id>-inline-setup.json` (no traversal, no unintended file).
+    // `.spur/run/<run-id>.state.json` / `.md` (no traversal, no unintended file).
     console.error(`inline-run-setup: refusing unsafe run id: ${runId}`);
     console.error(
         '  The run id must be a single safe filename component (alphanumeric/._-, no leading dot, ' +
@@ -171,10 +173,65 @@ async function readInstalledInventory(file: string, spurBin: string): Promise<un
     return value;
 }
 
+/**
+ * Project the setup outcome into the two-file run record (task 0927 R1): the machine state
+ * merges into `.spur/run/<run-id>.state.json` (atomic same-directory temp + rename, the
+ * 0925 R1 pattern) and `.spur/run/<run-id>.md` receives its run-start header exactly once.
+ * A re-setup of the same run id rewrites the state from the current outcome but keeps the
+ * prior `startedAt` instead of resurrecting setup time. Identity/provenance fields only —
+ * never prompt bodies — so the record carries no secret-bearing content by construction
+ * (0927 AC2). The retired `<run-id>-inline-setup.json` sidecar is not written (0927 R4);
+ * its readers were migrated to the pair state in the same change.
+ */
 function writeOutcome(runId: string, outcome: SetupOutcome): void {
     const runDir = join(process.cwd(), '.spur', 'run');
     if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
-    writeFileSync(join(runDir, `${runId}-inline-setup.json`), `${JSON.stringify(outcome, null, 4)}\n`);
+    const statePath = join(runDir, `${runId}.state.json`);
+    const markdownPath = join(runDir, `${runId}.md`);
+    let prior: Record<string, unknown> = {};
+    try {
+        const parsed: unknown = JSON.parse(readFileSync(statePath, 'utf8'));
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            prior = parsed as Record<string, unknown>;
+        }
+    } catch {
+        // No prior state (new run) or unreadable file — the outcome alone defines the state.
+    }
+    const at = new Date().toISOString();
+    const state = {
+        schemaVersion: 1 as const,
+        runId,
+        ...(outcome.workflowName !== undefined ? { workflowName: outcome.workflowName } : {}),
+        ...(outcome.status !== undefined ? { status: outcome.status } : {}),
+        startedAt: typeof prior.startedAt === 'string' ? prior.startedAt : at,
+        updatedAt: at,
+        ...(outcome.attached !== undefined ? { attached: outcome.attached } : {}),
+        ...(outcome.definitionDigest !== undefined ? { definitionDigest: outcome.definitionDigest } : {}),
+        ...(outcome.workflowVersion !== undefined ? { workflowVersion: outcome.workflowVersion } : {}),
+        ...(outcome.resolvedPath !== undefined ? { resolvedPath: outcome.resolvedPath } : {}),
+        ...(outcome.layer !== undefined ? { layer: outcome.layer } : {}),
+        ...(outcome.workdir !== undefined ? { workdir: outcome.workdir } : {}),
+        ...(outcome.ok === false && outcome.error !== undefined ? { error: outcome.error } : {}),
+    };
+    const temp = `${statePath}.tmp`;
+    try {
+        writeFileSync(temp, `${JSON.stringify(state, null, 4)}\n`);
+        renameSync(temp, statePath);
+    } catch {
+        // Best-effort: a failing record write must not wedge setup reporting — and never
+        // leaves `.tmp` residue behind (0926 R1).
+        try {
+            unlinkSync(temp);
+        } catch {
+            // Nothing to clean (temp was never created).
+        }
+    }
+    if (!existsSync(markdownPath)) {
+        appendFileSync(
+            markdownPath,
+            `# spur inline run ${runId} — ${outcome.workflowName ?? 'unknown workflow'} — setup ${at}\n`,
+        );
+    }
 }
 
 /**
@@ -239,9 +296,23 @@ interface TraceModeInput {
 }
 
 /**
- * Append one emission-failure line to `.spur/run/<run-id>.log` — the run log the inline
- * driver already owns. Best-effort and synchronous (the process may exit immediately
- * after), and never throws: an unwritable log must not wedge the run (ADR-117 R3).
+ * The run-record file for appended driver lines (task 0927 R1): `.spur/run/<run-id>.md`
+ * for pair-based runs. A legacy run that predates the pair keeps appending to its declared
+ * `.spur/run/<run-id>.log` — the same precedence as `readWorkflowRunRecord` (the pair wins,
+ * legacy stays readable in place).
+ */
+function runRecordLogPath(runDir: string, runId: string): string {
+    const markdownPath = join(runDir, `${runId}.md`);
+    const legacyLogPath = join(runDir, `${runId}.log`);
+    if (existsSync(legacyLogPath) && !existsSync(markdownPath)) return legacyLogPath;
+    return markdownPath;
+}
+
+/**
+ * Append one emission-failure line to the run record markdown — `.spur/run/<run-id>.md`,
+ * the run log the inline driver already owns. Best-effort and synchronous (the process may
+ * exit immediately after), and never throws: an unwritable log must not wedge the run
+ * (ADR-117 R3).
  */
 function appendTraceFailureLine(runId: string, detail: string): void {
     try {
@@ -249,7 +320,7 @@ function appendTraceFailureLine(runId: string, detail: string): void {
         if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
         const safeRunId = runId.replace(/[^A-Za-z0-9._-]/g, '_');
         const stamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-        appendFileSync(join(runDir, `${safeRunId}.log`), `[${stamp}] ${detail}\n`);
+        appendFileSync(runRecordLogPath(runDir, safeRunId), `[${stamp}] ${detail}\n`);
     } catch {
         // Best-effort (R3): the run continues even when the failure cannot be recorded.
     }

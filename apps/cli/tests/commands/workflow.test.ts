@@ -658,6 +658,102 @@ terminalStates:
         await rm(dir, { recursive: true, force: true });
     });
 
+    // A workflow that records an observable side effect, then pauses at the gate.
+    const RECORD_RESUME_WORKFLOW_YAML = `name: cli-record-pauser
+kind: state-machine
+initialState: start
+states:
+  - id: start
+    onEnter:
+      - kind: shell
+        options:
+          command: 'echo "tick" >> counter.txt'
+  - id: gate
+    pause: true
+  - id: done
+transitions:
+  - from: start
+    to: gate
+    guard: { kind: always }
+  - from: gate
+    to: done
+    guard: { kind: always }
+terminalStates:
+  - done
+`;
+
+    test('continue keeps run identity: appends only new record sections, repeats no side effect, settles state (0926 AC1)', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'record-pauser.yaml'), RECORD_RESUME_WORKFLOW_YAML);
+        const dbUrl = join(dir, 'spur.db');
+        const counter = join(dir, 'counter.txt');
+        const mdPath = join(dir, '.spur', 'run', 'cli-rec1.md');
+        const statePath = join(dir, '.spur', 'run', 'cli-rec1.state.json');
+
+        const runExit = await main(['workflow', 'run', '--run-id', 'cli-rec1', join(wfDir, 'record-pauser.yaml')], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl,
+        });
+        expect(runExit).toBe(1); // paused at the gate
+        // The recorded external effect ran exactly once.
+        expect((await readFile(counter, 'utf8')).trim().split('\n')).toEqual(['tick']);
+        const mdAfterRun = await readFile(mdPath, 'utf8');
+        expect(JSON.parse(await readFile(statePath, 'utf8'))).toMatchObject({ runId: 'cli-rec1', status: 'paused' });
+
+        const contExit = await main(['workflow', 'continue', 'cli-rec1', '--yes', '--answer', 'yes'], {
+            output: createCapturedOutput(),
+            cwd: dir,
+            dbUrl,
+        });
+        expect(contExit).toBe(0);
+
+        // Same run id, append-only record: original bytes intact, new sections after.
+        const mdAfterResume = await readFile(mdPath, 'utf8');
+        expect(mdAfterResume.startsWith(mdAfterRun)).toBe(true);
+        expect(mdAfterResume.length).toBeGreaterThan(mdAfterRun.length);
+        // Record recovery did not repeat the prior external effect.
+        expect((await readFile(counter, 'utf8')).trim().split('\n')).toEqual(['tick']);
+        // State atomically follows the authoritative trace outcome.
+        expect(JSON.parse(await readFile(statePath, 'utf8'))).toMatchObject({
+            schemaVersion: 1,
+            runId: 'cli-rec1',
+            status: 'done',
+        });
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('continue --no-log writes nothing to the pair (0926 AC2/R4)', async () => {
+        const dir = await createTempProject();
+        const wfDir = join(dir, '.spur', 'workflows');
+        await mkdir(wfDir, { recursive: true });
+        await writeFile(join(wfDir, 'pauser.yaml'), PAUSING_WORKFLOW_YAML);
+        const dbUrl = join(dir, 'spur.db');
+        await main(['workflow', 'run', '--run-id', 'cli-rec2', join(wfDir, 'pauser.yaml')], {
+            output: nullOutput(),
+            cwd: dir,
+            dbUrl,
+        });
+        const mdPath = join(dir, '.spur', 'run', 'cli-rec2.md');
+        const statePath = join(dir, '.spur', 'run', 'cli-rec2.state.json');
+        const mdBefore = await readFile(mdPath, 'utf8');
+        const stateBefore = await readFile(statePath, 'utf8');
+
+        const contExit = await main(['workflow', 'continue', 'cli-rec2', '--yes', '--answer', 'yes', '--no-log'], {
+            output: createCapturedOutput(),
+            cwd: dir,
+            dbUrl,
+        });
+        expect(contExit).toBe(0);
+
+        // The explicit opt-out suppresses the resume's record writes entirely.
+        expect(await readFile(mdPath, 'utf8')).toBe(mdBefore);
+        expect(await readFile(statePath, 'utf8')).toBe(stateBefore);
+        await rm(dir, { recursive: true, force: true });
+    });
+
     test('continue of a non-paused run returns 1', async () => {
         const dir = await createTempProject();
         const exitCode = await main(['workflow', 'continue', 'ghost-run', '--answer', 'yes', '--json'], {
@@ -1316,7 +1412,7 @@ failureStates:
         await rm(dir, { recursive: true, force: true });
     });
 
-    test('run retains the consolidated run log by default after a terminal run (0427 R6)', async () => {
+    test('run records the two-file pair by default after a terminal run (0427 R6 / 0925 AC1)', async () => {
         const dir = await createTempProject();
         const workflowFile = join(dir, 'workflow.yaml');
         await writeFile(workflowFile, MINIMAL_WORKFLOW_YAML);
@@ -1328,8 +1424,13 @@ failureStates:
         });
 
         expect(exitCode).toBe(0);
-        const logPath = join(dir, '.spur', 'run', 'retain-log-run.log');
-        expect((await readFile(logPath, 'utf8')).length).toBeGreaterThan(0);
+        const mdPath = join(dir, '.spur', 'run', 'retain-log-run.md');
+        expect((await readFile(mdPath, 'utf8')).length).toBeGreaterThan(0);
+        expect(await exists(join(dir, '.spur', 'run', 'retain-log-run.log'))).toBe(false);
+        const state = JSON.parse(
+            await readFile(join(dir, '.spur', 'run', 'retain-log-run.state.json'), 'utf8'),
+        ) as Record<string, unknown>;
+        expect(state).toMatchObject({ schemaVersion: 1, runId: 'retain-log-run', status: 'done' });
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -1345,8 +1446,8 @@ failureStates:
         });
 
         expect(exitCode).toBe(0);
-        const logPath = join(dir, '.spur', 'run', 'no-log-run.log');
-        await expect(readFile(logPath, 'utf8')).rejects.toThrow();
+        await expect(readFile(join(dir, '.spur', 'run', 'no-log-run.md'), 'utf8')).rejects.toThrow();
+        await expect(readFile(join(dir, '.spur', 'run', 'no-log-run.state.json'), 'utf8')).rejects.toThrow();
         await rm(dir, { recursive: true, force: true });
     });
 
@@ -1714,10 +1815,16 @@ failureStates:
         await mkdir(runDir, { recursive: true });
         const oldLog = join(runDir, 'wf_old.log');
         const freshLog = join(runDir, 'wf_fresh.log');
+        const oldMd = join(runDir, 'wf_old.md');
+        const oldState = join(runDir, 'wf_old.state.json');
         await writeFile(oldLog, 'old');
         await writeFile(freshLog, 'fresh');
+        await writeFile(oldMd, 'old record');
+        await writeFile(oldState, '{"status":"done"}');
         const oldMtime = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
         await utimes(oldLog, oldMtime, oldMtime);
+        await utimes(oldMd, oldMtime, oldMtime);
+        await utimes(oldState, oldMtime, oldMtime);
 
         const output = createCapturedOutput();
         const exitCode = await main(['workflow', 'clean', '--logs'], { output, cwd, dbUrl: ':memory:' });
@@ -1728,6 +1835,9 @@ failureStates:
         expect(output.messages.some((m) => m.includes('Reclaimed 1 retained run log(s) (>30d):'))).toBe(true);
         expect(await exists(oldLog)).toBe(false);
         expect(await exists(freshLog)).toBe(true);
+        // 0925 AC3: the pair is out of cleanup scope until a retention policy exists.
+        expect(await exists(oldMd)).toBe(true);
+        expect(await exists(oldState)).toBe(true);
     });
 
     test('clean --logs --dry-run lists old logs without deleting', async () => {
@@ -1735,9 +1845,15 @@ failureStates:
         const runDir = join(cwd, '.spur', 'run');
         await mkdir(runDir, { recursive: true });
         const oldLog = join(runDir, 'wf_old.log');
+        const oldMd = join(runDir, 'wf_old.md');
+        const oldState = join(runDir, 'wf_old.state.json');
         await writeFile(oldLog, 'old');
+        await writeFile(oldMd, 'old record');
+        await writeFile(oldState, '{"status":"done"}');
         const oldMtime = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000);
         await utimes(oldLog, oldMtime, oldMtime);
+        await utimes(oldMd, oldMtime, oldMtime);
+        await utimes(oldState, oldMtime, oldMtime);
 
         const output = createCapturedOutput();
         const exitCode = await main(['workflow', 'clean', '--logs', '--dry-run'], {
@@ -1749,6 +1865,9 @@ failureStates:
         expect(exitCode).toBe(0);
         expect(output.messages.some((m) => m.includes('Would reclaim 1 retained run log(s) (>30d):'))).toBe(true);
         expect(await exists(oldLog)).toBe(true); // dry-run unlinked nothing
+        // 0925 AC3: only the eligible .log is reported — the pair stays out.
+        expect(await exists(oldMd)).toBe(true);
+        expect(await exists(oldState)).toBe(true);
     });
 
     test('clean without --logs runs both scopes in one invocation', async () => {
@@ -2721,8 +2840,52 @@ describe('followRunLog', () => {
         await followRunLog({ trace: serviceTrace(() => true) }, 'r11', dir, 5, (line) => writes.push(line));
 
         expect(writes).toHaveLength(1);
-        expect(writes[0]).toContain('.spur/run/r11.log');
+        expect(writes[0]).toContain('.spur/run/r11.md');
         expect(writes[0]).toContain('--no-log');
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('0926 AC2 — switches from a legacy .log to the resumed run .md when it appears mid-follow', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'run', 'r12.log'), 'legacy\n');
+
+        const writes: string[] = [];
+        let stepped = false;
+        const wait = async () => {
+            if (!stepped) {
+                stepped = true;
+                // The continue of the legacy run creates the pair under the same id.
+                await writeFile(join(dir, '.spur', 'run', 'r12.md'), 'resumed section\n');
+                await writeFile(join(dir, '.spur', 'run', 'r12.state.json'), '{"runId":"r12"}');
+            }
+        };
+        let traceCalls = 0;
+        const trace = async () => {
+            traceCalls++;
+            return { run: { status: traceCalls >= 4 ? 'done' : 'running' } } as never;
+        };
+
+        await followRunLog({ trace }, 'r12', dir, 5, (line) => writes.push(line), wait);
+
+        // The tail moved to the new record instead of tracking the stale legacy file.
+        expect(writes).toEqual(['legacy', 'resumed section']);
+        await rm(dir, { recursive: true, force: true });
+    });
+
+    test('0926 AC2 — reports a missing pair state as an incomplete record, never as success', async () => {
+        const dir = await createTempProject();
+        await mkdir(join(dir, '.spur', 'run'), { recursive: true });
+        await writeFile(join(dir, '.spur', 'run', 'r13.md'), 'record body\n');
+        // No state file: the pair is incomplete by definition.
+
+        const writes: string[] = [];
+        await followRunLog({ trace: serviceTrace(() => true) }, 'r13', dir, 5, (line) => writes.push(line));
+
+        expect(writes).toEqual([
+            'record body',
+            `Run record incomplete (state-missing) at ${join(dir, '.spur', 'run', 'r13.state.json')} — the workflow DB trace remains the completion authority.`,
+        ]);
         await rm(dir, { recursive: true, force: true });
     });
 });

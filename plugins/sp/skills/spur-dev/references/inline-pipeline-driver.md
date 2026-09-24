@@ -69,7 +69,8 @@ the human/native presentation layer — labels are display addresses only, never
 1. Resolve the command inputs, `--auto`, and any explicit `--vars` — **without reading the selected
    YAML yet**. An explicit non-inline executor selection chooses the subprocess workflow path.
 2. Allocate a collision-resistant inline run id (`uuidgen`, with a timestamp/pid fallback), create
-   `.spur/run/`, and use `.spur/run/<run-id>.log` as the run log.
+   `.spur/run/`, and use the two-file run record (task 0927) — append lines to
+   `.spur/run/<run-id>.md` and read machine state from `.spur/run/<run-id>.state.json`.
 3. **Authoritative run identity (task 0804 R1, fail-closed).** Persist the run row through the
    internal delegate before any stage executes — this is what makes bound `run.artifact` record
    accept the inline run (0785 R3):
@@ -87,8 +88,10 @@ the human/native presentation layer — labels are display addresses only, never
    obtains the selected definition from the existing CLI `workflow show --format todo --json`
    projection and revalidates its schema/name/digest before preserving its source layer.
    Both paths create-or-attach the row,
-   and writes `.spur/run/<run-id>-inline-setup.json`. Seed `__runId` and `__definitionDigest`
-   from that file so proof capture and bound registration verify against the persisted identity.
+   and writes the run-record state `.spur/run/<run-id>.state.json` plus the `.md` run-start
+   header (task 0927; a legacy pre-0927 run keeps its `<run-id>-inline-setup.json` sidecar).
+   Seed `__runId` and `__definitionDigest`
+   from that state so proof capture and bound registration verify against the persisted identity.
    Bun remains required for SQLite; the Node-runnable installed twin re-enters Bun on PATH.
    A non-zero exit (missing runtime/bundle, invalid projection, missing row identity, changed definition) stops the run —
    never continue unbound and never fabricate a PASS. (The delegate persists the authoritative
@@ -258,13 +261,14 @@ Action semantics come from the YAML and the workflow action contract:
   and pass the same `--feature-file` the run folded in — omitting it, or running from elsewhere,
   yields a different digest and the mismatch surfaces later as a refused `run.artifact`
   registration — and the run-scoped review-completion marker exists — then appends one provenance
-  line to `.spur/run/<run-id>.log` naming the equivalence (artifact kind, path, verdict, digest) and
+  line to `.spur/run/<run-id>.md` naming the equivalence (artifact kind, path, verdict, digest) and
   proceeds to `spur task record`. A failed validation stops at the state and follows the failure
   contract; the step is never silently skipped. Artifact-provenance consumers read that run-log
   line on the inline path — there is no ledger row. The validation also includes **run/definition
   identity agreement from authoritative evidence** (task 0809 R4): the verdict's `proof.runId` and
-  `proof.definitionDigest` must agree with the setup artifact `.spur/run/<run-id>-inline-setup.json`
-  and the persisted run row; if that identity is absent or conflicts, STOP — recreating a row is
+  `proof.definitionDigest` must agree with the run-record state `.spur/run/<run-id>.state.json`
+  (legacy pre-0927 runs: `<run-id>-inline-setup.json`) and the persisted run row; if that identity
+  is absent or conflicts, STOP — recreating a row is
   not a diagnostic operation. The app-service bound-artifact fixture (which writes a real engine
   ledger row) is service-level test evidence for this identity mechanics, not evidence that the
   inline host writes a ledger.
@@ -434,7 +438,7 @@ or an operator decision returns a blocker; the host pauses at the current state 
 subagent cannot approve, infer consent, or recursively invoke the full pipeline.
 
 After every successful inline `agent.run` action append exactly one provenance line (inline or
-subagent form above) to `.spur/run/<run-id>.log`, where `<id>` is the current YAML state id. Also
+subagent form above) to `.spur/run/<run-id>.md`, where `<id>` is the current YAML state id. Also
 log start/failure and the ignored timeout value so an inline run remains auditable without
 fabricating an `AgentRunTracedResult`.
 
@@ -446,7 +450,8 @@ in one file and makes the run unauditable (task 0726 mixed both forms).
 
 ## Structured trace emission (ADR-117, task 0868)
 
-`.spur/run/<run-id>.log` is a human convenience, **not the record of truth**. A run's
+`.spur/run/<run-id>.md` is the human half of the two-file run record — evidence, **not the record
+of truth**. A run's
 observability is a property of the run, so the inline driver owes the same structured trace the
 engine subprocess writes — and it owes it through the **same writer**, never a parallel
 implementation. The shared writer is `WorkflowActionTraceWriter`
@@ -487,7 +492,7 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
   state is `done`; a run halted by a failing action under its error policy is `failed`.
 
 **Best-effort at the action boundary only (ADR-117).** An `--action` persistence failure is
-recorded — the delegate appends a `trace-emission-failed` line to `.spur/run/<run-id>.log` and
+recorded — the delegate appends a `trace-emission-failed` line to `.spur/run/<run-id>.md` and
 prints `{"ok":false}` on stdout — and the run continues to its declared terminal state; the
 delegate exits `0` for that outcome and the driver must never treat an emission failure as a run
 failure, retry it in a loop, or substitute a hand-written row. The run-row closure (`--close`) is
