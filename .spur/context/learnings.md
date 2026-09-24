@@ -860,3 +860,10 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - Count-ratchet test bumps (task-tagged comments, zero-violations assertions kept) are the sanctioned gate repair for added command/skill surfaces.
 - Contract fix = fix the authority doc row too (fix-ladder reverse-apply rule had to be re-fixed in design §6 after the verifier caught the residue).
 - Main moves during long batches: expect merge (not FF); pre-check `git log branch..main --name-only` overlap before choosing.
+
+## 2026-09-23 — E7 batch (0925–0929, runall inline+worktree) → feature-done gate
+- The ADR-119 feature-done gate needs three things beyond task completion: (1) a feature-scoped verification receipt (`spur workflow run feature-verification.yaml --vars '{"featureId":<ID>,"spurBin":"spur"}'`), (2) task verdict rows keyed by feature scenario title or `AC-N` alias (task-local `R1..Rn` ids are credited by no scenario → L4 error), (3) a `docs/dogfood/INDEX.md` entry whose filename segment equals the feature id when the feature touches self-referential workflow infra.
+- The receipt digest binds an isolated git tree hash (HEAD + working-tree modifications), the feature file content and `.spur/context/learnings.md` — so the pass must be the LAST write before `spur feature sync <id>`; any commit in between makes it stale ("receipt digest … ≠ current inputs").
+- `--vars` REPLACES the workflow var map (no merge): a partial `--vars '{"featureId":"E7"}'` silently empties `spurBin`, which switches feature-verification-steps' loadModule to source mode → "missing feature-verification seams" (`packages/app/src/index.ts` does not re-export splitLaunchCommand/ArtifactDao; the generated bundle does). Pass every non-default var, `spurBin` included.
+- `superskill script convert <plugin> <rel>` resolves `rel` relative to `plugins/<plugin>/` — pass `feature-verification-steps.ts`, not `scripts/feature-verification-steps.ts`.
+- `spur-check-feature` is a ~1.5 s invariant chain (8 checks + 7 repo-wide tests), not the full suite; per-task `spur-check` is the ~3 min heavy gate.
