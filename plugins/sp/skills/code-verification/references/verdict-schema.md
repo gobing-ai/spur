@@ -136,6 +136,7 @@ Wave C verification can emit the following additive `checks[]` rows:
 | `evidence-rule-pass` | All behavior-bearing AC rows had executable evidence or were explicitly non-behavioral. |
 | `evidence-rule-failed` | One or more MET behavior-bearing AC rows lacked `test` / `command` evidence and were downgraded to PARTIAL. |
 | `cli-golden-path-present` | CLI-surface tasks supplied, or failed to supply, one golden-path command evidence row. |
+| `residual-sweep` | Post-verdict residual scan (F96): `fail` when blocking leftovers exist (P1–P3 findings, added diff markers, unchecked boxes); evidence lists blocking/deferrable/advisory/housekeeping counts plus blocking and deferrable item ids. A `fail` downgrades an otherwise-PASS verdict to PARTIAL via the fold step. |
 
 ## How the gate reads it
 

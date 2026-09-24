@@ -296,4 +296,57 @@ esac`,
     // 0772 R1 (behavior moved into quality-gate.ts, 0823 d): the bounded-summary contract —
     // green gates print a one-line status, red gates print at most the last 40 lines, and the
     // durable log keeps everything — is asserted in plugins/sp/tests/quality-gate.test.ts.
+
+    // F96 residual sweep (0950): scan/fold wired into verify between task verdict and the
+    // jq proof bind; settle/report at the terminal states; base capture is resume-safe.
+    function shellCommands(stateId: string): string[] {
+        return (
+            PIPELINE.states
+                .find((state) => state.id === stateId)
+                ?.onEnter?.filter((action) => action.kind === 'shell')
+                .map((action) => action.options?.command ?? '') ?? []
+        );
+    }
+
+    test('precheck captures base.sha only when absent (F96 R1 resume-safe)', () => {
+        const cmd = shellCommands('precheck').find((c) => c.includes('-base.sha'));
+        expect(cmd).toBeDefined();
+        expect(cmd).toContain('rev-parse HEAD');
+        expect(cmd).toMatch(/\[ -f "?\.spur\/run\/\$wbs-base\.sha"? \] \|\|/);
+    });
+
+    test('verify orders scan+fold between task verdict and the jq proof bind (F96 R2)', () => {
+        const cmds = shellCommands('verify');
+        const verdictIdx = cmds.findIndex((c) => c.includes('task verdict'));
+        const residualIdx = cmds.findIndex((c) => c.includes('residual-scan') && c.includes('fold'));
+        const bindIdx = cmds.findIndex((c) => c.includes('+ {proof:'));
+        expect(verdictIdx).toBeGreaterThanOrEqual(0);
+        expect(residualIdx).toBeGreaterThan(verdictIdx);
+        expect(bindIdx).toBeGreaterThan(residualIdx);
+        // Hard action: no exit-0 blanket — a scanner crash must fail verify closed.
+        expect(cmds[residualIdx].trim().endsWith('exit 0')).toBe(false);
+        // Repo-first, then superskill twin, failing closed (quality-gate pattern).
+        expect(cmds[residualIdx]).toContain('superskill script path sp residual-scan.mjs');
+    });
+
+    test('test-fix appends the residual artifact to the gate log (F96 R3)', () => {
+        const cmd = shellCommands('test-fix').find((c) => c.includes('-residuals.json'));
+        expect(cmd).toBeDefined();
+        expect(cmd).toContain('-test-gate.log');
+    });
+
+    test('done settles residuals as a soft action after the transition (F96 R4)', () => {
+        const cmds = shellCommands('done');
+        const settleIdx = cmds.findIndex((c) => c.includes('residual-scan') && c.includes('settle'));
+        expect(settleIdx).toBe(0);
+        expect(cmds[settleIdx].trim().endsWith('exit 0')).toBe(true);
+    });
+
+    test('failed renders the residual report as a soft action (F96 R5)', () => {
+        const cmds = shellCommands('failed');
+        expect(cmds.length).toBeGreaterThan(0);
+        const report = cmds.find((c) => c.includes('residual-scan') && c.includes('report'));
+        expect(report).toBeDefined();
+        expect(report?.trim().endsWith('exit 0')).toBe(true);
+    });
 });

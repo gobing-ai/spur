@@ -241,6 +241,15 @@ recorded, so a later `/sp:dev-verify --next` cannot legally reach `done`. Call
 `/sp:dev-verify 0042 --auto --next` directly only to **re-verify** a task already at `testing`
 (e.g. after fixing a PARTIAL/FAIL); add `--force` to re-run an already-verified task.
 
+#### Leftovers (residual sweep)
+
+Verification (pipeline or standalone) runs an observe-only **residual sweep**: leftover task
+evidence outside the task's declared paths (staging residue, review files, unchecked plan boxes)
+downgrade a PASS verdict to PARTIAL instead of silently certifying them. When that happens, the
+router stops for you (C6) and prints `.spur/run/<wbs>-residual-report.md` plus the recovery
+command `/sp:dev-run <wbs>` — re-run the pipeline rather than fixing by hand, so the normal
+remediation budget applies.
+
 Shortcuts: `/sp:dev-run 0042 --auto --wrap` folds step 2 into step 1. Unsure of the current
 state? `/sp:dev-next 0042` reads the status and dispatches the right hop (backlog → refine,
 todo/wip → implement, testing → verify, done → wrap). Interrupted run: `/sp:dev-run 0042 --continue`.
@@ -276,7 +285,10 @@ silent bad `done`.
 
 After `done`, **wrap up** with `/sp:dev-wrap <wbs>` (or `/sp:dev-wrapall --feature <id>`
 for the whole feature) to capture learnings, sync docs, and (optionally) advance the
-feature and clean up the branch.
+feature and clean up the branch. For `/sp:dev-runall --wrap`/`--next` the wrap runs
+**once for the batch** over the `done` subset: unfinished tasks are listed in the batch
+report with their recovery commands, the feature advances only when the whole frozen set
+finished, and an empty done subset skips the wrap with a reason.
 
 ---
 

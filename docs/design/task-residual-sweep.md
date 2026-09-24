@@ -1,5 +1,5 @@
 ---
-status: proposed-design
+status: shipped-design
 feature: F96
 adr: ADR-071, ADR-076
 updated_at: 2026-09-24

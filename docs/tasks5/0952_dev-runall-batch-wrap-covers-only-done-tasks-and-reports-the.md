@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: dev-runall batch wrap covers only done tasks and reports the rest
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.121Z
-updated_at: "2026-09-24T18:59:37.250Z"
+updated_at: "2026-09-24T22:38:32.021Z"
 feature_id: F96
 priority: P2
 tags:
@@ -29,13 +29,13 @@ Premises (verified 2026-09-24):
 
 ### Requirements
 
-- [ ] R1. Add "Step 6 — Batch wrap (`--wrap` / `--next`)" to execution-batch.md. Pass only the batch tasks whose terminal status is `done` as `vars.tasks`. Pass `vars.feature` only when every task in the frozen batch is `done` or `cancelled`; otherwise omit it and note "feature lifecycle not advanced: <n> task(s) unfinished". When the done subset is empty, skip the wrap with a reason instead of failing.
-- [ ] R2. The batch report lists each excluded task with its status and recovery command. A task with a residual report uses the C6 recovery line; others use the next-router A-row command.
-- [ ] R3. Fix dev-runall.md: the `--wrap` flag row says once per batch over the done subset, and the per-task wording is removed. Mirror this in the dev-operations.md runall entry and the help doc's `--next` chain section.
+- [x] R1. Add "Step 6 — Batch wrap (`--wrap` / `--next`)" to execution-batch.md. Pass only the batch tasks whose terminal status is `done` as `vars.tasks`. Pass `vars.feature` only when every task in the frozen batch is `done` or `cancelled`; otherwise omit it and note "feature lifecycle not advanced: <n> task(s) unfinished". When the done subset is empty, skip the wrap with a reason instead of failing.
+- [x] R2. The batch report lists each excluded task with its status and recovery command. A task with a residual report uses the C6 recovery line; others use the next-router A-row command.
+- [x] R3. Fix dev-runall.md: the `--wrap` flag row says once per batch over the done subset, and the per-task wording is removed. Mirror this in the dev-operations.md runall entry and the help doc's `--next` chain section.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Batch wrap covers only completed tasks (req: R1, R2, R3)
+- [x] AC1 — Batch wrap covers only completed tasks (req: R1, R2, R3)
 
 ### Q&A
 
@@ -52,25 +52,61 @@ Decisions:
 
 ### Plan
 
-- [ ] Add Step 6 to plugins/sp/skills/spur-dev/references/execution-batch.md and extend the Step 5 report template with an "Excluded from wrap" block.
-- [ ] Fix plugins/sp/commands/dev-runall.md:23 and the dev-operations.md runall entry.
-- [ ] Update the help doc's `--next` chain section.
-- [ ] Run `bun run spur-check`, which includes the flag-contract validators.
+- [x] Add Step 6 to plugins/sp/skills/spur-dev/references/execution-batch.md and extend the Step 5 report template with an "Excluded from wrap" block.
+- [x] Fix plugins/sp/commands/dev-runall.md:23 and the dev-operations.md runall entry.
+- [x] Update the help doc's `--next` chain section.
+- [x] Run `bun run spur-check`, which includes the flag-contract validators.
 
 ### Solution
 
 <!-- Filled during implementation: file:line change map and concise rationale. -->
 
+| File | Change |
+| --- | --- |
+| plugins/sp/skills/spur-dev/references/execution-batch.md:442-456 | Step 5 template gains "Excluded from wrap" block (per-task status + recovery: C6 line for residual-reported tasks, router A-row otherwise). |
+| plugins/sp/skills/spur-dev/references/execution-batch.md:482-497 | New "## Step 6 — Batch wrap (`--wrap` / `--next`)": done-subset vars.tasks, feature only when the whole frozen set is done/cancelled, empty-subset skip with reason; filtering stays in the driver (wrapup invariant untouched). |
+| plugins/sp/commands/dev-runall.md:23 | --wrap flag row: once per batch over the done subset (contradiction removed). |
+| plugins/sp/skills/spur-dev/references/dev-operations.md:355 | runall entry mirrors the batch-once/done-subset semantics. |
+| docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:285-289 | --next chain section documents the batch-once wrap rule. |
+
+Rationale: driver-side filtering preserves wrapup-pipeline's hard refusal of non-done tasks and omits feature advance on partial batches — no FSM or workflow change.
+
+
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | execution-batch.md Step 6 (done-subset vars.tasks; conditional vars.feature with unfinished note; empty-subset skip with reason; driver-side filtering) |
+| R2 | MET | execution-batch.md Step 5 "Excluded from wrap" block with C6 recovery line for residual-reported tasks and router A-row for others |
+| R3 | MET | dev-runall.md:23 flag row fixed; dev-operations.md §13 runall entry mirrored; help doc --next chain section updated; validate-commands 40/40 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | bun test plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts: 20 pass; bun run validate-commands: 40 pass; Step 5/6 + flag-row/dev-operations/help surfaces in tree; spur-check PASS 8941 tests / 0 fail |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-24T22:38:04.704Z todo → wip (system)
+- 2026-09-24T22:38:31.670Z wip → testing (system)
+- 2026-09-24T22:38:32.021Z testing → done (system)
+

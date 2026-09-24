@@ -812,6 +812,13 @@ quality, review, and observe-only verification evidence names one unchanged fina
 
 **Detail:** `03 §20.3`; `docs/design/workflow-composition-contract.md` §Verification proof state.
 
+**Note (2026-09-24, F96 task 0951).** The residual sweep (`plugins/sp/scripts/residual-scan.ts`,
+fold/settle/report modes) is observe-only verification evidence under this ADR: it reads the tree
+and `.spur/run/` artifacts and writes only new `.spur/run/` outputs (plus folding its
+`residual-sweep` check into the verdict artifact it certifies) — it adds no model query and no
+mutation-after-proof surface, consistent with ADR-076's retirement of the model-bearing
+residual-sweep stage.
+
 ## ADR-072: One Canonical Pipeline per Lifecycle Boundary
 
 **Status:** Accepted · **Date:** 2026-08-19 · **Feature:** D5 · **Amends:** ADR-029

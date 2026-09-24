@@ -115,4 +115,16 @@ describe('sp plugin — routing-table.md ↔ adapter row parity (C2)', () => {
             ).toContain('--mode implement');
         }
     });
+
+    test('C6 residual-failure row is a HITL STOP, not an auto-dispatch (F96)', () => {
+        const c6 = md.split('\n').filter((l) => /^\|\s*C6\s*\|/.test(l));
+        expect(c6.length, 'routing-table.md must define exactly one C6 row').toBe(1);
+        // C6 prints the recovery command but never auto-dispatches: the row must not
+        // begin its Redirect-dispatch cell with an /sp:dev-* command.
+        const cells = c6[0].split('|').map((c) => c.trim());
+        const dispatchCell = cells[5] ?? ''; // C-table: | C6 | when | probe | signal | dispatch | else |
+        expect(dispatchCell.startsWith('/sp:dev-'), 'C6 must be a STOP, not an auto-dispatch').toBe(false);
+        expect(dispatchCell).toContain('HITL STOP');
+        expect(dispatchCell).toContain('residual-report.md');
+    });
 });

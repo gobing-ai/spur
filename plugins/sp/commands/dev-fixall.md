@@ -33,3 +33,10 @@ all**: targeted probes (`bun test <file> --test-name-pattern <test>`) during fix
 `bun run lint` before returning. Invoked standalone, it keeps the single confirming run (R4, task
 0483). `qualityGateCmd` itself is unchanged so `test-recheck` still runs the full gate.
 
+When dispatched from the pipeline's test-fix stage (F96, task 0950), the gate log carries a
+`residual artifact` block (`<wbs>-residuals.json`) and the findings file already
+contains the merged residual anchors: treat those items as fix targets, in order,
+alongside gate anchors. The fixer may write `.spur/run/<wbs>-residual-deferrals.json`
+— one `{id, reason}` entry per item — but only for P3 findings or diff markers it
+cannot fix inside the task; the done stage settles deferrals into follow-up tasks.
+
