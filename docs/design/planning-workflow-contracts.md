@@ -49,9 +49,19 @@ needed). `feature-dev.yaml` uses the same resolvable ref.
 
 **Task execution pipeline** — `config/workflows/task-pipeline.yaml` (design §6, ADR-022
 "orchestration is configuration": YAML over the existing engine, zero engine code). `kind:
-state-machine`, shape `precheck → implement → test [→ test-fix ↔ test-recheck] → review →
-approve(HITL) → verify → record → done` (precheck failure short-circuits to `failed`; `approve`
-routes to `failed` on rejection or `cancelled` on cancel). Invariants: it never touches files
+state-machine`, shape `precheck → implement [→ escalate] → test [→ test-fix ↔ test-recheck] → review
+→ approve(HITL) → verify → record → done` (precheck failure short-circuits to `failed`; `approve`
+routes to `failed` on rejection or `cancelled` on cancel). **Escalation pause (0933).** The implement
+`agent.run` declares `escalationFile: .spur/run/<wbs>-question.md`: after a clean exit a non-empty
+file means the agent paused on an operator question instead of finishing, so the attempt succeeds
+with `data.escalated = true` and `requireDiff` (including the 0487 scope guard) is skipped for that
+attempt only. The `escalate` state is a `hitl.input` gate whose prompt reads the question; an answer
+(from the host, or `spur workflow continue --answer-text <text>` for a headless run) is appended to
+`.spur/run/<wbs>-escalation.md` by that state's transcript consumer, the question file is removed,
+and `escalate → implement` re-enters the step. `maxEscalations` bounds the pause count; exhausting it
+routes to `failed` with the unanswered question appended to the run report. The question file is
+deleted before dispatch (0751 R3 freshness), so a question left by a prior run can never pause the
+current one. Invariants: it never touches files
 directly — status moves use the normal `spur task update <wbs> <status>` verb and section writes go
 through `spur task record` (0108) / `spur task update --section`, so the lifecycle guards apply
 identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
@@ -75,7 +85,10 @@ demonstrate stands on its own and governs any future candidate. Composition, act
 
 **Vars.** `wbs`, `profile`, `spurBin`, `agent`, `implementAgent`, `stepTimeoutMs`, `implementTimeoutMs`,
 `maxImplementReqs`, `maxImplementPlanItems`, `qualityGateCmd`, `qualityGateMaxFixAttempts`, `gateProbeCmd`,
-`formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, plus the proof-chain inputs (task 0703,
+`formatCmd`, `implementScopeGuard`, `mutationPolicy`, `__hitlAnswer`, `__hitlInput`, `maxEscalations`
+(default `2`), `escalationQuestion` (runtime-written from the question file), `deferFeatureSync`
+(default `"false"`; a parallel batch sets `"true"` to defer the post-record feature sync to batch
+integration — ADR-127), plus the proof-chain inputs (task 0703,
 completed by 0785 R2): `taskSpecPath` (task file resolved at `test` entry — `docs/tasks*` is excluded from the digest's
 git-tree half), `featureSpecPath` (linked feature spec resolved at `test` entry from the task frontmatter; empty
 for orphan tasks = legitimately omitted — a declared feature whose path fails to resolve fails closed),

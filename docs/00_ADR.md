@@ -1953,3 +1953,29 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   surfaces, and reviewer stages keep fresh-session isolation.
 - **Retains:** ADR-057 (durable artifacts, no terminal transport), ADR-087, ADR-116, ADR-121.
 - **Detail:** [workflow catalogue refactor](design/workflow-catalogue-refactor.md) §5.
+
+## ADR-127: Parallel Batch Tasks Are Isolated in Per-Task Worktrees and Integrated by Rebase-Then-Fast-Forward
+
+- **Status:** Accepted · **Date:** 2026-09-24 · **Feature:** H1
+- **Decision:** Under `--mode parallel`, each concurrently executing task runs in its own
+  create-mode worktree cut from the current base-ref tip, with a per-task batch marker and at most
+  `--concurrency` pipelines in flight; a task becomes eligible only when its in-set dependencies are
+  **integrated** onto the base ref, not merely finished. Integration is serialized and never creates
+  a merge commit: the task branch is rebased onto the base ref and merged `--ff-only`, and a failed
+  rebase is aborted with the worktree and branch retained for the operator. Because a task branch
+  may not write generated corpus regions, the post-record feature sync is deferred
+  (`deferFeatureSync`) and the orchestrator runs the bounded feature sync once per touched feature on
+  the base ref after the last integration. Alternatives rejected: a shared tree with task-level
+  locking (two pipelines would still share one working tree and one dirty-tree advisory),
+  sequential-only batches (forfeits the proven-independent fan-out), and per-task clones (no shared
+  object store or branch lifecycle).
+- **Why:** the harness already enforces one writer per working tree; making the task the isolation
+  unit removes the cross-task overwrite failure class without adding a coordination plane or a
+  second corpus writer.
+- **Consequence:** `--worktree` with `--mode parallel` is no longer a rejected combination (parallel
+  implies per-task isolation), a parallel batch commits exactly one corpus sync, and an integration
+  conflict is a retained-worktree operator decision with no auto-resolution.
+- **Retains:** ADR-047 (parallel batch stages stay isolated subprocesses), ADR-119 (repo-wide sync
+  stays feature-scoped, not per-task).
+- **Detail:** `03 §29`; `plugins/sp/skills/spur-dev/references/execution-batch.md` § Parallel
+  isolation; task 0931.

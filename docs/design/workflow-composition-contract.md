@@ -277,7 +277,10 @@ posture. This section owns the composition rules those numbers serve.
    `pipeline-budgets` `modelQueries`, which needs a recorded decision, and every shared workflow
    with a model query carries a budget entry.
 6. **Every step leaves a checked result.** An `agent.run` declares `expectFile` or `requireDiff`,
-   and the next deterministic step reads that result fail-closed. Trace keeps each action's
+   and the next deterministic step reads that result fail-closed. A step that pauses on an operator
+   question is the one exception: a non-empty `escalationFile` makes the attempt succeed with
+   `data.escalated = true` and skips `requireDiff` for that attempt only (0933), and the pipeline's
+   `escalate` gate holds the run until an answer. Trace keeps each action's
    `durationMs`, invocation and cost, so every step is observable on its own.
 7. **Step boundaries follow the cache window, not the clock.** Provider prompt caches expire after
    an idle window and refresh on every hit (Anthropic: 5 minutes by default, 1 hour at extra cost;

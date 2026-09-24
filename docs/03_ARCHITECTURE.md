@@ -227,8 +227,13 @@ process boundary. Interruption recovery is the engine's contract, not Spur's (AD
 on lost races) and rerun-enter at-least-once re-execution from `interrupted`. Spur only refuses
 duplicate run ids pre-flight, claims via `resumeOwner` at the executing boundary (sync CLI or
 detached `--async` worker), admits `paused | interrupted` as resumable, and sweeps stale runs to
-`interrupted` (rerun-resumable) — never status surgery or a local recovery FSM. Exact variable
-and resume contracts:
+`interrupted` (rerun-resumable) — never status surgery or a local recovery FSM. A headless task
+pipeline can pause mid-step on an operator question (0933): an `agent.run` declaring
+`escalationFile` succeeds with `data.escalated = true` when the agent left a non-empty question
+file, routes to the pipeline's `escalate` `hitl.input` gate, and resumes through
+`spur workflow continue --answer-text <text>` — bounded by the pipeline's `maxEscalations` var. The
+question file is deleted before dispatch, so a stale question can never pause a later run. Exact
+variable and resume contracts:
 [planning workflows](design/planning-workflow-contracts.md) and
 [workflow commands](design/cli-contracts.md).
 
@@ -1122,3 +1127,26 @@ its phase lands.
 
 Mechanisms, per-phase sequencing and the measured-promotion gate:
 [workflow catalogue refactor](design/workflow-catalogue-refactor.md).
+
+## 29. Parallel Batch Execution — built (ADR-127; tasks 0931–0933)
+
+A batch (`/sp:dev-runall`) is a driver loop over per-task `task-pipeline.yaml` runs, not a second
+workflow definition. Sequential mode is unchanged; `--mode parallel` makes the task the isolation
+unit:
+
+- **One tree per task.** Each concurrent task runs in a create-mode worktree cut from the base-ref
+  tip with its own batch marker; at most `--concurrency` (default 2) pipelines are in flight, and a
+  task becomes eligible only when its in-set dependencies are integrated onto the base ref, not
+  merely finished. Two pipelines never share a working tree, and the invoking tree takes no task
+  writes while the batch runs.
+- **Rebase-then-fast-forward integration.** A succeeded task commits on its branch; the orchestrator
+  rebases that branch onto the base ref and merges `--ff-only` from the invoking tree, one
+  integration at a time, so a batch never creates a merge commit. A failed rebase is aborted with the
+  worktree, branch and marker retained as an operator decision — there is no auto-resolution.
+- **One corpus sync per batch.** Task pipelines skip the post-record feature sync
+  (`deferFeatureSync`), so their branches never touch feature files or the generated feature index;
+  after the last integration the orchestrator runs the bounded sync plus one `feature refresh` per
+  touched feature on the base ref and commits it once.
+
+Driver contract, marker lifecycle and the retained-worktree resume/discard commands:
+[execution-batch.md](../plugins/sp/skills/spur-dev/references/execution-batch.md).

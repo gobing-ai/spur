@@ -111,7 +111,7 @@ extend inline engine-resume, artifact-ledger or DecisionMaker capabilities.
 ## 3. Stage contracts (ADR-118)
 
 An `agent.run` stage already declares its post-conditions (`answerFile`, `expectFile`, `requireDiff`,
-verdict parseability). Before tasks 0870/0871 a stage that exited cleanly and missed one was
+`escalationFile`, verdict parseability). Before tasks 0870/0871 a stage that exited cleanly and missed one was
 indistinguishable in the trace from an executor that crashed: both were `ok: false`, and both cost a
 full re-dispatch of a stage averaging 357 s.
 
@@ -119,7 +119,14 @@ full re-dispatch of a stage averaging 357 s.
 | --- | --- | --- |
 | success | contract satisfied | declared success edge |
 | `contract-violation` | clean exit, declared post-condition unmet | dedicated repair edge; first attempt must not re-dispatch the full stage |
+| escalated (paused) | clean exit, non-empty `escalationFile` | pipeline `escalate` gate; the run stays `paused` until an operator answer (0933) |
 | executor failure | non-zero executor exit, transport error | existing retry semantics |
+
+`escalationFile` is the one post-exit contract that is a **question signal**, not an assertion: a
+non-empty file means the agent paused instead of finishing, so the attempt reports success with
+`data.escalated = true` and `requireDiff` is skipped for that attempt only. It is not a
+`contract-violation` — nothing was violated — and the pause is bounded by the pipeline's
+`maxEscalations`.
 
 Shipped (tasks 0870/0871): the violation is detected and named **before the stage reports success**
 — the run log carries the `workflow.agent.contract-violation` line and the action trace records
