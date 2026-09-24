@@ -512,7 +512,10 @@ iterating one task).
 
 **The rule.** When a test fails and you are iterating to green:
 
-1. Run the narrow target first: `bun test <file> --test-name-pattern <test>`.
+1. Run the narrow target first: `bun test <file> --test-name-pattern <test>`. Workspace tests need
+   the workspace `bunfig.toml` preload — invoke them as a subshell `(cd <workspace> && bun test …)`
+   or with absolute paths, because the shell's cwd persists between calls and a bare `cd` breaks
+   later relative-path commands (verifyall session friction, 2026-09-23).
 2. Loop on that narrow target until green.
 3. **Then** run the single full `spur-check` (or `bun run check`) as the final gate.
 

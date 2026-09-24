@@ -166,10 +166,12 @@ pipeline. `bun run corpus-check` is the explicit unsuppressed
 audit for checker-policy changes (T10); ordinary corpus edits check affected inputs (T11).
 Do not bypass hooks or suppress findings to force green.
 
-Run targeted tests **inside their workspace**, whose `bunfig.toml` supplies the preload:
+Run targeted tests **inside their workspace**, whose `bunfig.toml` supplies the preload. Use a
+subshell or absolute paths — the shell's cwd persists between calls, so a bare `cd` breaks later
+relative-path commands:
 
 ```bash
-cd apps/cli && bun test tests/output-envelope.test.ts
+(cd apps/cli && bun test tests/output-envelope.test.ts)
 ```
 
 Root test runs enforce the repository coverage denominator. Tests belong under
