@@ -4,7 +4,7 @@ name: Inspect a bounded run record from the existing Board
 status: done
 template: feature-impl
 created_at: 2026-09-23T05:09:42.309Z
-updated_at: "2026-09-24T05:59:54.041Z"
+updated_at: "2026-09-24T07:09:31.558Z"
 feature_id: E7
 priority: P2
 tags:
@@ -78,14 +78,11 @@ Covers E7 R5. The current Board has History Tool Using and Observability System 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test + static-ref — packages/app/src/services/workflow-service.ts:2526-2541, workflow-service.ts:2574-2585, workflow-service.ts:1552-1556, apps/server/src/modules/observability/index.ts:365-376 |
-| R2 | MET | test + static-ref — packages/app/src/services/workflow-service.ts:2553, workflow-service.ts:2598-2666, workflow-service.ts:2618, workflow-service.ts:2623 |
-| R3 | MET | test + static-ref — apps/web/src/modules/observability/TasksTab.tsx:745, TasksTab.tsx:757-829, TasksTab.tsx:786-794 |
-| R4 | MET | command + static-ref — git diff apps/cli/src/commands/workflow.ts, git status apps/web/src/modules, apps/server/src/modules/observability/index.ts:365-376 |
+| AC-5 | MET | Task R1+R2+R3+R4 — bounded confined run-record inspection on the existing Board: route `apps/server/src/modules/observability/index.ts:362-377` (read-only GET `/api/observability/run-record/:runId`, traversal-shaped id → 400); application reader `packages/app/src/services/workflow-service.ts:1552` (`inspectRunRecord`) + `:2603-2633` (explicit missing/legacy/incomplete/oversized outcomes, `RUN_RECORD_INSPECT_MAX_BYTES` cap, legacy `.log` re-redacted on read via `redactAndBound`, absence alone never `expired`); UI `apps/web/src/modules/observability/TasksTab.tsx:744-812` (`RunRecordSection`, `aria-label` action, `role="alert"` errors, DB-trace status prop — never inferred from log); tests pass this run: service record-read block (`workflow-service.test.ts:2571-2751` — pair/incomplete/legacy/missing/traversal-reject/symlink-escape/oversized/absence-never-expired), server route 3/3 (`apps/server/tests/modules/observability/index.test.ts`), web UI 3/3 incl. "expanding a run reveals an accessible record action that loads the bounded record" (`apps/web/tests/modules/observability/tasks-tab.test.tsx:60`) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Valid run → bounded redacted projection with parsed state (workflow-service.test.ts "pair: serves the bounded, re-redacted markdown", real temp files, secret scrubbed); malformed id → throw in app / 400 `invalid-run-id` at server (index.test.ts:587-604); absent → `missing`, never `expired` ("missing: an absent record is missing"); legacy → re-redacted `legacy` outcome; incomplete pair → explicit `incomplete` reason state-missing/state-invalid x2; oversized → `oversized`+sizeBytes, no truncated content; symlink escape with real symlinks → md escape reads `missing`, escaped state degrades to `incomplete` and `"leaked"` never served (readConfinedRunFile realpath check, workflow-service.ts:2574-2585); route never reads outside `ctx.cwd/.spur/run` (service binding, workflow-service.ts:1552-1556); accessible view shows DB-trace status (tasks-tab.test.tsx asserts both badges = trace `done`, body never contains "expired"); keyboard + screen-reader checks via `getByRole("button", { name: "View run record for run run-1" })` and aria-expanded row toggle in the existing Tasks run detail. Suites: app 145 pass / 0 fail, server 22 pass / 0 fail, web 3 pass / 0 fail. |
+| AC1 — Operators inspect the record by run ID | MET | test | Server route tests 3/3 pass this run (`apps/server/tests/modules/observability/index.test.ts` run-record); service confinement/outcome tests pass this run (`workflow-service.test.ts:2571-2751`); UI accessibility tests 3/3 pass this run (`tasks-tab.test.tsx:60`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -98,7 +95,6 @@ Covers E7 R5. The current Board has History Tool Using and Observability System 
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:64c567b0dd58ed541c4d75d1243b145a9d09952fc775782070608329236a0926 |
 
 ### References
 

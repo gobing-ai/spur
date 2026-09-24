@@ -4,7 +4,7 @@ name: Move the remaining canonical workflows to the run record
 status: done
 template: feature-impl
 created_at: 2026-09-23T05:09:42.309Z
-updated_at: "2026-09-24T05:23:15.434Z"
+updated_at: "2026-09-24T07:07:54.932Z"
 feature_id: E7
 priority: P2
 tags:
@@ -75,14 +75,11 @@ Changes: (1) `plugins/sp/tests/run-record-catalog.test.ts` (new) — post-D63 ca
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test + manual-review — plugins/sp/tests/run-record-catalog.test.ts:63-76 (32 pass incl. post-D63 catalog presence asserting all 8 remaining workflows, per-file record-name sweep, idea-pipeline owner spot-checks :80-95); independent enumeration of every `.spur/run` ref in config/workflows/*.yaml: idea-pipeline.yaml:105,380,509, wrapup-pipeline.yaml:163,198, pr-review.yaml:74,92,126, wayfinder-resolution.yaml:66,85,143,150, feature-verification.yaml:74, history-anatomy.yaml:94,160-318, task-lifecycle.yaml:39 — all run-scoped `<runId>-<name>` / `<wbs>-verdict.json` / `history-anatomy-run.id` artifacts, zero exact record names |
-| R2 | MET | test + static-ref — catalog sweep green (plugins/sp/tests/run-record-catalog.test.ts:63-76) + `git diff config/workflows/` empty (no definition edited, so guard/human-decision/retry/external-effect behavior identical by construction) + pair ownership sits outside workflows: packages/app/src/observability/workflow-run-log-sink.ts:92-93 (0925 engine sink) and plugins/sp/scripts/inline-run-setup.ts:189-190 (0927 inline seam) write `.spur/run/<runId>.md` + `.state.json` for every run |
-| R3 | MET | manual-review + static-ref — no `config/workflows` diff and no `.spur/workflows` override dir in tree (nothing overwritten); independent proof retained: packages/app/src/workflow/feature-verification-receipt.ts:124-131 (run/feature-scoped receipts), config/workflows/wayfinder-resolution.yaml:143,150 (`<wbs>-verdict.json`), history-anatomy.yaml:94 (shared pointer); trace-file stays `.spur/workflow/` (apps/cli/src/commands/workflow.ts:532, docs table in plugins/sp/skills/spur-cli/references/workflows.md:218); doc edits are prose-only wording fixes (workflows.md:207,217-219,288,305,313-317,352-356; plugins/sp/skills/spur-dev/references/execution-workflow.md:141) matching CLI reality (workflow.ts:533,1482) |
-| R4 | MET | test + command — focused run: run-record-catalog + inline-run-setup/trace/installed/pipeline-driver suites 32 pass / 0 fail (installed resolution via bundled Node twin, plugins/sp/tests/inline-run-installed.test.ts); skill-structure + parity 93 pass / 0 fail; `bunx tsc --noEmit` exit 0; mutation sweep independently re-run: 5/5 record-name spellings flagged (`.md`, `.state.json`, `<RUNID>.md`, `<run-id>.log`, `$__runid.LOG`), 7/7 declared artifacts ignored |
+| AC-4 | MET | Task R1+R2+R3+R4 — post-D63 catalog classification with audited no-change dispositions: `plugins/sp/tests/run-record-catalog.test.ts:55-93` asserts all 8 remaining canonical workflows present + per-file record-name sweep (zero offenders) + idea-pipeline owner spot-checks — 12/12 pass this run; `git diff 755211d9f~1..755211d9f -- config/workflows/` = 0 files (guards/decisions/retries/external effects identical by construction); pair ownership outside workflows (`workflow-run-log-sink.ts:92-93`, `inline-run-setup.ts:189-190`); independent proof retained at owners (`packages/app/src/workflow/feature-verification-receipt.ts:122-131` run/feature-scoped receipts, unsafe ids throw); focused suites: catalog 12 pass + inline-run-setup/installed/trace 16 pass + inline-pipeline-driver 4 pass, all this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | catalog fixture covers every post-D63 definition (9 YAMLs incl. all 8 remaining, plugins/sp/tests/run-record-catalog.test.ts:48-76); independent proof/transient keep owners (feature-verification-receipt.ts:127-130, history-anatomy.yaml:94, wayfinder-resolution.yaml:143,150, `.spur/memory` route logs wrapup-pipeline.yaml:161); pair used by every workflow at the storage layer via sink+seam (workflow-run-log-sink.ts:92-93, inline-run-setup.ts:189-190); zero undeclared sidecars (sweep green, 10 files); source/installed/resumed/override resolution preserved — no definition edited (`git diff config/workflows/` empty), parity + installed-twin suites re-run green (32 pass), focused fixtures exist for the seam pair (inline-run-setup/trace/installed/driver) |
+| AC1 — Current callers survive the storage migration | MET | test | `plugins/sp/tests/run-record-catalog.test.ts` 12/12 pass this run (inventory + record-name sweep + owner spot-checks); zero `config/workflows/` edits in the E7 commit; installed parity via `inline-run-installed.test.ts` pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -95,7 +92,6 @@ Changes: (1) `plugins/sp/tests/run-record-catalog.test.ts` (new) — post-D63 ca
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:775ba44ec3d557a7728babf3f37b44c302d3b5ba62fa776510ccd088f9422783 |
 
 ### References
 

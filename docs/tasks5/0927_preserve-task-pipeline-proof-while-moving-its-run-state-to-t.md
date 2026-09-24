@@ -4,7 +4,7 @@ name: Preserve task-pipeline proof while moving its run state to the pair
 status: done
 template: feature-impl
 created_at: 2026-09-23T05:09:42.308Z
-updated_at: "2026-09-24T04:56:44.028Z"
+updated_at: "2026-09-24T07:06:24.105Z"
 feature_id: E7
 priority: P2
 tags:
@@ -76,15 +76,13 @@ R1 — inline/plugin drivers now produce the shared two-file record: `plugins/sp
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test + static-ref — plugins/sp/scripts/inline-run-setup.ts:186-235, plugins/sp/tests/inline-run-setup.test.ts:150-174, plugins/sp/tests/inline-run-trace.test.ts:150-158 |
-| R2 | MET | test + static-ref — plugins/sp/tests/inline-run-setup.test.ts:175-190, plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:91-93,266-271, plugins/sp/scripts/inline-run-setup.ts:201-206 |
-| R3 | MET | test + static-ref — plugins/sp/tests/inline-run-installed.test.ts:103-150, plugins/sp/scripts/inline-run-setup.mjs:72-113 |
-| R4 | MET | test + static-ref — packages/app/src/services/agent-service.ts:2551-2560, packages/app/src/services/workflow-service.ts:2515-2547, plugins/sp/tests/inline-run-setup.test.ts:172-174, plugins/sp/tests/inline-run-installed.test.ts:98-99, packages/app/tests/services/agent-service.test.ts:3266-3299 |
+| AC-4 | MET | Task R1+R3+R4 — task-pipeline run state moved to the pair while WBS-keyed proof stays independent: `plugins/sp/scripts/inline-run-setup.ts:186-235` (`writeOutcome` writes `<runId>.state.json` via temp+rename, retired `<run-id>-inline-setup.json` not written); `packages/app/src/services/agent-service.ts:2551-2562` (`resolveArtifactRefs` reads through the shared record seam, legacy `.log` ref in place); source/installed parity + project override: `plugins/sp/tests/inline-run-setup.test.ts`, `inline-run-installed.test.ts`, `inline-run-trace.test.ts` 16/16 pass this run (installed twin records identical identity shape; project-layer override produces same record behavior; retired sidecars absent on both paths); `packages/app/tests/services/agent-service.test.ts:3270` "artifact refs read the run-record pair, legacy log in place, none when missing" pass this run |
+| AC-2 | MET | Task R2 — proof gates preserved against the same current-input digest: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:91-93,266-271` (run/definition identity agreement gate reads the pair state; verdict `proof.runId`/`proof.definitionDigest` must agree); canary `SPUR-CANARY-0927` absent from both pair files: `plugins/sp/tests/inline-run-setup.test.ts:113-177` pass this run |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | All current callers survive: engine path writes the pair (workflow-run-log-sink.ts:85-180, atomic state replace + .md), inline path writes the same pair (inline-run-setup.ts:186-235), followRunLog re-detects record format per poll and switches legacy .log → .md mid-follow (apps/cli/src/commands/workflow.ts:1918-1936), resolveArtifactRefs migrated (agent-service.ts:2551-2560). Terminal and resume behavior covered (inline-run-trace.test.ts:88-110 DB queryability, workflow-service.test.ts resume test, apps/cli workflow.test.ts continue-keeps-identity test). Obsolete sidecar retired only after the last reader migrated, guarded by absence assertions (inline-run-setup.test.ts:172-174, inline-run-installed.test.ts:98-99, override-run 137-150). Fixtures are real: inline-pipeline-driver.test.ts:53 loads config/workflows/task-pipeline.yaml; inline-run-installed.test.ts uses a real workflow-show projection digest incl. the project override. |
-| AC2 | MET | test | Canary SPUR-CANARY-0927 planted in the resolved definition body (inline-run-setup.test.ts:111-113) never reaches either pair file (assertions at :166-170); engine-path canary spur-canary-secret-9f2c never reaches .md or .state.json (workflow-run-log-sink.test.ts 0925-AC2 canary test, redaction at sink write — workflow-run-log-sink.ts:320-326). Proof stays current-input bound: driver identity-agreement STOP preserved (inline-pipeline-driver.md:266-271 reading .state.json), run.artifact metadata prefers .md then legacy .log (workflow-service.ts:2487-2490), verdict/DB-trace authority untouched (task-pipeline.yaml unchanged; inline-run-trace.test.ts:91-110 queries action_runs without any record-file read); record/proof readers exercised unmocked (installed test runs the real bundled twin; agent-service test drives the real service against on-disk fixtures). |
+| AC1 — Current callers survive the storage migration | MET | test | `plugins/sp/tests/inline-run-setup.test.ts` + `inline-run-installed.test.ts` + `inline-run-trace.test.ts` 16/16 pass this run; `packages/app/tests/services/agent-service.test.ts:3270` pass this run |
+| AC2 — Recording preserves privacy and current proof | MET | test | `plugins/sp/tests/inline-run-setup.test.ts:166-173` canary + retired-sidecar assertions pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -97,7 +95,6 @@ R1 — inline/plugin drivers now produce the shared two-file record: `plugins/sp
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:62bc4639fa4675cf5ba992a110f55505854c61a7bdfbb88eb0274e5226538057 |
 
 ### References
 

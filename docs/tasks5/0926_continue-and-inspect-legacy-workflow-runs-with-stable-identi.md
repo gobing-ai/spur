@@ -4,7 +4,7 @@ name: Continue and inspect legacy workflow runs with stable identity
 status: done
 template: feature-impl
 created_at: 2026-09-23T05:09:42.307Z
-updated_at: "2026-09-24T04:07:51.661Z"
+updated_at: "2026-09-24T07:16:23.546Z"
 feature_id: E7
 priority: P2
 tags:
@@ -76,12 +76,14 @@ pre-pair reader is `AgentService.resolveArtifactRefs` (packages/app/src/services
 left unchanged here. The DB trace stays the lifecycle/completion authority everywhere; nothing infers
 status from markdown.
 
-- packages/app/src/services/workflow-service.ts:2495-2552 — shared reader seam `readWorkflowRunRecord(runDir, runId)` (plan step 2): explicit `pair` / `incomplete` (`state-missing` | `state-invalid`) / `legacy-log` / `missing` outcomes, traversal-rejecting run-id guard, bounded path+state read behind the service (R3). No bulk migration: legacy `.log` reads in place.
+- packages/app/src/services/workflow-service.ts:2505-2550 — shared reader seam `readWorkflowRunRecord(runDir, runId)` (plan step 2): explicit `pair` / `incomplete` (`state-missing` | `state-invalid`) / `legacy-log` / `missing` outcomes, traversal-rejecting run-id guard, bounded path+state read behind the service (R3). No bulk migration: legacy `.log` reads in place.
 - packages/app/src/observability/workflow-run-log-sink.ts:185-207 — resume identity carry-forward: a resumed run never re-emits `workflow.run.started`, so the resumed sink's state write carries `workflowName`/`startedAt` forward from the prior valid state file (never from markdown); missing/invalid prior state stays an explicit gap (R1).
 - packages/app/src/observability/workflow-run-log-sink.ts:220-233 — a failed atomic state replace now unlinks its `.tmp` (no residue) while staying best-effort (R1).
-- packages/app/src/observability/workflow-run-log-sink.ts:83-84 + apps/cli/src/commands/workflow.ts:1196-1202 (unchanged 0925 wiring) — continue keeps the original run id; the sink opens `<runId>.md` append-only and atomically replaces state on the trace's finalize event, so recovery appends only new sections and never re-executes recorded effects (engine receipts; verified by the side-effect counter tests).
-- apps/cli/src/commands/workflow.ts:1913-1963 — `followRunLog` re-detects the record format every poll (0926 R3): a legacy `.log` run continued mid-follow switches the tail to the new `.md` (once, from the top) instead of tracking the stale `.log` forever; a pair record with missing/invalid state is reported as an explicit incomplete record at terminal, never as success (AC2). `--no-log`, `--trace-file`, and the no-record `--no-log` message are unchanged (R4).
+- packages/app/src/observability/workflow-run-log-sink.ts:92-93 + apps/cli/src/commands/workflow.ts:1196-1202 (unchanged 0925 wiring) — continue keeps the original run id; the sink opens `<runId>.md` append-only and atomically replaces state on the trace's finalize event, so recovery appends only new sections and never re-executes recorded effects (engine receipts; verified by the side-effect counter tests).
+- apps/cli/src/commands/workflow.ts:1910-1963 — `followRunLog` re-detects the record format every poll (0926 R3): a legacy `.log` run continued mid-follow switches the tail to the new `.md` (once, from the top) instead of tracking the stale `.log` forever; a pair record with missing/invalid state is reported as an explicit incomplete record at terminal, never as success (AC2). `--no-log`, `--trace-file`, and the no-record `--no-log` message are unchanged (R4).
 - packages/app/src/index.ts — exports `readWorkflowRunRecord` / `WorkflowRunRecordRead` for the 0927/0929 seams.
+
+Anchor refresh (2026-09-24, verifyall E7 re-verification): two citations re-pointed to current line positions; content unchanged.
 
 ### Testing
 
@@ -91,10 +93,13 @@ status from markdown.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | test — workflow-service.test.ts:2669 (same run id, `mdAfterResume.startsWith(mdAfterRun)`, counter stays `['tick']`, state `paused`→`done` agreeing with DB trace, `startedAt` carried forward); test — workflow.test.ts:685 (CLI mirror with persisted artifacts) + static-ref — workflow-run-log-sink.ts:186-233 (resume identity carry-forward from prior valid state, atomic temp+rename with `.tmp` unlink) and workflow.ts:1198-1202 (continue sink reuses `targetId`) |
-| R2 | MET | test — workflow-service.test.ts:2669 and workflow.test.ts:685 (side-effect counter unchanged `['tick']` across resume = no replayed disposition) + static-ref — workflow-service.ts:2503-2521 (`readWorkflowRunRecord` is a pure reader returning a data union; no execution, no status transition, no synthesis from markdown) and workflow.ts:1957-1960 (incomplete record explicitly defers completion authority to the DB trace) |
-| R3 | MET | test — workflow-service.test.ts:2565-2628 (pair / incomplete state-missing / incomplete state-invalid / legacy-log in place / missing / traversal-reject) ; test — workflow.test.ts:2848 (legacy `.log` run continued mid-follow switches tail to the new `.md`, `['legacy', 'resumed section']`) and workflow.test.ts:2876 (missing state reported as `Run record incomplete (state-missing)`, never success) + static-ref — workflow-service.ts:2515-2552 (reader precedence: pair > explicit incomplete > legacy-log in place > missing) and workflow.ts:1917-1945 (format re-detected every poll, `.log` fallback preserved) |
-| R4 | MET | test — workflow.test.ts:728 (`continue --no-log` leaves `.md` and `.state.json` byte-identical) ; test — workflow.test.ts:1388 (`--trace-file` writes its independent JSONL projection under `.spur/workflow/`) + static-ref — workflow.ts:532,814 (`--trace-file` option/wiring untouched by the diff) and workflow.ts:898-902,1201 (secrets added to sink only; `--no-log` still suppresses sink construction entirely) |
+| AC-3 | MET | Task R1+R2 — resume keeps run ID, appends only new sections, state settles from the authoritative trace, recorded effect never repeated: `packages/app/tests/services/workflow-service.test.ts:2794` "resume keeps the run id, appends only new sections, settles state from the trace, and never repeats the recorded effect" pass this run (`mdAfterResume.startsWith(mdAfterRun)`, counter stays `['tick']`); CLI mirror `apps/cli/tests/commands/workflow.test.ts:685` (0926 AC1) pass this run; static: `workflow-run-log-sink.ts:186-233` (identity carry-forward from prior valid state, atomic temp+rename, `.tmp` unlink), `workflow.ts:1201` (continue sink on `targetId`) |
+| AC-6 | MET | Task R3+R4 — record read outcomes explicit (pair / incomplete state-missing / state-invalid / legacy-log in place / missing / traversal-reject / symlink-escape / oversized): `workflow-service.test.ts:2571-2751` 14+ tests pass this run; CLI `workflow.test.ts:2848` (legacy `.log` → `.md` tail switch mid-follow), `:2876` (missing state → incomplete, never success), `:728` (`continue --no-log` writes nothing), `:1388` (`--trace-file` independent projection) all pass this run; static: `workflow-service.ts:2505-2552` (`readWorkflowRunRecord` pure reader, precedence pair > incomplete > legacy > missing), `workflow.ts:1910-1945` (format re-detected per poll), `workflow.ts:1955-1961` (incomplete defers completion authority to DB trace) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Continue and replay retain run identity and state | MET | test | `packages/app/tests/services/workflow-service.test.ts:2794` resume test pass this run; `apps/cli/tests/commands/workflow.test.ts:685` (0926 AC1) pass this run |
+| AC2 — Existing run surfaces retain compatibility | MET | test | `apps/cli/tests/commands/workflow.test.ts:2848,2876,728,1388` pass this run; `packages/app/tests/services/workflow-service.test.ts:2571-2751` record-read block pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -106,7 +111,7 @@ status from markdown.
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | proof-input-digest | — | sha256:b41f167a7f2d20db13612cdc70602f80b4e19c0da6f7fc3bc099aad82b248cc7 |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 

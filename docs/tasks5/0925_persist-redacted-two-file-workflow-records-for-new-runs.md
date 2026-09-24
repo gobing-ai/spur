@@ -4,7 +4,7 @@ name: Persist redacted two-file workflow records for new runs
 status: done
 template: feature-impl
 created_at: 2026-09-23T05:09:42.304Z
-updated_at: "2026-09-24T04:03:45.334Z"
+updated_at: "2026-09-24T07:15:38.652Z"
 feature_id: E7
 priority: P2
 tags:
@@ -54,147 +54,6 @@ Covers E7 R1, R2 and R7. Current `WorkflowRunLogSink` writes `.spur/run/<runId>.
   Then only the eligible `.log` is reported or deleted and both pair files remain
   Verify in the workflow-service cleanup test against a real temporary run directory.
 
-#### Q&A
-
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Design
-
-- Scope: replace the existing `WorkflowRunLogSink` `.log` writer for newly logged source and bundled CLI runs. Task 0927 owns the separate host-inline driver and plugin scripts; this task does not migrate their sidecars.
-- Format: `.spur/run/<runId>.md` is an append-only, size-bounded, redacted human log. `.spur/run/<runId>.state.json` is a schema-versioned machine projection written through a temp file and same-directory rename. Only the JSON replacement is atomic. The run ID comes from the workflow run, never from an output string or user path.
-- Authority and ordering: DB trace/run status controls lifecycle and completion; state summarizes that status and must not claim a newer or stronger result than the trace. Keep `run.artifact`, task/feature verdicts, explicit `.spur/workflow/` trace-file output, and configured project overrides at their owners. Define the minimal private state fields and status mapping against the post-0921 engine shape before coding; no new public CLI verb or API is part of this task.
-- Privacy: apply configured-secret redaction at the persistence boundary to every input, output, error, preview, and steering text field before either file is written. Existing upstream redaction is useful but cannot be the only protection; a real-file canary test must cover the sink. Preserve visible truncation and current best-effort logging failure behavior without treating a failed write as proof of success.
-- Retention: `WorkflowAppService.cleanRunLogs()` currently filters `.log` names; keep that behavior. Do not add pair GC or apply `workflow.logRetentionDays` to the pair before an operator policy decision.
-- Primary targets: `packages/app/src/observability/workflow-run-log-sink.ts`, the adjacent workflow application boundary, `apps/cli/src/commands/workflow.ts` for normal run wiring, and their existing tests. The next task, 0926, receives the pair format and reader contract; 0927 receives inline/plugin ownership.
-- Anti-patterns: no second event store, raw prompt/output persistence, task-verdict copying, wholesale sidecar deletion, or treating the markdown log as a completion gate.
-
-#### Plan
-
-1. Snapshot D63's final run writer/reader inventory and classify canonical record versus independent evidence.
-2. Define the minimal state schema and writer behind existing application ownership.
-3. Wire normal source and bundled workflow runs to the pair, preserving `--no-log` and `--trace-file` semantics.
-4. Add focused normal-run, redaction, atomic-update, and cleanup-non-deletion checks; update the owning design contract.
-
-#### Solution
-
-Two-file run record written by the existing `WorkflowRunLogSink` (0925 scope: source + bundled CLI `workflow run`/`workflow continue`; inline/plugin drivers stay with 0927).
-
-- packages/app/src/observability/workflow-run-log-sink.ts:83-84 — record paths keyed to the authoritative run ID: append-only `<runId>.md` (`filePath`) + atomically replaced `<runId>.state.json` (`statePath`); R1/AC1.
-- packages/app/src/observability/workflow-run-log-sink.ts:177-196 — state writer: same-directory temp file + rename (atomic replace), schema 1, minimal private fields (`schemaVersion`, `runId`, `workflowName`, `status`, `startedAt`/`updatedAt`, `finalizedAt`); status maps `running` on start and copies the `workflow.run.finalized` trace status verbatim — state never claims stronger than the DB trace, which stays the lifecycle/completion authority alongside `run.artifact`, verdicts, and `--trace-file` output (R2/AC1).
-- packages/app/src/observability/workflow-run-log-sink.ts:269 — persistence-boundary redaction: every appended line is scrubbed against `secrets` (constructor option) via the existing `redactAndBound` before byte accounting; configured secrets pass from the CLI via `configuredSecretValues(context.env)` (apps/cli/src/commands/workflow.ts:899,1199), so a canary in input/output/error/steering/preview text cannot reach either file (R3/AC2).
-- apps/cli/src/commands/workflow.ts:1914-1921 — `followRunLog` (the `--follow --output` read projection) tails `.md` with the legacy `.log` as read-only fallback; option help strings updated.
-- packages/app/src/services/workflow-service.ts:2479-2491 — `outputArtifactForRun` (feeds `run.artifact`) prefers `.md`, falls back to legacy `.log`; `cleanRunLogs` unchanged in behavior (still scans `.log` names only) with the pair exclusion documented (R4/AC3).
-- docs/design/run-record-contract.md — recorded the 0925 implementation baseline (minimal state fields, status mapping, boundary redaction, reader fallbacks, cleanup scope).
-
-#### Testing
-
-**Pipeline verify results**
-
-- Verdict: PASS (from verdict artifact)
-
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | packages/app/src/observability/workflow-run-log-sink.ts:83-84,177-196 |
-| R2 | MET | packages/app/src/observability/workflow-run-log-sink.ts:166-167 |
-| R3 | MET | packages/app/src/observability/workflow-run-log-sink.ts:190-193,269-286 |
-| R4 | MET | packages/app/src/services/workflow-service.ts:968 |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Review
-
-<!-- spur:record-review -->
-
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | proof-input-digest | — | sha256:f66952b5953ef441b0278361ae25b6bda2a97c1e364f9cd51c35999f65e92374 |
-
-#### References
-
-- [E7 feature](../features/E7_two-file-run-record-history-orpc-and-tool-using-source-migration.md) and [current run-record contract](../design/run-record-contract.md).
-- D63 prerequisite: [0921](0921_complete-measured-workflow-migration-and-catalogue-reconcili.md). Handoff to [0926](0926_continue-and-inspect-legacy-workflow-runs-with-stable-identi.md) and [0927](0927_preserve-task-pipeline-proof-while-moving-its-run-state-to-t.md).
-- D63 is active in `/Users/robin/xprojects/spur-new-runall-d63-767a` at refinement time. Recheck its merged final code, generated bundle, and dependency status before 0925 implementation; do not build against unmerged worktree assumptions.
-
-#### History
-
-- 2026-09-24T03:07:53.057Z todo → wip (system)
-- 2026-09-24T03:30:08.687Z wip → testing (system)
-
-#### Q&A
-
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Design
-
-- Scope: replace the existing `WorkflowRunLogSink` `.log` writer for newly logged source and bundled CLI runs. Task 0927 owns the separate host-inline driver and plugin scripts; this task does not migrate their sidecars.
-- Format: `.spur/run/<runId>.md` is an append-only, size-bounded, redacted human log. `.spur/run/<runId>.state.json` is a schema-versioned machine projection written through a temp file and same-directory rename. Only the JSON replacement is atomic. The run ID comes from the workflow run, never from an output string or user path.
-- Authority and ordering: DB trace/run status controls lifecycle and completion; state summarizes that status and must not claim a newer or stronger result than the trace. Keep `run.artifact`, task/feature verdicts, explicit `.spur/workflow/` trace-file output, and configured project overrides at their owners. Define the minimal private state fields and status mapping against the post-0921 engine shape before coding; no new public CLI verb or API is part of this task.
-- Privacy: apply configured-secret redaction at the persistence boundary to every input, output, error, preview, and steering text field before either file is written. Existing upstream redaction is useful but cannot be the only protection; a real-file canary test must cover the sink. Preserve visible truncation and current best-effort logging failure behavior without treating a failed write as proof of success.
-- Retention: `WorkflowAppService.cleanRunLogs()` currently filters `.log` names; keep that behavior. Do not add pair GC or apply `workflow.logRetentionDays` to the pair before an operator policy decision.
-- Primary targets: `packages/app/src/observability/workflow-run-log-sink.ts`, the adjacent workflow application boundary, `apps/cli/src/commands/workflow.ts` for normal run wiring, and their existing tests. The next task, 0926, receives the pair format and reader contract; 0927 receives inline/plugin ownership.
-- Anti-patterns: no second event store, raw prompt/output persistence, task-verdict copying, wholesale sidecar deletion, or treating the markdown log as a completion gate.
-
-#### Plan
-
-1. Snapshot D63's final run writer/reader inventory and classify canonical record versus independent evidence.
-2. Define the minimal state schema and writer behind existing application ownership.
-3. Wire normal source and bundled workflow runs to the pair, preserving `--no-log` and `--trace-file` semantics.
-4. Add focused normal-run, redaction, atomic-update, and cleanup-non-deletion checks; update the owning design contract.
-
-#### Solution
-
-Two-file run record written by the existing `WorkflowRunLogSink` (0925 scope: source + bundled CLI `workflow run`/`workflow continue`; inline/plugin drivers stay with 0927).
-
-- packages/app/src/observability/workflow-run-log-sink.ts:83-84 — record paths keyed to the authoritative run ID: append-only `<runId>.md` (`filePath`) + atomically replaced `<runId>.state.json` (`statePath`); R1/AC1.
-- packages/app/src/observability/workflow-run-log-sink.ts:177-196 — state writer: same-directory temp file + rename (atomic replace), schema 1, minimal private fields (`schemaVersion`, `runId`, `workflowName`, `status`, `startedAt`/`updatedAt`, `finalizedAt`); status maps `running` on start and copies the `workflow.run.finalized` trace status verbatim — state never claims stronger than the DB trace, which stays the lifecycle/completion authority alongside `run.artifact`, verdicts, and `--trace-file` output (R2/AC1).
-- packages/app/src/observability/workflow-run-log-sink.ts:269 — persistence-boundary redaction: every appended line is scrubbed against `secrets` (constructor option) via the existing `redactAndBound` before byte accounting; configured secrets pass from the CLI via `configuredSecretValues(context.env)` (apps/cli/src/commands/workflow.ts:899,1199), so a canary in input/output/error/steering/preview text cannot reach either file (R3/AC2).
-- apps/cli/src/commands/workflow.ts:1914-1921 — `followRunLog` (the `--follow --output` read projection) tails `.md` with the legacy `.log` as read-only fallback; option help strings updated.
-- packages/app/src/services/workflow-service.ts:2479-2491 — `outputArtifactForRun` (feeds `run.artifact`) prefers `.md`, falls back to legacy `.log`; `cleanRunLogs` unchanged in behavior (still scans `.log` names only) with the pair exclusion documented (R4/AC3).
-- docs/design/run-record-contract.md — recorded the 0925 implementation baseline (minimal state fields, status mapping, boundary redaction, reader fallbacks, cleanup scope).
-
-#### Testing
-
-**Pipeline verify results**
-
-- Verdict: PASS (from verdict artifact)
-
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| R1 | MET | packages/app/src/observability/workflow-run-log-sink.ts:83-84,177-196 |
-| R2 | MET | packages/app/src/observability/workflow-run-log-sink.ts:166-167 |
-| R3 | MET | packages/app/src/observability/workflow-run-log-sink.ts:190-193,269-286 |
-| R4 | MET | packages/app/src/services/workflow-service.ts:968 |
-- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Review
-
-<!-- spur:record-review -->
-
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | proof-input-digest | — | sha256:f66952b5953ef441b0278361ae25b6bda2a97c1e364f9cd51c35999f65e92374 |
-
-#### References
-
-- [E7 feature](../features/E7_two-file-run-record-history-orpc-and-tool-using-source-migration.md) and [current run-record contract](../design/run-record-contract.md).
-- D63 prerequisite: [0921](0921_complete-measured-workflow-migration-and-catalogue-reconcili.md). Handoff to [0926](0926_continue-and-inspect-legacy-workflow-runs-with-stable-identi.md) and [0927](0927_preserve-task-pipeline-proof-while-moving-its-run-state-to-t.md).
-- D63 is active in `/Users/robin/xprojects/spur-new-runall-d63-767a` at refinement time. Recheck its merged final code, generated bundle, and dependency status before 0925 implementation; do not build against unmerged worktree assumptions.
-
-#### History
-
-- 2026-09-24T03:07:53.057Z todo → wip (system)
-- 2026-09-24T03:30:08.687Z wip → testing (system)
-- 2026-09-24T03:31:09.134Z testing → done (system)
-
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
@@ -222,12 +81,14 @@ Two-file run record written by the existing `WorkflowRunLogSink` (0925 scope: so
 
 Two-file run record written by the existing `WorkflowRunLogSink` (0925 scope: source + bundled CLI `workflow run`/`workflow continue`; inline/plugin drivers stay with 0927).
 
-- packages/app/src/observability/workflow-run-log-sink.ts:83-84 — record paths keyed to the authoritative run ID: append-only `<runId>.md` (`filePath`) + atomically replaced `<runId>.state.json` (`statePath`); R1/AC1.
-- packages/app/src/observability/workflow-run-log-sink.ts:177-196 — state writer: same-directory temp file + rename (atomic replace), schema 1, minimal private fields (`schemaVersion`, `runId`, `workflowName`, `status`, `startedAt`/`updatedAt`, `finalizedAt`); status maps `running` on start and copies the `workflow.run.finalized` trace status verbatim — state never claims stronger than the DB trace, which stays the lifecycle/completion authority alongside `run.artifact`, verdicts, and `--trace-file` output (R2/AC1).
-- packages/app/src/observability/workflow-run-log-sink.ts:269 — persistence-boundary redaction: every appended line is scrubbed against `secrets` (constructor option) via the existing `redactAndBound` before byte accounting; configured secrets pass from the CLI via `configuredSecretValues(context.env)` (apps/cli/src/commands/workflow.ts:899,1199), so a canary in input/output/error/steering/preview text cannot reach either file (R3/AC2).
-- apps/cli/src/commands/workflow.ts:1914-1921 — `followRunLog` (the `--follow --output` read projection) tails `.md` with the legacy `.log` as read-only fallback; option help strings updated.
-- packages/app/src/services/workflow-service.ts:2479-2491 — `outputArtifactForRun` (feeds `run.artifact`) prefers `.md`, falls back to legacy `.log`; `cleanRunLogs` unchanged in behavior (still scans `.log` names only) with the pair exclusion documented (R4/AC3).
+- packages/app/src/observability/workflow-run-log-sink.ts:92-93 — record paths keyed to the authoritative run ID: append-only `<runId>.md` (`filePath`) + atomically replaced `<runId>.state.json` (`statePath`); R1/AC1.
+- packages/app/src/observability/workflow-run-log-sink.ts:172-233 — state writer: same-directory temp file + rename (atomic replace, `:220-223`), schema 1, minimal private fields (`schemaVersion`, `runId`, `workflowName`, `status`, `startedAt`/`updatedAt`, `finalizedAt`); status maps `running` on start and copies the `workflow.run.finalized` trace status verbatim (`:172-176`) — state never claims stronger than the DB trace, which stays the lifecycle/completion authority alongside `run.artifact`, verdicts, and `--trace-file` output (R2/AC1).
+- packages/app/src/observability/workflow-run-log-sink.ts:300-306 — persistence-boundary redaction: every appended line is scrubbed against `secrets` (constructor option) via the existing `redactAndBound` before byte accounting; configured secrets pass from the CLI via `configuredSecretValues(context.env)` (apps/cli/src/commands/workflow.ts:901,1201), so a canary in input/output/error/steering/preview text cannot reach either file (R3/AC2).
+- apps/cli/src/commands/workflow.ts:1910-1937 — `followRunLog` (the `--follow --output` read projection) tails `.md` with the legacy `.log` as read-only fallback (format re-detected per poll, 0926); option help strings updated.
+- packages/app/src/services/workflow-service.ts:2497-2503 — `outputArtifactForRun` (feeds `run.artifact`) prefers `.md`, falls back to legacy `.log`; `cleanRunLogs` unchanged in behavior (still scans `.log` names only, `:959-991`) with the pair exclusion documented (R4/AC3).
 - docs/design/run-record-contract.md — recorded the 0925 implementation baseline (minimal state fields, status mapping, boundary redaction, reader fallbacks, cleanup scope).
+
+Anchor refresh (2026-09-24, verifyall E7 re-verification): citations re-pointed to post-0926/0927 line positions; content unchanged.
 
 ### Testing
 
@@ -237,10 +98,15 @@ Two-file run record written by the existing `WorkflowRunLogSink` (0925 scope: so
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/observability/workflow-run-log-sink.ts:83-84,177-196 |
-| R2 | MET | packages/app/src/observability/workflow-run-log-sink.ts:166-167 |
-| R3 | MET | packages/app/src/observability/workflow-run-log-sink.ts:190-193,269-286 |
-| R4 | MET | packages/app/src/services/workflow-service.ts:968 |
+| AC-1 | MET | Task R1+R2 — `packages/app/src/observability/workflow-run-log-sink.ts:92-93` (paths keyed to authoritative run ID: append-only `<runId>.md` + `<runId>.state.json`), `:209-223` (schemaVersion 1 state, same-dir temp + `renameSync` atomic replace), `:172-176` (terminal status copied verbatim from the trace event — DB trace stays completion authority); tests: `packages/app/tests/observability/workflow-run-log-sink.test.ts` 20/20 pass this run; `apps/cli/tests/commands/workflow.test.ts` "run records the two-file pair by default after a terminal run (0427 R6 / 0925 AC1)" pass this run |
+| AC-2 | MET | Task R3 — persistence-boundary redaction: `workflow-run-log-sink.ts:300-306` (every appended line scrubbed via `redactAndBound` against configured `secrets` before byte accounting), `:213` (state `workflowName` scrubbed); CLI wiring `apps/cli/src/commands/workflow.ts:901,1201` (`secrets: configuredSecretValues(context.env)`); canary test "0925 AC2 — a configured canary in input, output, and error text never reaches either file" pass this run (real temp dir, no mocked redactor) |
+| AC-7 | MET | Task R4 — `packages/app/src/services/workflow-service.ts:959-991` `cleanRunLogs` filters `.log` names only (`:968`), pair files never reclaimed; tests: `workflow-service.test.ts` "0925 R4 — the two-file run record is never reclaimed by .log cleanup" + 4 more cleanRunLogs tests pass this run; `apps/cli/tests/commands/workflow.test.ts` "clean --logs …" 2 tests (0925 AC3 dry-run + apply) pass this run |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — logging-enabled run writes one canonical two-file record | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts` 20/20 pass this run; `apps/cli/tests/commands/workflow.test.ts:1415` two-file pair test pass this run |
+| AC2 — recording preserves privacy and current proof | MET | test | `packages/app/tests/observability/workflow-run-log-sink.test.ts:474` canary test pass this run; completion authority stays with DB trace (`workflow-run-log-sink.ts:172-176`, `workflow-service.ts:2495-2503`) |
+| AC3 — new record files are not silently reclaimed | MET | test | `packages/app/tests/services/workflow-service.test.ts:2530` pair-protection test pass this run; `apps/cli/tests/commands/workflow.test.ts:1812,1843` clean --logs tests pass this run |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -252,7 +118,7 @@ Two-file run record written by the existing `WorkflowRunLogSink` (0925 scope: so
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
-| P4 | proof-input-digest | — | sha256:f66952b5953ef441b0278361ae25b6bda2a97c1e364f9cd51c35999f65e92374 |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### References
 
