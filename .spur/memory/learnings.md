@@ -2903,3 +2903,126 @@ Errors fixed / gotchas
   optional `--concurrency`/`--worktree` by design.
 - `.spur/run/` is gitignored, so run-scoped artifacts (verdicts, reports, these learnings) never
   enter the commit; the doc repair was committed separately as `docs(h1): record ADR-127 …`.
+Doc-evolve (wrapup) complete. Drift report for F96 (0949–0952):
+
+| Doc | Code says | Doc said | Repair |
+|---|---|---|---|
+| `docs/03_ARCHITECTURE.md` §20.3 | residual sweep shipped in canonical `task-pipeline` (read-only scan in `verify`, blocking → PARTIAL → bounded `verify→test-fix`, settle on `done`) | "The rule stands for any future candidate…" (hypothetical) | replaced with the shipped mechanism; version 1.52.0→1.53.0, `updated_at`→2026-09-24 |
+| `docs/00_ADR.md` | ADR-071 note landed 2026-09-24 | version still 1.51.0 / 2026-09-23 | bump 1.52.0 + date (§4.3) |
+| `docs/04_DESIGN.md` | index row for `task-residual-sweep.md` landed | version still 1.82.0 / 2026-09-23 | bump 1.83.0 + date (§4.3) |
+| `docs/design/workflow-composition-contract.md` | pipeline now carries residual completeness | Status omitted it | Status sentence added (T9) |
+| `docs/design/task-residual-sweep.md` | shipped | already `shipped-design` | clean |
+
+Verified clean: no new public `spur` noun/verb; `01_PRD`/`02_ROADMAP` unaffected; key-doc frontmatter matches §4.1; `AGENTS.md` routing unchanged.
+
+**Open drift, tool-owned (not raw-edited per your constraint):** `docs/features/INDEX.md` still shows F96 `[verifying]` while the record is `status: done`. `INDEX.md` is generated (§3) — repair with `spur feature refresh --feature F96`.
+
+Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/67b2f60d-90a8-4821-a0c3-f22b8a9ac498-wrapup-learnings.md`.
+
+# Working learnings — 2026-09-24 · F96 residual sweep (0949–0952)
+
+## 0949 — Residual scanner script (scan / fold / settle / report)
+
+- **Pattern:** one script, four modes, pure exported parsers + a thin `main(argv, env)` guarded by
+  `import.meta.main` — mirrors `plugins/sp/scripts/wrapup-steps.ts`. No class hierarchy.
+- **Gotcha:** the Review `Priority` column position varies between writer styles
+  (`| Priority | Dimension | Location | Finding |` vs `| # | Priority | Dimension | Finding | Location |`).
+  Locate columns by header name, never by fixed index. Priority cells carry suffixes (`P3 (minor)`);
+  match `^P[1-4]`.
+- **Gotcha:** the diff source must be `git diff --unified=0 <base>` (covers committed **and**
+  uncommitted) plus `git ls-files --others --exclude-standard` for untracked files (full content
+  counts as added). Parse `+` lines, not `+++`, and track new-file line numbers from hunk headers.
+- **Convention:** task file path and feature id come from `<spur-bin> task show <wbs> --json`
+  (`filePath`, `content`, `frontmatter.feature_id`) — never guess the folder.
+- **Gotcha:** a missing `<wbs>-base.sha` (standalone verify) sets `scanned.diff-marker=false`;
+  the scanner never guesses a base.
+- **Pattern:** item id = `category:sha256(location + normalized text)[:8]` with whitespace-collapsed
+  normalization, so a deferral entry written by the fix hop still matches on the next re-scan.
+- **Convention:** a standalone-shipping plugin script is registered `contract: standard` with an
+  `.mjs` twin in `config/plugin-scripts.json`, added to `build:scripts` via
+  `superskill script convert sp <file>.ts`, and checked by `script-contract-check.ts`.
+- **Convention:** observe-only under ADR-071 — `scan` writes only under `.spur/run/`; `settle` is the
+  sole mutation path; deletion is scoped to regular files matching `<tmp-dir>/<wbs>-*`, never a
+  directory.
+- **Pattern:** CLI-mode tests use a stub `spur-bin` script that records argv — settle/report are
+  testable without a live CLI.
+- **Gotcha:** `spur task create --feature` carries a 300 s dedup guard; `--skip-ready` files a
+  follow-up without dispatching a model.
+- **Evidence:** 19 tests in `plugins/sp/tests/residual-scan.test.ts`; fold idempotent; repo gate
+  PASS (8935 tests, digest `sha256:cf4c9f43…`).
+
+## 0950 — Wire the residual sweep into `task-pipeline.yaml`
+
+- **Pattern:** each new action is `kind: shell` with the same resolution as quality-gate —
+  repo-first, then `superskill script path sp <name>.mjs`, failing closed; `.mjs` runs under `node`,
+  `.ts` under `bun` (`case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac`).
+- **Ordering invariant:** `scan`+`fold` must run after `spur task verdict` and **before** the jq
+  proof bind, so the bind certifies the downgraded PARTIAL verdict and the existing `verify →
+  test-fix` edge remediates within the existing budget.
+- **Decision:** `scan`+`fold` is one hard action — a scanner crash fails verify closed (the
+  `verify → failed` catch-all routes a missing/malformed verdict). `settle` and `report` are soft
+  (`exit 0`) and must never change the outcome.
+- **Gotcha:** `record`'s first action `run.artifact` registers `<wbs>-verdict.json`; nothing may
+  rewrite the verdict or create task files before that registration — hence `settle` runs on `done`
+  entry, not `record`.
+- **Gotcha:** the fix counter (`<wbs>-test-fix-attempt`) resets only on quality-gate `run`, so a
+  fresh `/sp:dev-run` gets a fresh budget.
+- **Gotcha:** a single shell action is capped at 10 commands by the composition limit — the test-fix
+  residual block had to be its own action.
+- **Convention:** `config/workflows/` is the YAML SSOT; `apps/cli/config/` copies are generated by
+  `bun run --filter @gobing-ai/spur build:bundle`.
+- **Pattern:** resilience tests assert action ordering by index (`verdict < scan+fold < '+ {proof:'`),
+  fail-closed exit, twin-fallback string, and `shellCommands('done')[0]` containing settle.
+- **Gotcha:** do not touch the `verify → record` guard, `run.artifact` options,
+  `qualityGateMaxFixAttempts`, or the verify agent input (`--fix none` stays).
+- **Evidence:** 5 new resilience tests + 2 smoke stubs; `spur-check` PASS 8940 tests.
+
+## 0951 — Standalone verify, next-router C6, owning docs
+
+- **Decision:** C6 is a HITL STOP, not a fix hop — by the time it fires the bounded remediation loop
+  has already failed; repeating it unattended burns quota with no new information.
+- **Convention:** shipped surfaces reference plugin scripts only via
+  `superskill script path sp residual-scan.mjs`; script-contract-check rule 4 forbids
+  `bun plugins/sp/scripts/` there.
+- **Pattern:** standalone verify stays observe-only — `fold` rewrites only `.spur/run/` artifacts, so
+  `--fix none` semantics hold; the fold sits between the verdict write and `spur task record`.
+- **Convention:** ADR changes are dated notes appended under the existing ADR; never renumber.
+- **Gotcha:** the skill-structure test carries a per-skill byte baseline; new contract prose requires
+  bumping it (code-verification 31_203 → 32_146) — and that bump is explicitly not permanent.
+- **Gotcha:** `bun run validate-commands` (40/40) gates command-doc surfaces.
+- **Pattern:** a parity test asserts exactly one C6 row, a HITL STOP dispatch cell, that it prints
+  `residual-report.md`, and that it never auto-dispatches.
+- **Evidence:** routing-table-parity 5 pass; validate-commands 40/40; ADR-071 note + help "Leftovers"
+  subsection + `shipped-design` flip in tree.
+
+## 0952 — `dev-runall` batch wrap covers only done tasks
+
+- **Error fixed:** `dev-runall.md` contradicted itself — the flag table said `--wrap` runs "per task"
+  while the body said once per batch. Resolved to once per batch over the done subset, with the
+  per-task wording removed.
+- **Decision:** filtering lives in the batch driver (skill prose), not `wrapup-pipeline` — the wrap's
+  hard refusal of non-`done` tasks stays an invariant; the driver stops handing it tasks it would
+  refuse.
+- **Decision:** omit `vars.feature` on a partial batch so the wrap stays truthful — learnings and
+  metrics are still captured, but the feature does not advance.
+- **Gotcha:** advancing a feature while some of its batch tasks are unfinished overstates completion.
+- **Pattern:** an empty done subset skips the wrap with a reason instead of failing.
+- **Convention:** keep the flag contract in sync across `dev-runall.md`, the `dev-operations.md`
+  runall entry, and the help doc `--next` chain section.
+- **Evidence:** `execution-batch-contract.test.ts` 20 pass; validate-commands 40/40; `spur-check`
+  PASS 8941 tests.
+
+## Wrap-up (doc-evolve, 2026-09-24)
+
+- **Drift repaired:** `docs/00_ADR.md` version 1.51.0 → 1.52.0 (the ADR-071 note landed without a
+  bump); `docs/04_DESIGN.md` 1.82.0 → 1.83.0 (the index row landed without a bump);
+  `docs/03_ARCHITECTURE.md` §20.3 replaced the "any future candidate" hypothetical with the shipped
+  mechanism (1.52.0 → 1.53.0); `docs/design/workflow-composition-contract.md` Status now names
+  residual completeness.
+- **Lesson:** a doc-content commit must bump the owning doc's minor version and `updated_at` in the
+  same commit (§4.3). Both `00` and `04` missed it; the wrapup had to repair it.
+- **Open drift (tool-owned — not raw-edited):** `docs/features/INDEX.md` still shows F96
+  `[verifying]` while the feature record is `status: done`. `INDEX.md` is generated (§3 forbids raw
+  writes); repair with `spur feature refresh --feature F96`.
+- **Verified clean:** no new public `spur` noun/verb; `01_PRD`/`02_ROADMAP` unaffected; key-doc
+  frontmatter (`owns`/`authority`/`edit_rules`/`sync`) matches constitution §4.1.
