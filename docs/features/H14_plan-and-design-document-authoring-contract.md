@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H14"
 name: "Plan and design document authoring contract"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-25T07:20:54.598Z"
-updated_at: "2026-09-25T07:41:19.278Z"
+updated_at: "2026-09-25T07:52:21.563Z"
 ---
 
 # H14: Plan and design document authoring contract
@@ -71,4 +71,5 @@ Feature: Plan and design document authoring contract
 
 - 2026-09-25T07:41:17.085Z backlog → active (system)
 - 2026-09-25T07:41:19.278Z active → verifying (system)
+- 2026-09-25T07:52:21.563Z verifying → done (system)
 
