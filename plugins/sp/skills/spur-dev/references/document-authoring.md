@@ -34,6 +34,27 @@ not parser schemas. Keep Markdown readable even when frontmatter is absent in a 
 4. For a design satellite, write detail first, then add its pointer to `04_DESIGN.md` if missing.
    Update an existing index row only when its indexed facts change. Do not put task receipts there.
 
+## Frontmatter vocabulary
+
+Soft conventions for consistency and tag filtering, not a validator. Unknown values stay readable.
+
+| Field | Values |
+| --- | --- |
+| `kind` | `plan` for any `docs/plans/` record, `design` for any `docs/design/` satellite. Nothing else. |
+| `status` (plan) | `draft`, `proposed`, `approved`, `in-progress`, `done`, `superseded` |
+| `status` (design) | `proposed`, `accepted`, `implemented`, `superseded` |
+| `tags` | Ordered: one record-type tag, then owning feature ids (for example `H14`), then at most two area tags. |
+| `related` | Repo-relative paths or feature/task ids; no prose. |
+
+Record-type tags — plan: `brainstorm`, `proposal`, `investigation`, `audit`, `map`, `execution`,
+`evidence`; design: `contract` (observable surface) or `system` (internal mechanism). Area tags:
+`cli`, `server`, `web`, `workflow`, `planning`, `history`, `observability`, `agent`, `plugin`,
+`docs`, `config`. A project may extend the area list; reuse a tag already in the corpus
+(`rg -n '^tags:' docs/plans docs/design`) before adding one.
+
+A producing workflow may keep its own keys beside these, such as a brainstorm's `needs_design` and
+`run_id`, and its own section shape. The shared fields still apply.
+
 ## Revise an existing file
 
 Read the whole file and its inbound links first. Preserve the filename, meaningful headings,
@@ -41,6 +62,23 @@ anchors, dates, decisions, and historical status. Add missing metadata from evid
 unknowns instead of guessing. Restructure only where clarity improves, and keep a forwarding
 heading when an anchor cannot be migrated safely. Update `updated_at` only for a substantive edit.
 Do not turn an old proposal into a claim about current behavior without checking the owning source.
+
+Legacy metadata upgrade:
+
+- **Map** `date` → `created_at` and `feature`/`feature_id`/`task_wbs`/`parent_task` → `related`.
+  `title` is the H1 text; `topic` maps to `title` only when the file has no H1, otherwise drop it.
+- **Owners:** when no owner key exists, a feature or task record that links the file
+  (`rg -l <filename> docs/features <task dir>`) is evidence for `related`. Ids found only in body
+  prose are not; requirement and priority labels look like feature ids.
+- **Keep** workflow and provenance keys unchanged (`needs_design`, `run_id`, `doc`, `authority`,
+  `owns`, `read_before`, `edit_rules`, `version`, `derived_from`).
+- **Dates:** `created_at` comes from a legacy `date`, else the filename date prefix, else the first commit
+  (`git log --follow --diff-filter=A --format=%as -- <file> | tail -1`), else leave it out and flag it.
+  `updated_at` is the existing value or the last commit date; do not bump it for a metadata-only edit.
+- **Status:** use the vocabulary value only when the legacy value or body states it unambiguously
+  (`shipped`/`implemented`/`built …` → `implemented`; `approved-with-feedback` → `approved`).
+  Otherwise keep the legacy value and flag it for the operator. No status is better than a guessed one.
+- **Headings:** never renumber or rename legacy headings; numbering applies to new files only.
 
 For a bounded, read-only review of legacy files, use `sp:spur-doctor`. Apply accepted document
 proposals in place using this guide, then use `sp:doc-evolve` to check affected key-document sync.

@@ -66,9 +66,10 @@ Every row of a proposal cites the evidence it rests on. No anchor, no proposal.
 
 Enumerate `docs/plans/*.md` and `docs/design/*.md` with `rg --files` and sort the paths. Include
 every Markdown path in the review; JSON and other files are outside this contract. For a large set,
-the caller may split the frozen list into bounded path groups and combine their coverage lists.
-Read each file and the project constitution before judging it. Report scanned paths and counts of
-proposals and no-ops, so an omitted file is visible.
+freeze the list and split it into named path groups by record type (for example
+`docs/plans/*-brainstorm.md`, other plans, designs), at most ~40 files each, and combine their
+coverage lists. Read each file and the project constitution before judging it. Report scanned paths
+and counts of proposals and no-ops, so an omitted file is visible.
 
 Compare each plan with the [plan template](../spur-dev/templates/plan.md) and each design with the
 [design template](../spur-dev/templates/design.md), using the
@@ -77,6 +78,14 @@ unsupported `kind`, title, status, dates, material related links or useful tags;
 premises, execution sequence or follow-up in a plan; unclear issue, context, solution, contract or
 compatibility in a design; and a missing `04_DESIGN.md` pointer for a design satellite.
 These are **review prompts**, not format errors. Keep specialized sections required by a producing workflow.
+
+Judge metadata against the authoring guide's **frontmatter vocabulary** and **legacy metadata
+upgrade** rules, so every row in a batch makes the same choice: the same key mapping, `title` from
+the H1, `related` from owner keys or linking feature/task records, `created_at` source order
+(legacy `date`, filename prefix, first commit, else flag), status mapping only when unambiguous,
+and tags in record-type → feature → area order from the shared list. A row whose status or tag needs
+judgment says so in `change` instead of picking a value. Never propose renumbering or renaming a
+legacy heading.
 
 Propose only evidence-backed, useful edits. A proposal names the exact file and heading or
 frontmatter field, cites a line and the governing rule, and says what can be inferred and what
@@ -88,6 +97,11 @@ The `apply` cell for a document row points to the spur-dev authoring guide; the 
 accepted row in place, then runs `sp:doc-evolve` sync-check for affected key documents and verifies
 links, headings, frontmatter and the `04` index when applicable. No bulk conversion or strict
 validator is required for old files.
+
+For a batch, the caller saves each group's table as
+`docs/reports/YYYY-MM-DD-<group>-doc-upgrade-review.md`. After the operator accepts rows, the author
+applies one group's metadata-only rows together and commits them as one change; body restructuring
+rows stay per file. Flagged rows wait for the operator's answer.
 
 ## Workflow step profile and cache-window flags
 

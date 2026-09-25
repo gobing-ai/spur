@@ -158,10 +158,25 @@ DO NOT implement research directly. Delegate to specialized skills:
 
 ### Output Template
 
-```markdown
-# Brainstorm: [Topic]
+Frontmatter follows the spur-dev
+[document-authoring vocabulary](../../spur-dev/references/document-authoring.md#frontmatter-vocabulary);
+`needs_design` and `run_id` are brainstorm keys kept beside it. The body keeps this brainstorm shape,
+not the plan template's sections.
 
-**Date:** YYYY-MM-DD
+```markdown
+---
+kind: plan
+title: "Brainstorm: [Topic]"
+status: proposed
+created_at: YYYY-MM-DD
+updated_at: YYYY-MM-DD
+related: []          # owning feature/task ids when known
+tags: [brainstorm]   # then feature ids, then ≤2 area tags
+needs_design: true
+run_id: <run id, omit when none>
+---
+
+# Brainstorm: [Topic]
 
 ## Overview
 

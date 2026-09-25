@@ -50,3 +50,4 @@ git ls-files docs/dogfood | grep -Ev '(README|INDEX)\.md$'
 - `2026-09-24-sp-dev-runall-feature-F96-dogfood.md`
 - `2026-09-24-H1-runall-worktree-batch-dogfood.md`
 - `2026-09-25-H14-plan-design-authoring-dogfood.md`
+- `2026-09-25-spur-doctor-brainstorm-plan-upgrade-dogfood.md`
