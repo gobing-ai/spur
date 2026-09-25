@@ -1,8 +1,11 @@
 ---
-feature: L
-title: "System Events Payload and Wiring Enrichment — System Design"
-date: 2026-07-09
+kind: plan
+title: "System Design — Feature L"
 status: approved
+created_at: 2026-07-09
+updated_at: 2026-07-09
+related: [L]
+tags: [proposal, L, observability]
 sources:
   - apps/web/src/modules/observability/SystemEventsTab.tsx:253-366
   - apps/server/src/serve.ts:75-97

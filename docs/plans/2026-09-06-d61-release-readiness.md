@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "D61 pre-release readiness — 2026-09-06"
+created_at: 2026-09-06
+updated_at: 2026-09-06
+related: [D61, "0772"]
+tags: [evidence, D61, workflow]
+---
+
 # D61 pre-release readiness — 2026-09-06
 
 **Shippable: PASS.** All 13 D61 tasks are done and retain PASS requirement/AC verdicts.

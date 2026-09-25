@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "Plan: Feature-Orchestration Layer for the `sp:dev-*` Workflow"
+status: proposed
+created_at: 2026-06-25
+updated_at: 2026-06-25
+related: []
+tags: [proposal, plugin, workflow]
+---
+
 # Plan: Feature-Orchestration Layer for the `sp:dev-*` Workflow
 
 **Date:** 2026-06-25

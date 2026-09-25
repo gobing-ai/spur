@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "BDD Ecosystem Research for rd3:tasks — June 10, 2026"
+created_at: 2026-06-10
+updated_at: 2026-06-12
+related: []
+tags: [investigation, planning]
+---
+
 # BDD Ecosystem Research for rd3:tasks — June 10, 2026
 
 **Context:** `rd3:tasks` currently has a free-form `## Requirements` section. The design goal is to embed structured, machine-verifiable acceptance criteria (BDD scenarios) directly in task markdown files, validate them with `tasks check`, and trace them back to feature tree nodes. This research surveys the TypeScript BDD ecosystem for libraries, formats, and architectural patterns to reference.

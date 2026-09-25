@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "Next-generation Spur workflows — delivery proposal"
+status: approved
+created_at: 2026-09-21
+updated_at: 2026-09-22
+related: [D63, "0914", "0915", "0916", "0917", "0918", "0919"]
+tags: [proposal, D63, workflow]
+---
+
 # Next-generation Spur workflows — delivery proposal
 
 Date: 2026-09-21. Status: **architecture and eight-task breakdown approved by Robin; registered as D63**.

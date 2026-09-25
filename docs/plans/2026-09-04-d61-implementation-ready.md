@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "D61 implementation handoff"
+created_at: 2026-09-04
+updated_at: 2026-09-04
+related: [D61, "0765", "0766", "0767", "0768", "0769", "0770"]
+tags: [execution, D61, workflow]
+---
+
 # D61 implementation handoff
 
 Depth: `ready`. Selector: `feature:D61`. Eight tasks frozen; none excluded.

@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "D8 Proportional Workflow Upgrade Strategy — Task-Ready Decision Packet"
+status: approved
+created_at: 2026-09-02
+updated_at: 2026-09-03
+related: [D8, D9, "0733", "0751", "0752", "0753", "0754", "0755"]
+tags: [proposal, D8, D9, workflow]
+---
+
 # D8 Proportional Workflow Upgrade Strategy — Task-Ready Decision Packet
 
 **Date:** 2026-09-02

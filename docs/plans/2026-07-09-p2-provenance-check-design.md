@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "P2 Design Options: Provenance Check for Task `done` Transition"
+created_at: 2026-07-09
+updated_at: 2026-07-09
+related: []
+tags: [proposal, planning, workflow]
+---
+
 # P2 Design Options: Provenance Check for Task `done` Transition
 
 ## Problem

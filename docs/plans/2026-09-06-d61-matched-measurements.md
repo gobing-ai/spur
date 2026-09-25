@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "D61 matched-input reconstruction — 2026-09-06"
+created_at: 2026-09-06
+updated_at: 2026-09-06
+related: [D61, "0772"]
+tags: [evidence, D61, workflow]
+---
+
 # D61 matched-input reconstruction — 2026-09-06
 
 Historical source: `f85094a7f16e24a9ac9b5a36b1a76b1525b2d5e5` (operator-selected original ADR-108 revision).

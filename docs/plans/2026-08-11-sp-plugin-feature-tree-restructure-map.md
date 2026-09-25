@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "sp plugin feature-tree restructure map"
+status: done
+created_at: 2026-08-11
+updated_at: 2026-08-11
+related: []
+tags: [map, plugin, planning]
+---
+
 # sp plugin feature-tree restructure map
 
 **Status:** applied (2026-08-11)

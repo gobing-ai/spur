@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "0548 — Incremental import + analyze cost (real data)"
+created_at: 2026-08-15
+updated_at: 2026-08-15
+related: [E3]
+tags: [evidence, E3, history]
+---
+
 # 0548 — Incremental import + analyze cost (real data)
 
 Measured 2026-08-15 on this machine. Source-local CLI only.

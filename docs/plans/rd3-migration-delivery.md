@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "rd3 Migration — Delivery Surface Catalog"
+created_at: 2026-06-12
+updated_at: 2026-06-14
+related: ["0071"]
+tags: [map, plugin]
+---
+
 # rd3 Migration — Delivery Surface Catalog
 
 **Date:** 2026-06-12 · **Updated:** 2026-06-12 (operator review round 1 — see §13)

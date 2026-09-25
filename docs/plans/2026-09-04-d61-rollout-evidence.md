@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "D61 rollout evidence — task 0772 (2026-09-06)"
+created_at: 2026-09-04
+updated_at: 2026-09-06
+related: [D61, "0772"]
+tags: [evidence, D61, workflow]
+---
+
 # D61 rollout evidence — task 0772 (2026-09-06)
 
 ## Correction — 2026-09-06 reconstruction

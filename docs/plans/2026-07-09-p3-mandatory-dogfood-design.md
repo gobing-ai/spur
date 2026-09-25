@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "P3 Design Options: Mandatory Dogfood for Self-Referential Changes"
+created_at: 2026-07-09
+updated_at: 2026-07-09
+related: ["0244"]
+tags: [proposal, plugin, planning]
+---
+
 # P3 Design Options: Mandatory Dogfood for Self-Referential Changes
 
 ## Problem

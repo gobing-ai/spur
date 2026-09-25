@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "Spur Harness — Migration Feature Triage (rd3 → spur-new)"
+created_at: 2026-06-10
+updated_at: 2026-06-12
+related: ["0045", "0071", "0157", "0158"]
+tags: [map, plugin]
+---
+
 # Spur Harness — Migration Feature Triage (rd3 → spur-new)
 
 **Date:** 2026-06-10 (inventory) · 2026-06-11 (triage)

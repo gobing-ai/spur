@@ -1,10 +1,16 @@
 ---
+kind: plan
+title: "Server-Side Adjustment — Rough Feature List (Draft)"
+status: draft
+created_at: 2026-06-14
+updated_at: 2026-06-14
+related: ["0088"]
+tags: [proposal, server, web]
 doc: server-side-adjustment-feature-drafted
 owns: WHAT — rough feature list for the server + web re-foundation (pending confirmation)
 authority: draft v0.4 (incorporates SSE design from design doc v0.2; S6/W6 SSE features added to deferred list; D1 scoping documented)
 version: 0.4.0
 owner: Robin Min
-updated_at: 2026-06-14
 read_before: designing the server/web adjustment
 edit_rules: 99 §6.4
 ---

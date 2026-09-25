@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "D6 ready-depth refinement — 2026-09-06"
+created_at: 2026-09-06
+updated_at: 2026-09-06
+related: [D6]
+tags: [evidence, D6, planning]
+---
+
 # D6 ready-depth refinement — 2026-09-06
 
 Command: `/sp-dev-refineall --feature D6 --auto --depth ready`.

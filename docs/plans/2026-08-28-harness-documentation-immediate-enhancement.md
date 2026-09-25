@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "Harness Documentation Immediate Enhancement Plan"
+status: approved
+created_at: 2026-08-28
+updated_at: 2026-08-28
+related: [A6, "0705"]
+tags: [execution, A6, docs]
+---
+
 # Harness Documentation Immediate Enhancement Plan
 
 **Date:** 2026-08-28

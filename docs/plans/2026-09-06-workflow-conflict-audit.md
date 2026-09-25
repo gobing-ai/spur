@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "Workflow conflict audit — 2026-09-06"
+created_at: 2026-09-06
+updated_at: 2026-09-06
+related: ["0781", "0782", "0783", "0784", "0785", "0786"]
+tags: [audit, workflow]
+---
+
 # Workflow conflict audit — 2026-09-06
 
 Eight findings: **three repaired, five follow-ups open**. Do not treat the workflow as release-ready while P1 tasks 0782–0785 remain.

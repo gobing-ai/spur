@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "D61 forced verification — 2026-09-06"
+created_at: 2026-09-06
+updated_at: 2026-09-06
+related: [D61]
+tags: [evidence, D61, workflow]
+---
+
 # D61 forced verification — 2026-09-06
 
 > **Closure correction:** the initial FAIL below is historical. After the operator's ADR-108

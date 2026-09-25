@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "Feature tree restructure map"
+status: done
+created_at: 2026-07-27
+updated_at: 2026-08-16
+related: [F31, H12, "0356", "0358", "0359", "0494", "0495", "0497"]
+tags: [map, F31, H12, planning]
+---
+
 # Feature tree restructure map
 
 **Status:** applied historical map from audit **0356** (2026-07-28); do not reapply
