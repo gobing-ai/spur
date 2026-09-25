@@ -1,10 +1,13 @@
 ---
+kind: design
+title: "History Board module — Conversation Analytics & Agent Forensic Plane"
+created_at: 2026-08-21
+updated_at: 2026-09-22
+related: [E8, "0626", "0627", "0628", "0629", "0630", "0634"]
+tags: [system, E8, history, web]
 doc: design/history-board-module
-feature_id: E8
-tasks: [0626, 0627, 0628, 0629, 0630, 0634, 0635, 0636, 0637, 0638]
 owns: SURFACE + mechanism for the History Board module (conversation analytics, timeline, insights, and agent sources)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-22
 see_also: [design/history-board-tool-using-tab]
 ---
 

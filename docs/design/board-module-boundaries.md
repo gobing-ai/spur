@@ -1,9 +1,14 @@
 ---
+kind: design
+title: "Board module boundaries — Workspace / Inbox / Teams under the agent-role mechanism"
+status: superseded
+created_at: 2026-08-18
+updated_at: 2026-09-14
+related: [I6]
+tags: [system, I6, web, agent]
 doc: design/board-module-boundaries
-feature_id: I6
 owns: SURFACE + mechanism — responsibility boundary across Workspace / Inbox / Teams board modules
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-14
 ---
 
 > **Superseded (ADR-116).** The Workspace / Inbox / Teams boundary is retired: the Projects module owns

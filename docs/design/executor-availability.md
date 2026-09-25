@@ -1,9 +1,12 @@
 ---
-title: Executor availability and quota-driven disabling
-feature: B5
+kind: design
+title: "Executor availability"
 status: implemented
-version: 1.2.0
+created_at: 2026-09-07
 updated_at: 2026-09-18
+related: [B5]
+tags: [system, B5, agent]
+version: 1.2.0
 ---
 
 # Executor availability

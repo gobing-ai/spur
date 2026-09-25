@@ -1,9 +1,14 @@
 ---
+kind: design
+title: "Inbox Board module — durable message plane"
+status: superseded
+created_at: 2026-08-03
+updated_at: 2026-09-14
+related: [M4]
+tags: [system, M4, web, agent]
 doc: design/inbox-board-module
-feature_id: M4
 owns: SURFACE + mechanism for the Inbox Board module (message plane)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-14
 ---
 
 > **Superseded (ADR-116).** The Inbox Board module is retired: the durable message plane now lives in

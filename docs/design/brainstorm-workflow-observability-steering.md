@@ -1,3 +1,12 @@
+---
+kind: design
+title: "Brainstorm: Workflow observability, traceability, live output, and steering for `spur workflow run`"
+created_at: 2026-07-27
+updated_at: 2026-07-27
+related: ["0365", "0366"]
+tags: [system, workflow, observability]
+---
+
 # Brainstorm: Workflow observability, traceability, live output, and steering for `spur workflow run`
 
 **Date:** 2026-07-27

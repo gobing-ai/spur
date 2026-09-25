@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Workflow execution economy"
+status: accepted
+created_at: 2026-09-16
+updated_at: 2026-09-24
+related: [D62, "0867", "0868", "0872", "0873", "0876", "0877"]
+tags: [system, D62, workflow]
+---
+
 # Workflow execution economy
 
 **Area:** where workflow machine time goes, what the trace must record for that to be knowable,

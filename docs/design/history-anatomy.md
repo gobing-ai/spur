@@ -1,3 +1,13 @@
+---
+kind: design
+title: "History anatomy: daily cache, ad-hoc diagnosis, and bounded migration"
+status: implemented
+created_at: 2026-08-24
+updated_at: 2026-08-28
+related: [I8, "0657", "0658", "0659", "0660", "0661", "0669"]
+tags: [system, I8, history]
+---
+
 # History anatomy: daily cache, ad-hoc diagnosis, and bounded migration
 
 **Area:** sp plugin > `sp:history-anatomy` skill, `/sp:dev-find-issue` command, `history-anatomy.yaml` workflow, `docs/report` daily cache, and the HA-S1 correction to the history analyze artifact + forensics renderer.

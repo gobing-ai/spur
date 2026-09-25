@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Workflow shell ownership surface (feature D6, task 0608; amended by 0625)"
+status: accepted
+created_at: 2026-08-20
+updated_at: 2026-09-12
+related: [D6, A3, "0604", "0608", "0613", "0614", "0704", "0723"]
+tags: [system, D6, A3, workflow]
+---
+
 # Workflow shell ownership surface (feature D6, task 0608; amended by 0625)
 
 **Area:** who owns each compound shell program in the shipped pipelines, decided under ADR-051.

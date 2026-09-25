@@ -1,9 +1,14 @@
 ---
+kind: design
+title: "Environment-improvement lens"
+status: implemented
+created_at: 2026-08-26
+updated_at: 2026-08-29
+related: [I9]
+tags: [system, I9, plugin]
 doc: design/environment-improvement-lens
-feature_id: I9
 owns: SURFACE — plugin-level environment-improvement mapping and its two report projections
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-29
 ---
 
 # Environment-improvement lens

@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Features Board Layout Refactor & UI Enhancement — Design"
+status: implemented
+created_at: 2026-08-23
+updated_at: 2026-08-26
+related: [F84, F841, "0643", "0644", "0655"]
+tags: [system, F84, F841, web, planning]
+---
+
 # Features Board Layout Refactor & UI Enhancement — Design
 
 **Feature:** F84 / F841 · **Date:** 2026-08-24 · **Status:** Implemented (F841 Refinement)

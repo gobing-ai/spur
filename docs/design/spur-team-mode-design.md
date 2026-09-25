@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Spur Team Mode — Design Document"
+status: superseded
+created_at: 2026-06-02
+updated_at: 2026-09-15
+related: ["0005", "0006", "0007", "0609", "0850", "0861"]
+tags: [system, agent]
+---
+
 # Spur Team Mode — Design Document
 
 > **Superseded (ADR-116).** This proposal's composition unit is retired: a project — one worktree

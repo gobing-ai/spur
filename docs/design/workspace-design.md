@@ -1,9 +1,14 @@
 ---
+kind: design
+title: "Workspace Board module — team-scoped composition"
+status: superseded
+created_at: 2026-07-05
+updated_at: 2026-09-14
+related: [G3]
+tags: [system, G3, web, agent]
 doc: design/workspace
-feature_id: G3
 owns: SURFACE + mechanism for team-scoped Board composition
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-14
 ---
 
 > **Superseded (ADR-116).** Team-scoped Board composition is retired: project-scoped fleets declared in

@@ -1,9 +1,13 @@
 ---
+kind: design
+title: "Tasks Module — History-Shell Parity (F72)"
+created_at: 2026-08-24
+updated_at: 2026-08-25
+related: [F72]
+tags: [system, F72, web, planning]
 doc: design/tasks-module-shell-parity
-feature_id: F72
 owns: SURFACE + mechanism for the Tasks Board module — History-shell parity (one-row header, inline filters, append-only tabs, full-bleed density, enriched cards)
 authority: derived (ADR-081 wins on conflict)
-updated_at: 2026-08-25
 ---
 
 # Tasks Module — History-Shell Parity (F72)

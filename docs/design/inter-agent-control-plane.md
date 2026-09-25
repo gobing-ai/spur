@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Inter-agent control plane"
+status: accepted
+created_at: 2026-08-12
+updated_at: 2026-09-15
+related: [G4, "0529", "0530", "0531", "0599", "0685", "0820"]
+tags: [system, G4, agent]
+---
+
 # Inter-agent control plane
 
 **Area:** Occupant identity, coordination-facing run artifacts, pinned wait, caller env.

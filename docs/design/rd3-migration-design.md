@@ -1,3 +1,13 @@
+---
+kind: design
+title: "rd3 Migration — System Design"
+status: accepted
+created_at: 2026-06-12
+updated_at: 2026-06-14
+related: [F, "0041", "0045", "0046", "0047", "0071", "0192"]
+tags: [system, F, plugin]
+---
+
 # rd3 Migration — System Design
 
 **Date:** 2026-06-12 · **Status:** **Accepted** (operator review passed 2026-06-12) · **Updated:**

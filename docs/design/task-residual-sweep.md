@@ -1,8 +1,12 @@
 ---
-status: shipped-design
-feature: F96
-adr: ADR-071, ADR-076
+kind: design
+title: "Task residual sweep"
+status: implemented
+created_at: 2026-09-24
 updated_at: 2026-09-24
+related: [F96]
+tags: [system, F96, planning]
+adr: ADR-071, ADR-076
 ---
 
 # Task residual sweep

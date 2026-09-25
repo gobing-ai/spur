@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Spur Board UI Layout Optimization & Global Orchestrator Agent Interface — Design"
+status: proposed
+created_at: 2026-09-05
+updated_at: 2026-09-05
+related: [A7, "0778", "0779", "0780"]
+tags: [system, A7, web, agent]
+---
+
 # Spur Board UI Layout Optimization & Global Orchestrator Agent Interface — Design
 
 **Feature:** A7 · **Date:** 2026-09-06 · **Status:** Draft

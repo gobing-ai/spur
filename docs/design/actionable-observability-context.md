@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Actionable observability context"
+status: implemented
+created_at: 2026-08-12
+updated_at: 2026-08-19
+related: [J9, "0526", "0527", "0528", "0540", "0545", "0597"]
+tags: [system, J9, observability]
+---
+
 # Actionable observability context
 
 **Area:** System Event payloads/history/SSE, Spur Board System Events, `spur workflow trace`,

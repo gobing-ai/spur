@@ -1,3 +1,12 @@
+---
+kind: design
+title: "History Data Processing Architecture — Ingestion, Materialization, and Query Plane"
+created_at: 2026-08-22
+updated_at: 2026-09-02
+related: [E9, "0631", "0632", "0633", "0712", "0722"]
+tags: [system, E9, history]
+---
+
 # History Data Processing Architecture — Ingestion, Materialization, and Query Plane
 
 **Document Version:** 1.0.1

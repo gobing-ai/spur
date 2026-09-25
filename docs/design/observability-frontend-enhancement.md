@@ -1,10 +1,13 @@
 ---
+kind: design
+title: "Observability Board module — Frontend Enhancement & Tab Consolidation"
+created_at: 2026-08-24
+updated_at: 2026-08-24
+related: [J92, "0651", "0652", "0653", "0654"]
+tags: [system, J92, observability, web]
 doc: design/observability-frontend-enhancement
-feature_id: J92
-tasks: [0651, 0652, 0653, 0654]
 owns: SURFACE + mechanism for the Observability Board module (unified header, customizable event table, and tab consolidation)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-24
 ---
 
 # Observability Board module — Frontend Enhancement & Tab Consolidation

@@ -1,3 +1,12 @@
+---
+kind: design
+title: "dev-* Spine Cost + Drift Inventory (feature I6 / task 0594)"
+created_at: 2026-08-18
+updated_at: 2026-09-20
+related: [I6, I7, "0594", "0906"]
+tags: [system, I6, I7, plugin, workflow]
+---
+
 # dev-* Spine Cost + Drift Inventory (feature I6 / task 0594)
 
 > Measurement + inventory only. No source code changed by this task. The fix path

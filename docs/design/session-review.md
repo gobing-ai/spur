@@ -1,8 +1,14 @@
 ---
+kind: design
+title: "Active session review"
+status: implemented
+created_at: 2026-08-27
+updated_at: 2026-09-22
+related: ["0913"]
+tags: [system, plugin]
 doc: design/session-review
 owns: SURFACE — active-session review command, evidence boundary, and compact report contract
 authority: derived
-updated_at: 2026-09-22
 ---
 
 # Active session review

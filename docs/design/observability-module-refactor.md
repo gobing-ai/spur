@@ -1,9 +1,13 @@
 ---
+kind: design
+title: "Observability Board Module Refactor: Summary Tab, 4h Default, Truthful Jobs Table, and Schedule Tracing"
+created_at: 2026-09-06
+updated_at: 2026-09-07
+related: [J93]
+tags: [system, J93, observability, web]
 doc: design/observability-module-refactor
-feature_id: J93
 owns: SURFACE + mechanism for the Observability Board module refactor (Summary tab, 4h default, queue_jobs table, and schedule tracing)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-07
 ---
 
 # Observability Board Module Refactor: Summary Tab, 4h Default, Truthful Jobs Table, and Schedule Tracing

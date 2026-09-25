@@ -1,9 +1,13 @@
 ---
+kind: design
+title: "Feature detail action progress transparency — system design (feature F83)"
+created_at: 2026-07-29
+updated_at: 2026-07-29
+related: [F83]
+tags: [system, F83, web, planning]
 doc: design/feature-action-progress-transparency
-feature_id: F83
 owns: SURFACE + mechanism for Features detail action progress (async runner + SSE + floating layer)
 authority: derived (F81 Solutions 0352–0354 are the decision SSOT; this satellite is the ship shape)
-updated_at: 2026-07-29
 ---
 
 # Feature detail action progress transparency — system design (feature F83)

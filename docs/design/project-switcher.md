@@ -1,9 +1,13 @@
 ---
+kind: design
+title: "Project switcher — system design (feature K1)"
+created_at: 2026-07-29
+updated_at: 2026-09-14
+related: [K1]
+tags: [system, K1, web, server]
 doc: design/project-switcher
-feature_id: K1
 owns: SURFACE + mechanism for multi-project Spur Board switching and the project fleet
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-14
 ---
 
 # Project switcher — system design (feature K1)

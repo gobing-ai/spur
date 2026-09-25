@@ -1,3 +1,12 @@
+---
+kind: design
+title: "SQLite-Sourced Session Forensics — Token/Time Per Step Analysis"
+created_at: 2026-08-17
+updated_at: 2026-08-17
+related: ["0578", "0579", "0580", "0581"]
+tags: [system, history]
+---
+
 # SQLite-Sourced Session Forensics — Token/Time Per Step Analysis
 
 **Date:** 2026-08-17 · **Data source:** `.spur/spur.db` (imported history plane, all coding agents) · **Purpose:** prep for the new `/sp:dev-find-issue` (SQLite data plane, replacing ad-hoc JSONL parsing)

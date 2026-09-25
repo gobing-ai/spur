@@ -1,10 +1,16 @@
 ---
+kind: design
+title: "Server-Side Adjustment — Finalized Feature List"
+status: accepted
+created_at: 2026-06-14
+updated_at: 2026-06-14
+related: ["0073"]
+tags: [system, server, web]
 doc: server-side-adjustment-feature-finalized
 owns: WHAT — finalized feature list for the server + web re-foundation, ready for task decomposition
 authority: finalized (derived from server-side-adjustment-feature-drafted v0.4 + server-side-adjustment-design v0.2; operator-confirmed 2026-06-14)
 version: 1.0.0
 owner: Robin Min
-updated_at: 2026-06-14
 derived_from: [server-side-adjustment-feature-drafted v0.4, server-side-adjustment-design v0.2, docs/features/, 00_ADR]
 read_before: creating tasks for the server/web adjustment
 edit_rules: 99 §6.4

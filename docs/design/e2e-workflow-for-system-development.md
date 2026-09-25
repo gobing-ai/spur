@@ -1,3 +1,12 @@
+---
+kind: design
+title: "Design — End-to-end Workflow System for System Development"
+created_at: 2026-07-01
+updated_at: 2026-09-06
+related: ["0167", "0168", "0169", "0170", "0171", "0172"]
+tags: [system, workflow, plugin]
+---
+
 # Design — End-to-end Workflow System for System Development
 
 Owning task: [`0167`](../tasks2/0167_sp-plugin-hands-off-ready-idea-to-feature-flow-post-executio.md).

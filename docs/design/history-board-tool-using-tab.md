@@ -1,10 +1,14 @@
 ---
+kind: design
+title: "Design Satellite: History Board Tool Using Tab"
+status: implemented
+created_at: 2026-08-31
+updated_at: 2026-09-22
+related: [E81, "0724", "0725"]
+tags: [system, E81, history, web]
 doc: design/history-board-tool-using-tab
-feature_id: E81
-tasks: [0724, 0725]
 owns: SURFACE + mechanism for the History Board "Tool Using" tab (tool-invocation sequence, filters, inspection drawer)
 authority: derived (ADR wins on conflict)
-updated_at: 2026-09-22
 ---
 
 # Design Satellite: History Board Tool Using Tab

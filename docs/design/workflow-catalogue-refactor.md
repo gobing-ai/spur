@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional"
+status: proposed
+created_at: 2026-09-23
+updated_at: 2026-09-23
+related: [D64, "0937", "0938", "0939", "0940", "0941", "0942"]
+tags: [system, D64, workflow]
+---
+
 # Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional
 
 - **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64

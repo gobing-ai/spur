@@ -1,3 +1,13 @@
+---
+kind: design
+title: "History Refresh Process Isolation and Single-Flight Execution"
+status: implemented
+created_at: 2026-08-29
+updated_at: 2026-09-16
+related: [E31, "0716"]
+tags: [system, E31, history]
+---
+
 # History Refresh Process Isolation and Single-Flight Execution
 
 **Status:** Accepted; built — 0716 single-flight, 0717 process isolation, 0803 watchdog/bounded-BUSY/PASSIVE bounds  

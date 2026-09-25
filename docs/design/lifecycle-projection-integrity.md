@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Lifecycle Projection Integrity (task 0625)"
+status: implemented
+created_at: 2026-08-21
+updated_at: 2026-09-05
+related: ["0688"]
+tags: [system, planning]
+---
+
 # Lifecycle Projection Integrity (task 0625)
 
 **Area:** feature lifecycle projection convergence, corpus-aware wrap-up observation, and content

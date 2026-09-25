@@ -1,3 +1,13 @@
+---
+kind: design
+title: "History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving"
+status: implemented
+created_at: 2026-09-03
+updated_at: 2026-09-04
+related: [E91, "0738", "0739", "0740", "0741", "0742", "0743"]
+tags: [system, E91, history]
+---
+
 # History Incremental Materialization — Refresh Watermark, Bucket-Scoped Rollups, and Precomputed Serving
 
 **Feature:** E91 · **ADR:** ADR-103 · **Status:** implemented (0741 incremental refresh; 0763 bounded derivations)

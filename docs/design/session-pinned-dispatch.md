@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Session-pinned headless dispatch and the executor availability lifecycle"
+status: accepted
+created_at: 2026-09-17
+updated_at: 2026-09-22
+related: [B6, B7, B8, G66, H53, I31, "0888", "0889", "0890", "0891", "0892", "0893"]
+tags: [system, B6, B7, B8, G66, H53, I31, agent, workflow]
+---
+
 # Session-pinned headless dispatch and the executor availability lifecycle
 
 - **Status:** Approved (design-approval 2026-09-17) · **Date:** 2026-09-17 · **Features:** B6, B7, B8, G66 (plus activation of P and E6)

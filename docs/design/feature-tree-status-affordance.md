@@ -1,3 +1,12 @@
+---
+kind: design
+title: "Feature-tree status affordance — design"
+created_at: 2026-07-25
+updated_at: 2026-07-26
+related: ["0332", "0333", "0334", "0335", "0336"]
+tags: [system, web, planning]
+---
+
 # Feature-tree status affordance — design
 
 **Feature:** R2 · **Authority:** ADR-034 · **Date:** 2026-07-25

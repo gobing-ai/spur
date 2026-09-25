@@ -1,9 +1,13 @@
 ---
+kind: design
+title: "Plugin-Surface Parity Harness — design"
+created_at: 2026-08-11
+updated_at: 2026-08-11
+related: [I2]
+tags: [system, I2, plugin]
 doc: design/plugin-surface-parity
-feature_id: I2
 owns: SURFACE — parity harness contract between agent-facing surfaces and the live monorepo CLI
 authority: derived (ADR wins on conflict)
-updated_at: 2026-08-11
 ---
 
 # Plugin-Surface Parity Harness — design

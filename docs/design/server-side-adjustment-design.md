@@ -1,10 +1,15 @@
 ---
+kind: design
+title: "Server-Side Adjustment — Design"
+created_at: 2026-06-14
+updated_at: 2026-07-29
+related: ["0073", "0074", "0134", "0294"]
+tags: [system, server, web]
 doc: server-side-adjustment-design
 owns: HOW — mechanism, module interface shapes, wiring, layout, manifest format
 authority: design (derived from server-side-adjustment-feature-drafted v0.3)
 version: 0.3.0
 revision: 2026-07-29 — ADR-036 splits the Worker-safe HTTP composition root from the Bun-only application graph and corrects the Workers Static Assets build path.
-updated_at: 2026-07-29
 derived_from: [server-side-adjustment-feature-drafted v0.3, 00_ADR, 03_ARCHITECTURE, codebase]
 read_before: implementing the server/web adjustment
 edit_rules: 99 §6.4

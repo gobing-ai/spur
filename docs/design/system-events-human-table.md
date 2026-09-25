@@ -1,3 +1,13 @@
+---
+kind: design
+title: "System Events human table projection"
+status: implemented
+created_at: 2026-08-19
+updated_at: 2026-09-16
+related: [J91, "0605"]
+tags: [system, J91, observability, web]
+---
+
 # System Events human table projection
 
 **Area:** Observability > System Events table cells, presenter helpers, catalog retention, Board column mapping.

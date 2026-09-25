@@ -1,3 +1,12 @@
+---
+kind: design
+title: "Spur artifact composition and evolution (feature I21)"
+created_at: 2026-09-11
+updated_at: 2026-09-25
+related: [I21, "0819", "0820", "0827", "0955"]
+tags: [system, I21, plugin, workflow]
+---
+
 # Spur artifact composition and evolution (feature I21)
 
 **Area:** workflow layers for `spur workflow list` and name resolution; the `sp:spur-composer` and
