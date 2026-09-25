@@ -1,9 +1,13 @@
 ---
-title: "/sp:dev-refactor — lens-routed refactoring with a preservation contract"
-date: 2026-09-17
+kind: plan
+title: "Brainstorm: `/sp:dev-refactor`"
+status: approved
+created_at: 2026-09-17
+updated_at: 2026-09-17
+related: ["0883", "0884"]
+tags: [brainstorm, planning, plugin]
 needs_design: true
 run_id: 3c754764-3ea9-4746-a8de-5e30f3bb2aaf
-status: discovery
 ---
 
 # Brainstorm: `/sp:dev-refactor`

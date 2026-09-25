@@ -1,7 +1,11 @@
 ---
-title: "Retro skill harvest: environment lens for dogfood-testing and session forensics"
-date: 2026-08-26
-topic: retro-skills
+kind: plan
+title: "Brainstorm: Harvest `vendors/misc/retro` into Spur skills"
+status: approved
+created_at: 2026-08-26
+updated_at: 2026-08-26
+related: ["0686"]
+tags: [brainstorm, plugin]
 run_id: idea-retro-skills-20260826-r2
 needs_design: true
 design_status: pending_operator_review

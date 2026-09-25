@@ -1,6 +1,10 @@
 ---
-topic: History refresh process isolation and single-flight execution
-date: 2026-08-29
+kind: plan
+title: "Brainstorm: History refresh process isolation and single-flight execution"
+created_at: 2026-08-29
+updated_at: 2026-08-29
+related: []
+tags: [brainstorm, history]
 needs_design: true
 run_id: inline-history-refresh-20260829
 ---

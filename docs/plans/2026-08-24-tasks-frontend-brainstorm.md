@@ -1,6 +1,10 @@
 ---
-title: Tasks module frontend enhancement brainstorm
-date: 2026-08-24
+kind: plan
+title: "Brainstorm — Tasks Module Frontend Enhancement (via open-design)"
+created_at: 2026-08-24
+updated_at: 2026-08-24
+related: []
+tags: [brainstorm, planning, web]
 run_id: 9a6f0c49-ac5e-433c-b5cd-5bac44f6afbc
 needs_design: true
 ---

@@ -1,7 +1,10 @@
 ---
-title: "Observability System Events tab — dense sortable table + liveness strip + redesigned filter bar"
-date: 2026-07-07
-topic: observability-events-tab-ui
+kind: plan
+title: "Brainstorm — Observability System Events tab UI enhancement"
+created_at: 2026-07-07
+updated_at: 2026-07-07
+related: []
+tags: [brainstorm, observability, web]
 needs_design: true
 ---
 

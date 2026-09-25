@@ -1,7 +1,12 @@
 ---
+kind: plan
+title: "Brainstorm — One Comprehensive Per-Run Log for `spur workflow run`"
+created_at: 2026-08-04
+updated_at: 2026-09-07
+related: []
+tags: [brainstorm, observability, workflow]
 run_id: ffcdfbfd-cae9-4cdc-b1df-f4d1058513ef
 needs_design: true
-topic: workflow-run-observability
 generated_at: 2026-08-04T17:05:30Z
 ---
 

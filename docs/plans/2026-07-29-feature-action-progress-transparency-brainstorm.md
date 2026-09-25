@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "Brainstorm: Feature detail action progress transparency"
+status: approved
+created_at: 2026-07-29
+updated_at: 2026-07-29
+related: [F83]
+tags: [brainstorm, F83, planning]
+---
+
 # Brainstorm: Feature detail action progress transparency
 
 **Date:** 2026-07-29  

@@ -1,9 +1,12 @@
 ---
-title: Projects and agent fleet unification
-date: 2026-09-11
+kind: plan
+title: "Projects and agent fleet unification"
 status: approved
+created_at: 2026-09-11
+updated_at: 2026-09-11
+related: [G6]
+tags: [brainstorm, G6, agent]
 needs_design: true
-feature: G6
 mode: wayfinder-chart
 ---
 

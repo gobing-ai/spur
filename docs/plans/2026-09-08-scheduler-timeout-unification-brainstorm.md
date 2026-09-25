@@ -1,6 +1,11 @@
 ---
-date: 2026-09-08
+kind: plan
+title: "Scheduler timeout unification — idea evaluation"
 status: proposed
+created_at: 2026-09-08
+updated_at: 2026-09-08
+related: []
+tags: [brainstorm, workflow]
 needs_design: true
 run_id: idea-timeout-20260908-7c2fd396
 ---

@@ -1,11 +1,13 @@
 ---
-date: 2026-07-12
-topic: tool-using-followup-0245
-needs_design: true
+kind: plan
+title: "Brainstorm: Tool Using follow-ups after 0245"
 status: approved
+created_at: 2026-07-12
+updated_at: 2026-07-12
+related: [J, "0245"]
+tags: [brainstorm, J]
+needs_design: true
 recommended_approach: three-task-abc-pipeline
-feature_id: J
-parent_task: "0245"
 ---
 
 # Brainstorm: Tool Using follow-ups after 0245

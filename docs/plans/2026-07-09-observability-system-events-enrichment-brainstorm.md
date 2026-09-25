@@ -1,7 +1,10 @@
 ---
-title: "System Events observability — tooltip enrichment, scheduler field fix, producer audit, queue name threading"
-date: 2026-07-09
-topic: observability-system-events-enrichment
+kind: plan
+title: "Brainstorm — System Events observability enrichment"
+created_at: 2026-07-09
+updated_at: 2026-07-09
+related: []
+tags: [brainstorm, observability]
 needs_design: true
 ---
 

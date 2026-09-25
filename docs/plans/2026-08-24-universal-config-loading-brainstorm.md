@@ -1,7 +1,12 @@
 ---
+kind: plan
+title: "Brainstorm — Universal Config Loading After Config 1.2 Migration"
+status: approved
+created_at: 2026-08-24
+updated_at: 2026-08-24
+related: ["0665"]
+tags: [brainstorm, config]
 needs_design: true
-topic: universal-config-loading
-date: 2026-08-24
 run_id: d6592bfe-0f6c-4d10-a220-a0d2e9f106ad
 ---
 

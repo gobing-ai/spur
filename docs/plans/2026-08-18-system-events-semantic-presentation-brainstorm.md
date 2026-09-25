@@ -1,7 +1,11 @@
 ---
-title: "System Events semantic summaries, outcomes, and tooltip identity"
-date: 2026-08-18
-topic: system-events-semantic-presentation
+kind: plan
+title: "Brainstorm: System Events semantic presentation"
+status: approved
+created_at: 2026-08-18
+updated_at: 2026-08-19
+related: ["0601"]
+tags: [brainstorm, observability]
 run_id: 5b06ab75-0ae2-4187-bf74-3fb5289e401a
 needs_design: true
 ---

@@ -1,10 +1,12 @@
 ---
-title: G3 Team, Inbox, and Workspace boundary
-date: 2026-08-11
+kind: plan
+title: "G3 Team, Inbox, and Workspace boundary"
 status: approved
+created_at: 2026-08-11
+updated_at: 2026-08-11
+related: [G3, "0197"]
+tags: [brainstorm, G3, agent]
 needs_design: true
-feature: G3
-task: '0197'
 ---
 
 # G3 Team, Inbox, and Workspace boundary

@@ -1,3 +1,13 @@
+---
+kind: plan
+title: "Dev Command Argument Flags Contract — Brainstorm"
+status: approved
+created_at: 2026-08-01
+updated_at: 2026-08-01
+related: ["0412"]
+tags: [brainstorm, plugin, cli]
+---
+
 # Dev Command Argument Flags Contract — Brainstorm
 
 **Date:** 2026-08-01  

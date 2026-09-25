@@ -1,9 +1,13 @@
 ---
-date: 2026-07-03
-topic: Next feature cycle — prioritization and sequencing
+kind: plan
+title: "Brainstorm — Spur Next Feature Cycle: Prioritization & Sequencing"
+status: approved
+created_at: 2026-07-03
+updated_at: 2026-07-03
+related: ["0188", "0189", "0190", "0191", "0192", "0193"]
+tags: [brainstorm, planning]
 command: /sp:dev-brainstorm (detailed depth, 7 questions asked, 3 options)
 needs_design: true
-status: awaiting-operator-review
 ---
 
 # Brainstorm — Spur Next Feature Cycle: Prioritization & Sequencing

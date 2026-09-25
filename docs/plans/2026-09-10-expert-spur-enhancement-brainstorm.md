@@ -1,6 +1,11 @@
 ---
-date: 2026-09-10
-status: approved-with-feedback
+kind: plan
+title: "sp:expert-spur enhancement — discovery and proposal"
+status: approved
+created_at: 2026-09-10
+updated_at: 2026-09-10
+related: []
+tags: [brainstorm, plugin]
 needs_design: true
 run_id: 3bad357d-ac7d-4d03-a426-ba5c6997805a
 ---

@@ -1,6 +1,11 @@
 ---
-date: 2026-09-07
+kind: plan
+title: "Executor disabling and quota events — evaluation"
 status: proposed
+created_at: 2026-09-07
+updated_at: 2026-09-07
+related: [B5]
+tags: [brainstorm, B5, agent]
 needs_design: true
 ---
 

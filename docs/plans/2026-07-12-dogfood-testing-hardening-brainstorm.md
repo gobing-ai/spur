@@ -1,9 +1,12 @@
 ---
-title: Dogfood testing hardening — report delivery, content, cost honesty
-date: 2026-07-12
-topic: dogfood-testing-hardening
-needs_design: true
+kind: plan
+title: "Brainstorm: Dogfood testing hardening"
 status: draft
+created_at: 2026-07-12
+updated_at: 2026-07-12
+related: ["0244"]
+tags: [brainstorm, plugin]
+needs_design: true
 ---
 
 # Brainstorm: Dogfood testing hardening

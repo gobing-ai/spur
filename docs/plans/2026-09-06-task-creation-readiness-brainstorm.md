@@ -1,5 +1,11 @@
 ---
+kind: plan
+title: "Task creation consistency and default implementation readiness"
 status: proposed
+created_at: 2026-09-06
+updated_at: 2026-09-06
+related: ["0787", "0788"]
+tags: [brainstorm, planning]
 needs_design: true
 ---
 

@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "Brainstorm: Project Switcher Capability"
+created_at: 2026-07-29
+updated_at: 2026-07-29
+related: []
+tags: [brainstorm, web]
+---
+
 # Brainstorm: Project Switcher Capability
 
 **Date:** 2026-07-29

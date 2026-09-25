@@ -1,3 +1,12 @@
+---
+kind: plan
+title: "Brainstorm: `--agent inline` as a hard host-session selector"
+created_at: 2026-08-15
+updated_at: 2026-08-15
+related: []
+tags: [brainstorm, agent]
+---
+
 # Brainstorm: `--agent inline` as a hard host-session selector
 
 **Run:** `2e226f39-8546-4dcb-bde2-ed674039880c` (idea path) · **Date:** 2026-08-15

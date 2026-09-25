@@ -1,6 +1,10 @@
 ---
-topic: dev-history-load slash command (cumulative history import + analyze)
-date: 2026-08-15
+kind: plan
+title: "Brainstorm: `/sp:dev-history-load`"
+created_at: 2026-08-15
+updated_at: 2026-08-16
+related: []
+tags: [brainstorm, history, plugin]
 needs_design: false
 run_id: 25da545c-dcd1-4fac-85ea-58d1042e36f2
 ---

@@ -1,10 +1,13 @@
 ---
-date: 2026-07-12
-topic: observability-processes-runtime-tree
-needs_design: true
+kind: plan
+title: "Brainstorm: Observability Processes → serve-rooted runtime tree"
 status: approved
+created_at: 2026-07-12
+updated_at: 2026-07-12
+related: ["0243"]
+tags: [brainstorm, observability, web]
+needs_design: true
 recommended_approach: process-inventory-service-flat-rows
-task_wbs: "0243"
 ---
 
 # Brainstorm: Observability Processes → serve-rooted runtime tree

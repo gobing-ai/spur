@@ -1,5 +1,11 @@
 ---
+kind: plan
+title: "Remaining workflow upgrade after D8/D9"
 status: proposed
+created_at: 2026-09-04
+updated_at: 2026-09-04
+related: [D61, "0765", "0766", "0767", "0768", "0769", "0770"]
+tags: [brainstorm, D61, workflow]
 needs_design: true
 run_id: idea-workflow-upgrade-ecdebca8-d159-4bc7-8bac-046e61305333
 ---

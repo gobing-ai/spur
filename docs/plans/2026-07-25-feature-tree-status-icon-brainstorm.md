@@ -1,6 +1,11 @@
 ---
-date: 2026-07-25
-topic: Feature-tree status affordance redesign (Spur Board → Features → FEATURES panel)
+kind: plan
+title: "Brainstorm — Feature-tree status affordance"
+status: approved
+created_at: 2026-07-25
+updated_at: 2026-07-26
+related: [F822]
+tags: [brainstorm, F822, planning, web]
 needs_design: true
 scope: apps/web
 ---

@@ -1,7 +1,10 @@
 ---
-title: "History anatomy: daily cache, ad-hoc diagnosis, and bounded migration"
-date: 2026-08-24
-topic: history-anatomy
+kind: plan
+title: "Brainstorm: History anatomy"
+created_at: 2026-08-24
+updated_at: 2026-08-24
+related: []
+tags: [brainstorm, history]
 run_id: 61e76806-3cbf-4523-b4ba-a6e304a9eac1
 baseline_run_id: 7fa52fa5-acc8-4b52-b8e4-2d78071d76f2
 needs_design: true

@@ -1,6 +1,11 @@
 ---
-date: 2026-09-06
+kind: plan
+title: "Feature hierarchy governance and lifecycle — discovery and proposal"
 status: proposed
+created_at: 2026-09-06
+updated_at: 2026-09-06
+related: []
+tags: [brainstorm, planning]
 needs_design: true
 run_id: 4517c98a-b3e3-48d2-8eb5-0a183212cfb7
 ---

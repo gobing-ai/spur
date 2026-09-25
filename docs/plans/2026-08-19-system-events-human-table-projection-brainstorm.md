@@ -1,7 +1,10 @@
 ---
-title: "System Events table: workflow identity, id-free columns, executor column"
-date: 2026-08-19
-topic: system-events-human-table-projection
+kind: plan
+title: "Brainstorm: System Events human table projection (post-J9)"
+created_at: 2026-08-19
+updated_at: 2026-08-19
+related: []
+tags: [brainstorm, observability, web]
 run_id: f00aed70-8b22-4747-bf4e-281a3e983eb3
 needs_design: true
 ---

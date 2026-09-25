@@ -1,8 +1,12 @@
 ---
-topic: spur-dev + spur-cli audit and refinement
+kind: plan
+title: "Brainstorm: Comprehensive audit and refinement of `sp:spur-dev` + `sp:spur-cli` and integration surfaces"
+created_at: 2026-08-11
+updated_at: 2026-08-11
+related: []
+tags: [brainstorm, plugin, cli]
 run_id: b01acde5-3038-4f2b-8535-4c258fc00a50
 needs_design: true
-date: 2026-08-11
 ---
 
 # Brainstorm: Comprehensive audit and refinement of `sp:spur-dev` + `sp:spur-cli` and integration surfaces

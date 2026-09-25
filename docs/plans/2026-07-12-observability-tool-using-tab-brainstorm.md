@@ -1,10 +1,13 @@
 ---
-date: 2026-07-12
-topic: observability-tool-using-tab
-needs_design: true
+kind: plan
+title: "Brainstorm: Observability → Tool Using tab (token-ledger)"
 status: approved
+created_at: 2026-07-12
+updated_at: 2026-07-12
+related: [J]
+tags: [brainstorm, J, observability, web]
+needs_design: true
 recommended_approach: token-ledger-tail-service-flat-table
-feature_id: J
 ---
 
 # Brainstorm: Observability → Tool Using tab (token-ledger)
