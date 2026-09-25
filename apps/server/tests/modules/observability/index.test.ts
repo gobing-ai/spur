@@ -570,6 +570,7 @@ describe('observability routing-summary (task 0552)', () => {
     describe('GET /api/observability/run-record/:runId (task 0929 R1/R2)', () => {
         function mountWithWorkflowService(service: Record<string, unknown>): Hono {
             const app = new Hono();
+            app.onError(() => new Response(JSON.stringify({ error: 'internal' }), { status: 500 }));
             const ctx = {
                 workflowService: () => service,
             } as unknown as ServerContext;
@@ -611,7 +612,6 @@ describe('observability routing-summary (task 0552)', () => {
                     throw new Error('Invalid workflow run id: wording drift');
                 },
             });
-            app.onError(() => new Response(JSON.stringify({ error: 'internal' }), { status: 500 }));
 
             const res = await app.request('/api/observability/run-record/r1');
             expect(res.status).toBe(500);

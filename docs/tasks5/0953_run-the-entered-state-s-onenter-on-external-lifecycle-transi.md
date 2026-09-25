@@ -1,15 +1,17 @@
 ---
 schema_version: 1
 name: Run the entered state's onEnter on external lifecycle transitions so the feature-lifecycle verifying caller executes
-status: todo
+status: cancelled
+cancelled_reason: "Closed on main by commit 775e4e90 (feat(app): run target onEnter shells during feature-lifecycle hops) as recorded in task 0948 Review."
 template: issue
 created_at: 2026-09-24T18:15:51.414Z
-updated_at: "2026-09-24T18:16:13.079Z"
+updated_at: "2026-09-25T00:33:00.000Z"
 feature_id: H53
+ac_altitude: task-local
 
 ---
 
-## 0949. Run the entered state's onEnter on external lifecycle transitions so the feature-lifecycle verifying caller executes
+## 0953. Run the entered state's onEnter on external lifecycle transitions so the feature-lifecycle verifying caller executes
 
 ### Background
 
@@ -42,15 +44,15 @@ action in one workflow.
 
 ### Requirements
 
-- [ ] R1. An external lifecycle transition that enters a state declaring `onEnter` must execute those actions, so `spur feature sync <id>` entering `verifying` actually runs `feature-verification.yaml` and records the receipt.
-- [ ] R2. The entered-state action execution must reuse the driver's action semantics (var/env resolution for shell commands, declared error policy) rather than reimplementing them — the engine's `__wfShellEnv` option key and `resolveShellCommandTemplates` are not exported, so a Spur-side copy would couple to unexported internals.
-- [ ] R3. `spur feature sync <id>` alone must move a feature in `verifying` whose tasks are terminal to `done`, with the receipt produced by the lifecycle invocation and no manual pass run (task 0948 AC1).
+- [x] R1. An external lifecycle transition that enters a state declaring `onEnter` must execute those actions, so `spur feature sync <id>` entering `verifying` actually runs `feature-verification.yaml` and records the receipt.
+- [x] R2. The entered-state action execution must reuse the driver's action semantics (var/env resolution for shell commands, declared error policy) rather than reimplementing them — the engine's `__wfShellEnv` option key and `resolveShellCommandTemplates` are not exported, so a Spur-side copy would couple to unexported internals.
+- [x] R3. `spur feature sync <id>` alone must move a feature in `verifying` whose tasks are terminal to `done`, with the receipt produced by the lifecycle invocation and no manual pass run (task 0948 AC1).
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A feature entering `verifying` through the lifecycle records a feature-latest receipt (req: R1)
-- [ ] AC2 — A feature in `verifying` with terminal tasks reaches `done` via `spur feature sync <id>` alone, receipt written by the lifecycle invocation (req: R3)
-- [ ] AC3 — The entered-state action runs with the same var/env resolution the driver uses, asserted by a test rather than by reimplementing the resolution (req: R2)
+- [x] AC1 — A feature entering `verifying` through the lifecycle records a feature-latest receipt (req: R1)
+- [x] AC2 — A feature in `verifying` with terminal tasks reaches `done` via `spur feature sync <id>` alone, receipt written by the lifecycle invocation (req: R3)
+- [x] AC3 — The entered-state action runs with the same var/env resolution the driver uses, asserted by a test rather than by reimplementing the resolution (req: R2)
 
 ### Q&A
 
@@ -62,9 +64,9 @@ action in one workflow.
 
 ### Plan
 
-- [ ] P1. Decide the owner: add an engine capability (external transitions optionally run the entered state's `onEnter`) or an exported action-sequence entry point. Prefer the engine facade per AGENTS.md ("fix their facades instead of adding Spur workarounds").
-- [ ] P2. If the engine exposes it, call it from `lifecycle-adapter.requestTransition` after a successful commit and surface an action failure as a transition denial with a named report.
-- [ ] P3. Add the missing regression: drive a real active → verifying sync against a fixture and assert a receipt + a `verifying → done` success (today's tests seed receipts by hand, which is why the dead code survived).
+- [x] P1. Decide the owner: add an engine capability (external transitions optionally run the entered state's `onEnter`) or an exported action-sequence entry point. Prefer the engine facade per AGENTS.md ("fix their facades instead of adding Spur workarounds").
+- [x] P2. If the engine exposes it, call it from `lifecycle-adapter.requestTransition` after a successful commit and surface an action failure as a transition denial with a named report.
+- [x] P3. Add the missing regression: drive a real active → verifying sync against a fixture and assert a receipt + a `verifying → done` success (today's tests seed receipts by hand, which is why the dead code survived).
 
 ### Root Cause
 
@@ -94,3 +96,6 @@ Evidence:
 <!-- Links to failing logs, related issues, tasks, docs, or external references. -->
 
 ### History
+
+- 2026-09-24T18:16:13.079Z todo (system)
+- 2026-09-25T00:33:00.000Z todo → cancelled (closed on main by 775e4e90, see 0948 Review)
