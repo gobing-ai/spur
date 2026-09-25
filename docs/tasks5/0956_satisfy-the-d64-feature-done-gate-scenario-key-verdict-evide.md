@@ -4,7 +4,7 @@ name: "Satisfy the D64 feature-done gate: scenario-key verdict evidence and add 
 status: backlog
 template: feature-impl
 created_at: 2026-09-25T23:21:04.700Z
-updated_at: "2026-09-25T23:21:22.923Z"
+updated_at: "2026-09-25T23:43:05.106Z"
 feature_id: D64
 
 ---
@@ -13,15 +13,16 @@ feature_id: D64
 
 ### Background
 
-Deferred from the D64 runall wrapup (2026-09-25). The ADR-119 feature-done gate (`spur feature check D64 --strict --as done`) fails with exactly three finding codes after the batch merged (4a8f7daa8):
+Deferred from the D64 runall wrapup (2026-09-25). The ADR-119 feature-done gate (`spur feature check D64 --strict --as done`) fails with these finding codes after the batch merged (4a8f7daa8):
 
 - `L4.verdict-rows-match-no-scenario` ×10 — every task 0937–0946 carries verdict/Testing evidence rows not keyed to feature scenarios (repair per gate: `/sp:dev-verify <wbs>` per task).
 - `L4.scenario-unverified` ×10 — same root cause.
 - `L4.dogfood-missing` ×1 — no dogfood artifact for D64 (precedents: E7, H14 close commits).
+- `L4.feature-receipt-contract` ×1 (observed after wrapall d7cf0c8d5) — the recorded feature-verification receipt predates the wrapall doc-sync commit, so the gate also requires re-running the feature-scoped verification pass (`spur-check-feature`) after the re-keying work ("the selected definition changed after the pass").
 
 Dispositions from the batch: tasks are genuinely done (all runs closed done/done, reviews/verifies PASS); only the scenario KEYING of verdict rows and the dogfood artifact are missing. Digest-defect scare during wrapup was a stale-install artifact: node_modules had ts-dual-workflow-engine 0.5.0 vs lockfile 0.5.6; after `bun install` + `build:bundle` + `bun link` the receipt digest check passes in bundled mode — no code defect.
 
-Scope when picked up: run `/sp:dev-verify 0937..0946` re-keying evidence rows to feature scenarios (or re-record verdicts keyed by scenario/AC-N alias), produce the D64 dogfood artifact, re-run the strict gate to PASS, then transition D64 verifying → done and sync docs. Batch report: `.spur/run/batch-report-d64-9001.md` (worktree spur-new-runall-d64-9001).
+Scope when picked up: run `/sp:dev-verify 0937..0946` re-keying evidence rows to feature scenarios (or re-record verdicts keyed by scenario/AC-N alias), produce the D64 dogfood artifact, re-run `spur-check-feature` then the strict gate to PASS, then transition D64 verifying → done and sync docs. Batch report: `.spur/run/batch-report-d64-9001.md` (now in the main tree's `.spur/run/`; the batch worktree was removed after full merge).
 
 ### Requirements
 
