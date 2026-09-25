@@ -867,3 +867,10 @@ Full trace: `docs/plans/2026-07-03-feature-cycle-prioritization-brainstorm.md`. 
 - `--vars` REPLACES the workflow var map (no merge): a partial `--vars '{"featureId":"E7"}'` silently empties `spurBin`, which switches feature-verification-steps' loadModule to source mode → "missing feature-verification seams" (`packages/app/src/index.ts` does not re-export splitLaunchCommand/ArtifactDao; the generated bundle does). Pass every non-default var, `spurBin` included.
 - `superskill script convert <plugin> <rel>` resolves `rel` relative to `plugins/<plugin>/` — pass `feature-verification-steps.ts`, not `scripts/feature-verification-steps.ts`.
 - `spur-check-feature` is a ~1.5 s invariant chain (8 checks + 7 repo-wide tests), not the full suite; per-task `spur-check` is the ~3 min heavy gate.
+
+## 2026-09-25 — D64 batch (0937–0946, runall worktree sp/runall-d64-9001) → merged 4a8f7daa8
+- Proof-digest chains must reference the real feature file (`docs/features/D64_*.md`); a stale `--feature-file` path silently miscomputes fingerprints (0943 D1 stored a digest from a nonexistent `docs/features5/` path; verify had to re-derive the true fingerprint independently).
+- 30m worker watchdog + resume-with-continue beat fresh dispatch on long implement runs (timeout+resume ×5 this batch; 0946 still completed within budget).
+- Driver fixes only small deterministic gate failures (TS2322/TS2345, env-var hygiene, accept-and-ignore flags, edge re-anchors); substantive work stays with workers.
+- Guard-parity baseline regen: `JSON.stringify` output needs `bunx biome check --write` afterwards or the baseline fails the format gate.
+- When main advances mid-batch under an FF-only merge contract, rebase the batch branch (rebase-before-FF); expect task-file Solution conflicts — keep the authored narrative over auto-generated change-maps, `updated_at` ours.
