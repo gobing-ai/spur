@@ -89,8 +89,9 @@ Entered before `task-pipeline.yaml` `review` state dispatches `sp:code-verificat
 
 - [ ] The implementation matches the task's `## Plan` checklist (every checked item maps to a code/test/doc change).
 - [ ] `git status` shows only changes traceable to this task's Plan (no drive-by edits).
-- [ ] Lint and typecheck pass (`bun run lint`).
-- [ ] Tests pass (`bun run test`) — no `.skip`, `xfail`, or commented-out tests.
+- [ ] Check receipt current: `quality-gate.ts status` reports `reuse: true` for
+      `.spur/run/<wbs>-check-receipt.json` at the current digest; run `bun run spur-check` only
+      when it reports stale or missing (0940 — never re-run the full chain on a reusable receipt).
 - [ ] New `biome-ignore` / `eslint-disable` suppressions: none, or each is justified inline.
 - [ ] No new `console.*` in scripts (use a project logger if one exists).
 - [ ] The `## Solution` section records the file:line change map and rationale.

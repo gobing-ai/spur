@@ -47,9 +47,10 @@ a missing or mis-shaped module, an absolute path, or `..` fails the command befo
 Semantic validation also checks HITL decision policy (0911): `decision` is legal only on
 `hitl.confirm`/`hitl.select`; `mode: evidence` is rejected in `pause: true` states/nodes, allows
 one evidence action per state/node, requires existing producer nodes and valid select choices,
-and rejects unknown decision keys/modes. Details and the `decision-routing-example.yaml`
-walkthrough: [CLI contracts](../design/cli-contracts.md#explicit-decision-modes-task-0911).
-Bundled workflows already ship `mode: never` on their human gates; a local override copies them
+and rejects unknown decision keys/modes. Details: [CLI contracts](../design/cli-contracts.md#explicit-decision-modes-task-0911).
+The `decision-routing-example.yaml` walkthrough was retired from the catalogue (task 0946, D64 §10);
+the file survives as a test fixture (`packages/app/tests/services/fixtures/`). Bundled workflows
+already ship `mode: never` on their human gates; a local override copies them
 into `.spur/workflows/` (no hot reload — restart the process after config or YAML changes).
 
 ### Example
@@ -251,7 +252,9 @@ List available workflow YAML files across project (`.spur/workflows/`) and globa
 | `feature-dev.yaml` | Feature umbrella pipeline |
 | `idea-pipeline.yaml` | Front-half planning: idea → feature + AC + task batch (`/sp:dev-idea`, `/sp:dev-plan`) |
 | `wrapup-pipeline.yaml` | Post-execution wrap-up |
-| `decision-routing-example.yaml` | DecisionMaker `decision:` routing example — shell producer → evidence-mode `hitl.select` → never-mode paused `hitl.confirm` (authoring sample, not a lifecycle pipeline) |
+
+(The `decision-routing-example.yaml` authoring sample was retired from the catalogue by task 0946,
+D64 §10; it remains as a decision-policy test fixture under `packages/app/tests/services/fixtures/`.)
 
 ## spur workflow trace
 

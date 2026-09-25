@@ -56,6 +56,18 @@ const FILES: Array<{ key: string; path: string; values: string[] }> = [
         path: `.spur/run/${RUN_ID}-idea-needs-design.json`,
         values: ['{"needs_design": true}\n', '{"needs_design": false}\n', 'not-json\n'],
     },
+    // 0945 R2: derived route facts written by the route-fact writer action in ac-generate and
+    // feature-check onEnter — guards read these instead of re-deriving needs_design inline.
+    {
+        key: 'idea-design-route.txt',
+        path: `.spur/run/${RUN_ID}-idea-design-route.txt`,
+        values: ['design\n', 'skip\n'],
+    },
+    {
+        key: 'idea-ac-ready.status',
+        path: `.spur/run/${RUN_ID}-idea-ac-ready.status`,
+        values: ['PASS\n', 'FAIL\n'],
+    },
     { key: 'idea-ac-retry-count', path: `.spur/run/${RUN_ID}-idea-ac-retry-count`, values: ['0\n', '2\n', '3\n'] },
     {
         key: 'idea-decompose-retry-count',
@@ -76,6 +88,13 @@ const FILES: Array<{ key: string; path: string; values: string[] }> = [
     },
     { key: 'test-gate.status', path: `.spur/run/${WBS}-test-gate.status`, values: ['PASS\n', 'FAIL\n'] },
     { key: 'test-fix-attempt', path: `.spur/run/${WBS}-test-fix-attempt`, values: ['0\n', '2\n', '3\n'] },
+    // 0943 R3: failure-class decide row — the test-fail-triage edges read `.value` from this row
+    // (stop/retryable/fix) or fail closed when the file is missing/corrupt.
+    {
+        key: 'failure-class.decision',
+        path: `.spur/run/${WBS}-failure-class.decision`,
+        values: ['{"value":"stop"}\n', '{"value":"retryable"}\n', '{"value":"fix"}\n', 'not-json\n'],
+    },
     { key: 'verdict.json', path: `.spur/run/${WBS}-verdict.json`, values: verdictVariants() },
     { key: 'precheck-size.status', path: `.spur/run/${WBS}-precheck-size.status`, values: ['PASS\n', 'FAIL\n'] },
     {

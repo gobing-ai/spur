@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add the opt-in fleet executor surface for agent.run
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.005Z
-updated_at: "2026-09-24T00:25:35.137Z"
+updated_at: "2026-09-25T17:04:32.660Z"
 feature_id: D64
 priority: P2
 tags:
@@ -35,15 +35,15 @@ Implements: R8 — The agent fleet is an optional executor surface. ADR-126; doc
 
 ### Requirements
 
-- [ ] R1. The surface is selected by `--agent fleet` on model-bearing `/sp:dev-*` commands or by workflow var `executor: fleet`. The selection is valid only when `agent.fleet.enabled` is true and `FleetService.resolve` yields an enabled member whose `role` matches the action's `role`. Tie-breaking uses the configured `strategy` (rest|gtd).
-- [ ] R2. Dispatch runs through `AgentCoordinationService.sendMessage` to the resolved member, with a body naming run id, state, prompt artifact path and `expectFile`. It then waits identity-pinned (member id plus message id) until `expectFile` exists or the action timeout elapses. There is no terminal scraping and no keystrokes.
-- [ ] R3. When the fleet is unavailable (disabled, no member for the role, or member unreachable), the action fails with an explicit message and 0937 reason `failed-agent`. When `executorFallback: traditional` is set, it instead records `fallbackReason` in the action result and runs the existing subprocess path.
-- [ ] R4. The fleet action row records `surface: 'fleet'`, `memberId`, `messageId`, `expectFile`, `durationMs` and the terminal reason. A test asserts the same key set as on the subprocess surface, plus the fleet-only ids.
-- [ ] R5. Reviewer and verify roles require a fresh member session per dispatch (ADR-121). A reused session is rejected before send. With the fleet not selected, `agent.run` behavior and tests are byte-for-byte unchanged.
+- [x] R1. The surface is selected by `--agent fleet` on model-bearing `/sp:dev-*` commands or by workflow var `executor: fleet`. The selection is valid only when `agent.fleet.enabled` is true and `FleetService.resolve` yields an enabled member whose `role` matches the action's `role`. Tie-breaking uses the configured `strategy` (rest|gtd).
+- [x] R2. Dispatch runs through `AgentCoordinationService.sendMessage` to the resolved member, with a body naming run id, state, prompt artifact path and `expectFile`. It then waits identity-pinned (member id plus message id) until `expectFile` exists or the action timeout elapses. There is no terminal scraping and no keystrokes.
+- [x] R3. When the fleet is unavailable (disabled, no member for the role, or member unreachable), the action fails with an explicit message and 0937 reason `failed-agent`. When `executorFallback: traditional` is set, it instead records `fallbackReason` in the action result and runs the existing subprocess path.
+- [x] R4. The fleet action row records `surface: 'fleet'`, `memberId`, `messageId`, `expectFile`, `durationMs` and the terminal reason. A test asserts the same key set as on the subprocess surface, plus the fleet-only ids.
+- [x] R5. Reviewer and verify roles require a fresh member session per dispatch (ADR-121). A reused session is rejected before send. With the fleet not selected, `agent.run` behavior and tests are byte-for-byte unchanged.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — The agent fleet is an optional executor surface
+- [x] AC1 — The agent fleet is an optional executor surface
 
 ### Q&A
 
@@ -115,15 +115,183 @@ Implements: R8 — The agent fleet is an optional executor surface. ADR-126; doc
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/index.ts:317` |
+| `packages/app/src/index.ts:321` |
+| `packages/app/src/index.ts:733` |
+| `packages/app/src/index.ts:764` |
+| `packages/app/src/index.ts:918` |
+| `packages/app/src/services/inline-run-setup.ts:311` |
+| `packages/app/src/services/inline-run-setup.ts:33` |
+| `packages/app/src/services/inline-run-setup.ts:43` |
+| `packages/app/src/services/workflow-service.ts:1913` |
+| `packages/app/src/services/workflow-service.ts:1949` |
+| `packages/app/src/services/workflow-service.ts:2201` |
+| `packages/app/src/services/workflow-service.ts:2746` |
+| `packages/app/src/services/workflow-service.ts:3` |
+| `packages/app/src/services/workflow-service.ts:51` |
+| `packages/app/src/services/workflow-service.ts:65` |
+| `packages/app/src/services/workflow-service.ts:69` |
+| `packages/app/src/services/workflow-service.ts:699` |
+| `packages/app/src/services/workflow-service.ts:78` |
+| `packages/app/src/services/workflow-service.ts:802` |
+| `packages/app/src/services/workflow-service.ts:81` |
+| `packages/app/src/services/workflow-service.ts:963` |
+| `packages/app/src/services/workflow-service.ts:971` |
+| `packages/app/src/workflow/action-trace.ts:178` |
+| `packages/app/src/workflow/action-trace.ts:188` |
+| `packages/app/src/workflow/action-trace.ts:284` |
+| `packages/app/src/workflow/action-trace.ts:294` |
+| `packages/app/src/workflow/action-trace.ts:41` |
+| `packages/app/src/workflow/actions/agent-run.ts:1292` |
+| `packages/app/src/workflow/actions/agent-run.ts:195` |
+| `packages/app/src/workflow/actions/agent-run.ts:206` |
+| `packages/app/src/workflow/actions/agent-run.ts:241` |
+| `packages/app/src/workflow/actions/agent-run.ts:246` |
+| `packages/app/src/workflow/actions/agent-run.ts:257` |
+| `packages/app/src/workflow/actions/agent-run.ts:30` |
+| `packages/app/src/workflow/actions/agent-run.ts:407` |
+| `packages/app/src/workflow/actions/agent-run.ts:645` |
+| `packages/app/src/workflow/builtins.ts:104` |
+| `packages/app/src/workflow/builtins.ts:14` |
+| `packages/app/src/workflow/builtins.ts:2` |
+| `packages/app/src/workflow/builtins.ts:29` |
+| `packages/app/src/workflow/builtins.ts:57` |
+| `packages/app/src/workflow/builtins.ts:74` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:228` |
+| `packages/app/src/workflow/lifecycle-adapter.ts:243` |
+| `packages/app/src/workflow/observability.ts:26` |
+| `packages/app/src/workflow/observability.ts:472` |
+| `packages/app/tests/services/inline-run-setup.test.ts:15` |
+| `packages/app/tests/services/inline-run-setup.test.ts:3` |
+| `packages/app/tests/services/inline-run-setup.test.ts:649` |
+| `packages/app/tests/workflow/builtins.test.ts:34` |
+| `packages/config/src/index.ts:771` |
+| `packages/config/src/loader.ts:299` |
+| `packages/config/tests/loader.test.ts:1112` |
+| `packages/config/tests/loader.test.ts:30` |
+| `packages/domain/src/dao/run-dao.ts:121` |
+| `packages/domain/src/dao/run-dao.ts:127` |
+| `packages/domain/src/migrations.ts:1540` |
+| `packages/domain/src/migrations.ts:1778` |
+| `packages/domain/src/migrations.ts:1844` |
+| `packages/domain/src/migrations.ts:310` |
+| `packages/domain/tests/dao/migrations.test.ts:12` |
+| `packages/domain/tests/dao/migrations.test.ts:129` |
+| `packages/domain/tests/dao/migrations.test.ts:225` |
+| `packages/domain/tests/dao/migrations.test.ts:331` |
+| `packages/domain/tests/dao/migrations.test.ts:385` |
+| `packages/domain/tests/dao/migrations.test.ts:598` |
+| `packages/domain/tests/dao/migrations.test.ts:657` |
+| `packages/domain/tests/dao/migrations.test.ts:660` |
+| `plugins/sp/scripts/inline-pipeline-parity-check.ts:53` |
+| `plugins/sp/scripts/inline-run-setup.ts:103` |
+| `plugins/sp/scripts/inline-run-setup.ts:318` |
+| `plugins/sp/scripts/inline-run-setup.ts:34` |
+| `plugins/sp/scripts/inline-run-setup.ts:347` |
+| `plugins/sp/scripts/inline-run-setup.ts:36` |
+| `plugins/sp/scripts/inline-run-setup.ts:430` |
+| `plugins/sp/scripts/inline-run-setup.ts:465` |
+| `plugins/sp/scripts/inline-run-setup.ts:48` |
+| `plugins/sp/scripts/inline-run-setup.ts:557` |
+| `plugins/sp/scripts/inline-run-setup.ts:562` |
+| `plugins/sp/scripts/inline-run-setup.ts:575` |
+| `plugins/sp/scripts/inline-run-setup.ts:580` |
+| `plugins/sp/scripts/inline-run-setup.ts:596` |
+| `plugins/sp/scripts/inline-run-setup.ts:612` |
+| `plugins/sp/scripts/inline-run-setup.ts:629` |
+| `plugins/sp/scripts/quality-gate.ts:102` |
+| `plugins/sp/scripts/quality-gate.ts:18` |
+| `plugins/sp/scripts/quality-gate.ts:180` |
+| `plugins/sp/scripts/quality-gate.ts:27` |
+| `plugins/sp/scripts/quality-gate.ts:515` |
+| `plugins/sp/scripts/quality-gate.ts:578` |
+| `plugins/sp/scripts/quality-gate.ts:609` |
+| `plugins/sp/scripts/quality-gate.ts:613` |
+| `plugins/sp/scripts/quality-gate.ts:621` |
+| `plugins/sp/scripts/quality-gate.ts:85` |
+| `plugins/sp/tests/inline-run-setup.test.ts:399` |
+| `plugins/sp/tests/quality-gate.test.ts:324` |
+| `scripts/commands/bundle-plugin-lib.ts:129` |
+| `scripts/commands/bundle-plugin-lib.ts:176` |
+| `scripts/commands/real-run-cost.test.ts:104` |
+| `scripts/commands/real-run-cost.test.ts:19` |
+| `scripts/commands/real-run-cost.test.ts:22` |
+| `scripts/commands/real-run-cost.test.ts:236` |
+| `scripts/commands/real-run-cost.test.ts:25` |
+| `scripts/commands/real-run-cost.test.ts:32` |
+| `scripts/commands/real-run-cost.test.ts:41` |
+| `scripts/commands/real-run-cost.test.ts:44` |
+| `scripts/commands/real-run-cost.test.ts:54` |
+| `scripts/commands/real-run-cost.test.ts:57` |
+| `scripts/commands/real-run-cost.test.ts:6` |
+| `scripts/commands/real-run-cost.test.ts:83` |
+| `scripts/commands/real-run-cost.ts:118` |
+| `scripts/commands/real-run-cost.ts:128` |
+| `scripts/commands/real-run-cost.ts:172` |
+| `scripts/commands/real-run-cost.ts:178` |
+| `scripts/commands/real-run-cost.ts:182` |
+| `scripts/commands/real-run-cost.ts:195` |
+| `scripts/commands/real-run-cost.ts:213` |
+| `scripts/commands/real-run-cost.ts:244` |
+| `scripts/commands/real-run-cost.ts:255` |
+| `scripts/commands/real-run-cost.ts:273` |
+| `scripts/commands/real-run-cost.ts:292` |
+| `scripts/commands/real-run-cost.ts:318` |
+| `scripts/commands/real-run-cost.ts:329` |
+| `scripts/commands/real-run-cost.ts:34` |
+| `scripts/commands/real-run-cost.ts:41` |
+| `scripts/commands/real-run-cost.ts:5` |
+| `scripts/commands/real-run-cost.ts:500` |
+| `scripts/commands/real-run-cost.ts:505` |
+| `scripts/commands/real-run-cost.ts:515` |
+| `scripts/commands/real-run-cost.ts:531` |
+| `scripts/commands/real-run-cost.ts:533` |
+| `scripts/commands/real-run-cost.ts:56` |
+| `scripts/commands/real-run-cost.ts:89` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | agent-run.ts:651 branch on vars.executor==='fleet'; workflow-service.ts:2754-2757 mapFleetExecutorVar applied :802/:805; fleet-dispatch.ts:104-118 enabled gate + role-matched enabled members, :133-139 rest/gtd stable tie-break; tests fleet-dispatch.test.ts:100,145,155,165,239 + agent-run-fleet.test.ts:326; docs flag-glossary.md:73-78, dev-run.md:18,43, dev-runall.md:21,52, execution-batch.md:273 |
+| R2 | MET | fleet-dispatch.ts:168-183 body names run id/state/role/prompt artifact/expectFile; :181-187 keyed send requestKey=<runId>/<state>; :200-210 identity-pinned expectFile wait, memberId+messageId recorded; no spawn/terminal/keystroke code (rg clean, subprocess spy agent-run-fleet.test.ts:162); F2 accepted artifact-pinning trust model documented docs/design/fleet-config-declaration.md:87-98 |
+| R3 | MET | fleet-dispatch.ts:73-81 fallback only when executorFallback:'traditional' declared, else explicit fail failed-agent; agent-run.ts:390-405 fallbackReason vs explicit failed-agent row; :651-655 capture + :1292-1293 stamp + :242-252 contractViolation spread across all 7 sites (F1 remediation); tests agent-run-fleet.test.ts:177,197,215 + fleet-dispatch.test.ts:297,304 |
+| R4 | MET | agent-run.ts:361-366 success row surface:'fleet'/memberId/messageId/expectFile/durationMs/reason done; :376-388 timeout failed-timeout + identity ids; :395-402 unavailable failed-agent; key-set parity test agent-run-fleet.test.ts:108 vs baseline subprocess row :116-131 |
+| R5 | MET | fleet-dispatch.ts:46-49 FRESH_SESSION_ROLES=['reviewer'] (verify stages declare role reviewer); :122-131 rejection before send :181; tests fleet-dispatch.test.ts:213 reused-session rejected, :229 one-shot fresh, agent-run-fleet.test.ts:239 default path never consults fleet deps; git diff 34d3dd0de empty on tests/workflow/actions/agent-run.test.ts (161 pre-existing unedited) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Synthesis of R1-R5 all MET (fleet-dispatch.ts new 217 ln; agent-run.ts:258-405,645-655,1292-1293; builtins.ts:57,71-77; workflow-service.ts:1913-1954,:2754-2757); gate PASS attempt-4 9118 pass/0 fail across 522 files (.spur/run/0942-test-gate.status); review PASS full 482b9d9d + delta adc7d39f (.spur/run/0942-review-section.md); verify PASS daff7c38; fingerprint sha256:f1ecc630feed0b7a06f6d9a1157116b885d3abe630b08745015eb5dc139480c8 reproduced |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Verdict: PASS (full review run 482b9d9d, delta re-review run adc7d39f after P3#1 remediation).
+
+Reviewer scope: fleet-dispatch.ts (new), agent-run.ts / builtins.ts / workflow-service.ts (edited), 2 new test files (24+1 tests), 6 doc files. Fresh runs: 185 app tests pass, 123 parity tests pass, default path verified byte-identical (git diff empty on tests/workflow/actions/agent-run.test.ts, 161 pre-existing tests unedited). Gate: PASS attempt-4 (.spur/run/0942-test-gate.status); D2 fingerprint reproduced.
+
+Requirements: R1–R5 MET, AC1 MET (per-requirement evidence in reviewer report; frozen names executor:'fleet', executorFallback:'traditional', surface/memberId/messageId/fallbackReason, dispatchToFleet, FleetDispatchResult all verbatim; ADR-057 durable prompt artifact asserted byte-equal; ADR-121 fresh-session rejection pre-send; no terminal scraping/keystrokes/spawn — asserted by subprocess spy).
+
+Findings:
+
+| ID | Priority | Finding | Disposition |
+| --- | --- | --- | --- |
+| F1 | P3 | fleet-fallback + contract-violation early returns bypassed the fallbackReason stamp (trace row lost why traditional ran) | FIXED: runner-local fleetFallbackReason (reset at execute() entry, written in fleet block, conditionally spread by contractViolation across all 7 sites); new test asserts all four fields; delta re-review PASS (adc7d39f) |
+| F2 | P4 | Identity-pinned wait realized as artifact-pinning (keyed send + delete-before-invoke + recorded ids); file wait cannot cryptographically bind artifact to member — identical trust model to subprocess surface | ACCEPTED (no terminal scraping/spawn anywhere, asserted by test); document in fleet-config-declaration.md §4 if revisited |
+| F3 | P4 | mapFleetExecutorVar has no direct unit test (covered indirectly by action-level frozen-name guard + 123 parity tests) | DEFERRED: optional 5-line table test; not blocking |
+| F4 | P4 | Post-fleet plain-error returns (timeoutMs gate, requiresCapabilities parse, distinct-executor gate) carry no fallbackReason in error output (pre-existing shape, byte-identical to non-fleet runs) | DEFERRED: only if traceability ever demands it |
+| F5 | P4 | Worker deviations adjudicated ACCEPTED: projectPath in FleetDispatchInput (required by FleetService.resolve + artifact paths); fail-loud option list 10>3 (each a subprocess-only guarantee, unset-safe); mapFleetExecutorVar single-point mapping at :802/:805 | ACCEPTED by reviewer with upstream evidence |
+
+Note (delta reviewer): runner suite path is tests/workflow/actions/agent-run.test.ts (brief said tests/workflow/); 172 pass / 0 fail on fleet + runner suites.
 
 ### References
 
@@ -133,3 +301,8 @@ Implements: R8 — The agent fleet is an optional executor surface. ADR-126; doc
 - Related: docs/design/workflow-execution-economy.md, docs/design/fleet-config-declaration.md, docs/design/inter-agent-control-plane.md
 
 ### History
+
+- 2026-09-25T15:04:44.519Z todo → wip (system)
+- 2026-09-25T16:42:50.966Z wip → testing (system)
+- 2026-09-25T17:04:32.660Z testing → done (system)
+

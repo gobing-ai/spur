@@ -796,8 +796,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // Pure slash fixall form (literal ${vars.qualityGateCmd} in YAML).
         const pureFixall = `input: /sp:dev-fixall "$${'{vars.qualityGateCmd}'}"`;
         expect(testFixBlock).toContain(pureFixall);
-        // Green path: PASS probe → review without forcing a second full gate.
-        expect(taskPipeline).toMatch(/from: test\n +to: review\n/);
+        // Green path: PASS probe → review without forcing a second full gate. 0943 R1 moved
+        // the lane split into the deterministic `triage` state (test → triage → review/verify),
+        // so the direct test → review edge no longer exists.
+        expect(taskPipeline).toMatch(/from: test\n +to: triage\n/);
         // Exhausted fix attempts land on the failed terminal state.
         expect(taskPipeline).toMatch(/from: test-recheck\n +to: failed\n/);
     });

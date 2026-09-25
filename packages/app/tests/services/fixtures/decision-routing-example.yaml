@@ -1,6 +1,10 @@
 # DecisionMaker routing example (task 0911, D7). Demonstrates the three `decision:` modes
 # on hitl.* actions; copy the pattern into your own workflow instead of running this file.
 #
+# 0946 (D64 §10): retired from the workflow catalogue — example-only role, zero real runs in the
+# 0938 window, no live caller. Kept here as the decision-policy regression fixture executed by
+# the `decision policy (0911)` block in workflow-service.test.ts.
+#
 #   never    — the action always asks the human (DecisionMaker is bypassed even when
 #              `workflow.hitlDecisionMaker: true`). Used for gates that must stay human-only.
 #   evidence — the DecisionMaker answers from recorded action evidence of the listed producer
@@ -11,29 +15,37 @@
 #   (omitted) — legacy 0910 semantics: DecisionMaker may confirm/select without evidence and
 #              without provenance. Kept for compatibility; prefer an explicit mode.
 #
-# The run is safe and local: one shell producer emits a fixed failure summary, the choose step
-# reads it as evidence, and the operator gate has no side effects. No provider is required —
-# without `workflow.hitlDecisionMaker: true` (or without a key) the evidence step defers and
-# `never` behaves exactly like an unconfigured gate. See `spur self status` -> `decisionMaker`
-# for offline readiness. Optional registered-summary evidence (`summaryArtifact`) is documented
-# in docs/help/how_to_enable_jev_in_spur.md; this example deliberately creates no artifact.
+# The run is safe and local: one shell producer emits a fixed failure summary, a non-pausing
+# decide classifier (0941) makes the first retry/stop cut without pausing, the choose step
+# reads the producer as evidence, and the operator gate has no side effects. No provider is
+# required — without `workflow.decideDecisionMaker: true` the classifier degrades to its
+# declared default, without `workflow.hitlDecisionMaker: true` (or without a key) the evidence
+# step defers, and `never` behaves exactly like an unconfigured gate. See `spur self status`
+# -> `decisionMaker` for offline readiness. Optional registered-summary evidence
+# (`summaryArtifact`) is documented in docs/help/how_to_enable_jev_in_spur.md; this example
+# deliberately creates no artifact.
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: decision-routing-example
 version: "1"
 initialState: assess
 description: >
-  Worked example of DecisionMaker decision routing (0911 D7): a shell producer records a fixed
-  recovery summary as action evidence, a non-pausing hitl.select lets the DecisionMaker choose
-  retry or stop from that evidence (deferring with provenance when it is inconclusive), an
-  accepted retry runs exactly one attempt and then escalates, and the never-mode pause=true
-  hitl.confirm gate always waits for the operator with explicit yes/no/cancel branches.
-  Illustrative only — copy the patterns rather than running this file.
+  Worked example of DecisionMaker decision routing (0911 D7) plus the non-pausing decide
+  action (0941): a shell producer records a fixed recovery summary as action evidence, a
+  decide classifier makes the first retry/stop cut without pausing (degrading to its declared
+  default whenever the backend is unavailable or unsure), a non-pausing hitl.select lets the
+  DecisionMaker choose retry or stop from that evidence (deferring with provenance when it is
+  inconclusive), an accepted retry runs exactly one attempt and then escalates, and the
+  never-mode pause=true hitl.confirm gate always waits for the operator with explicit
+  yes/no/cancel branches. Illustrative only — copy the patterns rather than running this file.
 vars:
     recoveryChoice: ""
     decisionStatus: ""
     # Default answer var the never-mode gate's yes/no/cancel branches read (matches the stock gates).
     __hitlAnswer: ""
+    # Run id the inline driver/engine injects; the decide resultFile path is run-scoped and
+    # the routing guards read the value back with jq (the runner never reads it itself, 0941).
+    __runId: ""
 states:
   - id: assess
     description: >
@@ -45,6 +57,24 @@ states:
           command: >-
             printf 'Failure summary: verification failed twice on the flaky fixture; no data loss;
             retry is safe, or stop and hand the decision to the operator.'
+  - id: classify
+    description: >
+      Non-pausing decide action (0941, ADR-125): the DecisionMaker classifies the failure as
+      retry or stop WITHOUT pausing the run. Every degraded outcome — switch off, no backend,
+      error, timeout, low confidence — resolves to the declared default `stop` with
+      `degraded: true`, so the run always continues; the resultFile row is read back by the
+      routing guards, never by the runner itself.
+    onEnter:
+      - kind: decide
+        options:
+          id: recovery-classify
+          method: choice
+          question: >
+            Based on the recorded failure summary, should the run retry the failed
+            verification once, or stop and hand the decision to the operator?
+          choices: [retry, stop]
+          default: stop
+          resultFile: .spur/run/${vars.__runId}-recovery.decision.json
   - id: decide
     description: >
       Evidence-mode select (non-paused): DecisionMaker picks a recovery step from the assess
@@ -88,6 +118,27 @@ states:
 transitions:
   # Accepted decision branches first: the state machine takes the first passing edge.
   - from: assess
+    to: classify
+    guard: { kind: always }
+  # The decide classifier's value is read from its resultFile by file guards (0941 Design);
+  # a degraded row records value = default, so both guards require `degraded == false` —
+  # only an ACCEPTED classifier answer takes these branches; an unreadable or degraded row
+  # fails both and falls through to the gated select flow below.
+  - from: classify
+    to: retry
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq -r .value .spur/run/$__runId-recovery.decision.json 2>/dev/null)" = "retry" && test "$(jq -r .degraded .spur/run/$__runId-recovery.decision.json 2>/dev/null)" = "false"'
+  - from: classify
+    to: stop
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(jq -r .value .spur/run/$__runId-recovery.decision.json 2>/dev/null)" = "stop" && test "$(jq -r .degraded .spur/run/$__runId-recovery.decision.json 2>/dev/null)" = "false"'
+  # Classifier did not answer retry/stop (row missing/unreadable/degraded): fall through to
+  # the evidence-mode select below, which defers to the operator gate when inconclusive.
+  - from: classify
     to: decide
     guard: { kind: always }
   - from: decide

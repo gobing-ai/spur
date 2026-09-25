@@ -37,7 +37,7 @@
     },
     "apps/cli": {
       "name": "@gobing-ai/spur",
-      "version": "0.3.91",
+      "version": "0.3.92",
       "bin": {
         "spur": "spur.js",
       },
@@ -70,7 +70,7 @@
     },
     "apps/server": {
       "name": "@gobing-ai/spur-server",
-      "version": "0.3.91",
+      "version": "0.3.92",
       "dependencies": {
         "@gobing-ai/spur-app": "workspace:*",
         "@gobing-ai/spur-config": "workspace:*",
@@ -135,7 +135,7 @@
     },
     "packages/app": {
       "name": "@gobing-ai/spur-app",
-      "version": "0.3.91",
+      "version": "0.3.92",
       "dependencies": {
         "@gobing-ai/spur-config": "workspace:0.3.92",
         "@gobing-ai/spur-contracts": "workspace:*",
@@ -157,7 +157,7 @@
     },
     "packages/config": {
       "name": "@gobing-ai/spur-config",
-      "version": "0.3.91",
+      "version": "0.3.92",
       "dependencies": {
         "@gobing-ai/ts-runtime": "catalog:",
         "yaml": "catalog:",
@@ -170,7 +170,7 @@
     },
     "packages/contracts": {
       "name": "@gobing-ai/spur-contracts",
-      "version": "0.3.91",
+      "version": "0.3.92",
       "dependencies": {
         "@gobing-ai/spur-domain": "workspace:0.3.92",
         "@orpc/contract": "catalog:",
@@ -183,7 +183,7 @@
     },
     "packages/domain": {
       "name": "@gobing-ai/spur-domain",
-      "version": "0.3.91",
+      "version": "0.3.92",
       "dependencies": {
         "@gobing-ai/ts-db": "catalog:",
         "@gobing-ai/ts-dual-workflow-engine": "catalog:",
@@ -203,7 +203,7 @@
     "@commander-js/extra-typings": "^14.0.0",
     "@gobing-ai/ts-ai-runner": "^0.5.5",
     "@gobing-ai/ts-db": "^0.5.5",
-    "@gobing-ai/ts-dual-workflow-engine": "^0.5.5",
+    "@gobing-ai/ts-dual-workflow-engine": "^0.5.6",
     "@gobing-ai/ts-infra": "^0.5.5",
     "@gobing-ai/ts-llm-jsonl-importer": "^0.5.5",
     "@gobing-ai/ts-rule-engine": "^0.5.5",
@@ -409,7 +409,7 @@
 
     "@gobing-ai/ts-db": ["@gobing-ai/ts-db@0.5.5", "", { "dependencies": { "@gobing-ai/ts-runtime": "^0.5.5", "@gobing-ai/ts-utils": "^0.5.5" }, "peerDependencies": { "drizzle-orm": ">=0.38.0", "drizzle-zod": ">=0.5.0", "zod": ">=3.23.0" }, "optionalPeers": ["drizzle-zod", "zod"] }, "sha512-Fvi0X9j9OQgS9p8QhFl3/MA0ryZtL0BIrFyww1KG84q+KslOnzOGG8JwVoUjsKcfvtTII09MIl3TCtjxQ9zMZA=="],
 
-    "@gobing-ai/ts-dual-workflow-engine": ["@gobing-ai/ts-dual-workflow-engine@0.5.5", "", { "dependencies": { "@gobing-ai/ts-db": "^0.5.5", "@gobing-ai/ts-infra": "^0.5.5", "@gobing-ai/ts-runtime": "^0.5.5", "zod": "^4.1.0" } }, "sha512-AabX+dkfhUxEGZkuevvio4qk6jl0GzGr2HHcFP3CcOBG9EGIob0TBmXFZ6c+eaOoubfG+3FETf/WUI6xrTMQmw=="],
+    "@gobing-ai/ts-dual-workflow-engine": ["@gobing-ai/ts-dual-workflow-engine@0.5.6", "", { "dependencies": { "@gobing-ai/ts-db": "^0.5.5", "@gobing-ai/ts-infra": "^0.5.5", "@gobing-ai/ts-runtime": "^0.5.5", "zod": "^4.1.0" } }, "sha512-iZjnSsFZcTT70r4w2vlUxhCRBWIuv17Z2pWhmp+YsLisQ57jcby0MfUfnGZhd/Ianzkzplb91Dzo+ab9hzXtWw=="],
 
     "@gobing-ai/ts-infra": ["@gobing-ai/ts-infra@0.5.5", "", { "dependencies": { "@gobing-ai/ts-utils": "^0.5.5", "@logtape/logtape": "^2.0.0" }, "peerDependencies": { "@gobing-ai/ts-db": "^0.5.5", "@gobing-ai/ts-runtime": "^0.5.5", "@opentelemetry/api": "^1.9.0", "@opentelemetry/exporter-metrics-otlp-http": ">=0.200.0", "@opentelemetry/exporter-trace-otlp-http": ">=0.200.0", "@opentelemetry/resources": "^2.0.0", "@opentelemetry/sdk-metrics": "^2.0.0", "@opentelemetry/sdk-trace-node": "^2.0.0", "@opentelemetry/semantic-conventions": "^1.30.0" }, "optionalPeers": ["@gobing-ai/ts-db", "@gobing-ai/ts-runtime", "@opentelemetry/exporter-metrics-otlp-http", "@opentelemetry/exporter-trace-otlp-http", "@opentelemetry/resources", "@opentelemetry/sdk-metrics", "@opentelemetry/sdk-trace-node"] }, "sha512-irZpp1dJSB2wgigonwQ3vzLe5AikjdzdTsq2+eIEmxnbpBscS6xlneSMG0TJlSjaAhVsrbHd5SqE4D3iz5j7Vg=="],
 

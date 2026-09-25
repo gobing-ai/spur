@@ -48,13 +48,6 @@
             "tokenCostUsd": null,
             "source": "Coverage entry (0826 R2): the live definition's model-query count (extractResolvedWorkflowFacts, 2026-09-11). No real-run measurement yet: wall-clock and cost are unenforced until measured, never 0.",
             "decision": null
-        },
-        "decision-routing-example": {
-            "modelQueries": 0,
-            "wallClockMs": null,
-            "tokenCostUsd": null,
-            "source": "Coverage entry (0911): authoring example (config/workflows/decision-routing-example.yaml) enumerating `decision:` modes. Measured 0 model queries — the producer is a shell action, so the example runs with no provider (live count via loadQueryCounts, 2026-09-20). Not a pipeline humans run; wall-clock and cost unenforced, never 0.",
-            "decision": null
         }
     }
 }

@@ -240,6 +240,11 @@ export class LifecycleAdapter implements LifecyclePort {
                 // the transition time; harmless — consumers gate on `status`, never on
                 // `completed_at` (F16/F17 was a status bug, not a timestamp bug).
                 new Date().toISOString(),
+                undefined,
+                // 0937 R4: the lifecycle knows the entity outcome — declare the enum reason
+                // directly (cancel → 'cancelled', conclude → 'done'). Reopen (→ running)
+                // passes none: finalizeRun nulls the stale terminal reason.
+                to === 'cancelled' ? 'cancelled' : to === 'done' ? 'done' : undefined,
             );
             return { allowed: true, from: result.fromState, to: result.toState };
         }

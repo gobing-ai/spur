@@ -30,6 +30,7 @@
 // runtime-boundaries fs rule (recommended pre-check preset) forbids a static node:fs
 // import in application sources.
 const { mkdirSync } = await import('node:fs');
+const { readFile } = await import('node:fs/promises');
 
 import { join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
@@ -39,6 +40,8 @@ import {
     DbWorkflowPersistenceAdapter,
     WorkflowService as EngineWorkflowService,
 } from '@gobing-ai/ts-dual-workflow-engine';
+import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
 import {
     type ResolvedWorkflowDefinition,
@@ -303,5 +306,85 @@ export async function createOrAttachInlineRun(input: InlineRunSetupInput): Promi
         layer: resolved.layer,
         workdir,
         status: 'running',
+    };
+}
+
+/** Input for the inline driver's `--decide` mode (0941 R5). */
+export interface InlineDecideInput {
+    /** Absolute project working directory (options paths and the resultFile resolve here). */
+    readonly workdir: string;
+    /** Options JSON file path (relative to the workdir or absolute). */
+    readonly optionsFile: string;
+    /**
+     * Config-derived `workflow.decideDecisionMaker` switch, resolved at the composition
+     * boundary (the plugin delegate) — app services never load Spur config (ADR-082).
+     */
+    readonly enabled: boolean;
+}
+
+/** Result of {@link runDecideForInlineRun}: the decision row plus the resultFile it was written to. */
+export interface InlineDecideOutcome {
+    readonly ok: boolean;
+    readonly error?: string;
+    readonly value?: string;
+    readonly degraded?: boolean;
+    readonly reason?: string;
+    readonly backend?: string | null;
+    readonly confidence?: number | null;
+    readonly resultFile?: string;
+    readonly durationMs?: number;
+}
+
+/**
+ * Inline-driver decide execution (0941 R5): executes the SAME {@link DecideActionRunner} the
+ * engine composition registers and writes the same resultFile row — no second decide
+ * implementation. The decide-enabled switch is an explicit parameter: the composition
+ * boundary (plugin delegate) resolves `workflow.decideDecisionMaker` and threads it in
+ * (ADR-082). The caller (plugin script) owns the trace row through the shared
+ * WorkflowActionTraceWriter.
+ */
+export async function runDecideForInlineRun(input: InlineDecideInput): Promise<InlineDecideOutcome> {
+    const optionsFile = join(resolve(input.workdir), input.optionsFile);
+    let raw: unknown;
+    try {
+        raw = JSON.parse(await readFile(optionsFile, 'utf8'));
+    } catch (error) {
+        return { ok: false, error: `decide: unreadable options file ${input.optionsFile}: ${String(error)}` };
+    }
+    const parsed = DecideOptionsSchema.safeParse(raw);
+    if (!parsed.success) {
+        return {
+            ok: false,
+            error: `decide: invalid options — ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+        };
+    }
+    const runner = new DecideActionRunner(createNodeFileSystem(), { enabled: input.enabled });
+    const result = await runner.execute(raw as Record<string, unknown>, {
+        runId: 'inline-decide',
+        stateOrNodeId: 'decide',
+        workdir: resolve(input.workdir),
+        vars: {},
+        env: {},
+    });
+    if (!result.ok || result.data === undefined) {
+        return { ok: false, error: result.error ?? 'decide: action failed without an error message' };
+    }
+    const decision = result.data.decision as {
+        value: string;
+        degraded: boolean;
+        reason: string;
+        backend: string | null;
+        confidence: number | null;
+        durationMs: number;
+    };
+    return {
+        ok: true,
+        value: decision.value,
+        degraded: decision.degraded,
+        reason: decision.reason,
+        backend: decision.backend,
+        confidence: decision.confidence,
+        resultFile: join(resolve(input.workdir), parsed.data.resultFile),
+        durationMs: decision.durationMs,
     };
 }

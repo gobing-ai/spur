@@ -223,6 +223,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-pr-preflight.status 2>/dev/null)" = PASS'
   - from: preflight
     to: failed
+    terminalReason: failed-check
     description: Preflight red (detached HEAD, dirty tree, gh auth, no GitHub remote, or the current branch being the base branch) — stop before any publishing
     guard:
       kind: always
@@ -236,6 +237,7 @@ transitions:
         command: 'grep -qE "^(PASS|WARN)$" .spur/run/$__runId-pr-hygiene.status 2>/dev/null'
   - from: hygiene
     to: failed
+    terminalReason: failed-check
     description: BLOCK (secrets/.env/conflict markers) or probe failure — never submit a tainted diff
     guard:
       kind: always
@@ -249,6 +251,7 @@ transitions:
         command: 'grep -qE "^(PASS|SKIP)$" .spur/run/$__runId-pr-precheck.status 2>/dev/null'
   - from: precheck
     to: failed
+    terminalReason: failed-check
     description: Project checks red — do not spend a review request on code that fails its own gate
     guard:
       kind: always
@@ -262,6 +265,7 @@ transitions:
         command: 'grep -qE "^(PUSHED|UP_TO_DATE)$" .spur/run/$__runId-pr-push.status 2>/dev/null'
   - from: push
     to: failed
+    terminalReason: failed-check
     description: Push rejected (e.g. non-fast-forward) — report; never force-push as a workaround
     guard:
       kind: always
@@ -275,6 +279,7 @@ transitions:
         command: 'grep -qE "^(FOUND|CREATED)$" .spur/run/$__runId-pr-ensure.status 2>/dev/null'
   - from: ensure-pr
     to: failed
+    terminalReason: failed-check
     description: No reviewable delta or PR creation failed — report the actual git/GitHub state
     guard:
       kind: always
@@ -306,6 +311,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-pr-request.status 2>/dev/null)" = REQUESTED'
   - from: request
     to: failed
+    terminalReason: failed-check
     description: Request failed (no PR, gh error) — report the preserved error
     guard:
       kind: always
@@ -326,6 +332,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-pr-wait.status 2>/dev/null)" = TIMEOUT'
   - from: wait
     to: failed
+    terminalReason: failed-check
     description: Poll probe itself failed
     guard:
       kind: always
@@ -346,6 +353,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-pr-collect.status 2>/dev/null)" = PENDING'
   - from: collect
     to: failed
+    terminalReason: failed-check
     description: Collect probe failed
     guard:
       kind: always

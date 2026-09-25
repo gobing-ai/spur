@@ -1,7 +1,72 @@
 {
     "schemaVersion": 1,
     "note": "Workflow graph-change promotion candidates (task 0873, feature D62; ADR-076 amendment). A candidate is shadow-run against recorded real-run inputs and is promoted into the canonical definition or deleted by its named deadline — never left as a standing parallel <name>2.yaml. `verdict` is null while pending and is filled by `bun scripts/spur-dev.ts promotion evaluate <id>`; `promotion check` (spur-check-feature) fails any candidate still present past its deadline, any unreferenced parallel definition in config/workflows/, and (0877 R8) any retired definition with real (non-dry) terminal runs lacking a recorded decision in `retirements[]`.",
-    "candidates": [],
+    "candidates": [
+        {
+            "id": "task-pipeline-triage-lanes",
+            "canonical": "task-pipeline",
+            "deadline": "2026-11-24",
+            "createdAt": "2026-09-25",
+            "rationale": "0943 (feature D64): task-pipeline work routes by triage lane and failure class instead of static graphs. Between a green gate and the review/verify fork a deterministic `triage` state writes the diffstat (plugins/sp/scripts/task-diffstat.ts, numstat + untracked scan against the precheck-anchored run base), honors a caller-set mode verbatim (never overridden), pins the safety lane on sensitive paths (drizzle/, packages/config/, server auth basenames, *secret*, .github/, plugins/sp/hooks/, *.sql) or >400 changed lines with NO model call, otherwise consults `decide task-triage` (low → fast lane skips review; standard/high → review), and appends the route reason to .spur/memory/task-pipeline-routes.log (R5). On a red gate, `decide failure-class` routes retryable → test-recheck (attempt counted, qualityGateMaxFixAttempts still bounds), fix → test-fix, stop → failed(failed-check); missing/corrupt decision fails closed. Projected basis: the 0938 baseline (docs/reports/2026-09-workflow-cost-baseline.md) measured task-pipeline wall median 7983s over 1 real terminal run with agent.run median 0; the fast lane saves the review agent.run + wall on triage-low diffs, and retryable classification saves fixall hops (and their gate re-runs) on transient failures. Measurement gap honestly named: with workflow.decideDecisionMaker off (R4) triage degrades to standard lanes (diffstat-guard-sensitive/large still forced safety — pure shell, no model), so benefit only materializes with the flag on; per-lane route counts are observable post-merge in .spur/memory/task-pipeline-routes.log. Measured-benefit status: projected from 0938, NOT shadow-run-confirmed — plan step 5 (recorded-input shadow runs) is DEFERRED out of the 0943 session and tracked by this candidate's deadline; `promotion evaluate` runs post-merge. If it does not beat the baseline, it is reverted (ADR-076).",
+            "measurement": {
+                "workflow": "task-pipeline"
+            },
+            "delta": {
+                "agentRunCount": 0,
+                "baselineAgentRunCount": 0,
+                "note": "Structural graph agent.run count unchanged (no new model state); fast-lane runs save the existing review agent.run (1 fewer on triage-low diffs), retryable classification can save fixall fix hops. baselineAgentRunCount = 0938 task-pipeline agentRunCountMedian."
+            },
+            "verdict": null
+        },
+        {
+            "id": "check-dedup-task-pipeline",
+            "canonical": "task-pipeline",
+            "deadline": "2026-11-24",
+            "createdAt": "2026-09-25",
+            "rationale": "0940 (feature D64): the comprehensive check runs once at the quality boundary — no-progress rechecks skip the full gate to the probe path (check.skipped-no-progress) and review confirms the check receipt (check.reused) instead of re-running tests/lint. Projected basis: the 0938 baseline (docs/reports/2026-09-workflow-cost-baseline.md) measured task-pipeline wall median 7983s over 1 real terminal run with agent.run median 0; per-state rows cover only `record` (visits=0) — no test-recheck/review state-level wall deltas exist yet, so the benefit is projected as wall time (full-gate vs probe cost on no-progress loops, plus removed review-stage re-runs), not agent.run count. Measured-benefit status: projected from 0938, NOT shadow-run-confirmed; `promotion evaluate` runs post-merge against recorded runs. If it does not beat the baseline, it is reverted (ADR-076).",
+            "measurement": {
+                "workflow": "task-pipeline"
+            },
+            "delta": {
+                "agentRunCount": 0,
+                "baselineAgentRunCount": 0,
+                "note": "No agent.run delta by design: check dedup removes full-gate wall time on no-progress rechecks and model-stage re-runs, not model hops. baselineAgentRunCount = 0938 task-pipeline agentRunCountMedian."
+            },
+            "verdict": null
+        },
+        {
+            "id": "wrapup-drift-probe",
+            "canonical": "wrapup-pipeline",
+            "deadline": "2026-11-24",
+            "createdAt": "2026-09-25",
+            "rationale": "0944 (feature D64): a deterministic probe (plugins/sp/scripts/wrapup-drift-probe.ts) runs only when the caller leaves wrapup mode empty and projects mode=fast when no changed path matches a doc-owned surface (AGENTS.md doc map + docs/99_PROJECT_CONSTITUTION.md ownership table) and every task's Solution change map parsed — clean wraps then skip doc-sync via the existing fast edge (fast:drift-probe-clean), any doubt stays on the safety path. Projected basis: doc-sync costs exactly 1 agent.run per wrapup (wrapup-pipeline declares one model query; 0938 baseline docs/reports/2026-09-workflow-cost-baseline.json has 0 recorded wrapup runs — agentRunCountMedian null — so the 1 is structural, never a measured median). Measurement gap honestly named: skipping doc-sync also skips learnings capture (0607 R2 merge), so clean wraps lose per-task learnings rows; measured post-promotion by comparing .spur/memory/wrapup-routes.log fast:drift-probe-clean counts against captured <runId>-wrapup-learnings.md files. For 0946 (measurement-only confirmation): the 0938 snapshot carries per-state rows in states[] but history-anatomy has zero of them (0 recorded runs — only task-pipeline/record exists), and cache hit/miss disposition lives in the history-anatomy provenance stamp (0659/0660, history-anatomy-cache.ts), not in real-run-cost.ts; terminalReasonMix exists per workflow but history-anatomy's is empty. Measured-benefit status: projected from structure + 0938, NOT shadow-run-confirmed; `promotion evaluate` runs post-merge. If it does not beat the baseline, it is reverted (ADR-076).",
+            "measurement": {
+                "workflow": "wrapup-pipeline"
+            },
+            "delta": {
+                "agentRunCount": 0,
+                "baselineAgentRunCount": 1,
+                "note": "Clean wrap skips the single doc-sync agent.run (1 -> 0 for those wraps). baselineAgentRunCount = 1 structural doc-sync agent.run per wrapup run (wrapup-pipeline declares one model query — config/pipeline-budgets.json); the 0938 snapshot records 0 wrapup runs (agentRunCountMedian null), so no measured median exists yet."
+            },
+            "verdict": null
+        },
+        {
+            "id": "idea-pipeline-guard-legibility",
+            "canonical": "idea-pipeline",
+            "deadline": "2026-11-24",
+            "createdAt": "2026-09-25",
+            "rationale": "0945 (feature D64): the four idea-pipeline route guards (ac-generate/feature-check → system-design|decompose) read derived fact files (.spur/run/<runId>-idea-design-route.txt, <runId>-idea-ac-ready.status) written by one deterministic shell action at the end of both ac-generate and feature-check onEnter, instead of re-deriving design×needs_design and dual status reads inline — guards drop from 4-5 logical commands with (warn) markers to 3 predicates with no warn (ADR-115), and routing is proven identical by the executed truth-table test (idea-pipeline-routing.test.ts: the frozen pre-refactor guards are the oracle across profile × __hitlAnswer × design × needs_design × ac × coverage, 3456 cells, plus the guard-parity fixture refreshed per the 0874→0887 protocol). Projected basis: 0938 terminal-reason coverage for idea-pipeline is 100% classified for new runs (all nine failure-state edges declare terminalReason under 0937), so route outcomes stay measurable per terminalReason; this is projected from structure, NOT shadow-run-confirmed — promotion evaluate fills the verdict post-merge, and a losing candidate reverts (ADR-076).",
+            "measurement": {
+                "workflow": "idea-pipeline"
+            },
+            "verdict": null,
+            "delta": {
+                "agentRunCount": 6,
+                "baselineAgentRunCount": 6,
+                "note": "No agent.run delta by design: legibility derives the route facts in shell, model hops are unchanged (composition baseline modelQueries=6 in config/pipeline-budgets.json holds). baselineAgentRunCount = 0938 idea-pipeline agentRunCountMedian."
+            }
+        }
+    ],
     "retirements": [
         {
             "name": "planning-pipeline",
@@ -14,6 +79,12 @@
             "recordedBy": "ADR-076 (commit 017ac7a30)",
             "date": "2026-08-20",
             "rationale": "Standing parallel definition deleted with the D5-N fixture promotion bar; 5 real terminal runs retained in history."
+        },
+        {
+            "name": "decision-routing-example",
+            "recordedBy": "0946 (D64)",
+            "date": "2026-09-25",
+            "rationale": "Example-only authoring sample (0911 D7, retained-as-example 0921) retired per the mechanical catalogue rule (D64 design §10): zero real runs in the 0938 window (2026-06-01, run-record plane) and no live caller — only the plugin README catalogue row, a 0-query budget coverage entry and design/help doc mentions. YAML deleted; README row, budget entry and doc mentions removed; the decision-policy regression fixture moved to packages/app/tests/services/fixtures/decision-routing-example.yaml (workflow-service.test.ts decision-policy block). Its exit also dropped `hitl.select` from the live action union, so the inline-pipeline-parity-check DOCUMENTED set and driver mirror dropped it (parity contract). No run history deleted; 0 real terminal runs retained in history."
         }
     ]
 }

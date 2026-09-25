@@ -296,6 +296,20 @@ export async function loadSpurConfig(cwd?: string, opts?: LoadSpurConfigOptions)
  * @param configPath - Optional layer path (project or global) to invalidate; clears the
  *   entire cache when omitted.
  */
+// ---- Facade flag derivations (ADR-082) ----
+
+/**
+ * Project the `workflow.decideDecisionMaker` switch from a fresh merged load.
+ *
+ * For composition boundaries with no threaded config context — the inline driver delegate
+ * (task 0941) — the load happens here in the facade and the flag is passed into app
+ * services as an explicit parameter; app services never call {@link loadSpurConfig}
+ * themselves. Throws on an invalid config (same fail-loud posture as {@link loadSpurConfig}).
+ */
+export async function resolveDecideDecisionMakerEnabled(cwd?: string, opts?: LoadSpurConfigOptions): Promise<boolean> {
+    return (await loadSpurConfig(cwd, opts)).workflow?.decideDecisionMaker === true;
+}
+
 // Task 0797 / ADR-111: filesystem updater rides the node-only `./loader` subpath.
 // (Re-exported here because the package `exports` map points `./loader` at this file;
 // the import cycle executor-update → loader is safe — the shared symbols are used

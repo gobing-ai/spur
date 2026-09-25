@@ -31,6 +31,7 @@ describe('registerSpurBuiltins', () => {
         expect(actions).toContain('file.read');
         expect(actions).toContain('file.read.into-var');
         expect(actions).toContain('http.request');
+        expect(actions).toContain('decide');
     });
 
     test('http.request is not registered when no requester provided', () => {

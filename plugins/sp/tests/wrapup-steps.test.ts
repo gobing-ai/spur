@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
-import { main, WBS_PATTERN, WRAPUP_STEPS_USAGE, type WrapupStepsEnv } from '../scripts/wrapup-steps';
+import { main, WBS_PATTERN, WRAPUP_STEPS_USAGE, type WrapupStepsEnv, writeRouteReason } from '../scripts/wrapup-steps';
 
 /**
  * 0824: execution pins for the wrapup-steps plugin script, migrated from the workflow
@@ -481,6 +481,160 @@ test('0783 R4: malformed stdout (rc 0), a nonzero sync, and a failing gate all f
         );
         expect(readFileSync(join(cwd, '.spur/run/s-gatefail-wrapup-sync.status'), 'utf8')).toContain('FAIL');
         expect(`${malformed.err}${nonzero.err}`).toContain('malformed or unreadable');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+// ── 0944: route-reason subcommand — route table, drift-probe clean claim, attribution ──
+
+function writeRouteFixture(
+    cwd: string,
+    runId: string,
+    files: { tasks?: string; status?: string; probe?: string },
+): void {
+    mkdirSync(join(cwd, '.spur', 'run'), { recursive: true });
+    if (files.tasks !== undefined) {
+        writeFileSync(join(cwd, '.spur', 'run', `${runId}-wrapup-tasks.json`), files.tasks);
+    }
+    if (files.status !== undefined) {
+        writeFileSync(join(cwd, '.spur', 'run', `${runId}-wrapup-resolve.status`), files.status);
+    }
+    if (files.probe !== undefined) {
+        writeFileSync(join(cwd, '.spur', 'run', `${runId}-drift-probe.json`), files.probe);
+    }
+}
+
+test('0944: a clean drift probe with mode=fast claims fast:drift-probe-clean', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-rr-clean-'));
+    try {
+        writeRouteFixture(cwd, 'rr-a', {
+            tasks: '["0944"]\n',
+            status: 'PASS\n',
+            probe: '{"clean":true,"reasons":[],"paths":[]}\n',
+        });
+        const result = writeRouteReason({ __runId: 'rr-a', mode: 'fast' }, { cwd });
+        expect(result.exitCode).toBe(0);
+        expect(result.reason).toBe('fast:drift-probe-clean');
+        expect(readFileSync(join(cwd, '.spur/run/rr-a-route-reason.txt'), 'utf8')).toBe('fast:drift-probe-clean\n');
+        expect(readFileSync(join(cwd, '.spur/memory/wrapup-routes.log'), 'utf8')).toContain(
+            'rr-a fast:drift-probe-clean',
+        );
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0944: mode=safety claims safety:operator-forced doc-sync', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-rr-safety-'));
+    try {
+        writeRouteFixture(cwd, 'rr-b', { tasks: '["0944"]\n', status: 'PASS\n' });
+        const result = writeRouteReason({ __runId: 'rr-b', mode: 'safety' }, { cwd });
+        expect(result.reason).toBe('safety:operator-forced doc-sync');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0944: the former jq table is preserved one-for-one — fast, empty, unknown, conflict', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-rr-table-'));
+    try {
+        for (const [mode, expected] of [
+            ['fast', 'fast:evidence complete+consistent'],
+            ['', 'safety:missing evidence (mode empty)'],
+            ['unknown', 'safety:unknown evidence quality'],
+            ['conflict', 'safety:conflicting evidence'],
+            ['bogus', 'safety:unrecognized evidence (mode=bogus)'],
+        ] as const) {
+            const runId = `rr-${mode === '' ? 'empty' : mode}`;
+            writeRouteFixture(cwd, runId, { tasks: '["0944"]\n', status: 'PASS\n' });
+            expect(writeRouteReason({ __runId: runId, mode }, { cwd }).reason).toBe(expected);
+        }
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0944: only a validated [] claims skipped; a missing capture never claims skip or clean', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-rr-skip-'));
+    try {
+        writeRouteFixture(cwd, 'rr-s0', { tasks: '[]\n', status: 'PASS\n' });
+        expect(writeRouteReason({ __runId: 'rr-s0', mode: 'fast' }, { cwd }).reason).toBe('skipped:empty task list');
+        // No tasks file at all: never 0, so no skipped claim; no probe verdict either,
+        // so even mode=fast falls to the table instead of fast:drift-probe-clean.
+        writeRouteFixture(cwd, 'rr-s1', { status: 'PASS\n' });
+        expect(writeRouteReason({ __runId: 'rr-s1', mode: 'fast' }, { cwd }).reason).toBe(
+            'fast:evidence complete+consistent',
+        );
+        expect(readFileSync(join(cwd, '.spur/run/rr-s1-route-reason.txt'), 'utf8')).not.toContain('skipped');
+        // Corrupted capture: same refusal.
+        writeRouteFixture(cwd, 'rr-s2', { tasks: '{oops', status: 'PASS\n' });
+        expect(writeRouteReason({ __runId: 'rr-s2', mode: 'fast' }, { cwd }).reason).toBe(
+            'fast:evidence complete+consistent',
+        );
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0944: a corrupted probe file can never yield a clean claim', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-rr-probe-'));
+    try {
+        writeRouteFixture(cwd, 'rr-p', { tasks: '["0944"]\n', status: 'PASS\n', probe: 'not json' });
+        expect(writeRouteReason({ __runId: 'rr-p', mode: 'fast' }, { cwd }).reason).toBe(
+            'fast:evidence complete+consistent',
+        );
+        writeRouteFixture(cwd, 'rr-p2', {
+            tasks: '["0944"]\n',
+            status: 'PASS\n',
+            probe: '{"clean":false,"reasons":["x"],"paths":[]}',
+        });
+        expect(writeRouteReason({ __runId: 'rr-p2', mode: 'fast' }, { cwd }).reason).toBe(
+            'fast:evidence complete+consistent',
+        );
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0944: a FAIL resolve keeps its own reason — the route-reason writer writes nothing', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-rr-fail-'));
+    try {
+        writeRouteFixture(cwd, 'rr-f', { tasks: '["0944"]\n', status: 'FAIL\n' });
+        const result = writeRouteReason({ __runId: 'rr-f', mode: '' }, { cwd });
+        expect(result.exitCode).toBe(0);
+        const exists = (p: string): boolean => {
+            try {
+                readFileSync(join(cwd, p), 'utf8');
+                return true;
+            } catch {
+                return false;
+            }
+        };
+        expect(exists('.spur/run/rr-f-route-reason.txt')).toBe(false);
+        expect(exists('.spur/memory/wrapup-routes.log')).toBe(false);
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0944: an empty __runId is a hard mis-invocation (exit 1, nothing written)', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-rr-empty-'));
+    try {
+        const seen: string[] = [];
+        const original = process.stderr.write;
+        process.stderr.write = ((chunk: unknown): boolean => {
+            seen.push(String(chunk));
+            return true;
+        }) as typeof process.stderr.write;
+        let code = -1;
+        try {
+            code = writeRouteReason({ __runId: '', mode: '' }, { cwd }).exitCode;
+        } finally {
+            process.stderr.write = original;
+        }
+        expect(code).toBe(1);
+        expect(seen.join('')).toContain('__runId is empty');
     } finally {
         cleanup(cwd);
     }

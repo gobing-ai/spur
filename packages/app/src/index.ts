@@ -314,8 +314,11 @@ export type {
 } from './services/inline-run-setup';
 export {
     createOrAttachInlineRun,
+    type InlineDecideInput,
+    type InlineDecideOutcome,
     type InlineRunProjectDb,
     openInlineRunProjectDb,
+    runDecideForInlineRun,
 } from './services/inline-run-setup';
 export {
     acquireExclusiveJob,
@@ -727,6 +730,13 @@ export {
 } from './workflow/action-trace';
 export { AgentRunActionRunner } from './workflow/actions/agent-run';
 export { CommandGateActionRunner, type CommandGateOptions } from './workflow/actions/command-gate';
+// Non-pausing decide action (0941, ADR-125)
+export {
+    DECIDE_KIND,
+    type DecideActionDeps,
+    DecideActionRunner,
+    DecideOptionsSchema,
+} from './workflow/actions/decide';
 export { FileExistsActionRunner } from './workflow/actions/file-exists';
 export { FileReadActionRunner } from './workflow/actions/file-read';
 export { FileReadIntoVarActionRunner } from './workflow/actions/file-read-into-var';
@@ -751,6 +761,17 @@ export {
     computeDefinitionDigest,
     extractResolvedWorkflowFacts,
 } from './workflow/composition-baseline';
+export {
+    DECIDE_EVIDENCE_MAX_CHARS,
+    DEFAULT_MIN_CONFIDENCE,
+    type DecideDegradedReason,
+    type DecideDeps,
+    type DecideMethod,
+    type DecideOptions,
+    type DecideResult,
+    NOUL_YES_THRESHOLD,
+    runDecide,
+} from './workflow/decide';
 export {
     createDecisionHitlResponder,
     type DecisionConfig,
@@ -894,6 +915,14 @@ export {
     type WorkflowOutputDetail,
     type WorkflowStep,
 } from './workflow/step-reporter';
+export {
+    BOOKKEEPING_WORKFLOWS,
+    classifyTerminalReason,
+    isBookkeepingWorkflow,
+    isTerminalReason,
+    TERMINAL_REASONS,
+    type TerminalReason,
+} from './workflow/terminal-reason';
 export { WorkflowTraceWriter } from './workflow/trace-writer';
 export {
     assertInventoryIdentity,

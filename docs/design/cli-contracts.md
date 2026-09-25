@@ -871,7 +871,8 @@ raw evidence text and provider exception text never enter it.
 mode in `pause: true` states/nodes; more than one evidence action per state/node; select choices
 violating the evidence invariants (<2, duplicate, empty, a `defer` choice); and producer nodes
 that do not exist in the workflow. Bundled workflows ship explicit `mode: never` on their human
-gates, and `config/workflows/decision-routing-example.yaml` demonstrates all three modes.
+gates, and the `decision-routing-example` fixture (retired from the catalogue by task 0946, D64
+§10, kept at `packages/app/tests/services/fixtures/`) demonstrates all three modes.
 
 Offline readiness is projected by `spur self status` as `decisionMaker: {enabled, provider,
 credentialPresent, state, connectivity, inlineSupport}` with states `disabled`, `missing-key`,

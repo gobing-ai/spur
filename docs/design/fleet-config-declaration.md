@@ -94,6 +94,19 @@ No converter: no registered project carries a fleet declaration. `misplacedGloba
 | `GET /api/project/fleet` | adds `enabled: boolean`; `strategy` still read through `StrategyRuntime` (reconciled at start) |
 | Board hints (`ProjectsShell`, `AgentsView`, `useProjectContext`) | `.spur/fleet.json` → `agent.fleet in .spur/config.yaml` |
 
+**Workflow dispatch surface (0942, ADR-126, opt-in).** A workflow run may route its `agent.run`
+stages through this fleet instead of a subprocess by selecting the fleet executor
+(`--agent fleet` on `dev-run`/`dev-runall` maps the run to `executor: 'fleet'`).
+`dispatchToFleet` (`packages/app/src/workflow/fleet-dispatch.ts`) resolves the role through
+`FleetService` + `AgentCoordinationService`, persists the step prompt as a durable artifact
+(`.spur/run/<runId>/prompts/<state>.md`, ADR-057), and sends a keyed dispatch
+(`requestKey = <runId>/<state>`, 0832). A declared `expectFile` gates completion by artifact
+appearance; a member that accepted work but never produced it fails the stage as
+`failed-timeout` — never a fallback. Dispatch failures fall back only when the run declares
+`executorFallback: 'traditional'`; otherwise the stage fails explicitly (0937 `failed-agent`).
+Reviewer stages never dispatch to a member holding a reusable session (ADR-121, enforced before
+send).
+
 ## 5. Runtime vocabulary (R6)
 
 ### Routes — `apps/server/src/modules/team/` → `modules/processes/`

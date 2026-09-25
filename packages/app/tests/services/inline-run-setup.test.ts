@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { execSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, setEnvVar } from '@gobing-ai/spur-config';
@@ -12,6 +12,7 @@ import {
     type InlineRunProjectDb,
     openInlineRunProjectDb,
     resolveWorkflowDefinition,
+    runDecideForInlineRun,
 } from '../../src';
 import { RunArtifactActionRunner } from '../../src/workflow/actions/run-artifact';
 
@@ -644,5 +645,314 @@ describe('createOrAttachInlineRun (task 0804 R1)', () => {
         ]);
         // queryFirst returns undefined for no row (SQLite null → undefined, @gobing-ai/ts-db 0.4.62).
         expect(row).toBeUndefined();
+    });
+
+    test('an inventory without a definition source refuses before any run write', async () => {
+        const p = makeProject(WORKFLOW_V1);
+        try {
+            const selected = await resolveWorkflowDefinition(p.workdir, p.definitionPath);
+            // A valid projection minus `source`: without the CLI-selected path/layer the
+            // driver cannot revalidate what it launched, so setup must fail closed.
+            const inventory = {
+                name: selected.workflow.name,
+                kind: 'state-machine',
+                format: 'todo',
+                version: null,
+                definitionDigest: selected.digest,
+                steps: [
+                    { id: 'start', initial: true },
+                    { id: 'end', terminal: true },
+                ],
+            };
+            const res = await createOrAttachInlineRun({
+                workdir: p.workdir,
+                getDb: async () => projectDb.adapter,
+                file: DEFINITION,
+                runId: 'run-inline-no-source',
+                inventory,
+            });
+            expect(res).toMatchObject({
+                ok: false,
+                error: 'inline run setup requires a state-machine inventory with definition source',
+            });
+            expect(
+                await projectDb.adapter.queryFirst<{ id: string }>(`SELECT id FROM runs WHERE id = ?`, [
+                    'run-inline-no-source',
+                ]),
+            ).toBeUndefined();
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('an inventory whose name does not match its definition refuses (projection drift)', async () => {
+        const p = makeProject(WORKFLOW_V1);
+        try {
+            const selected = await resolveWorkflowDefinition(p.workdir, p.definitionPath);
+            const inventory = {
+                name: 'stale-inventory-name',
+                kind: 'state-machine',
+                format: 'todo',
+                version: null,
+                definitionDigest: selected.digest,
+                source: { path: p.definitionPath, layer: 'project' },
+                steps: [
+                    { id: 'start', initial: true },
+                    { id: 'end', terminal: true },
+                ],
+            };
+            const res = await createOrAttachInlineRun({
+                workdir: p.workdir,
+                getDb: async () => projectDb.adapter,
+                file: DEFINITION,
+                runId: 'run-inline-name-drift',
+                inventory,
+            });
+            expect(res).toMatchObject({
+                ok: false,
+                error: 'inline run setup: inventory workflow name does not match its definition',
+            });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('a run row whose recorded workflow name was mutated refuses (conflicting run identity)', async () => {
+        const p = makeProject(WORKFLOW_V1);
+        try {
+            expect((await setup(p.workdir)).ok).toBe(true);
+            // Digest and definition source stay intact — only the name is corrupted, so
+            // this is the one conflicting-identity path the digest check cannot catch.
+            await projectDb.adapter.run(`UPDATE runs SET workflow_name = 'renamed' WHERE id = ?`, [RUN_ID]);
+            const second = await setup(p.workdir);
+            expect(second.ok).toBe(false);
+            if (second.ok) return;
+            expect(second.error).toContain('conflicting run identity');
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('a run row without a recorded definition source refuses (unverifiable launch source)', async () => {
+        const p = makeProject(WORKFLOW_V1);
+        try {
+            expect((await setup(p.workdir)).ok).toBe(true);
+            // A matching digest with no source block still cannot prove WHERE the run
+            // launched from — setup refuses instead of attaching an unverifiable identity.
+            await projectDb.adapter.run(
+                `UPDATE runs SET metadata_json = json_remove(metadata_json, '$.definitionSource') WHERE id = ?`,
+                [RUN_ID],
+            );
+            const second = await setup(p.workdir);
+            expect(second.ok).toBe(false);
+            if (second.ok) return;
+            expect(second.error).toContain('no definition source');
+        } finally {
+            p.cleanup();
+        }
+    });
+});
+
+describe('runDecideForInlineRun (0941 R5)', () => {
+    const OPTIONS_FILE = '.spur/run/inline.decide-options.json';
+    const RESULT_FILE = '.spur/run/inline.decision.json';
+    const OPTIONS = {
+        id: 'recovery-classify',
+        method: 'choice',
+        question: 'retry or stop?',
+        choices: ['retry', 'stop'],
+        default: 'stop',
+        minConfidence: 0.8,
+        resultFile: RESULT_FILE,
+    };
+
+    function makeDecideProject(): { workdir: string; cleanup: () => void } {
+        const workdir = mkdtempSync(join(tmpdir(), 'spur-0941-decide-'));
+        mkdirSync(join(workdir, '.spur', 'run'), { recursive: true });
+        writeFileSync(join(workdir, ...OPTIONS_FILE.split('/')), JSON.stringify(OPTIONS));
+        return { workdir, cleanup: () => rmSync(workdir, { recursive: true, force: true }) };
+    }
+
+    function decide(p: { workdir: string }, enabled: boolean) {
+        return runDecideForInlineRun({ workdir: p.workdir, optionsFile: OPTIONS_FILE, enabled });
+    }
+
+    function readResultRow(p: { workdir: string }): Record<string, unknown> {
+        return JSON.parse(readFileSync(join(p.workdir, ...RESULT_FILE.split('/')), 'utf8')) as Record<string, unknown>;
+    }
+
+    interface FakeChoice {
+        choice: string;
+        confidence: number;
+        probabilities: Record<string, number>;
+    }
+
+    /**
+     * Typesafe-compatible decision backend: answers the single choice question with one
+     * canned wire answer (`{ answers: { question: { type: 'choice', … } } }`, the shape
+     * ts-ai-runner's fromSdkAnswer maps). The service wires the default maker through the
+     * SDK's `TYPESAFE_BASE_URL` self-resolution, so no seam injection is possible — this
+     * is the only way to exercise accepted/low-confidence through the SERVICE layer.
+     */
+    function startDecisionBackend(answer: FakeChoice): { baseURL: string; stop: () => void } {
+        const server = Bun.serve({
+            port: 0,
+            hostname: '127.0.0.1',
+            fetch: () =>
+                Response.json({
+                    answers: {
+                        question: {
+                            type: 'choice',
+                            choice: answer.choice,
+                            confidence: answer.confidence,
+                            probabilities: answer.probabilities,
+                        },
+                    },
+                }),
+        });
+        return { baseURL: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+    }
+
+    /** Save/restore the decision env keys; `setEnvVar(k, undefined)` removes the key. */
+    async function withDecisionEnv<T>(values: Record<string, string | undefined>, run: () => Promise<T>): Promise<T> {
+        const keys = Object.keys(values);
+        const previous = keys.map((k) => getEnvVar(k));
+        try {
+            for (const [k, v] of Object.entries(values)) setEnvVar(k, v);
+            return await run();
+        } finally {
+            for (const [i, k] of keys.entries()) setEnvVar(k, previous[i]);
+        }
+    }
+
+    test('an accepted decision returns the value and writes the resultFile row (0941 R2)', async () => {
+        const p = makeDecideProject();
+        const backend = startDecisionBackend({
+            choice: 'retry',
+            confidence: 0.91,
+            probabilities: { retry: 0.91, stop: 0.09 },
+        });
+        try {
+            const res = await withDecisionEnv(
+                { TYPESAFE_API_KEY: 'test-key', TYPESAFE_BASE_URL: backend.baseURL },
+                () => decide(p, true),
+            );
+            expect(res.ok).toBe(true);
+            if (!res.ok) return;
+            expect(res.value).toBe('retry');
+            expect(res.degraded).toBe(false);
+            expect(res.reason).toBe('accepted');
+            expect(res.backend).toBe('typesafe');
+            expect(res.confidence).toBeCloseTo(0.91);
+            expect(res.resultFile).toBe(join(p.workdir, ...RESULT_FILE.split('/')));
+            expect(typeof res.durationMs).toBe('number');
+            expect(readResultRow(p)).toMatchObject({
+                schemaVersion: 1,
+                value: 'retry',
+                reason: 'accepted',
+                backend: 'typesafe',
+                degraded: false,
+            });
+        } finally {
+            backend.stop();
+            p.cleanup();
+        }
+    });
+
+    test('the disabled switch degrades to the default without any backend call (0941 R4)', async () => {
+        const p = makeDecideProject();
+        try {
+            const res = await decide(p, false);
+            expect(res.ok).toBe(true);
+            if (!res.ok) return;
+            expect(res.value).toBe('stop');
+            expect(res.degraded).toBe(true);
+            expect(res.reason).toBe('disabled');
+            expect(res.backend).toBeNull();
+            expect(res.confidence).toBeNull();
+            expect(readResultRow(p)).toMatchObject({ degraded: true, reason: 'disabled', value: 'stop' });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('a configured backend answering below minConfidence degrades with reason low-confidence', async () => {
+        const p = makeDecideProject();
+        const backend = startDecisionBackend({
+            choice: 'retry',
+            confidence: 0.42,
+            probabilities: { retry: 0.42, stop: 0.58 },
+        });
+        try {
+            const res = await withDecisionEnv(
+                { TYPESAFE_API_KEY: 'test-key', TYPESAFE_BASE_URL: backend.baseURL },
+                () => decide(p, true),
+            );
+            expect(res.ok).toBe(true);
+            if (!res.ok) return;
+            expect(res.value).toBe('stop');
+            expect(res.degraded).toBe(true);
+            expect(res.reason).toBe('low-confidence');
+            expect(res.backend).toBe('typesafe');
+            expect(res.confidence).toBeCloseTo(0.42);
+            expect(readResultRow(p)).toMatchObject({ degraded: true, reason: 'low-confidence', value: 'stop' });
+        } finally {
+            backend.stop();
+            p.cleanup();
+        }
+    });
+
+    test('an enabled decide with no backend configured still degrades, never throws (0941 R3)', async () => {
+        const p = makeDecideProject();
+        try {
+            // No TYPESAFE_API_KEY: the default maker cannot construct its driver. Through
+            // this wiring the failure classifies as the closed-vocabulary `error` reason
+            // (`no-backend` needs the factory itself to reject — impossible with the lazy
+            // factory — and is covered at the core layer in tests/workflow/decide.test.ts).
+            const res = await withDecisionEnv({ TYPESAFE_API_KEY: undefined, TYPESAFE_BASE_URL: undefined }, () =>
+                decide(p, true),
+            );
+            expect(res.ok).toBe(true);
+            if (!res.ok) return;
+            expect(res.value).toBe('stop');
+            expect(res.degraded).toBe(true);
+            expect(res.reason).toBe('error');
+            expect(readResultRow(p)).toMatchObject({ degraded: true, reason: 'error', value: 'stop' });
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('an unreadable options file fails the decide step with a readable error', async () => {
+        const p = makeDecideProject();
+        try {
+            const res = await runDecideForInlineRun({
+                workdir: p.workdir,
+                optionsFile: '.spur/run/missing-decide-options.json',
+                enabled: false,
+            });
+            expect(res.ok).toBe(false);
+            if (res.ok) return;
+            expect(res.error).toContain('decide: unreadable options file');
+        } finally {
+            p.cleanup();
+        }
+    });
+
+    test('schema-invalid options fail closed and write no resultFile (0941 R1)', async () => {
+        const p = makeDecideProject();
+        try {
+            writeFileSync(
+                join(p.workdir, ...OPTIONS_FILE.split('/')),
+                JSON.stringify({ ...OPTIONS, default: 'pause' }),
+            );
+            const res = await decide(p, false);
+            expect(res.ok).toBe(false);
+            if (res.ok) return;
+            expect(res.error).toContain('decide: invalid options');
+            expect(() => readResultRow(p)).toThrow();
+        } finally {
+            p.cleanup();
+        }
     });
 });

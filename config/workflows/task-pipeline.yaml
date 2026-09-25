@@ -486,8 +486,8 @@ states:
     - id: test-recheck
       description: >
           Soft recheck after fixall with bounded SQLite-lock retry. Writes PASS|FAIL (always exit 0). Transitions
-          branch to review (PASS), another test-fix (FAIL and under max attempts),
-          or the pipeline `failed` state (FAIL and attempts exhausted) — never a
+          branch to `triage` (PASS — the 0943 lane router), `test-fail-triage` (FAIL — the 0943
+          failure-class router), or the pipeline `failed` state (corrupt status) — never a
           raw lifecycle abort that skips the terminal `failed` state.
       onEnter:
           # R4 (0703, ADR-071): bounded remediation mutated the tree by design, so the fresh evidence
@@ -509,6 +509,96 @@ states:
             options:
                 command: >-
                     mkdir -p .spur/run; if [ -f plugins/sp/scripts/quality-gate.ts ]; then bun plugins/sp/scripts/quality-gate.ts recheck; elif Q="$(superskill script path sp quality-gate.mjs 2>/dev/null)" && [ -f "$Q" ]; then node "$Q" recheck; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+
+    - id: triage
+      description: >-
+          Deterministic lane router between a green gate and the review/verify fork (0943 R1).
+          Writes the diffstat evidence file, honors a caller-set `mode` (never overridden), pins
+          the safety lane on sensitive paths or >400 changed lines without a model call (R2c),
+          otherwise consults `decide task-triage` (low → fast lane; anything else stays empty →
+          standard review path), and appends the triage route reason to
+          .spur/memory/task-pipeline-routes.log (R5). The `decide` action itself runs
+          unconditionally (the engine has no onEnter conditionals); its result is consulted only
+          when neither a caller mode nor the deterministic guard resolved the lane. The resolved
+          lane lands in the `mode` var for the triage → verify/review guards.
+      onEnter:
+          # (a) diffstat producer: task-diffstat.ts owns git reading and sensitive-path
+          # classification; shell only resolves it and fails closed (writes sensitive:true,
+          # which the pre-guard below maps to the safety lane).
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; if [ -f plugins/sp/scripts/task-diffstat.ts ]; then bun plugins/sp/scripts/task-diffstat.ts --spur-bin "$spurBin"; elif D="$(superskill script path sp task-diffstat.mjs 2>/dev/null)" && [ -f "$D" ]; then node "$D"; else echo "task-diffstat failed closed — task-diffstat script not found — run 'superskill install sp'" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; fi; exit 0
+          # (b)+(c) lane pre-guard BEFORE decide: a caller-set mode is projected verbatim (R2b);
+          # a sensitive path or >400 changed lines pins safety (R2c) and the decide result below
+          # is never consulted. An unreadable/missing diffstat row leaves the file empty → safety.
+          - kind: shell
+            options:
+                command: >-
+                    mkdir -p .spur/run; [ -n "$mode" ] && printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt" && exit 0; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' ".spur/run/$wbs-diffstat.json" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
+          # (d) lane decision — degrades to the standard default whenever workflow.decideDecisionMaker
+          # is off (R4), so with the flag off this state is pure shell: no model call is made.
+          - kind: decide
+            options:
+                id: task-triage
+                method: choice
+                question: >-
+                    The quality gate is green. Which verification lane does this diff deserve —
+                    low (small, contained diff — fast lane), standard, or high caution?
+                choices: [low, standard, high]
+                default: standard
+                evidence:
+                    - .spur/run/${vars.wbs}-diffstat.json
+                    - ${vars.taskSpecPath}
+                resultFile: .spur/run/${vars.wbs}-triage.decision
+          # (d) project the decision: low → fast lane; anything else (standard/high, degraded
+          # default, missing row) leaves the mode empty → standard review path. A non-empty mode
+          # file (caller-set or deterministic-high) is never overridden.
+          - kind: shell
+            options:
+                command: >-
+                    MF=".spur/run/$wbs-mode.txt"; [ -s "$MF" ] && exit 0; jq -r 'if .value == "low" then "fast" else empty end' ".spur/run/$wbs-triage.decision" 2>/dev/null > "$MF"; exit 0
+          # R5: append the triage route reason in the shared routes-log format.
+          - kind: shell
+            options:
+                command: >-
+                    m="$(cat ".spur/run/$wbs-mode.txt")"; RUN_ID="$__runId"; [ -n "$RUN_ID" ] || RUN_ID="pipeline-$wbs"; mkdir -p .spur/memory; printf '%s %s %s\n' "$RUN_ID" "$wbs" "$(jq -rn --arg m "$m" --arg c "$mode" 'if $c != "" then ($c + ":caller-set") else {"fast":"fast:triage low lane","safety":"safety:triage deterministic-high","":"safety:triage standard lane"}[$m] // "safety:triage unrecognized mode" end')" >> .spur/memory/task-pipeline-routes.log
+          # (d) the resolved lane becomes the `mode` var for the triage → verify/review guards.
+          - kind: file.read.into-var
+            options:
+                path: .spur/run/${vars.wbs}-mode.txt
+                var: mode
+
+    - id: test-fail-triage
+      description: >-
+          Deterministic failure-class router on a red gate (0943 R3). The engine has no onEnter
+          conditionals, so the FAIL branch from `test`/`test-recheck` lands here as its own
+          deterministic state (the sanctioned alternative), while the green branch goes to
+          `triage`. `decide failure-class` reads the bounded gate findings and routes: retryable
+          → test-recheck (the attempt is counted on entry, so qualityGateMaxFixAttempts still
+          bounds the loop), fix → test-fix (the repair hop, as before), stop → failed with
+          terminalReason failed-check. A missing/corrupt decision fails closed to failed-check.
+      onEnter:
+          - kind: decide
+            options:
+                id: failure-class
+                method: choice
+                question: >-
+                    The quality gate failed. Is the failure retryable (transient or environmental
+                    — just re-run the gate), fixable by the repair agent, or should the run stop
+                    here?
+                choices: [retryable, fix, stop]
+                default: fix
+                evidence:
+                    - .spur/run/${vars.wbs}-test-gate.findings
+                resultFile: .spur/run/${vars.wbs}-failure-class.decision
+          # A retryable classification still counts an attempt so the existing
+          # qualityGateMaxFixAttempts cap bounds the recheck loop (0943 R3; the cap edge reads
+          # the same counter the fixall path uses).
+          - kind: shell
+            options:
+                command: >-
+                    A=".spur/run/$wbs-test-fix-attempt"; [ "$(jq -r '.value // ""' ".spur/run/$wbs-failure-class.decision" 2>/dev/null)" = retryable ] && { n="$(cat "$A" 2>/dev/null || echo 0)"; printf '%s\n' "$((n + 1))" > "$A"; }; exit 0
 
     - id: review
       description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
@@ -779,6 +869,7 @@ transitions:
                   test "$size_status" = PASS && test "$evidence_status" = PASS && $spurBin task check $wbs
     - from: precheck
       to: failed
+      terminalReason: failed-check
       description: Size and/or task check failed — stop before implement.
       guard:
           kind: always
@@ -791,6 +882,7 @@ transitions:
     # fresh question file so a COMPLETED implement after max asks still routes to test.
     - from: implement
       to: failed
+      terminalReason: retry-exhausted
       description: Escalation bound exhausted — the agent paused again after maxEscalations operator answers.
       # 0933 R30 (guard-lines compression): thin predicate; the report note is written
       # by the failed state's onEnter when it observes a bound-exhausted pause.
@@ -826,38 +918,36 @@ transitions:
               command: 'test -n "$__hitlInput"'
     - from: escalate
       to: failed
+      terminalReason: cancelled
       description: Empty operator answer — give-up routes to failed (question + transcript preserved as evidence).
       guard:
           kind: shell
           options:
               command: 'test -z "$__hitlInput"'
-    # Soft probe branching (declaration order: PASS first, then FAIL, then defense).
+    # Soft probe branching (declaration order: PASS → triage, FAIL → test-fail-triage, defense).
+    # 0943 R1/R3: the four former gate-PASS edges (test/test-recheck → verify/review, split on
+    # `$mode`) are replaced by the deterministic `triage` lane producer; a red gate lands in
+    # `test-fail-triage` where `decide failure-class` routes the failure instead of a static fixall.
     - from: test
-      to: verify
-      description: Quality gate already green and mode is fast — proportional fast path bypasses review.
+      to: triage
+      description: Quality gate green — route the lane deterministically (triage, 0943 R1).
       guard:
           kind: shell
           options:
               command: >-
                   gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS && test "$mode" = fast
+                  test "$gate_status" = PASS
     - from: test
-      to: review
-      description: Quality gate already green and safety mode — proceed to review.
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS && test "$mode" != fast
-    - from: test
-      to: test-fix
-      description: Quality gate red — start bounded fixall loop.
+      to: test-fail-triage
+      description: Quality gate red — classify the failure before the repair hop (0943 R3).
       guard:
           kind: shell
           options:
               command: 'test "$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)" = FAIL'
-    # Defense: missing/corrupt status — treat as FAIL path, not silent PASS.
+    # 0943 review P3#2: the former `test → test-fix` FAIL edge is removed — it was dead (the
+    # identical guard on test → test-fail-triage fires first) and a silent spec-bypass trap:
+    # restoring it would skip failure-class on every red gate. The always-defense below keeps
+    # pre-0943 corrupt-status behavior (fixall then recheck).
     - from: test
       to: test-fix
       description: Probe status missing/corrupt — attempt fixall then recheck.
@@ -868,51 +958,95 @@ transitions:
       description: Fixall finished — soft recheck the same quality gate.
       guard:
           kind: always
-    # Recheck branching (PASS first; under-max FAIL → fixall again; exhausted → failed).
+    # Recheck branching (PASS → triage; red → test-fail-triage; defense). The two former
+    # static FAIL edges (under-max → test-fix, exhausted → failed retry-exhausted) moved into
+    # test-fail-triage's decision routing (0943 R3).
     - from: test-recheck
-      to: verify
-      description: Quality gate green after fixall and mode is fast — proportional fast path bypasses review.
+      to: triage
+      description: Quality gate green after fixall — route the lane deterministically (triage, 0943 R1).
       guard:
           kind: shell
           options:
               command: >-
                   gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS && test "$mode" = fast
+                  test "$gate_status" = PASS
     - from: test-recheck
-      to: review
-      description: Quality gate green after fixall and safety mode — proceed to review.
+      to: test-fail-triage
+      description: Still red after fixall — classify the failure (0943 R3).
       guard:
           kind: shell
           options:
               command: >-
                   gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  test "$gate_status" = PASS && test "$mode" != fast
-    - from: test-recheck
-      to: test-fix
-      description: Still red and under qualityGateMaxFixAttempts — another fixall hop.
-      # (warn) 5 commands: named gate status + fix attempts (legibility, 0874).
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
-                  test "$gate_status" = FAIL && test "$fix_attempts" -lt "$qualityGateMaxFixAttempts"
-    - from: test-recheck
-      to: failed
-      description: Still red after max fixall attempts — stop at failed (not silent abort).
-      # (warn) 5 commands: named gate status + fix attempts (legibility, 0874).
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  gate_status="$(cat .spur/run/$wbs-test-gate.status 2>/dev/null)";
-                  fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
-                  test "$gate_status" = FAIL && test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
+                  test "$gate_status" = FAIL
     # Defense: corrupt recheck status — failed, not review.
     - from: test-recheck
       to: failed
+      terminalReason: failed-check
       description: Recheck status missing/corrupt — stop at failed.
+      guard:
+          kind: always
+    # ── triage routing (0943 R1/R2): the lane producer replaced the four gate-PASS edges.
+    # mode=fast → verify; anything else (standard/high, deterministic-high, degraded default,
+    # caller-set non-fast) → review. Together the two guards are exhaustive, so triage never hangs.
+    - from: triage
+      to: verify
+      description: Triage resolved the fast lane (caller-set fast or task-triage low) — skip review.
+      guard:
+          kind: shell
+          options:
+              command: 'test "$mode" = fast'
+    - from: triage
+      to: review
+      description: Triage resolved a review lane (standard/high, deterministic-high, or caller-set) — review.
+      guard:
+          kind: shell
+          options:
+              command: 'test "$mode" != fast'
+    # ── failure-class routing (0943 R3): stop first (never mislabeled by the cap), then the
+    # attempt cap (bounds BOTH lanes — retryable counted on entry, fix as before), then the
+    # decision lanes, then the fail-closed defense. Declaration order matters.
+    - from: test-fail-triage
+      to: failed
+      terminalReason: failed-check
+      description: Failure class stop — the run terminates at failed, never bypassed.
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  jq -e '.value == "stop"' ".spur/run/$wbs-failure-class.decision" >/dev/null 2>&1
+    - from: test-fail-triage
+      to: failed
+      terminalReason: retry-exhausted
+      description: Attempt cap reached — qualityGateMaxFixAttempts bounds the retryable recheck and fix lanes alike.
+      # (warn) 5 commands: named fix attempts (legibility, 0874).
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
+                  test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
+    - from: test-fail-triage
+      to: test-recheck
+      description: Failure class retryable and under the cap — re-run the gate without fixall; the attempt was counted on entry.
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  jq -e '.value == "retryable"' ".spur/run/$wbs-failure-class.decision" >/dev/null 2>&1
+    - from: test-fail-triage
+      to: test-fix
+      description: Failure class fix and under the cap — the bounded repair hop, as before.
+      guard:
+          kind: shell
+          options:
+              command: >-
+                  jq -e '.value == "fix"' ".spur/run/$wbs-failure-class.decision" >/dev/null 2>&1
+    # Defense: missing/corrupt failure-class decision — fail closed instead of silently repairing.
+    - from: test-fail-triage
+      to: failed
+      terminalReason: failed-check
+      description: Failure-class decision missing/corrupt — stop at failed.
       guard:
           kind: always
     # ── review → approve, OR skip the HITL gate entirely when profile=auto (R4) ──
@@ -947,6 +1081,7 @@ transitions:
               command: 'test "$__hitlAnswer" = yes'
     - from: approve
       to: failed
+      terminalReason: cancelled
       description: Operator rejected at the approval gate — report and stop.
       guard:
           kind: shell
@@ -954,6 +1089,7 @@ transitions:
               command: 'test "$__hitlAnswer" = no'
     - from: approve
       to: cancelled
+      terminalReason: cancelled
       description: Operator cancelled at the approval gate.
       guard:
           kind: shell
@@ -1002,6 +1138,7 @@ transitions:
                   test "$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)" -lt "$qualityGateMaxFixAttempts"
     - from: verify
       to: failed
+      terminalReason: retry-exhausted
       description: >-
           Non-PASS with the fix budget exhausted, or a PASS/missing/malformed verdict whose proof
           block is absent or mismatched (task 0703 R5) — block before done; defense catch-all so the
@@ -1031,6 +1168,7 @@ transitions:
                   test "$verdict" = PASS && test "$proof_digest" = "$proofDigest"
     - from: record
       to: failed
+      terminalReason: failed-check
       description: Task check failed or proof evidence missing/malformed/mismatched — block before done.
       guard:
           kind: always

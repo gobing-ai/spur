@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Add the two-tier spur-check primitive with fingerprint-bound receipts
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-24T00:24:27.517Z"
+updated_at: "2026-09-25T06:30:52.015Z"
 feature_id: D64
 priority: P1
 tags:
@@ -30,21 +30,21 @@ Implements: R6 — Lightweight checks accumulate during development; R7 — The 
 
 ### Requirements
 
-- [ ] R1. `quality-gate.ts` gains mode `light`, which checks only the changed scope from `git diff --name-only HEAD` plus untracked files:
+- [x] R1. `quality-gate.ts` gains mode `light`, which checks only the changed scope from `git diff --name-only HEAD` plus untracked files:
   - `bunx biome check <changed files>`;
   - `bun run typecheck` in each touched workspace;
   - the related tests, where `<ws>/src/**/x.ts` maps to `<ws>/tests/**/x.test.ts`, run inside that workspace.
 
   A sub-check whose `{id, inputDigest}` already has a PASS in the receipt is skipped.
-- [ ] R2. Mode `run` (the `full` tier) keeps today's behavior. On completion it writes `.spur/run/<wbs>-check-receipt.json` with `schemaVersion: 'check-receipt/v1'`, `{wbs, runId, tier, inputDigest, checks: [{id, cmd, status, durationMs, logPath}], status, completedAt}`. `inputDigest` is `env.proofDigest`. When it is absent, no receipt is written and the log states why.
-- [ ] R3. Mode `status` exits 0 and prints `{reuse: boolean, reason}`. `reuse` is true only when `status == PASS`, `tier == full`, and `inputDigest` equals the supplied current digest. Otherwise the reason is `missing | failed | stale | light-only`.
-- [ ] R4. Existing outputs are unchanged: `-test-gate.status`, `.findings`, bounded findings, SQLite-busy retry and the `recheck` probe. Existing `quality-gate` tests stay green.
-- [ ] R5. A skill `plugins/sp/skills/spur-check/SKILL.md`, authored via superskill, documents the tiers, the receipt, the reuse rule, and composition with `/sp:dev-fixall --gate-log`. `bun run plugin-smoke` passes.
+- [x] R2. Mode `run` (the `full` tier) keeps today's behavior. On completion it writes `.spur/run/<wbs>-check-receipt.json` with `schemaVersion: 'check-receipt/v1'`, `{wbs, runId, tier, inputDigest, checks: [{id, cmd, status, durationMs, logPath}], status, completedAt}`. `inputDigest` is `env.proofDigest`. When it is absent, no receipt is written and the log states why.
+- [x] R3. Mode `status` exits 0 and prints `{reuse: boolean, reason}`. `reuse` is true only when `status == PASS`, `tier == full`, and `inputDigest` equals the supplied current digest. Otherwise the reason is `missing | failed | stale | light-only`.
+- [x] R4. Existing outputs are unchanged: `-test-gate.status`, `.findings`, bounded findings, SQLite-busy retry and the `recheck` probe. Existing `quality-gate` tests stay green.
+- [x] R5. A skill `plugins/sp/skills/spur-check/SKILL.md`, authored via superskill, documents the tiers, the receipt, the reuse rule, and composition with `/sp:dev-fixall --gate-log`. `bun run plugin-smoke` passes.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Lightweight checks accumulate during development
-- [ ] AC2 — The comprehensive check runs once at the quality boundary
+- [x] AC1 — Lightweight checks accumulate during development
+- [x] AC2 — The comprehensive check runs once at the quality boundary
 
 ### Q&A
 
@@ -116,15 +116,134 @@ The CLI modes are `run` (the existing mode, now also writing the receipt), `rech
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/index.ts:897` |
+| `packages/app/src/services/workflow-service.ts:2157` |
+| `packages/app/src/services/workflow-service.ts:67` |
+| `packages/app/src/services/workflow-service.ts:695` |
+| `packages/app/src/services/workflow-service.ts:949` |
+| `packages/app/src/services/workflow-service.ts:957` |
+| `packages/app/src/workflow/action-trace.ts:178` |
+| `packages/app/src/workflow/action-trace.ts:188` |
+| `packages/app/src/workflow/action-trace.ts:284` |
+| `packages/app/src/workflow/action-trace.ts:294` |
+| `packages/app/src/workflow/action-trace.ts:41` |
+| `packages/app/src/workflow/lifecycle-adapter.ts:243` |
+| `packages/app/src/workflow/observability.ts:26` |
+| `packages/app/src/workflow/observability.ts:472` |
+| `packages/domain/src/dao/run-dao.ts:121` |
+| `packages/domain/src/dao/run-dao.ts:127` |
+| `packages/domain/src/migrations.ts:1540` |
+| `packages/domain/src/migrations.ts:1778` |
+| `packages/domain/src/migrations.ts:1844` |
+| `packages/domain/src/migrations.ts:310` |
+| `packages/domain/tests/dao/migrations.test.ts:12` |
+| `packages/domain/tests/dao/migrations.test.ts:129` |
+| `packages/domain/tests/dao/migrations.test.ts:225` |
+| `packages/domain/tests/dao/migrations.test.ts:331` |
+| `packages/domain/tests/dao/migrations.test.ts:385` |
+| `packages/domain/tests/dao/migrations.test.ts:598` |
+| `packages/domain/tests/dao/migrations.test.ts:657` |
+| `packages/domain/tests/dao/migrations.test.ts:660` |
+| `plugins/sp/scripts/inline-run-setup.ts:308` |
+| `plugins/sp/scripts/inline-run-setup.ts:337` |
+| `plugins/sp/scripts/inline-run-setup.ts:35` |
+| `plugins/sp/scripts/inline-run-setup.ts:420` |
+| `plugins/sp/scripts/inline-run-setup.ts:474` |
+| `plugins/sp/scripts/inline-run-setup.ts:490` |
+| `plugins/sp/scripts/inline-run-setup.ts:512` |
+| `plugins/sp/scripts/inline-run-setup.ts:529` |
+| `plugins/sp/scripts/inline-run-setup.ts:96` |
+| `plugins/sp/scripts/quality-gate.ts:102` |
+| `plugins/sp/scripts/quality-gate.ts:18` |
+| `plugins/sp/scripts/quality-gate.ts:180` |
+| `plugins/sp/scripts/quality-gate.ts:27` |
+| `plugins/sp/scripts/quality-gate.ts:515` |
+| `plugins/sp/scripts/quality-gate.ts:578` |
+| `plugins/sp/scripts/quality-gate.ts:609` |
+| `plugins/sp/scripts/quality-gate.ts:613` |
+| `plugins/sp/scripts/quality-gate.ts:621` |
+| `plugins/sp/scripts/quality-gate.ts:85` |
+| `plugins/sp/tests/quality-gate.test.ts:324` |
+| `scripts/commands/real-run-cost.test.ts:104` |
+| `scripts/commands/real-run-cost.test.ts:19` |
+| `scripts/commands/real-run-cost.test.ts:22` |
+| `scripts/commands/real-run-cost.test.ts:236` |
+| `scripts/commands/real-run-cost.test.ts:25` |
+| `scripts/commands/real-run-cost.test.ts:32` |
+| `scripts/commands/real-run-cost.test.ts:41` |
+| `scripts/commands/real-run-cost.test.ts:44` |
+| `scripts/commands/real-run-cost.test.ts:54` |
+| `scripts/commands/real-run-cost.test.ts:57` |
+| `scripts/commands/real-run-cost.test.ts:6` |
+| `scripts/commands/real-run-cost.test.ts:83` |
+| `scripts/commands/real-run-cost.ts:118` |
+| `scripts/commands/real-run-cost.ts:128` |
+| `scripts/commands/real-run-cost.ts:172` |
+| `scripts/commands/real-run-cost.ts:178` |
+| `scripts/commands/real-run-cost.ts:182` |
+| `scripts/commands/real-run-cost.ts:195` |
+| `scripts/commands/real-run-cost.ts:213` |
+| `scripts/commands/real-run-cost.ts:244` |
+| `scripts/commands/real-run-cost.ts:255` |
+| `scripts/commands/real-run-cost.ts:273` |
+| `scripts/commands/real-run-cost.ts:292` |
+| `scripts/commands/real-run-cost.ts:318` |
+| `scripts/commands/real-run-cost.ts:329` |
+| `scripts/commands/real-run-cost.ts:34` |
+| `scripts/commands/real-run-cost.ts:41` |
+| `scripts/commands/real-run-cost.ts:5` |
+| `scripts/commands/real-run-cost.ts:500` |
+| `scripts/commands/real-run-cost.ts:505` |
+| `scripts/commands/real-run-cost.ts:515` |
+| `scripts/commands/real-run-cost.ts:531` |
+| `scripts/commands/real-run-cost.ts:533` |
+| `scripts/commands/real-run-cost.ts:56` |
+| `scripts/commands/real-run-cost.ts:89` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/scripts/quality-gate.ts:360-370 changed scope (git diff HEAD + ls-files --others); :290-313 src-to-test mapping; :333-357 biome check files + cd ws typecheck/test; :407-424 {id,inputDigest} PASS skip; fixture light PASS 3 checks, rerun skipped:3; tests quality-gate-receipt.test.ts:176,202,298,331 |
+| R2 | MET | quality-gate.ts:577-608 receipt written only in run with proofDigest; check-receipt/v1 schema :182; absent digest -> no receipt + logged reason :604-606; fixture full receipt + reuse ok; no-digest run wrote none; tests quality-gate.test.ts:326,358,375 |
+| R3 | MET | quality-gate.ts:623-626 status exit 0 prints {reuse,reason}; :243-258 reasons missing |
+| R4 | MET | quality-gate.ts:574-575 findings+status files; :87-95 bounded findings MAX 20; :528-543 SQLite-busy retry MAX 5; :520-526 recheck probe; :614,:631 soft-fail exit 0; 36 pass / 0 fail incl. pre-existing suites |
+| R5 | MET | plugins/sp/skills/spur-check/SKILL.md:1-13 superskill frontmatter; documents tiers/receipt/reuse//sp:dev-fixall composition; README.md:345 index row; plugin-smoke PASS |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | fixture light rerun at same digest skipped:3 with 3 skip log lines; quality-gate-receipt.test.ts:331 accumulation test; skip guard quality-gate.ts:407-424 |
+| AC2 | MET | test | run writes the only reusable receipt quality-gate.ts:577-597; readReceiptStatus:257 returns light-only (fixture confirmed); light never demotes full; digest captured at config/workflows/task-pipeline.yaml:419; test :298 never reports reuse |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0939 (delta re-review #2)
+
+**Review #1** (fresh sp-super-reviewer, run f9c432a1): PASS — R1–R5 + AC1/AC2 all MET with fresh evidence; run/recheck path byte-identical to base except one timing variable; deviations adjudicated: single `test` row on full receipt ACCEPTED (qualityGateCmd is one unit; R2 schema is generic), light accumulation keys ACCEPTED (spec-literal), real-worktree bun-install timing fixture ACCEPTED. Findings: P3#1 light-after-full receipt demotion (fixed — see below), P4#2 record deviation at finalize (done), P4#3 unquoted space-paths LEFT (ceiling, full tier is safety net), P4#4 sections at finalize (done).
+
+**Remediation (worker hop 9feabdc7):** runLightGate preserves a valid same-digest `tier: full` receipt — `preserveFullReceipt` gate at quality-gate.ts:423-436, sole light-path write at :451 in the else; light log prints preservation note; new test asserts stored file toEqual(full) + `{reuse:true, reason:'ok'}`.
+
+**Re-review #2** (fresh sp-super-reviewer, run c3188f9d): PASS — demotion hazard explicitly closed by path analysis; non-full prior receipts unchanged; mjs in sync; 36/36 tests; biome clean; fingerprint `sha256:ce294a33…` reproduced bit-exact; gate PASS (9048 tests).
+
+| P | Finding | Disposition |
+| --- | --- | --- |
+| P3 | Light run clobbered same-digest full receipt (status demoted to light-only) | FIXED (worker hop 9feabdc7; hazard closed in re-review #2) |
+| P4 | Full receipt carries single `test` row vs design's five-id list | ACCEPTED — one row = what actually ran; documented in script header + SKILL.md |
+| P4 | Unquoted paths in `bunx biome check ${scope.files}` (POSIX sh -c ceiling) | LEFT — pre-existing contract, full tier is the safety net |
+| P4 | buildReceipt allocates on preservation path for stdout status | ACCEPTED — harmless one-allocation |
+| P4 | Solution/Testing/Review placeholders | FILLED at record finalization (this write + record step) |
+
+Residual: light tier inherits POSIX-only `sh -c` contract (pre-existing); timing evidence recorded in Testing.
 
 ### References
 
@@ -134,3 +253,8 @@ The CLI modes are `run` (the existing mode, now also writing the receipt), `rech
 - Related: docs/design/workflow-execution-economy.md, docs/design/fleet-config-declaration.md, docs/design/inter-agent-control-plane.md
 
 ### History
+
+- 2026-09-25T05:30:00.938Z todo → wip (system)
+- 2026-09-25T06:30:51.298Z wip → testing (system)
+- 2026-09-25T06:30:52.015Z testing → done (system)
+

@@ -126,6 +126,10 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
                 // definition through the same seams in both layouts.
                 "export { captureFeatureReceiptDigest, completeFeatureVerificationReceipt, DEFAULT_FEATURE_VERIFICATION_CMD, featureReceiptPaths, startFeatureVerificationReceipt, validateFeatureVerificationReceipt } from '../packages/app/src/workflow/feature-verification-receipt';",
                 "export { resolveWorkflowDefinition } from '../packages/app/src/workflow/workflow-resolver';",
+                // Decide-enabled switch (task 0941 gate fix): the facade derivation the delegate
+                // calls at its composition boundary — the app service takes the flag as an
+                // explicit parameter (ADR-082), so the loader call stays out of app services.
+                "export { resolveDecideDecisionMakerEnabled } from '../packages/config/src/loader';",
                 "export { ArtifactDao, RunDao } from '../packages/domain/src/dao';",
                 "export { EMBEDDED_SPUR_SCHEMAS } from '../apps/cli/src/config/embedded-schemas';",
             ].join('\n'),
@@ -169,6 +173,7 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
                     (name) => `export declare const ${name}: typeof import('@gobing-ai/spur-domain').${name};`,
                 ),
                 'export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;',
+                "export declare const resolveDecideDecisionMakerEnabled: typeof import('@gobing-ai/spur-config/loader').resolveDecideDecisionMakerEnabled;",
                 'export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };',
                 '',
             ].join('\n'),

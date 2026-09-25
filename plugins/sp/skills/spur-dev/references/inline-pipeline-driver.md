@@ -23,7 +23,7 @@ the resolved actions and guards of every `.spur/workflows/*.yaml`; any element p
 in one and absent in the other fails the check. Add a new kind here when the driver
 implements it; remove the entry when the corresponding kind is dropped from the YAML.
 
-**Actions:** `shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `hitl.input` · `hitl.select` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate`
+**Actions:** `shell` · `note` · `doctor.probe` · `file.read.into-var` · `hitl.confirm` · `hitl.input` · `agent.run` · `proof.fingerprint` · `run.artifact` · `command.gate` · `decide`
 
 **Guards (transitions):** `always` · `shell` · `action-ok` · `contract-violation`
 
@@ -496,6 +496,24 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
   back-dates the row's `started_at` from its own `completed_at` minus the measured duration
   (0887 R8), so `completed_at − started_at == duration_ms` exactly; a back-date failure is
   recorded (`action.backdate`) and never affects the run.
+
+- **A `decide` action (0941)** — the driver never executes the DecisionMaker itself; it delegates
+  to the same app runner the engine registers, which writes the resultFile row (schemaVersion 1)
+  and returns the decision, then the delegate records the `action_runs` row (`kind=decide`)
+  through the same writer as every other action:
+
+  ```bash
+  bun "$SETUP_SCRIPT" --decide --run-id "$RUN_ID" --node <state-id> --options-json <options-file>
+  ```
+
+  The options JSON mirrors the YAML `decide` options (`id`, `method: choice|noul`, `question`,
+  `choices`/`default`, optional `evidence`, optional `minConfidence`, `resultFile`); paths resolve
+  against the project workdir. The decision never pauses and never fails the run for model
+  problems: a degraded outcome (feature switch off, no backend, error, timeout, low confidence)
+  prints `ok:true` with `degraded:true`, the declared `reason`, and `value = default`, and exits
+  `0` — route on the resultFile's `.value` with the declared file guards. Only an invalid options
+  schema exits `1` (fail closed), and usage errors exit `2`. The `action_runs` trace row is
+  best-effort exactly like `--action`.
 
 - **At the run's declared terminal state** — before the driver reports the run complete, close the
   row so a successful inline run is never left non-terminal for `spur workflow clean` to reap as

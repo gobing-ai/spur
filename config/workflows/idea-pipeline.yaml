@@ -262,6 +262,23 @@ states:
               printf 'FAIL run=%s checker not found — run superskill install sp\n' "$__runId" | tee ".spur/run/$__runId-idea-coverage.reason" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-idea-coverage.status";
             fi
+      # 0945 R2: derive the route facts ONCE at this boundary (0769 pattern) — guards read these
+      # named files instead of re-deriving design×needs_design inline. The same command is
+      # duplicated in feature-check's onEnter (YAML has no include); byte-equality is
+      # test-pinned (idea-pipeline-routing.test.ts). Missing/corrupt needs-design JSON fails
+      # safe to `design`; readiness is PASS only when both recorded checks are PASS.
+      # (warn) 7 commands: two three-way `test && printf || printf` derivations over captured
+      # signal files (ADR-115); no model hop, no CLI re-run.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            { test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false &&
+            printf 'skip\n' > .spur/run/$__runId-idea-design-route.txt ||
+            printf 'design\n' > .spur/run/$__runId-idea-design-route.txt; } &&
+            { test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS -a "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS &&
+            printf 'PASS\n' > .spur/run/$__runId-idea-ac-ready.status ||
+            printf 'FAIL\n' > .spur/run/$__runId-idea-ac-ready.status; }
 
   - id: feature-check
     description: >
@@ -286,6 +303,19 @@ states:
           prompt: "Feature check for ${vars.featureId}. Review the AC and confirm to proceed? Requirement coverage status: $(cat .spur/run/${vars.__runId}-idea-coverage.status 2>/dev/null || echo unknown) — reason: $(cat .spur/run/${vars.__runId}-idea-coverage.reason 2>/dev/null || echo n/a) (.spur/run/${vars.__runId}-idea-coverage.status[.reason]). (Failures route back to ac-generate for revision, capped at 3 retries.)"
           decision:
             mode: never
+      # 0945 R2: same writer as ac-generate's onEnter (byte-equal, test-pinned) — refreshes the
+      # derived route facts after the interactive gate so both entries into this boundary read
+      # consistent files; hitl.confirm only sets $__hitlAnswer.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            { test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false &&
+            printf 'skip\n' > .spur/run/$__runId-idea-design-route.txt ||
+            printf 'design\n' > .spur/run/$__runId-idea-design-route.txt; } &&
+            { test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS -a "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS &&
+            printf 'PASS\n' > .spur/run/$__runId-idea-ac-ready.status ||
+            printf 'FAIL\n' > .spur/run/$__runId-idea-ac-ready.status; }
 
   - id: system-design
     description: >
@@ -567,6 +597,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-idea-precheck-doctor.status 2>/dev/null)" = PASS'
   - from: start
     to: failed
+    terminalReason: failed-check
     description: Agent doctor FAIL — stop before discovery.
     guard:
       kind: always
@@ -606,6 +637,7 @@ transitions:
         command: 'test "$__hitlAnswer" = yes'
   - from: idea-eval
     to: cancelled
+    terminalReason: cancelled
     description: Idea evaluation rejected or cancelled — no feature created.
     guard:
       kind: shell
@@ -621,9 +653,11 @@ transitions:
 
   # ── ac-generate: auto-skip (profile=auto) OR enter feature-check HITL gate (interactive) ──
   # Declaration order: auto-skip guards tried FIRST (same pattern as task-pipeline review→verify
-  # and design-gen→handoff). Under profile=auto, the recorded `idea-ac-check` result and the
-  # recorded requirement-coverage status (0887 R4) route directly to the appropriate next
-  # state — guards never re-run the CLI or the checker (task 0769). Under interactive, the
+  # and design-gen→handoff). Under profile=auto, the derived route facts — the ready file (both
+  # recorded checks PASS, 0887 R4) and the design route file (0945 R2 writer at the end of both
+  # ac-generate and feature-check onEnter) — route directly to the appropriate next state:
+  # guards never re-run the CLI or the checker and never re-derive the signals (task 0769).
+  # Under interactive, the
   # always fallback enters the feature-check state whose onEnter hitl.confirm pauses for
   # operator confirmation (coverage is surfaced in that prompt; the operator's answer governs).
   #
@@ -631,25 +665,29 @@ transitions:
   - from: ac-generate
     to: system-design
     description: "profile=auto, check passed, requirements covered, design route — run system design."
-    # (warn) 4 commands: one persistent multi-assignment line captures both statuses; `test -a` folds the
-    # profile/ac and design/needs pairs (same operand semantics); guards never re-run the CLI (0769).
+    # 0945 R3: three predicates over derived facts — the ready file folds both recorded check
+    # statuses (PASS only when ac-check AND coverage are PASS), the route file folds
+    # design×needs_design (fail-safe design); nothing re-runs, nothing re-derives (0769).
     guard:
       kind: shell
       options:
         command: >-
-          ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" cov_status="$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)";
-          test "$profile" = auto -a "$ac_status" = PASS && test "$cov_status" = PASS && test "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false
+          test "$profile" = auto &&
+          test "$(cat .spur/run/$__runId-idea-ac-ready.status 2>/dev/null)" = PASS &&
+          test "$(cat .spur/run/$__runId-idea-design-route.txt 2>/dev/null)" = design
   # Auto-skip 2: pass + coverage + skip-design route → decompose
   - from: ac-generate
     to: decompose
     description: "profile=auto, check passed, requirements covered, skip-design route — go directly to decompose."
-    # (warn) 4 test segments: profile + inlined ac/coverage reads + the OR'd design=skip/(design=auto AND
-    # needs_design=false) pair folded into one `test` (`-a` binds tighter than `-o`), keeping one captured
-    # signal file authoritative for both routes (0769).
+    # 0945 R3: mirror of the design-route guard over the same derived facts with route=skip;
+    # one captured signal file per fact keeps both routes symmetric (0769).
     guard:
       kind: shell
       options:
-        command: 'test "$profile" = auto && test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS && test "$design" = skip -o "$design" = auto -a "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false'
+        command: >-
+          test "$profile" = auto &&
+          test "$(cat .spur/run/$__runId-idea-ac-ready.status 2>/dev/null)" = PASS &&
+          test "$(cat .spur/run/$__runId-idea-design-route.txt 2>/dev/null)" = skip
   # Auto-skip 3: check or coverage failed, retry < 3 → loop back to ac-generate (self-loop)
   - from: ac-generate
     to: ac-generate
@@ -666,6 +704,7 @@ transitions:
   # Auto-skip 4: check or coverage failed, retry cap reached → escalate to failed
   - from: ac-generate
     to: failed
+    terminalReason: retry-exhausted
     description: "profile=auto, check or coverage failed after 3 retries — escalate to failed."
     # (warn) 5 commands: mirror of the retry guard with cap>=3; keeping escalation and retry as one
     # test-chain pair makes the cap boundary auditable in the diff (0769).
@@ -687,23 +726,27 @@ transitions:
   - from: feature-check
     to: system-design
     description: Feature check passed, design route — run system design.
-    # (warn) 5 commands (named status capture + 4 conditions): HITL answer + captured status + design route; same shape as the
-    # ac-generate auto-skips, reading the same captured signal files (0769).
+    # 0945 R3: three predicates over derived facts — the recorded ac-check status stays the
+    # conjunct here (parity: the operator's answer governs the interactive gate, 0887), the
+    # route file folds design×needs_design (fail-safe design); nothing re-runs (0769).
     guard:
       kind: shell
       options:
         command: >-
-          ac_status="$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)";
-          test "$__hitlAnswer" = yes && test "$ac_status" = PASS && test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" != false
+          test "$__hitlAnswer" = yes &&
+          test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS &&
+          test "$(cat .spur/run/$__runId-idea-design-route.txt 2>/dev/null)" = design
   - from: feature-check
     to: decompose
     description: Feature check passed, skip-design route — go directly to decompose.
-    # (warn) 5 test segments: same as the feature-check design route plus the OR'd
-    # design=auto/needs_design=false pair (0769).
+    # 0945 R3: mirror of the design-route guard over the same derived facts with route=skip.
     guard:
       kind: shell
       options:
-        command: 'test "$__hitlAnswer" = yes && test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS && (test "$design" = skip || (test "$design" = auto && test "$(jq -r .needs_design .spur/run/$__runId-idea-needs-design.json 2>/dev/null)" = false))'
+        command: >-
+          test "$__hitlAnswer" = yes &&
+          test "$(cat .spur/run/$__runId-idea-ac-check.status 2>/dev/null)" = PASS &&
+          test "$(cat .spur/run/$__runId-idea-design-route.txt 2>/dev/null)" = skip
   - from: feature-check
     to: ac-generate
     description: "Feature check failed — revise AC (retry cap: 3)."
@@ -717,6 +760,7 @@ transitions:
           (test "$__hitlAnswer" = no || test "$ac_status" != PASS) && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -lt 3
   - from: feature-check
     to: failed
+    terminalReason: retry-exhausted
     description: Feature check failed after 3 retries — escalate to failed.
     # (warn) 5 commands (named status capture + 4 conditions): mirror of the revise guard with cap>=3 (0769).
     guard:
@@ -727,6 +771,7 @@ transitions:
           (test "$__hitlAnswer" = no || test "$ac_status" != PASS) && test "$(cat .spur/run/$__runId-idea-ac-retry-count 2>/dev/null || echo 0)" -ge 3
   - from: feature-check
     to: cancelled
+    terminalReason: cancelled
     description: Operator cancelled the feature-check gate.
     guard:
       kind: shell
@@ -772,6 +817,7 @@ transitions:
         command: 'test "$__hitlAnswer" = no && test "$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0)" -le 1'
   - from: design-approval
     to: failed
+    terminalReason: retry-exhausted
     description: "Design rejected after 1 revise - design-approval gate exhausted (R7 0433)."
     guard:
       kind: shell
@@ -779,6 +825,7 @@ transitions:
         command: 'test "$__hitlAnswer" = no && test "$(cat .spur/run/$__runId-idea-design-reject-count 2>/dev/null || echo 0)" -gt 1'
   - from: design-approval
     to: cancelled
+    terminalReason: cancelled
     description: Operator cancelled design approval.
     guard:
       kind: shell
@@ -816,6 +863,7 @@ transitions:
         command: 'test "$__hitlAnswer" = no'
   - from: batch-create
     to: cancelled
+    terminalReason: cancelled
     description: Operator cancelled batch creation.
     guard:
       kind: shell
@@ -845,6 +893,7 @@ transitions:
         command: 'test -f .spur/run/$__runId-idea-batch-create.failed && test "$(cat .spur/run/$__runId-idea-decompose-retry-count 2>/dev/null || echo 0)" -lt 3'
   - from: batch-create-run
     to: failed
+    terminalReason: retry-exhausted
     description: Batch-create failed after 3 retries — escalate to failed.
     guard:
       kind: shell

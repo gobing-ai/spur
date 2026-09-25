@@ -116,6 +116,62 @@ function resolveTasks(env, options = {}) {
 `);
   return { status: "PASS", statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 0 };
 }
+var ROUTE_REASON_TABLE = {
+  fast: "fast:evidence complete+consistent",
+  "": "safety:missing evidence (mode empty)",
+  unknown: "safety:unknown evidence quality",
+  conflict: "safety:conflicting evidence",
+  safety: "safety:operator-forced doc-sync"
+};
+function writeRouteReason(env, options = {}) {
+  const cwd = options.cwd;
+  const runId = env.__runId ?? "";
+  if (runId.length === 0) {
+    process.stderr.write(`task-resolve: __runId is empty \u2014 refusing to write a route reason
+`);
+    return { reason: "", reasonFile: "", exitCode: 1 };
+  }
+  mkdirSync(cwd ? join(cwd, ".spur", "run") : join(".spur", "run"), { recursive: true });
+  mkdirSync(cwd ? join(cwd, ".spur", "memory") : join(".spur", "memory"), { recursive: true });
+  const relReasonFile = join(".spur", "run", `${runId}-route-reason.txt`);
+  const abs = (p) => cwd ? join(cwd, p) : p;
+  const statusFile = join(".spur", "run", `${runId}-wrapup-resolve.status`);
+  if (readFileSyncSafe(abs(statusFile))?.trim() === "FAIL") {
+    return { reason: "", reasonFile: relReasonFile, exitCode: 0 };
+  }
+  let taskCount = -1;
+  try {
+    const parsed = JSON.parse(readFileSync(abs(join(".spur", "run", `${runId}-wrapup-tasks.json`)), "utf8"));
+    if (Array.isArray(parsed))
+      taskCount = parsed.length;
+  } catch {}
+  let probeClean = false;
+  try {
+    const probe = JSON.parse(readFileSync(abs(join(".spur", "run", `${runId}-drift-probe.json`)), "utf8"));
+    probeClean = probe?.clean === true;
+  } catch {}
+  const mode = env.mode ?? "";
+  let reason;
+  if (taskCount === 0) {
+    reason = "skipped:empty task list";
+  } else if (mode === "fast" && probeClean) {
+    reason = "fast:drift-probe-clean";
+  } else {
+    reason = ROUTE_REASON_TABLE[mode] ?? `safety:unrecognized evidence (mode=${mode})`;
+  }
+  writeFileSync(abs(relReasonFile), `${reason}
+`);
+  appendFileSync(abs(join(".spur", "memory", "wrapup-routes.log")), `${runId} ${reason}
+`);
+  return { reason, reasonFile: relReasonFile, exitCode: 0 };
+}
+function readFileSyncSafe(path) {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
 function runMetrics(env, options = {}) {
   const cwd = options.cwd;
   const runId = env.__runId ?? "";
@@ -325,11 +381,13 @@ function runFeatureTransition(env, options = {}) {
 `);
   return { status: syncStatus, statusFile: relStatusFile, exitCode: 0 };
 }
-var WRAPUP_STEPS_USAGE = "usage: wrapup-steps.ts <resolve|metrics|feature-transition>  (env: __runId, tasks, feature, featureGateCmd, spurBin)";
+var WRAPUP_STEPS_USAGE = "usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)";
 function main(argv, env = getEnvVars(), options = {}) {
   const sub = argv[0];
   if (sub === "resolve")
     return resolveTasks(env, options).exitCode;
+  if (sub === "route-reason")
+    return writeRouteReason(env, options).exitCode;
   if (sub === "metrics") {
     runMetrics(env, options);
     return 0;
@@ -344,6 +402,7 @@ function main(argv, env = getEnvVars(), options = {}) {
   process.exit(main(process.argv.slice(2)));
 }
 export {
+  writeRouteReason,
   taskStatusOf,
   spurCommand,
   runMetrics,

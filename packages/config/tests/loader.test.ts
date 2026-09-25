@@ -27,6 +27,7 @@ import {
     parseConfigYaml,
     resolveConfigFile,
     resolveConfigLayers,
+    resolveDecideDecisionMakerEnabled,
     resolvePlanningFolders,
     type TaskFoldersConfig,
 } from '../src/loader';
@@ -1107,4 +1108,23 @@ test('workflow.hitlDecisionMaker is optional, false by default policy, and boole
     expect(WorkflowConfigSchema.parse({ hitlDecisionMaker: true }).hitlDecisionMaker).toBe(true);
     expect(WorkflowConfigSchema.parse({ hitlDecisionMaker: false }).hitlDecisionMaker).toBe(false);
     expect(WorkflowConfigSchema.safeParse({ hitlDecisionMaker: 'true' }).success).toBe(false);
+});
+
+test('workflow.decideDecisionMaker is optional, false by default policy, and boolean only (0941 R4)', () => {
+    expect(WorkflowConfigSchema.parse({}).decideDecisionMaker ?? false).toBe(false);
+    expect(WorkflowConfigSchema.parse({ decideDecisionMaker: true }).decideDecisionMaker).toBe(true);
+    expect(WorkflowConfigSchema.parse({ decideDecisionMaker: false }).decideDecisionMaker).toBe(false);
+    expect(WorkflowConfigSchema.safeParse({ decideDecisionMaker: 'yes' }).success).toBe(false);
+});
+
+test('resolveDecideDecisionMakerEnabled projects the switch from a merged load (0941 gate fix)', async () => {
+    // Absent config → schema defaults → switch off.
+    expect(await resolveDecideDecisionMakerEnabled(tmpCwd)).toBe(false);
+    await writeConfig(tmpCwd, 'version: "1"\nname: t\nworkflow:\n  decideDecisionMaker: true\n');
+    // Same-path rewrite: clear the mtime-keyed cache so the reload sees the new file.
+    invalidateSpurConfig();
+    expect(await resolveDecideDecisionMakerEnabled(tmpCwd)).toBe(true);
+    await writeConfig(tmpCwd, 'version: "1"\nname: t\nworkflow:\n  decideDecisionMaker: false\n');
+    invalidateSpurConfig();
+    expect(await resolveDecideDecisionMakerEnabled(tmpCwd)).toBe(false);
 });

@@ -396,3 +396,151 @@ test('--fingerprint refuses a mixed invocation and a missing task file with usag
         cleanup();
     }
 });
+
+// ─── --decide mode (0941 R5) ─────────────────────────────────────────────────
+
+/** Run the delegate in --decide mode inside `dir` (options paths resolve against the cwd). */
+function runDecideMode(dir: string, args: string[]) {
+    return spawnSync('bun', [SCRIPT, '--decide', ...args, '--spur-bin', `bun ${REAL_APP_ENTRY}`], {
+        cwd: dir,
+        stdio: 'pipe',
+        encoding: 'utf8',
+    });
+}
+
+/** Write one options JSON file into `dir` and return its relative path. */
+function writeDecideOptions(dir: string, options: Record<string, unknown>): string {
+    writeFileSync(join(dir, 'decide-options.json'), `${JSON.stringify(options)}\n`);
+    return 'decide-options.json';
+}
+
+test('--decide executes through the app runner: degraded default with the switch off, resultFile written (0941 R4/R5)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-'));
+    try {
+        const optionsFile = writeDecideOptions(dir, {
+            id: 'recovery-classify',
+            method: 'choice',
+            question: 'retry or stop?',
+            choices: ['retry', 'stop'],
+            default: 'stop',
+            resultFile: '.spur/run/decide-test-recovery.decision.json',
+        });
+        const proc = runDecideMode(dir, [
+            '--run-id',
+            'decide-test-1',
+            '--node',
+            'classify',
+            '--options-json',
+            optionsFile,
+        ]);
+        expect(proc.status).toBe(0);
+        const outcome = JSON.parse(proc.stdout.trim().split('\n')[0] ?? '{}') as Record<string, unknown>;
+        expect(outcome.ok).toBe(true);
+        expect(outcome.degraded).toBe(true);
+        expect(outcome.reason).toBe('disabled');
+        expect(outcome.value).toBe('stop');
+        expect(outcome.runId).toBe('decide-test-1');
+        const row = JSON.parse(
+            readFileSync(join(dir, '.spur', 'run', 'decide-test-recovery.decision.json'), 'utf8'),
+        ) as Record<string, unknown>;
+        expect(row.schemaVersion).toBe(1);
+        expect(row.value).toBe('stop');
+        expect(row.degraded).toBe(true);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}, 30_000);
+
+test('--decide threads the config switch through the driver boundary: switch on gets past disabled (0941 gate fix)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-cfg-'));
+    try {
+        // The delegate resolves workflow.decideDecisionMaker at its own boundary; a switched-on
+        // config must get PAST the 'disabled' gate. The options declare a MISSING evidence file
+        // so the core degrades before any backend ask — deterministic and network-free; the
+        // reason is 'error' (factory ok, evidence absent) or 'no-backend' (factory threw).
+        mkdirSync(join(dir, '.spur'), { recursive: true });
+        writeFileSync(join(dir, '.spur', 'config.yaml'), 'workflow:\n  decideDecisionMaker: true\n');
+        const optionsFile = writeDecideOptions(dir, {
+            id: 'recovery-classify',
+            method: 'choice',
+            question: 'retry or stop?',
+            choices: ['retry', 'stop'],
+            default: 'retry',
+            evidence: ['missing-evidence.txt'],
+            resultFile: '.spur/run/decide-test-cfg.decision.json',
+        });
+        const proc = runDecideMode(dir, [
+            '--run-id',
+            'decide-test-4',
+            '--node',
+            'classify',
+            '--options-json',
+            optionsFile,
+        ]);
+        expect(proc.status).toBe(0);
+        const outcome = JSON.parse(proc.stdout.trim().split('\n')[0] ?? '{}') as Record<string, unknown>;
+        expect(outcome.ok).toBe(true);
+        expect(outcome.degraded).toBe(true);
+        expect(['error', 'no-backend']).toContain(outcome.reason);
+        expect(outcome.value).toBe('retry');
+        const row = JSON.parse(
+            readFileSync(join(dir, '.spur', 'run', 'decide-test-cfg.decision.json'), 'utf8'),
+        ) as Record<string, unknown>;
+        expect(row.degraded).toBe(true);
+        expect(row.reason).not.toBe('disabled');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}, 30_000);
+
+test('--decide fails closed on an invalid options schema (exit 1, ok:false) (0941 R3)', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-bad-'));
+    try {
+        const optionsFile = writeDecideOptions(dir, {
+            id: 'x',
+            method: 'choice',
+            question: 'q',
+            choices: ['retry', 'stop'],
+            default: 'pause',
+            resultFile: 'd.json',
+        });
+        const proc = runDecideMode(dir, [
+            '--run-id',
+            'decide-test-2',
+            '--node',
+            'classify',
+            '--options-json',
+            optionsFile,
+        ]);
+        expect(proc.status).toBe(1);
+        const outcome = JSON.parse(proc.stdout.trim().split('\n')[0] ?? '{}') as Record<string, unknown>;
+        expect(outcome.ok).toBe(false);
+        expect(outcome.error).toContain('invalid options');
+        expect(existsSync(join(dir, 'd.json'))).toBe(false);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}, 30_000);
+
+test('--decide refuses usage errors and unsafe run ids', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'inline-run-setup-decide-usage-'));
+    try {
+        const optionsFile = writeDecideOptions(dir, {
+            id: 'x',
+            method: 'noul',
+            question: 'q',
+            default: 'no',
+            resultFile: 'd.json',
+        });
+        // Missing --options-json → usage (exit 2).
+        expect(runDecideMode(dir, ['--run-id', 'decide-test-3', '--node', 'classify']).status).toBe(2);
+        // Missing --node → usage (exit 2).
+        expect(runDecideMode(dir, ['--run-id', 'decide-test-3', '--options-json', optionsFile]).status).toBe(2);
+        // Unsafe run id (path traversal) → refusal (exit 1).
+        expect(
+            runDecideMode(dir, ['--run-id', '../escape', '--node', 'classify', '--options-json', optionsFile]).status,
+        ).toBe(1);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+}, 30_000);

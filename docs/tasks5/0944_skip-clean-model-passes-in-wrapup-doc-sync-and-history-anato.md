@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Skip clean model passes in wrapup doc-sync and history-anatomy
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.006Z
-updated_at: "2026-09-24T00:28:27.289Z"
+updated_at: "2026-09-25T19:21:29.762Z"
 feature_id: D64
 priority: P3
 tags:
@@ -31,8 +31,8 @@ Implements: R4 — Workflow shape changes are accepted only on measured benefit.
 
 ### Requirements
 
-- [ ] R1. A deterministic probe `plugins/sp/scripts/wrapup-drift-probe.ts` (plugin standalone) reads the normalized task list `.spur/run/<runId>-wrapup-tasks.json`. For each task it collects changed paths from the `## Solution` file:line map (via `spur task show <wbs> --json`). It writes `.spur/run/<runId>-drift-probe.json` as `{clean: boolean, reasons[], paths[]}`.
-- [ ] R2. `clean` is false when any changed path matches a doc-owned surface:
+- [x] R1. A deterministic probe `plugins/sp/scripts/wrapup-drift-probe.ts` (plugin standalone) reads the normalized task list `.spur/run/<runId>-wrapup-tasks.json`. For each task it collects changed paths from the `## Solution` file:line map (via `spur task show <wbs> --json`). It writes `.spur/run/<runId>-drift-probe.json` as `{clean: boolean, reasons[], paths[]}`.
+- [x] R2. `clean` is false when any changed path matches a doc-owned surface:
   - `packages/contracts/**`
   - `apps/cli/src/commands/**`
   - `packages/config/src/**`
@@ -44,13 +44,13 @@ Implements: R4 — Workflow shape changes are accepted only on measured benefit.
   - a new top-level workspace directory
 
   It is also false when any task's Solution is empty or unparseable (fail safe).
-- [ ] R3. `task-resolve` runs the probe only when `mode` is empty. A clean probe sets `mode=fast`, and the route reason becomes `fast:drift-probe-clean`. A caller-set `mode` is never overridden. The route-reason map gains `"safety": "safety:operator-forced doc-sync"`, so `--vars '{"mode":"safety"}'` forces doc-sync.
-- [ ] R4. The candidate record `wrapup-drift-probe` has 0938 `baselineAgentRunCount` and a deadline 60 days out. Its verdict cites doc-sync `agent.run` count per wrap, plus the count of wraps whose learnings were skipped. If it does not win, it is reverted.
-- [ ] R5. history-anatomy is measurement only. The 0938 report's per-state view for `history-anatomy` (cache-probe hit/miss via `cache-disposition`, enrich/validate/correction visits and terminal-reason mix) is pinned in the 0938 baseline and cited by 0946. This task makes no history-anatomy YAML change.
+- [x] R3. `task-resolve` runs the probe only when `mode` is empty. A clean probe sets `mode=fast`, and the route reason becomes `fast:drift-probe-clean`. A caller-set `mode` is never overridden. The route-reason map gains `"safety": "safety:operator-forced doc-sync"`, so `--vars '{"mode":"safety"}'` forces doc-sync.
+- [x] R4. The candidate record `wrapup-drift-probe` has 0938 `baselineAgentRunCount` and a deadline 60 days out. Its verdict cites doc-sync `agent.run` count per wrap, plus the count of wraps whose learnings were skipped. If it does not win, it is reverted.
+- [x] R5. history-anatomy is measurement only. The 0938 report's per-state view for `history-anatomy` (cache-probe hit/miss via `cache-disposition`, enrich/validate/correction visits and terminal-reason mix) is pinned in the 0938 baseline and cited by 0946. This task makes no history-anatomy YAML change.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Workflow shape changes are accepted only on measured benefit
+- [x] AC1 — Workflow shape changes are accepted only on measured benefit
 
 ### Q&A
 
@@ -118,15 +118,202 @@ Implements: R4 — Workflow shape changes are accepted only on measured benefit.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/index.ts:317` |
+| `packages/app/src/index.ts:321` |
+| `packages/app/src/index.ts:733` |
+| `packages/app/src/index.ts:764` |
+| `packages/app/src/index.ts:918` |
+| `packages/app/src/services/inline-run-setup.ts:311` |
+| `packages/app/src/services/inline-run-setup.ts:33` |
+| `packages/app/src/services/inline-run-setup.ts:43` |
+| `packages/app/src/services/workflow-service.ts:1913` |
+| `packages/app/src/services/workflow-service.ts:1949` |
+| `packages/app/src/services/workflow-service.ts:2201` |
+| `packages/app/src/services/workflow-service.ts:2746` |
+| `packages/app/src/services/workflow-service.ts:3` |
+| `packages/app/src/services/workflow-service.ts:51` |
+| `packages/app/src/services/workflow-service.ts:65` |
+| `packages/app/src/services/workflow-service.ts:69` |
+| `packages/app/src/services/workflow-service.ts:699` |
+| `packages/app/src/services/workflow-service.ts:78` |
+| `packages/app/src/services/workflow-service.ts:802` |
+| `packages/app/src/services/workflow-service.ts:81` |
+| `packages/app/src/services/workflow-service.ts:963` |
+| `packages/app/src/services/workflow-service.ts:971` |
+| `packages/app/src/workflow/action-trace.ts:178` |
+| `packages/app/src/workflow/action-trace.ts:188` |
+| `packages/app/src/workflow/action-trace.ts:284` |
+| `packages/app/src/workflow/action-trace.ts:294` |
+| `packages/app/src/workflow/action-trace.ts:41` |
+| `packages/app/src/workflow/actions/agent-run.ts:1292` |
+| `packages/app/src/workflow/actions/agent-run.ts:195` |
+| `packages/app/src/workflow/actions/agent-run.ts:206` |
+| `packages/app/src/workflow/actions/agent-run.ts:241` |
+| `packages/app/src/workflow/actions/agent-run.ts:246` |
+| `packages/app/src/workflow/actions/agent-run.ts:257` |
+| `packages/app/src/workflow/actions/agent-run.ts:30` |
+| `packages/app/src/workflow/actions/agent-run.ts:407` |
+| `packages/app/src/workflow/actions/agent-run.ts:645` |
+| `packages/app/src/workflow/builtins.ts:104` |
+| `packages/app/src/workflow/builtins.ts:14` |
+| `packages/app/src/workflow/builtins.ts:2` |
+| `packages/app/src/workflow/builtins.ts:29` |
+| `packages/app/src/workflow/builtins.ts:57` |
+| `packages/app/src/workflow/builtins.ts:74` |
+| `packages/app/src/workflow/decision-hitl-responder.ts:228` |
+| `packages/app/src/workflow/lifecycle-adapter.ts:243` |
+| `packages/app/src/workflow/observability.ts:26` |
+| `packages/app/src/workflow/observability.ts:472` |
+| `packages/app/tests/services/inline-run-setup.test.ts:15` |
+| `packages/app/tests/services/inline-run-setup.test.ts:3` |
+| `packages/app/tests/services/inline-run-setup.test.ts:649` |
+| `packages/app/tests/workflow/builtins.test.ts:34` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:13` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:49` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:57` |
+| `packages/app/tests/workflow/proportional-routing-pilots.test.ts:71` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:102` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:129` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:136` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:162` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:210` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:213` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:23` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:352` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:360` |
+| `packages/app/tests/workflow/wrapup-pipeline.test.ts:368` |
+| `packages/config/src/index.ts:771` |
+| `packages/config/src/loader.ts:299` |
+| `packages/config/tests/loader.test.ts:1112` |
+| `packages/config/tests/loader.test.ts:30` |
+| `packages/domain/src/dao/run-dao.ts:121` |
+| `packages/domain/src/dao/run-dao.ts:127` |
+| `packages/domain/src/migrations.ts:1540` |
+| `packages/domain/src/migrations.ts:1778` |
+| `packages/domain/src/migrations.ts:1844` |
+| `packages/domain/src/migrations.ts:310` |
+| `packages/domain/tests/dao/migrations.test.ts:12` |
+| `packages/domain/tests/dao/migrations.test.ts:129` |
+| `packages/domain/tests/dao/migrations.test.ts:225` |
+| `packages/domain/tests/dao/migrations.test.ts:331` |
+| `packages/domain/tests/dao/migrations.test.ts:385` |
+| `packages/domain/tests/dao/migrations.test.ts:598` |
+| `packages/domain/tests/dao/migrations.test.ts:657` |
+| `packages/domain/tests/dao/migrations.test.ts:660` |
+| `plugins/sp/scripts/inline-pipeline-parity-check.ts:53` |
+| `plugins/sp/scripts/inline-run-setup.ts:103` |
+| `plugins/sp/scripts/inline-run-setup.ts:318` |
+| `plugins/sp/scripts/inline-run-setup.ts:34` |
+| `plugins/sp/scripts/inline-run-setup.ts:347` |
+| `plugins/sp/scripts/inline-run-setup.ts:36` |
+| `plugins/sp/scripts/inline-run-setup.ts:430` |
+| `plugins/sp/scripts/inline-run-setup.ts:465` |
+| `plugins/sp/scripts/inline-run-setup.ts:48` |
+| `plugins/sp/scripts/inline-run-setup.ts:557` |
+| `plugins/sp/scripts/inline-run-setup.ts:562` |
+| `plugins/sp/scripts/inline-run-setup.ts:575` |
+| `plugins/sp/scripts/inline-run-setup.ts:580` |
+| `plugins/sp/scripts/inline-run-setup.ts:596` |
+| `plugins/sp/scripts/inline-run-setup.ts:612` |
+| `plugins/sp/scripts/inline-run-setup.ts:629` |
+| `plugins/sp/scripts/quality-gate.ts:107` |
+| `plugins/sp/scripts/quality-gate.ts:16` |
+| `plugins/sp/scripts/quality-gate.ts:185` |
+| `plugins/sp/scripts/quality-gate.ts:29` |
+| `plugins/sp/scripts/quality-gate.ts:547` |
+| `plugins/sp/scripts/quality-gate.ts:552` |
+| `plugins/sp/scripts/quality-gate.ts:568` |
+| `plugins/sp/scripts/quality-gate.ts:625` |
+| `plugins/sp/scripts/quality-gate.ts:656` |
+| `plugins/sp/scripts/quality-gate.ts:658` |
+| `plugins/sp/scripts/quality-gate.ts:660` |
+| `plugins/sp/scripts/quality-gate.ts:668` |
+| `plugins/sp/scripts/quality-gate.ts:90` |
+| `plugins/sp/scripts/wrapup-steps.ts:12` |
+| `plugins/sp/scripts/wrapup-steps.ts:189` |
+| `plugins/sp/scripts/wrapup-steps.ts:535` |
+| `plugins/sp/scripts/wrapup-steps.ts:540` |
+| `plugins/sp/scripts/wrapup-steps.ts:6` |
+| `plugins/sp/tests/inline-run-setup.test.ts:399` |
+| `plugins/sp/tests/quality-gate.test.ts:324` |
+| `plugins/sp/tests/wrapup-steps.test.ts:488` |
+| `plugins/sp/tests/wrapup-steps.test.ts:6` |
+| `scripts/commands/bundle-plugin-lib.ts:129` |
+| `scripts/commands/bundle-plugin-lib.ts:176` |
+| `scripts/commands/real-run-cost.test.ts:104` |
+| `scripts/commands/real-run-cost.test.ts:19` |
+| `scripts/commands/real-run-cost.test.ts:22` |
+| `scripts/commands/real-run-cost.test.ts:236` |
+| `scripts/commands/real-run-cost.test.ts:25` |
+| `scripts/commands/real-run-cost.test.ts:32` |
+| `scripts/commands/real-run-cost.test.ts:41` |
+| `scripts/commands/real-run-cost.test.ts:44` |
+| `scripts/commands/real-run-cost.test.ts:54` |
+| `scripts/commands/real-run-cost.test.ts:57` |
+| `scripts/commands/real-run-cost.test.ts:6` |
+| `scripts/commands/real-run-cost.test.ts:83` |
+| `scripts/commands/real-run-cost.ts:118` |
+| `scripts/commands/real-run-cost.ts:128` |
+| `scripts/commands/real-run-cost.ts:172` |
+| `scripts/commands/real-run-cost.ts:178` |
+| `scripts/commands/real-run-cost.ts:182` |
+| `scripts/commands/real-run-cost.ts:195` |
+| `scripts/commands/real-run-cost.ts:213` |
+| `scripts/commands/real-run-cost.ts:244` |
+| `scripts/commands/real-run-cost.ts:255` |
+| `scripts/commands/real-run-cost.ts:273` |
+| `scripts/commands/real-run-cost.ts:292` |
+| `scripts/commands/real-run-cost.ts:318` |
+| `scripts/commands/real-run-cost.ts:329` |
+| `scripts/commands/real-run-cost.ts:34` |
+| `scripts/commands/real-run-cost.ts:41` |
+| `scripts/commands/real-run-cost.ts:5` |
+| `scripts/commands/real-run-cost.ts:500` |
+| `scripts/commands/real-run-cost.ts:505` |
+| `scripts/commands/real-run-cost.ts:515` |
+| `scripts/commands/real-run-cost.ts:531` |
+| `scripts/commands/real-run-cost.ts:533` |
+| `scripts/commands/real-run-cost.ts:56` |
+| `scripts/commands/real-run-cost.ts:89` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | wrapup-drift-probe.ts:188 reads .spur/run/<runId>-wrapup-tasks.json; :216 per-task spur task show --json; :123-135 changedPathsOf Solution file:line parse; :195 writes <runId>-drift-probe.json {clean,reasons,paths}; plugin-standalone holds (plugin-smoke PASS) |
+| R2 | MET | DOC_OWNED_SURFACES :73-87 all ten spec globs (workflows glob via join for sp-runtime-path rule); KNOWN_TOP_LEVEL :94-102 new-top-level check; fail-safe: empty/unparseable Solution :233, task-show failure :218, unparseable output :228, corrupted capture :210, dirty-first mode write :192; corpus excluded via CORPUS_PREFIXES :113-114; 10-test 13-glob matrix |
+| R3 | MET | wrapup-pipeline.yaml:163-172 probe gated on empty mode; clean -> mode=fast file + file.read.into-var projection (yaml:175-178); fast guard yaml:431 -> metrics-record; fast:drift-probe-clean wrapup-steps.ts:255; safety map entry :199 with guard yaml:438 -> doc-sync; caller mode projected verbatim; ADR-118 repair edge + branch-cleanup HITL untouched; routing tests clean/dirty/safety/empty-Solution all pass |
+| R4 | MET | config/workflow-candidates.json:22-35 candidate wrapup-drift-probe (canonical wrapup-pipeline), deadline 2026-11-24 = +60d, verdict null pre-promotion, rationale cites 1->0 doc-sync agent.run per wrap (structural, pipeline-budgets.json:25) + skipped-learnings measurement method post-promotion, revert-if-loses ADR-076; promotion check PASS |
+| R5 | MET | history-anatomy.yaml diff hunks are 0937 terminalReason lines only (zero 0944 graph change); 0938 baseline states[] has 0 history-anatomy rows - honestly named in candidate rationale with 0946 citation; measurement-only honored |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | artifact | Workflow shape change accepted on 0938-baselined structural projection with named measurement gaps, +60d deadline, post-promotion promotion evaluate, revert-if-loses (ADR-076); 4 P4 review advisories adjudicated ACCEPTED consistent with code; gate attempt-3 PASS 9149/524 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Verdict: PASS (full review dee270a3; fingerprint sha256:930cc20a… reproduced byte-identical; zero reviewer tree mutations).
+
+| Finding | Priority | Disposition |
+| --- | --- | --- |
+| F1: DOC_OWNED_SURFACES matches whole root package.json vs spec "scripts" — dep bumps mark wrap dirty | P4 | ACCEPTED — fail-safe direction (never wrongly clean); tightening would deviate from shipped constant |
+| F2: changedPathsOf silently drops backticked entries containing whitespace (corner fail-open) | P4 | ACCEPTED — no whitespace paths in repo; entries are malformed noise; could push a reason later |
+| F3: R5 letter unsatisfiable as written — 0938 baseline has 0 history-anatomy per-state rows | P4 | ACCEPTED — candidate rationale names the gap honestly and defers measurement to 0946 (cache disposition provenance stamp, empty terminalReasonMix); no fabrication |
+| F4: benefit projection structural (1 agent.run/wrap) not measured (wrapup median null, 0 runs) | P4 | ACCEPTED — candidate says exactly that, reverts-if-loses by 2026-11-24; post-promotion evaluation may find doc-sync cost ≈ 0 |
+
+Driver-side post-worker fixes adjudicated by reviewer (all ACCEPT): TS2322 null-status coercion `.status ?? 1` (spawnSync signal path, parity-check precedent); sp-runtime-path rule compliance via join('config','workflows') literals (parity-check :59 precedent) in probe + twin + 2 test files + bundle regen; biome template-literal/unused-import cleanup.
+
+Residual risk: clean wraps skip learnings capture (0607 R2) — real loss, measured post-promotion per rationale; whole-package.json glob + prose-only Solution maps make "clean" rarer than the spec letter implies (under-delivers, never wrong); every doubt lands on doc-sync (fail-safe invariant intact).
 
 ### References
 
@@ -136,3 +323,8 @@ Implements: R4 — Workflow shape changes are accepted only on measured benefit.
 - Related: docs/design/workflow-execution-economy.md, docs/design/fleet-config-declaration.md, docs/design/inter-agent-control-plane.md
 
 ### History
+
+- 2026-09-25T18:01:41.647Z todo → wip (system)
+- 2026-09-25T19:21:20.709Z wip → testing (system)
+- 2026-09-25T19:21:29.762Z testing → done (system)
+

@@ -31,8 +31,9 @@
  *   bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]
  *   bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]
  *   bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> \
+ *   bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]
  *       --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]
- *   bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--spur-bin <path>]
+ *   bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]
  *
  * The `--fingerprint` mode prints the engine's proof-input digest for the given spec files and
  * creates nothing (task 0862 R5).
@@ -44,6 +45,12 @@
  * `.spur/run/<run-id>.md` and the script still exits 0 with `{"ok":false}` on stdout, so
  * observation never wedges the run. `--close` is NOT best-effort: the run-row closure is
  * bookkeeping, so a missing run row or a persistence failure exits 1 with a named error.
+ * The `--decide` mode (task 0941 R5) executes the non-pausing decide action through the SAME
+ * app runner the engine registers (`runDecideForInlineRun`), writing the same resultFile row
+ * and recording the same `action_runs` trace row (`kind=decide`, best-effort). A degraded
+ * decision is still `ok: true` — the run continues — so exit 0 covers every model-level
+ * outcome; only an invalid options schema exits 1 (fail closed).
+ *
  * Exit 2 is reserved for usage errors.
  *
  * Env: SPUR_BIN
@@ -93,7 +100,10 @@ function usage(): never {
             '--status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]',
     );
     console.error(
-        '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--spur-bin <path>]',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]',
+    );
+    console.error(
+        '       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]',
     );
     process.exit(2);
 }
@@ -305,6 +315,24 @@ async function printFingerprint(taskFile: string, featureFile: string, spurBin: 
 /** Terminal statuses the inline driver may declare when closing its run row. */
 const CLOSE_STATUSES = new Set(['done', 'failed', 'paused']);
 
+/**
+ * 0937 R2: closed terminal-reason vocabulary the driver may declare on `--close`.
+ * COPIED from packages/app/src/workflow/terminal-reason.ts — the plugin standalone
+ * contract forbids a value import of app code; the parity test asserts the copy
+ * equals the app export.
+ */
+const TERMINAL_REASONS = new Set([
+    'done',
+    'paused-operator',
+    'failed-check',
+    'failed-agent',
+    'failed-timeout',
+    'failed-guard',
+    'cancelled',
+    'interrupted',
+    'retry-exhausted',
+]);
+
 /** Finalize statuses — a finish emission is terminal, so only done|failed are valid (0868 #4). */
 const ACTION_STATUSES = new Set(['done', 'failed']);
 
@@ -316,6 +344,8 @@ interface TraceModeInput {
     readonly close: boolean;
     readonly node: string;
     readonly kind: string;
+    /** Declared terminal reason (0937 R2) — validated against TERMINAL_REASONS before this point. */
+    readonly reason?: string;
     readonly status: string;
     readonly ok: boolean;
     readonly durationMs: number;
@@ -397,7 +427,7 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
         });
         const result = (
             input.close
-                ? await writer.closeRun(input.runId, input.status)
+                ? await writer.closeRun(input.runId, input.status, undefined, input.reason)
                 : await writer.recordAction({
                       runId: input.runId,
                       node: input.node,
@@ -432,6 +462,82 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
     }
 }
 
+/**
+ * `--decide` mode (task 0941 R5): execute the non-pausing decide action through the same app
+ * function the engine registers (`runDecideForInlineRun` → `DecideActionRunner`), then record
+ * the `action_runs` trace row through the shared writer. The decide-enabled switch
+ * (`workflow.decideDecisionMaker`) is resolved HERE at the driver boundary (ADR-082) through
+ * the bridged facade derivation and passed into the app runner as an explicit parameter —
+ * app services never load Spur config. Degraded outcomes (`disabled`,
+ * `no-backend`, `error`, `timeout`, `low-confidence`) are normal — the value is the declared
+ * default and the run continues — so they print `ok: true` and exit 0. Only an invalid options
+ * schema, an unreadable options file, or a failed config load fails closed with exit 1.
+ */
+async function runDecideMode(input: {
+    runId: string;
+    node: string;
+    optionsFile: string;
+    spurBin: string;
+}): Promise<number> {
+    type DecideOutcome = {
+        ok: boolean;
+        error?: string;
+        value?: string;
+        degraded?: boolean;
+        reason?: string;
+        backend?: string | null;
+        confidence?: number | null;
+        resultFile?: string;
+        durationMs?: number;
+    };
+    const decideFailed = (error: string): number => {
+        process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}\n`);
+        return 1;
+    };
+    let outcome: DecideOutcome;
+    try {
+        const { entry, portable } = resolveAppEntry(input.spurBin);
+        const app = (await import(entry)) as {
+            runDecideForInlineRun: (input2: {
+                workdir: string;
+                optionsFile: string;
+                enabled: boolean;
+            }) => Promise<DecideOutcome>;
+        };
+        // Config switch at the driver boundary (ADR-082 / task 0941 gate fix): the flag comes
+        // from the bridged facade derivation in the generated lib — the same committed bundle
+        // the inventory flow imports — never a @gobing-ai/* value import. Embedded schemas
+        // ride along only in the portable layout, mirroring the setup mode's load posture.
+        const lib = (await import(
+            fileURLToPath(new URL('../lib/inline-run.generated.mjs', import.meta.url))
+        )) as typeof import('../lib/inline-run.generated.mjs');
+        const enabled = await lib.resolveDecideDecisionMakerEnabled(
+            process.cwd(),
+            portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined,
+        );
+        outcome = await app.runDecideForInlineRun({
+            workdir: process.cwd(),
+            optionsFile: input.optionsFile,
+            enabled,
+        });
+    } catch (error) {
+        return decideFailed(error instanceof Error ? error.message : String(error));
+    }
+    if (!outcome.ok) return decideFailed(outcome.error ?? 'decide failed without an error message');
+    process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, node: input.node, ...outcome })}\n`);
+    // Trace row is best-effort, exactly like --action: an emission failure never wedges the run.
+    return await runTraceMode({
+        runId: input.runId,
+        close: false,
+        node: input.node,
+        kind: 'decide',
+        status: 'done',
+        ok: true,
+        durationMs: outcome.durationMs ?? 0,
+        spurBin: input.spurBin,
+    });
+}
+
 async function main(): Promise<void> {
     // The portable Node twin has no workspace imports; SQLite still uses Spur's existing Bun runtime.
     if (!process.versions.bun) {
@@ -448,9 +554,12 @@ async function main(): Promise<void> {
     let featureFile = '';
     let action = false;
     let close = false;
+    let decide = false;
+    let optionsJson = '';
     let node = '';
     let kind = '';
     let status = '';
+    let reason = '';
     let okRaw = '';
     let durationRaw = '';
     let spurBin = getEnvVar('SPUR_BIN') ?? '';
@@ -463,9 +572,12 @@ async function main(): Promise<void> {
         else if (argv[i] === '--feature-file') featureFile = argv[++i] ?? '';
         else if (argv[i] === '--action') action = true;
         else if (argv[i] === '--close') close = true;
+        else if (argv[i] === '--decide') decide = true;
+        else if (argv[i] === '--options-json') optionsJson = argv[++i] ?? '';
         else if (argv[i] === '--node') node = argv[++i] ?? '';
         else if (argv[i] === '--kind') kind = argv[++i] ?? '';
         else if (argv[i] === '--status') status = argv[++i] ?? '';
+        else if (argv[i] === '--reason') reason = argv[++i] ?? '';
         else if (argv[i] === '--ok') okRaw = argv[++i] ?? '';
         else if (argv[i] === '--duration-ms') durationRaw = argv[++i] ?? '';
         else if (argv[i] === '--spur-bin') spurBin = argv[++i] ?? spurBin;
@@ -481,12 +593,29 @@ async function main(): Promise<void> {
     // ADR-117 emission modes (task 0868): the inline driver reports one completed action
     // boundary, or closes its run row at the declared terminal state. Both share the run-id
     // filename guard, the app-entry resolution chain and the best-effort failure contract.
+    // Non-pausing decide action (0941 R5): --decide is mutually exclusive with the run-setup,
+    // fingerprint, and trace modes; it requires the run id (filename-guarded), the state id
+    // for the trace row, and the options JSON file.
+    if (decide) {
+        if (action || close || fingerprint || file !== '' || taskFile !== '') usage();
+        if (runId.trim() === '' || node.trim() === '' || optionsJson.trim() === '') usage();
+        if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
+        process.exit(await runDecideMode({ runId, node, optionsFile: optionsJson, spurBin }));
+    }
+
     if (action || close) {
         if (action && close) usage();
         if (runId.trim() === '' || status.trim() === '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
         if (close) {
             if (!CLOSE_STATUSES.has(status)) usage();
+            // 0937 R2: a failed close requires a declared reason, and any declared reason
+            // must be a closed-enum value — both fail loudly BEFORE any write happens.
+            if (reason.trim() === '') {
+                if (status === 'failed') usage();
+            } else if (!TERMINAL_REASONS.has(reason)) {
+                usage();
+            }
             process.exit(
                 await runTraceMode({
                     runId,
@@ -497,6 +626,7 @@ async function main(): Promise<void> {
                     ok: true,
                     durationMs: 0,
                     spurBin,
+                    ...(reason.trim() === '' ? {} : { reason }),
                 }),
             );
         }

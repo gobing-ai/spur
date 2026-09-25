@@ -225,8 +225,12 @@ function baseProvenance(
     };
 }
 
-/** The lazy upstream factory default — created only on an eligible request (D4). */
-async function defaultDecisionMaker(): Promise<DecisionMaker> {
+/**
+ * The lazy upstream factory default — created only on an eligible request (D4). Shared with the
+ * non-pausing decide action (0941): this extraction is the one allowed reuse move, so both
+ * surfaces construct the same 15s-timeout, zero-retry backend from existing config.
+ */
+export async function defaultDecisionMaker(): Promise<DecisionMaker> {
     const mod = await import('@gobing-ai/ts-ai-runner');
     return mod.createDecisionMaker({ timeoutMs: 15000, maxRetries: 0 });
 }

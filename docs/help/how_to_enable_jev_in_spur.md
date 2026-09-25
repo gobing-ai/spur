@@ -147,8 +147,9 @@ Per action you can pin the policy with the `decision` option (details in
   variable (`statusVar` records `deferred`).
 - absent — historical 0910 behavior (implicit participation when enabled), unchanged.
 
-Use `config/workflows/decision-routing-example.yaml` as the authoring template. Validation rejects
-mis-declared evidence mode at `workflow validate` time, before any run.
+The retired `decision-routing-example` workflow (task 0946, D64 §10 — now a test fixture at
+`packages/app/tests/services/fixtures/decision-routing-example.yaml`) is the worked authoring
+template. Validation rejects mis-declared evidence mode at `workflow validate` time, before any run.
 
 ## Implementation references
 

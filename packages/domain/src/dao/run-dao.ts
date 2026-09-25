@@ -118,12 +118,13 @@ export class RunDao extends EntityDao<typeof runs, typeof runs.id> {
               agent: string | null;
               started_at: string;
               completed_at: string | null;
+              terminal_reason: string | null;
               metadata_json: string;
           }
         | undefined
     > {
         return this.adapter.queryFirst(
-            'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, metadata_json FROM runs WHERE id = ?',
+            'SELECT id, workflow_name, mode, status, agent, started_at, completed_at, terminal_reason, metadata_json FROM runs WHERE id = ?',
             runId,
         );
     }

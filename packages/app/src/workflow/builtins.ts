@@ -1,4 +1,5 @@
 import type { ArtifactDao, DbAdapter } from '@gobing-ai/spur-domain';
+import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { HitlResponder, WorkflowEngineHost } from '@gobing-ai/ts-dual-workflow-engine';
 import {
     createNodeFileSystem,
@@ -10,6 +11,7 @@ import type { AgentService } from '../services/agent-service';
 import type { RuleService } from '../services/rule-service';
 import { AgentRunActionRunner, type AgentRunAgentConfig } from './actions/agent-run';
 import { CommandGateActionRunner } from './actions/command-gate';
+import { type DecideActionDeps, DecideActionRunner } from './actions/decide';
 import { DoctorProbeActionRunner } from './actions/doctor-probe';
 import { FileExistsActionRunner } from './actions/file-exists';
 import { FileReadActionRunner } from './actions/file-read';
@@ -24,6 +26,7 @@ import { RuleCheckActionRunner } from './actions/rule-check';
 import { RunArtifactActionRunner } from './actions/run-artifact';
 import { StreamingShellActionRunner } from './actions/shell';
 import type { DecisionEvaluator } from './decision-hitl-responder';
+import type { FleetDispatchDeps } from './fleet-dispatch';
 import { ContractViolationGuardRunner } from './guards/contract-violation';
 import { EnvShellGuardRunner } from './guards/shell';
 import type { WorkflowObservabilityBus } from './observability';
@@ -51,6 +54,12 @@ export interface SpurWorkflowBuiltinsOptions {
     secretValues?: readonly string[];
     /** Application-owned decision evaluator for explicit never/evidence HITL modes (0911). */
     decisionEvaluator?: DecisionEvaluator;
+    /** `workflow.decideDecisionMaker` switch for the non-pausing decide action (0941 R4). Default false. */
+    decideDecisionMaker?: boolean;
+    /** Optional provider factory for the decide action backend (0941 R4); defaults to the shared lazy maker. */
+    decideMaker?: () => Promise<DecisionMaker>;
+    /** Fleet executor deps for `agent.run` (0942/ADR-126). Absent = a selected fleet surface fails 'not wired'. */
+    fleetDispatchDeps?: FleetDispatchDeps;
 }
 
 /** Register all spur-specific built-in action runners on a workflow host. */
@@ -62,6 +71,7 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
             options.observabilityBus,
             options.steeringController,
             options.agentConfig,
+            options.fleetDispatchDeps,
         ),
         'builtin',
     );
@@ -91,6 +101,16 @@ export function registerSpurBuiltins(host: WorkflowEngineHost, options: SpurWork
     host.registerAction(new HitlConfirmActionRunner(options.hitlResponder, options.decisionEvaluator), 'builtin');
     host.registerAction(new HitlSelectActionRunner(options.hitlResponder, options.decisionEvaluator), 'builtin');
     host.registerAction(new HitlInputActionRunner(options.hitlResponder), 'builtin');
+    // Non-pausing decide action (0941, ADR-125): degrades to the declared default whenever the
+    // switch is off, no backend is available, the backend fails, or confidence is low — the run
+    // never pauses and the action never fails for model problems.
+    host.registerAction(
+        new DecideActionRunner(fileSystem, {
+            enabled: options.decideDecisionMaker === true,
+            ...(options.decideMaker !== undefined ? { decisionMaker: options.decideMaker } : {}),
+        } satisfies DecideActionDeps),
+        'builtin',
+    );
     host.registerAction(
         new CommandGateActionRunner(options.processExecutor ?? new NodeProcessExecutor(), fileSystem),
         'builtin',

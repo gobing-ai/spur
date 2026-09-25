@@ -20,7 +20,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
@@ -99,7 +99,9 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     const def = loadDef('wrapup-pipeline');
 
     test('identity: the definition carries an explicit version tag', () => {
-        expect(def.version).toBe('4');
+        // 0944: task-resolve gained the drift-probe + mode projection actions and the
+        // route-reason writer moved behind the wrapup-steps locator (composition caps).
+        expect(def.version).toBe('5');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -124,13 +126,14 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '4'
-        // since 0871 added the contract-violation repair edge (ADR-118 pilot).
+        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '5'
+        // since 0944 added the drift probe + mode projection and moved the route-reason
+        // writer behind the wrapup-steps locator ('4' since 0871's repair edge).
         // (feature-dev was pinned '3' until task 0866 retired the definition.)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '1',
-            'wrapup-pipeline': '4',
+            'wrapup-pipeline': '5',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -156,11 +159,23 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             expect(validate).toContain('wrapup-resolve.status');
             expect(validate).toContain('failed closed');
             expect(validate).not.toContain('"$tasks"');
-            // 0783 R2/R5: the route writer consumes the capture, never raw input.
-            const route = String(shells[1]?.options?.command ?? '');
-            expect(route).toContain('skipped:empty task list');
-            expect(route).toContain('wrapup-tasks.json');
-            expect(route).not.toContain('"$tasks"');
+            // 0783 R2/R5: the route-reason writer consumes the capture, never raw input.
+            // 0944: the writer moved behind the wrapup-steps locator (composition caps) and
+            // also reads the drift probe verdict; the capture + reason pins hold against the
+            // script source.
+            const route = String(shells[2]?.options?.command ?? '');
+            expect(route).toContain('wrapup-steps');
+            expect(route).toContain('route-reason');
+            // The route-reason writer lives in wrapup-steps.ts (0944): pin its body, not the
+            // whole script (resolve legitimately parses env.tasks; route-reason must not).
+            const script = readFileSync(WRAPUP_STEPS, 'utf8');
+            const fn = script.slice(
+                script.indexOf('export function writeRouteReason'),
+                script.indexOf('function readFileSyncSafe'),
+            );
+            expect(fn).toContain('skipped:empty task list');
+            expect(fn).toContain('wrapup-tasks.json');
+            expect(fn).not.toContain('env.tasks');
         });
 
         test('the failed edge is declared before the route edges and keys on the resolve status', () => {
@@ -192,22 +207,17 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0783-two-runs-'));
             try {
                 const spurBin = stubSpur(cwd, '{"frontmatter":{"status":"done"}}');
-                const route = shellOf(def, 'task-resolve', 1);
-                // 0824: the resolve step runs through the wrapup-steps script; the route writer
-                // stays a workflow shell, so run attribution stays a definition-level pin.
+                // 0824: the resolve step and the 0944 route-reason writer both run through the
+                // wrapup-steps script; run attribution stays a script-level pin.
                 const runThrough = (runId: string, wbs: string): void => {
-                    const script = spawnSync(process.execPath, [WRAPUP_STEPS, 'resolve'], {
-                        cwd,
-                        encoding: 'utf8',
-                        env: { ...getEnvVars(), __runId: runId, tasks: `["${wbs}"]`, spurBin },
-                    });
-                    expect(script.status).toBe(0);
-                    const writer = spawnSync('sh', ['-c', String(route.options?.command ?? '')], {
-                        cwd,
-                        encoding: 'utf8',
-                        env: { ...getEnvVars(), __runId: runId, tasks: `["${wbs}"]`, spurBin, mode: '' },
-                    });
-                    expect(writer.status).toBe(0);
+                    for (const sub of ['resolve', 'route-reason'] as const) {
+                        const step = spawnSync(process.execPath, [WRAPUP_STEPS, sub], {
+                            cwd,
+                            encoding: 'utf8',
+                            env: { ...getEnvVars(), __runId: runId, tasks: `["${wbs}"]`, spurBin, mode: '' },
+                        });
+                        expect(step.status).toBe(0);
+                    }
                 };
                 runThrough('r-a', '0783');
                 runThrough('r-b', '0784');
@@ -339,15 +349,196 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('route reason writers remain run-attributed (0758 R4/R5 pins survive; 0783 R5 drops the fixed fallback)', () => {
-        // 0824: shells[0] is the wrapup-steps locator wrapper; only the route writer (index 1)
-        // writes reasons.
-        const route = String(shellOf(def, 'task-resolve', 1)?.options?.command ?? '');
-        expect(route).toContain('REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"');
+        // 0824: shells[0] is the wrapup-steps locator wrapper. 0944: the route-reason writer
+        // also moved behind a locator (index 2, after the drift probe + mode projection) to
+        // stay inside the ADR-115 shell caps; only the script writes reasons.
+        const route = String(shellOf(def, 'task-resolve', 2)?.options?.command ?? '');
+        expect(route).toContain('wrapup-steps');
+        expect(route).toContain('route-reason');
         expect(route).not.toContain('.spur/run/wrapup-route-reason.txt');
         expect(route).not.toContain('RUN_ID="wrapup"');
-        // The locator wrapper writes no reason at all — fixed-path or otherwise.
+        const script = readFileSync(WRAPUP_STEPS, 'utf8');
+        expect(script).toContain('route-reason.txt`');
+        expect(script).not.toContain('.spur/run/wrapup-route-reason.txt');
+        // The resolve locator wrapper writes no reason at all — fixed-path or otherwise.
         const wrapper = String(shellOf(def, 'task-resolve', 0)?.options?.command ?? '');
         expect(wrapper).not.toContain('route-reason');
+    });
+
+    describe('0944 drift-probe routing (clean passes skip doc-sync; any doubt stays safe)', () => {
+        const taskShow = (solution: string): string =>
+            JSON.stringify({ status: 'done', content: `# 0944\n\n### Solution\n\n${solution}\n` });
+
+        interface RouteOutcome {
+            projectedMode: string;
+            probe: { clean: boolean; reasons: string[] } | null;
+            reason: string;
+            fastGuardRc: number;
+            safetyGuardRc: number;
+        }
+
+        /**
+         * Runs the task-resolve onEnter shells against a scaffolded temp cwd (symlinked
+         * plugin scripts + stub spur), simulating file.read.into-var between the probe
+         * wrapper and the route-reason writer (vars.mode := projected mode file content).
+         */
+        const runTaskResolve = (cwd: string, runId: string, spurBin: string, callerMode: string): RouteOutcome => {
+            const runShell = (index: number, mode: string): void => {
+                const result = spawnSync(
+                    'sh',
+                    ['-c', String(shellOf(def, 'task-resolve', index).options?.command ?? '')],
+                    {
+                        cwd,
+                        encoding: 'utf8',
+                        env: {
+                            ...getEnvVars(),
+                            __runId: runId,
+                            tasks: '["0944"]',
+                            spurBin,
+                            mode,
+                            PATH: `${cwd}:${getEnvVar('PATH') ?? ''}`,
+                        },
+                    },
+                );
+                expect(result.status, `shell ${index}`).toBe(0);
+            };
+            runShell(0, callerMode); // resolve: validates and writes the capture
+            runShell(1, callerMode); // probe + mode projection (no-op projection when mode set)
+            const raw = readFileSync(join(cwd, '.spur/run', `${runId}-mode.txt`), 'utf8');
+            const projectedMode = raw.trim();
+            let probe: RouteOutcome['probe'] = null;
+            try {
+                probe = JSON.parse(readFileSync(join(cwd, '.spur/run', `${runId}-drift-probe.json`), 'utf8'));
+            } catch {
+                // no probe artifact — the caller mode was set, so the probe never ran
+            }
+            runShell(2, projectedMode); // route-reason writer, now seeing the projected mode
+            const reason = readFileSync(join(cwd, '.spur/run', `${runId}-route-reason.txt`), 'utf8').trim();
+            const guardRc = (edge: string): number => {
+                const command = String(
+                    def.transitions.find((t: TransitionDef) => t.from === 'task-resolve' && t.to === edge)?.guard
+                        ?.options?.command ?? 'exit 99',
+                );
+                return (
+                    spawnSync('sh', ['-c', command], {
+                        cwd,
+                        encoding: 'utf8',
+                        env: { ...getEnvVars(), __runId: runId, mode: projectedMode },
+                    }).status ?? 1
+                );
+            };
+            return {
+                projectedMode,
+                probe,
+                reason,
+                fastGuardRc: guardRc('metrics-record'),
+                safetyGuardRc: guardRc('doc-sync'),
+            };
+        };
+
+        const scaffold = (cwd: string, stubBody: string): string => {
+            mkdirSync(join(cwd, 'plugins', 'sp'), { recursive: true });
+            symlinkSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts'), join(cwd, 'plugins', 'sp', 'scripts'));
+            const stub = join(cwd, 'stub-spur');
+            writeFileSync(stub, stubBody);
+            chmodSync(stub, 0o755);
+            return stub;
+        };
+
+        // sh echo interprets the JSON's \n escapes; the stubs below use printf %s instead.
+
+        test('a clean change map projects mode=fast, claims fast:drift-probe-clean, and routes metrics-record', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0944-clean-'));
+            try {
+                const stub = scaffold(
+                    cwd,
+                    `#!/bin/sh\ncase "$1 $2" in\n  "task show") printf '%s\\n' '${taskShow('- `packages/app/src/workflow/engine.ts:120`')}'; exit 0;;\nesac\nexit 99\n`,
+                );
+                const outcome = runTaskResolve(cwd, 'r-0944-clean', stub, '');
+                expect(outcome.probe?.clean).toBe(true);
+                expect(outcome.projectedMode).toBe('fast');
+                expect(outcome.reason).toBe('fast:drift-probe-clean');
+                expect(outcome.fastGuardRc).toBe(0); // metrics-record
+                expect(outcome.safetyGuardRc).not.toBe(0); // doc-sync declined
+                expect(readFileSync(join(cwd, '.spur/memory/wrapup-routes.log'), 'utf8')).toContain(
+                    'r-0944-clean fast:drift-probe-clean',
+                );
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('a doc-owned changed path stays dirty and routes doc-sync', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0944-docowned-'));
+            try {
+                const wfPath = `${join('config', 'workflows', 'wrapup-pipeline.yaml')}:12`;
+                const solution = [`- \`${wfPath}\``, '- `packages/app/src/index.ts:3`'].join('\n');
+                const stub = scaffold(
+                    cwd,
+                    `#!/bin/sh\ncase "$1 $2" in\n  "task show") printf '%s\\n' '${taskShow(solution)}'; exit 0;;\nesac\nexit 99\n`,
+                );
+                const outcome = runTaskResolve(cwd, 'r-0944-dirty', stub, '');
+                expect(outcome.probe?.clean).toBe(false);
+                expect(outcome.probe?.reasons.join(' ')).toContain('matches doc-owned surface');
+                expect(outcome.projectedMode).toBe('');
+                expect(outcome.reason).toBe('safety:missing evidence (mode empty)');
+                expect(outcome.fastGuardRc).not.toBe(0);
+                expect(outcome.safetyGuardRc).toBe(0); // doc-sync
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('a caller mode=safety is never overridden and still routes doc-sync', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0944-safety-'));
+            try {
+                const stub = scaffold(
+                    cwd,
+                    `#!/bin/sh\ncase "$1 $2" in\n  "task show") printf '%s\\n' '${taskShow('- `packages/app/src/index.ts:3`')}'; exit 0;;\nesac\nexit 99\n`,
+                );
+                const outcome = runTaskResolve(cwd, 'r-0944-safety', stub, 'safety');
+                expect(outcome.probe).toBeNull(); // the probe never ran
+                expect(outcome.projectedMode).toBe('safety');
+                expect(outcome.reason).toBe('safety:operator-forced doc-sync');
+                expect(outcome.safetyGuardRc).toBe(0); // doc-sync
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('an empty or unparseable Solution fails safe and routes doc-sync', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0944-emptysol-'));
+            try {
+                const stub = scaffold(
+                    cwd,
+                    `#!/bin/sh\ncase "$1 $2" in\n  "task show") printf '%s\\n' '${taskShow('(no change map yet)')}'; exit 0;;\nesac\nexit 99\n`,
+                );
+                const outcome = runTaskResolve(cwd, 'r-0944-empty', stub, '');
+                expect(outcome.probe?.clean).toBe(false);
+                expect(outcome.probe?.reasons).toEqual(['0944: Solution empty or unparseable']);
+                expect(outcome.projectedMode).toBe('');
+                expect(outcome.safetyGuardRc).toBe(0); // doc-sync
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('caller-mode-wins is YAML-level: the probe runs only behind the -n "$mode" gate', () => {
+            const probeShell = String(shellOf(def, 'task-resolve', 1)?.options?.command ?? '');
+            expect(probeShell).toContain('wrapup-drift-probe');
+            expect(probeShell.indexOf('[ -n "$mode" ]')).toBeGreaterThanOrEqual(0);
+            expect(probeShell.indexOf('[ -n "$mode" ]')).toBeLessThan(probeShell.indexOf('wrapup-drift-probe'));
+            expect(probeShell).not.toContain('jq');
+            // The projection is read into vars.mode by a declared file.read.into-var action.
+            const actions = (def.states.find((s) => s.id === 'task-resolve')?.onEnter ?? []) as Array<{
+                kind: string;
+                options?: Record<string, unknown>;
+            }>;
+            const intoVar = actions.find((a) => a.kind === 'file.read.into-var');
+            expect(intoVar?.options?.var).toBe('mode');
+            expect(String(intoVar?.options?.path)).toContain('-mode.txt');
+            expect(actions.map((a) => a.kind)).toEqual(['note', 'shell', 'shell', 'file.read.into-var', 'shell']);
+        });
     });
 
     describe('0824 wrapper fail-closed contract', () => {

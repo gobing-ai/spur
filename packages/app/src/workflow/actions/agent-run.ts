@@ -27,6 +27,7 @@ import {
     requiresDistinctExecutor,
 } from '../../services/review-independence';
 import { TaskLocator } from '../../services/task-locator';
+import { dispatchToFleet, type FleetDispatchDeps, fleetUnavailableOutcome } from '../fleet-dispatch';
 import type { WorkflowAgentBudgetEvent, WorkflowObservabilityBus, WorkflowTripwireFiredEvent } from '../observability';
 import { parseSteeringPolicy, type WorkflowSteeringController } from '../steering';
 import { CAPABILITY_BLOCK_PREFIX, evaluateTripWires, type TripWireSignal } from '../tripwire';
@@ -191,11 +192,18 @@ export class AgentRunActionRunner implements ActionRunner {
 
     private readonly agentService: AgentService;
 
+    // 0942 R3: the resolved fleet-fallback reason for the current execute() —
+    // stamped onto every post-fallback row, including the early contract-violation
+    // sub-outcomes that bypass the success-path stamp. Reset per invocation so a
+    // non-fleet row never carries a stale reason.
+    private fleetFallbackReason: string | undefined;
+
     constructor(
         agentService: AgentService,
         private readonly observabilityBus?: WorkflowObservabilityBus,
         private readonly steeringController?: WorkflowSteeringController,
         private readonly agentConfig: AgentRunAgentConfig = {},
+        private readonly fleetDeps?: FleetDispatchDeps,
     ) {
         this.agentService = agentService;
     }
@@ -230,14 +238,175 @@ export class AgentRunActionRunner implements ActionRunner {
             observed,
             ...(String(context.vars.wbs ?? '') !== '' ? { task: String(context.vars.wbs) } : {}),
         });
+        // 0942 R3: an early contract-violation return bypasses the success-path
+        // fallbackReason stamp — carry it here so a fleet-fallback row still names
+        // why the traditional surface ran.
         return {
             ok: false,
-            data: { ...data, outcome: 'contract-violation', contract, observed },
+            data: {
+                ...data,
+                outcome: 'contract-violation',
+                contract,
+                observed,
+                ...(this.fleetFallbackReason !== undefined ? { fallbackReason: this.fleetFallbackReason } : {}),
+            },
             error,
         };
     }
 
+    /**
+     * Fleet executor surface (task 0942, ADR-126) — the third executor branch,
+     * taken ONLY when the run var selects `executor: fleet`. Resolves to a final
+     * ActionResult, or to a declared fallback (`fallbackReason`) that drops to
+     * the traditional subprocess path below. Subprocess-only options fail loud:
+     * on this surface there is no stdout to capture, no diff to gate, and no
+     * runner budget to enforce — a member that accepted the work must not have
+     * those guarantees silently dropped.
+     */
+    private async executeFleetSurface(
+        options: Record<string, unknown>,
+        context: ActionRunContext,
+        input: string | undefined,
+        role: string,
+        cwd: string,
+    ): Promise<{ result?: ActionResult; fallbackReason?: string }> {
+        if (this.fleetDeps === undefined) {
+            return {
+                result: {
+                    ok: false,
+                    error: `agent.run: executor 'fleet' is selected but this host wired no fleet dispatch (ADR-126) — run where the fleet surface is composed`,
+                },
+            };
+        }
+        const unsupported = [
+            'agent',
+            'model',
+            'session',
+            'continue',
+            'answerFile',
+            'escalationFile',
+            'requireDiff',
+            'maxTokens',
+            'maxCostUsd',
+            'requiresCapabilities',
+        ].filter((key) => {
+            const value = options[key];
+            return !(value === undefined || value === null || value === false || value === '');
+        });
+        if (unsupported.length > 0) {
+            return {
+                result: {
+                    ok: false,
+                    error: `agent.run: option(s) ${unsupported.map((key) => `'${key}'`).join(', ')} are subprocess-surface only and unsupported on the fleet executor (0942)`,
+                },
+            };
+        }
+        if (input === undefined || input.trim() === '') {
+            return {
+                result: {
+                    ok: false,
+                    error: 'agent.run: fleet dispatch requires an input prompt (continue/resume is not a fleet surface)',
+                },
+            };
+        }
+        const expectFile = asOptionalString(options.expectFile);
+        const timeoutMs = asOptionalNumber(options.timeoutMs);
+        if (timeoutMs !== undefined && timeoutMs <= 0) {
+            return { result: { ok: false, error: 'agent.run: timeoutMs must be > 0' } };
+        }
+        // Delete-before-invoke (same contract as the subprocess path): a stale
+        // expectFile from a PRIOR run must not satisfy this dispatch's wait —
+        // presence after dispatch is the proof THIS member produced it.
+        if (expectFile !== undefined) {
+            const target = isAbsolute(expectFile) ? expectFile : join(cwd, expectFile);
+            const fs = createNodeFileSystem(cwd);
+            if (await fs.exists(target)) {
+                try {
+                    await fs.deleteFile(target);
+                } catch (error) {
+                    return {
+                        result: {
+                            ok: false,
+                            error: `agent.run: expectFile ${expectFile} exists from a previous run and could not be removed before dispatch: ${(error as Error).message}`,
+                        },
+                    };
+                }
+            }
+        }
+        const dispatch = await dispatchToFleet(
+            {
+                role,
+                prompt: input,
+                projectPath: cwd,
+                ...(expectFile !== undefined ? { expectFile } : {}),
+                ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+                runId: context.runId,
+                state: context.stateOrNodeId,
+            },
+            this.fleetDeps,
+        );
+        if (dispatch.status === 'dispatched') {
+            return {
+                result: {
+                    ok: true,
+                    data: {
+                        agent: dispatch.memberId,
+                        usage: unavailableAgentUsage('fleet members report no token usage'),
+                        ...(expectFile !== undefined ? { expectFile } : {}),
+                        durationMs: dispatch.durationMs,
+                        reason: 'done',
+                        // Fleet-only identity columns (R4); the trace parity test
+                        // (agent-run-fleet.test.ts) pins the key set against the
+                        // subprocess row shape.
+                        surface: 'fleet',
+                        memberId: dispatch.memberId,
+                        messageId: dispatch.messageId,
+                        promptPath: dispatch.promptPath,
+                    },
+                },
+            };
+        }
+        if (dispatch.status === 'timeout') {
+            // The member accepted the work — a fallback here would double-execute
+            // the stage. Fail explicitly; classifyTerminalReason maps the timeout
+            // error text to `failed-timeout` at run closure (0937).
+            return {
+                result: {
+                    ok: false,
+                    data: {
+                        agent: dispatch.memberId,
+                        usage: unavailableAgentUsage('fleet members report no token usage'),
+                        expectFile: dispatch.expectFile,
+                        durationMs: dispatch.durationMs,
+                        reason: 'failed-timeout',
+                        surface: 'fleet',
+                        memberId: dispatch.memberId,
+                        messageId: dispatch.messageId,
+                    },
+                    error: `agent.run (${dispatch.memberId}) accepted the fleet dispatch but expectFile never appeared within the declared timeout: ${dispatch.expectFile}`,
+                },
+            };
+        }
+        const outcome = fleetUnavailableOutcome(dispatch.reason, context.vars.executorFallback);
+        if (outcome.mode === 'fallback') return { fallbackReason: outcome.fallbackReason };
+        return {
+            result: {
+                ok: false,
+                data: {
+                    agent: role,
+                    usage: unavailableAgentUsage('fleet unavailable before dispatch'),
+                    reason: 'failed-agent',
+                    surface: 'fleet',
+                },
+                error: outcome.error,
+            },
+        };
+    }
+
     async execute(options: Record<string, unknown>, context: ActionRunContext): Promise<ActionResult> {
+        // Per-invocation reset: a prior execute()'s fallback reason must never leak
+        // onto a default-path row.
+        this.fleetFallbackReason = undefined;
         const input = asOptionalString(options.input);
         const agent = asOptionalString(options.agent);
         // 0687 R3: explicit `inline` is no longer rejected on dispatch surfaces;
@@ -471,6 +640,18 @@ export class AgentRunActionRunner implements ActionRunner {
                 ok: false,
                 error: `agent.run: step must declare a Layer-1 role: (scribe | coder | reviewer | planner) beside agent: (0538 R2)${role === undefined ? '' : ` — unknown role '${role}'`}`,
             };
+        }
+
+        // 0942/ADR-126: the opt-in fleet executor surface. Taken ONLY when the
+        // run var selects it; every default path in this method is untouched.
+        // On an unavailable fleet the run either falls back to the traditional
+        // subprocess below (declared via `executorFallback: traditional`, reason
+        // recorded) or fails explicitly with the 0937 reason `failed-agent` —
+        // never a silent downgrade.
+        if (context.vars.executor === 'fleet') {
+            const fleet = await this.executeFleetSurface(options, context, input, role, cwd);
+            if (fleet.result !== undefined) return fleet.result;
+            this.fleetFallbackReason = fleet.fallbackReason;
         }
 
         const flags: Record<string, string | boolean> = {};
@@ -1108,6 +1289,8 @@ export class AgentRunActionRunner implements ActionRunner {
             }
             // B7 R1 (0894): record the actually dispatched model (pin or step override).
             if (model !== undefined) resultData.model = model;
+            // 0942 R3: a declared fleet fallback names WHY the traditional surface ran.
+            if (this.fleetFallbackReason !== undefined) resultData.fallbackReason = this.fleetFallbackReason;
             // B7 R6/R7 (0895): trace columns — the dispatched executor, the session
             // the stage is associated with (accepted resume id, else the discovered
             // id), and the pin re-resolution outcome with its owner/reason.

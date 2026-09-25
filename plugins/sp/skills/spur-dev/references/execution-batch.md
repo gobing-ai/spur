@@ -270,7 +270,7 @@ Only two flags cross the orchestrator→pipeline boundary; both are merged into 
 | Flag | Effect on per-task `--vars` |
 | --- | --- |
 | `--auto` | sets `"profile":"auto"` (skips the HITL approve gate). Omitting it forwards nothing, so the pipeline uses its default profile (standard — HITL pause surfaces to the operator). (R4.2) |
-| `--agent <value>` | omit/`inline` in interactive sequential mode selects the host driver and is not forwarded. `auto` or a name sets **both** `"agent":"<value>"` and `"implementAgent":"<value>"` so every workflow `agent.run` step — including implement — spawns that executor. Headless omit/inline falls through the executor precedence chain. To pin ONLY implement, pass `--vars '{"implementAgent":"..."}'` separately; that explicit var selects the subprocess path. (R4.3, tasks 0483/0503) |
+| `--agent <value>` | omit/`inline` in interactive sequential mode selects the host driver and is not forwarded. `auto` or a name sets **both** `"agent":"<value>"` and `"implementAgent":"<value>"` so every workflow `agent.run` step — including implement — spawns that executor. Headless omit/inline falls through the executor precedence chain. To pin ONLY implement, pass `--vars '{"implementAgent":"..."}'` separately; that explicit var selects the subprocess path. (R4.3, tasks 0483/0503) The opt-in `fleet` value instead maps the run to `"executor":"fleet"`: every `agent.run` stage dispatches through the agent fleet control plane (0942/ADR-126) and neither `agent` nor `implementAgent` is pinned. |
 
 The host session remains the orchestrator for interactive sequential omit/inline. `sp:super-planner`
 owns explicit-executor and parallel paths; there the flag pins the per-task step executor, not the

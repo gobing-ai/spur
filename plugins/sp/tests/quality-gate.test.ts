@@ -321,3 +321,70 @@ describe('coverage shortfall findings (0862 R2)', () => {
         ]);
     });
 });
+
+describe('check-receipt write on run (0939 R2)', () => {
+    test('run with proofDigest writes a full-tier receipt bound to the digest', () => {
+        const { dir, cleanup } = scratch('spur-qg-receipt-');
+        try {
+            const script = executable(dir, 'gate.sh', 'echo ok');
+            const result = gate('run', dir, script, { proofDigest: 'digest-1' });
+            expect(result.status).toBe('PASS');
+            expect(result.receiptFile).toBe('.spur/run/0823-check-receipt.json');
+            const stored = JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8')) as Record<
+                string,
+                unknown
+            >;
+            expect(stored.schemaVersion).toBe('check-receipt/v1');
+            expect(stored.wbs).toBe('0823');
+            expect(stored.runId).toBe('pipeline-0823');
+            expect(stored.tier).toBe('full');
+            expect(stored.inputDigest).toBe('digest-1');
+            expect(stored.status).toBe('PASS');
+            expect(Number.isNaN(Date.parse(stored.completedAt as string))).toBe(false);
+            expect(stored.checks).toEqual([
+                {
+                    id: 'test',
+                    cmd: script,
+                    status: 'PASS',
+                    durationMs: expect.any(Number),
+                    logPath: '.spur/run/0823-test-gate.log',
+                },
+            ]);
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('run honors an explicit runId; a FAIL run writes a FAIL receipt', () => {
+        const { dir, cleanup } = scratch('spur-qg-receipt-id-');
+        try {
+            const script = executable(dir, 'gate.sh', 'exit 1');
+            const result = gate('run', dir, script, { proofDigest: 'd', runId: 'run-42' });
+            expect(result.status).toBe('FAIL');
+            const stored = JSON.parse(readFileSync(join(dir, '.spur/run/0823-check-receipt.json'), 'utf8')) as Record<
+                string,
+                unknown
+            >;
+            expect(stored.runId).toBe('run-42');
+            expect(stored.status).toBe('FAIL');
+        } finally {
+            cleanup();
+        }
+    });
+
+    test('run without proofDigest writes no receipt and the log says why; recheck never writes one', () => {
+        const { dir, cleanup } = scratch('spur-qg-receipt-absent-');
+        try {
+            const script = executable(dir, 'gate.sh', 'echo ok');
+            gate('run', dir, script);
+            expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(false);
+            expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain(
+                'check-receipt: not written — env `proofDigest` is not set',
+            );
+            gate('recheck', dir, script, { proofDigest: 'digest-1' });
+            expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(false);
+        } finally {
+            cleanup();
+        }
+    });
+});

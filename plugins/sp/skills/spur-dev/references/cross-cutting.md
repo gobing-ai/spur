@@ -120,6 +120,14 @@ This is **the same rule, not an exception**: `--agent` names who does the thinki
 the thinking happens in the stages. Selecting an executor for a loop that runs no prompts would be
 meaningless.
 
+**Fleet executor (0942, ADR-126, opt-in).** A workflow run may opt its `agent.run` stages into the
+agent fleet control plane by mapping the pipeline selector to `executor: 'fleet'` (dev-run /
+dev-runall `--agent fleet`). The stage dispatches to a fleet member through the fleet coordination
+surface instead of spawning a subprocess; a subprocess fallback happens only when the run declares
+`executorFallback: 'traditional'`, and an unavailable fleet otherwise fails the stage explicitly
+(0937 `failed-agent`). This is an additional `agent.run` transport — it does not change the
+`--agent` selector semantics documented above, and the interactive driver never resolves to it.
+
 **Interactive task pipelines invert control into the host session (ADR-047 amendment).**
 `dev-run --mode full` and sequential `dev-runall` with omitted `--agent` or explicit `--agent
 inline` interpret the existing `task-pipeline.yaml` in the host session; they do not launch `spur
@@ -785,8 +793,12 @@ The Design Approval Gate is the taste gate between system design and decompositi
 **The `needs_design` signal routing:**
 
 The signal is emitted by the `discovery` state's brainstorm dispatch and written to
-`.spur/run/idea-needs-design.json`. The `feature-check` state's transition guards read it to
-determine routing:
+`.spur/run/idea-needs-design.json`. A deterministic shell action at the end of the `ac-generate`
+and `feature-check` onEnter lists (0945 R2) folds `design` × `needs_design` once into
+`.spur/run/<runId>-idea-design-route.txt` (`design` | `skip`; missing/corrupt JSON fails safe to
+`design`) and the two recorded check statuses into `.spur/run/<runId>-idea-ac-ready.status`
+(`PASS` only when both are PASS). The transition guards read those derived files to determine
+routing — they never re-derive the signal inline (0769):
 
 | `design` var | `needs_design` signal | Route |
 | --- | --- | --- |

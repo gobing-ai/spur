@@ -768,6 +768,8 @@ export const WorkflowsConfigSchema = z.object({
 export const WorkflowConfigSchema = z.object({
     /** Opt-in DecisionMaker responder; false preserves existing interactive/default answers. */
     hitlDecisionMaker: z.boolean().optional(),
+    /** Opt-in DecisionMaker backend for the non-pausing decide action (0941 R4); false keeps the degraded default. */
+    decideDecisionMaker: z.boolean().optional(),
     logRetentionDays: z.number().int().positive().default(30),
 });
 

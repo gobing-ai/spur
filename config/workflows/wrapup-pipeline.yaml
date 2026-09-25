@@ -75,7 +75,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "4"
+version: "5"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -128,7 +128,10 @@ states:
       missing or corrupted capture refuses progression. A validated empty list
       -> skipped; length > 0 && mode == fast -> fast-path (metrics-record,
       bypassing doc-sync); missing/unknown/conflict -> doc-sync (safety-path).
-      Writes bounded machine-readable reason to reasonFile.
+      Writes bounded machine-readable reason to reasonFile. When the caller leaves
+      mode empty, a deterministic drift probe (0944) projects mode=fast only when
+      no changed path matches a doc-owned surface and every task's Solution
+      change map parsed — any doubt stays on the safety path.
     onEnter:
       - kind: note
         options:
@@ -148,21 +151,53 @@ states:
               echo "wrapup-steps failed closed — script not found — run 'superskill install sp'" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
             fi
-      # (e) route-reason writer: one jq table lookup over the mode var over the
-      # validated capture; workflow-local routing glue (0824). Runs AFTER validation
-      # and reads ONLY .spur/run/<runId>-wrapup-tasks.json — never raw vars.tasks
-      # (0783 R2/R5). A FAIL resolve exits without writing: the failed reason written
-      # by validation stands, and the skip reason can never mask it. A missing or
-      # corrupted capture fails the jq lookup (no skipped claim can be invented);
-      # the failed defense edge owns the run.
+      # (0944 R1-R3) deterministic drift probe — runs ONLY when the caller left mode
+      # empty (a caller-set mode is projected verbatim and the probe never runs). It
+      # writes <runId>-drift-probe.json {clean,reasons,paths} and projects the wrapup
+      # mode by writing <runId>-mode.txt: caller mode verbatim, `fast` when the probe
+      # is clean, empty when dirty (the probe script fails safe on any lookup or parse
+      # problem; a missing script writes a dirty probe + empty mode here). The next
+      # action reads the mode file into vars.mode via file.read.into-var.
       - kind: shell
         options:
           command: >-
-            mkdir -p .spur/run .spur/memory; RUN_ID="$__runId"; case "$RUN_ID" in '') echo "task-resolve: __runId is empty — refusing to write a route reason" >&2; exit 1 ;; esac;
-            REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"; case "$(cat ".spur/run/$RUN_ID-wrapup-resolve.status" 2>/dev/null)" in FAIL) exit 0 ;; esac;
-            N=$(jq length ".spur/run/$RUN_ID-wrapup-tasks.json" 2>/dev/null);
-            jq -rn --arg m "$mode" --arg n "$N" 'if $n == "0" then "skipped:empty task list" else {"fast":"fast:evidence complete+consistent","":"safety:missing evidence (mode empty)","unknown":"safety:unknown evidence quality","conflict":"safety:conflicting evidence"}[$m] // "safety:unrecognized evidence (mode=\($m))" end' > "$REASON_FILE";
-            printf '%s %s\n' "$RUN_ID" "$(cat "$REASON_FILE")" >> .spur/memory/wrapup-routes.log
+            if [ -n "$mode" ]; then
+              printf '%s\n' "$mode" > ".spur/run/$__runId-mode.txt";
+            elif [ -f plugins/sp/scripts/wrapup-drift-probe.ts ]; then
+              bun plugins/sp/scripts/wrapup-drift-probe.ts;
+            elif W="$(superskill script path sp wrapup-drift-probe.mjs 2>/dev/null)" && [ -f "$W" ]; then
+              node "$W";
+            else
+              printf '{"clean":false,"reasons":["probe script not found"],"paths":[]}' > ".spur/run/$__runId-drift-probe.json";
+              printf '\n' > ".spur/run/$__runId-mode.txt";
+            fi
+      - kind: file.read.into-var
+        options:
+          path: .spur/run/${vars.__runId}-mode.txt
+          var: mode
+      # (e) route-reason writer: one table lookup over the projected mode var over
+      # the validated capture and the drift probe verdict; workflow-local routing
+      # glue (0824, moved behind the wrapup-steps locator in 0944 to stay inside the
+      # ADR-115 shell caps). Runs AFTER the probe/projection so the reason reflects
+      # the projected mode. Reads ONLY .spur/run/<runId>-wrapup-tasks.json and the
+      # probe verdict — never raw vars.tasks (0783 R2/R5). A FAIL resolve exits
+      # without writing: the failed reason written by validation stands, and the
+      # skip reason can never mask it. A clean probe yields `fast:drift-probe-clean`
+      # (0944); mode `safety` claims `safety:operator-forced doc-sync`; a missing or
+      # corrupted capture fails the lookup (no skipped or clean claim can be
+      # invented); the failed defense edge owns the run.
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run .spur/memory &&
+            if [ -f plugins/sp/scripts/wrapup-steps.ts ]; then
+              bun plugins/sp/scripts/wrapup-steps.ts route-reason;
+            elif W="$(superskill script path sp wrapup-steps.mjs 2>/dev/null)" && [ -f "$W" ]; then
+              node "$W" route-reason;
+            else
+              echo "wrapup-steps failed closed — script not found — run 'superskill install sp'" >&2;
+              printf 'FAIL\n' > ".spur/run/$__runId-wrapup-resolve.status";
+            fi
 
   - id: doc-sync
     description: >
@@ -367,6 +402,7 @@ transitions:
   # ── task-resolve: validation fail + proportional route table (0758 R1-R4, 0770) ──
   - from: task-resolve
     to: failed
+    terminalReason: failed-check
     description: >
       Validation FAIL (0770): malformed wrap input, a non-string/empty entry, an
       unresolved or non-completed task, or an empty __runId. Declared before the
@@ -402,6 +438,7 @@ transitions:
         command: 'test "$(jq length .spur/run/$__runId-wrapup-tasks.json 2>/dev/null || echo -1)" -gt 0 && test "$mode" != fast'
   - from: task-resolve
     to: failed
+    terminalReason: failed-check
     description: >
       Defense (0770) — no PASS/FAIL resolve status (shell crashed or never ran):
       route to `failed` rather than claiming a skip.
@@ -429,6 +466,7 @@ transitions:
       kind: action-ok
   - from: doc-sync
     to: failed
+    terminalReason: failed-check
     description: >
       Executor failure (non-zero exit, signal, or dispatch error) — keep the
       existing fail semantics; a contract violation never falls through here
@@ -458,6 +496,7 @@ transitions:
   # the metrics status PASS so a missing status can never claim success.
   - from: metrics-record
     to: failed
+    terminalReason: failed-check
     description: >
       Metrics capture failed for at least one task — a missing metrics row is
       recorded as failure, never silently omitted as success (0770).
@@ -490,6 +529,7 @@ transitions:
   # ── feature-transition: fail edge, then branch-cleanup (if merge) or done ──
   - from: feature-transition
     to: failed
+    terminalReason: failed-check
     description: >
       Required synchronization failed (0770): non-zero sync exit, an invalid
       sync result, or a failed feature gate. The failed status carries the
@@ -507,6 +547,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-wrapup-sync.status 2>/dev/null)" = PASS'
   - from: feature-verify
     to: failed
+    terminalReason: failed-check
     description: >
       Post-wrapup feature check failed (0915 F1): the bound receipt no longer
       validates against the current feature contract. Already-written

@@ -186,7 +186,7 @@ pipeline step.
 
 ```
 plugins/sp/
-├── skills/                          # Domain knowledge + workflow docs (38 skills)
+├── skills/                          # Domain knowledge + workflow docs (39 skills)
 │   ├── brainstorm/                  # Structured ideation workflow
 │   │   ├── agents/openai.yaml
 │   │   ├── examples/ideation-example.md
@@ -342,6 +342,7 @@ surface or run one workflow. All skills target the same five core platforms: `cl
 | `session-review`            | 1.1   | Inline review of the active coding-agent session — compact outcomes, evidence-backed resolved/open issue classification, proposal-only improvements, and next actions; no workflow, import, delegation, or mutation                                                                                           |
 | `spur-composer`             | 1.0   | Cross-noun composition — workflow catalog selection, the ephemeral→project→shared ladder, ADR-115 budgets, trace-driven rule tuning; applies accepted `spur-doctor` proposals through `spur` verbs; never judges its own output and never runs a recurring loop                                              |
 | `spur-doctor`               | 1.0   | Cross-noun evaluation — read-only CLI evidence per noun (task/feature/rule/workflow/agent spec), reflection over `history-anatomy` findings through a closed action-class map, and a proposal table; writes nothing; diagnoses artifacts, not runtime environments (`spur agent doctor`'s job)                |
+| `spur-check`                | 1.0   | Two-tier check primitive (ADR-124) — light changed-scope checks during development, the full `bun run spur-check` chain at the quality boundary, and the fingerprint-bound `<wbs>-check-receipt.json` with the `status` reuse rule; composes with `/sp:dev-fixall --gate-log`                                  |
 | `redesign-web-ui`           | 1.0   | Existing-UI visual upgrade — audit generic AI fingerprints, apply in-stack polish against `DESIGN.md` / live tokens, verify behavior and viewports; does not migrate frameworks                                                                                                                            |
 | `taste-refactoring-api`     | 1.0   | API design and refactoring for REST/HTTP, RPC/gRPC, GraphQL, event contracts, and CLI surfaces; compatibility, security, and migration review |
 | `taste-refactoring-ui`      | 1.0   | UI design and refactoring with visual hierarchy, typography, spacing, color, and interaction review |
@@ -512,6 +513,7 @@ hold `SKILL.md` and prompt-side companions only.
 | `scripts/feature-sync-bounded.ts`                    | Bounded retry-suppression wrapper for `spur feature sync` during batch/wrap-up runs — suppresses identical L4-blocked repeats                                                                                                              |
 | `scripts/stage-registry-adapter.ts`                  | dev-next golden-path adapter over the canonical stage registry — TABLE A/B/C resolution bridge for the status-aware facade                                                                                                                |
 | `scripts/task-size-precheck.ts`                      | Pipeline size precheck guard (R2) — evaluates R-item/Plan-count limits to PASS/FAIL                                                                                                              |
+| `scripts/task-diffstat.ts`                           | 0943 triage-lane diffstat producer — numstat + untracked scan vs the run base; writes `<wbs>-diffstat.json` with the sensitive-path flag; fails safe (sensitive)                                                       |
 | `scripts/validate-flag-contracts.ts`                 | Mechanical consistency gate — compares flag claims across command files, flag-glossary, cross-cutting, dev-operations, and ADR; reports disagreements                                                                                    |
 | `*.test.ts`                                          | Unit suites — in `hooks/` for guards, in `tests/<skill>/` per ADR-031 pairing                                                                                                                                                                                                                     |
 
@@ -629,7 +631,10 @@ pipeline owns one lifecycle phase:
 | `idea-pipeline.yaml`        | Idea/planning → feature + tasks   | `/sp:dev-idea`, `/sp:dev-plan`    |
 | `wrapup-pipeline.yaml`      | Post-execution wrap-up            | `/sp:dev-wrap`, `/sp:dev-wrapall` |
 | `wayfinder-resolution.yaml` | Wayfinder ticket resolution loop  | `spur workflow run` (free-form)   |
-| `decision-routing-example.yaml` | DecisionMaker routing example (never / evidence / omitted modes, defer → operator pause) | `spur workflow run` (authoring sample) |
+
+> 0946 (D64): the `decision-routing-example.yaml` authoring sample was retired from the catalogue
+> (zero runs, example-only — `docs/design/workflow-catalogue-refactor.md` §10); the pattern lives on
+> as a test fixture (`packages/app/tests/services/fixtures/decision-routing-example.yaml`).
 
 ### Lifecycle operations
 

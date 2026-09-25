@@ -275,14 +275,11 @@ terminalStates: [done]
     });
 
     describe('decision policy (0911)', () => {
-        // The shipped example is a runnable state machine, not a doc sample: this block executes it
-        // end to end through the real service so the declared routes cannot rot into prose.
-        const EXAMPLE_WORKFLOW = join(
-            import.meta.dir,
-            '../../../../config',
-            'workflows',
-            'decision-routing-example.yaml',
-        );
+        // The example is a runnable state machine, not a doc sample: this block executes it end to
+        // end through the real service so the declared routes cannot rot into prose. 0946 retired it
+        // from the workflow catalogue (example-only role, zero runs — §10 of the catalogue refactor);
+        // the YAML moved here unchanged so the regression coverage survives the retirement.
+        const EXAMPLE_WORKFLOW = join(import.meta.dir, 'fixtures', 'decision-routing-example.yaml');
 
         /** Fake provider driver: always accepts the first offered choice with high confidence. */
         const acceptingDecisionMaker = async () =>

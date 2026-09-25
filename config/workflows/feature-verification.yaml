@@ -74,6 +74,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-feature-verification.status 2>/dev/null)" = PASS'
   - from: verify
     to: failed
+    terminalReason: failed-check
     description: Repo-wide checks failed (or the evidence is missing/corrupt) — stop at failed.
     guard:
       kind: always

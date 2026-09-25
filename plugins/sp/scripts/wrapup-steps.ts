@@ -3,12 +3,13 @@
  * wrapup-steps — deterministic wrap-up capture, metrics and feature sync behind the
  * wrapup-pipeline wrappers (task 0824, feature I21, governance §1.2 composition budgets).
  *
- * Reproduces the former wrapup-pipeline `task-resolve:onEnter:0`, `metrics-record:onEnter:0`
- * and `feature-transition:onEnter:0` shell programs one-for-one so the workflow stays inside
+ * Reproduces the former wrapup-pipeline `task-resolve:onEnter:0`, `task-resolve:onEnter:1`
+ * (route-reason writer, moved here in 0944), `metrics-record:onEnter:0` and
+ * `feature-transition:onEnter:0` shell programs one-for-one so the workflow stays inside
  * the shell-program caps while writing the same `.spur/run` artifacts:
  *   - `<runId>-wrapup-tasks.json`       normalized, deduplicated WBS capture (resolve)
  *   - `<runId>-wrapup-resolve.status`   `PASS`/`FAIL` (resolve)
- *   - `<runId>-route-reason.txt`        route reason (written by the workflow route writer)
+ *   - `<runId>-route-reason.txt`        route reason (route-reason subcommand)
  *   - `.spur/memory/wrapup-metrics.jsonl` one row per task (metrics)
  *   - `<runId>-wrapup-metrics.status`   `PASS`/`FAIL` (metrics)
  *   - `<runId>-wrapup-sync.status`      `PASS`/`FAIL` (feature-transition)
@@ -183,6 +184,89 @@ export function resolveTasks(env: WrapupStepsEnv, options: WrapupStepsOptions = 
     }
     writeFileSync(abs(relStatusFile), 'PASS\n');
     return { status: 'PASS', statusFile: relStatusFile, tasksFile: relTasksFile, exitCode: 0 };
+}
+
+/**
+ * 0944 R3 route-reason map — mirrors the former inline jq object one-for-one, plus the
+ * `safety` entry (operator-forced doc-sync). `fast:drift-probe-clean` is NOT in the map:
+ * it is only claimable when the drift probe itself classified the wrapup clean.
+ */
+const ROUTE_REASON_TABLE: Record<string, string> = {
+    fast: 'fast:evidence complete+consistent',
+    '': 'safety:missing evidence (mode empty)',
+    unknown: 'safety:unknown evidence quality',
+    conflict: 'safety:conflicting evidence',
+    safety: 'safety:operator-forced doc-sync',
+};
+
+export interface RouteReasonResult {
+    reason: string;
+    reasonFile: string;
+    exitCode: number;
+}
+
+/**
+ * `route-reason` — derive the task-resolve route reason from the validated capture, the
+ * projected mode and the drift probe verdict (0944). A resolve FAIL keeps its own reason
+ * (nothing is written, exit 0). A missing or corrupted capture never yields a `skipped`
+ * or `fast:drift-probe-clean` claim. The log line is run-attributed (0770).
+ */
+export function writeRouteReason(env: WrapupStepsEnv, options: WrapupStepsOptions = {}): RouteReasonResult {
+    const cwd = options.cwd;
+    const runId = env.__runId ?? '';
+    if (runId.length === 0) {
+        process.stderr.write('task-resolve: __runId is empty — refusing to write a route reason\n');
+        return { reason: '', reasonFile: '', exitCode: 1 };
+    }
+    mkdirSync(cwd ? join(cwd, '.spur', 'run') : join('.spur', 'run'), { recursive: true });
+    mkdirSync(cwd ? join(cwd, '.spur', 'memory') : join('.spur', 'memory'), { recursive: true });
+    const relReasonFile = join('.spur', 'run', `${runId}-route-reason.txt`);
+    const abs = (p: string): string => (cwd ? join(cwd, p) : p);
+
+    const statusFile = join('.spur', 'run', `${runId}-wrapup-resolve.status`);
+    if (readFileSyncSafe(abs(statusFile))?.trim() === 'FAIL') {
+        // The failed reason stands; the failed edge already owns the run.
+        return { reason: '', reasonFile: relReasonFile, exitCode: 0 };
+    }
+
+    // A missing/corrupted capture stays at -1: never 0, so no skipped claim can be invented.
+    let taskCount = -1;
+    try {
+        const parsed: unknown = JSON.parse(
+            readFileSync(abs(join('.spur', 'run', `${runId}-wrapup-tasks.json`)), 'utf8'),
+        );
+        if (Array.isArray(parsed)) taskCount = parsed.length;
+    } catch {
+        // treated as uncountable below
+    }
+    let probeClean = false;
+    try {
+        const probe: unknown = JSON.parse(readFileSync(abs(join('.spur', 'run', `${runId}-drift-probe.json`)), 'utf8'));
+        probeClean = (probe as { clean?: unknown } | null)?.clean === true;
+    } catch {
+        // no probe verdict — the map decides
+    }
+
+    const mode = env.mode ?? '';
+    let reason: string;
+    if (taskCount === 0) {
+        reason = 'skipped:empty task list';
+    } else if (mode === 'fast' && probeClean) {
+        reason = 'fast:drift-probe-clean';
+    } else {
+        reason = ROUTE_REASON_TABLE[mode] ?? `safety:unrecognized evidence (mode=${mode})`;
+    }
+    writeFileSync(abs(relReasonFile), `${reason}\n`);
+    appendFileSync(abs(join('.spur', 'memory', 'wrapup-routes.log')), `${runId} ${reason}\n`);
+    return { reason, reasonFile: relReasonFile, exitCode: 0 };
+}
+
+function readFileSyncSafe(path: string): string | null {
+    try {
+        return readFileSync(path, 'utf8');
+    } catch {
+        return null;
+    }
 }
 
 export interface MetricsResult {
@@ -448,11 +532,12 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
 }
 
 export const WRAPUP_STEPS_USAGE =
-    'usage: wrapup-steps.ts <resolve|metrics|feature-transition>  (env: __runId, tasks, feature, featureGateCmd, spurBin)';
+    'usage: wrapup-steps.ts <resolve|route-reason|metrics|feature-transition>  (env: __runId, tasks, mode, feature, featureGateCmd, spurBin)';
 
 export function main(argv: string[], env: WrapupStepsEnv = getEnvVars(), options: WrapupStepsOptions = {}): number {
     const sub = argv[0];
     if (sub === 'resolve') return resolveTasks(env, options).exitCode;
+    if (sub === 'route-reason') return writeRouteReason(env, options).exitCode;
     if (sub === 'metrics') {
         runMetrics(env, options);
         return 0;

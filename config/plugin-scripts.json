@@ -37,6 +37,11 @@
             "twin": "idea-handoff.mjs"
         },
         {
+            "rel": "wrapup-drift-probe.ts",
+            "contract": "standard",
+            "twin": "wrapup-drift-probe.mjs"
+        },
+        {
             "rel": "wrapup-steps.ts",
             "contract": "standard",
             "twin": "wrapup-steps.mjs"
@@ -95,6 +100,11 @@
         {
             "rel": "surface-drift-inventory.ts",
             "contract": "repo-only"
+        },
+        {
+            "rel": "task-diffstat.ts",
+            "contract": "standard",
+            "twin": "task-diffstat.mjs"
         },
         {
             "rel": "task-evidence-precheck.ts",

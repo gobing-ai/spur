@@ -51,7 +51,6 @@ const MATRIX: Record<string, StateMatrixRow> = {
     'history-anatomy': { resumeRerunStates: [], pauseGates: [], entryClass: 'repeatable' },
     'wrapup-pipeline': { resumeRerunStates: [], pauseGates: ['branch-cleanup'], entryClass: 'repeatable' },
     'wayfinder-resolution': { resumeRerunStates: [], pauseGates: ['approve'], entryClass: 'repeatable' },
-    'decision-routing-example': { resumeRerunStates: [], pauseGates: ['humanGate'], entryClass: 'repeatable' },
 };
 
 interface CanonicalDoc {

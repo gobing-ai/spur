@@ -18,7 +18,7 @@ Wraps the **sp:spur-dev** skill.
 | `--mode` `<sequential\|parallel>` | Batch execution order. | sequential |
 | `--keep-going` | Continue past per-task failures. | off |
 | `--auto` | Skip objective HITL gates. | off |
-| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below)). `auto`, a name, parallel mode, and headless invocation use subprocesses. | omit |
+| `--agent` `<inline\|auto\|name>` | Who runs each task's pipeline stages. Interactive sequential omit/`inline` uses the host-session driver with unified inline semantics (task 0687 — see below)). `auto`, a name, parallel mode, and headless invocation use subprocesses. The opt-in `fleet` selector (0942) maps each task run to `executor: 'fleet'` so `agent.run` stages dispatch through the fleet control plane (ADR-126) instead of a subprocess. | omit |
 | `--json` | Emit structured JSON. | off |
 | `--wrap` | Run the wrap hop **once for the batch** over the `done` subset only (Step 6 of execution-batch.md): `vars.feature` is passed only when every frozen task is `done`/`cancelled`; an empty done subset skips the wrap with a reason. The `--agent` selector is preserved into the `/sp:dev-wrap` handoff when supplied; omission remains omission. | off |
 | `--next` | Chain-to-completion via the next-router. | off |
@@ -49,7 +49,7 @@ only after its in-set dependencies are **integrated** onto the base ref), `--kee
 halts on first failure), `--auto`
 (sets `profile=auto` on each per-task run, skipping the HITL approve gate), `--agent <inline|auto|name>`
 (names who runs the pipeline's stages — interactive sequential omit/`inline` uses the host driver;
-`auto` or a name is merged into each per-task `vars.agent` and `vars.implementAgent`; parallel mode
+`auto` or a name is merged into each per-task `vars.agent` and `vars.implementAgent`; `fleet` maps each task run to `executor: 'fleet'` instead (fleet dispatch, 0942); parallel mode
 retains isolated subprocesses, ADR-047), `--json` (emit the
 report as JSON), `--wrap` (trigger
 `wrapup-pipeline.yaml` after the batch completes), `--next`

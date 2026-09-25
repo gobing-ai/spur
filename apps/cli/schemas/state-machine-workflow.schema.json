@@ -135,6 +135,10 @@
                         "type": "string",
                         "minLength": 1
                     },
+                    "terminalReason": {
+                        "type": "string",
+                        "description": "Closed terminal-reason enum declared when this edge finalizes the run (0937 R3; required for edges into failureStates)."
+                    },
                     "description": {
                         "type": "string"
                     },

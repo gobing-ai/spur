@@ -38,6 +38,7 @@ import {
     type WorkflowStatus,
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { classifyTerminalReason } from './terminal-reason';
 
 /** The engine does not export its reseed-result type; derive it from the interface. */
 type ReseedResult = Awaited<ReturnType<WorkflowPersistenceAdapter['reseedRun']>>;
@@ -174,11 +175,29 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
      * before the writer existed (review finding #1). R5/R7 keep the path shared; the
      * error just passes through. Only the action boundary stays best-effort (R3/R12).
      */
-    async finalizeRun(runId: string, status: WorkflowStatus, completedAt: string): Promise<void> {
+    async finalizeRun(
+        runId: string,
+        status: WorkflowStatus,
+        completedAt: string,
+        fence?: { readonly ownerAttempt: string },
+        reason?: string,
+    ): Promise<void> {
         // Engine 0.5.5 widens `finalizeRun` to `Promise<boolean | void>` (fenced ownership
         // CAS). This decorator's contract is the 3-arg pass-through, so the flag is
         // discarded — same shape as ObservableWorkflowAdapter.finalizeRun.
-        await this.inner.finalizeRun(runId, status, completedAt);
+        // 0937 R4: the engine reason is opaque — classify it to the closed enum at the
+        // seam, so `runs.terminal_reason` always holds a declared or mapped value. The
+        // engine also surfaces the failing action's error text as this reason (review
+        // P2#2), so forward it as errorText for the failed-timeout/failed-agent checks.
+        await this.inner.finalizeRun(
+            runId,
+            status,
+            completedAt,
+            fence,
+            reason === undefined
+                ? undefined
+                : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
+        );
     }
 
     /** Ownership/interruption CAS — straight pass-through per the class contract (ADR-025). */
@@ -262,12 +281,25 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
      * distinguish zero matched rows) and a persistence failure propagates, so the
      * delegate never reports a false `{"ok":true}`.
      */
-    async closeRun(runId: string, status: WorkflowStatus, completedAt?: string): Promise<{ ok: true }> {
+    async closeRun(
+        runId: string,
+        status: WorkflowStatus,
+        completedAt?: string,
+        reason?: string,
+    ): Promise<{ ok: true }> {
         const existing = await this.inner.loadRun(runId);
         if (existing === undefined) {
             throw new RunRowNotFoundError(runId);
         }
-        await this.inner.finalizeRun(runId, status, completedAt ?? new Date().toISOString());
+        await this.inner.finalizeRun(
+            runId,
+            status,
+            completedAt ?? new Date().toISOString(),
+            undefined,
+            reason === undefined
+                ? undefined
+                : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
+        );
         return { ok: true };
     }
 

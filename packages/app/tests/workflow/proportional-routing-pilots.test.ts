@@ -10,6 +10,8 @@ import { computeDefinitionDigest } from '../../src/workflow/composition-baseline
 
 const REPO_ROOT = join(import.meta.dir, '../../../../');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config', 'workflows');
+/** 0944: the route-reason writer (and its reason tokens) live in the wrapup-steps script. */
+const WRAPUP_STEPS_SCRIPT = join(REPO_ROOT, 'plugins', 'sp', 'scripts', 'wrapup-steps.ts');
 
 interface StateDef {
     id: string;
@@ -44,23 +46,30 @@ describe('proportional routing pilots (task 0758)', () => {
         test('task-resolve state writes bounded route reason', () => {
             const taskResolve = wrapupDef.states.find((s: StateDef) => s.id === 'task-resolve');
             expect(taskResolve).toBeDefined();
-            // Since task 0783 the FIRST shell is validation (writes the resolve status), and the
-            // route writer is the second shell — it reads the validated run-scoped capture only.
+            // Since task 0783 the FIRST shell is validation (writes the resolve status); since
+            // 0944 the LAST shell is the route-reason writer behind the wrapup-steps locator —
+            // it reads the validated run-scoped capture and the drift probe verdict only, and
+            // the reason tokens live in the script (the YAML shell stays inside the ADR-115 caps).
             const shellActions = taskResolve?.onEnter?.filter((a) => a.kind === 'shell') ?? [];
             const shellAction = shellActions[shellActions.length - 1];
             expect(shellAction).toBeDefined();
             const cmd = String(shellAction?.options?.command ?? '');
-            expect(cmd).toContain('fast:evidence complete+consistent');
-            expect(cmd).toContain('safety:missing evidence (mode empty)');
-            expect(cmd).toContain('safety:unknown evidence quality');
-            expect(cmd).toContain('safety:conflicting evidence');
-            expect(cmd).toContain('skipped:empty task list');
+            expect(cmd).toContain('wrapup-steps');
+            expect(cmd).toContain('route-reason');
+            expect(cmd).toContain('mkdir -p .spur/run .spur/memory');
+            const script = readFileSync(WRAPUP_STEPS_SCRIPT, 'utf8');
+            expect(script).toContain('fast:evidence complete+consistent');
+            expect(script).toContain('safety:missing evidence (mode empty)');
+            expect(script).toContain('safety:unknown evidence quality');
+            expect(script).toContain('safety:conflicting evidence');
+            expect(script).toContain('safety:operator-forced doc-sync');
+            expect(script).toContain('fast:drift-probe-clean');
+            expect(script).toContain('skipped:empty task list');
             // 0758 R3/R5: the reason artifact is run-scoped. The earlier fixed-path copy
             // (`.spur/run/wrapup-route-reason.txt`) had no reader and was overwritten by whichever
             // run finished last, so a claim read from it belonged to no particular run.
-            expect(cmd).toContain('REASON_FILE=".spur/run/$RUN_ID-route-reason.txt"');
-            expect(cmd).not.toContain('.spur/run/wrapup-route-reason.txt');
-            expect(cmd).toContain('mkdir -p .spur/run .spur/memory');
+            expect(script).toContain('-route-reason.txt`');
+            expect(script).not.toContain('.spur/run/wrapup-route-reason.txt');
         });
 
         test('transitions form a closed, mutually exhaustive table over (tasks, mode)', () => {

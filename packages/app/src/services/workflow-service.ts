@@ -1,6 +1,6 @@
 import { closeSync, constants, existsSync, fstatSync, openSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
-import { AGENT_ROLE_NAMES, type SpurConfig } from '@gobing-ai/spur-config';
+import { AGENT_ROLE_NAMES, getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
 import {
@@ -48,6 +48,7 @@ import { ValidationError } from '@gobing-ai/ts-utils';
 import { redactAndBound } from '../observability/agent-execution';
 import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import { createRunLogTraceFailureRecorder, withActionTrace } from '../workflow/action-trace';
+import { DECIDE_KIND, DecideOptionsSchema } from '../workflow/actions/decide';
 import { validateEvidenceChoices } from '../workflow/actions/hitl-select';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { resolveRunArtifactPath } from '../workflow/actions/run-path';
@@ -61,9 +62,11 @@ import {
 import { computeDefinitionDigest } from '../workflow/composition-baseline';
 import type { SummaryResolver } from '../workflow/decision-evidence';
 import { type DecisionEvaluator, evaluateDecision, parseDecisionConfig } from '../workflow/decision-hitl-responder';
+import { type FleetDispatchDeps, waitForFileExists } from '../workflow/fleet-dispatch';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
 import type { WorkflowSteeringController } from '../workflow/steering';
+import { isTerminalReason, TERMINAL_REASONS } from '../workflow/terminal-reason';
 import {
     type ResolvedWorkflowDefinition,
     registeredWorkflowPaths,
@@ -72,8 +75,10 @@ import {
     type WorkflowLayerId,
     workflowLayers,
 } from '../workflow/workflow-resolver';
+import { AgentCoordinationService, type CoordinationEventBus } from './agent-coordination-service';
 import type { AgentService } from './agent-service';
 import { bridgeEventBus, dropRetiredActionBoundaryAliases, withWorkflowIdentity } from './event-bridge';
+import { FleetService } from './fleet-service';
 import type { RuleService } from './rule-service';
 import {
     type SystemEventAction,
@@ -691,6 +696,23 @@ export class WorkflowAppService {
                 return { ok: false, valid: false, file, errors: decisionErrors };
             }
 
+            // Decide-action check (0941 R6): a decide action missing its default, declaring a
+            // default outside choices, or omitting resultFile is rejected with the SAME zod
+            // schema the runner executes — validation and execution cannot drift.
+            const decideErrors = collectDecideViolations(workflow);
+            if (decideErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: decideErrors };
+            }
+
+            // Terminal-reason check (0937 R3): every transition into a `failureStates`
+            // member must declare a valid `terminalReason` enum value, so a failed run's
+            // reason is per-edge, not the ambiguous `terminal:<stateId>` built-in. Same
+            // post-schema surface as the checks above.
+            const terminalReasonErrors = collectTerminalReasonViolations(workflow);
+            if (terminalReasonErrors.length > 0) {
+                return { ok: false, valid: false, file, errors: terminalReasonErrors };
+            }
+
             // 0614: warn-only composition advisory (shell measure + agent.run
             // prompt size + disposition suppression). Never affects validity.
             const composition = collectCompositionAdvisory(workflow, absolute);
@@ -777,8 +799,10 @@ export class WorkflowAppService {
         // a replace-style consumer cannot drop a declared var the caller omitted.
         const runVars = {
             ...mergeWorkflowRunVars(workflow.vars as Record<string, unknown> | undefined, {
-                ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, opts.vars, (m) => warnings.push(m)),
-                ...(opts.vars ?? {}),
+                ...resolveDefaultAgentVar(this.ctx.spurConfig ?? null, mapFleetExecutorVar(opts.vars), (m) =>
+                    warnings.push(m),
+                ),
+                ...mapFleetExecutorVar(opts.vars),
             }),
             __runId: runId,
             // 0759 R5: inject the canonical definition digest on the same seam as __runId so a
@@ -936,11 +960,18 @@ export class WorkflowAppService {
                     run.status === 'running'
                         ? await engine.interruptRun(
                               run.id,
-                              `stale: owner lost > ${olderThanMinutes}m (spur workflow clean)`,
+                              // 0937 review: the engine mirrors this reason into the closed-enum
+                              // runs.terminal_reason, so pass the declared value — the human detail
+                              // lands in metadata_json below under finalizeStale's key.
+                              'interrupted',
                           )
                         : undefined;
                 if (interrupted === undefined) {
                     await dao.finalizeStale(run.id, `stale: non-terminal > ${olderThanMinutes}m (spur workflow clean)`);
+                } else {
+                    await dao.mergeMetadata(run.id, {
+                        staleReason: `stale: owner lost > ${olderThanMinutes}m (spur workflow clean)`,
+                    });
                 }
             }
         }
@@ -1879,6 +1910,30 @@ export class WorkflowAppService {
         } catch {
             // keep agent-run defaults (docs/tasks3 + docs/features) when folder resolve fails
         }
+        // 0942/ADR-126: the fleet executor surface deps — composed from the same ctx
+        // slice the CLI threads (A5/ADR-082). Both services are cheap and lazy (the DB
+        // opens on first use); selecting the surface still requires the run var, so an
+        // engine host that never opts in keeps today's dispatch behavior byte-for-byte.
+        const fleetFs = createNodeFileSystem(this.ctx.cwd);
+        const fleetDispatchDeps: FleetDispatchDeps = {
+            coordination: new AgentCoordinationService({
+                cwd: this.ctx.cwd,
+                env: getEnvVars(),
+                ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
+                ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+                getDb: () => this.ctx.getDb(),
+                fs: fleetFs,
+                ...(bus !== undefined ? { eventBus: bus as unknown as CoordinationEventBus } : {}),
+            }),
+            fleet: new FleetService({
+                fs: fleetFs,
+                ...(this.ctx.spurConfig !== undefined ? { spurConfig: this.ctx.spurConfig } : {}),
+                ...(this.ctx.reloadAgentConfig !== undefined ? { reloadAgentConfig: this.ctx.reloadAgentConfig } : {}),
+                openDb: () => this.ctx.getDb(),
+            }),
+            waitForFile: waitForFileExists,
+            now: () => Date.now(),
+        };
         registerSpurBuiltins(host, {
             agentService: this.ctx.agentService(),
             ruleService: this.ctx.ruleService(),
@@ -1891,6 +1946,12 @@ export class WorkflowAppService {
             ...(opts.steeringController !== undefined ? { steeringController: opts.steeringController } : {}),
             agentConfig: agentSlice,
             getDb: () => this.ctx.getDb(),
+            // 0941 R4: decide degrades to its declared default unless the config switch is on.
+            decideDecisionMaker: this.ctx.spurConfig?.workflow?.decideDecisionMaker === true,
+            // 0941 R4: the backend comes from existing DecisionMaker config when the composition root supplies one.
+            ...(this.ctx.decisionMaker !== undefined ? { decideMaker: this.ctx.decisionMaker } : {}),
+            // 0942/ADR-126: the fleet executor surface for `agent.run`.
+            fleetDispatchDeps,
             // 0901 R5: configured secrets redact streamed shell output at the
             // emission boundary (bus → CLI logs + system-event ledger).
             ...(this.ctx.secretValues !== undefined ? { secretValues: this.ctx.secretValues } : {}),
@@ -2132,6 +2193,62 @@ function collectAgentRunRoleViolations(def: WorkflowDef): string[] {
         for (const state of smDef.states ?? []) {
             for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
             for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.id, action, i);
+        }
+    }
+    return violations;
+}
+
+/**
+ * Terminal-reason rule (0937 R3): a state-machine transition into a `failureStates`
+ * member finalizes the run as `failed`, so it must declare a closed-enum
+ * `terminalReason` — otherwise every edge into a shared failed state looks identical
+ * in `runs.terminal_reason`.
+ */
+function collectTerminalReasonViolations(def: WorkflowDef): string[] {
+    if (def.kind === 'transition-flow' || def.kind === undefined) return [];
+    const smDef = def as StateMachineWorkflowDef;
+    const failureStates = new Set(smDef.failureStates ?? []);
+    const violations: string[] = [];
+    for (const transition of smDef.transitions ?? []) {
+        if (!failureStates.has(transition.to)) continue;
+        if (transition.terminalReason === undefined || !isTerminalReason(transition.terminalReason)) {
+            violations.push(
+                `transition ${transition.from} -> ${transition.to} enters a failureState without a declared terminalReason` +
+                    ` — add \`terminalReason: <enum>\` (accepted: ${TERMINAL_REASONS.join(', ')}; 0937 R3)`,
+            );
+        }
+    }
+    return violations;
+}
+
+/**
+ * Decide-action rule (0941 R6): every `decide` action must parse against the runner's own
+ * {@link DecideOptionsSchema} — rejecting a missing `default`, a `default` outside `choices`
+ * (or outside yes/no for `noul`), a missing `resultFile`, and any other option-shape drift —
+ * before a run can start.
+ */
+export function collectDecideViolations(def: WorkflowDef): string[] {
+    const violations: string[] = [];
+    const visitAction = (stateId: string, action: ActionDef, idx: number): void => {
+        if (action.kind !== DECIDE_KIND) return;
+        const parsed = DecideOptionsSchema.safeParse(action.options ?? {});
+        if (!parsed.success) {
+            const location = `${stateId}/${DECIDE_KIND}[${idx}]`;
+            violations.push(
+                `Invalid decide action at ${location}: ${parsed.error.issues.map((i) => i.message).join('; ')}`,
+            );
+        }
+    };
+
+    if (def.kind === 'transition-flow' || def.kind === undefined) {
+        const flowDef = def as TransitionFlowWorkflowDef;
+        for (const node of flowDef.nodes ?? []) {
+            if (node.action) visitAction(node.id, node.action, 0);
+        }
+    } else {
+        const smDef = def as StateMachineWorkflowDef;
+        for (const state of smDef.states ?? []) {
+            for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
         }
     }
     return violations;
@@ -2624,6 +2741,20 @@ export class InvalidWorkflowRunIdError extends Error {
         super(`Invalid workflow run id: ${JSON.stringify(runId)}`);
         this.name = 'InvalidWorkflowRunIdError';
     }
+}
+
+/**
+ * `--agent fleet` selects the fleet executor surface (task 0942, ADR-126). 'fleet' is
+ * a surface, not an agent binary — left in `agent` it would never survive dispatch
+ * resolution, so it maps to the `executor` run var and is dropped from the agent
+ * ladder: the configured default executor then governs review/verify/implement if a
+ * declared fallback (`executorFallback: traditional`) runs. Any other `--agent`
+ * value, and explicit `--vars` `executor`, passes through untouched.
+ */
+function mapFleetExecutorVar(callerVars: Record<string, string> | undefined): Record<string, string> {
+    if (callerVars?.agent !== 'fleet') return callerVars ?? {};
+    const { agent: _agent, ...rest } = callerVars;
+    return { ...rest, executor: 'fleet' };
 }
 
 /**

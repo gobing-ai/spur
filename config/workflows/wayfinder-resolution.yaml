@@ -209,6 +209,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-wayfinder-precheck.status 2>/dev/null)" = PASS'
   - from: precheck
     to: failed
+    terminalReason: failed-check
     description: "Precheck FAIL — stop before delegation."
     guard:
       kind: always
@@ -221,6 +222,7 @@ transitions:
         command: 'test -s .spur/run/$__runId-wayfinder-answer.md'
   - from: investigate
     to: failed
+    terminalReason: failed-agent
     description: "Empty answer capture — investigate produced nothing to verify; stop rather than certify hollow evidence."
     guard:
       kind: shell
@@ -254,6 +256,7 @@ transitions:
         command: 'test "$__hitlAnswer" = yes'
   - from: approve
     to: cancelled
+    terminalReason: cancelled
     description: "Operator cancelled the research resolution."
     guard:
       kind: shell
@@ -261,6 +264,7 @@ transitions:
         command: 'test "$__hitlAnswer" = cancel'
   - from: approve
     to: failed
+    terminalReason: cancelled
     description: "Operator rejected the research resolution."
     guard:
       kind: shell
@@ -275,6 +279,7 @@ transitions:
         command: 'test "$(cat .spur/run/$__runId-wayfinder-final.status 2>/dev/null)" = PASS && test "$(cat .spur/run/$__runId-wayfinder-status.txt 2>/dev/null)" = done'
   - from: record
     to: failed
+    terminalReason: failed-check
     description: "Recording failed, was denied, or the task never reached done — stop without claiming completion."
     guard:
       kind: always

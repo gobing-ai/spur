@@ -82,8 +82,9 @@ verdict artifact so quality failures are not lost behind a requirements-only PAS
 
 Before declaring a task `done`, run this lightweight checklist. It catches the most common oversights that survive the formal pipeline gates:
 
-- [ ] All tests pass (`bun run test` exits 0).
-- [ ] Lint clean (`bun run lint` exits 0).
+- [ ] Check receipt `.spur/run/<wbs>-check-receipt.json` reports `reuse: true` for the current
+      digest via `quality-gate.ts status`; run `bun run spur-check` only when it reports stale or
+      missing (0940).
 - [ ] No `TODO` or `FIXME` without a linked task WBS.
 - [ ] `git status` shows only intentional changes (no debug artifacts, no temp files).
 - [ ] No `console.log` / `console.error` in production code (use the project logger).

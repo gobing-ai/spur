@@ -23,6 +23,7 @@ import type {
 import type { EventBus } from '@gobing-ai/ts-infra';
 import type { AgentExecutionEvent } from '../observability/agent-execution';
 import type { SteeringAck } from './steering';
+import { classifyTerminalReason } from './terminal-reason';
 
 /** The engine does not export its reseed-result type; derive it from the interface. */
 type ReseedResult = Awaited<ReturnType<WorkflowPersistenceAdapter['reseedRun']>>;
@@ -468,8 +469,26 @@ export class ObservableWorkflowAdapter implements WorkflowPersistenceAdapter {
         });
     }
 
-    async finalizeRun(runId: string, status: WorkflowStatus, completedAt: string): Promise<void> {
-        await this.inner.finalizeRun(runId, status, completedAt);
+    async finalizeRun(
+        runId: string,
+        status: WorkflowStatus,
+        completedAt: string,
+        fence?: { readonly ownerAttempt: string },
+        reason?: string,
+    ): Promise<void> {
+        // Engine 0.5.6 forwards the opaque engine reason; classify it here so the
+        // event consumers and `runs.terminal_reason` agree on the closed enum (0937 R4).
+        // The reason doubles as the failing action's error text (review P2#2), so pass
+        // it as errorText too — failed-timeout classification stays reachable.
+        await this.inner.finalizeRun(
+            runId,
+            status,
+            completedAt,
+            fence,
+            reason === undefined
+                ? undefined
+                : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
+        );
         await this.bus.emit('workflow.run.finalized', {
             ...this.envelope(runId, completedAt),
             status,

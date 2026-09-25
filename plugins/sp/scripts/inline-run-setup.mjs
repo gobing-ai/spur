@@ -29,7 +29,8 @@ function usage() {
   console.error("Usage: bun plugins/sp/scripts/inline-run-setup.ts --run-id <id> --file <definition> [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> " + "--status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]");
-  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--spur-bin <path>]");
+  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]");
+  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]");
   process.exit(2);
 }
 var SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -151,6 +152,17 @@ async function printFingerprint(taskFile, featureFile, spurBin) {
   return 0;
 }
 var CLOSE_STATUSES = new Set(["done", "failed", "paused"]);
+var TERMINAL_REASONS = new Set([
+  "done",
+  "paused-operator",
+  "failed-check",
+  "failed-agent",
+  "failed-timeout",
+  "failed-guard",
+  "cancelled",
+  "interrupted",
+  "retry-exhausted"
+]);
 var ACTION_STATUSES = new Set(["done", "failed"]);
 function runRecordLogPath(runDir, runId) {
   const markdownPath = join(runDir, `${runId}.md`);
@@ -187,7 +199,7 @@ async function runTraceMode(input) {
       const detail = failure;
       appendTraceFailureLine(input.runId, `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? "unknown error"}`);
     });
-    const result = input.close ? await writer.closeRun(input.runId, input.status) : await writer.recordAction({
+    const result = input.close ? await writer.closeRun(input.runId, input.status, undefined, input.reason) : await writer.recordAction({
       runId: input.runId,
       node: input.node,
       kind: input.kind,
@@ -215,6 +227,41 @@ async function runTraceMode(input) {
     projectDb?.close();
   }
 }
+async function runDecideMode(input) {
+  const decideFailed = (error) => {
+    process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}
+`);
+    return 1;
+  };
+  let outcome;
+  try {
+    const { entry, portable } = resolveAppEntry(input.spurBin);
+    const app = await import(entry);
+    const lib = await import(fileURLToPath(new URL("../lib/inline-run.generated.mjs", import.meta.url)));
+    const enabled = await lib.resolveDecideDecisionMakerEnabled(process.cwd(), portable ? { embeddedSchemas: lib.EMBEDDED_SPUR_SCHEMAS } : undefined);
+    outcome = await app.runDecideForInlineRun({
+      workdir: process.cwd(),
+      optionsFile: input.optionsFile,
+      enabled
+    });
+  } catch (error) {
+    return decideFailed(error instanceof Error ? error.message : String(error));
+  }
+  if (!outcome.ok)
+    return decideFailed(outcome.error ?? "decide failed without an error message");
+  process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, node: input.node, ...outcome })}
+`);
+  return await runTraceMode({
+    runId: input.runId,
+    close: false,
+    node: input.node,
+    kind: "decide",
+    status: "done",
+    ok: true,
+    durationMs: outcome.durationMs ?? 0,
+    spurBin: input.spurBin
+  });
+}
 async function main() {
   if (!process.versions.bun) {
     const child = spawnSync("bun", [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
@@ -231,9 +278,12 @@ async function main() {
   let featureFile = "";
   let action = false;
   let close = false;
+  let decide = false;
+  let optionsJson = "";
   let node = "";
   let kind = "";
   let status = "";
+  let reason = "";
   let okRaw = "";
   let durationRaw = "";
   let spurBin = getEnvVar("SPUR_BIN") ?? "";
@@ -253,12 +303,18 @@ async function main() {
       action = true;
     else if (argv[i] === "--close")
       close = true;
+    else if (argv[i] === "--decide")
+      decide = true;
+    else if (argv[i] === "--options-json")
+      optionsJson = argv[++i] ?? "";
     else if (argv[i] === "--node")
       node = argv[++i] ?? "";
     else if (argv[i] === "--kind")
       kind = argv[++i] ?? "";
     else if (argv[i] === "--status")
       status = argv[++i] ?? "";
+    else if (argv[i] === "--reason")
+      reason = argv[++i] ?? "";
     else if (argv[i] === "--ok")
       okRaw = argv[++i] ?? "";
     else if (argv[i] === "--duration-ms")
@@ -271,6 +327,15 @@ async function main() {
       usage();
     process.exit(await printFingerprint(taskFile, featureFile, spurBin));
   }
+  if (decide) {
+    if (action || close || fingerprint || file !== "" || taskFile !== "")
+      usage();
+    if (runId.trim() === "" || node.trim() === "" || optionsJson.trim() === "")
+      usage();
+    if (!SAFE_RUN_ID_RE.test(runId))
+      refuseUnsafeRunId(runId);
+    process.exit(await runDecideMode({ runId, node, optionsFile: optionsJson, spurBin }));
+  }
   if (action || close) {
     if (action && close)
       usage();
@@ -281,6 +346,12 @@ async function main() {
     if (close) {
       if (!CLOSE_STATUSES.has(status))
         usage();
+      if (reason.trim() === "") {
+        if (status === "failed")
+          usage();
+      } else if (!TERMINAL_REASONS.has(reason)) {
+        usage();
+      }
       process.exit(await runTraceMode({
         runId,
         close: true,
@@ -289,7 +360,8 @@ async function main() {
         status,
         ok: true,
         durationMs: 0,
-        spurBin
+        spurBin,
+        ...reason.trim() === "" ? {} : { reason }
       }));
     }
     if (node.trim() === "" || kind.trim() === "")

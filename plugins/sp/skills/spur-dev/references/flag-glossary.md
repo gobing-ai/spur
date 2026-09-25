@@ -69,6 +69,14 @@ inline is the default selector and omitted/explicit `inline` resolve identically
 the concrete coding-agent tool; `executor` remains the domain-layer role and is not a command flag.
 `inline` and `auto` are reserved values — config validation rejects an executor claiming either.
 
+**Fleet executor (0942, ADR-126, opt-in).** On the pipeline selectors (`dev-run`, `dev-runall`),
+`--agent fleet` maps the workflow run to the executor var `executor: 'fleet'`: every `agent.run`
+stage dispatches through the agent fleet control plane instead of spawning a subprocess, with a
+subprocess fallback only when the run declares `executorFallback: 'traditional'`; otherwise an
+unavailable fleet fails the stage loudly (0937 `failed-agent`). `fleet` is deliberately not part of
+the `<inline|auto|name>` selector grammar above — the value table and the executor precedence chain
+are unchanged. Contract: [fleet-config-declaration.md](../../../../../docs/design/fleet-config-declaration.md).
+
 #### `--inline` (removed — collapsed into `--agent`)
 
 **Anchor:** `#flag-inline` (stub retained to avoid dangling external links).

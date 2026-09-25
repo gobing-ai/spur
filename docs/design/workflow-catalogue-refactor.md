@@ -174,3 +174,34 @@ P1a/P1b/P1c are independent; P2 triage lanes need P1c; check dedup needs P1a. Bl
 No DB schema change beyond the terminal-reason column (migration 0049). That column needs an upstream
 `ts-dual-workflow-engine` release (facade `reason` + transition `terminalReason`) and a catalog pin
 bump from 0.5.2.
+
+## 10. Catalogue reconciliation
+
+Recorded by task 0946 (2026-09-25), applying the mechanical rule: `retire` requires zero real
+(non-dry, non-bookkeeping) runs in the window **and** (no live caller **or** an example-only role);
+fewer than 3 runs with live callers is `keep` plus a follow-up measurement note, never a retirement.
+Evidence: `bun scripts/spur-dev.ts real-run-cost --by-state --include-bookkeeping --since 2026-06-01
+--json` over the run-record plane (`.spur/spur.db`, 2026-09-25; raw payload
+`.spur/run/0946-real-run-cost.json`), plus a non-test caller grep under `plugins/`, `apps/cli/src`,
+`packages/app/src`, `scripts/`. Caller counts name non-test reference sites (code caller / command or
+skill instruction surface / config entry). Wall figures are seconds. Bookkeeping workflows
+(`task-lifecycle`, `feature-lifecycle`, 0937 `BOOKKEEPING_WORKFLOWS`) are judged on correctness only;
+their run rows are lifecycle transitions, not metric rollups.
+
+| Workflow | Decision | Evidence (window 2026-06-01 → 2026-09-25) | Live callers | Reason |
+| --- | --- | --- | --- | --- |
+| `task-pipeline` | **keep** | runs=9 (9 terminal, 0 dry) · agent.run median 0 · wall p50 4789s / p90 7983s · mix `done`×9 | ~30 (driver, services, workflow actions, `/sp:dev-run*`, agents) | The daily development spine; the only catalogue member with real traffic. 0940/0943 candidates own its measured refactors. |
+| `task-lifecycle` | **keep** | bookkeeping: 9 runs, all non-terminal transitions · wall n/a · mix {} (0937 separates bookkeeping rows) | 5 (`task.ts`, `pipeline-run-link.ts`, `planning-write-service.ts`, `lifecycle-adapter.ts`, `terminal-reason.ts`) | Correctness-judged (cost-exempt): externally driven TaskStatus FSM; zero terminal rows and zero `action_runs` are its correct shape. |
+| `feature-lifecycle` | **keep** | bookkeeping: 0 recorded runs in window (run-record plane) · wall n/a · mix {} | 4 (`lifecycle-adapter.ts`, `terminal-reason.ts`, README, cross-cutting ref) | Correctness-judged (cost-exempt): FeatureStatus FSM driven by `requestTransition`; its `verifying` entry owns the 0880 `feature-verification` wiring. |
+| `feature-verification` | **keep** + measurement note | runs=0 · median/p50/p90 n/a · mix {} | 4 (`feature-check.ts`, CLI wiring, receipt module, `feature-verification-steps.ts`) | Live caller is fail-closed (`feature-check.ts` refuses completion without its recorded PASS, 0880); zero recorded runs means the feature boundary has not closed since the run-record plane landed — measure at the next feature close, never retire on this window. |
+| `idea-pipeline` | **keep** | runs=0 in window · median/p50/p90 n/a · mix {} | ~15 (`task-service.ts`, idea-handoff modules, `/sp:dev-idea`/`/sp:dev-plan`, coverage/parity scripts, skill refs) | Planning entry surface with dense callers; its guard-legibility fix already shipped (0945 candidate, frozen truth-table parity). Zero recorded runs is a plane-gap, not absence of use. |
+| `wrapup-pipeline` | **keep** + measurement note | runs=0 in window · median/p50/p90 n/a · mix {} | 8 (`/sp:dev-wrap`, `/sp:dev-wrapall`, `/sp:dev-runall`, `wrapup-steps.ts`, drift probe, README, 2 skill refs) | Every task close routes here via `/sp:dev-wrap*`; the 0944 drift-probe candidate projects its doc-sync saving. Measurement note: record ≥3 real runs (post-promotion) before any shape change. |
+| `history-anatomy` | **keep** + measurement note | 0938/0944: 0 attributable runs in the run-record window; per-state rows absent, cache disposition not in `real-run-cost` (0944 receipt, finding F3) · median/p50/p90 n/a · mix {} | ~10 (history-anatomy skill + 3 refs, dogfood/session-review/spur-doctor/spur-composer skills, cache script, packaging) | Graph decision owned here per 0944 R5: on zero measured runs no graph change is justified — the ADR-079 cache branch stays, no enrichment rework. Measurement note: pre-0925 phase-plane history (7 `done`, last 2026-09-13, composition contract) predates the run-record plane; measure cache hit/miss from new runs. |
+| `pr-review` | **keep** + measurement note | runs=0 in window · median/p50/p90 n/a · mix {} (0866 already found zero real completions) | 6 (`/sp:dev-pr-review` spine SSOT, `slash-commands-service.ts`, `pr-reviewing.ts` + skill, roles ref, budget entry) | 0866 retained it because `dev-pr-review` declares it the spine SSOT — the caller half of the retirement test still fails. Measurement note: <3 runs with live callers ⇒ never retire (R4); record usage before any shape decision. |
+| `wayfinder-resolution` | **keep** + measurement note | runs=0 in run-record window · median/p50/p90 n/a · mix {} (0866 phase-plane: 1 non-dry `done`, 2026-07-19, 225s, across 6 runs) | 3 (wayfinder skill reference, README catalogue row, budget entry) | 1 real completion (<3) plus a live instruction surface (wayfinder skill) ⇒ keep by the mechanical rule. Measurement note: free-form `spur workflow run` usage is under-observed in the run-record plane; re-measure before any decision. |
+| `decision-routing-example` | **retire** | runs=0 in window (0 real, ever, in the run-record plane) · median/p50/p90 n/a · mix {} | 1 catalogue-row doc (README) + budget coverage entry + design/help docs; example-only role | Example-only authoring sample (0911/0921 disposition): no command, skill, agent or service invokes it; the R4 retire rule is met (zero runs AND example-only). YAML deleted, catalogue row and budget entry removed, budget/docs mentions rerouted; the 0911 decision-policy regression coverage moved with the YAML into the workflow-service test fixtures (`packages/app/tests/services/fixtures/decision-routing-example.yaml`). Recorded in `retirements[]` (`0946 (D64)`). |
+
+Post-reconciliation catalogue: 9 definitions. No `fix` decisions — every defect-bearing candidate
+surface already carries its measured fix as a D64 promotion candidate (0940/0943/0944/0945), and the
+remaining zero-run workflows show no defect evidence, only measurement gaps. `promotion check`
+confirms no parallel definition and no unrecorded retirement after the delete.

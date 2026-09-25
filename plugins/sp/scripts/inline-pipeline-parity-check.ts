@@ -45,11 +45,11 @@ const DOCUMENTED = {
         'file.read.into-var',
         'hitl.confirm',
         'hitl.input',
-        'hitl.select',
         'agent.run',
         'proof.fingerprint',
         'run.artifact',
         'command.gate',
+        'decide',
     ]),
     guards: new Set(['always', 'shell', 'action-ok', 'contract-violation']),
 } as const;

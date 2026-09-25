@@ -645,11 +645,12 @@ describe('idea-pipeline definition — 0887 robustness contract', () => {
 
     test('R4: profile=auto ac-generate guards conjunct the recorded coverage status', () => {
         const forward = guardCommand('ac-generate', 'system-design');
-        expect(forward).toContain('-idea-coverage.status');
-        expect(forward).toContain('test "$cov_status" = PASS');
-        expect(guardCommand('ac-generate', 'decompose')).toContain(
-            'test "$(cat .spur/run/$__runId-idea-coverage.status 2>/dev/null)" = PASS',
-        );
+        // 0945: coverage conjuncts via the derived readiness file (R2 writer folds ac-check AND
+        // coverage into PASS); guards never read the coverage status inline.
+        expect(forward).toContain('-idea-ac-ready.status');
+        expect(forward).not.toContain('-idea-coverage.status');
+        expect(guardCommand('ac-generate', 'decompose')).toContain('-idea-ac-ready.status');
+        // Retry/failed edges keep the direct dual-status pair (0945 changed only the route edges).
         for (const to of ['ac-generate', 'failed'] as const) {
             const command = guardCommand('ac-generate', to);
             expect(command).toContain('test "$ac_status" != PASS || test "$cov_status" != PASS');

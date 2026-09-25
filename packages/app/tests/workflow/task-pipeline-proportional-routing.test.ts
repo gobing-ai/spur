@@ -78,39 +78,57 @@ describe('task-pipeline proportional routing (task 0759, S5)', () => {
 
     test('R1/R2: test state branches proportionally while keeping safety floor', () => {
         const fromTest = def.transitions.filter((t) => t.from === 'test');
-        expect(fromTest.length).toBeGreaterThanOrEqual(4);
+        // 0943 review P3#2: exactly three edges — green→triage, red→test-fail-triage,
+        // corrupt-status defense→test-fix. The dead duplicate red edge was removed.
+        expect(fromTest.length).toBe(3);
 
-        // Fast path on green quality gate: bypasses review, goes directly to verify
-        const fastEdge = fromTest.find((t) => t.to === 'verify');
-        expect(fastEdge).toBeDefined();
-        const fastCmd = String(fastEdge?.guard?.options?.command ?? '');
-        expect(fastCmd).toContain('$wbs-test-gate.status');
-        expect(fastCmd).toContain('$mode" = fast');
+        // 0943 R1: on a green gate the proportional decision moved into the deterministic
+        // `triage` state — test routes there instead of picking the lane itself.
+        const passEdge = fromTest.find((t) => t.to === 'triage');
+        expect(passEdge).toBeDefined();
+        const passCmd = String(passEdge?.guard?.options?.command ?? '');
+        expect(passCmd).toContain('$wbs-test-gate.status');
+        expect(passCmd).toContain('= PASS');
 
-        // Safety path on green quality gate: proceeds to review
-        const safetyEdge = fromTest.find((t) => t.to === 'review');
-        expect(safetyEdge).toBeDefined();
-        const safetyCmd = String(safetyEdge?.guard?.options?.command ?? '');
-        expect(safetyCmd).toContain('$wbs-test-gate.status');
-        expect(safetyCmd).toContain('$mode" != fast');
+        // 0943 R3: a red gate lands in the failure-class router before the repair hop.
+        const failEdge = fromTest.find((t) => t.to === 'test-fail-triage');
+        expect(failEdge).toBeDefined();
+        expect(String(failEdge?.guard?.options?.command ?? '')).toContain('= FAIL');
 
-        // Red quality gate still routes to test-fix
-        const redEdge = fromTest.find(
+        // 0943 review P3#2: no direct red edge may exist — failure-class owns every red gate,
+        // and a restored `test → test-fix` FAIL edge would bypass it (dead today, live tomorrow).
+        const bypass = fromTest.find(
             (t) => t.to === 'test-fix' && String(t.guard?.options?.command ?? '').includes('FAIL'),
         );
-        expect(redEdge).toBeDefined();
+        expect(bypass).toBeUndefined();
+        // The repair hop is reached through the fix decision lane only.
+        const fixEdge = def.transitions.find((t) => t.from === 'test-fail-triage' && t.to === 'test-fix');
+        expect(fixEdge).toBeDefined();
+    });
+
+    test('R1/R2: triage forks proportionally — mode=fast bypasses review, anything else reviews', () => {
+        // 0943 R1/R2: the fork guards read the projected mode var and are exhaustive.
+        const fastEdge = def.transitions.find((t) => t.from === 'triage' && t.to === 'verify');
+        expect(fastEdge).toBeDefined();
+        expect(String(fastEdge?.guard?.options?.command ?? '')).toContain('$mode" = fast');
+
+        const safetyEdge = def.transitions.find((t) => t.from === 'triage' && t.to === 'review');
+        expect(safetyEdge).toBeDefined();
+        expect(String(safetyEdge?.guard?.options?.command ?? '')).toContain('$mode" != fast');
     });
 
     test('R1/R2: test-recheck state branches proportionally after fixall loop', () => {
         const fromRecheck = def.transitions.filter((t) => t.from === 'test-recheck');
 
-        const fastEdge = fromRecheck.find((t) => t.to === 'verify');
-        expect(fastEdge).toBeDefined();
-        expect(String(fastEdge?.guard?.options?.command ?? '')).toContain('$mode" = fast');
+        // 0943 R1: green after fixall routes into triage, same as the first gate pass.
+        const passEdge = fromRecheck.find((t) => t.to === 'triage');
+        expect(passEdge).toBeDefined();
+        expect(String(passEdge?.guard?.options?.command ?? '')).toContain('= PASS');
 
-        const safetyEdge = fromRecheck.find((t) => t.to === 'review');
-        expect(safetyEdge).toBeDefined();
-        expect(String(safetyEdge?.guard?.options?.command ?? '')).toContain('$mode" != fast');
+        // 0943 R3: still red routes into the failure-class router.
+        const failEdge = fromRecheck.find((t) => t.to === 'test-fail-triage');
+        expect(failEdge).toBeDefined();
+        expect(String(failEdge?.guard?.options?.command ?? '')).toContain('= FAIL');
     });
 
     test('R2: safety floor holds — proof bracket and verify are never bypassed', () => {

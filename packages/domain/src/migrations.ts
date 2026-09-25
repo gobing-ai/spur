@@ -308,6 +308,18 @@ UPDATE agent_executor_updates SET owner = 'quota', layer = 'project' WHERE owner
 `;
 
 /**
+ * DDL for the `runs` terminal-reason column (0937 R1): every closed run row carries a
+ * nullable `terminal_reason` — the closed enum from packages/app terminal-reason.ts.
+ * The engine's own schema (ts-dual-workflow-engine 0.5.6 `schema-sql.ts`) creates the
+ * column for new databases; this migration covers databases created before that.
+ * addColumnIfMissing guards with `terminal_reason`. Kept byte-compatible with
+ * `drizzle/0049_spur_cli_runs_terminal_reason.sql`.
+ */
+export const CLI_RUNS_TERMINAL_REASON_SCHEMA_SQL = `
+ALTER TABLE runs ADD COLUMN terminal_reason TEXT;
+`;
+
+/**
  * DDL for the `project_claims` table (0836, feature G62): one mutable holder per
  * `(project_path, slot)` — the runtime claim boundary that makes orchestrator
  * ownership exclusive across processes (R3). NOT append-per-run history (that is
@@ -1525,6 +1537,15 @@ export const CLI_MIGRATIONS: CliMigration[] = [
         sql: AGENT_EXECUTOR_UPDATES_OWNER_COLUMNS_SCHEMA_SQL,
         addColumnIfMissing: { table: 'agent_executor_updates', column: 'owner' },
     },
+    {
+        // 0937 R1: nullable `terminal_reason` on `runs` — every closed run row ends with
+        // a classified reason from the closed enum (packages/app terminal-reason.ts).
+        // addColumnIfMissing guards with `terminal_reason`; engine 0.5.6 schema creates
+        // it for new databases.
+        id: '0049_spur_cli_runs_terminal_reason',
+        sql: CLI_RUNS_TERMINAL_REASON_SCHEMA_SQL,
+        addColumnIfMissing: { table: 'runs', column: 'terminal_reason' },
+    },
 ];
 
 /** Filename marker for regenerated CLI-owned migrations. */
@@ -1754,6 +1775,11 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             migration.id === '0041_spur_cli_queue_jobs_deadline_lease_columns' &&
             !(await tableExists(adapter, 'queue_jobs'));
 
+        // 0049 ALTERs runs — same table-absence shape as 0041/0043: a journal whose
+        // foundation predates the runs table journals without executing.
+        const runsTerminalReasonSkip =
+            migration.id === '0049_spur_cli_runs_terminal_reason' && !(await tableExists(adapter, 'runs'));
+
         // 0043 ALTERs inbox_messages — same table-absence shape as 0041/0027.
         const inboxRequestKeySkip =
             migration.id === '0043_spur_cli_inbox_messages_request_key' &&
@@ -1815,6 +1841,7 @@ export async function applyCliMigrations(adapter: DbAdapter, migrations = CLI_MI
             !queueJobsActiveIndexSkip &&
             !schedulerCustomActiveIndexSkip &&
             !queueJobsDeadlineLeaseSkip &&
+            !runsTerminalReasonSkip &&
             !inboxRequestKeySkip &&
             !coordinationReceiptColumnsSkip &&
             !historyToolIdentitySkip &&

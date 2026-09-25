@@ -391,6 +391,7 @@ transitions:
         command: 'grep -q "^PASS$" .spur/run/$__runId-structure-gate.txt 2>/dev/null'
   - from: structure-gate
     to: failed
+    terminalReason: retry-exhausted
     description: Structure gate FAIL with the correction cap exhausted — never publish a malformed candidate.
     guard:
       kind: shell
@@ -418,6 +419,7 @@ transitions:
         command: '! tail -n 1 .spur/run/$__runId-validation.txt 2>/dev/null | grep -qx "Verdict: PASS" && test "$(cat .spur/run/$__runId-correction-count 2>/dev/null || echo 0)" -lt 2'
   - from: validate
     to: failed
+    terminalReason: retry-exhausted
     description: Validation FAIL with the correction cap exhausted — terminate without publishing.
     guard:
       kind: always

@@ -14,4 +14,5 @@ export declare const resolveWorkflowDefinition: typeof import('@gobing-ai/spur-a
 export declare const ArtifactDao: typeof import('@gobing-ai/spur-domain').ArtifactDao;
 export declare const RunDao: typeof import('@gobing-ai/spur-domain').RunDao;
 export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;
+export declare const resolveDecideDecisionMakerEnabled: typeof import('@gobing-ai/spur-config/loader').resolveDecideDecisionMakerEnabled;
 export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };

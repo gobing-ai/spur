@@ -219,6 +219,18 @@ function runInlineSmoke(
                 writeFileSync(join(cwd, resultFile), 'PASS\n');
                 continue;
             }
+            if (action.kind === 'decide') {
+                // 0943/0941: the smoke simulates the decisionMaker-off contract — runDecide
+                // always writes the schemaVersion-1 row with the degraded default value; the
+                // driver script (`inline-run-setup --decide`) owns the real execution.
+                const resultFile = expand(action.options?.resultFile ?? '', vars);
+                mkdirSync(dirname(join(cwd, resultFile)), { recursive: true });
+                writeFileSync(
+                    join(cwd, resultFile),
+                    `${JSON.stringify({ schemaVersion: 1, value: action.options?.default ?? '', degraded: true, reason: 'disabled' })}\n`,
+                );
+                continue;
+            }
             if (action.kind === 'shell') {
                 let command = expand(action.options?.command ?? '', vars);
                 if (command.includes('task-size-precheck.ts')) {
