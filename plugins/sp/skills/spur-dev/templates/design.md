@@ -5,26 +5,27 @@ status: proposed
 created_at: YYYY-MM-DD
 updated_at: YYYY-MM-DD
 related: []
+tags: []
 ---
 
 # <Specific non-UI contract or system design>
 
-## Scope and status
+## 1. Issue and scope
 
-<Surface covered and whether the content describes current behavior or a proposal. Link its feature, ADR, or plan when relevant.>
+<Specific issue or tasks this design addresses, observed impact, boundaries, and whether the solution is proposed or current. Link the owning records.>
 
-## Boundaries and flow
+## 2. Context and constraints
 
-<Participating modules, ownership, inputs, outputs, and data flow. Link to 03 for the wider architecture.>
+<Relevant current behavior, evidence for the issue, and constraints the solution must respect. Link to 03 for wider architecture.>
 
-## Contract and behavior
+## 3. Solution
 
-<Signatures, schemas, defaults, errors, and boundary behavior that readers need to implement or use the surface.>
+<Chosen approach and how it resolves the issue. Show ownership, boundaries, and flow; distinguish proposed behavior from implemented behavior.>
 
-## Invariants and compatibility
+## 4. Contract and compatibility
 
-<Properties that must hold, edge cases, compatibility, and migration behavior. Omit inapplicable parts.>
+<Observable inputs, outputs, defaults, errors, invariants, edge cases, and migration behavior needed to implement or use the solution. Omit inapplicable parts.>
 
-## Decisions and open questions
+## 5. Tradeoffs and open questions
 
-<Chosen approach and material tradeoffs. Link ADR decisions instead of restating them; distinguish unresolved questions.>
+<Why this solution was chosen, material costs or alternatives, and unresolved questions or follow-up. Link ADR decisions instead of restating them.>

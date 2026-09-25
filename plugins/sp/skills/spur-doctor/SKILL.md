@@ -73,11 +73,10 @@ proposals and no-ops, so an omitted file is visible.
 Compare each plan with the [plan template](../spur-dev/templates/plan.md) and each design with the
 [design template](../spur-dev/templates/design.md), using the
 [authoring guide](../spur-dev/references/document-authoring.md) for meaning. Look for missing or
-unsupported `kind`, title, status, dates or material related links; unclear purpose or evidence in
-a plan;
-unclear current/proposed status, boundaries, contracts, invariants or compatibility in a design;
-and a missing `04_DESIGN.md` pointer for a design satellite. These are **review prompts**, not
-format errors. Keep specialized sections required by a producing workflow.
+unsupported `kind`, title, status, dates, material related links or useful tags; unclear objective,
+premises, execution sequence or follow-up in a plan; unclear issue, context, solution, contract or
+compatibility in a design; and a missing `04_DESIGN.md` pointer for a design satellite.
+These are **review prompts**, not format errors. Keep specialized sections required by a producing workflow.
 
 Propose only evidence-backed, useful edits. A proposal names the exact file and heading or
 frontmatter field, cites a line and the governing rule, and says what can be inferred and what
