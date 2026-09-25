@@ -51,8 +51,15 @@ export interface ScanEnv {
     [key: string]: string | undefined;
 }
 
+export interface ScanIo {
+    out: (line: string) => void;
+    err: (line: string) => void;
+}
+
 export interface ScanOptions {
     cwd?: string;
+    /** Injectable output sinks; defaults to process streams (tests inject no-ops to keep reporter output clean). */
+    io?: ScanIo;
 }
 
 const MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
@@ -460,19 +467,19 @@ function loadVerdict(
     return JSON.parse(readFileSync(join(runDir, `${wbs}-verdict.json`), 'utf8'));
 }
 
-function scanMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEnv): number {
+function scanMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEnv, io: ScanIo): number {
     const task = loadTask(env, opts.spurBin, opts.wbs, opts.root);
     const runDir = join(opts.root, '.spur', 'run');
     mkdirSync(runDir, { recursive: true });
     const artifact = scanResiduals(opts.root, opts.wbs, opts.tmpDir, task.content, env);
     writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(artifact, null, 2)}\n`);
-    process.stdout.write(
+    io.out(
         `residual-scan: ${opts.wbs} blocking=${artifact.counts.blocking} deferrable=${artifact.counts.deferrable} advisory=${artifact.counts.advisory} housekeeping=${artifact.counts.housekeeping}\n`,
     );
     return 0;
 }
 
-function foldMode(opts: NonNullable<ReturnType<typeof parseArgs>>, _env: ScanEnv): number {
+function foldMode(opts: NonNullable<ReturnType<typeof parseArgs>>, _env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
     const scan = JSON.parse(readFileSync(join(runDir, `${opts.wbs}-residuals.json`), 'utf8')) as ResidualArtifact;
     const verdictPath = join(runDir, `${opts.wbs}-verdict.json`);
@@ -485,13 +492,13 @@ function foldMode(opts: NonNullable<ReturnType<typeof parseArgs>>, _env: ScanEnv
         `${JSON.stringify({ ...verdict, verdict: folded.verdict, checks: folded.checks }, null, 2)}\n`,
     );
     writeFileSync(findingsPath, folded.findings);
-    process.stdout.write(
+    io.out(
         `residual-fold: ${opts.wbs} verdict=${folded.verdict} residual-sweep=${folded.checks.find((c) => c.name === 'residual-sweep')?.status}\n`,
     );
     return 0;
 }
 
-function settleMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEnv): number {
+function settleMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEnv, io: ScanIo): number {
     const task = loadTask(env, opts.spurBin, opts.wbs, opts.root);
     const runDir = join(opts.root, '.spur', 'run');
     const scan = scanResiduals(opts.root, opts.wbs, opts.tmpDir, task.content, env);
@@ -502,7 +509,7 @@ function settleMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEn
         : {};
     if (deferred.length > 0 && prior.followUp === undefined) {
         if (task.featureId === '') {
-            process.stderr.write(
+            io.err(
                 `residual-settle: ${opts.wbs} deferrals pending but feature_id unknown; re-run: residual-scan settle ${opts.wbs}\n`,
             );
             return 0;
@@ -514,7 +521,7 @@ function settleMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEn
             opts.root,
         );
         if (created.status !== 0) {
-            process.stderr.write(`residual-settle: task create failed; re-run: residual-scan settle ${opts.wbs}\n`);
+            io.err(`residual-settle: task create failed; re-run: residual-scan settle ${opts.wbs}\n`);
             return 0;
         }
         let wbsNew = '';
@@ -530,9 +537,7 @@ function settleMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEn
             wbsNew = '';
         }
         if (wbsNew === '') {
-            process.stderr.write(
-                `residual-settle: could not read created task wbs; re-run: residual-scan settle ${opts.wbs}\n`,
-            );
+            io.err(`residual-settle: could not read created task wbs; re-run: residual-scan settle ${opts.wbs}\n`);
             return 0;
         }
         const bg = [
@@ -549,22 +554,18 @@ function settleMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEn
             opts.root,
         );
         if (upd.status !== 0) {
-            process.stderr.write(
-                `residual-settle: background write failed; re-run: residual-scan settle ${opts.wbs}\n`,
-            );
+            io.err(`residual-settle: background write failed; re-run: residual-scan settle ${opts.wbs}\n`);
             return 0;
         }
         prior.followUp = wbsNew;
-        process.stdout.write(`residual-settle: filed follow-up ${wbsNew} for ${deferred.length} deferred item(s)\n`);
+        io.out(`residual-settle: filed follow-up ${wbsNew} for ${deferred.length} deferred item(s)\n`);
     }
     // Cleanup: only regular files `<tmpDir>/<wbs>-*`. Never directories, never other prefixes.
     for (const path of listStagingResidue(opts.tmpDir, opts.wbs)) {
         try {
             rmSync(path, { force: true });
         } catch {
-            process.stderr.write(
-                `residual-settle: could not remove ${path}; re-run: residual-scan settle ${opts.wbs}\n`,
-            );
+            io.err(`residual-settle: could not remove ${path}; re-run: residual-scan settle ${opts.wbs}\n`);
             return 0;
         }
     }
@@ -572,7 +573,7 @@ function settleMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEn
     return 0;
 }
 
-function reportMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEnv): number {
+function reportMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEnv, io: ScanIo): number {
     const runDir = join(opts.root, '.spur', 'run');
     const verdict = loadVerdict(runDir, opts.wbs);
     const sweep = verdict.checks.find((c) => c.name === 'residual-sweep');
@@ -584,25 +585,27 @@ function reportMode(opts: NonNullable<ReturnType<typeof parseArgs>>, env: ScanEn
     const attempts = existsSync(attemptFile) ? Number.parseInt(readFileSync(attemptFile, 'utf8').trim() || '0', 10) : 0;
     const reportPath = join(runDir, `${opts.wbs}-residual-report.md`);
     writeFileSync(reportPath, renderReport(opts.wbs, blocking, Number.isNaN(attempts) ? 0 : attempts));
-    process.stdout.write(
-        `Recovery: fix the items in .spur/run/${opts.wbs}-residual-report.md, then /sp:dev-run ${opts.wbs}\n`,
-    );
+    io.out(`Recovery: fix the items in .spur/run/${opts.wbs}-residual-report.md, then /sp:dev-run ${opts.wbs}\n`);
     return 0;
 }
 
 export function main(argv: string[], env: ScanEnv = getEnvVars(), options: ScanOptions = {}): number {
+    const io: ScanIo = options.io ?? {
+        out: (line) => process.stdout.write(line),
+        err: (line) => process.stderr.write(line),
+    };
     const opts = parseArgs(argv);
     if (opts === null) {
-        process.stderr.write(`${RESIDUAL_SCAN_USAGE}\n`);
+        io.err(`${RESIDUAL_SCAN_USAGE}\n`);
         return 2;
     }
     const cwd = options.cwd ?? process.cwd();
     const resolved = { ...opts, root: opts.root.startsWith('/') ? opts.root : join(cwd, opts.root) };
-    if (resolved.mode === 'scan') return scanMode(resolved, env);
-    if (resolved.mode === 'fold') return foldMode(resolved, env);
-    if (resolved.mode === 'settle') return settleMode(resolved, env);
-    if (resolved.mode === 'report') return reportMode(resolved, env);
-    process.stderr.write(`${RESIDUAL_SCAN_USAGE}\n`);
+    if (resolved.mode === 'scan') return scanMode(resolved, env, io);
+    if (resolved.mode === 'fold') return foldMode(resolved, env, io);
+    if (resolved.mode === 'settle') return settleMode(resolved, env, io);
+    if (resolved.mode === 'report') return reportMode(resolved, env, io);
+    io.err(`${RESIDUAL_SCAN_USAGE}\n`);
     return 2;
 }
 

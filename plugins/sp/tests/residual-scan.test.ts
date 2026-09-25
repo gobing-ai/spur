@@ -247,9 +247,11 @@ describe('foldVerdict', () => {
     });
 });
 
+const SILENT = { io: { out: () => {}, err: () => {} } } as const;
+
 describe('CLI modes', () => {
     test('usage on bad args', () => {
-        expect(main([], {})).toBe(2);
+        expect(main([], {}, SILENT)).toBe(2);
     });
 
     test('scan via main writes artifact; report is no-op on passing sweep, writes on failing', () => {
@@ -262,7 +264,7 @@ describe('CLI modes', () => {
             );
             chmodSync(stub, 0o755);
             const argv = ['scan', '0949', '--spur-bin', stub, '--root', dir];
-            expect(main(argv, {})).toBe(0);
+            expect(main(argv, {}, SILENT)).toBe(0);
             const artPath = join(dir, '.spur', 'run', '0949-residuals.json');
             expect(existsSync(artPath)).toBe(true);
             const art = JSON.parse(readFileSync(artPath, 'utf8')) as ResidualArtifact;
@@ -275,7 +277,7 @@ describe('CLI modes', () => {
                     checks: [{ name: 'residual-sweep', status: 'pass', evidence: 'blocking=0' }],
                 }),
             );
-            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {})).toBe(0);
+            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
             expect(existsSync(join(dir, '.spur', 'run', '0949-residual-report.md'))).toBe(false);
             // failing sweep → report written
             writeFileSync(
@@ -286,7 +288,7 @@ describe('CLI modes', () => {
                 }),
             );
             writeFileSync(join(dir, '.spur', 'run', '0949-test-fix-attempt'), '2\n');
-            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {})).toBe(0);
+            expect(main(['report', '0949', '--spur-bin', stub, '--root', dir], {}, SILENT)).toBe(0);
             const report = readFileSync(join(dir, '.spur', 'run', '0949-residual-report.md'), 'utf8');
             expect(report).toContain('Attempt: 2');
             expect(report).toContain('review-finding');
@@ -318,7 +320,7 @@ describe('CLI modes', () => {
                 JSON.stringify({ verdict: 'PASS', checks: [{ name: 'tests-pass', status: 'pass', evidence: 'ok' }] }),
             );
             writeFileSync(join(runDir, '0949-test-gate.findings'), 'src/y.ts:1 ');
-            expect(main(['fold', '0949', '--root', dir], {})).toBe(0);
+            expect(main(['fold', '0949', '--root', dir], {}, SILENT)).toBe(0);
             const verdict = JSON.parse(readFileSync(join(runDir, '0949-verdict.json'), 'utf8')) as {
                 verdict: string;
                 checks: Array<{ name: string; status: string }>;
@@ -351,8 +353,8 @@ describe('CLI modes', () => {
             const tmpScoped = join(dir, 'tmpdir');
             mkdirSync(tmpScoped);
             const argv = ['settle', '0949', '--spur-bin', stub, '--root', dir, '--tmp-dir', tmpScoped];
-            expect(main(argv, {})).toBe(0);
-            expect(main(argv, {})).toBe(0);
+            expect(main(argv, {}, SILENT)).toBe(0);
+            expect(main(argv, {}, SILENT)).toBe(0);
             expect(existsSync(join(tmpScoped, '0949-leftover.txt'))).toBe(false);
             expect(existsSync(otherTmp)).toBe(true);
             // deferral path: mark the box deferrable via deferrals file, settle creates task once
@@ -367,10 +369,10 @@ describe('CLI modes', () => {
                 join(dir, '.spur', 'run', '0949-residual-deferrals.json'),
                 JSON.stringify([{ id: p3Id, reason: 'post-merge' }]),
             );
-            expect(main(argv, {})).toBe(0);
+            expect(main(argv, {}, SILENT)).toBe(0);
             const callsTxt = readFileSync(join(dir, 'calls.log'), 'utf8');
             expect(callsTxt).toContain('create');
-            expect(main(argv, {})).toBe(0);
+            expect(main(argv, {}, SILENT)).toBe(0);
             const callsAfterSecond = readFileSync(join(dir, 'calls.log'), 'utf8');
             expect(callsAfterSecond.split('\n').filter((l) => l.includes('create'))).toHaveLength(1);
             const residuals = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0949-residuals.json'), 'utf8')) as {
