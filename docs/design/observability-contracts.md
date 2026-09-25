@@ -3,8 +3,8 @@ kind: design
 title: "Observability and HTTP read contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-22
-related: ["0853", "0855", "0857", "0860", "0869"]
+updated_at: 2026-09-25
+related: ["0853", "0855", "0857", "0860", "0869", "0937"]
 tags: [contract, observability, server]
 ---
 
@@ -341,6 +341,13 @@ keyset `before`; `PhaseRunDao` / `TransitionRunDao` / `ActionRunDao` /
 `TaskRunLinkDao`). `RunStoreService({ getDb, secretValues? })` composes them and redacts.
 `summarizeActionResult(resultJson, secretValues?)` owns the trace-safe projection. `runsModule`
 maps HTTP ↔ service results only.
+
+**Terminal reason (0937).** Migration `0049_spur_cli_runs_terminal_reason` adds a nullable
+`runs.terminal_reason` column (the guarded-ALTER, table-absent-skip pattern of `runs.external_key`),
+holding the closed enum from `packages/app/src/workflow/terminal-reason.ts`; `RunDao.traceRowById`
+selects it. The HTTP DTOs above do not project it yet — exposing it is additive when a consumer
+needs it. Taxonomy, classifier and write-path ownership:
+[workflow catalogue refactor](workflow-catalogue-refactor.md) §3.
 
 <a id="team--message-http-routes-0256"></a>
 

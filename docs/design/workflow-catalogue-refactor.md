@@ -1,16 +1,16 @@
 ---
 kind: design
 title: "Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional"
-status: proposed
+status: implemented
 created_at: 2026-09-23
-updated_at: 2026-09-23
-related: [D64, "0937", "0938", "0939", "0940", "0941", "0942"]
+updated_at: 2026-09-25
+related: [D64, "0937", "0938", "0939", "0940", "0941", "0942", "0943", "0944", "0945", "0946"]
 tags: [system, D64, workflow]
 ---
 
 # Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional
 
-- **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64
+- **Status:** Implemented · **Date:** 2026-09-23 · **Feature:** D64
 - **Depends on:** D63, E7, H53, H1 (no implementation task starts before they are done)
 - **Decisions:** ADR-124 (check receipts), ADR-125 (`decide` action), ADR-126 (fleet executor surface)
 - **Extends:** [workflow execution economy](workflow-execution-economy.md) (ADR-117/118/119, promotion
@@ -93,7 +93,7 @@ and when slash commands (`/sp:dev-fixall`) or skills are composed in. `bun run s
 the `full` task-local chain; `spur-check-feature` stays the ADR-119 feature-scoped pass. A public
 `spur check` verb is **out of scope** unless separately consented.
 
-**Expected removal.** `verify`, `record` and `precheck` already never run the gate (audit 2026-09-23).
+**Removal.** `verify`, `record` and `precheck` already never run the gate (audit 2026-09-23).
 The real duplicates are (a) model-stage checklists that tell review agents to re-run `bun run test`
 (`gate-checklists.md`, `secu-review.md`) — they read the receipt instead — and (b) a `test-recheck`
 full gate after a fix pass that changed no tracked source (digest equals the last FAIL receipt),
@@ -161,7 +161,7 @@ Each item is a `config/workflow-candidates.json` record with pinned baseline and
 
 Per workflow: keep / fix / retire with evidence from the baseline report. Initial suspects:
 `pr-review`, `wayfinder-resolution`, `decision-routing-example`. Retirement deletes the YAML and
-reroutes callers (ADR-076 "delete, don't layer"). Task 0946 adds the §10 reconciliation table.
+reroutes callers (ADR-076 "delete, don't layer"); §10 records the outcome.
 
 ## 9. Sequencing and blast radius
 
@@ -171,9 +171,9 @@ reroutes callers (ADR-076 "delete, don't layer"). Task 0946 adds the §10 reconc
 
 P1a/P1b/P1c are independent; P2 triage lanes need P1c; check dedup needs P1a. Blast radius is
 `config/workflows/*`, `packages/app/src/workflow/*`, `plugins/sp/scripts/*`, `plugins/sp/skills/*`.
-No DB schema change beyond the terminal-reason column (migration 0049). That column needs an upstream
-`ts-dual-workflow-engine` release (facade `reason` + transition `terminalReason`) and a catalog pin
-bump from 0.5.2.
+The only DB schema change is the terminal-reason column (migration 0049), landed with the
+`ts-dual-workflow-engine` 0.5.6 release (facade `reason` + transition `terminalReason`) and its
+catalog pin bump.
 
 ## 10. Catalogue reconciliation
 

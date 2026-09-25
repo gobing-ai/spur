@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.53.0
+version: 1.54.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-24
+updated_at: 2026-09-25
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1099,11 +1099,10 @@ run outcomes and applies fallback policy; upstream A2 supplies validated provide
 Activation and limits are defined in [CLI contracts](design/cli-contracts.md#optional-decisionmaker-for-executed-hitl-actions)
 and [ADR-123](00_ADR.md#adr-123-optional-decisionmaker-policy-decorates-spurs-existing-hitl-responder).
 
-## 28. Workflow Catalogue Refactor — accepted design, not built (ADR-124/125/126)
+## 28. Workflow Catalogue Refactor — built (ADR-124/125/126; tasks 0937–0946)
 
-Feature D64's three choices are accepted and **not implemented**; nothing here is shipped behavior,
-and each is additive or opt-in, so the canonical catalogue of §20/§27 keeps running unchanged until
-its phase lands.
+Feature D64's three choices are implemented and each is additive or opt-in, so the canonical
+catalogue of §20/§27 keeps running unchanged by default.
 
 - **Check receipts (ADR-124).** One two-tier primitive owns task-local checking — `light` accumulates
   during development, `full` runs once at the task quality boundary. Its result is a receipt bound to
@@ -1117,7 +1116,7 @@ its phase lands.
   flag and reason to a declared `resultFile` that guards read, and falls back to a declared default
   when no backend is configured, the backend errors, or confidence is below threshold. It complements
   ADR-123, which decorates *pausing* HITL actions, and leaves deterministic facts with commands.
-  Inline and subprocess drivers must execute it through one application service for parity.
+  Inline and subprocess drivers execute it through one shared application service for parity.
 - **Fleet executor surface (ADR-126).** When `agent.fleet.enabled` and the operator selects it
   (`--agent fleet` or `executor: fleet`), `agent.run` dispatches through the G4 control plane (§17)
   and waits on the member's durable artifact, while inline and subprocess remain the default
@@ -1125,7 +1124,7 @@ its phase lands.
   the action never launches a member (ADR-116) and reviewer/verify stages keep fresh sessions
   (ADR-121).
 
-Mechanisms, per-phase sequencing and the measured-promotion gate:
+Mechanisms, the catalogue reconciliation table and the measured-promotion gate:
 [workflow catalogue refactor](design/workflow-catalogue-refactor.md).
 
 ## 29. Parallel Batch Execution — built (ADR-127; tasks 0931–0933)

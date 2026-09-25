@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.52.0
+version: 1.53.0
 owner: Robin Min
-updated_at: 2026-09-24
+updated_at: 2026-09-25
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1907,7 +1907,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 
 ## ADR-124: Task Checks Are Fingerprint-Bound Receipts Reused Across Stages
 
-- **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64
+- **Status:** Accepted · **Date:** 2026-09-23 · **Feature:** D64
 - **Decision:** Task-local checking runs through one two-tier primitive (`spur-check`: `light`
   accumulative during development, `full` once at the task quality boundary) whose result is a
   receipt bound to the shared `ProofInputFingerprint`. A later stage reuses a PASS receipt whose
@@ -1924,7 +1924,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 
 ## ADR-125: Fuzzy Workflow Branching Uses a Non-Pausing `decide` Action With a Deterministic Default
 
-- **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64
+- **Status:** Accepted · **Date:** 2026-09-23 · **Feature:** D64
 - **Decision:** Workflows express fuzzy classification through a first-class `decide` action that
   wraps upstream DecisionMaker (opt-in via `workflow.decideDecisionMaker`), writes its
   value/confidence/backend/degraded reason to a result file that guards read, and falls back to a declared default when no backend is configured, it errors, or
@@ -1940,7 +1940,7 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 
 ## ADR-126: The Agent Fleet Is an Opt-In Third Executor Surface for `agent.run`
 
-- **Status:** Proposed · **Date:** 2026-09-23 · **Feature:** D64
+- **Status:** Accepted · **Date:** 2026-09-23 · **Feature:** D64
 - **Decision:** When `agent.fleet.enabled` and the operator selects it (`--agent fleet` or
   `executor: fleet`), `agent.run` dispatches to a role-resolved fleet member through the G4 control
   plane and waits on its durable artifact; the traditional inline and subprocess surfaces stay

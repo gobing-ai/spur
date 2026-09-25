@@ -3026,3 +3026,231 @@ Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/67b2f60d-90a8-482
   writes); repair with `spur feature refresh --feature F96`.
 - **Verified clean:** no new public `spur` noun/verb; `01_PRD`/`02_ROADMAP` unaffected; key-doc
   frontmatter (`owns`/`authority`/`edit_rules`/`sync`) matches constitution §4.1.
+## Drift report — 2026-09-25 (wrapup run `f18dd06e`, batch 0937–0946)
+
+Drift probe: `clean=false` → doc-sync required. Repaired 4 findings; 1 reported open (out of key-doc remit).
+
+| # | Doc | Reality says | Doc said | Authority | Trigger | Repair |
+|---|-----|--------------|----------|-----------|---------|--------|
+| 1 | `03_ARCHITECTURE.md` §28 | ADR-124/125/126 shipped (batch 0937–0946) | "accepted design, **not built** … nothing here is shipped behavior" | 03 (§6.4) | T1 | Retitled "built (ADR-124/125/126; tasks 0937–0946)"; opening now states implemented/opt-in; two bullet tense fixes; version 1.53.0→1.54.0 |
+| 2 | `00_ADR.md` | Three decisions accepted and implemented | ADR-124/125/126 `Status: **Proposed**` — outside the register vocabulary (`Accepted`/`Accepted (design)`/`Superseded`/`Skipped`) | 00 (§6.1) | T1 | In-place editorial correction to `Accepted` (no addendum, §6.1); version 1.52.0→1.53.0 |
+| 3 | `design/workflow-catalogue-refactor.md` | All phases landed; §10 recorded | `status: proposed`, `- **Status:** Proposed`, "Task 0946 **adds** the §10 table", "**Expected** removal", "**needs** an upstream release" | 04 satellite (§6.5) | T3/T9 | `status: implemented`; `updated_at`→2026-09-25; `related` += 0943–0946; four stale future-tense statements made current |
+| 4 | `design/observability-contracts.md` | Migration 0049 adds nullable `runs.terminal_reason`; `RunDao.traceRowById` selects it; HTTP DTOs do **not** project it | Column absent from its owning satellite | 04 satellite (§6.5) | T3 | Added "Terminal reason (0937)" paragraph; `updated_at`→2026-09-25; `related` += 0937 |
+
+**Reported open (not edited):** `docs/help/cmd_workflow.md` catalogue table still lists `basic.yaml` and `feature-dev.yaml` — neither exists in `config/workflows/` (0866 retirees). Hand-maintained help doc, outside the key-doc remit; `help-doc-parity` checks flag sets only. Flagged by 0946's review as a doc-evolve follow-up — needs an operator scope call.
+
+**Zero-delta checks (with the commands that produced zero):**
+
+- `docs/04_DESIGN.md` — index row 66 pointer/title/indexed facts unchanged (§4.5 requires no ceremonial edit); `rg -n "D64|proposed|not built" docs/04_DESIGN.md` → one row, no status word.
+- Real CLI surface vs `docs/design/` — batch already synced `cli-contracts.md`, `fleet-config-declaration.md`, `workflow-composition-contract.md`; `rg -n "decideDecisionMaker|terminal_reason" docs/design/` → present in the owning D64 satellite.
+- §4.3 contract-verify — `00` authoritative/§6.1, `03` derived/§6.4, `04` derived/§6.5, `99` authoritative-on-process/§6.8 all match §4.1; `updated_at` refreshed only where content changed.
+- Config keys — `workflow.decideDecisionMaker` documented in `03 §28` + D64 satellite §6; `configuration-contracts.md` does not enumerate workflow booleans (no drift).
+- `run-record-contract.md` — `--close --reason` flows to the DB column, not `.state.json`; state-file field set unchanged (`grep` of the writer) → no drift.
+- Event catalog — `workflow.run.finalized` payload unchanged in `observability.ts` → no drift.
+
+**Gates:** `bun run lint` (biome 1110 files + typecheck, all 7 workspaces) PASS · `bun run link-check` PASS. Full suite not re-run: diff is markdown-only and biome ignores markdown, so no test surface changed. `git status` = the 4 intended files + the run artifact.
+
+**Skipped:** `docs/help/cmd_workflow.md` repair (out of remit, reported above) and ADR status addenda (status-vocabulary alignment is editorial per §6.1 — delivery evidence stays in the tasks).
+
+---
+
+# Working learnings — D64 batch (WBS 0937–0946)
+
+Measured workflow-catalogue refactor: conventions, errors fixed, patterns and gotchas.
+Sources: `docs/tasks5/0937…0946` (Q&A / Solution / Review), batch commit `4a8f7daa8`,
+wrapup run `f18dd06e-159c-4399-809f-dcb12e02b757`.
+
+## 2026-09-23 — refinement and design decisions
+
+### 0937 — closed terminal reason on every run
+
+- **Reason persistence belongs in the engine facade, not a Spur side table.** The engine owns
+  `finalizeRun`; a Spur table would be a second writer. `AGENTS.md` mandates fixing
+  `@gobing-ai/ts-*` facades rather than adding Spur workarounds.
+- **The engine reason stays an opaque string; Spur owns the enum.** Keeps ts-libs vocabulary-free
+  and makes classification an application concern (`packages/app/src/workflow/terminal-reason.ts`).
+- **Bookkeeping is a report-side constant, not a column.** The workflow name already determines it;
+  a column would be a redundant writer (`BOOKKEEPING_WORKFLOWS`).
+- **Legacy nulls read `unclassified`** — no backfill.
+- New `runs` columns follow the guarded-ALTER + table-absent-skip pattern (`runs.external_key`
+  precedent) and stay byte-compatible with the drizzle file.
+
+### 0938 — reproducible cost baseline
+
+- **Extend `scripts/commands/real-run-cost.ts`** rather than add a command or domain query: one
+  owner per metric, and the promotion measurement shape is reused.
+- **Retry = repeated state visit within a run** — deterministic from `transition_runs`.
+  `test-fix-attempt` files are ephemeral and absent from the DB.
+- **Nearest-rank percentiles** — deterministic, no floating-point interpolation.
+
+### 0939 — two-tier `spur-check` with fingerprint-bound receipts
+
+- **The plugin script cannot value-import `ProofInputFingerprint`** (plugin standalone contract).
+  Take the digest the pipeline already passes: `env.proofDigest` (captured by `proof.fingerprint`)
+  or `inline-run-setup --fingerprint`.
+- **Light-tier related tests use a filename mapping, not an import graph** — deterministic and
+  cheap; the full tier remains the safety net.
+- **A receipt is reusable only from the full tier** — preserves "review is entered only after a
+  green full gate".
+
+### 0940 — check-receipt reuse (measured candidate)
+
+- **Premise error corrected:** `verify`, `record` and `precheck` never ran the gate. The real
+  duplicates are model-stage checklists that re-run tests, and a no-progress `test-recheck`.
+- **No new YAML states.** The recheck skip lives in `quality-gate.ts`, which both surfaces already
+  share.
+
+### 0941 — non-pausing `decide` action
+
+- **v1 methods are `choice` and `noul` only**; `ask`/`score` are deferred until a candidate needs
+  them.
+- **Backends are whatever the installed DecisionMaker supports** (typesafe, laya-local). `fm-local`
+  does not exist and was not invented.
+- **Config key is `workflow.decideDecisionMaker`**, a sibling of `workflow.hitlDecisionMaker`; it
+  superseded the drafted `workflow.decide.enabled` so `WorkflowConfigSchema` keeps one naming
+  pattern.
+
+### 0942 — opt-in fleet executor for `agent.run`
+
+- **Surface parity is proven by a trace key-set test.** `inline-pipeline-parity-check` compares
+  action/guard kinds only and stays unchanged.
+- **`agent.run` never launches a fleet member** — it dispatches to running members only (ADR-116);
+  launch stays with the operator or fleet tooling.
+- **Fallback happens only when declared** (`executorFallback: traditional`); otherwise the stage
+  fails explicitly as `failed-agent`.
+
+### 0943 — triage lanes and failure-class routing
+
+- **Triage produces `mode` for the existing fast-path edges** — no new skip edge; reuses 0587
+  proportional routing and its route-reason log.
+- **Deterministic checks run before the model:** sensitive paths and diffs over 400 lines are
+  decided without `decide`.
+- **Failure class `retryable` still counts an attempt**, so the loop stays bounded by the existing
+  cap.
+
+### 0944 — skip clean model passes
+
+- **The drift probe produces `mode` for the existing fast-path edge** — no new edge.
+- **Skipping doc-sync also skips learnings capture** — accepted as a measured tradeoff in the
+  candidate verdict (if material, the verdict is `retire` or split learnings into cheap capture).
+- **history-anatomy is measurement only**; its graph decision moved to 0946.
+- **The task title was kept**; the narrowed scope is recorded in Background rather than a rename.
+
+### 0945 — idea-pipeline guard legibility
+
+- **Design-approval rejection maps to `retry-exhausted`** (the edge fires only after the revise
+  budget is spent). The closed enum has no `rejected`, and adding one would reopen 0937's enum.
+- **The truth-table test is written before the rewrite** — the regression proof that legibility
+  changed nothing.
+
+### 0946 — catalogue reconciliation
+
+- **Mechanical retire rule: zero real runs AND (no live caller OR example-only).** Reproducible,
+  and prevents cost-only retirement of a live surface.
+- **Bookkeeping workflows are judged on correctness only** — their runs are lifecycle transitions,
+  not work.
+- **This task owns the history-anatomy graph decision** (moved from 0944).
+- **`spur-check-feature` runs once, here** — the last D64 task.
+
+## 2026-09-24 — Q&A closure
+
+- Every D64 task's Q&A records "Design accepted (2026-09-23) … with ADR-124/125/126 at **Proposed**
+  status". That wording is historical at acceptance; after implementation the register status moves
+  to `Accepted` and the satellite to `implemented`. **Task corpus keeps the historical statement —
+  doc-evolve must not "fix" task records.**
+- The Q&A sections carry the load-bearing decisions (refuted premises, deferred items, naming);
+  the Solution `Deviations` paragraphs carry the shape changes. Both are the cheapest source of
+  learnings for a batch wrapup.
+
+## 2026-09-25 — implementation, review, doc-sync
+
+### 0937
+
+- **Upstream-first sequencing:** the `ts-dual-workflow-engine` 0.5.6 release (facade `reason` +
+  transition `terminalReason`) is a separate operator-authorized phase; the catalog pin bump is part
+  of the task.
+- **Deviation:** `finalizeRun` took the reason as the **5th** param (after the existing `fence`),
+  not the designed 4-arg shape — required for legacy-adapter assignability.
+- Decorators classify only `{status, engineReason}` (they hold no action context);
+  `failed-agent`/`failed-timeout` reach the column via declared YAML reasons or context-bearing
+  callers.
+- **The plugin-side enum is a copied literal** (standalone contract) — it needs a copy↔export parity
+  test (`inline-run-close-reason.test.ts`).
+- **Review fix:** `--close --status failed` without a reason (or with a non-enum reason) must exit
+  nonzero **before any write**.
+
+### 0938
+
+- **A "digest mismatch" review finding was rejected as a false positive:** the reviewer conflated
+  the gate-log hash with the proof-input fingerprint. Verify a fingerprint's provenance before
+  acting on a mismatch claim.
+- The `.md` twin of the baseline report was missing a section — keep the twin additive-only.
+
+### 0939
+
+- A **light-tier run after a full receipt demoted the receipt**; fixed with `preserveFullReceipt`.
+  Receipt tier must never regress.
+- Check truth keeps exactly one writer per task.
+
+### 0940
+
+- Comment placement drift plus a stale generated twin; no YAML change (dedup lives in the shared
+  script).
+
+### 0941
+
+- **Gate hardening spanned three hops.** An app-layer `loadSpurConfig` call violated the boundary
+  rule; the fix threads the flag as an explicit parameter from the composition boundary (facade
+  derives it via `resolveDecideDecisionMakerEnabled`).
+- A stale `inline-run-setup.mjs` twin and an example-YAML regression followed the guard-idiom
+  change — **regenerate twins and re-run the example workflows after a guard rewrite**.
+
+### 0942
+
+- **`fallbackReason` stamping could be bypassed** — stamp it at the single write point.
+
+### 0943
+
+- **Rename-only diffs bypassed the sensitive-path classifier**; fixed by expanding the diff path
+  set (`expandDiffPath`). Path-based classifiers must see both sides of a rename.
+- A **dead `test → test-fix` edge** was removed rather than left as graph noise.
+- Gitignored bundle twins went stale — regenerate after source changes.
+
+### 0944
+
+- **The probe fails safe:** an empty or unparseable Solution section marks the run dirty so
+  doc-sync still runs, rather than skipping it.
+- The doc-owned path list must mirror the constitution's ownership table, not an ad-hoc list.
+
+### 0945
+
+- **Out-of-contract design values fail open** — validate the enum at the seam.
+- Guard legibility came from named guard files plus a declared terminal reason on every failure
+  edge.
+
+### 0946
+
+- **Evidence snapshot drift:** re-pin the measurement window before publishing a decision table.
+- Retirements are recorded in `retirements[]`; a delete without that record is an unrecorded
+  retirement.
+- **Deferred finding:** `docs/help/cmd_workflow.md` still lists the 0866 retirees `basic.yaml` and
+  `feature-dev.yaml` (neither exists in `config/workflows/`). It is a hand-maintained help doc,
+  outside the key-doc remit, and `help-doc-parity` only checks flag sets — so it stays open.
+
+### Doc-sync (this wrapup pass)
+
+- **Drift found:** `03 §28` still read "accepted design, not built" while the batch shipped it;
+  ADR-124/125/126 were `Proposed` (outside the register's `Accepted` / `Accepted (design)` /
+  `Superseded` / `Skipped` vocabulary); the D64 satellite was `status: proposed` with future-tense
+  §8/§9; and `runs.terminal_reason` (migration 0049) was missing from its owning satellite.
+- **Repair:** in-place editorial status corrections (no addenda — §6.1), satellite
+  `status`/`updated_at`/`related`, and one schema paragraph in `observability-contracts.md`.
+- **`04_DESIGN.md` needed no edit:** its index row's pointer, title and indexed facts were
+  unchanged (§4.5) — a zero-delta, not an omission.
+- **Gotcha — rendered identifiers can lie.** The harness's bash output aliases repeated long tokens
+  in long outputs (e.g. `terminal` → `n`, which made `runs.terminal_reason` look like `runs.n`).
+  Never conclude a rename from rendered output: verify with `grep -c`, the `read` tool, or an
+  `edit` match (which fails loudly on aliased text).
+- **Scope discipline:** the doc-evolve operation owns the key documents (`00`–`05`, `99`,
+  `AGENTS.md`, `docs/design/*`). Findings outside that set (e.g. `docs/help/`) are reported, not
+  edited.
