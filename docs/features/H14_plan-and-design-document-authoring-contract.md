@@ -2,11 +2,11 @@
 schema_version: 1
 id: "H14"
 name: "Plan and design document authoring contract"
-status: backlog
+status: verifying
 priority: P2
 tags: []
 created_at: "2026-09-25T07:20:54.598Z"
-updated_at: "2026-09-25T07:21:19.639Z"
+updated_at: "2026-09-25T07:41:19.278Z"
 ---
 
 # H14: Plan and design document authoring contract
@@ -62,9 +62,13 @@ Feature: Plan and design document authoring contract
 | WBS | Task | Status |
 | --- | ---- | ------ |
 | 0954 | Define lightweight plan and design authoring templates and project guidance | done |
-| 0955 | Add read-only doctor guidance for legacy plan and design upgrades | todo |
+| 0955 | Add read-only doctor guidance for legacy plan and design upgrades | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
 
 ## History
+
+- 2026-09-25T07:41:17.085Z backlog → active (system)
+- 2026-09-25T07:41:19.278Z active → verifying (system)
+

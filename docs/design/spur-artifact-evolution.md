@@ -39,13 +39,13 @@ their owners: [CLI contracts](cli-contracts.md) (`workflow list` and `show`) and
 | `sp:spur-cli` | Verb, flag, output and exit semantics per noun, plus the per-noun procedures (ADR-054) | Cross-noun method |
 | `sp:spur-dev` | The planning → execution lifecycle | Composition or evaluation method |
 | `sp:spur-composer` | Select, compose, tune and promote artifacts; apply accepted proposals | Judge its own output; run recurring loops |
-| `sp:spur-doctor` | Evaluate artifacts from CLI evidence; reflect over history findings; propose changes | Any task, feature, rule or workflow write |
+| `sp:spur-doctor` | Evaluate corpus artifacts and plan/design Markdown from read-only evidence; reflect over history findings; propose changes | Any corpus or document write |
 | `sp:expert-spur` | One bounded corpus campaign per dispatch, over the three skills above | Lifecycle, batches, recurring loops, coordination dispatch, `spur agent loop` |
 | `sp:super-planner` | Batches, recurring evolution loops, multi-agent coordination | Corpus method |
 
 Composer and doctor link the `sp:spur-cli` references for verbs and existing per-noun procedures;
 they never restate a verb or flag catalog. They cover tasks, features, rules, workflows and agent
-specs; doctor also reads history.
+specs; doctor also reads history findings and plan/design Markdown.
 
 ## 3. Doctor evidence per noun
 
@@ -57,6 +57,7 @@ specs; doctor also reads history.
 | workflow | `spur workflow list --json`, `spur workflow validate --json`, `spur workflow trace --json`, the step profile (§10) |
 | agent spec | `spur agent list --specs --json` (§9) |
 | history | A `sp:history-anatomy` report, never raw history records |
+| plan/design Markdown | File content, constitution, spur-dev template, and inbound index/links |
 
 ## 4. Reflection map
 
@@ -79,19 +80,25 @@ derives new ones from raw records.
 
 Doctor returns a proposal table and writes nothing:
 
+The doctor also reviews existing `docs/plans/*.md` and `docs/design/*.md` against the lightweight
+`sp:spur-dev` templates. It reports complete path coverage, cites file lines and constitution
+rules, and proposes only history-preserving edits. A document author applies accepted rows in
+place using the spur-dev authoring guide; `sp:doc-evolve` checks affected key-document sync.
+Legacy Markdown remains readable without bulk migration or a strict format gate.
+
 | Column | Content |
 | --- | --- |
 | `key` | The finding key, or `<noun>:<id>:<check>` for an artifact finding |
-| `evidence` | The CLI output or report section the row rests on |
+| `evidence` | The CLI output, report section, or document line the row rests on |
 | `action` | One action class from §4 |
 | `change` | The proposed change, in one line |
-| `apply` | The `spur` verb or procedure that lands it |
+| `apply` | Corpus verb/procedure or the spur-dev authoring guide for document rows |
 | `verify` | The evidence to re-run afterwards |
 
-The operator accepts rows. Composer applies each accepted row through its `apply` route, then
-re-runs its `verify` evidence. A task row carries the finding `key` in its body, as the
-history-anatomy handoff route requires. There is no new artifact store: a caller that wants a
-record saves the table under `docs/reports/`.
+The operator accepts rows. Composer applies accepted corpus rows through their `apply` routes;
+document authors apply accepted document rows, then re-run their `verify` evidence. A task row
+carries the finding `key` in its body, as the history-anatomy handoff route requires. There is no
+new artifact store: a caller that wants a record saves the table under `docs/reports/`.
 
 ## 6. Workflow catalog and selection
 

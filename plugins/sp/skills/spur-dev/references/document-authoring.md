@@ -41,5 +41,6 @@ unknowns instead of guessing. Restructure only where clarity improves, and keep 
 heading when an anchor cannot be migrated safely. Update `updated_at` only for a substantive edit.
 Do not turn an old proposal into a claim about current behavior without checking the owning source.
 
-Accepted documentation edits follow `sp:doc-evolve` and the project constitution. No bulk
-conversion or strict format check is required to read or maintain existing documents.
+For a bounded, read-only review of legacy files, use `sp:spur-doctor`. Apply accepted document
+proposals in place using this guide, then use `sp:doc-evolve` to check affected key-document sync.
+No bulk conversion or strict format check is required to read or maintain existing documents.

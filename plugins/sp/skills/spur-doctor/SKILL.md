@@ -1,6 +1,6 @@
 ---
 name: spur-doctor
-description: "Evaluate spur artifacts from read-only CLI evidence — tasks, features, rules, workflows, agent specs — reflect over sp:history-anatomy findings, and return a proposal table. Diagnoses spur artifacts, not runtime environments (that is spur agent doctor). Triggers: check artifact health, propose evolution, reflect over history findings."
+description: "Evaluate spur artifacts and plan/design Markdown from read-only evidence, reflect over sp:history-anatomy findings, and return a proposal table. Diagnoses artifacts, not runtime environments (that is spur agent doctor). Triggers: check artifact health, propose evolution, review legacy documents."
 license: Apache-2.0
 version: 1.0.0
 metadata:
@@ -26,16 +26,19 @@ see_also:
 # sp:spur-doctor — evaluate spur artifacts and propose changes
 
 One cross-noun method (ADR-114, [spur artifact evolution](../../../../docs/design/spur-artifact-evolution.md)
-§2): gather **read-only CLI evidence** about tasks, features, rules, workflows and agent specs,
-**reflect** over `sp:history-anatomy` findings, and return a **proposal table**. It diagnoses spur
-**artifacts** — definitions, rules, corpus records — not runtime environments: whether an agent
+§2): gather **read-only evidence** about tasks, features, rules, workflows, agent specs, and
+plan/design Markdown; **reflect** over `sp:history-anatomy` findings; and return a
+**proposal table**. It diagnoses spur artifacts — definitions, rules, corpus records and documents —
+not runtime environments: whether an agent
 binary, host session or tool install is healthy is `spur agent doctor`'s job, not this skill's.
 
 ## Read-only invariant
 
-The doctor **writes nothing and names no mutating verb**. It performs no task, feature, rule or
-workflow write — the operator accepts rows and `sp:spur-composer`
-([../spur-composer/SKILL.md](../spur-composer/SKILL.md)) applies them. A caller that wants a
+The doctor **writes nothing and names no mutating verb**. It performs no task, feature, rule,
+workflow or document write. The operator accepts rows; `sp:spur-composer`
+([../spur-composer/SKILL.md](../spur-composer/SKILL.md)) applies corpus rows, while a document
+author applies plan/design rows using the
+[spur-dev authoring guide](../spur-dev/references/document-authoring.md). A caller that wants a
 record saves the returned table under `docs/reports/`; the doctor creates no artifact store.
 
 - **History enters only through `sp:history-anatomy` findings.** Raw history records stay out
@@ -55,8 +58,37 @@ record saves the returned table under `docs/reports/`; the doctor creates no art
 | workflow | `spur workflow validate --json` (findings by `level`), `node "$(superskill script path sp workflow-step-profile.mjs)" <workflow> --json` |
 | agent spec | `spur agent list --specs --json` |
 | history | A `sp:history-anatomy` report ([../history-anatomy/SKILL.md](../history-anatomy/SKILL.md)), never raw history records |
+| plan/design Markdown | The file itself, the project constitution, the relevant spur-dev template, and inbound index/links; no new CLI needed |
 
 Every row of a proposal cites the evidence it rests on. No anchor, no proposal.
+
+## Legacy plan and design review
+
+Enumerate `docs/plans/*.md` and `docs/design/*.md` with `rg --files` and sort the paths. Include
+every Markdown path in the review; JSON and other files are outside this contract. For a large set,
+the caller may split the frozen list into bounded path groups and combine their coverage lists.
+Read each file and the project constitution before judging it. Report scanned paths and counts of
+proposals and no-ops, so an omitted file is visible.
+
+Compare each plan with the [plan template](../spur-dev/templates/plan.md) and each design with the
+[design template](../spur-dev/templates/design.md), using the
+[authoring guide](../spur-dev/references/document-authoring.md) for meaning. Look for missing or
+unsupported `kind`, title, status, dates or material related links; unclear purpose or evidence in
+a plan;
+unclear current/proposed status, boundaries, contracts, invariants or compatibility in a design;
+and a missing `04_DESIGN.md` pointer for a design satellite. These are **review prompts**, not
+format errors. Keep specialized sections required by a producing workflow.
+
+Propose only evidence-backed, useful edits. A proposal names the exact file and heading or
+frontmatter field, cites a line and the governing rule, and says what can be inferred and what
+needs an operator answer. Preserve filenames, anchors, original dates, decisions and historical
+status. Do not silently promote a proposal to current behavior, invent metadata, or rewrite a
+whole file to fit a template. A conforming or intentionally specialized file is a no-op.
+
+The `apply` cell for a document row points to the spur-dev authoring guide; the author edits an
+accepted row in place, then runs `sp:doc-evolve` sync-check for affected key documents and verifies
+links, headings, frontmatter and the `04` index when applicable. No bulk conversion or strict
+validator is required for old files.
 
 ## Workflow step profile and cache-window flags
 
@@ -114,25 +146,26 @@ Return one row per actionable finding, with exactly these columns:
 | Column | Content |
 | --- | --- |
 | `key` | The finding key, or `<noun>:<id>:<check>` for an artifact finding |
-| `evidence` | The CLI output or report section the row rests on |
+| `evidence` | CLI output, report section, or document path and line the row rests on |
 | `action` | One action class from the reflection map (or the per-noun evaluation) |
 | `change` | The proposed change, in one line |
-| `apply` | The `spur` verb or composer procedure that lands it |
+| `apply` | The `spur`/composer route for corpus rows or the spur-dev authoring guide for document rows |
 | `verify` | The evidence to re-run after applying |
 
 Rules:
 
-- The `apply` route is always a `spur` verb or a gated composer step — never a raw file edit this
-  skill performs. Shared-workflow rows route through the composition ladder's shared step.
+- Corpus `apply` routes use a `spur` verb or gated composer step; document rows use the spur-dev
+  authoring guide. The doctor itself never edits either surface. Shared-workflow rows route
+  through the composition ladder's shared step.
 - A `task` row carries the finding `key` in the task body (the history-anatomy handoff route).
 - Rows are proposals only. No applied change, diff, or command output claimed as run.
 
 ## What this skill is not
 
-- **Not the applier.** `sp:spur-composer` applies accepted rows; this skill performs no
-  task/feature/rule/workflow write.
+- **Not the applier.** `sp:spur-composer` applies accepted corpus rows and document authors apply
+  accepted document rows; this skill performs no write.
 - **Not a runtime doctor.** Environment, binary and session readiness belong to
-  `spur agent doctor`; this skill diagnoses spur artifacts from CLI evidence.
+  `spur agent doctor`; this skill diagnoses artifacts from read-only evidence.
 - **Not a history interpreter.** Findings come from `sp:history-anatomy` reports, never from raw
   history records.
 - **Not a loop.** Recurring evolution passes belong to `sp:super-planner` or a workflow.

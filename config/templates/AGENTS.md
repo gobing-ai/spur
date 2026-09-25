@@ -97,7 +97,7 @@ sync and contract checks. Follow host/operator precedence.
 
 For new `docs/plans/` working records and `docs/design/` non-UI satellites, use the
 `sp:spur-dev` plan/design templates and document-authoring reference. Preserve legacy files' history
-and headings when revising them.
+and headings when revising them; `sp:spur-doctor` can propose safe upgrades.
 
 ### Doc map
 
