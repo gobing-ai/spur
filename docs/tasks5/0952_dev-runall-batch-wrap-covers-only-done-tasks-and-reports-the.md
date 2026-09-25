@@ -4,7 +4,7 @@ name: dev-runall batch wrap covers only done tasks and reports the rest
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.121Z
-updated_at: "2026-09-24T22:53:35.036Z"
+updated_at: "2026-09-25T00:21:47.738Z"
 feature_id: F96
 priority: P2
 tags:
@@ -80,26 +80,15 @@ Rationale: driver-side filtering preserves wrapup-pipeline's hard refusal of non
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | execution-batch.md Step 6 (done-subset vars.tasks; conditional vars.feature with unfinished note; empty-subset skip with reason; driver-side filtering) |
-| R2 | MET | execution-batch.md Step 5 "Excluded from wrap" block with C6 recovery line for residual-reported tasks and router A-row for others |
-| R3 | MET | dev-runall.md:23 flag row fixed; dev-operations.md §13 runall entry mirrored; help doc --next chain section updated; validate-commands 40/40 |
-| R7 — Batch wrap covers only completed tasks | MET | feature scenario coverage — see task requirement rows above |
+| R1 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:482` Step 6 batch wrap over done subset only |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:448` excluded from wrap table with C6 and A-row recovery commands |
+| R3 | MET | `plugins/sp/commands/dev-runall.md:23` flag row, `plugins/sp/skills/spur-dev/references/dev-operations.md:355` runall entry, and help doc |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | bun test plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts: 20 pass; bun run validate-commands: 40 pass; Step 5/6 + flag-row/dev-operations/help surfaces in tree; spur-check PASS 8941 tests / 0 fail |
+| AC1 | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1` passing tests |
+| Scenario: R7 — Batch wrap covers only completed tasks | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:1` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Review
-
-<!-- spur:record-review -->
-
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### Review
 
@@ -111,8 +100,8 @@ Rationale: driver-side filtering preserves wrapup-pipeline's hard refusal of non
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
 
-| R7 — Batch wrap covers only completed tasks | MET | feature scenario coverage — see task requirement rows above |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->

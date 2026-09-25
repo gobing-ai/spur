@@ -4,7 +4,7 @@ name: "Residual scanner script: scan, fold, settle and report modes"
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.116Z
-updated_at: "2026-09-24T22:53:50.770Z"
+updated_at: "2026-09-25T00:20:29.623Z"
 feature_id: F96
 priority: P2
 tags:
@@ -92,31 +92,19 @@ Rationale: scan is observe-only (ADR-071) — writes only under `.spur/run/`; se
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | plugins/sp/scripts/residual-scan.ts:494-575+ (parseArgs dispatch scan/fold/settle/report; main+import.meta.main); modes test-driven via CLI tests |
-| R2 | MET | scanMode writes only .spur/run/ artifacts (residuals.json, report.md); tests/residual-scan.test.ts diff-markers + review tests confirm observe-only behavior incl. missing-base flag |
-| R3 | MET | classify() P1/P2 blocking, P3 deferrable w/ reason, P4+none advisory; unchecked-box and staging-residue blocking; tests: classification/deferral + stable ids |
-| R4 | MET | foldVerdict replaces residual-sweep check, PASS->PARTIAL only when blocking>0, anchors merged/sorted/cap 20; test 'fold is idempotent' asserts stable second fold |
-| R5 | MET | settleMode: single followUp (prior.followUp guard), Background via --from-file, re-run hint on all 5 failure paths, cleanup scoped <tmpDir>/<wbs>-* regular files; test 'settle files follow-up once (idempotent) and cleans only wbs-prefixed tmp files' |
-| R6 | MET | reportMode renders counts+table, no-op exit 0 on passing sweep; test 'report is no-op on passing sweep, writes on failing' |
-| R7 | MET | config/plugin-scripts.json standard entry + twin; package.json build:scripts convert; script-contract-check PASS (26 scripts, 0 violations); verdict-schema.md residual-sweep row |
-| R1 — Deterministic residual scan classifies task leftovers | MET | feature scenario coverage — see task requirement rows above |
+| R1 | MET | `plugins/sp/scripts/residual-scan.ts:494` CLI entry points and pure exports pass unit tests |
+| R2 | MET | `plugins/sp/scripts/residual-scan.ts:463` scanMode writes .spur/run/<wbs>-residuals.json with categories and missing base flag |
+| R3 | MET | `plugins/sp/scripts/residual-scan.ts:274` classify maps P1/P2/unchecked to blocking, P3/diff-marker deferrable with reason, P4 advisory |
+| R4 | MET | `plugins/sp/scripts/residual-scan.ts:310` foldVerdict replaces residual-sweep check, merges findings and downgrades PASS to PARTIAL when blocking > 0 |
+| R5 | MET | `plugins/sp/scripts/residual-scan.ts:494` settleMode creates follow-up task, writes Background, cleans staging files |
+| R6 | MET | `plugins/sp/scripts/residual-scan.ts:575` reportMode writes .spur/run/<wbs>-residual-report.md on failing residual check |
+| R7 | MET | `config/plugin-scripts.json:76` and `plugins/sp/skills/code-verification/references/verdict-schema.md:133` register script and document residual-sweep |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): 19 pass / 0 fail; repo gate .spur/run/0949-test-gate.status=PASS (8935 tests, proof-digest sha256:cf4c9f43...) |
+| AC1 | MET | test | `plugins/sp/tests/residual-scan.test.ts:1` (19 passing tests) |
+| Scenario: R1 — Deterministic residual scan classifies task leftovers | MET | test | `plugins/sp/tests/residual-scan.test.ts:1` (19 passing tests) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Review
-
-<!-- spur:record-review -->
-
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:cf4c9f4368e77dd90ebb5fb54b69d15bc8483974f894114820112ac4fa2b89a8 |
 
 ### Review
 
@@ -128,9 +116,8 @@ Rationale: scan is observe-only (ADR-071) — writes only under `.spur/run/`; se
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:cf4c9f4368e77dd90ebb5fb54b69d15bc8483974f894114820112ac4fa2b89a8 |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=3 housekeeping=0 |
 
-| R1 — Deterministic residual scan classifies task leftovers | MET | feature scenario coverage — see task requirement rows above |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->

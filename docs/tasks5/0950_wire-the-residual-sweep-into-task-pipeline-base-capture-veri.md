@@ -4,7 +4,7 @@ name: "Wire the residual sweep into task-pipeline: base capture, verify fold, do
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.119Z
-updated_at: "2026-09-24T22:53:50.496Z"
+updated_at: "2026-09-25T00:20:39.524Z"
 feature_id: F96
 priority: P2
 tags:
@@ -102,35 +102,24 @@ Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bin
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | task-pipeline.yaml precheck F96 R1 shell: '[ -f ".spur/run/$wbs-base.sha" ] \|\| git rev-parse HEAD > ...' (resume-safe); resilience test 'precheck captures base.sha only when absent' |
-| R2 | MET | task-pipeline.yaml verify: hard scan+fold shell ordered after 'task verdict' and before '+ {proof:' jq bind (resilience test asserts index ordering, fail-closed exit, superskill twin string); blocking residual → fold rewrites verdict PASS→PARTIAL → existing verify→test-fix edge |
-| R3 | MET | test-fix separate shell appends '-residuals.json' block to '-test-gate.log'; fold merges anchors into '-test-gate.findings'; dev-fixall.md Implementation documents residual fix targets + residual-deferrals.json {id, reason} (P3/markers only) |
-| R4 | MET | done onEnter soft settle shell (exit 0, re-run hint) before command.gate transition; resilience test asserts shellCommands('done')[0] contains settle + soft exit |
-| R5 | MET | failed state gained onEnter soft report shell (exit 0); resilience test 'failed renders the residual report as a soft action'; task stays wip |
-| R6 | MET | build:bundle regenerated bundle (6 residual-scan refs); spur-check PASS 8940 tests / 510 files / 0 fail; post-rules 2/2; 5 new resilience tests + 2 smoke stub blocks green |
-| R2 — In-scope residuals downgrade a PASS verdict | MET | feature scenario coverage — see task requirement rows above |
-| R3 — Existing remediation loop fixes residuals within budget | MET | feature scenario coverage — see task requirement rows above |
-| R4 — Deferrable leftovers become linked follow-up tasks | MET | feature scenario coverage — see task requirement rows above |
-| R5 — Unfixable leftovers end in an honest routable terminal state | MET | feature scenario coverage — see task requirement rows above |
+| R1 | MET | `config/workflows/task-pipeline.yaml:221` precheck captures base.sha only when absent (resume-safe) |
+| R2 | MET | `config/workflows/task-pipeline.yaml:637` verify hard scan+fold shell between task verdict and jq proof bind |
+| R3 | MET | `config/workflows/task-pipeline.yaml:454` test-fix separate shell appends residuals to log; `plugins/sp/commands/dev-fixall.md:60` documents deferrals |
+| R4 | MET | `config/workflows/task-pipeline.yaml:715` done onEnter soft settle shell |
+| R5 | MET | `config/workflows/task-pipeline.yaml:762` failed onEnter soft report shell |
+| R6 | MET | `apps/cli/config/workflows/task-pipeline.yaml:637` and `plugins/sp/tests/task-pipeline-resilience.test.ts:292` bundled copies and resilience tests |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | resilience verify-ordering test + (cd plugins/sp && bun test tests/task-pipeline-residual tests green); repo gate .spur/run/0950-test-gate.status=PASS (8940 tests, digest sha256:6fde54d8...) — fold downgrade path exercised at unit level in residual-scan.test.ts |
-| AC2 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): fold downgrade + anchors merge; test-fix hands residuals.json + merged anchors to fixall within qualityGateMaxFixAttempts (task-pipeline.yaml test-fix; dev-fixall.md) |
-| AC3 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): settle creates single linked follow-up once (idempotence); done settle wiring (task-pipeline.yaml done state) |
-| AC4 | MET | test | (cd plugins/sp && bun test tests/residual-scan.test.ts): report writes routable report + re-run hint, no-op exit 0 on passing sweep; failed onEnter wiring (task-pipeline.yaml) |
+| AC1 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:292` verify ordering test passes |
+| AC2 | MET | test | `plugins/sp/tests/residual-scan.test.ts:250` test-fix remediation test passes |
+| AC3 | MET | test | `plugins/sp/tests/residual-scan.test.ts:316` settle follow-up creation test passes |
+| AC4 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:333` failed onEnter report test passes |
+| Scenario: R2 — In-scope residuals downgrade a PASS verdict | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:292` |
+| Scenario: R3 — Existing remediation loop fixes residuals within budget | MET | test | `plugins/sp/tests/residual-scan.test.ts:250` |
+| Scenario: R4 — Deferrable leftovers become linked follow-up tasks | MET | test | `plugins/sp/tests/residual-scan.test.ts:316` |
+| Scenario: R5 — Unfixable leftovers end in an honest routable terminal state | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:333` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Review
-
-<!-- spur:record-review -->
-
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### Review
 
@@ -142,11 +131,8 @@ Rationale: the fold rewrites the verdict artifact BEFORE the jq bind, so the bin
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
 
-| R2 — In-scope residuals downgrade a PASS verdict | MET | feature scenario coverage — see task requirement rows above |
-| R3 — Existing remediation loop fixes residuals within budget | MET | feature scenario coverage — see task requirement rows above |
-| R4 — Deferrable leftovers become linked follow-up tasks | MET | feature scenario coverage — see task requirement rows above |
-| R5 — Unfixable leftovers end in an honest routable terminal state | MET | feature scenario coverage — see task requirement rows above |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->

@@ -4,7 +4,7 @@ name: Residual sweep for standalone verify, next-router C6 recovery row, and own
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.120Z
-updated_at: "2026-09-24T22:53:18.282Z"
+updated_at: "2026-09-25T00:21:15.124Z"
 feature_id: F96
 priority: P2
 tags:
@@ -92,29 +92,18 @@ Rationale: shipped surfaces reference the script only via `superskill script pat
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | code-verification/SKILL.md Step 10 (scan+fold between verdict write and record; node twin via superskill script path; settle on done); dev-verify.md/dev-verifyall.md Implementation bullets; validate-commands 40/40 |
-| R2 | MET | routing-table.md C6 row + precedence note; routing-table-parity.test.ts 'C6 residual-failure row is a HITL STOP' green |
-| R3 | MET | docs/00_ADR.md ADR-071 dated note; help doc Leftovers subsection; task-residual-sweep.md status: shipped-design |
-| R6 — Next-router routes residual-failed tasks to recovery | MET | feature scenario coverage — see task requirement rows above |
-| R8 — Owning documents describe the residual contract | MET | feature scenario coverage — see task requirement rows above |
+| R1 | MET | `plugins/sp/skills/code-verification/SKILL.md:255` Step 10 scan+fold, dev-verify.md:39 and dev-verifyall.md:69 residual sweep wiring |
+| R2 | MET | `plugins/sp/skills/next-router/references/routing-table.md:116` row C6 HITL STOP for failing residual-sweep check with recovery |
+| R3 | MET | `docs/00_ADR.md:812` ADR-071 note, `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:240` Leftovers subsection, `docs/design/task-residual-sweep.md:2` shipped-design |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | (cd plugins/sp && bun test tests/routing-table-parity.test.ts): 5 pass; fold downgrade behavior owned by residual-scan.test.ts fold tests (PASS to PARTIAL on blocking residual); standalone Step 10 wiring |
-| AC2 | MET | test | routing-table-parity C6 STOP guard test (no auto-dispatch); precedence note above C2/C3/C5 |
-| AC3 | MET | test | bun run validate-commands: 40 commands pass all 5 gates (doc surfaces parse clean); ADR-071 note + help Leftovers + shipped-design flip all in tree |
+| AC1 | MET | test | `plugins/sp/tests/routing-table-parity.test.ts:119` fold downgrade path exercised at unit level |
+| AC2 | MET | test | `plugins/sp/tests/routing-table-parity.test.ts:119` C6 residual failure row test passes |
+| AC3 | MET | test | `plugins/sp/tests/skill-structure.test.ts:853` owning document checks pass |
+| Scenario: R6 — Next-router routes residual-failed tasks to recovery | MET | test | `plugins/sp/tests/routing-table-parity.test.ts:119` |
+| Scenario: R8 — Owning documents describe the residual contract | MET | test | `plugins/sp/tests/skill-structure.test.ts:853` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-
-#### Review
-
-<!-- spur:record-review -->
-
-**SECU findings** (pipeline verify step — verdict: PASS)
-
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
 
 ### Review
 
@@ -126,9 +115,8 @@ Rationale: shipped surfaces reference the script only via `superskill script pat
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
 
-| R6 — Next-router routes residual-failed tasks to recovery | MET | feature scenario coverage — see task requirement rows above |
-| R8 — Owning documents describe the residual contract | MET | feature scenario coverage — see task requirement rows above |
 ### References
 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
