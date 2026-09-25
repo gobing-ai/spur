@@ -16,6 +16,8 @@ sync: [T5, T6]
 
 Phase goals, order, dependencies and exits only. Detailed feature state belongs in the
 feature tool's index; task progress belongs in task records (constitution §6.3).
+Detailed proposals and investigations may live in dated `docs/plans/` working records;
+link accepted phase changes here without copying the plan.
 
 ## Phase 0 — Foundation
 

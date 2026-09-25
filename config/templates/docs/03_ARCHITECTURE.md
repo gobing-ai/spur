@@ -31,4 +31,6 @@ _(Describe the primary data path: input → processing → output. Name the seam
 <!--
 Describes the CURRENT architecture only. Future/accepted designs go in sections explicitly
 titled "(accepted design — ADR-NNN; not yet built)". Keep command/schema detail in 04 satellites and task delivery receipts in task records.
+Use the `sp:spur-dev` design template for a new non-UI satellite; link it instead of copying its
+contract here.
 -->

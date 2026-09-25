@@ -116,7 +116,7 @@ reference for the half you're operating; do not duplicate its content here.
 | Feature check gate         | planning  | `spur feature check`                                                                      | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
 | Decomposition (dispatch)   | planning  | `task-batch.schema.json`                                                                  | `sp:spec-decomposition` competency — the spine dispatches, does not inline                                                              |
 | Batch-create gate          | planning  | `spur task batch-create`                                                                  | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
-| Design doc                 | planning  | — (prompt work; §4.5/T9)                                                                  | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
+| Design doc | planning | — (§4.5/T9) | [document-authoring.md](references/document-authoring.md) |
 | Refine                     | planning  | `spur task update --section`                                                              | [planning-workflow.md](references/planning-workflow.md)                                                                                 |
 | Batch refine               | planning  | `sp:dev-refineall` → per-task `refine`                                                    | [dev-operations.md](references/dev-operations.md) § refineall · [planning-workflow.md](references/planning-workflow.md)                 |
 | Task selection             | execution | `spur task list`                                                                          | [execution-workflow.md](references/execution-workflow.md)                                                                               |
@@ -246,6 +246,7 @@ for "what's actually in file Y" or for resources that sit outside the step seque
 - `idea-pipeline.yaml` — the front-half state machine (absorbed the retired
   planning-pipeline in D5-K; `/sp:dev-plan` routes here, ADR-072).
 - `templates/bdd/gherkin.md` — the BDD scenario template.
+- `templates/plan.md` and `templates/design.md` — plan and design starting points.
 
 ## Platform Notes
 

@@ -137,6 +137,7 @@ template, source-citation format) is needed only inside each phase, not at the p
 2. IDEATE   → Generate 2-3 approaches with trade-offs (delegate research inline; escalate via spur agent run on a trigger)
 3. OUTPUT   → Structured markdown (Overview → Approaches → Recommendations → Next Steps),
               delivered incrementally; saved to docs/plans/YYYY-MM-DD-<topic>-brainstorm.md
+              using the spur-dev plan template while retaining the required ## Design Summary
 ```
 
 ## Design Approval Gate

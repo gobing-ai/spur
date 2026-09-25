@@ -3,7 +3,7 @@ name: Project Constitution
 doc: 99_PROJECT_CONSTITUTION
 owns: PROCESS — how the key files are maintained
 authority: authoritative-on-process
-version: 1.7.0
+version: 1.8.0
 created_at: {{init-date}}
 updated_at: {{init-date}}
 edit_rules: 99 §6.8
@@ -70,11 +70,15 @@ size, approval, task count, or completion alone does not qualify it for an ADR (
 ### 4.2 Working layers (outside the authority chain)
 
 - Dated `docs/plans/` and `docs/reports/` files hold proposals, investigations, audits and evidence.
-  They record work; accepted conclusions take effect only in their proper owner.
+  They record work; accepted conclusions take effect only in their proper owner. New plan files use
+  ordinary Markdown with concise frontmatter and purpose, evidence, recommendation, and follow-up
+  as applicable; the `sp:spur-dev` plan template is a starting point, not a rigid schema.
 - Configured task folders hold requirements, implementation plans, results and verification,
   maintained through the task tool. Resolve their paths through that tool.
 - Existing project context or learning storage holds reusable lessons (§8).
 - `docs/design/` and `docs/features/` are governed detail layers (§4.5), not scratch storage.
+  New non-UI design satellites use the `sp:spur-dev` design template; revisions preserve existing
+  meaning and references.
 
 Preserve historical evidence and its dates. It may be linked for provenance, but current
 contracts must be understandable without treating an old plan or report as governing policy.
@@ -90,6 +94,8 @@ Use `authoritative` for `00`, `authoritative-on-scope` for `01`,
 `owns` must match §4.1 in meaning. Bump the minor version for substantive edits and refresh
 `updated_at` when content changes. Do not touch unrelated documents just to update a date.
 Keep one metadata block. Root entry/UI files may use their established native format.
+Plans and design satellites use lighter frontmatter for identity, truthful status and dates;
+legacy files without it remain valid and readable. Do not infer historical status from a template.
 
 ### 4.4 AGENTS.md synchronization
 
@@ -194,6 +200,8 @@ Keep the index short. Satellites own non-UI signatures, schemas, defaults, error
 and boundary behavior. Verify against registrations/contracts; prefer generated artifacts to
 manual copies. UI rules belong in root `DESIGN.md`; architectural rationale belongs in `00`/`03`.
 Separate proposed from current behavior. A completed task adds no delivery receipt here.
+Use the design template to structure new satellites around boundaries, contracts, invariants and
+compatibility. Preserve stable headings and historical claims when revising old ones.
 
 ### 6.6 `docs/05_FEATURES.md` + `docs/features/<feature-id>_<slug>.md`
 

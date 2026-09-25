@@ -83,6 +83,10 @@ It owns document responsibilities and maintenance; `00` owns architectural choic
 `01` product scope, and root `DESIGN.md` UI/UX. Use **`sp:doc-evolve`** for drift,
 sync and contract checks. Follow host/operator precedence.
 
+For new `docs/plans/` working records and `docs/design/` non-UI satellites, use the
+`sp:spur-dev` plan/design templates and document-authoring reference. Preserve legacy files' history
+and headings when revising them.
+
 ### Doc map
 
 | File | Owns | Update when |

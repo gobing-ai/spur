@@ -198,11 +198,11 @@ task Design.
 order (§4.5 rule 5 / sync trigger **T9**):
 
 1. **Satellite first.** Write/update `docs/design/<slug>.md`. `<slug>` is the stable grep anchor —
-   derive it from the feature name (kebab-case), and **reuse the existing slug** on re-runs. Capture
-   the chosen approach + one-line reason, rejected alternatives, key interface/type **signatures**
-   (not bodies), invariants, and the surface it touches. Do **not** restate the satellite file format
-   here — follow the shape of existing satellites (`docs/design/server-side-adjustment-design.md`,
-   `workflow-observability.md`).
+   derive it from the feature name (kebab-case), and **reuse the existing slug** on re-runs. For a
+   new file use [document-authoring.md](document-authoring.md) and its design template; for an
+   existing file preserve its headings and anchors. Capture the chosen approach + one-line reason,
+   rejected alternatives, key interface/type **signatures** (not bodies), invariants, and the
+   surface it touches.
 2. **Index second.** Add or update the satellite's row in `docs/04_DESIGN.md §0` (the `| Satellite |
    Area | Status |` table) — pointer + one-line area + status only, never a restatement of the body.
 

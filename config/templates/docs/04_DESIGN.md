@@ -16,6 +16,8 @@ sync: [T3, T9]
 
 Non-UI contract index (constitution §6.5). Keep signatures, schemas, defaults, errors
 and boundary behavior in the owning `docs/design/<slug>.md` satellite.
+Start a new satellite from the `sp:spur-dev` design template; distinguish proposed from current
+behavior and preserve existing headings when revising one.
 
 ## UI/UX boundary & DESIGN.md
 
