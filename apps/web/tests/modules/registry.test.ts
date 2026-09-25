@@ -94,6 +94,7 @@ describe('singleton registry instance', () => {
         expect(getEnabledModules()).toEqual([
             'observability',
             'history',
+            'plans',
             'designs',
             'features',
             'tasks',

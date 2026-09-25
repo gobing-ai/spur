@@ -923,5 +923,117 @@ export const healthModule: ServerModule = {
         app.get('/api/designs', designsHandler);
         app.get('/api/project/designs/file', designFileHandler);
         app.get('/api/designs/file', designFileHandler);
+
+        const plansHandler = async (c: { json: (data: unknown) => Response }) => {
+            if (!ctx) {
+                return c.json({ files: [], total: 0 });
+            }
+
+            try {
+                const projectRoot = ctx.cwd ?? process.cwd();
+                const fs = ctx.fs ?? createNodeFileSystem(projectRoot);
+                const files: Array<{
+                    id: string;
+                    path: string;
+                    name: string;
+                    title: string;
+                    category: 'roadmap' | 'plan';
+                }> = [];
+
+                // 1. docs/02_ROADMAP.md
+                const roadmapPath = join(projectRoot, 'docs', '02_ROADMAP.md');
+                if (await fs.exists(roadmapPath)) {
+                    let title = '02 Roadmap — Spur';
+                    try {
+                        const content = await fs.readFile(roadmapPath);
+                        const match = content.match(/^#\s+(.+)$/m);
+                        if (match?.[1]) title = match[1].trim();
+                    } catch {}
+                    files.push({
+                        id: 'docs/02_ROADMAP.md',
+                        path: 'docs/02_ROADMAP.md',
+                        name: '02_ROADMAP.md',
+                        title,
+                        category: 'roadmap',
+                    });
+                }
+
+                // 2. docs/plans/*.md (descending by filename)
+                const plansDir = join(projectRoot, 'docs', 'plans');
+                if (await fs.exists(plansDir)) {
+                    let mdFiles: string[] = [];
+                    try {
+                        const entries = await fs.readDir(plansDir);
+                        mdFiles = entries.filter((f) => f.endsWith('.md'));
+                    } catch {}
+                    mdFiles.sort((a, b) => b.localeCompare(a));
+
+                    for (const filename of mdFiles) {
+                        const fullPath = join(plansDir, filename);
+                        const relPath = `docs/plans/${filename}`;
+                        let title = filename.replace(/\.md$/, '').replace(/-/g, ' ');
+                        try {
+                            const content = await fs.readFile(fullPath);
+                            const match = content.match(/^#\s+(.+)$/m);
+                            if (match?.[1]) title = match[1].trim();
+                        } catch {}
+
+                        files.push({
+                            id: relPath,
+                            path: relPath,
+                            name: filename,
+                            title,
+                            category: 'plan',
+                        });
+                    }
+                }
+
+                return c.json({ files, total: files.length });
+            } catch {
+                return c.json({ files: [], total: 0 });
+            }
+        };
+
+        const planFileHandler = async (c: {
+            req: { query: (name: string) => string | undefined };
+            json: (data: unknown, status?: number) => Response;
+        }) => {
+            if (!ctx) {
+                return c.json({ ok: false, error: 'ServerContext unavailable' }, 503);
+            }
+            const reqPath = c.req.query('path');
+            if (!reqPath) {
+                return c.json({ ok: false, error: 'Missing path query parameter' }, 400);
+            }
+
+            // Path boundary check: strictly allowed plan doc locations
+            const isAllowed = reqPath === 'docs/02_ROADMAP.md' || /^docs\/plans\/[a-zA-Z0-9_.-]+\.md$/.test(reqPath);
+
+            if (!isAllowed) {
+                return c.json({ ok: false, error: 'Access denied: path not allowed' }, 403);
+            }
+
+            try {
+                const projectRoot = ctx.cwd ?? process.cwd();
+                const fs = ctx.fs ?? createNodeFileSystem(projectRoot);
+                const fullPath = join(projectRoot, reqPath);
+                if (!(await fs.exists(fullPath))) {
+                    return c.json({ ok: false, error: 'File not found' }, 404);
+                }
+                const content = await fs.readFile(fullPath);
+                let title = basename(reqPath, '.md');
+                const match = content.match(/^#\s+(.+)$/m);
+                if (match?.[1]) title = match[1].trim();
+
+                return c.json({ ok: true, path: reqPath, title, content });
+            } catch (err) {
+                return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500);
+            }
+        };
+
+        app.get('/api/project/plans', plansHandler);
+        app.get('/api/plans', plansHandler);
+        app.get('/api/project/plans/file', planFileHandler);
+        app.get('/api/plans/file', planFileHandler);
     },
 };

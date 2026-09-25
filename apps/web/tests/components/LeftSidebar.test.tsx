@@ -165,15 +165,15 @@ describe('LeftSidebar module ordering, labels, and tooltips', () => {
             s.textContent?.trim(),
         );
         // 0849 R1: Workspace, Inbox, and Teams are retired — the surviving modules keep
-        // their declared order (observability 10, history 20, designs 25, features 30, tasks 40, projects 45).
-        expect(labels).toEqual(['Observabilities', 'Histories', 'Designs', 'Features', 'Tasks', 'Projects']);
+        // their declared order (observability 10, history 20, plans 24, designs 25, features 30, tasks 40, projects 45).
+        expect(labels).toEqual(['Observabilities', 'Histories', 'Plans', 'Designs', 'Features', 'Tasks', 'Projects']);
     });
 
     test('collapsed nav items render tooltips with label and description', () => {
         silentProjectFetch();
         const { container } = renderSidebar(true);
         const tooltips = Array.from(container.querySelectorAll('nav .tooltip'));
-        expect(tooltips.length).toBe(6);
+        expect(tooltips.length).toBe(7);
         const firstTip = tooltips[0]?.getAttribute('data-tip');
         expect(firstTip).toContain(
             'Observabilities\nReal-time system events, execution traces, and agent doctor telemetry',
