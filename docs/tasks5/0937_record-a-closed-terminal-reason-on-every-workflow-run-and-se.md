@@ -4,7 +4,7 @@ name: Record a closed terminal reason on every workflow run and separate bookkee
 status: todo
 template: feature-impl
 created_at: 2026-09-24T00:13:17.000Z
-updated_at: "2026-09-24T00:23:20.852Z"
+updated_at: "2026-09-25T03:11:50.897Z"
 feature_id: D64
 priority: P1
 tags:
@@ -128,7 +128,20 @@ Implements: R1 — Refactor work starts only after its prerequisite features fin
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented R1–R6. Two phases: an upstream engine release (operator-authorized, escalation 1/2) followed by the Spur-side integration.
+
+**Upstream ts-libs (full-auto release contract):** branch `feat/engine-terminal-reason`, commit `fabfad09` — `finalizeRun(runId, status, completedAt, fence?, reason?)` in both adapters, `runs.terminal_reason TEXT` (CREATE + guarded ALTER in `schema-sql.ts`), `interruptRun` mirrors the reason, `claimRunOwnership` clears it on resume, `RunLifecycle.done/fail/pause` forward it, and state-machine `TransitionDef.terminalReason` overrides the built-in terminal reason on declared edges (`.strict()` preserved). Package gate: 454 tests, lint + typecheck green. Released as `@gobing-ai/ts-dual-workflow-engine@0.5.6` (tags `@gobing-ai/ts-dual-workflow-engine-v0.5.6` + aggregate `@gobing-ai/ts-libs-v0.5.6`, the actual Publish trigger; CI run 36087285491 success; registry confirmed). Spur pin bumped `^0.5.5` → `^0.5.6` (root `package.json` catalog).
+
+**Spur side:**
+- `packages/app/src/workflow/terminal-reason.ts` (new): `TERMINAL_REASONS` (frozen R1 order), `TerminalReason`, `isTerminalReason`, `BOOKKEEPING_WORKFLOWS`/`isBookkeepingWorkflow`, and `classifyTerminalReason({status, engineReason, actionKind?, errorText?})` (packages/app/src/workflow/terminal-reason.ts:51) implementing the R4 mappings; declared enum values pass through untouched; exports added to the app index for the 0938 handoff.
+- Decorators classify at the seam so `runs.terminal_reason` always holds an enum value: `WorkflowActionTraceWriter.finalizeRun` (+fence/reason, packages/app/src/workflow/action-trace.ts:178) and `closeRun` (+reason, packages/app/src/workflow/action-trace.ts:280), and `ObservableWorkflowAdapter.finalizeRun` (packages/app/src/workflow/observability.ts:472). The Proxy-based pid/identity decorators forward all args unchanged. `lifecycle-adapter` declares reasons directly: entity `done` → `done`, `cancelled` → `cancelled` (status still `failed`); reopen finalizes with no reason, clearing the stale one.
+- Migration: `drizzle/0049_spur_cli_runs_terminal_reason.sql` + `CLI_RUNS_TERMINAL_REASON_SCHEMA_SQL` registered in `packages/domain/src/migrations.ts:1545` with `addColumnIfMissing {runs, terminal_reason}` and the 0041-style table-absent skip. `RunDao.traceRowById` now selects `terminal_reason` (the 0938 read path).
+- Validate rule (R3): `collectTerminalReasonViolations` (packages/app/src/services/workflow-service.ts:2156, wired at :699) in the shared post-schema walk — any state-machine transition into a `failureStates` member must declare a valid enum `terminalReason`. `apps/cli/schemas/state-machine-workflow.schema.json` accepts the new key (single schema copy). All ten canonical YAMLs validate (7 annotated, 40 failure edges, reasons assigned per edge semantics: gates → `failed-check`, retry caps → `retry-exhausted`, operator reject/cancel → `cancelled`, empty agent capture → `failed-agent`); a stripped-edge variant fails validation as required.
+- `inline-run-setup --close --reason` (R2): copied `TERMINal_REASONS` literal (plugin standalone contract), `--close --status failed` without a reason — or with a non-enum reason — exits nonzero before any write; the reason flows through `writer.closeRun`.
+
+**Tests** (all green, run in workspace subshells): `packages/app/tests/workflow/terminal-reason.test.ts` (enum/guard, full R4 table, status-only classification, bookkeeping list, decorator classify+forward capture, 0.5.6 adapter persists the reason), `packages/domain/tests/dao/migrations.test.ts` (0049 id/SQL/guard + journal counts), `plugins/sp/tests/inline-run-close-reason.test.ts` (copy↔export parity, both R2 nonzero-before-write cases), plus existing action-trace/observability/workflow-service/run-dao suites re-run.
+
+**Deviations:** `finalizeRun` gained the reason as the 5th param (after the engine's existing `fence`), not the Design's literal 4-arg shape — required for legacy-adapter assignability. Decorators classify only `{status, engineReason}` (they hold no action context); `failed-agent`/`failed-timeout` reach the column via declared YAML reasons or context-bearing callers — per-edge authoring is the 0945/0946 handoff. Engine CHANGELOG entry deferred (repo convention is a separate changelog commit, outside the release contract).
 
 ### Testing
 
