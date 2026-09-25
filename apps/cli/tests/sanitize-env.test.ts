@@ -1,15 +1,16 @@
 import { expect, test } from 'bun:test';
 import { getEnvVar, getEnvVars, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
+import { sanitizeProtoShimEnv } from '../src/sanitize-env';
 
 /**
- * `sanitize-env` is an import-side-effect module: it strips proto's shim-launch markers from
- * `getEnvVars()` once, at CLI start, so no descendant process inherits them and misreads them as
- * `proto::commands::run::fallback_loop`. The module body runs on first import and the module cache
- * makes that unrepeatable — so the fixture is planted, the environment is snapshotted either side of
- * the single import, and every case is asserted against those two snapshots.
+ * The sanitizer is invoked directly rather than through an import side effect: `bun test` shares
+ * one module registry across every test file in the process, so by the time this file runs the
+ * module body has usually already executed (via `src/index.ts` in an earlier file) and a fresh
+ * import is a cache hit that would sanitize nothing. File discovery order differs per platform —
+ * this exact dependence failed only on Linux CI (task-adjacent: proto shim sanitization).
  */
 
-/** Markers the module must delete: anchored `PROTO_SHIM_` / `PROTO_INTERNAL_`. */
+/** Markers the sanitizer must delete: anchored `PROTO_SHIM_` / `PROTO_INTERNAL_`. */
 const MARKERS = { PROTO_SHIM_NAME: 'spur', PROTO_INTERNAL_ORIGINAL_ARGS: '--version' };
 
 /**
@@ -25,39 +26,38 @@ const NEAR_MISSES = {
 
 const planted = { ...MARKERS, ...NEAR_MISSES };
 const saved = new Map(Object.keys(planted).map((key) => [key, getEnvVar(key)]));
-Object.assign(getEnvVars(), planted);
 
-const before = { ...getEnvVars() };
-await import('../src/sanitize-env');
-const after = { ...getEnvVars() };
-
-for (const [key, value] of saved) {
-    if (value === undefined) removeEnvVar(key);
-    else setEnvVar(key, value);
-}
-// The runner itself may be shim-launched, so the module can have deleted real markers too; put
-// them back rather than leaking a sanitized environment into the rest of the suite.
-for (const [key, value] of Object.entries(before)) {
-    if (!(key in after) && !(key in planted)) setEnvVar(key, value);
-}
-
-test('importing sanitize-env deletes the proto shim-launch markers', () => {
-    for (const key of Object.keys(MARKERS)) {
-        expect(before[key], `${key} was not planted`).toBeDefined();
-        expect(after, `${key} must not survive sanitization`).not.toHaveProperty(key);
+test('sanitizeProtoShimEnv deletes the proto shim-launch markers', () => {
+    Object.assign(getEnvVars(), planted);
+    try {
+        sanitizeProtoShimEnv();
+        for (const [key, value] of Object.entries(planted)) {
+            expect(getEnvVar(key), `${key} must ${key in MARKERS ? 'not ' : ''}survive sanitization`).toBe(
+                key in MARKERS ? undefined : value,
+            );
+        }
+    } finally {
+        for (const [key, value] of saved) {
+            if (value === undefined) removeEnvVar(key);
+            else setEnvVar(key, value);
+        }
     }
 });
 
-test('importing sanitize-env leaves non-marker PROTO_ variables intact', () => {
-    for (const [key, value] of Object.entries(NEAR_MISSES)) {
-        expect(after[key], `${key} must survive sanitization`).toBe(value);
+test('sanitizeProtoShimEnv deletes nothing that is not a marker', () => {
+    // Asserted as a predicate over the whole env, not just the fixtures: a shim-launched test
+    // runner carries real PROTO_SHIM_* markers of its own, which the module is equally right
+    // to delete — but nothing outside the anchored prefix may ever be touched.
+    const before = { ...getEnvVars(), ...MARKERS };
+    Object.assign(getEnvVars(), MARKERS);
+    sanitizeProtoShimEnv();
+    try {
+        const removed = Object.keys(before).filter((key) => !(key in getEnvVars()));
+        expect(removed.filter((key) => !/^PROTO_(SHIM|INTERNAL)_/.test(key))).toEqual([]);
+        expect(removed).toEqual(expect.arrayContaining(Object.keys(MARKERS)));
+    } finally {
+        for (const [key, value] of Object.entries(before)) {
+            if (!(key in getEnvVars())) setEnvVar(key, value);
+        }
     }
-});
-
-test('sanitize-env deletes nothing that is not a marker', () => {
-    // Asserted as a predicate, not as an exact set: a shim-launched test runner carries real
-    // PROTO_SHIM_* markers of its own, which the module is equally right to delete.
-    const removed = Object.keys(before).filter((key) => !(key in after));
-    expect(removed.filter((key) => !/^PROTO_(SHIM|INTERNAL)_/.test(key))).toEqual([]);
-    expect(removed).toEqual(expect.arrayContaining(Object.keys(MARKERS)));
 });

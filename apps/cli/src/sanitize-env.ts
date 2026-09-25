@@ -9,6 +9,10 @@ import { getEnvVars, removeEnvVar } from '@gobing-ai/spur-config';
  * downstream spawn (workflow shell steps, guards, agents, nested spur runs) is clean.
  * (Reproduced via kk-daily-ai-voice → surfdash `publishing.yaml`, 2026-09-04.)
  */
-for (const key of Object.keys(getEnvVars())) {
-    if (/^PROTO_(SHIM|INTERNAL)_/.test(key)) removeEnvVar(key);
+export function sanitizeProtoShimEnv(): void {
+    for (const key of Object.keys(getEnvVars())) {
+        if (/^PROTO_(SHIM|INTERNAL)_/.test(key)) removeEnvVar(key);
+    }
 }
+
+sanitizeProtoShimEnv();
