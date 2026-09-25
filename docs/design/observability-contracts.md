@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Observability and HTTP read contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-22
+related: ["0853", "0855", "0857", "0860", "0869"]
+tags: [contract, observability, server]
+---
+
 # Observability and HTTP read contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

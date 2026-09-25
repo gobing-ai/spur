@@ -1,7 +1,11 @@
 ---
-feature: A21
-status: shipped
+kind: design
+title: "Execution deadlines and unlimited jobs"
+status: implemented
+created_at: 2026-09-08
 updated_at: 2026-09-08
+related: [A21]
+tags: [contract, A21, workflow, agent]
 derived_from: [ADR-112, 01_PRD]
 ---
 

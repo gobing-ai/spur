@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Configuration and asset contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-18
+related: ["0857", "0858", "0861", "0890"]
+tags: [contract, config]
+---
+
 # Configuration and asset contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

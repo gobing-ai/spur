@@ -1,3 +1,13 @@
+---
+kind: design
+title: "History CLI and refresh contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-16
+related: []
+tags: [contract, history, cli]
+---
+
 # History CLI and refresh contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

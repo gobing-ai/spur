@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Planning records and lifecycle contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-17
+related: []
+tags: [contract, planning]
+---
+
 # Planning records and lifecycle contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

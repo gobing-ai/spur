@@ -1,10 +1,15 @@
 ---
+kind: design
+title: "Workflow run log (all-in-one per-run log)"
+status: implemented
+created_at: 2026-08-04
+updated_at: 2026-08-04
+related: [D2, "0430", "0709", "0901"]
+tags: [contract, D2, workflow, observability]
 doc: design/workflow-run-log
 area: spur workflow run log — consolidated per-run log, retention, trace follow source
-status: built (feature D2)
 authority: derived
 owner: Robin Min
-updated_at: 2026-08-04
 read_before: implementing the all-in-one per-run workflow run log (feature D2)
 edit_rules: 99 §6.5
 sync: [T3, T9]

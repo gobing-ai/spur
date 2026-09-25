@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Feature sync and agent command contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-09
+related: []
+tags: [contract, planning, cli]
+---
+
 # Feature sync and agent command contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

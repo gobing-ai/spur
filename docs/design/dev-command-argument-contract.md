@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Design — Dev-command argument contract"
+status: accepted
+created_at: 2026-08-01
+updated_at: 2026-08-02
+related: ["0412"]
+tags: [contract, plugin, cli]
+---
+
 # Design — Dev-command argument contract
 
 Feature: [`H81`](../features/H81_dev-command-argument-contract-clarity.md).  

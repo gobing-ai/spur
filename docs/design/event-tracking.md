@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Event tracking — System Event 5W1H SSOT"
+status: implemented
+created_at: 2026-08-18
+updated_at: 2026-09-16
+related: [I6, J9, "0597", "0601", "0602", "0605", "0806", "0807"]
+tags: [contract, I6, J9, observability]
+---
+
 # Event tracking — System Event 5W1H SSOT
 
 **Area:** System Event catalog (`SYSTEM_EVENT_CATALOG`), 5W1H payload contract, `*.updated` field-level diff, `workflow.*` legibility.

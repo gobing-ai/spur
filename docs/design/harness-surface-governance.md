@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Harness surface governance"
+status: accepted
+created_at: 2026-08-21
+updated_at: 2026-09-24
+related: [G64, "0613", "0614", "0617", "0625", "0670", "0693"]
+tags: [contract, G64, plugin, cli]
+---
+
 # Harness surface governance
 
 **Area:** the composition measures (shell actions, shell guards, agent.run), their warn and error

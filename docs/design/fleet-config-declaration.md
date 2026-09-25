@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Fleet declaration in spur config — system design (feature G65)"
+status: accepted
+created_at: 2026-09-14
+updated_at: 2026-09-18
+related: [G65, "0856", "0857", "0858", "0859", "0860", "0861"]
+tags: [contract, G65, config, agent]
+---
+
 # Fleet declaration in spur config — system design (feature G65)
 
 - **Status:** Accepted (2026-09-15) · **Date:** 2026-09-14 · **Feature:** G65 (parent G6)

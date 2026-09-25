@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Essential workflow checks and observable execution"
+status: implemented
+created_at: 2026-09-04
+updated_at: 2026-09-17
+related: [D61, "0765", "0766", "0767", "0768", "0769", "0770"]
+tags: [contract, D61, workflow]
+---
+
 # Essential workflow checks and observable execution
 
 **Feature:** D61 · **Status:** done; 13 tasks verified PASS on 2026-09-06 · **Decision:** ADR-108.

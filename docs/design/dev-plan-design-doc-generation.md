@@ -1,3 +1,12 @@
+---
+kind: design
+title: "Design — `/sp:dev-plan` design-doc generation (design by default / `--skip-design`)"
+created_at: 2026-06-25
+updated_at: 2026-07-27
+related: ["0124", "0955"]
+tags: [contract, plugin, planning]
+---
+
 # Design — `/sp:dev-plan` design-doc generation (design by default / `--skip-design`)
 
 Owning task: [`0124`](../tasks/0124_add-design-auto-design-doc-generation-to-sp-dev-plan-plannin.md).

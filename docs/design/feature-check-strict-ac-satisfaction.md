@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Feature check `--strict`: AC satisfaction (tasks 0340, 0410, 0561, 0672)"
+status: implemented
+created_at: 2026-07-26
+updated_at: 2026-08-25
+related: ["0340", "0410", "0561", "0672"]
+tags: [contract, planning, cli]
+---
+
 # Feature check `--strict`: AC satisfaction (tasks 0340, 0410, 0561, 0672)
 
 **Status:** implemented  

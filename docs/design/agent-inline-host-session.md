@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Design: `--agent inline` — host-session-only execution guarantee"
+status: superseded
+created_at: 2026-08-15
+updated_at: 2026-08-26
+related: ["0565", "0566", "0687"]
+tags: [contract, agent, cli]
+---
+
 # Design: `--agent inline` — host-session-only execution guarantee
 
 > **SUPERSEDED (2026-08-26, task 0687 / ADR-087):** the headless rejection this doc specifies was

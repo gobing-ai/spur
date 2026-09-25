@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Planning workflow and operation contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-24
+related: ["0889", "0898", "0949"]
+tags: [contract, planning, workflow]
+---
+
 # Planning workflow and operation contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

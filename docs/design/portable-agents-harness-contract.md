@@ -1,3 +1,12 @@
+---
+kind: design
+title: "Design — Portable `AGENTS.md` harness contract"
+created_at: 2026-07-22
+updated_at: 2026-09-09
+related: ["0312"]
+tags: [contract, docs, plugin]
+---
+
 # Design — Portable `AGENTS.md` harness contract
 
 Owning task: [`0312`](../tasks2/0312_review-and-enhance-portable-agents-md-harness-template.md).

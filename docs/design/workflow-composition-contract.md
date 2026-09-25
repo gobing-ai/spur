@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Workflow composition contract"
+status: implemented
+created_at: 2026-08-19
+updated_at: 2026-09-24
+related: [D9, F96, "0603", "0604", "0606", "0608", "0610", "0703"]
+tags: [contract, D9, F96, workflow]
+---
+
 # Workflow composition contract
 
 **Area:** workflow definition composition, deterministic action ownership, pipeline promotion, and run artifacts.

@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Cross-process workflow steering control channel"
+status: proposed
+created_at: 2026-07-28
+updated_at: 2026-07-28
+related: [H1, J3, "0365"]
+tags: [contract, H1, J3, workflow]
+---
+
 # Cross-process workflow steering control channel
 
 **Status:** proposed design only; not implemented or approved for runtime use.

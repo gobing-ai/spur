@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Agent doctor as the routing inspection surface"
+status: accepted
+created_at: 2026-08-26
+updated_at: 2026-09-18
+related: [B4, "0681", "0682", "0683", "0684", "0818"]
+tags: [contract, B4, agent, cli]
+---
+
 # Agent doctor as the routing inspection surface
 
 **Area:** `spur agent doctor` output contract, doctor probe cost, `doctor.probe` workflow action.

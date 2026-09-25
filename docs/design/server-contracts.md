@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Server bootstrap and scheduler contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-16
+related: ["0863"]
+tags: [contract, server]
+---
+
 # Server bootstrap and scheduler contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

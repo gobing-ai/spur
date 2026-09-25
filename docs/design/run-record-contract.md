@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Run record — two-file contract + the Observability read plane"
+status: implemented
+created_at: 2026-08-18
+updated_at: 2026-09-24
+related: [E7, I6, "0598", "0610", "0683", "0709", "0712", "0925"]
+tags: [contract, E7, I6, workflow, observability]
+---
+
 # Run record — two-file contract + the Observability read plane
 
 **Area:** `.spur/run` artifact consolidation (two-file run record), mid-run reader inventory, retention proposal, and the History/Observability read plane (tab dispositions + required contracts).

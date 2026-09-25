@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Universal config loading"
+status: implemented
+created_at: 2026-08-24
+updated_at: 2026-09-15
+related: [A5, "0665", "0666", "0861"]
+tags: [contract, A5, config]
+---
+
 # Universal config loading
 
 **Area:** CLI/server composition-root config wiring, per-service config threading, agent-surface

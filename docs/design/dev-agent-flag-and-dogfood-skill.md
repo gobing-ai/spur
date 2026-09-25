@@ -1,3 +1,12 @@
+---
+kind: design
+title: "Design — `--agent` on critical dev-* commands + `sp:dogfood-testing` extraction"
+created_at: 2026-06-25
+updated_at: 2026-09-21
+related: ["0125", "0244", "0406", "0480", "0503", "0687"]
+tags: [contract, plugin, agent]
+---
+
 # Design — `--agent` on critical dev-* commands + `sp:dogfood-testing` extraction
 
 Owning task: [`0125`](../tasks/0125_add-agent-to-critical-dev-commands-extract-sp-dogfood-testin.md).

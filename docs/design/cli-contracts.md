@@ -1,3 +1,13 @@
+---
+kind: design
+title: "CLI grammar, initialization, agents, teams and rules"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-24
+related: ["0822", "0850", "0856", "0857", "0860", "0861"]
+tags: [contract, cli, agent]
+---
+
 # CLI grammar, initialization, agents, teams and rules
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

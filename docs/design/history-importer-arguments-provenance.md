@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Tool Call Arguments Extraction, Ingestion Diagnostics, and Field Provenance Standard Procedure"
+status: accepted
+created_at: 2026-09-01
+updated_at: 2026-09-01
+related: [E9]
+tags: [contract, E9, history]
+---
+
 # Tool Call Arguments Extraction, Ingestion Diagnostics, and Field Provenance Standard Procedure
 
 **Document Version:** 1.0.0  

@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Data and output contracts"
+status: implemented
+created_at: 2026-09-09
+updated_at: 2026-09-14
+related: []
+tags: [contract, cli]
+---
+
 # Data and output contracts
 
 Detailed non-UI contracts, indexed by [04 Design](../04_DESIGN.md).

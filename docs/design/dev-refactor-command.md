@@ -1,3 +1,13 @@
+---
+kind: design
+title: "Design — `/sp:dev-refactor` lens-routed refactoring with a preservation contract"
+status: implemented
+created_at: 2026-09-17
+updated_at: 2026-09-17
+related: [H13, "0883", "0884", "0885", "0886"]
+tags: [contract, H13, plugin]
+---
+
 # Design — `/sp:dev-refactor` lens-routed refactoring with a preservation contract
 
 Feature: [`H13`](../features/H13_dev-refactor-lens-routed-refactoring-command-with-preservation-contract.md).  

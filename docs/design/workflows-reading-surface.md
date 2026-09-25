@@ -1,10 +1,15 @@
 ---
+kind: design
+title: "Workflows reading surface"
+status: implemented
+created_at: 2026-09-22
+updated_at: 2026-09-22
+related: []
+tags: [contract, server, web]
 doc: design/workflows-reading-surface
 area: project workflows reading surface — server workflows endpoint and the web settings workflows tab
-status: built (2026-09-22, server 803c51d09; web 84e420a6e..4a8ca580b)
 authority: derived
 owner: Robin Min
-updated_at: 2026-09-22
 read_before: changing the workflows endpoint payload, workflow listing resolution, or the settings workflows view
 ---
 

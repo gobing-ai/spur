@@ -1,8 +1,12 @@
 ---
-status: shipped-design
-feature: F21
-adr: ADR-109
+kind: design
+title: "Task creation and implementation readiness"
+status: implemented
+created_at: 2026-09-06
 updated_at: 2026-09-06
+related: [F21]
+tags: [contract, F21, planning]
+adr: ADR-109
 ---
 
 # Task creation and implementation readiness
