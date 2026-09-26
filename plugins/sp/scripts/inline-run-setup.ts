@@ -103,6 +103,10 @@ function usage(): never {
         '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]',
     );
     console.error(
+        '       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, ' +
+            'failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted',
+    );
+    console.error(
         '       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]',
     );
     process.exit(2);
