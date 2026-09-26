@@ -577,31 +577,24 @@ states:
           Deterministic failure-class router on a red gate (0943 R3). The engine has no onEnter
           conditionals, so the FAIL branch from `test`/`test-recheck` lands here as its own
           deterministic state (the sanctioned alternative), while the green branch goes to
-          `triage`. `decide failure-class` reads the bounded gate findings and routes: retryable
-          → test-recheck (the attempt is counted on entry, so qualityGateMaxFixAttempts still
-          bounds the loop), fix → test-fix (the repair hop, as before), stop → failed with
-          terminalReason failed-check. A missing/corrupt decision fails closed to failed-check.
+          `triage`. `decide failure-class` reads the bounded gate findings and routes: fix →
+          test-fix (the bounded repair hop; its default, recorded as `source: default` when no
+          backend decides — 0976 R2), stop → failed with terminalReason failed-check. A
+          missing/corrupt decision fails closed to failed-check. (0976 R2 collapsed the former
+          `retryable` lane: the declared default made it unreachable on the inline path.)
       onEnter:
           - kind: decide
             options:
                 id: failure-class
                 method: choice
                 question: >-
-                    The quality gate failed. Is the failure retryable (transient or environmental
-                    — just re-run the gate), fixable by the repair agent, or should the run stop
-                    here?
-                choices: [retryable, fix, stop]
+                    The quality gate failed. Is the failure fixable by the repair agent, or should
+                    the run stop here?
+                choices: [fix, stop]
                 default: fix
                 evidence:
                     - .spur/run/${vars.wbs}-test-gate.findings
                 resultFile: .spur/run/${vars.wbs}-failure-class.decision
-          # A retryable classification still counts an attempt so the existing
-          # qualityGateMaxFixAttempts cap bounds the recheck loop (0943 R3; the cap edge reads
-          # the same counter the fixall path uses).
-          - kind: shell
-            options:
-                command: >-
-                    A=".spur/run/$wbs-test-fix-attempt"; [ "$(jq -r '.value // ""' ".spur/run/$wbs-failure-class.decision" 2>/dev/null)" = retryable ] && { n="$(cat "$A" 2>/dev/null || echo 0)"; printf '%s\n' "$((n + 1))" > "$A"; }; exit 0
 
     - id: review
       description: Three-dimensional code review via /sp:dev-review (functional requirements traceability + SECUA framework (Security, Efficiency, Correctness, Usability, Architecture) + architecture depth), findings written to `## Review`.
@@ -1007,8 +1000,7 @@ transitions:
           options:
               command: 'test "$mode" != fast'
     # ── failure-class routing (0943 R3): stop first (never mislabeled by the cap), then the
-    # attempt cap (bounds BOTH lanes — retryable counted on entry, fix as before), then the
-    # decision lanes, then the fail-closed defense. Declaration order matters.
+    # attempt cap, then the fix lane, then the fail-closed defense. Declaration order matters.
     - from: test-fail-triage
       to: failed
       terminalReason: failed-check
@@ -1021,7 +1013,7 @@ transitions:
     - from: test-fail-triage
       to: failed
       terminalReason: retry-exhausted
-      description: Attempt cap reached — qualityGateMaxFixAttempts bounds the retryable recheck and fix lanes alike.
+      description: Attempt cap reached — qualityGateMaxFixAttempts bounds the fix lane.
       # (warn) 5 commands: named fix attempts (legibility, 0874).
       guard:
           kind: shell
@@ -1029,14 +1021,6 @@ transitions:
               command: >-
                   fix_attempts="$(cat .spur/run/$wbs-test-fix-attempt 2>/dev/null || echo 0)";
                   test "$fix_attempts" -ge "$qualityGateMaxFixAttempts"
-    - from: test-fail-triage
-      to: test-recheck
-      description: Failure class retryable and under the cap — re-run the gate without fixall; the attempt was counted on entry.
-      guard:
-          kind: shell
-          options:
-              command: >-
-                  jq -e '.value == "retryable"' ".spur/run/$wbs-failure-class.decision" >/dev/null 2>&1
     - from: test-fail-triage
       to: test-fix
       description: Failure class fix and under the cap — the bounded repair hop, as before.

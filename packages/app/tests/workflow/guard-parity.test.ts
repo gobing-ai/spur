@@ -89,7 +89,8 @@ const FILES: Array<{ key: string; path: string; values: string[] }> = [
     { key: 'test-gate.status', path: `.spur/run/${WBS}-test-gate.status`, values: ['PASS\n', 'FAIL\n'] },
     { key: 'test-fix-attempt', path: `.spur/run/${WBS}-test-fix-attempt`, values: ['0\n', '2\n', '3\n'] },
     // 0943 R3: failure-class decide row — the test-fail-triage edges read `.value` from this row
-    // (stop/retryable/fix) or fail closed when the file is missing/corrupt.
+    // (stop/fix) or fail closed when the file is missing/corrupt. `retryable` stays as a boundary
+    // value: 0976 R2 collapsed that lane, so a stale row must fall through to the defense.
     {
         key: 'failure-class.decision',
         path: `.spur/run/${WBS}-failure-class.decision`,

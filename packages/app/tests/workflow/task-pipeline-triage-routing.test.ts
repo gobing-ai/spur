@@ -17,9 +17,10 @@
  * - R5: every triage run appends `<runId> <wbs> <reason>` to .spur/memory/task-pipeline-routes.log
  *   with the reason naming the lane origin (caller-set / triage low / deterministic-high / standard).
  * - failure-class routing: stop → failed(failed-check) BEFORE the cap (never mislabeled),
- *   the qualityGateMaxFixAttempts cap bounds BOTH lanes (a retryable classification counts its
- *   attempt on entry), retryable → test-recheck, fix → test-fix, missing/corrupt decision →
- *   failed(failed-check) defense (fail closed, never silently repair).
+ *   the qualityGateMaxFixAttempts cap bounds the fix lane, fix → test-fix, missing/corrupt
+ *   decision → failed(failed-check) defense (fail closed, never silently repair). 0976 R2
+ *   collapsed the unreachable `retryable` lane: a `retryable` row is now out of vocabulary and
+ *   fails closed like any corrupt decision.
  * - Frozen names: decide ids `task-triage`/`failure-class`, the four gate-PASS edges are gone,
  *   and the triage fork guards are exhaustive (`= fast` / `!= fast`) so triage never hangs.
  */
@@ -311,26 +312,27 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
 });
 
 describe('task-pipeline 0943 — failure-class routing (R3)', () => {
-    test('frozen contract: failure-class decide row + declaration order (stop, cap, retryable, fix, defense)', () => {
+    test('frozen contract: failure-class decide row + declaration order (stop, cap, fix, defense)', () => {
         const decide = decideAction('test-fail-triage', 'failure-class');
-        expect(decide.options?.choices).toEqual(['retryable', 'fix', 'stop']);
+        expect(decide.options?.choices).toEqual(['fix', 'stop']);
         expect(decide.options?.default).toBe('fix');
         expect(decide.options?.resultFile).toBe(`.spur/run/\${vars.wbs}-failure-class.decision`);
         expect(decide.options?.evidence).toEqual([`.spur/run/\${vars.wbs}-test-gate.findings`]);
         expect(edgesFrom('test-fail-triage').map((t) => [t.to, t.terminalReason ?? '-'])).toEqual([
             ['failed', 'failed-check'],
             ['failed', 'retry-exhausted'],
-            ['test-recheck', '-'],
             ['test-fix', '-'],
             ['failed', 'failed-check'],
         ]);
     });
 
-    test('retryable counts its attempt on entry and routes test-fail-triage → test-recheck', () => {
+    test('0976 R2: a stale `retryable` row is out of vocabulary — fails closed, no lane, no attempt counted', () => {
         const staged = stage({ gateStatus: 'FAIL\n', attempts: '0\n', failureDecision: { value: 'retryable' } });
         runOnEnterShells('test-fail-triage', staged.cwd, staged.vars);
-        expect(readAttempts(staged)).toBe('1');
-        expect(firstPassingEdge('test-fail-triage', staged.cwd, staged.vars).to).toBe('test-recheck');
+        expect(readAttempts(staged)).toBe('0');
+        const edge = firstPassingEdge('test-fail-triage', staged.cwd, staged.vars);
+        expect(edge.to).toBe('failed');
+        expect(edge.terminalReason).toBe('failed-check');
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
@@ -351,11 +353,11 @@ describe('task-pipeline 0943 — failure-class routing (R3)', () => {
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 
-    test('the cap bounds the retryable lane: retryable at max attempts routes failed(retry-exhausted)', () => {
+    test('the cap bounds the fix lane: fix at max attempts routes failed(retry-exhausted)', () => {
         const staged = stage({
             gateStatus: 'FAIL\n',
             attempts: `${MAX_ATTEMPTS}\n`,
-            failureDecision: { value: 'retryable' },
+            failureDecision: { value: 'fix' },
         });
         runOnEnterShells('test-fail-triage', staged.cwd, staged.vars);
         const edge = firstPassingEdge('test-fail-triage', staged.cwd, staged.vars);

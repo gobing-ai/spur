@@ -9,6 +9,10 @@ import {
 } from '@gobing-ai/ts-runtime';
 import { EnvShellGuardRunner } from '../../../src/workflow/guards/shell';
 
+// 0976 R3: the cases that really spawn /bin/sh keep an explicit budget — a cold spawn under
+// full-suite concurrency can exceed bun's 5s default while the assertion itself is sound.
+const SPAWN_TIMEOUT_MS = 20_000;
+
 function makeCtx(overrides: Partial<GuardContext> = {}): GuardContext {
     return {
         runId: 'run-1',
@@ -41,7 +45,16 @@ describe('EnvShellGuardRunner', () => {
     });
 
     test('passed reflects exit code, preserving guard semantics', async () => {
-        const runner = new EnvShellGuardRunner(new NodeProcessExecutor());
+        // 0976 R3: injected executor — the semantics under test are exit code → passed, so no
+        // wall-clock-bound spawn. The metacharacter cases below keep real end-to-end spawns.
+        const fakeExecutor: ProcessExecutor = {
+            run: async (options) =>
+                ({ exitCode: options.env?.profile === 'auto' ? 0 : 1, stdout: '', stderr: '' }) as ProcessResult,
+            runStreaming: () => {
+                throw new Error('guards use buffered run()');
+            },
+        };
+        const runner = new EnvShellGuardRunner(fakeExecutor);
 
         const yes = await runner.evaluate(
             { command: 'test "$profile" = auto' },
@@ -56,36 +69,44 @@ describe('EnvShellGuardRunner', () => {
         expect(no.passed).toBe(false);
     });
 
-    test('a var carrying shell metacharacters cannot execute from a guard (0435)', async () => {
-        // The pre-fix shape embedded the value in the command string, so a backticked payload ran
-        // while the comparison still returned an ordinary boolean — a silent side effect.
-        const runner = new EnvShellGuardRunner(new NodeProcessExecutor());
-        const payload = '`printf INJECTED` $(printf INJECTED) "dq" \\bs';
+    test(
+        'a var carrying shell metacharacters cannot execute from a guard (0435)',
+        async () => {
+            // The pre-fix shape embedded the value in the command string, so a backticked payload ran
+            // while the comparison still returned an ordinary boolean — a silent side effect.
+            const runner = new EnvShellGuardRunner(new NodeProcessExecutor());
+            const payload = '`printf INJECTED` $(printf INJECTED) "dq" \\bs';
 
-        const result = await runner.evaluate(
-            { command: 'printf \'%s\' "$probe"' },
-            makeCtx({ vars: { probe: payload } }),
-        );
+            const result = await runner.evaluate(
+                { command: 'printf \'%s\' "$probe"' },
+                makeCtx({ vars: { probe: payload } }),
+            );
 
-        // printf exits 0, so the guard passes; what matters is WHAT it printed.
-        expect(result.passed).toBe(true);
-        const report = result.report as { stdout: string };
-        // Observed literally — had the backticks or $() executed, stdout would contain INJECTED.
-        expect(report.stdout).toBe(payload);
-        expect(report.stdout).not.toContain('INJECTED\n');
-    });
+            // printf exits 0, so the guard passes; what matters is WHAT it printed.
+            expect(result.passed).toBe(true);
+            const report = result.report as { stdout: string };
+            // Observed literally — had the backticks or $() executed, stdout would contain INJECTED.
+            expect(report.stdout).toBe(payload);
+            expect(report.stdout).not.toContain('INJECTED\n');
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 
-    test('a metacharacter-bearing var does not alter which transition is taken', async () => {
-        const runner = new EnvShellGuardRunner(new NodeProcessExecutor());
+    test(
+        'a metacharacter-bearing var does not alter which transition is taken',
+        async () => {
+            const runner = new EnvShellGuardRunner(new NodeProcessExecutor());
 
-        // A payload engineered to make a naive `test "<value>" = PASS` succeed via injection.
-        const result = await runner.evaluate(
-            { command: 'test "$probe" = PASS' },
-            makeCtx({ vars: { probe: 'x`printf PASS`' } }),
-        );
+            // A payload engineered to make a naive `test "<value>" = PASS` succeed via injection.
+            const result = await runner.evaluate(
+                { command: 'test "$probe" = PASS' },
+                makeCtx({ vars: { probe: 'x`printf PASS`' } }),
+            );
 
-        expect(result.passed).toBe(false);
-    });
+            expect(result.passed).toBe(false);
+        },
+        SPAWN_TIMEOUT_MS,
+    );
 
     test('explicit args run the command as a program, not via /bin/sh', async () => {
         let captured: ProcessOptions | undefined;

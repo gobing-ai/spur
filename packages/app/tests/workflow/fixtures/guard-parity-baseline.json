@@ -110,12 +110,6 @@
         },
         {
             "from": "test-fail-triage",
-            "to": "test-recheck",
-            "kind": "shell",
-            "command": "jq -e '.value == \"retryable\"' \".spur/run/$wbs-failure-class.decision\" >/dev/null 2>&1"
-        },
-        {
-            "from": "test-fail-triage",
             "to": "test-fix",
             "kind": "shell",
             "command": "jq -e '.value == \"fix\"' \".spur/run/$wbs-failure-class.decision\" >/dev/null 2>&1"
