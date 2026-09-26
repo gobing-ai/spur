@@ -39,6 +39,7 @@
 import { Database } from 'bun:sqlite';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 // Deep relative import (0775, same as workflow-promotion.ts): the root node_modules has no
 // @gobing-ai/app workspace link for scripts/commands, so the §1.1 alias cannot resolve here.
 import {
@@ -47,7 +48,7 @@ import {
     type TerminalReason,
 } from '../../packages/app/src/workflow/terminal-reason';
 
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DB_PATH = join(REPO_ROOT, '.spur/spur.db');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config/workflows');
 

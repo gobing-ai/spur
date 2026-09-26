@@ -27,13 +27,14 @@
 import { execFileSync } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 // Deep relative import (0775): the root node_modules has no @gobing-ai/spur-app workspace
 // link for scripts/commands, so the §1.1 cross-workspace alias rule cannot resolve here.
 import { extractResolvedWorkflowFacts } from '../../packages/app/src/workflow/composition-baseline';
 import { readWorkflowMetrics, type WorkflowMetrics } from './real-run-cost';
 
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const BUDGETS_PATH = join(REPO_ROOT, 'config/pipeline-budgets.json');
 const WORKFLOWS_DIR = join(REPO_ROOT, 'config/workflows');
 

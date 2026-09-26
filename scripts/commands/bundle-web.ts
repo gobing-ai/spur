@@ -11,8 +11,9 @@
  */
 import { cp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DEFAULT_SOURCE = join(REPO_ROOT, 'dist/web');
 const DEFAULT_TARGET = join(REPO_ROOT, 'apps/cli/web');
 

@@ -8,9 +8,10 @@
  * end-user IDE validation resolves against the schemas shipped with the CLI.
  */
 import { cp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const SOURCE = new URL('../../config', import.meta.url).pathname;
+const SOURCE = fileURLToPath(new URL('../../config', import.meta.url));
 
 // Skip anything that is not a shippable config asset. `cp`'s filter runs per
 // entry: returning false prunes the entry (and, for a directory, its subtree).
@@ -22,6 +23,11 @@ const EXCLUDE = /(^|\/)(\.DS_Store|fixtures)($|\/)/;
 export async function bundleConfig(target: string | undefined): Promise<{ target: string; injected: number }> {
     if (!target) {
         throw new Error('Usage: spur-dev bundle-config <dist-config-dir>');
+    }
+    // The target is wiped first — refuse a path that would take the source with it (`.`, repo root, `config`).
+    const fromTarget = relative(resolve(target), SOURCE);
+    if (!fromTarget.startsWith('..') && !isAbsolute(fromTarget)) {
+        throw new Error(`bundle-config: refusing to replace ${resolve(target)} — it contains the source ${SOURCE}`);
     }
     await rm(target, { recursive: true, force: true });
     await cp(SOURCE, target, {

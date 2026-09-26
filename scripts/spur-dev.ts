@@ -9,7 +9,7 @@
  * Commands:
  *   bump-ver <pkg|--all> <version> [--push]    bump version(s), commit, tag, push
  *   drop-tags <pkg|--all> <version> [--remote] delete release tag(s)
- *   publish <package-dir>                       resolve deps + npm publish (OIDC)
+ *   publish <package-dir> [--otp <code>]       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
  *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
@@ -19,6 +19,10 @@
  *   build-cli                                  patch ts-runtime + compile local `spur` binary
  *   dev-all                                     run server + web under one supervisor
  *   link-check                                  fail if a linked @gobing-ai pkg serves a stale dist/
+ *   eval-pipeline [args]                        run fixture tasks through a pipeline and record cost/outcome
+ *   real-run-cost [args]                        report real pipeline-run cost from the project DB
+ *   check-pipeline-budgets [args]               fail when pipeline cost exceeds config/pipeline-budgets.json
+ *   promotion [args]                            workflow candidate promotion/retirement records
  */
 import { buildBinaries } from './commands/build-binaries';
 import { buildCli } from './commands/build-cli';
@@ -57,7 +61,11 @@ try {
         case 'publish': {
             const otpIndex = args.indexOf('--otp');
             const otp = otpIndex !== -1 ? args[otpIndex + 1] : undefined;
-            await publish(args[0], otp);
+            // Flag position is free: the dir is the first arg that is neither `--otp` nor its value.
+            await publish(
+                args.find((_, i) => otpIndex === -1 || (i !== otpIndex && i !== otpIndex + 1)),
+                otp,
+            );
             break;
         }
         case 'bundle-config': {

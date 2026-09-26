@@ -15,8 +15,9 @@
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 interface Marketplace {
     plugins?: Array<{ name?: string; version?: string; source?: string }>;
@@ -71,14 +72,11 @@ export async function verifyPackExtract(extractRoot: string): Promise<void> {
 
     const files = await listFiles(join(pkg, 'plugins'));
     const rel = files.map((f) => f.slice(join(pkg, 'plugins').length + 1));
-    if (
-        rel.some(
-            (f) => f.includes('/tests/') || f.startsWith('tests/') || f.endsWith('.test.ts') || f.includes('/evals/'),
-        )
-    ) {
-        throw new Error(
-            `pruned content found in packed plugins: ${rel.filter((f) => /tests|\/evals\/|\.test\.ts/.test(f)).join(', ')}`,
-        );
+    const pruned = rel.filter(
+        (f) => f.includes('/tests/') || f.startsWith('tests/') || f.endsWith('.test.ts') || f.includes('/evals/'),
+    );
+    if (pruned.length > 0) {
+        throw new Error(`pruned content found in packed plugins: ${pruned.join(', ')}`);
     }
 }
 

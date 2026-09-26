@@ -8,8 +8,9 @@
  * Builds the package BEFORE calling npm publish so that bin files exist on disk
  * when npm validates them (npm ≥ 11 checks bin existence pre-lifecycle-scripts).
  */
+import { fileURLToPath } from 'node:url';
 
-const repoRoot = new URL('../../', import.meta.url).pathname;
+const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 async function loadJson(path: string): Promise<Record<string, unknown>> {
     return await Bun.file(path).json();
@@ -68,7 +69,9 @@ export async function publish(target: string | undefined, otp?: string): Promise
                     deps[name] = `^${info.version}`;
                     changed++;
                 }
-            } else if (range === 'catalog:' && catalog[name]) {
+            } else if (range === 'catalog:') {
+                // A missing entry would publish the literal `catalog:` range, which npm cannot install.
+                if (!catalog[name]) throw new Error(`catalog entry not found in root workspaces.catalog: ${name}`);
                 deps[name] = catalog[name];
                 changed++;
             }
@@ -80,33 +83,31 @@ export async function publish(target: string | undefined, otp?: string): Promise
         console.log(`Resolved ${changed} workspace/catalog range(s)`);
     }
 
-    // Build before npm publish so bin files exist when npm validates them.
-    // npm ≥ 11 checks bin file existence BEFORE running prepublishOnly, so
-    // relying on the lifecycle hook alone causes npm to strip the bin entry.
-    const build = Bun.spawnSync(['bun', 'run', 'build:bundle'], {
-        cwd: dir,
-        stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    if (build.exitCode !== 0) {
-        // Restore original manifest before throwing on build failure.
+    // The resolved manifest must never outlive this call — restore on every exit path.
+    try {
+        // Build before npm publish so bin files exist when npm validates them.
+        // npm ≥ 11 checks bin file existence BEFORE running prepublishOnly, so
+        // relying on the lifecycle hook alone causes npm to strip the bin entry.
+        const build = Bun.spawnSync(['bun', 'run', 'build:bundle'], {
+            cwd: dir,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        if (build.exitCode !== 0) {
+            console.error(build.stderr.toString().trim());
+            throw new Error(`build:bundle failed (exit ${build.exitCode})`);
+        }
+
+        const publishArgs = ['npm', 'publish', '--access', 'public'];
+        if (otp) publishArgs.push('--otp', otp);
+        const result = Bun.spawnSync(publishArgs, {
+            cwd: dir,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        const output = [result.stdout.toString(), result.stderr.toString()].filter(Boolean).join('\n').trim();
+        console.log(output);
+
+        if (result.exitCode !== 0) throw new Error(`npm publish failed (exit ${result.exitCode})`);
+    } finally {
         if (changed > 0) await Bun.write(manifestPath, original);
-        console.error(build.stderr.toString().trim());
-        throw new Error(`build:bundle failed (exit ${build.exitCode})`);
     }
-
-    const publishArgs = ['npm', 'publish', '--access', 'public'];
-    if (otp) publishArgs.push('--otp', otp);
-    const result = Bun.spawnSync(publishArgs, {
-        cwd: dir,
-        stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    const output = [result.stdout.toString(), result.stderr.toString()].filter(Boolean).join('\n').trim();
-    console.log(output);
-
-    // Restore original manifest before potentially throwing.
-    if (changed > 0) {
-        await Bun.write(manifestPath, original);
-    }
-
-    if (result.exitCode !== 0) throw new Error(`npm publish failed (exit ${result.exitCode})`);
 }

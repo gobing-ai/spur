@@ -22,8 +22,9 @@
  */
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const ENTRY = join(REPO_ROOT, 'packages/domain/src/analytics/artifact-digest.ts');
 const OUT_DIR = join(REPO_ROOT, 'plugins/sp/lib');
 

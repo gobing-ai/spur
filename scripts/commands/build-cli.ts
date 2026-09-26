@@ -16,10 +16,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const CLI_ENTRY = new URL('../../apps/cli/src/index.ts', import.meta.url).pathname;
-const CLI_DIR = new URL('../../apps/cli', import.meta.url).pathname;
-const OUT_FILE = new URL('../../dist/cli/spur', import.meta.url).pathname;
+const CLI_ENTRY = fileURLToPath(new URL('../../apps/cli/src/index.ts', import.meta.url));
+const CLI_DIR = fileURLToPath(new URL('../../apps/cli', import.meta.url));
+const OUT_FILE = fileURLToPath(new URL('../../dist/cli/spur', import.meta.url));
 
 /** Resolve the ts-runtime dist file through the CLI's module resolution. */
 function resolveTsRuntimeDist(): string {
@@ -35,7 +36,8 @@ function resolveTsRuntimeDist(): string {
  * `const <var> = '@gobing-ai/ts-db'` declaration and rewrites
  * `await import(<var>)` → `await import('@gobing-ai/ts-db')`.
  *
- * Returns a restore function, or a no-op if no patch was needed.
+ * Returns a restore function. Throws when no import can be patched: the compiled
+ * binary would build fine and then fail at runtime with `Cannot find module`.
  */
 export function patchTsRuntimeImport(): () => void {
     const distFile = resolveTsRuntimeDist();
@@ -54,10 +56,9 @@ export function patchTsRuntimeImport(): () => void {
     }
 
     if (patched === original) {
-        console.warn(
-            'build-cli: WARNING — could not find a variable-specifier ts-db import in ts-runtime dist. The pattern may have changed.',
+        throw new Error(
+            `build-cli: no variable-specifier ts-db import found in ${distFile} — the ts-runtime dist shape changed; update patchTsRuntimeImport before compiling`,
         );
-        return () => {};
     }
 
     writeFileSync(distFile, patched, 'utf-8');

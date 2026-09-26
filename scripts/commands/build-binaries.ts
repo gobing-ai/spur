@@ -7,10 +7,11 @@
  * `scripts/install.sh` downloads.
  */
 import { mkdir } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { patchTsRuntimeImport } from './build-cli';
 
-const CLI_ENTRY = new URL('../../apps/cli/src/index.ts', import.meta.url).pathname;
-const OUT_DIR = new URL('../../dist/cli', import.meta.url).pathname;
+const CLI_ENTRY = fileURLToPath(new URL('../../apps/cli/src/index.ts', import.meta.url));
+const OUT_DIR = fileURLToPath(new URL('../../dist/cli', import.meta.url));
 
 // asset suffix -> Bun --target triple. Suffixes mirror scripts/install.sh.
 const TARGETS: Record<string, string> = {

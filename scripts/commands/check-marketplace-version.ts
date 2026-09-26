@@ -13,8 +13,9 @@
  */
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const REPO_ROOT = new URL('../../', import.meta.url).pathname;
+const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const PKG = join(REPO_ROOT, 'apps/cli/package.json');
 const MARKETPLACE = join(REPO_ROOT, '.claude-plugin/marketplace.json');
 const PLUGIN = join(REPO_ROOT, 'plugins/sp/plugin.json');

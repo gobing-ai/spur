@@ -11,6 +11,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { bundleConfig } from './bundle-config';
 
 const SCHEMA_LINE = /^\s*(?:\$schema|"\$schema")\s*:/gm;
@@ -56,5 +57,14 @@ describe('bundleConfig', () => {
             const matches = content.match(SCHEMA_LINE) ?? [];
             expect(matches.length, `${file} must carry a $schema for IDE validation`).toBeGreaterThanOrEqual(1);
         }
+    });
+});
+
+describe('bundleConfig target guard', () => {
+    const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
+
+    // The target is removed before copying, so a target that contains the source would delete config/.
+    test.each([repoRoot, join(repoRoot, 'config'), '/'])('refuses %s', async (dangerous) => {
+        await expect(bundleConfig(dangerous)).rejects.toThrow('refusing to replace');
     });
 });

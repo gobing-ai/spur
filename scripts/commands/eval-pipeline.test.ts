@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, spyOn, test } from '
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import {
     createEvalRun,
@@ -141,7 +142,7 @@ describe('extractHistoryCost', () => {
 
 describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', () => {
     test('loadWorkflowFacts extracts modelQueries + action keys from the live definitions', async () => {
-        const workflowsDir = join(new URL('../../', import.meta.url).pathname, 'config/workflows');
+        const workflowsDir = join(fileURLToPath(new URL('../../', import.meta.url)), 'config/workflows');
         const facts = await loadWorkflowFacts(workflowsDir);
         expect(facts['task-pipeline'].modelQueries).toContain('implement');
         expect(facts['task-pipeline'].actions.length).toBeGreaterThan(0);
@@ -205,7 +206,7 @@ describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', 
 });
 
 describe('readGateOutcomes', () => {
-    const runDir = join(new URL('../../', import.meta.url).pathname, '.spur/run');
+    const runDir = join(fileURLToPath(new URL('../../', import.meta.url)), '.spur/run');
     const wbs = '99991';
     const files = [`${wbs}-precheck-doctor.status`, `${wbs}-test-gate.status`, `${wbs}-verdict.json`];
 
@@ -282,7 +283,7 @@ describe('record shape + diffRecords', () => {
 // ignored the whole tree), and both root and per-workspace `node_modules` are linked (without them
 // `tsc` is missing and typecheck fails TS2307 across apps/cli).
 describe('fixture worktree can run the quality gate', () => {
-    const repoRoot = new URL('../../', import.meta.url).pathname;
+    const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
     const created: EvalRun[] = [];
 
     afterAll(async () => {
@@ -323,7 +324,7 @@ describe('nesting guard', () => {
         logSpy.mockRestore();
         errSpy.mockRestore();
         // `--dry` still writes a report; do not leave test artifacts in the project's report dir.
-        const reportDir = join(new URL('../../', import.meta.url).pathname, '.spur/reports/pipeline-eval');
+        const reportDir = join(fileURLToPath(new URL('../../', import.meta.url)), '.spur/reports/pipeline-eval');
         for (const f of await readdir(reportDir).catch(() => [] as string[])) {
             if (f.includes('nesting-guard')) await rm(join(reportDir, f), { force: true });
         }
