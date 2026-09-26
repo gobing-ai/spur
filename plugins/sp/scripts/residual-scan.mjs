@@ -18,6 +18,9 @@ var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report> <wb
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
 var NONE_FINDING = /^(none|\u2014)$/i;
+var DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
+var RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
+var DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;
 var ANCHOR_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
 var RANGE_ANCHOR = /([A-Za-z0-9_./-]+\.[A-Za-z]+):([0-9]+)-[0-9]+/g;
 var EXCLUDED_PATHS = ["docs/tasks", "docs/features/", ".spur/"];
@@ -68,6 +71,7 @@ function parseReviewFindings(taskContent) {
     }
     const findingCol = header.findIndex((h) => h.trim() === "Finding");
     const locationCol = header.findIndex((h) => h.trim() === "Location");
+    const dispositionCol = header.findIndex((h) => DISPOSITION_HEADER.test(h.trim()));
     i++;
     const sep = lines[i];
     if (sep !== undefined && /^\s*\|[\s:|-]+\|\s*$/.test(sep))
@@ -79,8 +83,10 @@ function parseReviewFindings(taskContent) {
       const cells = splitRow(row);
       const priority = (cells[priorityCol] ?? "").trim();
       const finding = (cells[findingCol] ?? "").trim();
-      if (PRIORITY_PATTERN.test(priority) && !NONE_FINDING.test(finding) && finding.length > 0) {
-        out.push({ priority, location: locationOf(cells[locationCol] ?? "", finding), text: finding });
+      const disposition = dispositionCol === -1 ? "" : (cells[dispositionCol] ?? "").trim();
+      if (PRIORITY_PATTERN.test(priority) && !NONE_FINDING.test(finding) && finding.length > 0 && !RESOLVED_DISPOSITION.test(disposition)) {
+        const location = locationOf(cells[locationCol] ?? "", finding);
+        out.push(DEFERRED_DISPOSITION.test(disposition) ? { priority, location, text: finding, deferral: disposition } : { priority, location, text: finding });
       }
       i++;
     }
@@ -193,7 +199,9 @@ function scanResiduals(root, wbs, tmpDir, taskContent, _env) {
   const runDir = join(root, ".spur", "run");
   const basePath = join(runDir, `${wbs}-base.sha`);
   const base = existsSync(basePath) ? readFileSync(basePath, "utf8").trim() : null;
-  const review = parseReviewFindings(taskContent).map((r) => ({
+  const reviewRows = parseReviewFindings(taskContent);
+  const tableDeferrals = reviewRows.flatMap((r) => r.deferral === undefined ? [] : [{ id: makeItemId("review-finding", r.location, r.text), reason: r.deferral }]);
+  const review = reviewRows.map((r) => ({
     category: "review-finding",
     priority: r.priority,
     location: r.location,
@@ -214,7 +222,7 @@ function scanResiduals(root, wbs, tmpDir, taskContent, _env) {
     location: p,
     text: p
   }));
-  const items = classify([...review, ...markers, ...boxes, ...residue], readDeferrals(runDir, wbs));
+  const items = classify([...review, ...markers, ...boxes, ...residue], [...tableDeferrals, ...readDeferrals(runDir, wbs)]);
   const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
   for (const item of items)
     counts[item.class]++;

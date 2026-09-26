@@ -261,8 +261,8 @@ the deterministic Testing writer `spur task record` (section authorship never ha
 # write .spur/run/<wbs>-verdict.json (shape in references/verdict-schema.md), then:
 # F96 residual sweep (observe-only): scan + fold BEFORE record, under every --fix mode.
 RESIDUAL=$(superskill script path sp residual-scan.mjs)
-node "$RESIDUAL" scan --wbs <wbs> --base .spur/run/<wbs>-base.sha
-node "$RESIDUAL" fold --wbs <wbs> --verdict .spur/run/<wbs>-verdict.json
+node "$RESIDUAL" scan <wbs>
+node "$RESIDUAL" fold <wbs>
 spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ## Testing
 ```
 

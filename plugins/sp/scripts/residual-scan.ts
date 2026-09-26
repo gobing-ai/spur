@@ -65,6 +65,9 @@ export interface ScanOptions {
 const MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 const PRIORITY_PATTERN = /^P[1-4]/;
 const NONE_FINDING = /^(none|—)$/i;
+const DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
+const RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
+const DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;
 const ANCHOR_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
 /** `path:12-18` range anchor → single-line `path:12`. */
 const RANGE_ANCHOR = /([A-Za-z0-9_./-]+\.[A-Za-z]+):([0-9]+)-[0-9]+/g;
@@ -108,12 +111,16 @@ export function locationOf(locationCell: string, finding: string): string {
 /**
  * Extract review-finding rows: any `### Review` section table whose header carries a
  * Priority column. Rows need `^P[1-4]` priority and a finding other than `none`/`—`.
+ * A disposition column (Disposition/Action/Status/Resolution/Fixed) is honored: `FIXED`/
+ * `RESOLVED`/`DONE` rows are dropped; `DEFER` rows carry the cell as an in-table deferral reason.
  */
-export function parseReviewFindings(taskContent: string): Array<{ priority: string; location: string; text: string }> {
+export function parseReviewFindings(
+    taskContent: string,
+): Array<{ priority: string; location: string; text: string; deferral?: string }> {
     const section = taskContent.split(/^### Review\b/m)[1];
     if (section === undefined) return [];
     const body = section.split(/^### /m)[0];
-    const out: Array<{ priority: string; location: string; text: string }> = [];
+    const out: Array<{ priority: string; location: string; text: string; deferral?: string }> = [];
     const lines = body.split('\n');
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
@@ -127,6 +134,7 @@ export function parseReviewFindings(taskContent: string): Array<{ priority: stri
         }
         const findingCol = header.findIndex((h) => h.trim() === 'Finding');
         const locationCol = header.findIndex((h) => h.trim() === 'Location');
+        const dispositionCol = header.findIndex((h) => DISPOSITION_HEADER.test(h.trim()));
         i++; // skip header
         const sep = lines[i];
         if (sep !== undefined && /^\s*\|[\s:|-]+\|\s*$/.test(sep)) i++; // skip separator
@@ -136,8 +144,19 @@ export function parseReviewFindings(taskContent: string): Array<{ priority: stri
             const cells = splitRow(row);
             const priority = (cells[priorityCol] ?? '').trim();
             const finding = (cells[findingCol] ?? '').trim();
-            if (PRIORITY_PATTERN.test(priority) && !NONE_FINDING.test(finding) && finding.length > 0) {
-                out.push({ priority, location: locationOf(cells[locationCol] ?? '', finding), text: finding });
+            const disposition = dispositionCol === -1 ? '' : (cells[dispositionCol] ?? '').trim();
+            if (
+                PRIORITY_PATTERN.test(priority) &&
+                !NONE_FINDING.test(finding) &&
+                finding.length > 0 &&
+                !RESOLVED_DISPOSITION.test(disposition)
+            ) {
+                const location = locationOf(cells[locationCol] ?? '', finding);
+                out.push(
+                    DEFERRED_DISPOSITION.test(disposition)
+                        ? { priority, location, text: finding, deferral: disposition }
+                        : { priority, location, text: finding },
+                );
             }
             i++;
         }
@@ -295,7 +314,11 @@ export function scanResiduals(
     const runDir = join(root, '.spur', 'run');
     const basePath = join(runDir, `${wbs}-base.sha`);
     const base = existsSync(basePath) ? readFileSync(basePath, 'utf8').trim() : null;
-    const review = parseReviewFindings(taskContent).map((r) => ({
+    const reviewRows = parseReviewFindings(taskContent);
+    const tableDeferrals = reviewRows.flatMap((r) =>
+        r.deferral === undefined ? [] : [{ id: makeItemId('review-finding', r.location, r.text), reason: r.deferral }],
+    );
+    const review = reviewRows.map((r) => ({
         category: 'review-finding' as const,
         priority: r.priority,
         location: r.location,
@@ -319,7 +342,10 @@ export function scanResiduals(
         location: p,
         text: p,
     }));
-    const items = classify([...review, ...markers, ...boxes, ...residue], readDeferrals(runDir, wbs));
+    const items = classify(
+        [...review, ...markers, ...boxes, ...residue],
+        [...tableDeferrals, ...readDeferrals(runDir, wbs)],
+    );
     const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
     for (const item of items) counts[item.class]++;
     return {

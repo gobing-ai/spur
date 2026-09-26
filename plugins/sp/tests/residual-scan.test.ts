@@ -73,6 +73,36 @@ describe('parseReviewFindings', () => {
         );
         expect(rows[0]?.location).toBe('x/y.ts:9');
     });
+
+    // Resolved findings must not need a hand-written deferral file (D64 0940/0942/0947).
+    test('honors the disposition column: FIXED dropped, DEFER becomes an in-table deferral', () => {
+        const review = [
+            '### Review',
+            '',
+            '| ID | Priority | Finding | Disposition |',
+            '| --- | --- | --- | --- |',
+            '| F1 | P3 | Stamp bypassed `a.ts:1` | FIXED: runner-local reason |',
+            '| F2 | P3 | Placeholders `b.ts:2` | DEFER — resolved by closing chain |',
+            '| F3 | P2 | Real bug `c.ts:3` | open |',
+            '',
+            '| Priority | Finding | Location | Action |',
+            '| --- | --- | --- | --- |',
+            '| P3 | Bundle drift | `d.mjs` | RESOLVED — regenerated in main tree |',
+        ].join('\n');
+        const rows = parseReviewFindings(review);
+        expect(rows.map((r) => r.text)).toEqual(['Placeholders `b.ts:2`', 'Real bug `c.ts:3`']);
+        expect(rows[0]?.deferral).toBe('DEFER — resolved by closing chain');
+        expect(rows[1]?.deferral).toBeUndefined();
+
+        const { dir, cleanup } = scratch('rs-disp-');
+        const art = scanResiduals(dir, '0998', tmpdir(), review, {});
+        cleanup();
+        const classes = art.items.filter((i) => i.category === 'review-finding').map((i) => [i.priority, i.class]);
+        expect(classes).toEqual([
+            ['P3', 'deferrable'],
+            ['P2', 'blocking'],
+        ]);
+    });
 });
 
 describe('diff markers', () => {

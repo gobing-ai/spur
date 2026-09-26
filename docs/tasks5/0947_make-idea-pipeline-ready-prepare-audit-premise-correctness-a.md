@@ -4,7 +4,7 @@ name: Make idea-pipeline ready-prepare audit premise correctness and re-stamp ev
 status: done
 template: issue
 created_at: 2026-09-24T00:36:30.606Z
-updated_at: "2026-09-26T02:50:05.670Z"
+updated_at: "2026-09-26T03:22:59.117Z"
 feature_id: D64
 
 estimate_hours: 6
@@ -242,7 +242,7 @@ Two-layer fix, same-process; no new deps, no new public surface (R4), seven chec
 | --- | --- | --- | --- |
 | P1 | none | — | — |
 | P2 | none | — | — |
-| P3 | Generated-bundle determinism: committed `idea-handoff.generated.mjs` was built in this worktree and carries unrelated minified-identifier renames; fail-safe (determinism test catches mismatch) | `plugins/sp/lib/idea-handoff.generated.mjs` | one `bun run build:plugin-lib` regeneration in main tree after merge |
+| P3 | Generated-bundle determinism: committed `idea-handoff.generated.mjs` was built in this worktree and carries unrelated minified-identifier renames; fail-safe (determinism test catches mismatch) | `plugins/sp/lib/idea-handoff.generated.mjs` | RESOLVED — regenerated in main tree (commit 685f49526); `plugins/sp/tests/idea-handoff-script.test.ts` determinism 2/2 pass (2026-09-25) |
 | P4 | Citation token regex omits `.mjs`/`.mts` — genuine citations to such files degrade fail-closed | `packages/app/src/services/task-readiness.ts:455` | widen only if false degrades observed in real runs |
 | P4 | Absolute-path citations resolve outside repo root (read-only leniency, undocumented) | `packages/app/src/workflow/idea-handoff.ts:71-84` | document or reject absolute citations |
 | P4 | Defensive dead branches after digest + `verifyReadyChecks` success | `packages/app/src/workflow/idea-handoff.ts:347,357` | optional cleanup in a later pass |
