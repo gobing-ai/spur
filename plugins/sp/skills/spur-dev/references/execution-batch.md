@@ -500,7 +500,7 @@ written inside the worktree and **are removed with it** in create mode — the E
 this evidence. Copying them out is no longer a manual audit-time duty: WT-4a (create-mode block
 below) runs `inline-run-setup.ts --persist-out --from "$WT_PATH"` **before** WT-4b holder cleanup,
 which copies the run/action/phase/transition/workflow-state rows and both record files into the
-invoking tree. The shapes are pinned (task 0975 R2): idempotent on re-persist; success exits 0
+invoking tree. The shapes are pinned (task 0975 R1): idempotent on re-persist; success exits 0
 printing `{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"}]}`
 — an `id-exists` / `external-key-conflict` skip never modifies the pre-existing target rows, a
 `record-conflict:<file>` skip never overwrites a divergent invoking-tree record — and any failure
