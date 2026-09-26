@@ -14,6 +14,7 @@ import {
     runLightGate,
     runQualityGate,
     runShellCommand,
+    shQuote,
 } from '../scripts/quality-gate';
 
 /** Injected `exists` predicate over a fixed path set — keeps the scope helpers pure. */
@@ -237,6 +238,19 @@ describe('planLightChecks', () => {
         // Every test command cd's into its workspace; paths are workspace-relative.
         expect(plans[2]).toEqual({ id: 'test:apps/cli', cmd: 'cd apps/cli && bun test tests/a.test.ts' });
         expect(plans[3]).toEqual({ id: 'test:packages/domain', cmd: 'cd packages/domain && bun test tests/b.test.ts' });
+    });
+
+    test('hostile or spaced file names reach sh as one literal argument each', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-qg-quote-'));
+        try {
+            const names = ['x$(touch pwned).ts', 'a b.ts', "it's;touch pwned.ts", 'plain/path.ts'];
+            const { output } = runShellCommand(`printf '%s\\n' ${names.map(shQuote).join(' ')}`, dir);
+            expect(output.split('\n').filter(Boolean)).toEqual(names);
+            expect(existsSync(join(dir, 'pwned'))).toBe(false);
+            expect(shQuote('plain/path.ts')).toBe('plain/path.ts');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test('no files and no tests → no rows even with workspaces touched', () => {

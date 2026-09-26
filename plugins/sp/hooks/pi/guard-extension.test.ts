@@ -175,6 +175,22 @@ describe('tool_call — task-write-guard', () => {
         }
     });
 
+    test('SPUR_WRITE_GUARD=off allows an owned task file, matching the Claude hook', async () => {
+        const dir = makeTempDir('spur-pi-g5b-');
+        setEnvVar('SPUR_BIN', makeFakeSpur(dir, 0));
+        setEnvVar('SPUR_WRITE_GUARD', 'off');
+        try {
+            const res = await callTool(
+                { toolName: 'write', input: { path: join(dir, 'docs', 'tasks', '0001_x.md') } },
+                makeCtx(),
+            );
+            expect(res.block).toBeUndefined();
+        } finally {
+            removeEnvVar('SPUR_BIN');
+            removeEnvVar('SPUR_WRITE_GUARD');
+        }
+    });
+
     test('allows a corpus-shaped path when spur reports unowned', async () => {
         const dir = makeTempDir('spur-pi-g6-');
         setEnvVar('SPUR_BIN', makeFakeSpur(dir, 1));
@@ -235,6 +251,19 @@ describe('tool_call — careful-guard', () => {
         expect(ctx.confirms).toHaveLength(1);
     });
 
+    test('SPUR_CAREFUL=off skips the prompt, matching the Claude hook', async () => {
+        makeTempDir('spur-pi-c5-');
+        const ctx = makeCtx(false);
+        setEnvVar('SPUR_CAREFUL', 'off');
+        try {
+            const res = await callTool({ toolName: 'bash', input: { command: 'rm -rf /tmp/scratch-pi-guard' } }, ctx);
+            expect(res.block).toBeUndefined();
+            expect(ctx.confirms).toHaveLength(0);
+        } finally {
+            removeEnvVar('SPUR_CAREFUL');
+        }
+    });
+
     test('ignores non-string command input', async () => {
         makeTempDir('spur-pi-c4-');
         const ctx = makeCtx();
@@ -285,6 +314,16 @@ describe('session lifecycle and token ledger', () => {
         expect(events[0]?.tokens).toBe(0);
     });
 
+    test('a Pi-native read (lowercase tool, `path` input) records a read event with its path', async () => {
+        const dir = makeTempDir('spur-pi-s3b-');
+        await handlers.session_start?.({}, makeCtx());
+        await handlers.tool_result?.({ toolName: 'read', input: { path: '/y.ts' } }, makeCtx());
+
+        const events = readLedger(dir).filter((e) => e.type === 'read');
+        expect(events).toHaveLength(1);
+        expect(events[0]?.path).toBe('/y.ts');
+    });
+
     test('secret-bearing commands are redacted before token estimation', async () => {
         const dir = makeTempDir('spur-pi-s4-');
         await handlers.session_start?.({}, makeCtx());
@@ -294,6 +333,11 @@ describe('session lifecycle and token ledger', () => {
         const events = readLedger(dir).filter((e) => e.type === 'write');
         expect(events).toHaveLength(1);
         expect(typeof events[0]?.tokens).toBe('number');
+        // The persisted summary must not carry the raw secrets.
+        const summary = String(events[0]?.summary);
+        for (const secret of ['a'.repeat(36), 'b'.repeat(20), 'C'.repeat(16), 'd'.repeat(16)]) {
+            expect(summary).not.toContain(secret);
+        }
     });
 
     test('token estimates cap at 4 KiB of command text', async () => {
@@ -305,7 +349,7 @@ describe('session lifecycle and token ledger', () => {
         expect(events[0]?.tokens).toBe(Math.ceil(4096 / 4));
         // The summary is truncated at 200 chars
         expect(String(events[0]?.summary)).toHaveLength(200);
-        expect(String(events[0]?.summary).endsWith('...')).toBe(true);
+        expect(String(events[0]?.summary).endsWith('…')).toBe(true);
     });
 
     test('summary candidate chain falls back through pattern to a tool-name placeholder', async () => {

@@ -335,6 +335,15 @@ export function lightScope(changedFiles: string[], exists: (p: string) => boolea
     return { files, workspaces: [...workspaces].sort(), tests: [...tests].sort() };
 }
 
+/**
+ * Quote one argument for `sh -c`. Changed-file names come from the working tree (untracked files
+ * included), so an unquoted `x$(cmd).ts` would run `cmd` and a space would split the argument.
+ * Plain paths pass through unchanged to keep receipts readable.
+ */
+export function shQuote(arg: string): string {
+    return /^[\w./@+-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
 export interface LightCheckPlan {
     id: string;
     cmd: string;
@@ -364,11 +373,11 @@ export function planLightChecks(
 ): LightCheckPlan[] {
     const plans: LightCheckPlan[] = [];
     if (scope.files.length > 0) {
-        plans.push({ id: 'format-lint:changed', cmd: `bunx biome check ${scope.files.join(' ')}` });
+        plans.push({ id: 'format-lint:changed', cmd: `bunx biome check ${scope.files.map(shQuote).join(' ')}` });
     }
     for (const workspace of scope.workspaces) {
         if (hasTypecheck(workspace)) {
-            plans.push({ id: `typecheck:${workspace}`, cmd: `cd ${workspace} && bun run typecheck` });
+            plans.push({ id: `typecheck:${workspace}`, cmd: `cd ${shQuote(workspace)} && bun run typecheck` });
         }
     }
     const testsByWorkspace = new Map<string, string[]>();
@@ -379,7 +388,10 @@ export function planLightChecks(
         testsByWorkspace.set(workspace, paths);
     }
     for (const [workspace, paths] of testsByWorkspace) {
-        plans.push({ id: `test:${workspace}`, cmd: `cd ${workspace} && bun test ${paths.join(' ')}` });
+        plans.push({
+            id: `test:${workspace}`,
+            cmd: `cd ${shQuote(workspace)} && bun test ${paths.map(shQuote).join(' ')}`,
+        });
     }
     return plans;
 }

@@ -25,6 +25,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { getEnvVar, getEnvVars } from '../../lib/env';
 import { resolveAgentHint as resolveAgentHintShared, resolveModelHint as resolveModelHintShared } from '../agent-hint';
+import { cappedByteLength, truncateSummary } from '../context-post-tool';
 import { classifyCommand } from '../destructive-policy';
 import { couldBeTaskFile } from '../task-file-policy';
 
@@ -36,8 +37,6 @@ import { couldBeTaskFile } from '../task-file-policy';
 const spurContextDir = (): string => join(process.cwd(), '.spur', 'context');
 const sessionFilePath = (): string => join(spurContextDir(), '.session.json');
 const ledgerFilePath = (): string => join(spurContextDir(), 'token-ledger.jsonl');
-const REDACTION_CAP = 4096;
-const SUMMARY_MAX_CHARS = 200;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -122,37 +121,15 @@ interface ToolEvent {
     tool_input?: Record<string, unknown>;
 }
 
-function estimateTokenCount(text: string): number {
-    if (!text) return 0;
-    // Rough estimate: ~4 chars per token for English text
-    return Math.ceil(text.length / 4);
-}
-
+// Summaries persist to disk, so they go through the same scrubber as the Claude hook —
+// the local copy this replaced stored the raw command (secrets included) as `summary`.
 function summarizeToolEvent(event: ToolEvent): string {
     const input = event.tool_input ?? {};
     const candidates = [input.file_path, input.command, input.pattern, input.glob_pattern, input.glob, input.path];
     for (const c of candidates) {
-        if (typeof c === 'string' && c.trim()) {
-            const s = c.trim();
-            return s.length > SUMMARY_MAX_CHARS ? `${s.slice(0, SUMMARY_MAX_CHARS - 3)}...` : s;
-        }
+        if (typeof c === 'string' && c.trim()) return truncateSummary(c);
     }
     return `(${event.tool_name ?? 'unknown'})`;
-}
-
-function redactText(text: string): string {
-    // Strip obvious secret patterns
-    let result = text.slice(0, REDACTION_CAP);
-    result = result.replace(
-        /-----BEGIN\s+(?:RSA\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:RSA\s+)?PRIVATE\s+KEY-----/g,
-        '[REDACTED: PRIVATE KEY]',
-    );
-    result = result.replace(/ghp_[A-Za-z0-9]{36}/g, '[REDACTED: GITHUB_TOKEN]');
-    result = result.replace(/gho_[A-Za-z0-9]{36}/g, '[REDACTED: GITHUB_TOKEN]');
-    result = result.replace(/sk-[A-Za-z0-9]{20,}/g, '[REDACTED: API_KEY]');
-    result = result.replace(/api[_-]key['"]?\s*[:=]\s*['"][A-Za-z0-9_-]{16,}['"]/gi, '[REDACTED: API_KEY]');
-    result = result.replace(/AKIA[0-9A-Z]{16}/g, '[REDACTED: AWS_KEY]');
-    return result;
 }
 
 function appendToLedger(event: ToolEvent, command: string | undefined): void {
@@ -162,13 +139,16 @@ function appendToLedger(event: ToolEvent, command: string | undefined): void {
         if (!sessionId) return;
 
         const summary = summarizeToolEvent(event);
-        const tokens = command ? estimateTokenCount(redactText(command)) : 0;
+        const tokens = command ? Math.ceil(cappedByteLength(command) / 4) : 0;
+        const input = event.tool_input ?? {};
+        // Pi tool names are lowercase (`read`) and its write/edit tools take `path`, not `file_path`.
+        const path = typeof input.file_path === 'string' ? input.file_path : input.path;
 
         const ledgerEntry = JSON.stringify({
             session: sessionId,
-            type: event.tool_name === 'Read' ? 'read' : 'write',
+            type: event.tool_name?.toLowerCase() === 'read' ? 'read' : 'write',
             tool: event.tool_name,
-            path: event.tool_input?.file_path ?? null,
+            path: typeof path === 'string' ? path : null,
             summary,
             tokens,
             timestamp: new Date().toISOString(),
@@ -272,8 +252,9 @@ function cleanupSession(): void {
 export default function (pi: ExtensionAPI): void {
     // ── task-write-guard + careful-guard ──────────────────────────────
     pi.on('tool_call', async (event, ctx) => {
-        // task-write-guard: block Write/Edit to Spur task files
-        if (event.toolName === 'write' || event.toolName === 'edit') {
+        // task-write-guard: block Write/Edit to Spur task files.
+        // Both guards honor the same `off` escape hatches as the Claude hooks.
+        if ((event.toolName === 'write' || event.toolName === 'edit') && getEnvVar('SPUR_WRITE_GUARD') !== 'off') {
             const input = event.input as Record<string, unknown> | undefined;
             // Pi's write/edit tools use `path` (not Claude Code's `file_path`)
             const filePath = resolveInputPath(input);
@@ -287,7 +268,7 @@ export default function (pi: ExtensionAPI): void {
         }
 
         // careful-guard: warn on destructive Bash commands
-        if (event.toolName === 'bash') {
+        if (event.toolName === 'bash' && getEnvVar('SPUR_CAREFUL') !== 'off') {
             const input = event.input as Record<string, unknown> | undefined;
             const command = typeof input?.command === 'string' ? input.command : '';
             const hit = command ? classifyCommand(command) : null;

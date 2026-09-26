@@ -154,6 +154,9 @@ function lightScope(changedFiles, exists = existsSync) {
   }
   return { files, workspaces: [...workspaces].sort(), tests: [...tests].sort() };
 }
+function shQuote(arg) {
+  return /^[\w./@+-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
 function workspaceHasTypecheck(workspace) {
   try {
     const pkg = JSON.parse(readFileSync(join(workspace, "package.json"), "utf8"));
@@ -165,11 +168,11 @@ function workspaceHasTypecheck(workspace) {
 function planLightChecks(scope, hasTypecheck = workspaceHasTypecheck) {
   const plans = [];
   if (scope.files.length > 0) {
-    plans.push({ id: "format-lint:changed", cmd: `bunx biome check ${scope.files.join(" ")}` });
+    plans.push({ id: "format-lint:changed", cmd: `bunx biome check ${scope.files.map(shQuote).join(" ")}` });
   }
   for (const workspace of scope.workspaces) {
     if (hasTypecheck(workspace)) {
-      plans.push({ id: `typecheck:${workspace}`, cmd: `cd ${workspace} && bun run typecheck` });
+      plans.push({ id: `typecheck:${workspace}`, cmd: `cd ${shQuote(workspace)} && bun run typecheck` });
     }
   }
   const testsByWorkspace = new Map;
@@ -180,7 +183,10 @@ function planLightChecks(scope, hasTypecheck = workspaceHasTypecheck) {
     testsByWorkspace.set(workspace, paths);
   }
   for (const [workspace, paths] of testsByWorkspace) {
-    plans.push({ id: `test:${workspace}`, cmd: `cd ${workspace} && bun test ${paths.join(" ")}` });
+    plans.push({
+      id: `test:${workspace}`,
+      cmd: `cd ${shQuote(workspace)} && bun test ${paths.map(shQuote).join(" ")}`
+    });
   }
   return plans;
 }
@@ -439,6 +445,7 @@ function main(argv, env = getEnvVars(), options = {}) {
 export {
   workspaceHasTypecheck,
   tailLines,
+  shQuote,
   scanCoverageShortfalls,
   runShellCommand,
   runQualityGate,

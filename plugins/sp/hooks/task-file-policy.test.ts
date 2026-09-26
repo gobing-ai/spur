@@ -8,9 +8,12 @@
  * drift apart.
  */
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { couldBeTaskFile } from './task-file-policy';
+
+// Repo-anchored so the suite passes from any cwd (repo root or plugins/sp).
+const REPO_ROOT = join(import.meta.dir, '..', '..', '..');
 
 describe('couldBeTaskFile — matches the corpus convention', () => {
     test('accepts a task file basename', () => {
@@ -45,8 +48,11 @@ describe('couldBeTaskFile — matches the corpus convention', () => {
 
     test('every real task file in this repo passes the pre-filter', () => {
         // A single miss here is a guard that silently stops protecting part of the corpus.
-        const { readdirSync, existsSync } = require('node:fs') as typeof import('node:fs');
-        const folders = ['docs/tasks', 'docs/tasks2', 'docs/tasks3'].filter((d) => existsSync(d));
+        // Every corpus folder (docs/tasks, docs/tasks2, …), not a fixed list that goes stale.
+        const docs = join(REPO_ROOT, 'docs');
+        const folders = readdirSync(docs)
+            .filter((d) => /^tasks\d*$/.test(d))
+            .map((d) => join(docs, d));
         expect(folders.length).toBeGreaterThan(0);
         const missed: string[] = [];
         let checked = 0;
@@ -64,7 +70,7 @@ describe('couldBeTaskFile — matches the corpus convention', () => {
     test('stays in lockstep with TASK_FILENAME_RE in task-locator.ts', () => {
         // The predicate exists only because it mirrors the locator's convention;
         // if the locator's regex changes, this test is the tripwire.
-        const locator = readFileSync('packages/app/src/services/task-locator.ts', 'utf8');
+        const locator = readFileSync(join(REPO_ROOT, 'packages/app/src/services/task-locator.ts'), 'utf8');
         expect(locator).toContain('const TASK_FILENAME_RE = /^(\\d{4})_(.+)\\.md$/;');
     });
 });
