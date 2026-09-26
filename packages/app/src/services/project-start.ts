@@ -75,29 +75,61 @@ function flattenEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 /**
+ * Windows detached-launch spec: argv travels in env vars so cmd.exe never parses argument
+ * bytes. cmd.exe expands %VAR% inside double quotes (and !VAR! under delayed expansion),
+ * so each element is handed off as SPUR_SERVE_ARG_<i> and referenced, not embedded.
+ *
+ * @throws if a value cannot survive the handoff: `"` in any argument (closes the quote
+ * after expansion) or a .cmd/.bat launcher (a batch interpreter re-expands %).
+ */
+export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+} {
+    const launcher = cmd[0];
+    if (launcher === undefined) {
+        throw new Error('detached serve launch: command must not be empty');
+    }
+    if (/\.(cmd|bat)$/i.test(launcher)) {
+        throw new Error(`detached serve launch: batch launcher ${launcher} re-expands %; use the bun executable`);
+    }
+    const env: Record<string, string> = {};
+    for (const [i, arg] of cmd.entries()) {
+        if (arg.includes('"')) {
+            throw new Error(
+                `detached serve launch: argument ${i} contains '"', which cannot be passed through cmd.exe`,
+            );
+        }
+        env[`SPUR_SERVE_ARG_${i}`] = arg;
+    }
+    return {
+        command: 'cmd',
+        args: ['/d', '/v:off', '/c', `start /b "" ${cmd.map((_, i) => `"%SPUR_SERVE_ARG_${i}%"`).join(' ')}`],
+        env,
+    };
+}
+
+/**
  * Default production spawn: ProcessExecutor runs `nohup <cmd> &` so the serve
  * daemon outlives the CLI without a direct Bun.spawn / child_process call.
+ * On Windows, argv reaches the daemon via SPUR_SERVE_ARG_<i> env vars under
+ * `cmd /d /v:off /c start /b` so cmd.exe never expands argument bytes.
  */
 export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options) => {
     const executor = new NodeProcessExecutor();
-    const line = cmd.map(shQuote).join(' ');
     // nohup + background: PE waits only for the shell, which exits immediately.
-    // macOS and Linux both ship nohup; Windows uses start /b via cmd.
-    const shell =
-        process.platform === 'win32'
-            ? {
-                  command: 'cmd',
-                  args: ['/c', `start /b "" ${cmd.map((c) => `"${c.replace(/"/g, '""')}"`).join(' ')}`],
-              }
-            : {
-                  command: '/bin/sh',
-                  args: ['-c', `nohup ${line} </dev/null >/dev/null 2>&1 &`],
-              };
+    // macOS and Linux both ship nohup; Windows uses start /b via cmd (env handoff above).
+    const windowsLaunch = process.platform === 'win32' ? buildWindowsDetachedServeLaunch(cmd) : undefined;
+    const shell = windowsLaunch ?? {
+        command: '/bin/sh',
+        args: ['-c', `nohup ${cmd.map(shQuote).join(' ')} </dev/null >/dev/null 2>&1 &`],
+    };
     await executor.run({
         command: shell.command,
         args: shell.args,
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-        env: flattenEnv(options.env ?? getEnvVars()),
+        env: { ...flattenEnv(options.env ?? getEnvVars()), ...windowsLaunch?.env },
         forceBuffered: true,
         rejectOnError: false,
     });

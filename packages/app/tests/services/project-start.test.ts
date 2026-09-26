@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '@gobing-ai/spur-config';
 import { ProjectRegistry, setPortProbeForTests } from '../../src/services/project-registry';
 import {
+    buildWindowsDetachedServeLaunch,
     type DetachedServeChild,
     type DetachedServeSpawn,
     defaultDetachedServeSpawn,
@@ -379,5 +380,61 @@ describe('project-start', () => {
         });
         expect(optionHits).toBe(1);
         expect(globalHits).toBe(0);
+    });
+
+    // 0964: the win32 branch of defaultDetachedServeSpawn delegates to the builder below;
+    // POSIX hosts (this test host) exercise the same pure launch spec directly.
+    describe('buildWindowsDetachedServeLaunch', () => {
+        it('hands every argv element to the daemon via SPUR_SERVE_ARG_<i> under cmd /d /v:off /c start /b (AC1)', () => {
+            const cmd = ['C:\\bun.exe', 'C:\\a%PATH%b', 'x!y!', 'a&b|c', 'p q', '^caret', ''];
+            const launch = buildWindowsDetachedServeLaunch(cmd);
+            expect(launch.command).toBe('cmd');
+            expect(launch.args).toEqual([
+                '/d',
+                '/v:off',
+                '/c',
+                'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%" "%SPUR_SERVE_ARG_6%"',
+            ]);
+            const joined = launch.args.join(' ');
+            for (const [i, arg] of cmd.entries()) {
+                // No argument bytes on the command line (empty string is a trivial substring).
+                if (arg !== '') expect(joined.includes(arg)).toBe(false);
+                expect(launch.env[`SPUR_SERVE_ARG_${i}`]).toBe(arg);
+            }
+        });
+
+        it('throws naming the index for an argument containing a double quote (AC2)', () => {
+            expect(() => buildWindowsDetachedServeLaunch(['C:\\bun.exe', 'serve', 'he said "hi"'])).toThrow(
+                /argument 2 contains '"', which cannot be passed through cmd\.exe/,
+            );
+        });
+
+        it('throws for .cmd/.bat launchers that would re-expand % (AC2)', () => {
+            expect(() => buildWindowsDetachedServeLaunch(['C:\\tools\\spur.CMD', 'serve'])).toThrow(
+                /batch launcher C:\\tools\\spur\.CMD re-expands %; use the bun executable/,
+            );
+            expect(() => buildWindowsDetachedServeLaunch(['C:\\tools\\spur.bat', 'serve'])).toThrow(/batch launcher/);
+        });
+
+        it('throws on an empty command', () => {
+            expect(() => buildWindowsDetachedServeLaunch([])).toThrow(/command must not be empty/);
+        });
+
+        it('builds the launch spec the win32 branch passes to the executor for a real serve argv', () => {
+            const launch = buildWindowsDetachedServeLaunch([
+                process.execPath,
+                'serve',
+                '--cwd',
+                'C:\\tmp\\p%x',
+                '--port',
+                '4100',
+            ]);
+            expect(launch.command).toBe('cmd');
+            expect(launch.args.slice(0, 3)).toEqual(['/d', '/v:off', '/c']);
+            expect(launch.args[3]).toBe(
+                'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%"',
+            );
+            expect(launch.env.SPUR_SERVE_ARG_3).toBe('C:\\tmp\\p%x');
+        });
     });
 });
