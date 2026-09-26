@@ -85,6 +85,7 @@
         ├── [done] **F94**: Pipeline close-out and gate friction: baseline reconcile verb, anchor-drift detection, verified-box auto-flip, and FSM denial guidance ([F94_pipeline-close-out-and-gate-friction-baseline-reconcile-verb-anchor-drift-detection-verified-box-auto-flip-and-fsm-denial-guidance.md](./F94_pipeline-close-out-and-gate-friction-baseline-reconcile-verb-anchor-drift-detection-verified-box-auto-flip-and-fsm-denial-guidance.md))
         ├── [done] **F95**: CLI JSON envelope standard: normalized ok-data-error shape across spur nouns ([F95_cli-json-envelope-standard-normalized-ok-data-error-shape-across-spur-nouns.md](./F95_cli-json-envelope-standard-normalized-ok-data-error-shape-across-spur-nouns.md))
         └── [done] **F96**: Residual sweep for task execution ([F96_residual-sweep-for-task-execution.md](./F96_residual-sweep-for-task-execution.md))
+            └── [backlog] **F961**: Residual-scan ignores placeholder no-finding review rows ([F961_residual-scan-ignores-placeholder-no-finding-review-rows.md](./F961_residual-scan-ignores-placeholder-no-finding-review-rows.md))
 [active] **G**: Collaboration ([G_collaboration.md](./G_collaboration.md))
     ├── [verifying] **G1**: Inbox IPC ([G1_inbox-ipc.md](./G1_inbox-ipc.md))
     ├── [done] **G2**: Team process supervision ([G2_team-process-supervision.md](./G2_team-process-supervision.md))
