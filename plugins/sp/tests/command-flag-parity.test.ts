@@ -227,7 +227,7 @@ describe('sp plugin — command flag parity with dev-operations.md (R8/R9, task 
 
     // dev-run joined the set: it drives a whole task pipeline (a batch of one), unlike dev-next
     // which dispatches a single step and stays excluded below.
-    const WORKTREE_COMMANDS = ['dev-runall', 'dev-refineall', 'dev-verifyall', 'dev-run'];
+    const WORKTREE_COMMANDS = ['dev-runall', 'dev-refineall', 'dev-verifyall', 'dev-run', 'dev-review'];
     for (const command of WORKTREE_COMMANDS) {
         test(`R7 — ${command} documents optional --worktree name as [<name>]`, () => {
             const raw = readFileSync(join(COMMANDS_DIR, `${command}.md`), 'utf8');

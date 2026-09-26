@@ -1,6 +1,6 @@
 ---
 name: session-review
-description: "Review the active coding-agent session: separate resolved from open issues with evidence, propose bounded improvements. With --triage, apply pure-doc / 1–2-line fixes inline and file the rest as one task. Triggers: review this session, wrap-up, triage findings."
+description: "Review the active coding-agent session: separate resolved from open issues with evidence, propose bounded improvements. With --triage, apply pure-doc / 1–2-line fixes inline and file the rest as one or more tasks. Triggers: review this session, wrap-up, triage findings."
 license: Apache-2.0
 version: 1.1.0
 metadata:
@@ -31,7 +31,7 @@ cross-agent windows, recurrence, trends, or quantitative performance forensics.
 | Argument | Description | Default |
 | --- | --- | --- |
 | `[focus]` | Question or operation to emphasize. It changes ordering, not evidence collection. | full active session |
-| `--triage` | Opt into bounded remediation after the report: apply direct fixes (pure docs / one-to-two-line fixes) inline, then file all remaining actionable findings as exactly one new task via the CLI-gated corpus surface. | off (report-only) |
+| `--triage` | Opt into bounded remediation after the report: apply direct fixes (pure docs / one-to-two-line fixes) inline, then file all remaining actionable findings as one or more implement-ready tasks via the CLI-gated corpus surface. | off (report-only) |
 
 ## Evidence boundary
 
@@ -64,13 +64,15 @@ three buckets — never skip triage and start fixing from the raw findings list.
    - **Note** — pre-existing, environmental, or ownerless observations; report only.
 2. **Apply direct fixes inline** — smallest surgical diff, project style, and re-verify each
    with the targeted check (lint / test / the exact command that exhibited the issue).
-3. **Create exactly one task** for the Task bucket through the CLI-gated corpus surface
-   (`spur task create`, then `spur task update <wbs> --section <s> --from-file` per section).
-   One task, not one per finding: each finding keeps its evidence, a suggested fix direction,
-   and an AC where verifiable. Exclude what direct fixes already resolved — say so in the task
-   Background instead.
+3. **File the Task bucket as one or more tasks** by the shared filing rule in
+   [dev-operations.md § 2. review](../spur-dev/references/dev-operations.md#2-review) (Triage
+   step 3): one task per cohesive unit one agent can implement and verify in one run, under the
+   existing feature that owns the surface (never a new root feature), implement-ready, written
+   only through `spur task create --skip-ready` + `spur task update <wbs> --section <s> --from-file`.
+   Not one task per finding: each finding keeps its evidence, fix direction, and an AC where
+   verifiable. Exclude what direct fixes already resolved — say so in the task Background.
 4. **Report** — add a Triage section: applied fixes (path + one-line what + verification) and
-   the created task WBS. The Resolved/Open tables keep their evidence rules unchanged.
+   each created task WBS. The Resolved/Open tables keep their evidence rules unchanged.
 
 ## Protocol
 
@@ -156,7 +158,7 @@ improvement. Use `None` when the session is complete and no follow-up is justifi
   to imported-history analysis.
 - Report-only by default: do not create or update corpus items or edit files. The single exception
   is `--triage` mode, which permits exactly two mutation classes — direct fixes from the triage
-  bucket, and the one triage task. Anything beyond that stays a proposal.
+  bucket, and the triage tasks. Anything beyond that stays a proposal.
 - Do not turn a single low-impact observation into a new policy. Report it as a candidate until it
   recurs or demonstrates a high-impact contract violation.
 

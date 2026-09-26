@@ -102,7 +102,7 @@ list this README is checked against.
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dev-next`          | Status-aware router — inspect a task (or next frontier under a feature), dispatch the best existing `/sp:dev-*` command, chain on clean success |
 | `dev-run`           | Run a task — full pipeline (precheck→implement→test→review→approve→verify→record→done) or single-step (implement)                               |
-| `dev-review`        | Multi-dimensional review for a task or path — functional requirements traceability, SECUA framework, and architectural depth                    |
+| `dev-review`        | Multi-dimensional review for a task or path (traceability, SECUA, architecture); `--triage` fixes small findings, files the rest as tasks       |
 | `dev-pr-review`     | GitHub Codex PR review — prepare/reuse a PR, request `@codex review`, collect findings, validate/fix/re-review (fix mode); workflow-backed spine |
 | `dev-verify`        | Verify a task against its requirements and Acceptance Criteria — traceability check producing a PASS/PARTIAL/FAIL verdict with evidence         |
 | `dev-unit`          | Generate or extend tests until the unit target is met                                                                                           |

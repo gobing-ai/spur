@@ -538,7 +538,7 @@ all subsequent tools, agents, task/feature writes, and run artifacts use the con
 tree's cwd. A stale or empty selector, an unsupported mode, or an invalid target creates no tree and
 no marker (WT-2/WT-7), and the required Git safety checks (WT-1) still precede creation.
 
-> **Command wiring (task 0814 R3).** The four worktree-capable commands (`dev-run`, `dev-runall`,
+> **Command wiring (task 0814 R3).** The four task-set worktree commands (`dev-run`, `dev-runall`,
 > `dev-refineall`, `dev-verifyall`) each call `quickReadiness` with their operation (`run`/`refine`/
 > `verify`), the resolved selector/status, and the filtered-set size **before** WT-1/WT-2. The
 > admission outcome gates the tree: an invalid/empty selector, unsupported mode, or a target that
@@ -556,6 +556,13 @@ derived branch/directory slug is the WBS — `sp/run-<wbs>-<short-id>`. The WT-4
 non-PASS verify verdict, or a HITL pause that ends the run take the WT-5 retention path. Only the
 full pipeline is eligible — `--worktree --mode implement` is rejected (WT-7), because that mode is
 the pipeline's implement stage and already runs in the driver's tree.
+
+**Review triage `dev-review` (run of one).** `/sp:dev-review <target> --triage --worktree [<name>]`
+runs this lifecycle around one review-plus-triage pass: WT-1…WT-6 apply unchanged, the marker's
+`command` is `dev-review` and its `selector` is the review target, and the slug is the WBS or the
+path's basename (`sp/review-<slug>-<short-id>`). It skips `quickReadiness` (there is no task set;
+admission is "the target resolves"). WT-4 success reads as "every direct fix passed its check and the
+project gate is green"; anything else takes WT-5. Contract: [dev-operations.md § 2. review](dev-operations.md#2-review).
 
 One flag, two modes (see the glossary entry for the ownership rule). Bare `--worktree` is **create
 mode** (cut a fresh branch + sibling tree). `--worktree <name>` is **reuse mode** (attach to a tree
@@ -976,6 +983,8 @@ fallback, because `<name>` was explicit and unambiguous intent.
 - **`--mode implement`** is rejected when combined with `--worktree` on `dev-run` — that mode *is*
   the pipeline's implement stage (bug-742) and runs in whatever tree the driver set up; a second
   worktree would split one task's evidence across two trees.
+- **`dev-review` without `--triage`** is rejected when combined with `--worktree` — a read-only
+  review writes nothing worth isolating; review another worktree by passing a path inside it.
 - **No** create-with-name (`--worktree <name>` never creates; an unresolvable name is an error),
   no `--worktree-keep` variant, no auto-cleanup of stale worktrees or markers from prior runs.
 

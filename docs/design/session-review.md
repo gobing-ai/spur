@@ -3,7 +3,7 @@ kind: design
 title: "Active session review"
 status: implemented
 created_at: 2026-08-27
-updated_at: 2026-09-22
+updated_at: 2026-09-26
 related: ["0913"]
 tags: [system, plugin]
 doc: design/session-review
@@ -55,7 +55,9 @@ environment-improvement placement rule and remain proposals only.
 - Report-only by default: no source/doc edit, no corpus task creation, and no indexed-context
   append, except the explicit bounded `--triage` exception (shipped with the command, documented
   here since task 0913): exactly two mutation classes — pure-doc / one-to-two-line direct fixes
-  applied inline with re-verification, and exactly one triage task created through the CLI-gated
-  corpus surface. Anything else stays a proposal.
+  applied inline with re-verification, and one or more implement-ready triage tasks created
+  through the CLI-gated corpus surface (one per cohesive unit, under existing features; the filing
+  rule is shared with `/sp:dev-review --triage`, `plugins/sp/skills/spur-dev/references/dev-operations.md`
+  § 2. review). Anything else stays a proposal.
 - No recurrence or trend claim from one session.
 - Ended sessions, cross-agent windows, and quantitative forensics route to history-anatomy.

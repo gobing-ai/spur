@@ -410,6 +410,17 @@ Full checklist: [dev-operations.md](dev-operations.md) § refine (depth ready).
 Use the task's Gherkin scenarios as the verification lens on verify-family commands (`dev-verify`,
 `dev-verifyall`).
 
+### `--triage` — fix small findings, file the rest as tasks
+
+**Anchor:** `#flag-triage`.
+
+Review commands (`dev-review`, `dev-review-session`): after the report, bucket every finding once
+(direct fix / task / note), apply the direct fixes inline with a targeted check each, and file the
+remainder through `spur task` — never fix straight from the raw findings list. Off by default
+(report-only). Both file one or more implement-ready tasks sized per cohesive unit, under existing
+features ([dev-operations.md § 2. review](dev-operations.md#2-review)); `dev-review-session` keeps
+the stricter direct-fix bar (pure docs / one-to-two-line fixes).
+
 ### `--approve-taste` — pre-clear all taste gates this run
 
 **Anchor:** `#flag-approve-taste`.
@@ -422,9 +433,11 @@ flag sets both.
 
 **Anchor:** `#flag-worktree`.
 
-Batch commands plus single-task `dev-run` (`dev-refineall`, `dev-runall`, `dev-verifyall`,
-`dev-run`): run the entire driver loop inside an isolated git worktree instead of the operator's
-working directory. One flag, two modes:
+Batch commands plus single-task `dev-run` and review triage (`dev-refineall`, `dev-runall`,
+`dev-verifyall`, `dev-run`, `dev-review`): run the entire driver loop inside an isolated git
+worktree instead of the operator's working directory. On `dev-review` the flag requires `--triage`
+and wraps the review-plus-triage pass
+([dev-operations.md § 2. review](dev-operations.md#2-review)). One flag, two modes:
 
 - **Create mode** — bare `--worktree` (no value). Cut a fresh branch from the current HEAD's ref,
   create a sibling worktree with a derived name, run the batch there. On a fully successful batch

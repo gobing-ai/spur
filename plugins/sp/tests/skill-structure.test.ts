@@ -1160,10 +1160,10 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // Report-only default + the two-class triage exception, stated in skill and satellite.
         expect(command).toContain('[--triage]');
         expect(skill).toContain('Report-only stays the default.');
-        expect(skill).toContain('exactly one new task');
+        expect(skill).toContain('one or more implement-ready tasks');
         expect(design).toContain('/sp:dev-review-session [<focus>] [--triage]');
         expect(design).toContain('bounded `--triage` exception');
-        expect(design).toContain('exactly one triage task');
+        expect(design).toContain('one or more implement-ready triage tasks');
 
         // ADR-089 keeps its decision history and carries a narrowly dated clarification.
         expect(adr).toContain(

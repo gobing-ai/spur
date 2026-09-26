@@ -3,7 +3,7 @@ kind: design
 title: "Design — `/sp:dev-refactor` lens-routed refactoring with a preservation contract"
 status: implemented
 created_at: 2026-09-17
-updated_at: 2026-09-17
+updated_at: 2026-09-26
 related: [H13, "0883", "0884", "0885", "0886"]
 tags: [contract, H13, plugin]
 ---
@@ -22,7 +22,8 @@ Status: built — command, coordinator skill, taste-lens contracts, and surface 
 The four taste-refactoring skills (`api`, `architect`, `tests`, `ui`) are strong interactive lenses
 but are unreachable from the `/sp:dev-*` surface and carry no shared contract: severities diverge,
 only two of four have a preservation contract, none defines an apply loop, and a cheaper executor
-cannot merge or gate their prose output. `/sp:dev-review` is report-only; `/sp:dev-simplify` is
+cannot merge or gate their prose output. `/sp:dev-review` is report-only (its later `--triage` mode
+fixes only small findings and files the rest); `/sp:dev-simplify` is
 generic. There is no safe "refactor this path and keep every feature" entry point.
 
 ## 2. Chosen approach

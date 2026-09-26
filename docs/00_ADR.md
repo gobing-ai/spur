@@ -1292,6 +1292,12 @@ re-verified inline, and one triage task created through the CLI-gated corpus sur
 workflow launch, delegation, history import, baseline comparison, and indexed-context appends
 stay prohibited. This records the already-shipped surface; it does not reopen the decision.
 
+**Amendment 2026-09-26 — triage files one or more tasks.** The second mutation class widens from
+one triage task to one or more implement-ready tasks sized per cohesive unit, sharing
+`/sp:dev-review --triage`'s filing rule. A single task mixing unrelated findings could not be
+handed to one implementing agent without re-splitting. The class boundary (CLI-gated task creation
+only) and every prohibition above are unchanged.
+
 **Why.** Immediate wrap-up and historical forensics have different evidence, latency, and output
 contracts; combining them would unfreeze history-anatomy's two-mode and twelve-section contracts.
 
