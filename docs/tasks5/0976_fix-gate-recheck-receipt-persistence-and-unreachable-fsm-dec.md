@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix gate-recheck receipt persistence and unreachable FSM decisions (0962 run findings)
-status: backlog
+status: wip
 template: standard
 created_at: 2026-09-26T16:33:31.303Z
-updated_at: "2026-09-26T16:48:42.117Z"
+updated_at: "2026-09-26T23:20:50.985Z"
 feature_id: I31
 
 ---
@@ -52,6 +52,12 @@ Owned by elsewhere — recorded here as pointers, not requirements:
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-26T23:14:23.155Z
+
+- **Q: F-B policy — resolvable backend (a) or deterministic default (b)?** **Closed (operator, 2026-09-26): (b) deterministic default.** FSM-internal decides (`triage`, `test-fail-triage`) use the YAML `default` as the intended deterministic classification; the trace/run log records `source: default` so a fallback is never presented as a model decision. The unreachable `retryable` lane is collapsed so the guard set matches the reachable outcomes. Rationale: an inline driver must not depend on a configured backend; "deterministic over implicit". R2/AC2 are satisfied by provenance + a guard set with no dead lane (the "`retryable` reachable when a backend is configured" clause is superseded by the collapse).
+- **Q: F-A shape — refresh single receipt (a) or per-digest receipts (b)?** **Closed (operator, 2026-09-26): (a) refresh single receipt.** `recheck` rewrites `.spur/run/<wbs>-check-receipt.json` for the digest it evaluated; anti-laundering preserved (a skip never turns FAIL into PASS; a FAIL digest still writes the FAIL verdict). X→Y→X revisit is out of scope.
+- **Q: F-C approach?** **Closed (agent, per Design preference):** prefer removing the wall-clock dependency for the semantics case if injection stays readable; otherwise an explicit per-test `timeout` with a spawn-cost comment.
+
 ### Design
 
 Fix direction per finding; the owner picks the final shape.
@@ -72,7 +78,28 @@ Fix direction per finding; the owner picks the final shape.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Three findings fixed per the Q&A decisions (F-A (a) refresh single receipt; F-B (b) deterministic default + collapse; F-C injection for the semantics case, explicit budget for real spawns).
+
+| Req | File | Change |
+| --- | --- | --- |
+| R1 | `plugins/sp/scripts/quality-gate.ts:642` | Receipt write gated on `!noProgressSkip` instead of `mode === 'run'`: `recheck` persists the receipt it evaluated; a skip never rewrites a receipt (anti-laundering kept). |
+| R1 | `plugins/sp/tests/quality-gate-receipt.test.ts:518` | run → recheck → recheck at one digest: second recheck skips, probe/full gate not run, receipt byte-equal. |
+| R1 | `plugins/sp/tests/quality-gate-receipt.test.ts:550` | A green recheck persists PASS only because the full gate actually ran. |
+| R1 | `plugins/sp/tests/quality-gate.test.ts:375` | No-digest recheck writes no receipt; recheck with a digest writes one. |
+| R2 | `packages/app/src/workflow/decide.ts:65` | `DecideResult.source: 'model' \| 'default'` — `default` on every degraded row, `model` only on accepted answers. |
+| R2 | `packages/app/src/services/inline-run-setup.ts:484` | Inline decide outcome threads `source`. |
+| R2 | `plugins/sp/scripts/inline-run-setup.ts:561` | `--decide` appends `decide node=… value=… source=… reason=…` to the run log (helper renamed `appendRunLogLine`). |
+| R2 | `config/workflows/task-pipeline.yaml:593` | `failure-class` choices collapsed to `[fix, stop]`; retryable attempt-count shell and `test-fail-triage → test-recheck` edge removed. |
+| R2 | `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:329` | Stale `retryable` row fails closed; frozen order is stop, cap, fix, defense. |
+| R2 | `packages/app/tests/workflow/guard-parity.test.ts:93` | Baseline fixture drops the retryable edge; `retryable` kept as a boundary value. |
+| R2 | `packages/app/tests/workflow/decide.test.ts:177` | Degraded rows pin `source: 'default'`; accepted row pins `source: 'model'`. |
+| R2 | `plugins/sp/tests/inline-run-setup.test.ts:453` | `--decide` provenance pinned in stdout, resultFile and run log. |
+| R2 | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:515` | Driver doc names the `source` field and run-log line. |
+| R2 | `docs/design/workflow-catalogue-refactor.md:143` | Decide row shape + failure-triage lane table updated. |
+| R3 | `packages/app/tests/workflow/guards/shell.test.ts:48` | Semantics case uses an injected executor (no wall clock). |
+| R3 | `packages/app/tests/workflow/guards/shell.test.ts:14` | Real-spawn metacharacter cases carry `SPAWN_TIMEOUT_MS` with the spawn-cost comment. |
+
+Generated bundles regenerated: `plugins/sp/scripts/{quality-gate,inline-run-setup}.mjs`, `plugins/sp/lib/inline-run.generated.mjs`, CLI config bundle.
 
 ### Testing
 
@@ -87,3 +114,6 @@ Fix direction per finding; the owner picks the final shape.
 <!-- Links to features, docs, ADRs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-26T23:20:50.985Z backlog → wip (system)
+

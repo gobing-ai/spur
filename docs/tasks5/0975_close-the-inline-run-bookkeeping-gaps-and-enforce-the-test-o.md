@@ -4,7 +4,7 @@ name: Close the inline-run bookkeeping gaps and enforce the test-only subpath in
 status: done
 template: issue
 created_at: 2026-09-26T16:02:38.308Z
-updated_at: "2026-09-26T23:00:45.030Z"
+updated_at: "2026-09-26T23:13:08.609Z"
 
 feature_id: I31
 ac_altitude: task-local
@@ -221,17 +221,17 @@ open for this run's own completion and WT-3b.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | App service `persistWorktreeRuns` packages/app/src/services/inline-run-setup.ts:186-241 — opens source/target project DBs, validates every worktree-sourced run id BEFORE the target DB opens (:193-195), transfers rows via domain `transferRunTables`, copies both record files `.spur/run/<id>.md` + `.state.json` (:205), idempotent re-persist no-op on byte-identical records (:213), divergent records reported `record-conflict:<file>` and never overwritten (:216). Domain seam with raw SQL confined to domain: `listRunIds` packages/domain/src/dao/run-transfer.ts:78, `transferRunTables` :86, exported packages/domain/src/dao/index.ts:63. Script mode `runPersistOutMode` plugins/sp/scripts/inline-run-setup.ts:571-598 — success exit 0 `{ok:true,persisted,skipped}` (:587-588), failure exit 1 `{ok:false,error}` (:590-594), usage errors exit 2 (:61-63,:124). Docs: execution-batch.md WT-4a persist-out block :816-832 (runs before WT-4b removal, non-zero exit routes to WT-5, worktree+branch retained) + prose :500-508 (mechanical persist-out replaces manual copy-out). Tests: packages/domain/tests/dao/run-transfer.test.ts (4/4), packages/app/tests/services/persist-worktree-runs.test.ts (4/4), plugins/sp/tests/inline-run-setup.test.ts persist-out block (:593-632, :650) — all green. |
-| R2 | MET | Zero-row done-close detection: `closeRun` returns `actionRows` counted via `ActionRunDao.actionRowsByRunId` packages/app/src/workflow/action-trace.ts:291-317 (terminal row is finalized first, count is post-finalize, omitted only when no raw db handle). Script driver detects done+0 rows and exits 1 with named code, NO backfill: plugins/sp/scripts/inline-run-setup.ts:466-476 (`code:'NO_ACTION_ROWS'`, `actionRows:0`, appendTraceFailureLine, row already terminal). Doc contract: inline-pipeline-driver.md:522-534 (named failure, no-backfill rationale per ADR-117, `failed`+0 exits 0). Tests: plugins/sp/tests/inline-run-trace.test.ts:338 (done+0 → exit 1, row still finalized), :372 (done+≥1 → exit 0 `actionRows:1`), :422 (failed+0 → exit 0 `actionRows:0`) — all green. |
-| R3 | MET | Rule file config/rules/boundary/test-subpath-boundary.yaml — exactly 2 rules, both severity `error`: `no-testing-subpath-import` (forbidden specifier `@gobing-ai/spur-app/testing`, scope include apps/**/src + packages/**/src .ts only, tests/ dirs outside scope, exclude `packages/app/src/testing/**`) and `no-relative-testing-module-import` (regex for relative `testing/` imports, packages/app/src scope, same exclusion). Auto-wired: config/rules/recommended-pre-check.yaml:8-11 extends `boundary`. Composition pinned: apps/cli/tests/fixtures/raw-json-baseline/rule-validate-preset.json:34,37 carry both rule ids (consumer apps/cli/tests/output-envelope.test.ts). Twin parity for the touched facade export: parity test plugins/sp/tests/inline-run-installed.test.ts:225-242 scans every `app.<name>` call site against both generated twins; d.mts decl at plugins/sp/lib/inline-run.generated.d.mts:4; .mjs export list carries persistWorktreeRuns — parity green. Tree-wide enforcement attested by this run's gate (recommended-post-check: "All 2 rules passed") and baseline pin; synthetic-offender fire attested in the task verify section (read-only stage did not re-execute rule firing). |
+| R1 | MET | `packages/domain/src/dao/run-transfer.ts:86` transferRunTables (id-exists / external-key-conflict skip, one batch per run); `packages/app/src/services/inline-run-setup.ts:186` persistWorktreeRuns; script `plugins/sp/scripts/inline-run-setup.ts:577` runPersistOutMode; WT-4a wiring `plugins/sp/skills/spur-dev/references/execution-batch.md:836`. Forced re-verify 2026-09-26: domain run-transfer.test.ts 4/4, app persist-worktree-runs + action-trace 23/23, plugins/sp inline-run-setup/trace/installed/execution-batch-contract 52/52 — all green this run. Live: worktree run inline-20260926T215924Z-e9ac (worktree spur-new-run-0975-9039, torn down) is present in the invoking tree .spur/spur.db (status done, 13 action_runs rows) with .md + .state.json in .spur/run/. |
+| R2 | MET | `packages/app/src/workflow/action-trace.ts:290` closeRun returns actionRows; `plugins/sp/scripts/inline-run-setup.ts:470` NO_ACTION_ROWS exit 1 after finalize; tests `plugins/sp/tests/inline-run-trace.test.ts:338` / `:372` / `:403` green this run. |
+| R3 | MET | `config/rules/boundary/test-subpath-boundary.yaml:14` no-testing-subpath-import + `:32` no-relative-testing-module-import, both severity error; preset `spur rule run` (recommended-pre-check) exit 0, 0 findings this run; synthetic fixtures re-fired this run (see AC5). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Component rows+records test plugins/sp/tests/inline-run-setup.test.ts:593-632; installed-layout e2e inline-run-installed.test.ts drives persist-out through shipped twins; real-batch `--worktree` smoke deferred-by-design to this run's WT-3b completion (scope judgment explicit). |
-| AC2 | MET | test | packages/domain/tests/dao/run-transfer.test.ts:68-160 id-exists/external-key-conflict/idempotence; app+script idempotence assert unchanged counts. |
-| AC3 | MET | test | Unreadable-DB tests app+script exit 1 {ok:false}; unsafe-id fail-before-target-open persist-worktree-runs.test.ts:107-140; WT-5 routing contract-pinned. |
-| AC4 | MET | test | plugins/sp/tests/inline-run-trace.test.ts:338/:372/:422 all three close cases green. |
-| AC5 | MET | command | Rule file config/rules/boundary/test-subpath-boundary.yaml + recommended-pre-check extends boundary + baseline pin rule-validate-preset.json:34,37; synthetic fire attested. |
+| AC1 | MET | command | Live: `spur workflow progress inline-20260926T215924Z-e9ac --json` in invoking tree → status completed; sqlite action_runs count=13, runs.status=done; `.spur/run/inline-20260926T215924Z-e9ac.md` + `.state.json` exist after worktree teardown. Component test `plugins/sp/tests/inline-run-setup.test.ts:593` green. |
+| AC2 | MET | test | `packages/domain/tests/dao/run-transfer.test.ts:68` id-exists / external-key-conflict / idempotent re-persist — 4/4 green this run; script idempotence `plugins/sp/tests/inline-run-setup.test.ts:593` green. |
+| AC3 | MET | test | Unreadable-DB exit 1 `{ok:false}` in `plugins/sp/tests/inline-run-setup.test.ts:593` block + `packages/app/tests/services/persist-worktree-runs.test.ts:41` green; WT-5 routing pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:155` green. |
+| AC4 | MET | test | `plugins/sp/tests/inline-run-trace.test.ts:338` (done+0 → exit 1 NO_ACTION_ROWS, row terminal), `:372` (≥1 → exit 0 actionRows), `:403` (failed+0 → exit 0) — green this run. |
+| AC5 | MET | command | This run: `spur rule run --file config/rules/boundary/test-subpath-boundary.yaml` clean tree exit 0; allowed-location fixtures (packages/app/src/testing/zz0975-ok.ts, packages/app/tests/zz0975-ok.ts) exit 0; violating fixtures packages/app/src/zz0975-fx.ts (relative ./testing/…) + apps/server/src/zz0975-fx.ts (@gobing-ai/spur-app/testing) → exit 1 naming no-relative-testing-module-import and no-testing-subpath-import; fixtures removed, git status clean. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -244,8 +244,7 @@ open for this run's own completion and WT-3b.
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=0 housekeeping=0 |
-| P4 | proof-input-digest | — | sha256:d7172c922ed9af94231f0ec776c640df7ec6f3ebab994446dcb5b623927d7efe |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=3 housekeeping=0 |
 
 ### References
 
