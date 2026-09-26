@@ -4,7 +4,7 @@ name: Harden Windows detached-serve spawn against cmd.exe %VAR% expansion
 status: done
 template: standard
 created_at: 2026-09-26T04:37:18.669Z
-updated_at: "2026-09-26T22:14:21.124Z"
+updated_at: "2026-09-26T22:30:16.110Z"
 
 feature_id: K21
 ac_numbering: task-local
@@ -109,10 +109,25 @@ Errors are thrown `Error`s with messages of the form `detached serve launch: arg
 
 ### Testing
 
-- Focused: `(cd packages/app && bun test tests/services/project-start.test.ts)` — 22 pass / 0 fail (58 expect calls), including 5 new tests: AC1 metacharacter matrix (`%PATH%`, `!y!`, `a&b|c`, space, `^caret`, empty string; byte-identical env round-trip; no argument bytes on the command line), AC2 rejections (index-naming `"` error; `.CMD`/`.bat` launcher error; empty argv), and the exact start-chain spec for a realistic serve argv.
-- `bunx tsc --noEmit -p packages/app` — clean. `rg -n "Bun\.spawn|child_process" packages/app/src/services/project-start.ts` — doc-comment mentions only; no code-level spawn (launch stays on `NodeProcessExecutor.run`).
-- AC3 (Windows smoke: `spur projects start` from a `%`-containing path) untested — no Windows host; macOS dev/CI exercised the pure builder per R2.
-- Not run here (later pipeline stages own them): `bun run spur-check` / `spur-check-feature`; no commit made — changes left in the working tree.
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/project-start.ts:104-108` env `SPUR_SERVE_ARG_<i>` + `"%SPUR_SERVE_ARG_<i>%"` under `/d /v:off /c`; test `packages/app/tests/services/project-start.test.ts:388-404` (22 pass / 0 fail this run) |
+| R2 | MET | `packages/app/src/services/project-start.ts:85-89` exported pure builder; not re-exported from barrel; unit-tested at `packages/app/tests/services/project-start.test.ts:387-439` |
+| R3 | MET | `packages/app/src/services/project-start.ts:90-103` throws on empty argv, `.cmd`/`.bat` launcher, and `"` in any argument; tests `packages/app/tests/services/project-start.test.ts:406-421` |
+| R4 | PARTIAL | `packages/app/src/services/project-start.ts:121-126` keeps `start /b` on win32 and POSIX `nohup … &` branch unchanged; daemon survival on real Windows cmd.exe untested — no Windows host |
+| R5 | MET | `packages/app/src/services/project-start.ts:128-132` launch stays on `executor.run`; `rg -n "Bun\.spawn\|child_process" packages/app/src/services/project-start.ts` hits doc comments only (:21, :40-41, :115); `bun run spur-check` pre-check: All 49 rules passed |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Every serve argument reaches the daemon unchanged | MET | test | `packages/app/tests/services/project-start.test.ts:388-404` metacharacter matrix incl. empty string; byte-identical env; no argument bytes on command line |
+| R2 — Unsafe launch inputs fail loud before spawn | MET | test | `packages/app/tests/services/project-start.test.ts:406-421` index-naming `"` error, `.CMD`/`.bat` error, empty argv; builder is pure so no executor call |
+| R3 — The serve daemon outlives the launching CLI | PARTIAL | static-ref | AC3 untested — no Windows host; `start /b` preserved at `packages/app/src/services/project-start.ts:108`; operator previously ratified via force-done |
+| R4 — Launch stays behind ProcessExecutor | MET | command | `rg` gate: comment-only hits; `bun run spur-check`: biome + typecheck clean, 49/49 pre-check rules pass (incl. no-direct-process-spawn) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
