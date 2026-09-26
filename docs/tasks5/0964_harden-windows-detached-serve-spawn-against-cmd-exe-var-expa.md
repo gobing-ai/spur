@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: Harden Windows detached-serve spawn against cmd.exe %VAR% expansion
-status: testing
+status: done
 template: standard
 created_at: 2026-09-26T04:37:18.669Z
-updated_at: "2026-09-26T22:13:49.100Z"
+updated_at: "2026-09-26T22:14:21.124Z"
 
 feature_id: K21
 ac_numbering: task-local
+done_forced: "true"
+done_reason: "AC3 (Windows smoke: daemon outlives CLI) unverifiable on this host - no Windows machine. R1-R5 + AC1/2/4 MET with test/command evidence across 3 independent verify cycles; gate PASS (9227 tests / 532 files); review PASS x3. AC3 operator-ratified PARTIAL. Commit c84e11a9."
 ---
 
 ## 0964. Harden Windows detached-serve spawn against cmd.exe %VAR% expansion
@@ -40,7 +42,8 @@ Graduates all four of feature K21's scenarios (exact titles below); the numbered
 
 - [x] AC1 — R1 — Every serve argument reaches the daemon unchanged (req: R1, R2)
 - [x] AC2 — R2 — Unsafe launch inputs fail loud before spawn (req: R3)
-- [x] AC3 — R3 — The serve daemon outlives the launching CLI (req: R4) — operator-ratified PARTIAL: no Windows host available; smoke on a Windows machine before trusting daemon behavior (run 64be6f77, --force-done)
+- [x] AC3 — R3 — The serve daemon outlives the launching CLI (req: R4)
+  <!-- AC3 = PARTIAL by evidence (verify cycles 1-3): no Windows host; operator-ratified via task update --force-done (run 64be6f77, done_reason). Smoke on a Windows machine before trusting daemon behavior. -->
 - [x] AC4 — R4 — Launch stays behind ProcessExecutor (req: R5)
 
 **Verify lens**
@@ -136,4 +139,5 @@ Residual risk: daemon behavior under real `cmd.exe` (var expansion, `%*` edge ca
 - 2026-09-26T04:40:09.304Z backlog → todo (system)
 - 2026-09-26T17:24:25.381Z todo → wip (system)
 - 2026-09-26T22:12:57.531Z wip → testing (system)
+- 2026-09-26T22:14:21.121Z testing → done (system)
 
