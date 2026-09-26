@@ -257,7 +257,7 @@ agent's transcript instead of re-deriving it (task 0482 R4). Overridable per run
 **Declared step role (0538 R2).** Every `agent.run` step declares `role: <scribe|coder|reviewer|planner>`
 beside its `agent:` pin — the Layer-1 role vocabulary (`DEFAULT_AGENT_ROLES`, `packages/config`).
 `spur workflow validate` fails a step with no or an unknown role via the post-schema walk
-(`collectAgentRunRoleViolations` — `packages/app/src/services/workflow-service.ts`; the JSON schema
+(`collectAgentRunRoleViolations` — `packages/app/src/workflow/composition-lint.ts`; the JSON schema
 validator is a keyword subset, so the walk is the enforcement surface). `spur workflow run` rejects
 the same step at dispatch time via `AgentRunActionRunner`'s runtime guard — which is also the
 fallback for any dispatch path that bypassed validate — so neither verb ever spawns a role-less

@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import type { DecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { ActionRunContext } from '@gobing-ai/ts-dual-workflow-engine';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { collectDecideViolations } from '../../../src/services/workflow-service';
 import { DECIDE_KIND, DecideActionRunner, DecideOptionsSchema } from '../../../src/workflow/actions/decide';
+import { collectDecideViolations } from '../../../src/workflow/composition-lint';
 
 /**
  * Runner-level coverage for the non-pausing decide action (0941): the zod option schema

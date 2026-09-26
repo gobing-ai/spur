@@ -1,5 +1,5 @@
-import { closeSync, constants, existsSync, fstatSync, openSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { AGENT_ROLE_NAMES, getEnvVars, type SpurConfig } from '@gobing-ai/spur-config';
 import { resolvePlanningFolders } from '@gobing-ai/spur-config/loader';
 import type { DbAdapter } from '@gobing-ai/spur-domain';
@@ -19,20 +19,16 @@ import {
 import { type DecisionMaker, resolveAgentName } from '@gobing-ai/ts-ai-runner';
 
 import {
-    type ActionDef,
     type ActionRedactor,
     collectWorkflowExtensions,
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
     type WorkflowRunResult as EngineWorkflowRunResult,
     WorkflowService as EngineWorkflowService,
-    type GuardDef,
     type HitlResponder,
     loadWorkflowDef,
     loadWorkflowExtensionsIntoHost,
     type ResumeOwnership,
-    type StateMachineWorkflowDef,
-    type TransitionFlowWorkflowDef,
     type WorkflowDef,
     type WorkflowEngineHost,
     type WorkflowPersistenceAdapter,
@@ -46,10 +42,7 @@ import {
 } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import { redactAndBound } from '../observability/agent-execution';
-import type { WorkflowRunLogConfig } from '../observability/workflow-run-log-sink';
 import { createRunLogTraceFailureRecorder, withActionTrace } from '../workflow/action-trace';
-import { DECIDE_KIND, DecideOptionsSchema } from '../workflow/actions/decide';
-import { validateEvidenceChoices } from '../workflow/actions/hitl-select';
 import type { HostAllowlist, HttpRequester } from '../workflow/actions/http-request';
 import { resolveRunArtifactPath } from '../workflow/actions/run-path';
 import { registerSpurBuiltins } from '../workflow/builtins';
@@ -60,13 +53,33 @@ import {
     parseCheckpointMetadata,
 } from '../workflow/checkpoint-contract';
 import { computeDefinitionDigest } from '../workflow/composition-baseline';
+import {
+    type CompositionAdvisory,
+    collectAgentRunRoleViolations,
+    collectCompositionAdvisory,
+    collectDecideViolations,
+    collectHitlDecisionViolations,
+    collectShellCommands,
+    collectTerminalReasonViolations,
+    collectUndeclaredShellVarViolations,
+    gateSitesForState,
+    hitlAnswerVar,
+} from '../workflow/composition-lint';
 import type { SummaryResolver } from '../workflow/decision-evidence';
-import { type DecisionEvaluator, evaluateDecision, parseDecisionConfig } from '../workflow/decision-hitl-responder';
+import { type DecisionEvaluator, evaluateDecision } from '../workflow/decision-hitl-responder';
 import { type FleetDispatchDeps, waitForFileExists } from '../workflow/fleet-dispatch';
 import { ObservableWorkflowAdapter, type WorkflowObservabilityBus } from '../workflow/observability';
 import { projectWorkflowProgress } from '../workflow/progress-projection';
+import {
+    type CheckpointReclamationResult,
+    inspectWorkflowRunRecord,
+    type ReclaimedCheckpoint,
+    type ReclaimedRunLog,
+    type RunLogReclamationResult,
+    type SkippedCheckpoint,
+    type WorkflowRunRecordInspection,
+} from '../workflow/run-record';
 import type { WorkflowSteeringController } from '../workflow/steering';
-import { isTerminalReason, TERMINAL_REASONS } from '../workflow/terminal-reason';
 import {
     type ResolvedWorkflowDefinition,
     registeredWorkflowPaths,
@@ -262,39 +275,6 @@ export type WorkflowValidateResult =
     | { ok: true; valid: true; workflow: WorkflowDef; digest?: string; composition?: CompositionAdvisory }
     | { ok: false; valid: false; file: string; errors: string[] };
 
-/** Composition advisory for a validated workflow (0614; two-tier budgets per ADR-115). */
-export interface CompositionAdvisory {
-    findings: CompositionFinding[];
-}
-
-/** One composition finding under the ADR-115 measures and tiers. */
-export interface CompositionFinding {
-    workflow: string;
-    state: string;
-    actionKey: string;
-    level: 'warn' | 'error';
-    measure: {
-        kind: 'shell-lines' | 'shell-chars' | 'guard-lines' | 'agent-run-chars' | 'agent-run-output';
-        measured: number;
-        threshold?: number;
-        severity?: string;
-    };
-    recommendation: string;
-}
-
-/**
- * ADR-115 composition tier caps — the parity anchor for the governance §1.2 tier
- * table (`docs/design/harness-surface-governance.md`), the composition paragraph in
- * `docs/design/cli-contracts.md` and the §3 table in
- * `plugins/sp/skills/spur-cli/references/workflows/workflow-fit-and-tuning.md`.
- * A ratchet changes all four together.
- */
-export const COMPOSITION_CAPS = {
-    shell: { warnAbove: 5, errorAbove: 10, charsErrorAbove: 800 },
-    guard: { warnAbove: 3, errorAbove: 5 },
-    agentRunInput: { charsErrorAbove: 1000, lowSeverityBelow: 200 },
-} as const;
-
 /**
  * Result of a workflow run operation: the engine's run result, widened with an
  * index signature so it serializes cleanly via `toJson`. run()/continuePaused()
@@ -360,53 +340,6 @@ export interface WorkflowCleanResult {
     dryRun: boolean;
     /** The runs that were (or would be) finalized. */
     cleaned: CleanedRun[];
-}
-
-/** A retained run log reclaimed by `spur workflow clean` (feature D2 / task 0429). */
-export interface ReclaimedRunLog {
-    /** Run id derived from the log file name (`<runId>.log`). */
-    runId: string;
-    /** Path of the removed (or would-be-removed) log file. */
-    path: string;
-    /** File mtime at scan time (ISO 8601). */
-    mtime: string;
-}
-
-/** Result of retained run-log reclamation (`.spur/run/<RUNID>.log`, task 0429). */
-export interface RunLogReclamationResult {
-    /** Retention threshold applied, in days. */
-    retentionDays: number;
-    /** Whether this was a dry run (no writes). */
-    dryRun: boolean;
-    /** The logs that were (or would be) removed. */
-    reclaimed: ReclaimedRunLog[];
-    /** Removal failures — best-effort: one file failing never aborts the rest. */
-    failures: Array<{ path: string; error: string }>;
-}
-
-/** An expired terminal checkpoint removed (or reportable) by checkpoint reclamation (task 0711 R5). */
-export interface ReclaimedCheckpoint {
-    /** File name under `.spur/memory/sessions/`. */
-    name: string;
-    /** Confined absolute path of the removed (or would-be-removed) checkpoint. */
-    path: string;
-    /** `updated_at` (fallback mtime) at scan time, ISO 8601. */
-    age: string;
-}
-
-/** A checkpoint that was scanned but deliberately kept, with the reason (task 0711 R5/R6). */
-export interface SkippedCheckpoint {
-    name: string;
-    reason: string;
-}
-
-/** Result of session-checkpoint reclamation (`.spur/memory/sessions/`, task 0711 R5–R8). */
-export interface CheckpointReclamationResult {
-    retentionDays: number;
-    dryRun: boolean;
-    reclaimed: ReclaimedCheckpoint[];
-    skipped: SkippedCheckpoint[];
-    failures: Array<{ path: string; error: string }>;
 }
 
 /** Result of `spur workflow cancel <run-id>` — one non-terminal run finalized as `failed`. */
@@ -2078,189 +2011,6 @@ export function workflowVersionLiteral(workflow: WorkflowDef): string | null {
     return typeof workflow.version === 'string' && workflow.version !== '' ? workflow.version : null;
 }
 
-interface ShellCommandEntry {
-    /** State or node id where the command was found. */
-    stateId: string;
-    /** Whether it's an action or guard. */
-    kind: 'action' | 'guard';
-    /** Index within the action array or guard location. */
-    index: number;
-    /** The shell command string. */
-    command: string;
-}
-
-/**
- * Walk a workflow def and collect all shell-kind commands for syntax validation.
- * Supports both state-machine and transition-flow workflow kinds.
- */
-function collectShellCommands(def: WorkflowDef): ShellCommandEntry[] {
-    const entries: ShellCommandEntry[] = [];
-
-    const visitAction = (stateId: string, action: ActionDef, idx: number): void => {
-        if (action.kind === 'shell') {
-            const cmd = action.options?.command;
-            if (typeof cmd === 'string' && cmd.length > 0) {
-                entries.push({ stateId, kind: 'action', index: idx, command: cmd });
-            }
-        }
-    };
-
-    const visitGuard = (stateId: string, guard: GuardDef): void => {
-        if (guard.kind === 'shell') {
-            const cmd = guard.options?.command;
-            if (typeof cmd === 'string' && cmd.length > 0) {
-                entries.push({ stateId, kind: 'guard', index: 0, command: cmd });
-            }
-        }
-    };
-
-    if (def.kind === 'transition-flow' || def.kind === undefined) {
-        // Transition-flow: walk nodes for actions, edges for guards.
-        const flowDef = def as TransitionFlowWorkflowDef;
-        for (const node of flowDef.nodes ?? []) {
-            if (node.action) visitAction(node.id, node.action, 0);
-        }
-        for (const edge of flowDef.edges ?? []) {
-            if (edge.condition) visitGuard(edge.from, edge.condition);
-        }
-    } else {
-        // State-machine: walk states for onEnter/onExit, transitions for guards.
-        const smDef = def as StateMachineWorkflowDef;
-        for (const state of smDef.states ?? []) {
-            if (state.onEnter) {
-                state.onEnter.forEach((action, i) => {
-                    visitAction(state.id, action, i);
-                });
-            }
-            if (state.onExit) {
-                state.onExit.forEach((action, i) => {
-                    visitAction(state.id, action, i);
-                });
-            }
-        }
-        for (const trans of smDef.transitions ?? []) {
-            if (trans.guard) visitGuard(`${trans.from}→${trans.to}`, trans.guard);
-        }
-    }
-
-    return entries;
-}
-
-/**
- * Walk a workflow def and collect validation violations for `agent.run` steps
- * that declare no `role:` or an unknown one (0538 R2). Supports both
- * state-machine and transition-flow workflow kinds; mirrors
- * {@link collectShellCommands}'s walk so the two post-schema gates stay
- * consistent. The role vocabulary is the four-id `AGENT_ROLE_NAMES` literal.
- */
-function collectAgentRunRoleViolations(def: WorkflowDef): string[] {
-    const roleOf = (options: Record<string, unknown> | undefined): string | undefined => {
-        const role = options?.role;
-        return typeof role === 'string' && role.trim() !== '' ? role.trim() : undefined;
-    };
-
-    const violations: string[] = [];
-    const visitAction = (stateId: string, action: ActionDef, idx: number): void => {
-        if (action.kind !== 'agent.run') return;
-        const role = roleOf(action.options);
-        const location = `${stateId}/agent.run[${idx}]`;
-        if (role === undefined) {
-            violations.push(
-                `agent.run step at ${location} declares no role: — add \`role:\` (scribe | coder | reviewer | planner) beside \`agent:\` (0538 R2)`,
-            );
-        } else if (!(AGENT_ROLE_NAMES as readonly string[]).includes(role)) {
-            violations.push(
-                `agent.run step at ${location} declares unknown role: '${role}' (accepted: ${AGENT_ROLE_NAMES.join(', ')}; 0538 R2)`,
-            );
-        }
-        // B7 R3 (0894): the session-policy vocabulary is closed — validate rejects
-        // anything but reuse | fresh before a run can start.
-        const session = action.options?.session;
-        if (session !== undefined && session !== 'reuse' && session !== 'fresh') {
-            violations.push(
-                `agent.run step at ${location} declares invalid session: '${String(session)}' (accepted: reuse, fresh; 0894 R3)`,
-            );
-        }
-    };
-
-    if (def.kind === 'transition-flow' || def.kind === undefined) {
-        const flowDef = def as TransitionFlowWorkflowDef;
-        for (const node of flowDef.nodes ?? []) {
-            if (node.action) visitAction(node.id, node.action, 0);
-        }
-    } else {
-        const smDef = def as StateMachineWorkflowDef;
-        for (const state of smDef.states ?? []) {
-            for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
-            for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.id, action, i);
-        }
-    }
-    return violations;
-}
-
-/**
- * Terminal-reason rule (0937 R3): a state-machine transition into a `failureStates`
- * member finalizes the run as `failed`, so it must declare a closed-enum
- * `terminalReason` — otherwise every edge into a shared failed state looks identical
- * in `runs.terminal_reason`.
- */
-function collectTerminalReasonViolations(def: WorkflowDef): string[] {
-    if (def.kind === 'transition-flow' || def.kind === undefined) return [];
-    const smDef = def as StateMachineWorkflowDef;
-    const failureStates = new Set(smDef.failureStates ?? []);
-    const violations: string[] = [];
-    for (const transition of smDef.transitions ?? []) {
-        if (!failureStates.has(transition.to)) continue;
-        if (transition.terminalReason === undefined || !isTerminalReason(transition.terminalReason)) {
-            violations.push(
-                `transition ${transition.from} -> ${transition.to} enters a failureState without a declared terminalReason` +
-                    ` — add \`terminalReason: <enum>\` (accepted: ${TERMINAL_REASONS.join(', ')}; 0937 R3)`,
-            );
-        }
-    }
-    return violations;
-}
-
-/**
- * Decide-action rule (0941 R6): every `decide` action must parse against the runner's own
- * {@link DecideOptionsSchema} — rejecting a missing `default`, a `default` outside `choices`
- * (or outside yes/no for `noul`), a missing `resultFile`, and any other option-shape drift —
- * before a run can start.
- */
-export function collectDecideViolations(def: WorkflowDef): string[] {
-    const violations: string[] = [];
-    const visitAction = (stateId: string, action: ActionDef, idx: number): void => {
-        if (action.kind !== DECIDE_KIND) return;
-        const parsed = DecideOptionsSchema.safeParse(action.options ?? {});
-        if (!parsed.success) {
-            const location = `${stateId}/${DECIDE_KIND}[${idx}]`;
-            violations.push(
-                `Invalid decide action at ${location}: ${parsed.error.issues.map((i) => i.message).join('; ')}`,
-            );
-        }
-    };
-
-    if (def.kind === 'transition-flow' || def.kind === undefined) {
-        const flowDef = def as TransitionFlowWorkflowDef;
-        for (const node of flowDef.nodes ?? []) {
-            if (node.action) visitAction(node.id, node.action, 0);
-        }
-    } else {
-        const smDef = def as StateMachineWorkflowDef;
-        for (const state of smDef.states ?? []) {
-            for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.id, action, i);
-        }
-    }
-    return violations;
-}
-
-const HITL_DECISION_KINDS = new Set(['hitl.confirm', 'hitl.select', 'hitl.input']);
-const HITL_ANSWER_VAR_DEFAULTS: Record<string, string> = {
-    'hitl.confirm': '__hitlAnswer',
-    'hitl.select': '__hitlAnswer',
-    'hitl.input': '__hitlInput',
-};
-
 /** The three gate action kinds that carry an operator answer (0932). */
 export type GateActionKind = 'hitl.confirm' | 'hitl.select' | 'hitl.input';
 
@@ -2292,52 +2042,6 @@ export interface ContinuePausedOptions {
     readonly recordSelfPid?: boolean;
 }
 
-/** One gate action site in a definition (the 0911 decision walk / 0932 inspection). */
-export interface HitlActionSite {
-    readonly stateOrNodeId: string;
-    readonly paused: boolean;
-    readonly kind: string;
-    readonly index: number;
-    readonly options: Record<string, unknown> | undefined;
-}
-
-/**
- * The var a gate writes its answer into: `options.var` when a non-empty string,
- * else the kind default (0932 R1/R2). Shared with the 0911 decision walk so
- * validation, inspection and execution agree on one answer-var rule.
- */
-export function hitlAnswerVar(kind: string, options: Record<string, unknown> | undefined): string {
-    return typeof options?.var === 'string' && options.var.trim() !== ''
-        ? options.var
-        : (HITL_ANSWER_VAR_DEFAULTS[kind] ?? '__hitlAnswer');
-}
-
-/**
- * Every gate action site declared by one state/node, in declaration order
- * (onEnter before onExit; 0932). Shared by the 0911 decision walk and
- * `pendingGate` — one site walk, never a copied second one.
- */
-export function gateSitesForState(def: WorkflowDef, stateId: string): HitlActionSite[] {
-    const sites: HitlActionSite[] = [];
-    const visitAction = (paused: boolean, action: ActionDef, idx: number): void => {
-        if (!HITL_DECISION_KINDS.has(action.kind)) return;
-        sites.push({ stateOrNodeId: stateId, paused, kind: action.kind, index: idx, options: action.options });
-    };
-
-    if (def.kind === 'transition-flow' || def.kind === undefined) {
-        const flowDef = def as TransitionFlowWorkflowDef;
-        const node = (flowDef.nodes ?? []).find((n) => n.id === stateId);
-        if (node?.action) visitAction(node.pause === true, node.action, 0);
-    } else {
-        const smDef = def as StateMachineWorkflowDef;
-        const state = (smDef.states ?? []).find((s) => s.id === stateId);
-        if (state === undefined) return sites;
-        for (const [i, action] of (state.onEnter ?? []).entries()) visitAction(state.pause === true, action, i);
-        for (const [i, action] of (state.onExit ?? []).entries()) visitAction(state.pause === true, action, i);
-    }
-    return sites;
-}
-
 /**
  * 0932 R2: the rejection message for an answer flag that does not match the
  * gate the run is actually paused on — it names the pending gate kind and state.
@@ -2357,338 +2061,6 @@ function pendingGateMismatchMessage(
             : '--answer requires a pending hitl.confirm or hitl.select gate';
     return `Cannot resume run "${runId}": ${pending} — ${requires} (0932 R2). Resume refused; nothing was mutated.`;
 }
-/**
- * Post-schema policy walk (0911 D2/D5): every hitl.confirm/select/input `decision:` option is
- * parsed with the same runtime parser, and evidence-mode declarations get structural checks that
- * only the whole workflow can see — no evidence-mode action in a pause=true state/node, at most
- * one per state/node, select choices satisfying the evidence invariants, and every producer
- * node referencing a state/node that actually exists. Mirrors the role-var walkers so all
- * post-schema gates stay consistent; both `validate` and `run` share it.
- */
-export function collectHitlDecisionViolations(def: WorkflowDef): string[] {
-    const stateIds = new Set<string>();
-    const sites: HitlActionSite[] = [];
-
-    if (def.kind === 'transition-flow' || def.kind === undefined) {
-        const flowDef = def as TransitionFlowWorkflowDef;
-        for (const node of flowDef.nodes ?? []) {
-            stateIds.add(node.id);
-            // 0932: the per-state site walk is shared with pendingGate, not copied.
-            sites.push(...gateSitesForState(def, node.id));
-        }
-    } else {
-        const smDef = def as StateMachineWorkflowDef;
-        for (const state of smDef.states ?? []) {
-            stateIds.add(state.id);
-            sites.push(...gateSitesForState(def, state.id));
-        }
-    }
-
-    const violations: string[] = [];
-    const evidencePerState = new Map<string, number>();
-    for (const site of sites) {
-        const location = `${site.stateOrNodeId}/${site.kind}[${site.index}]`;
-        const answerVar = hitlAnswerVar(site.kind, site.options);
-        const kindName = site.kind === 'hitl.confirm' ? 'confirm' : site.kind === 'hitl.select' ? 'select' : 'input';
-        const parsed = parseDecisionConfig(site.options ?? {}, answerVar, kindName);
-        if (!parsed.ok) {
-            violations.push(`Invalid decision at ${location}: ${parsed.error}`);
-            continue;
-        }
-        if (parsed.config.mode !== 'evidence') continue;
-
-        if (site.paused) {
-            violations.push(
-                `Evidence-mode action at ${location} is not allowed in a pause=true state/node (0911 D2): a paused run never reaches the automatic answer path`,
-            );
-        }
-        const count = (evidencePerState.get(site.stateOrNodeId) ?? 0) + 1;
-        evidencePerState.set(site.stateOrNodeId, count);
-        if (count > 1) {
-            violations.push(
-                `At most one evidence-mode action per state/node (0911): ${site.stateOrNodeId} declares ${count}`,
-            );
-        }
-
-        if (site.kind === 'hitl.select') {
-            // The choice list lives under `options.options` — the key the runtime runner reads
-            // (`actions/hitl-select.ts`) — and is normalized exactly the way `asStringArray` does
-            // (no filtering), so validation and execution agree on empty/duplicate choices.
-            const rawChoices = site.options?.options;
-            const choices = Array.isArray(rawChoices) ? rawChoices.map((choice) => String(choice)) : [];
-            const choiceError = validateEvidenceChoices(choices);
-            if (choiceError !== null) {
-                violations.push(`Invalid decision at ${location}: ${choiceError}`);
-            }
-        }
-
-        const unknownNodes = parsed.config.evidenceNodes.filter((node) => !stateIds.has(node));
-        if (unknownNodes.length > 0) {
-            violations.push(
-                `Unknown producer node(s) at ${location}: ${unknownNodes.join(', ')} — evidenceNodes must reference existing state/node ids (0911 D5)`,
-            );
-        }
-    }
-    return violations;
-}
-
-/**
- * Post-schema check (0674 R5): a shell action/guard referencing `$var` where `var` is neither
- * declared in the workflow's `vars:` block nor provided locally fails validation — the
- * undeclared-`$baselineSince` class of defect cannot silently recur.
- *
- * Exemptions (each has one reason):
- * - UPPER_SNAKE names: environment namespace — ambient (`PATH`, `PWD`) or helper-emitted via a
- *   sourced `*.env` file (ADR-069 glue convention, e.g. `HA_SINCE`). ponytail ceiling: an
- *   undeclared UPPER_SNAKE workflow var would slip through; upgrade path is parsing the sourced
- *   file, not worth it while repo-owned helpers control that namespace.
- * - dotted braced names (`${vars.x}`): engine templates, interpolated before sh runs.
- * - escaped `\$name`: literal text passed through to jq/awk, never shell-expanded.
- * - names bound locally: shell assignment (`x=…`), jq `--arg/--argjson/--slurpfile`, `for x in`,
- *   `read x`.
- */
-export function collectUndeclaredShellVarViolations(def: WorkflowDef): string[] {
-    const declared = new Set(Object.keys(def.vars ?? {}));
-    const violations: string[] = [];
-
-    const visitCommand = (location: string, command: string): void => {
-        // Mask single-quoted spans first — sh treats them as literal text (jq/awk program bodies).
-        let masked = '';
-        let open = false;
-        for (const ch of command) {
-            if (ch === "'") open = !open;
-            else if (!open) masked += ch;
-        }
-        const assigned = new Set<string>();
-        for (const m of command.matchAll(/\b(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\S/g)) {
-            assigned.add(m[1] as string);
-        }
-        for (const m of masked.matchAll(/(?:^|\s)(?:--arg|--argjson|--slurpfile)\s+([A-Za-z_][A-Za-z0-9_]*)\b/g)) {
-            assigned.add(m[1] as string);
-        }
-        for (const m of masked.matchAll(/\bfor\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\b/g)) {
-            assigned.add(m[1] as string);
-        }
-        for (const m of masked.matchAll(
-            /\bread\s+(?:-[a-zA-Z]+\s+)*([A-Za-z_][A-Za-z0-9_]*(?:\s+[A-Za-z_][A-Za-z0-9_]*)*)/g,
-        )) {
-            for (const v of ((m[1] as string) ?? '').split(/\s+/)) assigned.add(v);
-        }
-        for (const m of masked.matchAll(/\$(?:\{([^}]*)\}|([A-Za-z_][A-Za-z0-9_]*))/g)) {
-            const raw = (m[1] ?? m[2]) as string;
-            if (raw.includes('.')) continue;
-            if (/^[A-Z][A-Z0-9_]*$/.test(raw)) continue;
-            if ((masked[(m.index ?? 0) - 1] ?? '') === '\\') continue;
-            if (declared.has(raw) || assigned.has(raw)) continue;
-            violations.push(
-                `Shell command at ${location} references $${raw}, which is not declared in the workflow's vars: block (0674 R5) — declare it or provide it locally`,
-            );
-        }
-    };
-
-    if (def.kind === 'transition-flow' || def.kind === undefined) {
-        const flowDef = def as TransitionFlowWorkflowDef;
-        for (const node of flowDef.nodes ?? []) {
-            const cmd = node.action?.kind === 'shell' ? node.action.options?.command : undefined;
-            if (typeof cmd === 'string' && cmd.length > 0) visitCommand(node.id, cmd);
-        }
-        for (const edge of flowDef.edges ?? []) {
-            const cmd = edge.condition?.kind === 'shell' ? edge.condition.options?.command : undefined;
-            if (typeof cmd === 'string' && cmd.length > 0) visitCommand(`${edge.from}→${edge.to}`, cmd);
-        }
-    } else {
-        const smDef = def as StateMachineWorkflowDef;
-        const walkActions = (stateId: string, actions: readonly ActionDef[] | undefined): void => {
-            for (const [i, action] of (actions ?? []).entries()) {
-                const cmd = action.kind === 'shell' ? action.options?.command : undefined;
-                if (typeof cmd === 'string' && cmd.length > 0) visitCommand(`${stateId}/action[${i}]`, cmd);
-            }
-        };
-        for (const state of smDef.states ?? []) {
-            walkActions(state.id, state.onEnter);
-            walkActions(state.id, state.onExit);
-        }
-        for (const trans of smDef.transitions ?? []) {
-            const cmd = trans.guard?.kind === 'shell' ? trans.guard.options?.command : undefined;
-            if (typeof cmd === 'string' && cmd.length > 0) visitCommand(`${trans.from}→${trans.to}`, cmd);
-        }
-    }
-    return violations;
-}
-
-/** Bare shell structure tokens never count as a logical command (ADR-115 unit). */
-const STRUCTURE_TOKENS = new Set(['then', 'else', 'fi', 'do', 'done', 'esac', '{', '}', '(', ')', ';;']);
-
-/**
- * Count the logical commands of a shell program (ADR-115): split on newline,
- * `;`, `&&` and `||`, skipping blank segments, `#` comment segments and bare
- * structure tokens. A pipeline counts once. The split is deliberately naive —
- * it also splits inside `$(…)` and quotes, so a `;` in a quoted message counts;
- * a single `|` never splits. This is the same algorithm that produced the
- * 2026-09-10 governance §1.2 measurements.
- */
-export function countLogicalCommands(command: string): number {
-    return command
-        .split(/\n|;|&&|\|\|/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith('#') && !STRUCTURE_TOKENS.has(s)).length;
-}
-
-/**
- * Composition advisory walk (0614, ADR-115). Measures shell actions, shell
- * transition guards and `agent.run` steps against the governance §1.2 tier caps
- * (`COMPOSITION_CAPS`). Guards are measured since ADR-115 — the ADR-069 bulk
- * exemption ended. Each element yields at most one size finding, plus a separate
- * `agent-run-output` finding when an `agent.run` declares no output check.
- * Findings are derived from the definition; no snapshot or suppression list
- * returns (ADR-108). Warn-level findings never affect anything; error-level
- * findings make `workflow validate` exit 1 (CLI-side) but still never block a
- * run — run/dry-run/continue never call this walk.
- */
-function collectCompositionAdvisory(def: WorkflowDef, workflowFile: string): CompositionAdvisory {
-    const findings: CompositionFinding[] = [];
-    const workflowName = basename(workflowFile, '.yaml');
-
-    const measureShellAction = (stateId: string, actionKey: string, command: string): void => {
-        const caps = COMPOSITION_CAPS.shell;
-        const lines = countLogicalCommands(command);
-        // Precedence: error lines, then error chars, then warn lines — one size
-        // finding per element keeps the counts equal to the §1.2 measured table.
-        if (lines > caps.errorAbove) {
-            findings.push({
-                workflow: workflowName,
-                state: stateId,
-                actionKey,
-                level: 'error',
-                measure: { kind: 'shell-lines', measured: lines, threshold: caps.errorAbove },
-                recommendation: `shell action at ${actionKey} measures ${lines} logical commands (error above ${caps.errorAbove}, ADR-115) — move it to an owner from the governance §1.1 fix vocabulary`,
-            });
-        } else if (command.length > caps.charsErrorAbove) {
-            findings.push({
-                workflow: workflowName,
-                state: stateId,
-                actionKey,
-                level: 'error',
-                measure: { kind: 'shell-chars', measured: command.length, threshold: caps.charsErrorAbove },
-                recommendation: `shell action at ${actionKey} is ${command.length} chars (error above ${caps.charsErrorAbove}, ADR-115) — move it to an owner from the governance §1.1 fix vocabulary`,
-            });
-        } else if (lines > caps.warnAbove) {
-            findings.push({
-                workflow: workflowName,
-                state: stateId,
-                actionKey,
-                level: 'warn',
-                measure: { kind: 'shell-lines', measured: lines, threshold: caps.warnAbove },
-                recommendation: `shell action at ${actionKey} measures ${lines} logical commands (warn above ${caps.warnAbove}, ADR-115) — move it to an owner from the governance §1.1 fix vocabulary`,
-            });
-        }
-    };
-
-    const measureShellGuard = (from: string, to: string, command: string): void => {
-        const caps = COMPOSITION_CAPS.guard;
-        const lines = countLogicalCommands(command);
-        const actionKey = `${from}→${to}`; // same location format as the shell-var walk
-        if (lines > caps.errorAbove || lines > caps.warnAbove) {
-            const level: CompositionFinding['level'] = lines > caps.errorAbove ? 'error' : 'warn';
-            const threshold = lines > caps.errorAbove ? caps.errorAbove : caps.warnAbove;
-            findings.push({
-                workflow: workflowName,
-                state: from,
-                actionKey,
-                level,
-                measure: { kind: 'guard-lines', measured: lines, threshold },
-                recommendation: `shell guard ${actionKey} measures ${lines} logical commands (${level} above ${threshold}, ADR-115) — reduce it to one predicate over a result file`,
-            });
-        }
-    };
-
-    const measureAgentRun = (
-        stateId: string,
-        actionKey: string,
-        options: Record<string, unknown> | undefined,
-    ): void => {
-        const caps = COMPOSITION_CAPS.agentRunInput;
-        const input = options?.input;
-        if (typeof input === 'string' && input.length > 0) {
-            const severity =
-                input.length < caps.lowSeverityBelow ? 'low' : input.length <= caps.charsErrorAbove ? 'medium' : 'high';
-            if (input.length > caps.charsErrorAbove) {
-                // Over the cap is an error whatever the shape — slash-led or not.
-                findings.push({
-                    workflow: workflowName,
-                    state: stateId,
-                    actionKey,
-                    level: 'error',
-                    measure: {
-                        kind: 'agent-run-chars',
-                        measured: input.length,
-                        threshold: caps.charsErrorAbove,
-                        severity,
-                    },
-                    recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, over the ${caps.charsErrorAbove}-char cap (error, severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
-                });
-            } else if (!input.trimStart().startsWith('/')) {
-                findings.push({
-                    workflow: workflowName,
-                    state: stateId,
-                    actionKey,
-                    level: 'warn',
-                    measure: { kind: 'agent-run-chars', measured: input.length, severity },
-                    recommendation: `agent.run prompt at ${actionKey} is ${input.length} chars, not slash-pinned (warn, severity ${severity}) — pin to a slash command or a script with a bounded prompt`,
-                });
-            }
-        }
-        if (options?.expectFile === undefined && options?.requireDiff !== true) {
-            findings.push({
-                workflow: workflowName,
-                state: stateId,
-                actionKey,
-                level: 'warn',
-                measure: { kind: 'agent-run-output', measured: 0 },
-                recommendation: `agent.run at ${actionKey} declares neither expectFile nor requireDiff — declare the artifact it must produce`,
-            });
-        }
-    };
-
-    const visitAction = (stateId: string, actionKey: string, action: ActionDef): void => {
-        if (action.kind === 'shell') {
-            const cmd = action.options?.command;
-            if (typeof cmd === 'string' && cmd.length > 0) measureShellAction(stateId, actionKey, cmd);
-        } else if (action.kind === 'agent.run') {
-            measureAgentRun(stateId, actionKey, action.options);
-        }
-    };
-
-    if (def.kind === 'transition-flow' || def.kind === undefined) {
-        const flowDef = def as TransitionFlowWorkflowDef;
-        for (const node of flowDef.nodes ?? []) {
-            if (node.action) visitAction(node.id, `${node.id}:onEnter:0`, node.action);
-        }
-        // ADR-115 measures flow edges as guards for completeness; no shipped
-        // definition uses them today.
-        for (const edge of flowDef.edges ?? []) {
-            const cmd = edge.condition?.kind === 'shell' ? edge.condition.options?.command : undefined;
-            if (typeof cmd === 'string' && cmd.length > 0) measureShellGuard(edge.from, edge.to, cmd);
-        }
-    } else {
-        const smDef = def as StateMachineWorkflowDef;
-        for (const state of smDef.states ?? []) {
-            for (const [i, action] of (state.onEnter ?? []).entries()) {
-                visitAction(state.id, `${state.id}:onEnter:${i}`, action);
-            }
-            for (const [i, action] of (state.onExit ?? []).entries()) {
-                visitAction(state.id, `${state.id}:onExit:${i}`, action);
-            }
-        }
-        for (const trans of smDef.transitions ?? []) {
-            const cmd = trans.guard?.kind === 'shell' ? trans.guard.options?.command : undefined;
-            if (typeof cmd === 'string' && cmd.length > 0) measureShellGuard(trans.from, trans.to, cmd);
-        }
-    }
-
-    return { findings };
-}
-
 async function fileExists(path: string): Promise<boolean> {
     const fs = createNodeFileSystem();
     return await fs.exists(path);
@@ -2733,15 +2105,9 @@ export function mergeWorkflowRunVars(
     return { ...base, ...user };
 }
 
-/** Thrown when a run id cannot be used as a single path segment under `.spur/run` (0948 R5). */
-export class InvalidWorkflowRunIdError extends Error {
-    readonly code = 'invalid-run-id' as const;
-
-    constructor(runId: string) {
-        super(`Invalid workflow run id: ${JSON.stringify(runId)}`);
-        this.name = 'InvalidWorkflowRunIdError';
-    }
-}
+// Re-exported from `workflow/run-record` (0962): that module owns the traversal guard that throws
+// it, and the class must not create a run-record → service edge. The public surface is unchanged.
+export { InvalidWorkflowRunIdError } from '../workflow/run-record';
 
 /**
  * `--agent fleet` selects the fleet executor surface (task 0942, ADR-126). 'fleet' is
@@ -2827,30 +2193,6 @@ function resolveDefaultAgentVar(
 }
 
 /**
- * Resolve the run-log retention threshold (days) from the threaded config
- * `workflow.logRetentionDays` (feature D2 / task 0429). Sync & pure: a load
- * failure is already surfaced once at the root; `config === null` degrades to
- * the 30-day default.
- */
-export function resolveWorkflowLogRetentionDays(config: SpurConfig | null): number {
-    return config?.workflow?.logRetentionDays ?? 30;
-}
-
-/**
- * Resolve run-log size limits (`maxBytes`, `maxLines`) from `agent.output` in
- * the threaded config. Returns an empty object when the section is absent or
- * the config is null — observability config must never break a run.
- */
-export function resolveOutputLogConfig(config: SpurConfig | null): WorkflowRunLogConfig {
-    const output = config?.agent?.output;
-    if (output === undefined) return {};
-    return {
-        ...(output['max-bytes'] !== undefined ? { maxBytes: output['max-bytes'] } : {}),
-        ...(output['max-lines'] !== undefined ? { maxLines: output['max-lines'] } : {}),
-    };
-}
-
-/**
  * Relative path to a run's human run record — `.spur/run/<runId>.md` for new
  * runs (E7 / task 0925), with the legacy `.spur/run/<runId>.log` (feature D2 /
  * task 0426) as a read-only fallback — for `run.artifact` metadata. The pair's
@@ -2863,207 +2205,6 @@ async function outputArtifactForRun(cwd: string, runId: string): Promise<string 
         if (await fileExists(join(cwd, relative))) return relative;
     }
     return undefined;
-}
-
-/** Explicit outcome of reading a run's persisted record from disk (E7 / task 0926 R3). */
-export type WorkflowRunRecordRead =
-    | { kind: 'pair'; markdownPath: string; statePath: string; state: Record<string, unknown> }
-    | {
-          kind: 'incomplete';
-          markdownPath: string;
-          statePath: string;
-          reason: 'state-missing' | 'state-invalid';
-      }
-    | { kind: 'legacy-log'; logPath: string }
-    | { kind: 'missing' };
-
-/**
- * Detect a run's record format and read its machine state (E7 / task 0926 — the
- * shared reader seam behind the workflow service for the follow tail and the
- * 0927/0929 surfaces). Precedence: a valid pair wins; a `.md` whose state file
- * is missing or unparseable is an explicit INCOMPLETE record — never success,
- * never synthesized from the markdown; a historical `.log`-only run stays
- * readable in place with no bulk migration; the DB trace remains the lifecycle
- * authority regardless of what is on disk.
- */
-export function readWorkflowRunRecord(runDir: string, runId: string): WorkflowRunRecordRead {
-    // Run ids key file names under the run dir — reject traversal before any path is built.
-    if (runId.includes('/') || runId.includes('\\') || runId.includes('..')) {
-        throw new InvalidWorkflowRunIdError(runId);
-    }
-    const markdownPath = join(runDir, `${runId}.md`);
-    const statePath = join(runDir, `${runId}.state.json`);
-    if (existsSync(markdownPath)) {
-        // 0948 R6: read the state file directly instead of `existsSync` → `readFileSync`.
-        // That two-call sequence raced a concurrent writer, so a pair that vanished between
-        // the calls was classified `state-invalid` (a corruption signal) when the honest
-        // outcome is `state-missing`. ENOENT is the missing signal; anything else — bad JSON,
-        // wrong shape — stays invalid.
-        let raw: string;
-        try {
-            raw = readFileSync(statePath, 'utf8');
-        } catch (err) {
-            // Vanished between the exists check and the read is missing, not invalid (0948 R6).
-            const reason = stateReadFailureReason(err);
-            return { kind: 'incomplete', markdownPath, statePath, reason };
-        }
-        try {
-            const state: unknown = JSON.parse(raw);
-            if (state !== null && typeof state === 'object' && !Array.isArray(state)) {
-                return { kind: 'pair', markdownPath, statePath, state: state as Record<string, unknown> };
-            }
-        } catch {
-            // Unparseable state → explicit invalid outcome below.
-        }
-        return { kind: 'incomplete', markdownPath, statePath, reason: 'state-invalid' };
-    }
-    const legacyLogPath = join(runDir, `${runId}.log`);
-    if (existsSync(legacyLogPath)) return { kind: 'legacy-log', logPath: legacyLogPath };
-    return { kind: 'missing' };
-}
-
-/** Byte cap on one served run-record FILE (0929 R2) — one bounded JSON response. */
-export const RUN_RECORD_INSPECT_MAX_BYTES = 256 * 1024;
-
-/**
- * Character cap for the redacted TEXT bound (0948 R5). Bytes and characters are different
- * units: the file gate measures the file size in bytes while `redactAndBound` measures
- * `string.length` in characters, so a single constant could not honestly name both.
- */
-export const RUN_RECORD_INSPECT_MAX_CHARS = 256 * 1024;
-
-/** ENOENT between exists and read is a vanished file; every other read failure is invalid. */
-export function stateReadFailureReason(err: unknown): 'state-missing' | 'state-invalid' {
-    if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === 'ENOENT') {
-        return 'state-missing';
-    }
-    return 'state-invalid';
-}
-
-/** Explicit bounded outcome of a Board run-record inspection (0929 R2). */
-export type WorkflowRunRecordInspection =
-    | { status: 'record'; markdown: string; state: Record<string, unknown> }
-    | { status: 'incomplete'; markdown: string; reason: 'state-missing' | 'state-invalid' }
-    | { status: 'legacy'; content: string }
-    | { status: 'oversized'; sizeBytes: number }
-    | { status: 'missing' };
-
-/**
- * Outcome of reading one run-record file under confinement: the text, an
- * explicit oversized signal, or nothing (escaped/vanished → missing).
- */
-type ConfinedRunFile = { text: string } | { oversized: number } | undefined;
-
-/**
- * Read one run-record file only if it is a regular file at the confined path.
- *
- * 0948 R5 collapses the realpath → stat → read TOCTOU window: one `open` (with
- * `O_NOFOLLOW`, so a symlinked final component is refused atomically rather than
- * followed) pins the inode, and every subsequent check and the read itself use THAT
- * descriptor. The old sequence re-resolved the path three times, so the bytes served
- * need not have been the bytes whose size and location were checked.
- *
- * Confinement rests on the caller: `realRunDir` is already fully resolved and the
- * final component is a validated single run-id segment.
- */
-function readConfinedRunFile(realRunDir: string, path: string, maxBytes: number): ConfinedRunFile {
-    // 0948 R5: `open` FIRST, so the descriptor pins the inode the moment the path is
-    // resolved. `O_NOFOLLOW` refuses a symlinked final component outright (the escape
-    // vector, since the run-id component itself is already validated). The confined
-    // realpath is then checked AND its identity compared to the descriptor we hold —
-    // a swap between open and check is caught by dev/ino instead of being read.
-    let fd: number | undefined;
-    try {
-        fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
-        const real = realpathSync(path);
-        if (real !== realRunDir && !real.startsWith(realRunDir + sep)) return undefined;
-        const opened = fstatSync(fd);
-        const confined = statSync(real);
-        if (opened.dev !== confined.dev || opened.ino !== confined.ino) return undefined;
-        if (!opened.isFile()) return undefined;
-        if (opened.size > maxBytes) return { oversized: opened.size };
-        return { text: readFileSync(fd, 'utf8') };
-    } catch {
-        return undefined; // escaped (symlink), vanished, or unreadable → missing
-    } finally {
-        if (fd !== undefined) closeSync(fd);
-    }
-}
-
-/**
- * Re-redact a parsed JSON value (0948 R5): the run-record state is served from disk, so
- * it must pass the same read-side scrub as the markdown. Strings are redacted and
- * bounded; object keys are scrubbed too (a secret can be a key).
- */
-function redactJsonValue(value: unknown, secrets: readonly string[], maxChars: number): unknown {
-    if (typeof value === 'string') return redactAndBound(value, secrets, maxChars);
-    if (Array.isArray(value)) return value.map((item) => redactJsonValue(item, secrets, maxChars));
-    if (value !== null && typeof value === 'object') {
-        const out: Record<string, unknown> = {};
-        for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-            out[redactAndBound(key, secrets, maxChars)] = redactJsonValue(item, secrets, maxChars);
-        }
-        return out;
-    }
-    return value;
-}
-
-/**
- * Confined, redacted, bounded run-record inspection behind the Board read
- * route (E7 / task 0929 R1/R2). Builds on the shared {@link readWorkflowRunRecord}
- * seam — no second format parser — and adds the remote-read guarantees: every
- * served file must resolve beneath the run directory, text is re-redacted
- * against the caller's secrets and capped before it leaves the process, and
- * the outcome is an explicit union — a present pair, a legacy-only log, an
- * incomplete record, oversized content, or missing. `expired` is reserved for
- * persisted cleanup evidence; the current log cleaner leaves no tombstone, so
- * absence alone is `missing`. Completion stays a DB-trace fact; nothing here
- * infers status from the record text.
- */
-export function inspectWorkflowRunRecord(
-    runDir: string,
-    runId: string,
-    opts: { secretValues?: readonly string[]; maxBytes?: number; maxChars?: number } = {},
-): WorkflowRunRecordInspection {
-    const maxBytes = opts.maxBytes ?? RUN_RECORD_INSPECT_MAX_BYTES;
-    const maxChars = opts.maxChars ?? RUN_RECORD_INSPECT_MAX_CHARS;
-    const secrets = opts.secretValues ?? [];
-    const record = readWorkflowRunRecord(runDir, runId); // rejects traversal-shaped ids
-    if (record.kind === 'missing') return { status: 'missing' };
-    let realRunDir: string;
-    try {
-        realRunDir = realpathSync(runDir);
-    } catch {
-        return { status: 'missing' }; // run dir vanished between detection and read
-    }
-    if (record.kind === 'legacy-log') {
-        const file = readConfinedRunFile(realRunDir, record.logPath, maxBytes);
-        if (file === undefined) return { status: 'missing' };
-        if ('oversized' in file) return { status: 'oversized', sizeBytes: file.oversized };
-        // The legacy `.log` predates write-time redaction — scrub it again on read.
-        return { status: 'legacy', content: redactAndBound(file.text, secrets, maxChars) };
-    }
-    const mdFile = readConfinedRunFile(realRunDir, record.markdownPath, maxBytes);
-    if (mdFile === undefined) return { status: 'missing' };
-    if ('oversized' in mdFile) return { status: 'oversized', sizeBytes: mdFile.oversized };
-    const markdown = redactAndBound(mdFile.text, secrets, maxChars);
-    if (record.kind === 'incomplete') {
-        return { status: 'incomplete', markdown, reason: record.reason };
-    }
-    const stateFile = readConfinedRunFile(realRunDir, record.statePath, maxBytes);
-    if (stateFile === undefined) {
-        // The state file cannot be served (escaped or vanished) — the record
-        // degrades to incomplete, never to a synthesized state (0929 R2).
-        return { status: 'incomplete', markdown, reason: 'state-invalid' };
-    }
-    if ('oversized' in stateFile) return { status: 'oversized', sizeBytes: stateFile.oversized };
-    // 0948 R5: the state JSON is served from disk and must not bypass read-side redaction —
-    // `markdown` was scrubbed while `state` was served parse-trusted.
-    return {
-        status: 'record',
-        markdown,
-        state: redactJsonValue(record.state, secrets, maxChars) as Record<string, unknown>,
-    };
 }
 
 /**

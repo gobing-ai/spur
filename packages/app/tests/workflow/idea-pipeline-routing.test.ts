@@ -28,7 +28,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { countLogicalCommands } from '../../src/services/workflow-service';
+import { countLogicalCommands } from '../../src/workflow/composition-lint';
 
 const WORKFLOWS_DIR = join(import.meta.dir, '../../../../config', 'workflows');
 const RUN_ID = 'run-routing';

@@ -7,8 +7,8 @@ import { describe, expect, mock, test } from 'bun:test';
 import type { ActionRunRow } from '@gobing-ai/spur-domain';
 import { createDecisionMaker } from '@gobing-ai/ts-ai-runner';
 import type { HitlRequest, WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
-import { collectHitlDecisionViolations } from '../../src/services/workflow-service';
 import { validateEvidenceChoices } from '../../src/workflow/actions/hitl-select';
+import { collectHitlDecisionViolations } from '../../src/workflow/composition-lint';
 import { MAX_EVIDENCE_ROWS, parseSummaryEnvelope, selectEvidence } from '../../src/workflow/decision-evidence';
 import {
     type DecisionConfig,

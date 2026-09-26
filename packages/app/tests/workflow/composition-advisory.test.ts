@@ -5,12 +5,8 @@ import { join, resolve } from 'node:path';
 import { createMigratedDb } from '@gobing-ai/spur-domain';
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
-import {
-    COMPOSITION_CAPS,
-    type CompositionFinding,
-    countLogicalCommands,
-    WorkflowAppService,
-} from '../../src/services/workflow-service';
+import { WorkflowAppService } from '../../src/services/workflow-service';
+import { COMPOSITION_CAPS, type CompositionFinding, countLogicalCommands } from '../../src/workflow/composition-lint';
 
 // 0614 + 0822 (ADR-115): two-tier composition advisory on `workflow validate`.
 // Drives the private advisory through WorkflowAppService.validate(); temp dirs sit

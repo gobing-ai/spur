@@ -680,7 +680,6 @@ export type {
     WorkflowCleanResult,
     WorkflowListEntry,
     WorkflowListResult,
-    WorkflowRunRecordRead,
     WorkflowRunResult,
     WorkflowTraceEntry,
     WorkflowTraceFilter,
@@ -693,12 +692,9 @@ export {
     type ResolvedWorkflowDefinition,
     type ResolveWorkflowDefinitionOptions,
     type ResolveWorkflowFileResult,
-    readWorkflowRunRecord,
     registeredWorkflowPaths,
-    resolveOutputLogConfig,
     resolveWorkflowDefinition,
     resolveWorkflowFile,
-    resolveWorkflowLogRetentionDays,
     WorkflowAppService,
     type WorkflowLayer,
     type WorkflowLayerId,
@@ -889,6 +885,12 @@ export {
     readProofInputContents,
     type TaskProofData,
 } from './workflow/proof-input-fingerprint';
+export type { WorkflowRunRecordRead } from './workflow/run-record';
+export {
+    readWorkflowRunRecord,
+    resolveOutputLogConfig,
+    resolveWorkflowLogRetentionDays,
+} from './workflow/run-record';
 export {
     parseSteeringPolicy,
     type SteeringAck,

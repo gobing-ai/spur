@@ -15,9 +15,9 @@ import { runDecide } from '../decide';
 export const DECIDE_KIND = 'decide';
 
 /**
- * Option validation (0941 R1) — the workflow-validate walker (`collectDecideViolations`)
- * parses with the SAME schema, so validation and execution cannot drift. Only this schema
- * fails the action; every model-level outcome degrades (0941 R3).
+ * Option validation (0941 R1) — the workflow-validate walker (`collectDecideViolations`,
+ * `workflow/composition-lint.ts`) parses with the SAME schema, so validation and execution cannot
+ * drift. Only this schema fails the action; every model-level outcome degrades (0941 R3).
  */
 export const DecideOptionsSchema = z
     .object({
