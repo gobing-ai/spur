@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.3.93] - 2026-09-25
+
+### Added
+
+- runall batch — measured decisions, explicit checks, deduplicated workflow catalogue (4a8f7daa8)
+
+### Fixed
+
+- key D64 verdict AC rows to feature scenarios (0937-0946) (319e2e352)
+- key feature receipt verifier identity on name/layer/digest (a1b740dc0)
+
+### Changed
+
+- qualify D64 evidence anchors to full file paths (0937-0947) (52882f064)
+- record forced verifyall re-verify for 0937-0947, 0956 (3868d2292)
+- regenerate plugin lib bundles for importer schema 0.5.7 (685f49526)
+- upgrade dependencies (a413957fb)
+- close the D64 evidence re-key task (c5583f346)
+- add 0957-0960 and refine 0956 for the D64 done gate (adc3fab6d)
+- updat tasks after refinment (a2e2de640)
+- implementation-ready refinement — coverage map, keying contract, dogfood predicate, receipt ordering (status todo) (1c8a1d313)
+- fix batch-report pointer after worktree removal; record feature-receipt-contract gate finding (9d4935a8c)
+- D64 wrapall — doc-sync after runall batch (ADR-124..126 accepted, catalogue + observability sync, learnings/metrics for 10 tasks) (d7cf0c8d5)
+- sync feature status after runall batch (11/11 done, verifying) + defer gate-keying to 0956 (80be2ac01)
+- update memory (1303bdb4f)
+- upgrade system satellite metadata (06f8d075d)
+- upgrade contract satellite metadata (c0e95fbc4)
+- add design satellites legacy metadata upgrade reviews (c78cffcbb)
+- upgrade remaining plan metadata (21792c978)
+- add other-plans legacy metadata upgrade review (ed22cc324)
+- upgrade brainstorm plan metadata (a5641168f)
+- add plan/design frontmatter vocabulary and batch upgrade rules (c9afa166d)
+- focus plan and design templates on execution and solutions (5c120c8a4)
+- close H14 document authoring feature (63bd86761)
+- guide legacy plan and design upgrades (19ce957c8)
+- define plan and design authoring contract (f0145f0e4)
+- register plan and design authoring contract (2fc9810af)
+- updat tasks after refinment (cdad1623d)
+
 ## [0.3.92] - 2026-09-24
 
 ### Added
