@@ -4,7 +4,7 @@ name: Reuse check receipts across task-pipeline stages as a measured candidate
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-26T00:58:55.218Z"
+updated_at: "2026-09-26T02:41:49.667Z"
 feature_id: D64
 priority: P2
 tags:

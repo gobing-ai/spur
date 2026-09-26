@@ -4,7 +4,7 @@ name: Add the two-tier spur-check primitive with fingerprint-bound receipts
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-26T00:58:54.138Z"
+updated_at: "2026-09-26T02:39:59.035Z"
 feature_id: D64
 priority: P1
 tags:

@@ -4,7 +4,7 @@ name: "Satisfy the D64 feature-done gate: scenario-key verdict evidence and add 
 status: done
 template: feature-impl
 created_at: 2026-09-25T23:21:04.700Z
-updated_at: "2026-09-26T01:19:36.353Z"
+updated_at: "2026-09-26T02:40:58.917Z"
 feature_id: D64
 
 ac_altitude: task-local
@@ -258,7 +258,8 @@ object is the committed diff `319e2e352`, byte-identical, and it does not read t
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=0 housekeeping=0 |
+| P4 | reverify-2026-09-25 | — | D64 verifyall --force: anchors resolved (all verdicts); D64 cited suites 168/168 pass; spur-check-feature exit 0; spur-check 9128/9131 (2 bundle-drift fixed in 685f49526, 1 sandbox-denied git fixture in apps/cli/tests/commands/feature.test.ts) |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=3 housekeeping=1 |
 
 ### References
 

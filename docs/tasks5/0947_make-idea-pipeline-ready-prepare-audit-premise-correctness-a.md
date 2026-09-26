@@ -4,7 +4,7 @@ name: Make idea-pipeline ready-prepare audit premise correctness and re-stamp ev
 status: done
 template: issue
 created_at: 2026-09-24T00:36:30.606Z
-updated_at: "2026-09-24T17:34:14.734Z"
+updated_at: "2026-09-26T02:41:52.714Z"
 feature_id: D64
 
 estimate_hours: 6

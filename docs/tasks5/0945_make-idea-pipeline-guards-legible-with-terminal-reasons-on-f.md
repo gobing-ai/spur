@@ -4,7 +4,7 @@ name: Make idea-pipeline guards legible with terminal reasons on failure edges
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.007Z
-updated_at: "2026-09-26T00:59:00.753Z"
+updated_at: "2026-09-26T02:40:09.673Z"
 feature_id: D64
 priority: P3
 tags:

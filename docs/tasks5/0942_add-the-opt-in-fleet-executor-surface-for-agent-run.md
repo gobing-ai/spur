@@ -4,7 +4,7 @@ name: Add the opt-in fleet executor surface for agent.run
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.005Z
-updated_at: "2026-09-26T00:58:57.452Z"
+updated_at: "2026-09-26T02:41:51.234Z"
 feature_id: D64
 priority: P2
 tags:
