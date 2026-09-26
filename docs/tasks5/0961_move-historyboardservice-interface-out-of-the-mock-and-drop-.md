@@ -4,8 +4,10 @@ name: Move HistoryBoardService interface out of the mock and drop MockHistoryBoa
 status: todo
 template: standard
 created_at: 2026-09-26T04:37:17.893Z
-updated_at: "2026-09-26T04:40:05.422Z"
+updated_at: "2026-09-26T04:55:54.823Z"
 
+feature_id: E82
+ac_numbering: task-local
 ---
 
 ## 0961. Move HistoryBoardService interface out of the mock and drop MockHistoryBoardService from the spur-app production barrel
@@ -29,43 +31,58 @@ Why it matters: the dependency points the wrong way (real → mock), and fixture
 
 ### Requirements
 
-- [ ] R1. `HistoryBoardService` is declared in production code that owns it (`history-board-service.ts` or a new `history-board-port.ts`), and no file under `packages/app/src/` imports from `history-board-mock-service`.
-- [ ] R2. `MockHistoryBoardService` and its fixture catalogs are no longer exported from the `@gobing-ai/spur-app` root barrel (`packages/app/src/index.ts`).
-- [ ] R3. The mock remains importable by the three existing test consumers through one documented path (see Design), with no test behavior change.
-- [ ] R4. `HistoryBoardService` stays exported from the root barrel so `apps/server/src/context.ts` compiles unchanged.
+- [ ] R1. `HistoryBoardService` is declared in `packages/app/src/services/history-board-service.ts` (the live implementation's module), and no file under `packages/app/src/` other than the mock itself imports the mock module.
+- [ ] R2. `MockHistoryBoardService` and its fixture catalogs are no longer exported from the `@gobing-ai/spur-app` root barrel (`packages/app/src/index.ts`), so the Worker bundle stops pulling the mock module.
+- [ ] R3. The mock moves to `packages/app/src/testing/history-board-mock.ts`, exposed only via a new `"./testing"` subpath export, and its three test consumers import it from there with no assertion change.
+- [ ] R4. `HistoryBoardService` stays exported (type-only) from the root barrel, so `apps/server/src/context.ts:6,162` compiles with no edit under `apps/server/src/`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — `rg "history-board-mock-service" packages/app/src` returns only the mock file itself (req: R1)
-- [ ] AC2 — `rg "MockHistoryBoardService" packages/app/src/index.ts` returns nothing (req: R2)
-- [ ] AC3 — `apps/server/tests/modules/history/handlers.test.ts`, `packages/app/tests/services/history-response-shape.test.ts`, `packages/app/tests/services/history-board-mock-service.test.ts` pass with unchanged assertions (req: R3)
-- [ ] AC4 — `bun run typecheck` and `bun run test-cf` green (Worker bundle must not gain the fixture module) (req: R4)
+Graduates all four of feature E82's scenarios (exact titles below); the numbered rows are the verify lens.
+
+- [ ] AC1 — R1 — Production code owns the History Board port (req: R1)
+- [ ] AC2 — R2 — The root barrel ships no History Board fixture (req: R2)
+- [ ] AC3 — R3 — Tests reach the mock through the testing subpath (req: R3)
+- [ ] AC4 — R4 — Server context compiles against the unchanged port export (req: R4)
+
+**Verify lens**
+
+- **AC1** — `rg -n "interface HistoryBoardService" packages/app/src` hits only `services/history-board-service.ts`; `rg -l "history-board-mock|MockHistoryBoardService" packages/app/src` lists only `src/testing/history-board-mock.ts`; `git ls-files packages/app/src/services/history-board-mock-service.ts` is empty.
+- **AC2** — `rg -n "MockHistoryBoardService|history-board-mock" packages/app/src/index.ts` returns nothing; `bun run test-cf` green.
+- **AC3** — `jq -r '.exports["./testing"]' packages/app/package.json` prints `./src/testing/history-board-mock.ts`; the three consumers import `@gobing-ai/spur-app/testing` (cross-workspace) or `../../src/testing/history-board-mock` (in-package) and pass: `(cd packages/app && bun test tests/services/history-response-shape.test.ts tests/services/history-board-mock-service.test.ts)` and `(cd apps/server && bun test tests/modules/history/handlers.test.ts)`; `git diff <base> -- '**/tests/**'` shows only import-line changes.
+- **AC4** — `git diff <base> --stat -- apps/server/src` is empty; `bun run typecheck` and `bun run spur-check` green.
 
 ### Q&A
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
+- **Q:** Test-only subpath (`@gobing-ai/spur-app/testing`) or move the mock under `packages/app/tests/fixtures/`? **A:** Subpath. `apps/server` tests consume the mock cross-workspace; a `tests/` location would force a deep relative import across workspaces (forbidden by AGENTS.md). Decided 2026-09-25 (refinement).
+- **Q:** Separate `history-board-port.ts` for the interface? **A:** No — the interface is the live implementation's contract; declaring it in `history-board-service.ts` is one file fewer. The mock imports the type from there (test → prod direction is correct).
+- **Q:** Is removing `MockHistoryBoardService` from the root barrel a breaking change for external consumers? **A:** No external consumer: `packages/app/package.json` is `"private": true` (checked 2026-09-25) and `rg` finds no production importer. No changelog entry required.
+- **Q:** Keep the test filename `history-board-mock-service.test.ts`? **A:** Yes — renaming a test file is churn outside the requirement; only its import line changes.
 
 ### Design
 
-**Recommended:** new subpath export `@gobing-ai/spur-app/testing` → `./src/testing/history-board-mock.ts` (moved file), added to `packages/app/package.json` `exports` beside the existing subpaths (`./errors`, `./feature-check`, …).
+Package-export change only; no public `spur` noun/verb change, no behavior change.
 
-- Interface moves to `packages/app/src/services/history-board-service.ts` (it is the live implementation's contract; one fewer file than a separate port module). Mock imports the type from there.
-- Test consumers switch import to `@gobing-ai/spur-app/testing` (cross-workspace) or the relative path (in-package tests).
-- Keep the mock under `src/` (not `tests/`) because `apps/server` tests consume it cross-workspace; a `tests/` path would be a deep relative import (forbidden by AGENTS.md).
+1. **Interface move.** Cut `export interface HistoryBoardService { … }` (mock file :21, plus any request/response types it declares that the live file needs) into `services/history-board-service.ts`. Replace `import type { HistoryBoardService } from './history-board-mock-service'` (:86) with the local declaration.
+2. **Mock move.** `git mv packages/app/src/services/history-board-mock-service.ts packages/app/src/testing/history-board-mock.ts`; its import becomes `import type { HistoryBoardService, … } from '../services/history-board-service'`. Content otherwise unchanged.
+3. **Subpath.** Add `"./testing": "./src/testing/history-board-mock.ts"` to `packages/app/package.json` `exports`, in the same style as the existing entries (`./errors`, `./feature-check`, …). Name it `testing` (not `history-board-mock`) so later test doubles can join without another export.
+4. **Barrel.** In `src/index.ts:258-259`: re-point `export type { HistoryBoardService }` to `./services/history-board-service` (merge into the :260 line), delete the `MockHistoryBoardService` export.
+5. **Consumers** (all three import `MockHistoryBoardService` today — two via the in-package barrel `../../src`, one via `@gobing-ai/spur-app`): `apps/server/tests/modules/history/handlers.test.ts:2` → `@gobing-ai/spur-app/testing`; `packages/app/tests/services/history-response-shape.test.ts:16` and `history-board-mock-service.test.ts:2` → `../../src/testing/history-board-mock`. `history-board-service.test.ts` imports the live class only — untouched.
 
-**Rejected:** moving the mock into `packages/app/tests/fixtures/` — forces `apps/server` to deep-import across workspaces.
+**Invariant:** nothing under `packages/app/src/` (other than `src/testing/`) imports `src/testing/`. The Worker entry never imports the `./testing` subpath.
 
-**Invariant:** no public noun/verb change; this is a package-export change only. Check whether `@gobing-ai/spur-app` is consumed outside this monorepo before release — if so, note the removed root export in the changelog.
+**Rejected:** fixture under `tests/` (deep cross-workspace import); keeping the mock in the barrel behind a comment (still ships in the Worker bundle).
 
 ### Plan
 
-- [ ] Move `interface HistoryBoardService` into `history-board-service.ts`; update the mock to import it.
-- [ ] `git mv` mock to `packages/app/src/testing/history-board-mock.ts`; add `"./testing"` export to `packages/app/package.json`.
-- [ ] Remove `MockHistoryBoardService` from `src/index.ts`; re-point `export type { HistoryBoardService }` to the live file.
-- [ ] Update the three test imports.
-- [ ] `(cd packages/app && bun test tests/services/history-*.test.ts)`, `(cd apps/server && bun test tests/modules/history)`, `bun run test-cf`, `bun run spur-check`.
+- [ ] Move the interface (and any types it needs) into `services/history-board-service.ts`; drop the reverse import at :86.
+- [ ] `git mv` the mock to `src/testing/history-board-mock.ts`; fix its type import.
+- [ ] Add the `"./testing"` export to `packages/app/package.json`.
+- [ ] Edit `src/index.ts:258-260` per Design §4.
+- [ ] Update the three test imports (Design §5).
+- [ ] Focused: `(cd packages/app && bun test tests/services/history-response-shape.test.ts tests/services/history-board-mock-service.test.ts tests/services/history-board-service.test.ts)`; `(cd apps/server && bun test tests/modules/history)`.
+- [ ] Gates: `bun run spur-check`, `bun run test-cf`; run the AC1–AC4 `rg`/`jq`/`git diff` probes and paste output into Testing.
+- [ ] One commit: `refactor(app): own HistoryBoardService in the live module; mock moves to /testing subpath (0961)`.
 
 ### Solution
 
@@ -81,7 +98,9 @@ Why it matters: the dependency points the wrong way (real → mock), and fixture
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- Feature: E82 (parent E8 — History Board module).
+- Review source: `/sp:dev-review packages --focus all`, 2026-09-25, candidate C1; base commit `959f84bd6`.
+- AGENTS.md: cross-workspace imports use `@gobing-ai/*`, never deep relative paths.
 
 ### History
 

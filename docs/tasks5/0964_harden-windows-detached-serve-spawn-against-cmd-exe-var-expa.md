@@ -4,8 +4,10 @@ name: Harden Windows detached-serve spawn against cmd.exe %VAR% expansion
 status: todo
 template: standard
 created_at: 2026-09-26T04:37:18.669Z
-updated_at: "2026-09-26T04:40:09.304Z"
+updated_at: "2026-09-26T04:55:59.847Z"
 
+feature_id: K21
+ac_numbering: task-local
 ---
 
 ## 0964. Harden Windows detached-serve spawn against cmd.exe %VAR% expansion
@@ -26,41 +28,75 @@ Exposure today: low — `cmd` is the spur binary path plus serve flags assembled
 
 ### Requirements
 
-- [ ] R1. The Windows detached-serve launch passes every argument to the child byte-identical, including arguments containing `%`, `!`, `"`, `^`, `&` and spaces.
-- [ ] R2. The daemon still outlives the CLI process (the existing detached semantics are preserved).
-- [ ] R3. The quoting/launch construction is a pure, exported-for-test function with unit tests that run on any host.
-- [ ] R4. No direct `Bun.spawn` / `child_process` call is introduced (the `no-direct-process-spawn` rule); launch goes through `ProcessExecutor`.
+- [ ] R1. On win32, the detached serve launch no longer embeds any argument bytes in the `cmd` command line: each argv element is handed off in its own environment variable (`SPUR_SERVE_ARG_<i>`), referenced as `"%SPUR_SERVE_ARG_<i>%"`, under `cmd /d /v:off /c`.
+- [ ] R2. The launch-spec construction is a pure exported function `buildWindowsDetachedServeLaunch(cmd: readonly string[]): { command: string; args: string[]; env: Record<string, string> }` in `project-start.ts` (exported for tests; not added to the barrel), unit-tested on any host.
+- [ ] R3. Inputs the handoff cannot carry fail loud before spawn: any argument containing `"` throws (illegal in Windows paths; would break out of quoting after expansion), and a launcher `cmd[0]` ending in `.cmd` / `.bat` (case-insensitive) throws, because a batch interpreter re-expands `%` in its arguments.
+- [ ] R4. The daemon still outlives the CLI (`start /b` semantics preserved); the POSIX branch is untouched.
+- [ ] R5. No direct `Bun.spawn` / `child_process` call is introduced; launch stays on `NodeProcessExecutor.run`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — unit test: arguments `C:\a%PATH%b`, `x!y`, `he said "hi"`, `a&b`, `p q` produce a launch spec from which the child receives them unchanged (req: R1)
-- [ ] AC2 — the win32 branch no longer embeds user arguments in a `cmd /c` command string, or, if it must, a test proves `%` survives (req: R1)
-- [ ] AC3 — `bun run spur-check` green (req: R4)
-- [ ] AC4 — manual Windows smoke (`spur serve` detached from a project path containing `%`) recorded in Testing, or explicitly marked untested with the reason (req: R2)
+Graduates all four of feature K21's scenarios (exact titles below); the numbered rows are the verify lens.
+
+- [ ] AC1 — R1 — Every serve argument reaches the daemon unchanged (req: R1, R2)
+- [ ] AC2 — R2 — Unsafe launch inputs fail loud before spawn (req: R3)
+- [ ] AC3 — R3 — The serve daemon outlives the launching CLI (req: R4)
+- [ ] AC4 — R4 — Launch stays behind ProcessExecutor (req: R5)
+
+**Verify lens**
+
+- **AC1** — unit test over `buildWindowsDetachedServeLaunch(['C:\\bun.exe', 'C:\\a%PATH%b', 'x!y!', 'a&b|c', 'p q', '^caret', ''])`: `command === 'cmd'`; `args` equals `['/d', '/v:off', '/c', 'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" … "%SPUR_SERVE_ARG_6%"']`; `args.join(' ')` contains none of the input argument strings; `env.SPUR_SERVE_ARG_<i> === cmd[i]` for every i (byte-identical, including the empty string).
+- **AC2** — unit tests: an argument `he said "hi"` throws an error naming the argument index and the `"` restriction; `cmd[0] = 'C:\\tools\\spur.CMD'` throws naming batch launchers; neither calls the executor (spawn seam spy has 0 calls).
+- **AC3** — Windows smoke: `spur projects start <name>` from a project path containing `%` (e.g. `C:\tmp\p%USERNAME%x`), CLI exits, `spur projects list --json` shows it running on its port, and the serve process's `--cwd` equals the literal path. Recorded in Testing; if no Windows host is available, Testing states "AC3 untested — no Windows host" and the verdict is PARTIAL for AC3 only (operator decides).
+- **AC4** — `rg -n "Bun\.spawn|child_process" packages/app/src/services/project-start.ts` returns nothing; `bun run spur-check` green (includes the `no-direct-process-spawn` rule).
 
 ### Q&A
 
-<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
-     condition. Not a parking lot for open questions — an unanswered question here means the task
-     is not ready to hand off. Keep empty if none. -->
-
-#### Q&A entry — 2026-09-26T04:39:45.994Z
-
-- **Q:** Why a task rather than an inline fix? **A:** No cheap correct escape exists for `%` inside `cmd /c` quotes; the right fix changes the launch mechanism and needs a Windows check. Decided 2026-09-25 in the packages review triage.
+- **Q:** Why a task rather than an inline fix? **A:** No cheap correct escape exists for `%` inside `cmd /c` quotes (`^%` is literal inside quotes); the fix changes the launch mechanism and needs a Windows check. Decided 2026-09-25 in the packages review triage.
+- **Q:** Filed Design option 1 — detached launch without `cmd` via `ProcessExecutor`? **A:** Not available. `@gobing-ai/ts-runtime` 0.5.7 `ProcessOptions` (`packages/runtime/src/process-executor.ts:58-120` in ts-libs) has no `detached`/fire-and-forget option; `run` awaits child exit, and the internal `detached: true` (:817) is process-group containment for deadlines, not daemonization. Adding one is a cross-repo release — out of scope. **Chosen: option 2 (env-var handoff).** Deferred condition: if ts-runtime ships a detached launch API, replace the win32 `cmd` hop with it in a follow-up.
+- **Q:** Why does the env-var handoff survive `%`? **A:** `cmd` expands `%VAR%` in one pass over the command line and does not rescan the substituted text, so a value containing `%NAME%` stays literal. `/v:off` disables delayed expansion so `!` is literal regardless of the registry default; `/d` skips AutoRun commands. `^`, `&`, `|`, `<`, `>` are literal inside the double quotes that wrap each reference.
+- **Q:** What still breaks it? **A:** (1) A `"` inside a value — quote parsing happens after expansion, so it would close the quote; `"` is illegal in Windows file names and serve flags are internal, so reject it (R3). (2) A `.cmd`/`.bat` launcher — the batch interpreter re-parses `%` in `%*`/`%1`; `resolveSpurServeCommand` normally yields `process.execPath` (bun.exe) but its `Bun.which('spur')` fallback could return `spur.cmd`, so reject it (R3).
+- **Q:** Env var collisions? **A:** Names are `SPUR_SERVE_ARG_<index>`; the builder's `env` is merged over the caller env (caller env first, builder keys win). Stale `SPUR_SERVE_ARG_*` from the parent are harmless — only indices `< cmd.length` are referenced.
 
 ### Design
 
-Preferred order (pick the first that `ProcessExecutor` supports — check `@gobing-ai/ts-runtime` before choosing):
+**Chosen: env-var handoff under `cmd /d /v:off /c start /b`.** Keeps `NodeProcessExecutor` as the only launcher (rule `no-direct-process-spawn`) and needs no ts-runtime change.
 
-1. **Avoid `cmd` for argument passing.** Launch the target directly as a detached process through `ProcessExecutor` (argv array, no shell); if ts-runtime lacks a `detached` option, add it there (fix the facade, not a Spur workaround — AGENTS.md).
-2. **Pass arguments via environment.** `cmd /c start /b "" "%SPUR_SERVE_BIN%" ...` with each argument in a dedicated env var — `cmd` expands the var *once* and does not re-expand `%` in the result, so values containing `%` survive. Caveat: quote parsing happens *after* expansion, so a value containing `"` still breaks out of the quotes — reject `"` in paths (illegal in Windows filenames anyway) and test it (AC1).
-3. Last resort: PowerShell `Start-Process -ArgumentList` with single-quote escaping (`'` → `''`).
+```ts
+/** Windows detached-launch spec: argv travels in env vars so cmd.exe never parses argument bytes. */
+export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+} {
+    // throw if cmd is empty, if cmd[0] matches /\.(cmd|bat)$/i, or if any element contains '"'
+    // env: { SPUR_SERVE_ARG_0: cmd[0], … }
+    // args: ['/d', '/v:off', '/c', `start /b "" ${cmd.map((_, i) => `"%SPUR_SERVE_ARG_${i}%"`).join(' ')}`]
+}
+```
 
-Option 1 removes the problem class; 2 is the smallest in-repo change. Either way, extract the win32 launch-spec builder into a pure function (R3) so tests run on macOS CI.
+In `defaultDetachedServeSpawn`, the win32 branch becomes:
+
+```ts
+const launch = buildWindowsDetachedServeLaunch(cmd);
+// command/args from launch; env: { ...flattenEnv(options.env ?? getEnvVars()), ...launch.env }
+```
+
+The POSIX branch and the `executor.run({...})` call shape stay as they are; only the win32 `{command,args}` and the env merge change. Update the function's doc comment (:77-80) to say Windows uses the env-var handoff and why.
+
+Errors are thrown `Error`s with messages of the form `detached serve launch: argument <i> contains '"', which cannot be passed through cmd.exe` and `detached serve launch: batch launcher <path> re-expands %; use the bun executable`. `startProject` already surfaces thrown spawn errors to the CLI.
+
+**Rejected:** caret/percent escaping inside quotes (no correct escape exists); PowerShell `Start-Process` (adds a second interpreter with its own quoting and a ~300 ms startup; keep as fallback only if the Windows smoke fails for option 2).
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+- [ ] Add `buildWindowsDetachedServeLaunch` to `packages/app/src/services/project-start.ts` above `defaultDetachedServeSpawn` (Design snippet).
+- [ ] Rewire the win32 branch of `defaultDetachedServeSpawn` to use it; merge `launch.env` over the flattened env; update the doc comment.
+- [ ] Tests in `packages/app/tests/services/project-start.test.ts`: AC1 spec test (metacharacter matrix incl. empty string), AC2 two rejection tests, plus one test that the win32 branch is selected via the builder (call the builder directly; do not stub `process.platform` globally).
+- [ ] Focused: `(cd packages/app && bun test tests/services/project-start.test.ts)`.
+- [ ] Gates: `bun run spur-check`; `rg -n "Bun\.spawn|child_process" packages/app/src/services/project-start.ts` empty.
+- [ ] Windows smoke (AC3) if a host is available; otherwise record "untested — no Windows host" in Testing.
+- [ ] One commit: `fix(project-start): pass Windows detached serve argv via env to defeat cmd %VAR% expansion (0964)`.
 
 ### Solution
 
@@ -76,7 +112,10 @@ Option 1 removes the problem class; 2 is the smallest in-repo change. Either way
 
 ### References
 
-<!-- Links to features, docs, ADRs, related tasks, or external references. -->
+- Feature: K21 (parent K2 — project runtime robustness).
+- Review source: `/sp:dev-review packages --focus all`, 2026-09-25, SECUA minor; base commit `959f84bd6`.
+- Precedent for env-var handoff: `packages/app/src/workflow/actions/shell.ts:97` (`/bin/sh -c` with vars passed via env).
+- `@gobing-ai/ts-runtime` 0.5.7 `ProcessOptions` — no detached launch (see Q&A).
 
 ### History
 
