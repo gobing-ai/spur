@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Give consuming projects a supported way to sync the sp plugin pipeline scripts (vendoring drifts)
-status: backlog
+status: cancelled
 template: issue
 created_at: 2026-09-26T00:36:38.467Z
-updated_at: "2026-09-26T00:37:29.635Z"
+updated_at: "2026-09-26T17:05:46.990Z"
 feature_id: I
 
 ac_altitude: task-local
@@ -173,6 +173,43 @@ Reference counts for the absent scripts across `config/workflows/` + `plugins/sp
   that consumes these scripts is Spur's, and `spur self` already owns install-level operations
   (`init` / `migrate`).
 
+#### Q&A entry — 2026-09-26T17:05:46.777Z
+
+<!-- Clarifications and triage decisions. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-26T00:37:18.485Z
+
+- **CLOSED — "stop vendoring" is not an option here.** The scripts are executed from the project tree by
+  design (project-first resolution in every step shell). Removing the vendored copy without changing the
+  pipeline's resolution would move every step onto the installed twin and make the plugin a hard runtime
+  dependency of the pipeline. This task provides the sync; **0960** addresses resolution safety.
+- **CLOSED — the sync must not prune project-only files.** The project legitimately carries local scripts
+  that the plugin does not ship (`feature-dev-precheck.{ts,mjs}`, `wrapup-drift-probe.{ts,mjs}` in
+  knowledge-kit). A sync that prunes unknown files would be destructive and would have deleted them.
+- **CLOSED — a manifest is required, not optional.** Without a recorded source revision, "drift" is
+  undefined (drift against which source, at which version?). The manifest is the anchor for both the report
+  and the check mode; it is also what makes the "which revision produced this run?" question answerable.
+- **OPEN — the authoritative source (blocks ready).** Installed plugin
+  (`node_modules/@gobing-ai/spur/plugins/sp`, 0.3.92) **or** the spur-new dev tree (`plugins/sp`, no version
+  field)? The project's own re-vendor history contradicts itself: `e8b07e70` says "from installed plugin",
+  but its result matches **spur-new** ( `inline-run-setup.ts` diff = 0 vs spur-new, 156 vs installed).
+  Operator decision required before implementation; the answer also determines whether a dev-tree source
+  needs a version/revision identifier at all.
+- **OPEN — ownership plane (blocks ready).** A `superskill` verb (e.g. `superskill install sp --scripts`,
+  or an `emit` verb) or a `spur self` verb (e.g. `spur self sync-plugin-scripts`)? Evidence for
+  superskill: it already resolves plugin scripts for the pipeline (`superskill script path sp <name>.mjs`),
+  so the emission surface and the resolver would live in one place. Evidence for spur: the pipeline YAML
+  that consumes these scripts is Spur's, and `spur self` already owns install-level operations
+  (`init` / `migrate`).
+
+
+#### Q&A entry — 2026-09-26 (triage: cancelled as superseded by 0960)
+
+- **The premise does not hold.** A supported way to install the scripts already exists: `superskill install sp --marketplace <locator> [--no-global]` (root `README.md:67-75`). `superskill script path sp <rel> --json` already resolves project-level first and global second. knowledge-kit's `Plugin 'sp' not found` came from omitting `--marketplace`, which Spur's own fail-closed remedy text also omits. 0960 R4 fixes that text.
+- **The real defect is execution, not distribution.** Unguarded project-first probes (17 sites) run a vendored copy when one exists. 0960 R1 restricts them to the Spur source repo, so a consumer's vendored copy is never executed. That makes a sync verb and a vendor manifest unnecessary, and they would duplicate Superskill's resolver (ADR-065).
+- **The residue moved to 0960:** run-scoped revision identity (R2, script-set digest), the remedy text (R4), and the missing rule-4 coverage (R5). The `--fingerprint` reproduction is the `SETUP_SCRIPT` probe fixed by 0960 R1.
+- Both open questions (source, ownership plane) are answered by existing Superskill surfaces, so no operator decision remains.
+
 ### Design
 
 **Direction A (recommended) — a superskill verb reusing the existing resolver.**
@@ -252,4 +289,5 @@ flag is a symptom; the absent sync surface is the cause.
 ### History
 
 - 2026-09-26T00:37:29.635Z todo → backlog (system)
+- 2026-09-26T17:05:46.990Z backlog → cancelled (system)
 

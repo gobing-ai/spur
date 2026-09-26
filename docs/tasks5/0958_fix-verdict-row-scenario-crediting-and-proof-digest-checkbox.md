@@ -4,7 +4,7 @@ name: Fix verdict-row scenario crediting and proof-digest checkbox invalidation 
 status: backlog
 template: feature-impl
 created_at: 2026-09-26T00:29:55.505Z
-updated_at: "2026-09-26T00:31:11.654Z"
+updated_at: "2026-09-26T17:03:44.532Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -55,11 +55,11 @@ nothing. Root cause, verified in source:
 - The done gate matches a row to a scenario with
   `rowMatchesScenario(id, sc)` (`packages/app/src/services/feature-check.ts:1206`), which accepts only:
   `normalizeTitle(id)` equal to the scenario's normalized title, or `id`/stripped/body-stripped equal to
-  `sc.alias` — and `sc.alias` is `AC-<n>` (1-based ordinal, built at `feature-check.ts:793`).
+  `sc.alias` — and `sc.alias` is `AC-<n>` (1-based ordinal, built at `feature-check.ts:796`, and a second builder `indexScenarioAliases` at `:1262` builds the same `AC-<n>` aliases).
   `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:61`) strips a leading `R<n>`/`AC<n>` prefix but
   has no notion of a scenario reference *inside* a longer string. So `(feature R3)` contributes nothing.
 - Nothing upstream prevents this: the verify-exit lint
-  (`apps/cli/plugins/sp/scripts/verify-answer-lint.ts`) validates AC ids against the task's AC labels
+  (`plugins/sp/scripts/verify-answer-lint.ts`; the `apps/cli/plugins/…` path is the generated build:bundle copy) validates AC ids against the task's AC labels
   *or* a linked feature scenario title — the prose ids satisfy the task-label branch, so the lint passes
   and the failure only surfaces later, at the feature's `verifying → done` boundary, as an opaque count.
 
@@ -89,52 +89,35 @@ the canonical record-stage action — `spur task record` has no checkbox flag, s
 record step invalidates the proof it just established, and the run must re-capture (R4 pattern) and
 re-bind the verdict proof block by hand. A task that is *more* verified looks *less* certified.
 
-#### Blast radius and sibling work (found while filing this task)
+#### Blast radius and sibling work (re-checked 2026-09-26)
 
-- The same failure independently hit feature **D64**: task **0956** ("Satisfy the D64 feature-done gate:
-  scenario-key verdict evidence", `todo`) exists to re-key the recorded verdict evidence of tasks
-  0937–0946 to full AC labels — a **data-level workaround** for exactly this symptom. Two independent
-  occurrences in the same week: knowledge-kit D6 (manual re-key of 0165) and spur D64 (0956, re-keying
-  0937–0946).
-- **0956 is the workaround; this task is the engine fix — they must not be merged into one solution.**
-  0956 edits *evidence data* for one feature; this task edits *the matcher and the lint* so future
-  evidence cannot strand a feature. 0956 R3 already documents the trap from the other side: a task whose
-  AC section contains D64 scenario titles becomes a covering task whose task-local rows then fire
-  `L4.verdict-rows-match-no-scenario` — the gate punishes the very task written to satisfy it.
-- **Defect B has no sibling task.** Nothing in `docs/tasks5/` covers checkbox normalization or
-  tick-state digest stability (grep for `canonicalizeCheckbox` / tick-state / checkbox tick returns only
-  this task).
-- Related in-flight work in the same area (do not duplicate): **0957** (feature-receipt verifier identity
-  must not bind the absolute definition path) touches `feature-verification-receipt.ts`, a different
-  layer of the same completion boundary.
+- **0956** (D64 data-level re-key of tasks 0937–0946) is now **done**. It was the workaround, and this task is the engine fix. 0956 R3 documented the trap from the other side: a covering task whose rows are keyed task-locally fires `L4.verdict-rows-match-no-scenario`. R2 below is scoped to covering tasks for that reason.
+- **0957** (feature-receipt verifier identity) is now **done**. It touched a different layer, and there is no overlap.
+- **Folded in: 0975 F3** (proof-capture ordering against the completion-box tick). Ticking boxes before the `record` hop moved the fresh digest off the declared one. Defect B's checkbox-canonical digest makes the ordering irrelevant, so 0975 no longer carries it. **0976** also points here for the same observation.
+- There is no other pending overlap. `rg` over 0964–0976 for `rowMatchesScenario`, `canonicalizeCheckbox`, the tick-state digest, and `verdict-rows-match-no-scenario` returns only this task and the pointers above.
 
-#### Aggravating factor (not this task's fix)
+#### Provenance note (not this task's fix)
 
-The inline driver reference documents proof capture as
-`bun "$SETUP_SCRIPT" --fingerprint --task-file <task> --feature-file <feature>`, but the copy of
-`inline-run-setup.ts` vendored into the consuming project lacked the `--fingerprint` mode entirely (0
-occurrences), so the run had to hand-roll a digest runner against the engine's
-`computeProofInputFingerprint`. The consumer's stale vendored copy is being re-vendored there; it is
-recorded here only as provenance for how Defect B was measured.
+The consuming project measured Defect B with a hand-rolled digest runner. Its stale vendored `inline-run-setup.ts` lacked `--fingerprint`, because the inline driver reference resolves `plugins/sp/scripts/` project-first. That resolution defect is owned by **0960**.
 
 ### Requirements
 
-- [ ] R1. A verdict row whose `id` carries an explicit feature-scenario reference is credited to that scenario by the feature done gate — accepted embedded forms: a parenthesised `(feature R<n>)`, a parenthesised `(covers: R<n>)`, and a bracketed `[R<n>]` tag. The reference must be an explicit scenario token, not a bare `R<n>` substring anywhere in the row.
-- [ ] R2. The verify-exit lint (`verify-answer-lint.ts`) fails, with a non-zero exit and an actionable message, when the task links a feature whose scenarios parse and **no** verdict row names any of those scenarios. The message names the offending row ids and the accepted key forms.
-- [ ] R3. The proof digest is unchanged when the only difference in a proof-input section is checkbox tick-state (`- [ ]` vs `- [x]`, including `*`, indentation and case variants).
-- [ ] R4. The proof digest still changes when the text of a proof-input section changes (any non-checkbox-marker edit), and when a proof-input section is added or removed.
-- [ ] R5. The `L4.verdict-rows-match-no-scenario` finding names the offending row ids (currently only a count) and the accepted key forms, so the repair is derivable from the finding alone.
-- [ ] R6. Existing behaviour is preserved: a row already keyed by the scenario's exact title or by `AC-<n>` still matches; a task with no linked feature, or a feature with no parseable scenarios, is unaffected and never fails the new lint check.
+- [ ] R1. The feature done gate credits a verdict row to a scenario when the row's `id` carries an explicit reference to that scenario. The accepted embedded forms are a parenthesised `(feature R<n>)`, a parenthesised `(covers: R<n>)`, and a bracketed `[R<n>]` tag. The reference must be one of these delimited tokens; a bare `R<n>` substring anywhere else in the row does not count. Both alias builders (`scenarioAliases` and `indexScenarioAliases`) carry the scenario label, so the gate and the verified-scenario lookup agree.
+- [ ] R2. `spur task verdict --from-answer` exits non-zero with an actionable message when three conditions all hold: the task covers at least one scenario of its linked feature (the same `checkAcCoverage` semantics the done gate uses to select covering tasks), that feature's scenarios parse, and no derived row names any of those scenarios. The message lists the offending row ids and the accepted key forms. The check reuses `rowMatchesScenario` in-process, so the check and the done gate cannot disagree.
+- [ ] R3. The proof digest is unchanged when the only difference in a proof-input section is checkbox tick-state (`- [ ]` against `- [x]`, including `*`/`+` bullets, indentation and case variants).
+- [ ] R4. The proof digest still changes when the text of a proof-input section changes (any edit other than the checkbox marker), and when a proof-input section is added or removed.
+- [ ] R5. The `L4.verdict-rows-match-no-scenario` finding names the offending row ids (bounded: the first 5 plus a count) and the accepted key forms, so the repair can be derived from the finding alone.
+- [ ] R6. Existing behaviour is preserved. A row keyed by the scenario's exact title or by `AC-<n>` still matches. A task with no linked feature, a task that covers no scenario (task-local rows), and a feature with no parseable scenarios are unaffected and never trip R2.
 
 ### Acceptance Criteria
 
 - [ ] AC1 — An embedded `(feature R<n>)` reference is credited by that scenario at the done gate (req: R1)
 - [ ] AC2 — An embedded `(covers: R<n>)` or `[R<n>]` reference is credited by that scenario (req: R1)
 - [ ] AC3 — A row whose only scenario-like token is an unrelated bare `R<n>` substring is NOT credited, so the new rule cannot over-credit (req: R1)
-- [ ] AC4 — The verify-exit lint fails with a named message when no row names any linked-feature scenario, and passes once a row is re-keyed (req: R2)
+- [ ] AC4 — `spur task verdict --from-answer` fails with a named message for a covering task whose rows name no linked-feature scenario, and passes once a row is re-keyed (req: R2)
 - [ ] AC5 — A checkbox-only edit to Requirements or Acceptance Criteria leaves the proof digest byte-identical; a text edit changes it (req: R3, R4)
 - [ ] AC6 — The done-gate finding names the offending row ids (req: R5)
-- [ ] AC7 — Title-keyed, `AC-<n>`-keyed, orphan-task and scenario-less-feature cases are unchanged (req: R6)
+- [ ] AC7 — Title-keyed, `AC-<n>`-keyed, orphan-task, non-covering task-local and scenario-less-feature cases are unchanged (req: R6)
 
 ### Q&A
 
@@ -167,31 +150,58 @@ recorded here only as provenance for how Defect B was measured.
   re-capture at `test-recheck` stay as they are; the fix removes a false invalidation rather than moving
   the bracket. Changing the YAML would re-open the digest/definition binding for every project.
 
+#### Q&A entry — 2026-09-26T17:03:43.852Z
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-26T00:30:39.373Z
+
+- **Credit the explicit embedded reference, not a bare `R<n>` token (closed).** Scanning a row id for any
+  `R<n>` substring would credit `Req1 — fallback … ` style rows to unrelated scenarios and would make the
+  gate unable to distinguish a scenario reference from incidental prose. Only the three explicit,
+  delimiting forms are accepted: `(feature R<n>)`, `(covers: R<n>)`, `[R<n>]`. Rationale: the run's real
+  rows used `(feature R3)`, and `(covers: …)` is already the corpus's established binding syntax
+  (`COVERS_RE` in `feature-check.ts` for task AC → feature scenario).
+- **Prevention runs in `spur task verdict --from-answer`, not in `verify-answer-lint.ts` (closed; revised 2026-09-26).** The original choice (the lint) is not implementable as written. `plugins/sp/scripts/*` may value-import only `node:*`/`bun:*` builtins and relative paths (`sp-plugin-standalone` rule), so the lint cannot import `rowMatchesScenario`. A second copy of the matcher inside the lint is exactly the divergence Defect A comes from. The lint already carries its own scenario-title normalization (`verify-answer-lint.ts:364-367`, `:473-510`), which is how prose ids passed it. `task verdict --from-answer` runs immediately after the lint in the pipeline (`task-pipeline.yaml:720`) and in every standalone correction loop, so it still fails before any evidence is certified. It is app-side, where the matcher lives. The done gate keeps its finding as the backstop.
+- **R2 applies only to covering tasks (closed).** The done gate reads verdict rows only from tasks that cover a scenario (`feature-check.ts:802-828`). Applying R2 to every feature-linked task would punish task-local tasks, which is the trap 0956 R3 recorded.
+- **The matcher runs over the original id (closed).** `rowMatchesScenario` derives `bodyStripped` by removing a trailing parenthetical, which is where `(feature R3)` sits. The explicit-reference extractor must therefore read the raw `id`, before any stripping.
+- **Checkbox normalization is scoped to the marker, not to whitespace (closed).** Only the checkbox marker
+  is canonicalized; all other text is hashed as-is, so a spec edit can never hide behind normalization.
+  Deliberately *not* normalized: list bullets, indentation of non-checkbox lines, and checkbox ordering —
+  those remain spec content.
+- **Digest values change for a given input (accepted, documented).** Normalizing the marker changes the
+  digest for any task whose sections contain checkboxes. The digest is per-run state, not a persisted
+  contract across versions, so this is acceptable; the change must be noted in the code comment and in
+  the task's Solution so a live run spanning an upgrade is diagnosable rather than mysterious.
+- **No pipeline YAML change (closed).** `task-pipeline.yaml`'s capture point (test entry) and the R4
+  re-capture at `test-recheck` stay as they are; the fix removes a false invalidation rather than moving
+  the bracket. Changing the YAML would re-open the digest/definition binding for every project.
+
 ### Design
 
-#### R1/R2/R5 — crediting and prevention
+#### R1/R2/R5: crediting and prevention
 
-- **`packages/app/src/services/feature-check.ts` — extend `rowMatchesScenario(id, sc)` (:1206).** Add an
-  explicit-reference extractor evaluated in addition to the existing normalized-title / alias comparisons.
-  Proposed shape: after the existing `stripped` / `bodyStripped` derivations, extract candidate references
-  with a bounded pattern over the *original* id —
-  `\((?:feature|covers:)\s*(R\d+)\)` (case-insensitive, `covers:` may be followed by a title, so capture
-  the leading `R<n>` token) and `\[(R\d+)\]` — then match a captured token against the scenario's own
-  `R<n>` label. The scenario's label is available from `sc` (add `label` to the `scenarioAliases` entries
-  built at :793 alongside `alias: AC-${i+1}`; derive it from the parsed scenario name's leading `R<n>`
-  via the same prefix rule `normalizeTitle` uses). Invariant: the extractor must never match a bare
-  `R<n>` that is not inside one of the three delimiters.
-- **`apps/cli/plugins/sp/scripts/verify-answer-lint.ts` — add the linked-feature scenario check.** When the
-  task resolves a linked feature and that feature yields parseable scenarios, require at least one verdict
-  row to name a scenario (reusing the same matcher as the gate so the two cannot disagree). On failure:
-  non-zero exit, and a message listing the offending row ids verbatim plus the accepted forms
-  (scenario title, `AC-<n>`, `(feature R<n>)`, `(covers: R<n>)`, `[R<n>]`). Skip silently when the task has
-  no linked feature or the feature has no scenarios (R6). Import the matcher from the app service rather
-  than re-implementing it — a divergent second implementation is the defect being fixed.
-- **`packages/app/src/services/feature-check.ts` — improve the two finding messages (:916-935).** Include
-  the offending row ids (bounded: first N ids plus a count) in `L4_VERDICT_ROWS_MATCH_NO_SCENARIO`, and name
-  the accepted key forms. Keep the existing `L4.scenario-unverified` text; it already names the scenario and
-  the covering task.
+- **`packages/app/src/services/feature-check.ts`: extend `rowMatchesScenario(id, sc)` (:1206).**
+  - Add an explicit-reference extractor. It is evaluated in addition to the existing normalized-title and alias comparisons.
+  - It runs over the **original** `id`. `bodyStripped` removes the trailing parenthetical that carries `(feature R3)`, so the extractor cannot run after that step.
+  - Bounded patterns, case-insensitive:
+    - `\((?:feature|covers:)\s*(R\d+)\b[^)]*\)`. `covers:` may be followed by a title, so capture only the leading `R<n>` token.
+    - `\[(R\d+)\]`.
+  - A captured token is compared to the scenario's `R<n>` label.
+  - Invariant: the extractor never matches a bare `R<n>` outside one of the three delimiters.
+- **Both alias builders carry the label.** Add `label` next to `alias: AC-${i+1}` in `scenarioAliases` (:796) and in `indexScenarioAliases` (:1262). Derive it from the scenario name's leading `R<n>`, using the prefix rule `normalizeTitle`/`stripScenarioPrefixes` already applies (`packages/domain/src/bdd/coverage.ts:61`). If `label` is absent (a scenario with no `R<n>` prefix), only the extractor branch is disabled for that scenario.
+- **R2 check, app-side.**
+  - Add `verdictScenarioKeyGap(wbs, rows)` to `packages/app/src/services/feature-check.ts`. It sits next to `verdictRowsMatchScenarios` (:1236), which is exported but has had no production caller since 0700 R3, and reuses it.
+  - It resolves the task's linked feature and decides "covering" with the same `checkAcCoverage` call the done gate uses (:802-818).
+  - It returns `null` in three cases: no linked feature, no parseable scenarios, or a non-covering task. Otherwise it returns the offending ids and the accepted forms.
+  - `apps/cli/src/commands/task.ts` `verdict` (:1265) calls it after `deriveVerdict` over `[...requirements, ...acceptanceCriteria]`. On a gap it prints the message, does **not** write the artifact, and exits non-zero. The handler stays a thin transport (ADR-021).
+  - This answers both reasons 0700 R3 gave for removing the old verdict-time warning (comment at :1291-1298):
+    - The old warning could not be cleared. This check is scoped to covering tasks, and re-keying one row clears it.
+    - The old warning read only `requirements`. This check reads both tables, as the gate does.
+- **`verify-answer-lint.ts` is unchanged.** Its private scenario-title mirror (`plugins/sp/scripts/verify-answer-lint.ts:284`) only admits ids and never credits them. Prose ids already pass it, so the three new forms cannot regress it. It stays standalone-safe.
+- **Improve the done-gate message (:915-931).** `L4_VERDICT_ROWS_MATCH_NO_SCENARIO` lists the first 5 offending row ids plus a count, and names the accepted forms: scenario title, `AC-<n>`, `(feature R<n>)`, `(covers: R<n>)`, `[R<n>]`. Keep the `L4.scenario-unverified` text; it already names the scenario and the covering task. The done gate stays the backstop.
 
 #### R3/R4 — proof-digest checkbox normalization
 
@@ -222,21 +232,13 @@ item text and assert it changes.
 
 ### Plan
 
-- [ ] 1. `feature-check.ts`: add the scenario `label` to `scenarioAliases` (:793) and extend
-      `rowMatchesScenario` (:1206) with the three explicit embedded-reference forms; unit tests for
-      credited forms, the bare-`R<n>` non-match, and the unchanged title/alias paths.
-- [ ] 2. Export the matcher for reuse and wire `verify-answer-lint.ts` to fail on the linked-feature
-      no-row-names-a-scenario condition, with the actionable message; tests for fail, pass-after-rekey,
-      orphan-task and scenario-less-feature.
-- [ ] 3. Improve the `L4_VERDICT_ROWS_MATCH_NO_SCENARIO` message to name the offending row ids; update the
-      finding's test expectations.
-- [ ] 4. `proof-input-fingerprint.ts`: add `canonicalizeCheckboxMarkers` and apply it in
-      `extractTaskProofData` / `extractFeatureProofData`; comment the one-time digest-change note.
-- [ ] 5. Add the four fingerprint test cases (tick-only identical, text edit differs, marker variants
-      identical, section add/remove differs).
-- [ ] 6. Replay the recorded reproduction end-to-end (prose-keyed rows → done gate PASS without re-keying;
-      checkbox flip → digest unchanged) and record the before/after evidence.
-- [ ] 7. `bun run gate` green; no suppressions added.
+- [ ] 1. `feature-check.ts`: add `label` to both alias builders (:796, :1262). Extend `rowMatchesScenario` (:1206) with the three explicit embedded-reference forms, evaluated over the raw id. Unit tests: credited forms, bare-`R<n>` non-match, unchanged title/alias paths, and a scenario without an `R<n>` label.
+- [ ] 2. `feature-check.ts`: add `verdictScenarioKeyGap` (covering-task scoped, reusing `verdictRowsMatchScenarios`). Wire it into `task verdict` (`apps/cli/src/commands/task.ts:1265`): no artifact write and a non-zero exit on a gap. Replace the 0700 R3 comment with the reason this check differs. Tests: covering-task fail, pass-after-rekey, non-covering task-local, orphan task, scenario-less feature.
+- [ ] 3. Improve the `L4_VERDICT_ROWS_MATCH_NO_SCENARIO` message to name the offending row ids and accepted forms; update the finding's test expectations.
+- [ ] 4. `proof-input-fingerprint.ts`: add `canonicalizeCheckboxMarkers` and apply it in `extractTaskProofData` (:302) and `extractFeatureProofData` (:343); comment the one-time digest-change note.
+- [ ] 5. Add the four fingerprint test cases: tick-only identical, text edit differs, marker variants identical, section add/remove differs.
+- [ ] 6. Replay the recorded reproduction end-to-end: prose-keyed rows reach done-gate PASS without re-keying, and a checkbox flip leaves the digest unchanged. Record the before/after evidence.
+- [ ] 7. Update the `task verdict` entry in the owning design satellite (new failure mode on an existing verb; no new noun/verb). `bun run spur-check` green; no suppressions.
 
 ### Solution
 
@@ -254,15 +256,18 @@ item text and assert it changes.
 
 - Parent feature: `docs/features/F91_corpus-gate-integrity-content-verified-evidence-anchors-external-evidence-notation-ac-altitude-carve-out-and-a-two-sided-warning-ratchet.md`
 - Related: `docs/features/F93_durable-verification-evidence-the-completion-gate-reads-the-tracked-task-record-not-a-gitignored-artifact.md` (the completion gate reads the tracked record — Defect A is the same gate failing to read valid evidence)
-- Source: `packages/app/src/services/feature-check.ts` (`scenarioAliases` :793, L4 findings :916-935, `rowMatchesScenario` :1206)
+- Source: `packages/app/src/services/feature-check.ts` (`scenarioAliases` :796, covering-task selection :802-828, L4 finding :915-931, `rowMatchesScenario` :1206, `verdictRowsMatchScenarios` :1236, `indexScenarioAliases` :1262)
 - Source: `packages/app/src/services/task-verdict.ts` (`deriveVerdict` — row id derivation from the answer tables)
 - Source: `packages/domain/src/bdd/coverage.ts:61` (`normalizeTitle` / `stripScenarioPrefixes`)
-- Source: `apps/cli/plugins/sp/scripts/verify-answer-lint.ts` (verify-exit lint, 0726 R3)
+- Source: `apps/cli/src/commands/task.ts:1265` (`task verdict --from-answer` handler; 0700 R3 comment at :1291)
+- Source: `plugins/sp/scripts/verify-answer-lint.ts` (verify-exit lint, 0726 R3; unchanged by this task)
 - Source: `packages/app/src/workflow/proof-input-fingerprint.ts` (`extractTaskProofData` :302, `extractFeatureProofData` :343, `computeProofInputFingerprint` :376)
 - Source: `packages/app/src/workflow/actions/proof-fingerprint.ts` (the `proof.fingerprint` action)
 - Source: `config/workflows/task-pipeline.yaml` (proofDigest capture at `test` entry; R6 carve-out comment; `test-recheck` R4 re-capture)
 - Evidence of record: batch run `runall-d6-4440` (knowledge-kit, feature D6, 2026-09-25) — `.spur/run/runall-d6-4440-batch-report.md`, verdict artifacts `.spur/run/0164-verdict.json`, `.spur/run/0165-verdict.json` (rows verbatim in Background), `.spur/run/0166-verdict.json`
-- Sibling workaround (do not duplicate): `docs/tasks5/0956_satisfy-the-d64-feature-done-gate-scenario-key-verdict-evide.md` — data-level re-key of D64 evidence (tasks 0937–0946)
-- Related in-flight work: `docs/tasks5/0957_feature-receipt-verifier-identity-must-not-bind-the-absolute.md`
+- Sibling workaround (done): `docs/tasks5/0956_satisfy-the-d64-feature-done-gate-scenario-key-verdict-evide.md`: data-level re-key of D64 evidence (tasks 0937–0946)
+- Related (done, no overlap): `docs/tasks5/0957_feature-receipt-verifier-identity-must-not-bind-the-absolute.md`
+- Folded-in pointers: **0975** (F3, capture ordering; removed there), **0976** (Background pointer)
+- Provenance owner: **0960**, project-first script resolution (the stale vendored `inline-run-setup.ts`)
 
 ### History
