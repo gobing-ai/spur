@@ -440,12 +440,18 @@ test('--decide executes through the app runner: degraded default with the switch
         expect(outcome.reason).toBe('disabled');
         expect(outcome.value).toBe('stop');
         expect(outcome.runId).toBe('decide-test-1');
+        // 0976 R2: provenance is explicit in stdout, the resultFile row, and the run log.
+        expect(outcome.source).toBe('default');
         const row = JSON.parse(
             readFileSync(join(dir, '.spur', 'run', 'decide-test-recovery.decision.json'), 'utf8'),
         ) as Record<string, unknown>;
         expect(row.schemaVersion).toBe(1);
         expect(row.value).toBe('stop');
         expect(row.degraded).toBe(true);
+        expect(row.source).toBe('default');
+        expect(readFileSync(join(dir, '.spur', 'run', 'decide-test-1.md'), 'utf8')).toContain(
+            'decide node=classify value=stop source=default reason=disabled',
+        );
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

@@ -511,7 +511,10 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
   against the project workdir. The decision never pauses and never fails the run for model
   problems: a degraded outcome (feature switch off, no backend, error, timeout, low confidence)
   prints `ok:true` with `degraded:true`, the declared `reason`, and `value = default`, and exits
-  `0` — route on the resultFile's `.value` with the declared file guards. Only an invalid options
+  `0` — route on the resultFile's `.value` with the declared file guards. Every row carries
+  `source: model|default` (0976 R2), and the delegate appends
+  `decide node=<id> value=<v> source=<s> reason=<r>` to the run log, so a declared-default
+  fallback is never read as a model decision. Only an invalid options
   schema exits `1` (fail closed), and usage errors exit `2`. The `action_runs` trace row is
   best-effort exactly like `--action`.
 

@@ -387,7 +387,7 @@ function runRecordLogPath(runDir: string, runId: string): string {
  * exit immediately after), and never throws: an unwritable log must not wedge the run
  * (ADR-117 R3).
  */
-function appendTraceFailureLine(runId: string, detail: string): void {
+function appendRunLogLine(runId: string, detail: string): void {
     try {
         const runDir = join(process.cwd(), '.spur', 'run');
         if (!existsSync(runDir)) mkdirSync(runDir, { recursive: true });
@@ -409,7 +409,7 @@ function appendTraceFailureLine(runId: string, detail: string): void {
 async function runTraceMode(input: TraceModeInput): Promise<number> {
     const operation = input.close ? 'run.close' : 'action.finish';
     const fail = (error: string): number => {
-        appendTraceFailureLine(
+        appendRunLogLine(
             input.runId,
             `trace-emission-failed operation=${operation} run=${input.runId}` +
                 `${input.node === '' ? '' : ` node=${input.node}`}${input.kind === '' ? '' : ` kind=${input.kind}`}: ${error}`,
@@ -436,7 +436,7 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
         projectDb = await app.openInlineRunProjectDb(process.cwd());
         const writer = app.createWorkflowActionTraceWriter(projectDb.adapter, (failure: unknown) => {
             const detail = failure as { operation?: string; error?: string };
-            appendTraceFailureLine(
+            appendRunLogLine(
                 input.runId,
                 `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? 'unknown error'}`,
             );
@@ -465,7 +465,7 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
             // driver must surface this instead of reporting a clean close, and must never
             // backfill rows. Exit 1 with the named code; the run record carries the finding.
             const error = `run ${input.runId} closed done with zero action_runs rows`;
-            appendTraceFailureLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
+            appendRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error, code: 'NO_ACTION_ROWS', actionRows: 0 })}\n`,
             );
@@ -478,7 +478,7 @@ async function runTraceMode(input: TraceModeInput): Promise<number> {
             // The run row must exist before --close can mark it terminal (R6); a missing row
             // is a loud correctness failure, not a best-effort emission failure (finding #4).
             const message = error instanceof Error ? error.message : String(error);
-            appendTraceFailureLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
+            appendRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
             process.stdout.write(
                 `${JSON.stringify({ ok: false, runId: input.runId, error: message, code: 'RUN_NOT_FOUND' })}\n`,
             );
@@ -513,6 +513,7 @@ async function runDecideMode(input: {
         value?: string;
         degraded?: boolean;
         reason?: string;
+        source?: 'model' | 'default';
         backend?: string | null;
         confidence?: number | null;
         resultFile?: string;
@@ -553,6 +554,12 @@ async function runDecideMode(input: {
     }
     if (!outcome.ok) return decideFailed(outcome.error ?? 'decide failed without an error message');
     process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, node: input.node, ...outcome })}\n`);
+    // 0976 R2: the run log names the decision's provenance, so a declared-default fallback is
+    // never read as a model decision. Best-effort through the same run-log appender.
+    appendRunLogLine(
+        input.runId,
+        `decide node=${input.node} value=${outcome.value ?? ''} source=${outcome.source ?? 'default'} reason=${outcome.reason ?? ''}`,
+    );
     // Trace row is best-effort, exactly like --action: an emission failure never wedges the run.
     return await runTraceMode({
         runId: input.runId,

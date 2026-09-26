@@ -173,7 +173,7 @@ function runRecordLogPath(runDir, runId) {
     return legacyLogPath;
   return markdownPath;
 }
-function appendTraceFailureLine(runId, detail) {
+function appendRunLogLine(runId, detail) {
   try {
     const runDir = join(process.cwd(), ".spur", "run");
     if (!existsSync(runDir))
@@ -187,7 +187,7 @@ function appendTraceFailureLine(runId, detail) {
 async function runTraceMode(input) {
   const operation = input.close ? "run.close" : "action.finish";
   const fail = (error) => {
-    appendTraceFailureLine(input.runId, `trace-emission-failed operation=${operation} run=${input.runId}${input.node === "" ? "" : ` node=${input.node}`}${input.kind === "" ? "" : ` kind=${input.kind}`}: ${error}`);
+    appendRunLogLine(input.runId, `trace-emission-failed operation=${operation} run=${input.runId}${input.node === "" ? "" : ` node=${input.node}`}${input.kind === "" ? "" : ` kind=${input.kind}`}: ${error}`);
     process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error })}
 `);
     return input.close ? 1 : 0;
@@ -199,7 +199,7 @@ async function runTraceMode(input) {
     projectDb = await app.openInlineRunProjectDb(process.cwd());
     const writer = app.createWorkflowActionTraceWriter(projectDb.adapter, (failure) => {
       const detail = failure;
-      appendTraceFailureLine(input.runId, `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? "unknown error"}`);
+      appendRunLogLine(input.runId, `trace-emission-failed operation=${detail.operation ?? operation} run=${input.runId}: ${detail.error ?? "unknown error"}`);
     });
     const result = input.close ? await writer.closeRun(input.runId, input.status, undefined, input.reason) : await writer.recordAction({
       runId: input.runId,
@@ -215,7 +215,7 @@ async function runTraceMode(input) {
     }
     if (input.close && input.status === "done" && result.actionRows === 0) {
       const error = `run ${input.runId} closed done with zero action_runs rows`;
-      appendTraceFailureLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
+      appendRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
       process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error, code: "NO_ACTION_ROWS", actionRows: 0 })}
 `);
       return 1;
@@ -226,7 +226,7 @@ async function runTraceMode(input) {
   } catch (error) {
     if (input.close && error.name === "RunRowNotFoundError") {
       const message = error instanceof Error ? error.message : String(error);
-      appendTraceFailureLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
+      appendRunLogLine(input.runId, `trace-close-failed run=${input.runId}: ${message}`);
       process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error: message, code: "RUN_NOT_FOUND" })}
 `);
       return 1;
@@ -260,6 +260,7 @@ async function runDecideMode(input) {
     return decideFailed(outcome.error ?? "decide failed without an error message");
   process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, node: input.node, ...outcome })}
 `);
+  appendRunLogLine(input.runId, `decide node=${input.node} value=${outcome.value ?? ""} source=${outcome.source ?? "default"} reason=${outcome.reason ?? ""}`);
   return await runTraceMode({
     runId: input.runId,
     close: false,
