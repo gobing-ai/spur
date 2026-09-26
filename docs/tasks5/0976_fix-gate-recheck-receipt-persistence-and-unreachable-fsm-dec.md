@@ -4,7 +4,7 @@ name: Fix gate-recheck receipt persistence and unreachable FSM decisions (0962 r
 status: backlog
 template: standard
 created_at: 2026-09-26T16:33:31.303Z
-updated_at: "2026-09-26T16:34:19.845Z"
+updated_at: "2026-09-26T16:48:42.117Z"
 feature_id: I31
 
 ---
@@ -18,9 +18,9 @@ Surfaced by the session that drove task 0962 end-to-end (`dev-run 0962 --auto --
 Owned by elsewhere — recorded here as pointers, not requirements:
 
 - Standard-script twin verification: **0970** / feature **A32** (resolves the `stale_twin` gate failure this session reported; fixed live by commits `58bd10d78` + `3166da837`).
-- Inline `--worktree` run provenance destroyed by teardown, action-row emission, and proof-capture ordering vs completion-box ticking: **0975**. This session independently reproduced the provenance loss (the worktree's `spur.db` died with `git worktree remove`, so both run rows are no longer queryable and the run records survive only because they were copied out by hand) and the capture-ordering trap (ticking boxes before the `record` hop moved the fresh digest off the declared one). Both belong to 0975.
+- Inline `--worktree` run provenance destroyed by teardown and action-row emission: **0975**. This session independently reproduced the provenance loss (the worktree's `spur.db` died with `git worktree remove`, so both run rows are no longer queryable and the run records survive only because they were copied out by hand); that belongs to 0975.
+- Proof-capture ordering vs completion-box ticking (ticking boxes before the `record` hop moved the fresh digest off the declared one): **0958** Defect B. Its checkbox-canonical digest makes the ordering irrelevant, so 0975 no longer carries it.
 - 0945 routing truth-table evaluation cost: **0974**.
-- Proof-digest checkbox invalidation in the completion gate: **0958**.
 
 **F-A — `quality-gate.ts recheck` never persists the check receipt, so the declared no-progress skip is unreachable.** The script's own contract says a full-tier FAIL receipt at the current digest is a no-progress skip straight to the FAIL write (0940 R2), implemented as `receiptFailsAtDigest(receipt, currentDigest)` comparing `receipt.inputDigest === currentDigest`. Only `run` writes receipts, so after any `run` at a different digest the comparison can never hold. Observed: `run` wrote `.spur/run/0962-check-receipt.json` with `inputDigest sha256:f1772d62…`; a later `recheck` at `sha256:ea9a99e8…` re-ran the entire suite (349 s) and left the receipt byte-identical (`inputDigest` still `f1772d62…`, `completedAt` unchanged at `2026-09-26T06:35:12.638Z`). One task consumed three full gate invocations: 67 s (FAIL on `require-corresponding-test`), 541 s (FAIL, load-sensitive test), 349 s (PASS). Anchor: `docs/reports/i31/0912-workflow-baseline.md` F4 gate repetition, owner handoff D62. That baseline marks F3/F4 INSUFFICIENT_EVIDENCE pending a 3-run sample with retained failing-gate output, so no performance target is claimed here — the measurement above is this run's own gate invocations.
 
