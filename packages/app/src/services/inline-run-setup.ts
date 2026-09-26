@@ -34,7 +34,13 @@ const { readFile } = await import('node:fs/promises');
 
 import { join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
-import { createMigratedDb, normalizePersistedWorkflowLayer, RunDao, transferRunTables } from '@gobing-ai/spur-domain';
+import {
+    createMigratedDb,
+    listRunIds,
+    normalizePersistedWorkflowLayer,
+    RunDao,
+    transferRunTables,
+} from '@gobing-ai/spur-domain';
 import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
@@ -42,6 +48,7 @@ import {
 } from '@gobing-ai/ts-dual-workflow-engine';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
+import { InvalidWorkflowRunIdError } from '../workflow/run-record';
 import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
 import {
     type ResolvedWorkflowDefinition,
@@ -155,6 +162,15 @@ export interface PersistWorktreeRunsSuccess {
 }
 
 /**
+ * DB-sourced run ids become `.spur/run/<id>.md` / `.state.json` filenames in the invoking
+ * tree, so every id read from the worktree DB must be a single safe filename component —
+ * the same charset the script's `SAFE_RUN_ID_RE` arg guard (task 0804 R8) enforces for
+ * driver-supplied ids. The script keeps its own copy (portable twin); this persistence
+ * seam re-checks because its ids come from the worktree DB, not the driver.
+ */
+const SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/**
  * Persist a worktree's inline-run provenance into the invoking tree (task 0975 R1):
  * transfer the `runs` row plus its `action_runs` / `phase_runs` / `transition_runs` /
  * `workflow_states` children with {@link transferRunTables}, then copy each persisted
@@ -162,14 +178,21 @@ export interface PersistWorktreeRunsSuccess {
  * record is left untouched — identical bytes are an idempotent no-op, divergent bytes
  * are reported as `skipped[{id, reason:'record-conflict:<file>'}]` rather than
  * overwritten. Any persistence failure (unreadable worktree DB, unwritable target,
- * missing source record) throws — the caller routes to WT-5 and the worktree is
- * retained, so a green run can never destroy its own evidence.
+ * missing source record, or a source run id that is not a safe filename component —
+ * rejected as {@link InvalidWorkflowRunIdError} before any target write) throws — the
+ * caller routes to WT-5 and the worktree is retained, so a green run can never destroy
+ * its own evidence.
  */
 export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Promise<PersistWorktreeRunsSuccess> {
     const fromDir = resolve(input.fromWorkdir);
     const toDir = resolve(input.toWorkdir);
     const source = await openInlineRunProjectDb(fromDir);
     try {
+        // Fail closed BEFORE the target DB is even opened: a hostile worktree row id must
+        // never reach a `.spur/run/<id>` path, and rejection leaves zero partial state.
+        for (const id of await listRunIds(source.adapter)) {
+            if (!SAFE_RUN_ID_RE.test(id)) throw new InvalidWorkflowRunIdError(id);
+        }
         const target = await openInlineRunProjectDb(toDir);
         try {
             const { persistedIds, skipped } = await transferRunTables(source.adapter, target.adapter);

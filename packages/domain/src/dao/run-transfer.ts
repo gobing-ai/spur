@@ -71,6 +71,15 @@ async function tableColumns(db: DbAdapter, table: string): Promise<Set<string>> 
 }
 
 /**
+ * List the run ids present in `from`. Raw SQL lives here (domain-only rule): the app-side
+ * persistWorktreeRuns validation seam reads worktree-sourced ids through this instead of
+ * inlining its own queries.
+ */
+export async function listRunIds(from: DbAdapter): Promise<string[]> {
+    return (await from.queryAll<{ id: string }>('SELECT id FROM runs')).map((row) => row.id);
+}
+
+/**
  * Copy every run row and its child rows from `from` into `to`; read-verify, idempotent,
  * one batch per run. Full conflict and column-intersection contract in the module doc.
  */

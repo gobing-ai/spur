@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { openInlineRunProjectDb, persistWorktreeRuns } from '../../src';
+import { InvalidWorkflowRunIdError, openInlineRunProjectDb, persistWorktreeRuns } from '../../src';
 
 /**
  * Task 0975 R1 — the app persist-out operation: DB row transfer plus two-file run-record
@@ -99,6 +99,40 @@ describe('persistWorktreeRuns (task 0975 R1)', () => {
             expect(result.skipped).toContainEqual({ id: 'run_cf', reason: 'record-conflict:run_cf.state.json' });
             // The pre-existing invoking-tree record stands.
             expect(readFileSync(join(to.dir, '.spur', 'run', 'run_cf.state.json'), 'utf8')).toContain('someone-else');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('a DB-sourced run id that is not a safe filename component rejects before any target write', async () => {
+        const from = makeDir('persist-unsafe-from-');
+        const to = makeDir('persist-unsafe-to-');
+        try {
+            // Accept: a sane id persists normally (same happy path as the first test).
+            await seedWorktree(from.dir, 'run_ok');
+            expect(await persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).toEqual({
+                ok: true,
+                persisted: 1,
+                skipped: [],
+            });
+
+            // Reject: an id planted in the worktree DB that would traverse out of
+            // `.spur/run/` if copied as `<id>.md` throws the named invalid-run-id error
+            // (task 0975 R2 hardening) — and the target keeps exactly the rows the accept
+            // pass inserted, because validation runs before the target DB is opened.
+            await seedWorktree(from.dir, '../escape');
+            expect(persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir })).rejects.toBeInstanceOf(
+                InvalidWorkflowRunIdError,
+            );
+
+            const db = await openInlineRunProjectDb(to.dir);
+            try {
+                const runs = await db.adapter.queryAll<{ id: string }>('SELECT id FROM runs ORDER BY id');
+                expect(runs.map((row) => row.id)).toEqual(['run_ok']);
+            } finally {
+                db.close();
+            }
         } finally {
             from.cleanup();
             to.cleanup();
