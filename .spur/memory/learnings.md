@@ -3275,3 +3275,9 @@ wrapup run `f18dd06e-159c-4399-809f-dcb12e02b757`.
 
 - `packages/app/tests/workflow/idea-pipeline-routing.test.ts` ("0945 routing truth-table parity") declares its own 60000 ms timeout and performs ~3,400 `/bin/sh` spawns. Runtime tracks host load: ~86 s at load 13.7 on 10 CPUs (times out, red gate) versus ~57 s at load 8 (green). `bun run spur-check` is therefore load-sensitive on a shared box; a red gate from this test alone is environmental, not a regression.
 
+
+## 2026-09-26 · incident: worktree evidence lost at closeout (task 0964 wrap)
+
+- What: `git worktree remove` executed before verifying the evidence copy; the `cp -p spur-new-dev-run-0964-bf63/.spur/run/0964-*` glob used a wrong relative path (worktree is a SIBLING of the primary checkout, needs `../`), failed silently under `2>/dev/null`, and the run-scoped artifacts (verdict/residuals/review-report/gate logs/runlogs 64be6f77 + 13c9e002) were deleted with the tree. No TM snapshot, no Trash.
+- Lesson: (1) sibling checkouts need `../` paths — verify with `ls` BEFORE the destructive op; (2) never `2>/dev/null` a cp that is the only copy; (3) worktree closeout order = copy evidence → verify listing → THEN remove.
+- Residual: conclusions survive (task doc Review section, done_reason, commits 39824159/dc127d5f, metrics ledger, pi subagent transcripts); only the gitignored run scratch is gone.
