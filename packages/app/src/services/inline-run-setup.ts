@@ -29,12 +29,12 @@
 // `openInlineRunProjectDb`. The top-level-await dynamic form is deliberate — the standing
 // runtime-boundaries fs rule (recommended pre-check preset) forbids a static node:fs
 // import in application sources.
-const { mkdirSync } = await import('node:fs');
+const { mkdirSync, writeFileSync } = await import('node:fs');
 const { readFile } = await import('node:fs/promises');
 
 import { join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
-import { createMigratedDb, normalizePersistedWorkflowLayer, RunDao } from '@gobing-ai/spur-domain';
+import { createMigratedDb, normalizePersistedWorkflowLayer, RunDao, transferRunTables } from '@gobing-ai/spur-domain';
 import {
     createDefaultWorkflowEngineHost,
     DbWorkflowPersistenceAdapter,
@@ -135,6 +135,79 @@ export async function openInlineRunProjectDb(workdir: string): Promise<InlineRun
     mkdirSync(join(url, '..'), { recursive: true });
     const adapter = await createMigratedDb({ url });
     return { adapter, close: () => adapter.close() };
+}
+
+/** Input for {@link persistWorktreeRuns}. */
+export interface PersistWorktreeRunsInput {
+    /** Worktree (or any project dir) whose `.spur` run provenance is copied out. */
+    readonly fromWorkdir: string;
+    /** Invoking tree that receives the DB rows and run records. */
+    readonly toWorkdir: string;
+}
+
+/** Successful persist-out: inserted run-row count plus the collision / record skips. */
+export interface PersistWorktreeRunsSuccess {
+    readonly ok: true;
+    /** Runs whose rows were inserted into the target DB. */
+    readonly persisted: number;
+    /** Collision skips — DB reasons from the transfer, plus per-file `record-conflict:<file>`. */
+    readonly skipped: ReadonlyArray<{ id: string; reason: string }>;
+}
+
+/**
+ * Persist a worktree's inline-run provenance into the invoking tree (task 0975 R1):
+ * transfer the `runs` row plus its `action_runs` / `phase_runs` / `transition_runs` /
+ * `workflow_states` children with {@link transferRunTables}, then copy each persisted
+ * run's two-file run record (`.spur/run/<id>.md` + `.state.json`). An existing target
+ * record is left untouched — identical bytes are an idempotent no-op, divergent bytes
+ * are reported as `skipped[{id, reason:'record-conflict:<file>'}]` rather than
+ * overwritten. Any persistence failure (unreadable worktree DB, unwritable target,
+ * missing source record) throws — the caller routes to WT-5 and the worktree is
+ * retained, so a green run can never destroy its own evidence.
+ */
+export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Promise<PersistWorktreeRunsSuccess> {
+    const fromDir = resolve(input.fromWorkdir);
+    const toDir = resolve(input.toWorkdir);
+    const source = await openInlineRunProjectDb(fromDir);
+    try {
+        const target = await openInlineRunProjectDb(toDir);
+        try {
+            const { persistedIds, skipped } = await transferRunTables(source.adapter, target.adapter);
+            const recordSkips: Array<{ id: string; reason: string }> = [];
+            if (persistedIds.length > 0) {
+                const fromRunDir = join(fromDir, '.spur', 'run');
+                const toRunDir = join(toDir, '.spur', 'run');
+                mkdirSync(toRunDir, { recursive: true });
+                for (const id of persistedIds) {
+                    for (const fileName of [`${id}.md`, `${id}.state.json`]) {
+                        const sourceBytes = await readFile(join(fromRunDir, fileName));
+                        const targetPath = join(toRunDir, fileName);
+                        let existing: Buffer | undefined;
+                        try {
+                            existing = await readFile(targetPath);
+                        } catch {
+                            existing = undefined; // absent target — copy below
+                        }
+                        if (existing !== undefined) {
+                            if (existing.equals(sourceBytes)) continue; // idempotent re-persist
+                            recordSkips.push({ id, reason: `record-conflict:${fileName}` });
+                            continue; // never overwrite a divergent invoking-tree record
+                        }
+                        writeFileSync(targetPath, sourceBytes);
+                    }
+                }
+            }
+            return {
+                ok: true,
+                persisted: persistedIds.length,
+                skipped: [...skipped, ...recordSkips],
+            };
+        } finally {
+            target.close();
+        }
+    } finally {
+        source.close();
+    }
 }
 
 /**

@@ -151,3 +151,30 @@ describe('execution-batch spec contract (task 0919 — batch continuation reconc
         expect(SPEC).toContain('routes to **WT-5**');
     });
 });
+
+describe('execution-batch spec contract (task 0975 R1 — per-run provenance persist-out)', () => {
+    test('WT-4a — the persist-out call is wired before WT-4b with the shared WT_PATH hoisted above both', () => {
+        // The create-mode block resolves WT_PATH once, runs persist-out, then holder cleanup.
+        const wtPath = SPEC.indexOf('WT_PATH="$(cd "../<worktree-dir>" && pwd)"');
+        const persistOut = SPEC.indexOf('bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH"');
+        const holderCleanup = SPEC.indexOf('WT-4b — bounded CWD-holder cleanup');
+        expect(wtPath).toBeGreaterThanOrEqual(0);
+        expect(persistOut).toBeGreaterThan(wtPath);
+        expect(holderCleanup).toBeGreaterThan(persistOut);
+        // Exactly one resolution site — no second, divergent copy further down.
+        expect(SPEC.match(/WT_PATH="\$\(cd "\.\.\/<worktree-dir>" && pwd\)"/g)).toHaveLength(1);
+    });
+
+    test('WT-4a — persist-out failure halts with WT-5 routing (worktree + branch retained)', () => {
+        expect(SPEC).toContain('worktree run-record persist-out failed - worktree retained (WT-5)');
+        expect(SPEC).toContain('Any persistence failure routes to WT-5');
+    });
+
+    test('prose — stage-record copy-out is the mechanical persist-out, not a manual duty', () => {
+        expect(SPEC).toContain('persisted by 0975 R1');
+        expect(SPEC).toContain('inline-run-setup.ts --persist-out --from <worktree>');
+        expect(SPEC).toContain('idempotent on re-persist');
+        expect(SPEC).not.toContain('must copy those records out');
+        expect(SPEC).toContain('spur workflow progress --json` in the\ninvoking tree shows the merged run `done`');
+    });
+});

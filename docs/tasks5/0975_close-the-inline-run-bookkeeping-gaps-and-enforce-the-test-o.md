@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Close the inline-run bookkeeping gaps and enforce the test-only subpath invariant
-status: todo
+status: wip
 template: issue
 created_at: 2026-09-26T16:02:38.308Z
-updated_at: "2026-09-26T16:49:03.675Z"
+updated_at: "2026-09-26T17:54:45.020Z"
 
 feature_id: I31
 ac_altitude: task-local
@@ -117,7 +117,84 @@ The `specifier` form is an exact prefix match with a `/` or quote boundary (ts-r
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Implemented R1 (worktree provenance persist-out), R2 (`NO_ACTION_ROWS` done-close guard), and R3
+(test-only subpath boundary rules). Deviation from the plan's step (1): the transfer is a single
+domain module (`run-transfer.ts`, raw SQL through `DbAdapter.batch`) instead of per-DAO methods —
+the copy is schema-shaped (`SELECT *` + column intersection), not entity-shaped, and one module
+keeps the conflict policy (`id-exists` / `external-key-conflict`) in one place. Another deviation:
+the domain transfer copies the column INTERSECTION of source/target — the engine's guarded ALTER
+columns (`owner_attempt`/`owner_pid`/`interrupt_reason`) exist in an engine-touched worktree DB but
+not yet in a freshly CLI-migrated invoking tree; dropping them unblocks the copy without
+duplicating engine migration policy (found by the e2e persist-out test, not visible at DAO level).
+
+#### R1 — worktree run persistence (AC1/AC2/AC3)
+
+- `packages/domain/src/dao/run-transfer.ts:36` — `RunTransferResult`/`RunTransferSkipped`; `:72`
+  `transferRunTables(from, to)`: id-conflict and `(workflow_name, external_key)` conflict checks
+  via SELECT before insert; per-run children copied with `ON CONFLICT(id) DO NOTHING`; run +
+  children commit as one `DbAdapter.batch` (half-copied runs impossible). Target rows never
+  modified on skip (AC2).
+- `packages/domain/src/dao/index.ts:63` — domain facade export.
+- `packages/app/src/services/inline-run-setup.ts:168` — `persistWorktreeRuns`: opens both project
+  DBs, transfers rows, then copies `.spur/run/<id>.md` + `.state.json` for persisted ids —
+  identical bytes are an idempotent no-op, divergent invoking-tree records are skipped as
+  `record-conflict:<file>` (never overwritten), a missing source record throws (fail-closed).
+- `packages/app/src/index.ts:322` — app export for the script surface.
+- `plugins/sp/scripts/inline-run-setup.ts:577` — `runPersistOutMode` (`--persist-out --from
+  <path>`, cwd = invoking tree): success `{ok:true,persisted:n,skipped:[…]}` exit 0; failure
+  `{ok:false,error}` exit 1 (AC3 → WT-5 retention); `:613`/`:633`/`:667` flag parsing,
+  mutually-exclusive mode guard, usage errors exit 2. Header usage docs `:38`/`:59`.
+- Docs: `plugins/sp/skills/spur-dev/references/execution-batch.md:824-833` — WT-4a now runs `bun
+  "$SETUP_SCRIPT" --persist-out --from "$WT_PATH"` before WT-4b, `WT_PATH` hoisted to one
+  resolution site `:823`, non-zero exit halts → WT-5; prose `:489-495` + `:497-508` fold the
+  0948 R9 copy-out paragraphs into the mechanical persist-out pointer.
+- Pins: `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:155` (ordering, single
+  WT_PATH site, WT-5 routing, no manual-copy wording).
+- Tests: `packages/domain/tests/dao/run-transfer.test.ts:68` (4 — fresh copy, id-exists skip,
+  external-key-conflict skip, idempotent re-persist), `packages/app/tests/services/persist-worktree-runs.test.ts:41`
+  (3 — rows+records copied, divergent record skipped unmodified, unreadable DB rejects),
+  `plugins/sp/tests/inline-run-setup.test.ts:593-696` (4 — e2e exit 0 + queryable rows/records,
+  idempotent second persist, exit 1 on garbage DB, exit 2 usage matrix).
+
+#### R2 — NO_ACTION_ROWS (AC4)
+
+- `packages/app/src/workflow/action-trace.ts:295` — `closeRun` returns `{ ok: true, actionRows }`,
+  counting via `ActionRunDao.actionRowsByRunId` when the raw db handle is present (`:309-311`);
+  omitted on the engine path (writer without db).
+- `plugins/sp/scripts/inline-run-setup.ts:463-471` — `--close --status done` with `actionRows ===
+  0` → prints `{ok:false,runId,code:"NO_ACTION_ROWS",actionRows:0}` and exits 1 (row already
+  terminal; finding appended to the run log); ≥1 row exits 0 reporting `actionRows`; `failed`/
+  `paused` exempt.
+- Docs: `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:530-537` — the driver
+  surfaces the code in its final report and must not backfill rows.
+- Tests: `plugins/sp/tests/inline-run-trace.test.ts:338/372/403` (zero+done → exit 1
+  NO_ACTION_ROWS with terminal row + log line; ≥1 row → exit 0 `actionRows:1`; zero+failed →
+  exit 0 with `terminal_reason`), `packages/app/tests/workflow/action-trace.test.ts:191-212`
+  (app-level pin of the new return shape: `actionRows:1`).
+
+#### R3 — test-only subpath boundary (AC5)
+
+- `config/rules/boundary/test-subpath-boundary.yaml:14` — `no-testing-subpath-import`
+  (specifier `@gobing-ai/spur-app/testing`, scope `apps/**/src/**/*.ts` + `packages/**/src/**/*.ts`,
+  exclude `packages/app/src/testing/**`) and `:32` `no-relative-testing-module-import` (line
+  pattern for relative `…/testing…` imports in `packages/app/src/**`). Globs are `.ts` only —
+  the evaluator's segment-aware matcher has no brace groups, matching the dao-boundary precedent;
+  `src`-only scope keeps `**/tests/**` clean by construction. Auto-wired into
+  `recommended-pre-check` via the preset's `boundary` category (verified: both ids present in
+  `rule validate --preset recommended-pre-check`).
+- Generated catalog staged by `bun run build:bundle` (`apps/cli/config/` is gitignored).
+- Evidence: `rule validate <file>` valid; synthetic fixtures in `packages/app/src/` +
+  `apps/server/src/` → `rule run --rule <id>` exit 1 naming the rule id and file:line; relative
+  fixture → `no-relative-testing-module-import` exit 1; clean control + full preset `rule run` →
+  exit 0, 0 findings; fixtures removed afterwards.
+
+#### Gates
+
+`bunx biome check` clean on all changed files; `typecheck` exit 0 for all 7 workspaces; targeted
+suites green (domain 4, app services 2256 incl. the 3 new, app workflow 20 incl. the updated pin,
+plugins/sp full suite 1648 incl. the 11 new/updated); `bun run build:scripts` regenerated the
+`.mjs` twins (script-contract-check 0 violations); `bun run plugin-smoke` PASS; working tree
+contains only the intended 17 paths; nothing committed (host owns the commit boundary).
 
 ### Testing
 
@@ -138,3 +215,6 @@ The `specifier` form is an exact prefix match with a `/` or quote boundary (ts-r
 - Invariant origin: **0961** (`packages/app/package.json` `"./testing"` export).
 
 ### History
+
+- 2026-09-26T17:54:45.020Z todo → wip (system)
+

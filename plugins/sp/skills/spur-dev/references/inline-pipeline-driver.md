@@ -524,7 +524,18 @@ The driver reaches it through the existing run delegate (`$SETUP_SCRIPT`,
   ```
 
   `--status` is the declared terminal state's verdict, not a guess: a run that reached a terminal
-  state is `done`; a run halted by a failing action under its error policy is `failed`.
+  state is `done`; a run halted by a failing action under its error policy is `failed`. On success
+  the close reports the recorded evidence: `{"ok":true,"runId":…,"actionRows":<n>}`.
+
+  **Zero-row done closes are a named failure (task 0975 R2).** A run closed `done` with **zero**
+  `action_runs` rows (`actionRows:0`) finalizes the row but exits `1` with
+  `{"ok":false,"code":"NO_ACTION_ROWS","actionRows":0}` — a run that claims success without a
+  single recorded action is exactly the untraced-runs gap ADR-117 closes, so the driver must
+  surface the code in its final report instead of reporting a clean close. The failure must NOT
+  be repaired by backfilling rows: the run row is already terminal, and hand-written rows are
+  forbidden (ADR-117) — record the finding and let the task's evidence show the gap. A `failed`
+  close with zero rows stays a clean `0` (a halt before the first boundary legitimately records
+  nothing), and any `done` close with `actionRows ≥ 1` exits `0`.
 
 **Best-effort at the action boundary only (ADR-117).** An `--action` persistence failure is
 recorded — the delegate appends a `trace-emission-failed` line to `.spur/run/<run-id>.md` and

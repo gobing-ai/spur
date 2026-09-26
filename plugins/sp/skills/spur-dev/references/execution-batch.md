@@ -490,16 +490,21 @@ Evidence persistence precedes destructive cleanup: a persistence failure (unread
 disk-full, missing directory) routes to **WT-5** — the worktree and branch are retained so a green
 batch can never destroy its own evidence. Reuse mode retains its operator-owned tree but still
 persists the Step 5 report under the invoking tree; the reused tree's `.spur/run/` remains the live
-copy while that tree lives on.
+copy while that tree lives on. The per-run provenance — the worktree DB's run/action rows and the
+`.spur/run/<runId>.md` + `.state.json` records — is persisted mechanically by WT-4a's
+`inline-run-setup.ts --persist-out --from <worktree>` call, not by hand.
 
-**Stage records are worktree-local too (0948 R9, E7 Finding 5).** The persisted report and verdict
-JSONs above are the batch's *summary* evidence. Each task's own per-stage run record
-(`.spur/run/<runId>.md` + `.state.json`, plus gate/answer artifacts) is written inside the
-worktree's `.spur/run/` and **is removed with the worktree** in create mode. A merged batch
-therefore leaves no per-stage run record in the invoking tree unless it is copied out. Anything
-auditing "what did this batch actually run?" must copy those records out **before** WT-4 removal —
-the E7 batch lost exactly this evidence this way. The rule is the same one above: copy out first,
-then remove; a copy failure retains the worktree.
+**Stage records are worktree-local too (0948 R9, E7 Finding 5; persisted by 0975 R1).** Each task's
+own per-stage run record (`.spur/run/<runId>.md` + `.state.json`) and the worktree DB's run rows are
+written inside the worktree and **are removed with it** in create mode — the E7 batch lost exactly
+this evidence. Copying them out is no longer a manual audit-time duty: WT-4a (create-mode block
+below) runs `inline-run-setup.ts --persist-out --from "$WT_PATH"` **before** WT-4b holder cleanup,
+which copies the run/action/phase/transition/workflow-state rows and both record files into the
+invoking tree (idempotent on re-persist; a divergent existing invoking-tree record is reported
+`skipped`, never overwritten; an unreadable worktree DB exits non-zero). Any persist-out failure
+routes to **WT-5** — worktree and branch retained — the same copy-out-first contract as the
+verdict persistence above. After a green persist-out, `spur workflow progress --json` in the
+invoking tree shows the merged run `done` with its per-action rows.
 
 ## Step 6 — Batch wrap (`--wrap` / `--next`) (F96 task 0952 R1)
 
@@ -812,13 +817,23 @@ git checkout "$BASE_REF"
 [ "$(git rev-list --count "$BASE_SHA..$BRANCH")" -gt 0 ] \
   || { echo "halt: branch carries no commits - nothing to merge" >&2; false; }   # -> WT-5
 git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts
-# if FF succeeded — WT-4a evidence persistence (Step 5, task 0720 R3) runs FIRST:
-# persist the batch report + verdict artifacts into the invoking tree's .spur/run/
-# before anything below touches the worktree. Persistence failure routes to WT-5.
+# if FF succeeded — WT-4a evidence persistence runs FIRST (Step 5, task 0720 R3):
+# persist the batch report + verdict artifacts AND the per-run provenance (task
+# 0975 R1) into the invoking tree before anything below touches the worktree.
+# Any persistence failure routes to WT-5 — the worktree and branch are retained.
+WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4b below
+# WT-4a provenance persist-out (task 0975 R1): copy the worktree DB's run rows plus
+# the .spur/run/<runId>.md + .state.json records into THIS tree. Run from the main
+# tree (cwd = the invoking tree). Idempotent; conflicts are reported, never
+# overwritten. A non-zero exit — including a half-readable worktree — must NOT
+# proceed to WT-4b removal:
+SETUP_SCRIPT="plugins/sp/scripts/inline-run-setup.ts"
+[ -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)"
+bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" \
+  || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; exit 1; }
 #
-# WT-4b — bounded CWD-holder cleanup (task 0720 R1). Resolve the EXACT absolute
-# worktree path; a relative path or a stale entry matches the wrong processes.
-WT_PATH="$(cd "../<worktree-dir>" && pwd)"
+# WT-4b — bounded CWD-holder cleanup (task 0720 R1). $WT_PATH above is the EXACT
+# absolute worktree path; a relative path or a stale entry matches the wrong processes.
 # Holders = processes with any open fd under the worktree tree (lsof +D walks the
 # tree; CWD holders are the common case but +D also catches open-file holders —
 # over-match errs toward removal success; a plain -t <dir> matches only the

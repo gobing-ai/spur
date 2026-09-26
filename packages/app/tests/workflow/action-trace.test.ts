@@ -189,8 +189,18 @@ describe('WorkflowActionTraceWriter (task 0868 R4/R12)', () => {
         await writer.createRun(runRecord());
         expect((await new RunDao(projectDb.adapter).traceRowById(RUN_ID))?.status).toBe('running');
 
+        // 0975 R2: record one action so the close reports the recorded-row count.
+        await writer.recordAction({
+            runId: RUN_ID,
+            node: 'review',
+            kind: 'agent.run',
+            status: 'done',
+            ok: true,
+            durationMs: 7,
+        });
+
         const result = await writer.closeRun(RUN_ID, 'done');
-        expect(result).toEqual({ ok: true });
+        expect(result).toEqual({ ok: true, actionRows: 1 });
 
         const row = await new RunDao(projectDb.adapter).traceRowById(RUN_ID);
         expect(row?.status).toBe('done');

@@ -280,13 +280,19 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
      * row raises {@link RunRowNotFoundError} (review finding #4 — a blind `UPDATE` cannot
      * distinguish zero matched rows) and a persistence failure propagates, so the
      * delegate never reports a false `{"ok":true}`.
+     *
+     * Returns `actionRows` — the number of `action_runs` rows the run recorded at close
+     * time (task 0975 R2) — so the caller can detect a run finalized `done` with zero
+     * recorded actions instead of trusting the status alone. Counted through the raw
+     * domain DAO; omitted when the writer was built without a raw db handle (the engine
+     * path, which never calls closeRun).
      */
     async closeRun(
         runId: string,
         status: WorkflowStatus,
         completedAt?: string,
         reason?: string,
-    ): Promise<{ ok: true }> {
+    ): Promise<{ ok: true; actionRows?: number }> {
         const existing = await this.inner.loadRun(runId);
         if (existing === undefined) {
             throw new RunRowNotFoundError(runId);
@@ -300,7 +306,9 @@ export class WorkflowActionTraceWriter implements WorkflowPersistenceAdapter {
                 ? undefined
                 : classifyTerminalReason({ status, engineReason: reason, errorText: reason }),
         );
-        return { ok: true };
+        if (this.db === undefined) return { ok: true };
+        const rows = await new ActionRunDao(this.db).actionRowsByRunId(runId);
+        return { ok: true, actionRows: rows.length };
     }
 
     private async guard<T>(

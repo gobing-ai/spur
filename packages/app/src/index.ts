@@ -317,6 +317,9 @@ export {
     type InlineDecideOutcome,
     type InlineRunProjectDb,
     openInlineRunProjectDb,
+    type PersistWorktreeRunsInput,
+    type PersistWorktreeRunsSuccess,
+    persistWorktreeRuns,
     runDecideForInlineRun,
 } from './services/inline-run-setup';
 export {

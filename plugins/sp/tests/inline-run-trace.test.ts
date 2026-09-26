@@ -332,3 +332,108 @@ test('a malformed invocation is a usage error (exit 2), never a silent emission'
         p.cleanup();
     }
 });
+
+// ── Task 0975 R2: a `done` close with zero action rows is a named failure ────────
+
+test('0975 AC4: --close --status done with zero action rows exits 1 with code NO_ACTION_ROWS, row still finalized', () => {
+    const p = makeProject();
+    const runId = 'run-0975-no-rows';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        // No --action in between: the run reached `done` without a single recorded action.
+        const close = runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(close.status).toBe(1);
+        const out = JSON.parse(close.stdout) as {
+            ok: boolean;
+            runId: string;
+            code?: string;
+            actionRows?: number;
+            error?: string;
+        };
+        expect(out).toMatchObject({ ok: false, runId, code: 'NO_ACTION_ROWS', actionRows: 0 });
+        expect(out.error).toContain(runId);
+
+        // The row IS terminal — the defect is the bookkeeping, and the finding is recorded.
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const run = db.query<{ status: string }, [string]>('SELECT status FROM runs WHERE id = ?').get(runId);
+            expect(run?.status).toBe('done');
+        } finally {
+            db.close();
+        }
+        expect(readFileSync(join(p.workdir, '.spur', 'run', `${runId}.md`), 'utf8')).toContain('trace-close-failed');
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test('0975 AC4: --close --status done with at least one action row exits 0 reporting actionRows', () => {
+    const p = makeProject();
+    const runId = 'run-0975-with-rows';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+        const action = runScript(p.workdir, [
+            '--action',
+            '--run-id',
+            runId,
+            '--node',
+            'implement',
+            '--kind',
+            'shell',
+            '--status',
+            'done',
+            '--ok',
+            'true',
+            '--duration-ms',
+            '7',
+        ]);
+        expect(action.status, action.stderr).toBe(0);
+
+        const close = runScript(p.workdir, ['--close', '--run-id', runId, '--status', 'done']);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 1 });
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);
+
+test('0975 AC4: --close --status failed with zero action rows stays a clean close (exit 0)', () => {
+    const p = makeProject();
+    const runId = 'run-0975-failed-zero';
+    try {
+        const setup = runScript(p.workdir, ['--run-id', runId, '--file', '.spur/workflows/inline-smoke.yaml']);
+        expect(setup.status, setup.stderr).toBe(0);
+
+        // A failed close may legitimately carry zero action rows (failure before any
+        // boundary executed) — only `done` demands recorded work.
+        const close = runScript(p.workdir, [
+            '--close',
+            '--run-id',
+            runId,
+            '--status',
+            'failed',
+            '--reason',
+            'failed-check',
+        ]);
+        expect(close.status, close.stderr).toBe(0);
+        expect(JSON.parse(close.stdout)).toEqual({ ok: true, runId, actionRows: 0 });
+
+        const db = new Database(join(p.workdir, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const run = db
+                .query<{ status: string; terminal_reason: string | null }, [string]>(
+                    'SELECT status, terminal_reason FROM runs WHERE id = ?',
+                )
+                .get(runId);
+            expect(run?.status).toBe('failed');
+            expect(run?.terminal_reason).toBe('failed-check');
+        } finally {
+            db.close();
+        }
+    } finally {
+        p.cleanup();
+    }
+}, 60_000);

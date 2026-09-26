@@ -1,0 +1,47 @@
+# Test-only subpath boundary — @gobing-ai/spur-app/testing and the app's testing/
+# module are for tests and the mock itself, never production sources (task 0975 R3).
+#
+# WHY: `@gobing-ai/spur-app/testing` (packages/app/src/testing/history-board-mock.ts)
+# is a test-only mock subpath (E82). A production import couples shipped code to a
+# fake, and it crept toward the server transport before 0961 severed the seam. The
+# evaluator's glob matcher is segment-aware with `*`/`**` only (no brace groups), so
+# the ts/tsx globs would need separate entries — the repo carries .ts sources only,
+# matching the dao-boundary precedent.
+#
+# Scope covers src trees only: `<workspace>/tests/**` directories stay outside, and
+# `packages/app/src/testing/**` (the mock's own home) is exempted explicitly.
+rules:
+  - id: no-testing-subpath-import
+    description: >
+      Production sources must not import the @gobing-ai/spur-app/testing subpath
+      (history-board mock, E82/0961). Tests under <workspace>/tests/** and the
+      packages/app/src/testing/** module itself are exempt.
+    severity: error
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - specifier: "@gobing-ai/spur-app/testing"
+        scope:
+          include:
+            - "apps/**/src/**/*.ts"
+            - "packages/**/src/**/*.ts"
+          exclude:
+            - "packages/app/src/testing/**"
+
+  - id: no-relative-testing-module-import
+    description: >
+      packages/app production sources must not reach the testing/ module through
+      relative imports (from './testing/…' or '../…/testing…'). The testing/**
+      module itself and workspace tests/ directories are exempt.
+    severity: error
+    evaluator:
+      type: forbidden-import
+      config:
+        forbidden:
+          - pattern: "(?:from\\s+|import\\(\\s*)['\"](\\.\\.?/)+(?:[^'\"]*/)?testing(?:/|['\"])"
+        scope:
+          include:
+            - "packages/app/src/**/*.ts"
+          exclude:
+            - "packages/app/src/testing/**"

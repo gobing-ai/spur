@@ -544,3 +544,145 @@ test('--decide refuses usage errors and unsafe run ids', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 }, 30_000);
+
+// ── --persist-out (task 0975 R1) ─────────────────────────────────────────────────
+
+import { Database } from 'bun:sqlite';
+
+/** Minimal resolvable workflow so the source worktree can produce a real run row. */
+const PERSIST_WF = `name: persist-out-smoke
+initialState: start
+terminalStates: [done]
+states:
+  - id: start
+  - id: done
+transitions:
+  - from: start
+    to: done
+    guard:
+      kind: always
+`;
+
+/** Worktree with one fully-traced inline run (setup row + record files + one action row). */
+function makeWorktree(prefix: string, runId: string): { dir: string; cleanup: () => void } {
+    const dir = mkdtempSync(join(tmpdir(), prefix));
+    mkdirSync(join(dir, '.spur', 'workflows'), { recursive: true });
+    writeFileSync(join(dir, '.spur', 'workflows', 'persist-out-smoke.yaml'), PERSIST_WF);
+    const run = (args: string[]) => spawnSync('bun', [SCRIPT, ...args], { cwd: dir, stdio: 'pipe', encoding: 'utf8' });
+    const setup = run(['--run-id', runId, '--file', '.spur/workflows/persist-out-smoke.yaml']);
+    if (setup.status !== 0) throw new Error(`fixture setup failed: ${setup.stderr}`);
+    const action = run([
+        '--action',
+        '--run-id',
+        runId,
+        '--node',
+        'start',
+        '--kind',
+        'shell',
+        '--status',
+        'done',
+        '--ok',
+        'true',
+        '--duration-ms',
+        '5',
+    ]);
+    if (action.status !== 0) throw new Error(`fixture action failed: ${action.stderr}`);
+    return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+test('0975 --persist-out: copies the run row, its action rows and the run records into the invoking tree', () => {
+    const from = makeWorktree('persist-out-from-', 'run-0975-out');
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-to-'));
+    try {
+        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from.dir], {
+            cwd: to,
+            stdio: 'pipe',
+            encoding: 'utf8',
+        });
+        expect(proc.status, proc.stderr).toBe(0);
+        expect(JSON.parse(proc.stdout)).toEqual({ ok: true, persisted: 1, skipped: [] });
+
+        // AC1 shape: the run is queryable in the invoking tree and both record files exist.
+        const db = new Database(join(to, '.spur', 'spur.db'), { readonly: true });
+        try {
+            const run = db
+                .query<{ id: string; status: string }, [string]>('SELECT id, status FROM runs WHERE id = ?')
+                .get('run-0975-out');
+            expect(run?.id).toBe('run-0975-out');
+            const actions = db.query('SELECT id FROM action_runs WHERE run_id = ?').all('run-0975-out');
+            expect(actions).toHaveLength(1);
+        } finally {
+            db.close();
+        }
+        expect(existsSync(join(to, '.spur', 'run', 'run-0975-out.md'))).toBe(true);
+        expect(existsSync(join(to, '.spur', 'run', 'run-0975-out.state.json'))).toBe(true);
+    } finally {
+        from.cleanup();
+        rmSync(to, { recursive: true, force: true });
+    }
+}, 60_000);
+
+test('0975 --persist-out: persisting the same worktree twice skips id-exists and leaves counts unchanged', () => {
+    const from = makeWorktree('persist-out-idem-from-', 'run-0975-idem');
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-idem-to-'));
+    try {
+        const argv = ['--persist-out', '--from', from.dir];
+        const first = spawnSync('bun', [SCRIPT, ...argv], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
+        expect(first.status).toBe(0);
+        const second = spawnSync('bun', [SCRIPT, ...argv], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
+        expect(second.status).toBe(0);
+        const out = JSON.parse(second.stdout) as { ok: boolean; persisted: number; skipped: unknown[] };
+        expect(out).toEqual({ ok: true, persisted: 0, skipped: [{ id: 'run-0975-idem', reason: 'id-exists' }] });
+
+        const db = new Database(join(to, '.spur', 'spur.db'), { readonly: true });
+        try {
+            expect(db.query('SELECT id FROM runs').all()).toHaveLength(1);
+            expect(db.query('SELECT id FROM action_runs').all()).toHaveLength(1);
+        } finally {
+            db.close();
+        }
+    } finally {
+        from.cleanup();
+        rmSync(to, { recursive: true, force: true });
+    }
+}, 60_000);
+
+test('0975 --persist-out: an unreadable worktree DB exits 1 with {ok:false}', () => {
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-fail-to-'));
+    const from = mkdtempSync(join(tmpdir(), 'persist-out-fail-from-'));
+    try {
+        mkdirSync(join(from, '.spur'), { recursive: true });
+        writeFileSync(join(from, '.spur', 'spur.db'), 'not a database');
+        const proc = spawnSync('bun', [SCRIPT, '--persist-out', '--from', from], {
+            cwd: to,
+            stdio: 'pipe',
+            encoding: 'utf8',
+        });
+        expect(proc.status).toBe(1);
+        const out = JSON.parse(proc.stdout) as { ok: boolean; error?: string };
+        expect(out.ok).toBe(false);
+        expect(out.error).toBeTruthy();
+    } finally {
+        rmSync(from, { recursive: true, force: true });
+        rmSync(to, { recursive: true, force: true });
+    }
+}, 60_000);
+
+test('0975 --persist-out: usage errors exit 2', () => {
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-usage-'));
+    try {
+        for (const args of [
+            ['--persist-out'],
+            // --from missing a value collapses to the next flag / empty → usage.
+            ['--persist-out', '--from'],
+            // Mixed with another mode.
+            ['--persist-out', '--from', '/tmp/x', '--close', '--run-id', 'r', '--status', 'done'],
+            ['--persist-out', '--from', '/tmp/x', '--run-id', 'r'],
+        ]) {
+            const proc = spawnSync('bun', [SCRIPT, ...args], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
+            expect(proc.status, `expected usage exit 2 for ${args.join(' ')}`).toBe(2);
+        }
+    } finally {
+        rmSync(to, { recursive: true, force: true });
+    }
+});

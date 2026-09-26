@@ -30,6 +30,7 @@ function usage() {
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> " + "--status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]");
+  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--spur-bin <path>]");
   console.error("       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, " + "failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]");
   process.exit(2);
@@ -212,6 +213,13 @@ async function runTraceMode(input) {
       const failure = result.failure;
       return fail(failure.error ?? "unknown trace emission failure");
     }
+    if (input.close && input.status === "done" && result.actionRows === 0) {
+      const error = `run ${input.runId} closed done with zero action_runs rows`;
+      appendTraceFailureLine(input.runId, `trace-close-failed run=${input.runId}: ${error}`);
+      process.stdout.write(`${JSON.stringify({ ok: false, runId: input.runId, error, code: "NO_ACTION_ROWS", actionRows: 0 })}
+`);
+      return 1;
+    }
     process.stdout.write(`${JSON.stringify({ ...result, runId: input.runId })}
 `);
     return 0;
@@ -263,6 +271,21 @@ async function runDecideMode(input) {
     spurBin: input.spurBin
   });
 }
+async function runPersistOutMode(input) {
+  try {
+    const { entry } = resolveAppEntry(input.spurBin);
+    const app = await import(entry);
+    const result = await app.persistWorktreeRuns({ fromWorkdir: input.from, toWorkdir: process.cwd() });
+    process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}
+`);
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stdout.write(`${JSON.stringify({ ok: false, error: message })}
+`);
+    return 1;
+  }
+}
 async function main() {
   if (!process.versions.bun) {
     const child = spawnSync("bun", [fileURLToPath(import.meta.url), ...process.argv.slice(2)], {
@@ -280,6 +303,8 @@ async function main() {
   let action = false;
   let close = false;
   let decide = false;
+  let persistOut = false;
+  let from = "";
   let optionsJson = "";
   let node = "";
   let kind = "";
@@ -306,6 +331,10 @@ async function main() {
       close = true;
     else if (argv[i] === "--decide")
       decide = true;
+    else if (argv[i] === "--persist-out")
+      persistOut = true;
+    else if (argv[i] === "--from")
+      from = argv[++i] ?? "";
     else if (argv[i] === "--options-json")
       optionsJson = argv[++i] ?? "";
     else if (argv[i] === "--node")
@@ -336,6 +365,13 @@ async function main() {
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
     process.exit(await runDecideMode({ runId, node, optionsFile: optionsJson, spurBin }));
+  }
+  if (persistOut) {
+    if (fingerprint || decide || action || close || runId !== "" || file !== "" || taskFile !== "")
+      usage();
+    if (from.trim() === "")
+      usage();
+    process.exit(await runPersistOutMode({ from, spurBin }));
   }
   if (action || close) {
     if (action && close)
