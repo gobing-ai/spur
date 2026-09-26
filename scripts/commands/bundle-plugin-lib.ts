@@ -118,7 +118,11 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
         writeFileSync(
             entry,
             [
-                "export { createOrAttachInlineRun, openInlineRunProjectDb } from '../packages/app/src/services/inline-run-setup';",
+                // Task 0975 verify P1: the worktree close-out path (--persist-out) and the
+                // --decide mode are driver-facade calls (`app.persistWorktreeRuns` /
+                // `app.runDecideForInlineRun`); omitting them left both dead in installed
+                // layouts. plugins/sp/tests/inline-run-installed.test.ts pins facade↔twin parity.
+                "export { createOrAttachInlineRun, openInlineRunProjectDb, persistWorktreeRuns, runDecideForInlineRun } from '../packages/app/src/services/inline-run-setup';",
                 "export { computeProofInputFingerprint, readProofInputContents } from '../packages/app/src/workflow/proof-input-fingerprint';",
                 "export { createWorkflowActionTraceWriter } from '../packages/app/src/workflow/action-trace';",
                 "export { splitLaunchCommand } from '../packages/app/src/workflow/split-launch-command';",
@@ -157,6 +161,8 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
                 ...[
                     'createOrAttachInlineRun',
                     'openInlineRunProjectDb',
+                    'persistWorktreeRuns',
+                    'runDecideForInlineRun',
                     'computeProofInputFingerprint',
                     'readProofInputContents',
                     'createWorkflowActionTraceWriter',

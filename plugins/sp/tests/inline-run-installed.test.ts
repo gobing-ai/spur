@@ -220,3 +220,21 @@ transitions:
         rmSync(root, { recursive: true, force: true });
     }
 }, 60_000);
+
+// Task 0975 verify P1: the driver facade calls app operations by name
+// (`app.persistWorktreeRuns`, …). A twin missing an export fails at runtime in every
+// installed layout, so parity is pinned here: every app.<name> call site in the facade
+// source must be present in both generated twins (exported names survive minification).
+test('generated twins export every app operation the driver facade calls', () => {
+    const facade = readFileSync(resolve(import.meta.dir, '../scripts/inline-run-setup.ts'), 'utf8');
+    const names = new Set([...facade.matchAll(/\bapp\.([A-Za-z_$][\w$]*)/g)].map((m) => m[1] ?? '').filter(Boolean));
+    expect(names.size).toBeGreaterThan(0);
+    for (const twin of [
+        resolve(import.meta.dir, '../lib/inline-run.generated.mjs'),
+        resolve(import.meta.dir, '../lib/inline-run.generated.d.mts'),
+    ]) {
+        const text = readFileSync(twin, 'utf8');
+        const missing = [...names].filter((name) => !text.includes(name));
+        expect(missing).toEqual([]);
+    }
+});
