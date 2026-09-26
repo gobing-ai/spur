@@ -64,7 +64,8 @@ export interface ScanOptions {
 
 const MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 const PRIORITY_PATTERN = /^P[1-4]/;
-const NONE_FINDING = /^(none|—)$/i;
+// Placeholder "no finding" cells, optionally with a trailing "(…)" note; "None of X…" is a real finding.
+const NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|—)\s*(\(.*\))?\.?$/i;
 const DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
 const RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
 const DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;

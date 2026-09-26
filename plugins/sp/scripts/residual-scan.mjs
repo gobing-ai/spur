@@ -17,7 +17,7 @@ function getEnvVars() {
 var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
-var NONE_FINDING = /^(none|\u2014)$/i;
+var NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|\u2014)\s*(\(.*\))?\.?$/i;
 var DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
 var RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
 var DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;

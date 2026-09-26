@@ -67,6 +67,42 @@ describe('parseReviewFindings', () => {
         expect(rows[2]).toEqual({ priority: 'P1', location: 'src/b.ts:3', text: 'Off by one' });
     });
 
+    // Clean-review placeholder rows ("None found (…)") are not findings (0964 false positive);
+    // full 0977 Design behavior table — unknown phrasings fail safe toward blocking.
+    test('skips placeholder no-finding rows but keeps findings that start with "None"', () => {
+        const rows = parseReviewFindings(
+            [
+                '### Review',
+                '',
+                '| Priority | Finding | Evidence | Disposition |',
+                '| --- | --- | --- | --- |',
+                // Placeholder no-finding cells (dropped).
+                '| P1 | None | x | n/a |',
+                '| P1 | none. | x | n/a |',
+                '| P1 | None found | x | n/a |',
+                '| P1 | None found (3 independent review cycles) | x | n/a |',
+                '| P2 | No findings. | x | n/a |',
+                '| P2 | No finding | x | n/a |',
+                '| P2 | No issues found | x | n/a |',
+                '| P2 | No issue | x | n/a |',
+                '| P2 | — | x | n/a |',
+                // Real findings (kept, text unchanged).
+                '| P3 | None of the callers validate input | `src/d.ts:4` | open |',
+                '| P3 | None found (x) but callers skip validation | `src/d.ts:9` | open |',
+                '| P3 | No findings; see P2 | `src/d.ts:14` | open |',
+                '| P3 | Nothing to report | `src/d.ts:19` | open |',
+                '| P4 (advisory) | N/A | `src/d.ts:24` | open |',
+            ].join('\n'),
+        );
+        expect(rows.map((r) => r.text)).toEqual([
+            'None of the callers validate input',
+            'None found (x) but callers skip validation',
+            'No findings; see P2',
+            'Nothing to report',
+            'N/A',
+        ]);
+    });
+
     test('falls back to first backticked anchor when Location missing', () => {
         const rows = parseReviewFindings(
             '### Review\n\n| Priority | Finding |\n| --- | --- |\n| P3 | See `x/y.ts:9` |',
