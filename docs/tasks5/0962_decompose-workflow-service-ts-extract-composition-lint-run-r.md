@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: "Decompose workflow-service.ts: extract composition lint, run-record inspection and reclamation"
-status: todo
+status: done
 template: standard
 created_at: 2026-09-26T04:37:18.168Z
-updated_at: "2026-09-26T04:55:57.524Z"
+updated_at: "2026-09-26T07:23:34.698Z"
 
 feature_id: D91
 ac_numbering: task-local
@@ -52,22 +52,22 @@ Advisory severity. No behavior change intended.
 
 ### Requirements
 
-- [ ] R1. Every Group A symbol (Background table) lives in `packages/app/src/workflow/composition-lint.ts`, which imports nothing from `services/workflow-service.ts`.
-- [ ] R2. Every Group B symbol lives in `packages/app/src/workflow/run-record.ts` (retention resolvers and reclamation types co-located there — no separate `run-retention.ts`), which imports nothing from `services/workflow-service.ts`.
-- [ ] R3. Every symbol the `@gobing-ai/spur-app` barrel exported before the move is still exported with the same name and type; no file under `apps/` is edited; `agent-service.ts` imports `readWorkflowRunRecord` from `../workflow/run-record` directly.
-- [ ] R4. Zero behavior change: test files change only import lines; no assertion, cap value, error string or lint rule changes.
-- [ ] R5. `hitlAnswerVar`, `gateSitesForState` and `HitlActionSite` are exported from `composition-lint.ts` only for the service's continue path and are **not** re-exported from the barrel (they are not today); the previously non-exported walkers stay non-exported except where the service needs them.
-- [ ] R6. `config/rules/strict/runtime-boundaries.yaml` `no-direct-fs-io` allowlist gains `packages/app/src/workflow/run-record.ts` with a justification comment; the `workflow-service.ts` entry stays (it still reads at :1055/:1081) with its now-stale comment (composition advisory) replaced by what remains.
-- [ ] R7. Live design docs that cite a moved symbol at `workflow-service.ts` are re-pointed: `docs/design/planning-workflow-contracts.md:260` (`collectAgentRunRoleViolations`), `docs/design/universal-config-loading.md:75` (retention resolvers). Historical records (`docs/tasks*/`, `docs/dogfood/`, `docs/reports/`, `docs/inventory/`) are not edited.
+- [x] R1. Every Group A symbol (Background table) lives in `packages/app/src/workflow/composition-lint.ts`, which imports nothing from `services/workflow-service.ts`.
+- [x] R2. Every Group B symbol lives in `packages/app/src/workflow/run-record.ts` (retention resolvers and reclamation types co-located there — no separate `run-retention.ts`), which imports nothing from `services/workflow-service.ts`.
+- [x] R3. Every symbol the `@gobing-ai/spur-app` barrel exported before the move is still exported with the same name and type; no file under `apps/` is edited; `agent-service.ts` imports `readWorkflowRunRecord` from `../workflow/run-record` directly.
+- [x] R4. Zero behavior change: test files change only import lines; no assertion, cap value, error string or lint rule changes.
+- [x] R5. `hitlAnswerVar`, `gateSitesForState` and `HitlActionSite` are exported from `composition-lint.ts` only for the service's continue path and are **not** re-exported from the barrel (they are not today); the previously non-exported walkers stay non-exported except where the service needs them.
+- [x] R6. `config/rules/strict/runtime-boundaries.yaml` `no-direct-fs-io` allowlist gains `packages/app/src/workflow/run-record.ts` with a justification comment; the `workflow-service.ts` entry stays (it still reads at :1055/:1081) with its now-stale comment (composition advisory) replaced by what remains.
+- [x] R7. Live design docs that cite a moved symbol at `workflow-service.ts` are re-pointed: `docs/design/planning-workflow-contracts.md:260` (`collectAgentRunRoleViolations`), `docs/design/universal-config-loading.md:75` (retention resolvers). Historical records (`docs/tasks*/`, `docs/dogfood/`, `docs/reports/`, `docs/inventory/`) are not edited.
 
 ### Acceptance Criteria
 
 Graduates all four of feature D91's scenarios (exact titles below); the numbered rows are the verify lens.
 
-- [ ] AC1 — R1 — Composition lint lives in its own module without a back-edge (req: R1, R5)
-- [ ] AC2 — R2 — Run-record inspection and retention live in their own module (req: R2, R6)
-- [ ] AC3 — R3 — The spur-app public surface is unchanged (req: R3, R7)
-- [ ] AC4 — R4 — Workflow behavior is unchanged (req: R4)
+- [x] AC1 — R1 — Composition lint lives in its own module without a back-edge (req: R1, R5)
+- [x] AC2 — R2 — Run-record inspection and retention live in their own module (req: R2, R6)
+- [x] AC3 — R3 — The spur-app public surface is unchanged (req: R3, R7)
+- [x] AC4 — R4 — Workflow behavior is unchanged (req: R4)
 
 **Verify lens**
 
@@ -114,22 +114,96 @@ Placement under `workflow/` co-locates lint with `actions/decide.ts` and the run
 
 ### Plan
 
-- [ ] Record base: `git rev-parse HEAD`; snapshot barrel export names to `$TMPDIR/barrel-before.txt` (AC3 command).
-- [ ] **Commit 1** — create `workflow/composition-lint.ts` with Group A; service imports it; update `tests/workflow/{composition-advisory,undeclared-shell-vars,decision-evidence,idea-pipeline-routing}.test.ts` and `tests/workflow/actions/decide.test.ts` imports; barrel re-export paths; `decide.ts:18` comment. Run `(cd packages/app && bun test tests/workflow)`. Commit `refactor(app): extract workflow composition lint module (0962)`.
-- [ ] **Commit 2** — create `workflow/run-record.ts` with Group B; service + `agent-service.ts:78` import it; barrel paths; `tests/services/workflow-service.test.ts` imports; `runtime-boundaries.yaml` entry; R7 doc citations. Run `(cd packages/app && bun test tests/services/workflow-service.test.ts tests/services/agent-service.test.ts)`. Commit `refactor(app): extract workflow run-record module (0962)`.
-- [ ] Gates: `bun run spur-check`, `bun run test-cf`, `spur rule run --json`; AC1–AC4 probes and barrel-names diff pasted into Testing.
+- [x] Record base: `git rev-parse HEAD`; snapshot barrel export names to `$TMPDIR/barrel-before.txt` (AC3 command).
+- [x] **Commit 1** — create `workflow/composition-lint.ts` with Group A; service imports it; update `tests/workflow/{composition-advisory,undeclared-shell-vars,decision-evidence,idea-pipeline-routing}.test.ts` and `tests/workflow/actions/decide.test.ts` imports; barrel re-export paths; `decide.ts:18` comment. Run `(cd packages/app && bun test tests/workflow)`. Commit `refactor(app): extract workflow composition lint module (0962)`.
+- [x] **Commit 2** — create `workflow/run-record.ts` with Group B; service + `agent-service.ts:78` import it; barrel paths; `tests/services/workflow-service.test.ts` imports; `runtime-boundaries.yaml` entry; R7 doc citations. Run `(cd packages/app && bun test tests/services/workflow-service.test.ts tests/services/agent-service.test.ts)`. Commit `refactor(app): extract workflow run-record module (0962)`.
+- [x] Gates: `bun run spur-check`, `bun run test-cf`, `spur rule run --json`; AC1–AC4 probes and barrel-names diff pasted into Testing.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Pure move refactor in two independently revertible commits; no behavior change intended.
+
+| Change | Anchor |
+| --- | --- |
+| Group A — composition-lint module created (composition advisory, shell/role/terminal-reason/decide/HITL/undeclared-var walkers, `COMPOSITION_CAPS`, `CompositionAdvisory`/`CompositionFinding`) | `packages/app/src/workflow/composition-lint.ts:473` |
+| Service imports the Group A walkers and `CompositionAdvisory` (no back-edge) | `packages/app/src/services/workflow-service.ts:67` |
+| Group A call sites inside `WorkflowAppService.validate` | `packages/app/src/services/workflow-service.ts:582` |
+| Continue-path gate lookup (`gateSitesForState`/`hitlAnswerVar`) now imports from the lint module | `packages/app/src/services/workflow-service.ts:1315` |
+| Group B — run-record module created (record inspection, retention resolvers, reclamation types) | `packages/app/src/workflow/run-record.ts:27` |
+| `InvalidWorkflowRunIdError` moved with the reader that throws it; re-exported so the barrel surface and class identity are unchanged (Design rule 3) | `packages/app/src/services/workflow-service.ts:2110` |
+| Service imports the reclamation types and `inspectWorkflowRunRecord` | `packages/app/src/services/workflow-service.ts:81` |
+| `inspectRunRecord` call site | `packages/app/src/services/workflow-service.ts:1634` |
+| Barrel re-export paths re-pointed; names, `type` modifiers and ordering unchanged | `packages/app/src/index.ts:889` |
+| `agent-service.ts` imports `readWorkflowRunRecord` from the new module directly (R3) | `packages/app/src/services/agent-service.ts:64` |
+| `no-direct-fs-io` allowlist gains `run-record.ts`; the `workflow-service.ts` entry comment now names checkpoint reclamation | `config/rules/strict/runtime-boundaries.yaml:76` |
+| R7 — design citation re-pointed to the lint module | `docs/design/planning-workflow-contracts.md:260` |
+| R7 — design citation re-pointed to the run-record module | `docs/design/universal-config-loading.md:75` |
+
+Verification evidence (targeted, run in the execution worktree):
+
+- `(cd packages/app && bun run typecheck)` — clean.
+- `(cd packages/app && bun test tests/services/workflow-service.test.ts tests/services/agent-service.test.ts)` — 370 pass, 0 fail.
+- `(cd packages/app && bun test tests/workflow)` — 932 pass, 1 fail. The single failure (`tests/workflow/idea-pipeline-routing.test.ts`, "0945 routing truth-table parity") is **pre-existing and environmental**, not caused by this task: it reproduces identically with this task's changes stashed at base, and at base in the main tree. It declares its own 60000 ms timeout (`:316`) and performs ~2,600 `/bin/sh` spawns; the host load average was 13.7 on 10 CPUs at run time.
+- Byte-identity: the moved blocks are byte-for-byte identical to the base source apart from the `export` keywords the service needs (`composition-lint.ts`) and the relocated error class (`run-record.ts`).
+- AC1 probes: `rg "workflow-service" composition-lint.ts` empty; no moved walker/const declaration remains in the service; `hitlAnswerVar|gateSitesForState` absent from the barrel.
+- AC2 probes: `rg "workflow-service" run-record.ts` empty; the service shows only import/call lines for the moved readers; `spur rule run --json` reports zero `no-direct-fs-io` findings.
+- AC3 probes: `git diff <base> --stat -- apps/` empty; barrel export-name set identical before/after; `wc -l` = 2,553 ≤ 2,700.
+
+No barrel export was added or removed: `CompositionAdvisory`, `CompositionFinding`, `COMPOSITION_CAPS` and the walkers were never barrel-exported, so re-pointing them does not change the public surface.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/workflow/composition-lint.ts:1` (every Group A symbol); `rg "workflow-service" packages/app/src/workflow/composition-lint.ts` → no match |
+| R2 | MET | `packages/app/src/workflow/run-record.ts:1` (every Group B symbol incl. retention resolvers + reclamation types); `rg "workflow-service" packages/app/src/workflow/run-record.ts` → no match |
+| R3 | MET | barrel export-name set `diff` vs base empty; `git diff 53f5fa37c --stat -- apps/` empty; `packages/app/src/services/agent-service.ts:64` imports from `../workflow/run-record` |
+| R4 | MET | moved blocks byte-identical to base apart from added `export` keywords; `bun run spur-check` green (9204 pass / 0 fail); existing test files changed only on their `import` lines — see the `checks` note on the AC4 diff lens |
+| R5 | MET | `rg "hitlAnswerVar\|gateSitesForState\|HitlActionSite" packages/app/src/index.ts` → no match; `ShellCommandEntry` stays module-private (`composition-lint.ts:56`); only the four walkers the service calls are exported |
+| R6 | MET | `config/rules/strict/runtime-boundaries.yaml:76` allowlist entry with justification; `workflow-service.ts` entry comment replaced; `spur rule run --json` → 0 `no-direct-fs-io` findings |
+| R7 | MET | `docs/design/planning-workflow-contracts.md:260` and `docs/design/universal-config-loading.md:75` re-pointed; no historical record edited |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Composition lint lives in its own module without a back-edge | MET | command | `rg -n "workflow-service" packages/app/src/workflow/composition-lint.ts` → no match; `rg -n "^export (function\|const) (collect\w+Violations\|countLogicalCommands\|COMPOSITION_CAPS)" packages/app/src/services/workflow-service.ts` → no match |
+| R2 — Run-record inspection and retention live in their own module | MET | command | `rg -n "workflow-service" packages/app/src/workflow/run-record.ts` → no match; `spur rule run --json` → 0 `no-direct-fs-io` findings; service shows only the import at `:75` and the call at `:1634` |
+| R3 — The spur-app public surface is unchanged | MET | command | `git diff 53f5fa37c --stat -- apps/` empty; barrel `Object.keys` diff empty; `bun run typecheck` clean; `wc -l packages/app/src/services/workflow-service.ts` = 2553 ≤ 2700 |
+| R4 — Workflow behavior is unchanged | MET | command | `bun run spur-check` → 9204 pass / 0 fail; `(cd packages/app && bun test tests/workflow tests/services/workflow-service.test.ts tests/services/agent-service.test.ts)` → 1321 pass / 0 fail; `bun run test-cf` green; moved code byte-identical to base |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
+
+**Gate evidence (execution worktree `/Users/robin/xprojects/spur-new-run-0962-0021`, branch `sp/run-0962-0021`, run `wf-0962-0021`)**
+
+- `bun run typecheck` (packages/app) — clean.
+- `bun run spur-check` — green: 9204 pass / 0 fail (lint, typecheck, pre/post checks, full suite).
+- `bun run test-cf` — green.
+- `(cd packages/app && bun test tests/workflow tests/services/workflow-service.test.ts tests/services/agent-service.test.ts)` — 1321 pass / 0 fail.
+- `(cd packages/app && bun test tests/workflow/composition-lint.test.ts tests/workflow/run-record.test.ts)` — 18 pass / 0 fail.
+- `bun run rule run --json` — zero `no-direct-fs-io` findings.
+- Byte-identity: both moved blocks are byte-for-byte identical to the base revision apart from the `export` keywords the service needs and the relocated `InvalidWorkflowRunIdError` class.
+- Barrel export-name set (`Object.keys` of the app barrel, sorted) — `diff` against the base revision empty.
+- `git diff 53f5fa37c --stat -- apps/` — empty.
+- `wc -l` on the service — 2553 lines, against the AC3 ceiling of 2700.
+- Quality gate needed two attempts: the first failed on `require-corresponding-test` (fixed by adding the two corresponding test files); the second passed. The intervening red run failed only on the load-sensitive `idea-pipeline-routing` 0945 parity test, which reproduces red at the base revision with this task's changes stashed — see the Review residual risk.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**Review disposition: approved** — pure move refactor, no behavior change, both module boundaries hold, public surface unchanged. No P1/P2 findings.
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P3 | task contract | task 0962 Acceptance Criteria | AC4's diff lens ("`git diff` over the test trees shows only `import` line changes") cannot hold together with a green `spur-check`: the repo rule `require-corresponding-test` requires a test file per new source module, so two corresponding test files were added (18 tests). No existing test assertion changed. This is a task-spec defect, not a code defect. |
+| P4 | rule comment | `no-direct-fs-io` allowlist | The `workflow-service.ts` allowlist comment now cites its remaining reads by line number; line citations in a path-based allowlist drift. Documentation only — the rule matches by path. |
+| P4 | module layout | `workflow/run-record.ts` | `InvalidWorkflowRunIdError` moved out of the service (the plan listed it as staying) because the Design rule "never import back from the service" forbids the reader depending on the service. Mitigated: the service re-exports the class, so the barrel name, path and **class identity** are unchanged; `apps/server`'s `err instanceof InvalidWorkflowRunIdError` path and its tests pass in the green suite. |
+
+**Residual risk.** `tests/workflow/idea-pipeline-routing.test.ts` ("0945 routing truth-table parity") declares its own 60000 ms timeout and performs roughly 3,400 `/bin/sh` spawns. It is load-sensitive: about 86 s at host load 13.7 on 10 CPUs (times out) versus about 57 s at load 8 (passes). It reproduces identically at the base revision with this task's changes stashed, so it is pre-existing rather than a regression — but on a loaded host `bun run spur-check` can go red for this reason alone.
+
+**Traceability.** All seven requirements and all four acceptance criteria are MET with command evidence; verdict `PASS`, proof digest `sha256:ea9a99e8…` bound at quality-gate entry, review stage completed.
 
 ### References
 
@@ -141,4 +215,7 @@ Placement under `workflow/` co-locates lint with `actions/decide.ts` and the run
 ### History
 
 - 2026-09-26T04:40:07.144Z backlog → todo (system)
+- 2026-09-26T06:32:48.034Z todo → wip (system)
+- 2026-09-26T07:22:44.230Z wip → testing (system)
+- 2026-09-26T07:23:34.698Z testing → done (system)
 
