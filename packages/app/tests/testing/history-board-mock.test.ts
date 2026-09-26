@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MockHistoryBoardService } from '../../src';
+import { MockHistoryBoardService } from '../../src/testing/history-board-mock';
 
 describe('MockHistoryBoardService', () => {
     const service = new MockHistoryBoardService();

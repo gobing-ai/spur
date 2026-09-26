@@ -10,7 +10,8 @@
         "./feature-check": "./src/services/feature-check.ts",
         "./system-event-tap": "./src/services/system-event-tap.ts",
         "./system-events": "./src/services/event-names.ts",
-        "./decision-readiness": "./src/workflow/decision-readiness.ts"
+        "./decision-readiness": "./src/workflow/decision-readiness.ts",
+        "./testing": "./src/testing/history-board-mock.ts"
     },
     "scripts": {
         "build": "bun build src/index.ts --outdir dist --target bun",

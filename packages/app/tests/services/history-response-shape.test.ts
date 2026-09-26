@@ -13,7 +13,7 @@ import {
     historyTimelineResponseDataSchema,
     historyToolSequenceResponseDataSchema,
 } from '@gobing-ai/spur-contracts';
-import { MockHistoryBoardService } from '../../src';
+import { MockHistoryBoardService } from '../../src/testing/history-board-mock';
 
 /**
  * 0745 R3 — every History endpoint returns the same response shape the contract

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MockHistoryBoardService } from '@gobing-ai/spur-app';
+import { MockHistoryBoardService } from '@gobing-ai/spur-app/testing';
 import type { ServerContext } from '../../../src/context';
 import { createHistoryHandlers } from '../../../src/modules/history';
 

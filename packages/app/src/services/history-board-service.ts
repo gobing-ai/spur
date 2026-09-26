@@ -83,7 +83,19 @@ import {
     topStepsByDuration,
     topStepsByTokens,
 } from '@gobing-ai/spur-domain';
-import type { HistoryBoardService } from './history-board-mock-service';
+
+/**
+ * Service interface for History Board API queries.
+ */
+export interface HistoryBoardService {
+    getSummary(filter?: HistoryFilter): Promise<HistorySummaryResponse['data']>;
+    getTimeline(input: HistoryTimelineInput): Promise<HistoryTimelineResponse['data']>;
+    getToolSequence(input: HistoryToolSequenceInput): Promise<HistoryToolSequenceResponse['data']>;
+    getSessions(input: HistorySessionsInput): Promise<HistorySessionsResponse['data']>;
+    getInsights(filter?: HistoryFilter): Promise<HistoryInsightsResponse['data']>;
+    getSources(): Promise<HistorySourcesResponse['data']>;
+    triggerImport(mode: 'full' | 'incremental'): Promise<HistoryTriggerImportResponse['data']>;
+}
 
 /**
  * Dependency options for initializing LiveHistoryBoardService.
