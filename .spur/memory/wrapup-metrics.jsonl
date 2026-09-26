@@ -189,3 +189,4 @@ Verdict `PASS` sourced from the task's pipeline verdict artifact (`# Testing →
 {"wbs":"0945","feature_id":"D64","status":"done","verdict":"UNKNOWN","timestamp":"2026-09-25T23:31:32Z"}
 {"wbs":"0946","feature_id":"D64","status":"done","verdict":"UNKNOWN","timestamp":"2026-09-25T23:31:32Z"}
 {"wbs":"0962","feature_id":"D91","status":"done","verdict":"PASS","timestamp":"2026-09-26T07:25:20Z"}
+{"wbs":"0961","feature_id":"E82","status":"done","verdict":"PASS","timestamp":"2026-09-26T16:23:50Z"}
