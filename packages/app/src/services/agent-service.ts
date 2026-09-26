@@ -61,6 +61,7 @@ import {
     configuredSecretValues,
 } from '../observability/agent-execution';
 import { toEnvelopeJson } from '../output/envelope';
+import { readWorkflowRunRecord } from '../workflow/run-record';
 import { type NormalizedAgentUsage, normalizeAgentUsage } from './agent-usage';
 import {
     capabilityDiagnostic,
@@ -75,7 +76,6 @@ import { bridgeEventBus, withInvokeRouting } from './event-bridge';
 import { classifyDispatch } from './failure-classification';
 import { FleetService } from './fleet-service';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
-import { readWorkflowRunRecord } from './workflow-service';
 
 // ---------------------------------------------------------------------------
 // Public types

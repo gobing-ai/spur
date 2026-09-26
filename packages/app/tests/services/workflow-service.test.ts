@@ -22,18 +22,20 @@ import { WorkflowRunLogSink } from '../../src/observability/workflow-run-log-sin
 import type { AgentService } from '../../src/services/agent-service';
 import type { RuleService } from '../../src/services/rule-service';
 import {
-    inspectWorkflowRunRecord,
     mergeWorkflowRunVars,
-    readWorkflowRunRecord,
-    resolveOutputLogConfig,
     resolveWorkflowDefinition,
     resolveWorkflowFile,
-    resolveWorkflowLogRetentionDays,
-    stateReadFailureReason,
     WorkflowAppService,
     type WorkflowListResult,
 } from '../../src/services/workflow-service';
 import type { WorkflowObservabilityEventMap } from '../../src/workflow/observability';
+import {
+    inspectWorkflowRunRecord,
+    readWorkflowRunRecord,
+    resolveOutputLogConfig,
+    resolveWorkflowLogRetentionDays,
+    stateReadFailureReason,
+} from '../../src/workflow/run-record';
 
 const PAUSING_YAML = `name: pauser-svc
 kind: state-machine
