@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Skip placeholder no-finding rows in residual-scan review parsing
-status: wip
+status: done
 template: standard
 created_at: 2026-09-26T22:45:20.140Z
-updated_at: "2026-09-26T23:03:27.434Z"
+updated_at: "2026-09-26T23:51:42.282Z"
 feature_id: F961
 priority: P1
 tags:
@@ -22,15 +22,15 @@ estimate_hours: 1
 
 ### Requirements
 
-- [ ] R1. `parseReviewFindings` drops placeholder no-finding cells: `None`, `None found`, `No finding(s)`, `No issue(s)` with optional ` found`, optional trailing `(…)` note and optional period, case-insensitive, plus `—`.
-- [ ] R2. Finding text that merely starts with "None" (e.g. "None of the callers validate input") is still returned as a finding, unchanged.
-- [ ] R3. A regression test in `plugins/sp/tests/residual-scan.test.ts` pins R1 and R2, and `plugins/sp/scripts/residual-scan.mjs` is regenerated via `superskill script convert sp residual-scan.ts`.
+- [x] R1. `parseReviewFindings` drops placeholder no-finding cells: `None`, `None found`, `No finding(s)`, `No issue(s)` with optional ` found`, optional trailing `(…)` note and optional period, case-insensitive, plus `—`.
+- [x] R2. Finding text that merely starts with "None" (e.g. "None of the callers validate input") is still returned as a finding, unchanged.
+- [x] R3. A regression test in `plugins/sp/tests/residual-scan.test.ts` pins R1 and R2, and `plugins/sp/scripts/residual-scan.mjs` is regenerated via `superskill script convert sp residual-scan.ts`.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — Placeholder no-finding rows are not residual findings (req: R1)
-- [ ] AC2 — R2 — Real findings that start with None still count (req: R2)
-- [ ] AC3 — R3 — Shipped script matches the tested source (req: R3)
+- [x] AC1 — R1 — Placeholder no-finding rows are not residual findings (req: R1)
+- [x] AC2 — R2 — Real findings that start with None still count (req: R2)
+- [x] AC3 — R3 — Shipped script matches the tested source (req: R3)
 
 ### Q&A
 
@@ -93,11 +93,34 @@ Rationale: single-edit root cause per Q&A — one shared regex covers scan, fold
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PARTIAL (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | residual-scan.ts:68 frozen literal (anchored, case-insensitive, optional "(…)" note + period + em-dash) drops placeholder cells; table test residual-scan.test.ts:72-105 asserts 9 dropped rows; committed in afb49c376 |
+| R2 | MET | table test keeps "None of the callers validate input" and "None found (x) but callers skip validation" unchanged; kept-set asserted exactly (5 rows) |
+| R3 | MET | regression test residual-scan.test.ts:72-105 pins R1+R2; residual-scan.mjs regenerated via superskill script convert sp residual-scan.ts (em-dash as \u2014, regex-equivalent) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | residual-scan.ts scan 0964 → blocking=0 advisory=1 (re-run 2026-09-26 16:35); 9 placeholder rows dropped in table test |
+| AC2 | MET | test | table test asserts exact kept-set incl. unknown phrasings (No findings; see P2 / Nothing to report / N/A) per closed Q&A fail-safe decision |
+| AC3 | MET | test | git show --stat afb49c376: exactly residual-scan.{ts,mjs}+test (+39/-2); suite 21/21 pass; full gate green (status=PASS, 0 fails) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PARTIAL)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
 
 ### References
 
@@ -110,4 +133,6 @@ Rationale: single-edit root cause per Q&A — one shared regex covers scan, fold
 ### History
 
 - 2026-09-26T23:03:27.434Z todo → wip (system)
+- 2026-09-26T23:47:08.886Z wip → testing (system)
+- 2026-09-26T23:51:42.282Z testing → done (system)
 
