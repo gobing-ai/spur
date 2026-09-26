@@ -53,6 +53,24 @@ function probe(cwd: string, runId: string, spur: ReturnType<typeof fakeSpur>, en
     return runDriftProbe({ __runId: runId, spurBin: 'unused', ...env }, { cwd }, spur);
 }
 
+/**
+ * A fail-safe case's diagnostic is the operator's, not the test runner's: capture the write
+ * so the assertion still pins the message without leaking it into the suite output.
+ */
+function capturingStderr<T>(body: () => T): { result: T; stderr: string } {
+    const seen: string[] = [];
+    const original = process.stderr.write;
+    process.stderr.write = ((chunk: unknown): boolean => {
+        seen.push(String(chunk));
+        return true;
+    }) as typeof process.stderr.write;
+    try {
+        return { result: body(), stderr: seen.join('') };
+    } finally {
+        process.stderr.write = original;
+    }
+}
+
 describe('wrapup-drift-probe 0944', () => {
     test('one case per doc-owned surface glob — a changed path under each is dirty', () => {
         const representative: Record<(typeof DOC_OWNED_SURFACES)[number], string> = {
@@ -204,7 +222,8 @@ describe('wrapup-drift-probe 0944', () => {
     test('a missing or corrupted normalized capture fails safe (dirty)', () => {
         const cwd = newCwd();
         try {
-            const result = probe(cwd, 's5', fakeSpur({}));
+            const { result, stderr } = capturingStderr(() => probe(cwd, 's5', fakeSpur({})));
+            expect(stderr).toContain('normalized task capture is missing or corrupted');
             expect(result.clean).toBe(false);
             expect(result.reasons).toEqual(['normalized task capture missing or corrupted']);
             expect(readFileSync(join(cwd, '.spur', 'run', 's5-mode.txt'), 'utf8')).toBe('\n');
@@ -216,7 +235,8 @@ describe('wrapup-drift-probe 0944', () => {
     test('an empty __runId is a hard mis-invocation and writes nothing', () => {
         const cwd = newCwd();
         try {
-            const result = probe(cwd, '', fakeSpur({}));
+            const { result, stderr } = capturingStderr(() => probe(cwd, '', fakeSpur({})));
+            expect(stderr).toContain('__runId is empty — refusing the legacy fixed-path fallback');
             expect(result.exitCode).toBe(1);
             const exists = (p: string): boolean => {
                 try {
@@ -234,18 +254,9 @@ describe('wrapup-drift-probe 0944', () => {
     });
 
     test('main rejects positional args with the usage line', () => {
-        const seen: string[] = [];
-        const original = process.stderr.write;
-        process.stderr.write = ((chunk: unknown): boolean => {
-            seen.push(String(chunk));
-            return true;
-        }) as typeof process.stderr.write;
-        try {
-            expect(main(['unexpected'], { __runId: 'x' }, { cwd: newCwd() })).toBe(2);
-        } finally {
-            process.stderr.write = original;
-        }
-        expect(seen.join('')).toContain(WRAPUP_DRIFT_PROBE_USAGE);
+        const { result, stderr } = capturingStderr(() => main(['unexpected'], { __runId: 'x' }, { cwd: newCwd() }));
+        expect(result).toBe(2);
+        expect(stderr).toContain(WRAPUP_DRIFT_PROBE_USAGE);
     });
 
     test('Solution parsing pins: heading depth tolerance, section boundary, path-like filter, line stripping', () => {
