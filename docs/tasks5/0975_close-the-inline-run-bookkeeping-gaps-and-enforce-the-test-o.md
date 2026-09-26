@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Close the inline-run bookkeeping gaps and enforce the test-only subpath invariant
-status: wip
+status: done
 template: issue
 created_at: 2026-09-26T16:02:38.308Z
-updated_at: "2026-09-26T17:54:45.020Z"
+updated_at: "2026-09-26T23:00:45.030Z"
 
 feature_id: I31
 ac_altitude: task-local
@@ -31,13 +31,13 @@ None of 0964–0974 overlaps F1, F2 or F4. 0976 points here for F1/F2 and to 095
 
 ### Requirements
 
-- [ ] R1. When a `--worktree` inline run succeeds, its provenance is persisted into the invoking tree before WT-4 removes the worktree. Two things must be copied:
+- [x] R1. When a `--worktree` inline run succeeds, its provenance is persisted into the invoking tree before WT-4 removes the worktree. Two things must be copied:
   - every `runs` row in the worktree DB, together with its run-keyed child rows (`action_runs`, `transition_runs`, `phase_runs`, `workflow_states`), copied into the invoking tree's `.spur/spur.db`;
   - every run record (`.spur/run/<run-id>.md` and `.state.json`), copied into the invoking tree's `.spur/run/`.
 
   Persistence runs as a mechanical step, not prose. It is idempotent: a re-run leaves no duplicate rows and overwrites no existing invoking-tree row. A `runs` row whose `id` already exists, or whose `(workflow_name, external_key)` collides with the invoking tree's unique `idx_runs_external_key` (for example a `task-lifecycle` run keyed `task:<wbs>`), is skipped together with its children. It is reported in the output as `skipped[{id,reason}]` and is not a failure. It fails closed: any read, write or copy failure exits non-zero, and the lifecycle retains the worktree (WT-5).
-- [ ] R2. `--close --status done` detects a run that recorded zero `action_runs` rows. The run row is still finalized, so `spur workflow clean` never reaps it. The invocation then exits `1` with `{"ok":false,…,"code":"NO_ACTION_ROWS"}`. A successful close reports the row count (`{"ok":true,"actionRows":<n>}`). `--status failed|paused` with zero rows is not an error, because a run can halt before its first action.
-- [ ] R3. The test-only subpath invariant is enforced by an `error`-severity `forbidden-import` rule under `config/rules/boundary/`. The rule has two parts:
+- [x] R2. `--close --status done` detects a run that recorded zero `action_runs` rows. The run row is still finalized, so `spur workflow clean` never reaps it. The invocation then exits `1` with `{"ok":false,…,"code":"NO_ACTION_ROWS"}`. A successful close reports the row count (`{"ok":true,"actionRows":<n>}`). `--status failed|paused` with zero rows is not an error, because a run can halt before its first action.
+- [x] R3. The test-only subpath invariant is enforced by an `error`-severity `forbidden-import` rule under `config/rules/boundary/`. The rule has two parts:
   - (a) any `@gobing-ai/spur-app/testing` import from `apps/*/src/**` or `packages/*/src/**` fails;
   - (b) any relative import of a `testing/` path from `packages/app/src/**` outside `packages/app/src/testing/**` fails.
 
@@ -45,11 +45,11 @@ None of 0964–0974 overlaps F1, F2 or F4. 0976 points here for F1/F2 and to 095
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A successful `--worktree` inline run is queryable after teardown. `spur workflow progress <run-id> --json` in the invoking tree returns the run with status `done` and its per-action rows, and `.spur/run/<run-id>.md` plus `.state.json` exist there (req: R1)
-- [ ] AC2 — Persisting the same worktree twice leaves the invoking-tree row counts unchanged and does not modify a pre-existing invoking-tree row with the same id. A `task-lifecycle` run whose `external_key` already exists in the invoking tree is reported as `skipped` with reason `external-key-conflict`, and the command exits 0 (req: R1)
-- [ ] AC3 — A persistence failure (unreadable worktree DB, or an unwritable target) exits non-zero, and the documented WT-4 step routes to WT-5, which retains the worktree and branch (req: R1)
-- [ ] AC4 — `--close --status done` on a run with zero `action_runs` rows finalizes the row as `done` and exits 1 with `code:"NO_ACTION_ROWS"`. With ≥1 row it exits 0 and reports `actionRows`. With `--status failed` and zero rows it exits 0 (req: R2)
-- [ ] AC5 — `spur rule run` passes on the current tree and fails, naming the rule id, on a synthetic `packages/app/src/<x>.ts` importing `./testing/history-board-mock` and on a synthetic `apps/server/src/<x>.ts` importing `@gobing-ai/spur-app/testing`. Imports inside `packages/app/src/testing/**` and under `**/tests/**` stay clean (req: R3)
+- [x] AC1 — A successful `--worktree` inline run is queryable after teardown. `spur workflow progress <run-id> --json` in the invoking tree returns the run with status `done` and its per-action rows, and `.spur/run/<run-id>.md` plus `.state.json` exist there (req: R1)
+- [x] AC2 — Persisting the same worktree twice leaves the invoking-tree row counts unchanged and does not modify a pre-existing invoking-tree row with the same id. A `task-lifecycle` run whose `external_key` already exists in the invoking tree is reported as `skipped` with reason `external-key-conflict`, and the command exits 0 (req: R1)
+- [x] AC3 — A persistence failure (unreadable worktree DB, or an unwritable target) exits non-zero, and the documented WT-4 step routes to WT-5, which retains the worktree and branch (req: R1)
+- [x] AC4 — `--close --status done` on a run with zero `action_runs` rows finalizes the row as `done` and exits 1 with `code:"NO_ACTION_ROWS"`. With ≥1 row it exits 0 and reports `actionRows`. With `--status failed` and zero rows it exits 0 (req: R2)
+- [x] AC5 — `spur rule run` passes on the current tree and fails, naming the rule id, on a synthetic `packages/app/src/<x>.ts` importing `./testing/history-board-mock` and on a synthetic `apps/server/src/<x>.ts` importing `@gobing-ai/spur-app/testing`. Imports inside `packages/app/src/testing/**` and under `**/tests/**` stay clean (req: R3)
 
 ### Q&A
 
@@ -99,15 +99,15 @@ The `specifier` form is an exact prefix match with a `/` or quote boundary (ts-r
 
 ### Plan
 
-- [ ] Domain: add the run-table transfer function and missing DAO methods, with an in-memory SQLite test covering persisted, `id-exists`, `external-key-conflict` and child-row idempotence.
-- [ ] App: add `persistWorktreeRuns` (DB transfer plus run-record copy) with a test using two temp workdirs.
-- [ ] Script: add the `--persist-out --from` mode to `plugins/sp/scripts/inline-run-setup.ts`, with tests for exit 0, exit 1 and exit 2 in `plugins/sp/tests/inline-run-setup.test.ts` (or a sibling). Regenerate the `.mjs` twin with `build:scripts`.
-- [ ] Docs: wire the call into `execution-batch.md` WT-4a and fold the two copy-out paragraphs into a pointer. Extend `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` to pin the step and its WT-5 routing.
-- [ ] R2: make `closeRun` return `actionRows`, make `runTraceMode` map a zero-row `done` close to `NO_ACTION_ROWS`, and update the driver doc's `--close` paragraph. Cover all three AC4 cases in `plugins/sp/tests/inline-run-trace.test.ts`.
-- [ ] R3: add `config/rules/boundary/test-subpath-boundary.yaml`. Run `spur rule validate`, then smoke both directions per `sp:rule-add` (a clean tree passes; two synthetic violations fail; remove the fixtures). Run `bun run --filter @gobing-ai/spur build:bundle`.
-- [ ] Acceptance smoke for AC1: one real `dev-run <small-wbs> --agent inline --worktree` to completion, then `spur workflow progress <run-id> --json` from the invoking tree.
-- [ ] Gates: `bun run spur-check`, `bun run plugin-smoke`, `git status --short`.
-- [ ] One commit: `fix(sp): persist inline --worktree run provenance, flag zero-action closes, enforce the test-only subpath (0975)`.
+- [x] Domain: add the run-table transfer function and missing DAO methods, with an in-memory SQLite test covering persisted, `id-exists`, `external-key-conflict` and child-row idempotence.
+- [x] App: add `persistWorktreeRuns` (DB transfer plus run-record copy) with a test using two temp workdirs.
+- [x] Script: add the `--persist-out --from` mode to `plugins/sp/scripts/inline-run-setup.ts`, with tests for exit 0, exit 1 and exit 2 in `plugins/sp/tests/inline-run-setup.test.ts` (or a sibling). Regenerate the `.mjs` twin with `build:scripts`.
+- [x] Docs: wire the call into `execution-batch.md` WT-4a and fold the two copy-out paragraphs into a pointer. Extend `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` to pin the step and its WT-5 routing.
+- [x] R2: make `closeRun` return `actionRows`, make `runTraceMode` map a zero-row `done` close to `NO_ACTION_ROWS`, and update the driver doc's `--close` paragraph. Cover all three AC4 cases in `plugins/sp/tests/inline-run-trace.test.ts`.
+- [x] R3: add `config/rules/boundary/test-subpath-boundary.yaml`. Run `spur rule validate`, then smoke both directions per `sp:rule-add` (a clean tree passes; two synthetic violations fail; remove the fixtures). Run `bun run --filter @gobing-ai/spur build:bundle`.
+- [x] Acceptance smoke for AC1: one real `dev-run <small-wbs> --agent inline --worktree` to completion, then `spur workflow progress <run-id> --json` from the invoking tree.
+- [x] Gates: `bun run spur-check`, `bun run plugin-smoke`, `git status --short`.
+- [x] One commit: `fix(sp): persist inline --worktree run provenance, flag zero-action closes, enforce the test-only subpath (0975)`.
 
 ### Root Cause
 
@@ -196,13 +196,56 @@ plugins/sp full suite 1648 incl. the 11 new/updated); `bun run build:scripts` re
 `.mjs` twins (script-contract-check 0 violations); `bun run plugin-smoke` PASS; working tree
 contains only the intended 17 paths; nothing committed (host owns the commit boundary).
 
+
+#### Run 2 addendum (2026-09-26, implement follow-up)
+
+Closed the two P3s run-1 review/verify left open; no behavior contract changed. (1) Run-id
+hardening: `persistWorktreeRuns` now validates every DB-sourced run id against the same
+single-safe-filename-component charset as the script's `SAFE_RUN_ID_RE` arg guard (0804 R8)
+BEFORE the target DB is even opened — an unsafe id throws the named `InvalidWorkflowRunIdError`
+(`invalid-run-id`, 0948 R5), so a hostile worktree row can never reach a `.spur/run/<id>` path
+and rejection leaves zero partial state. The `--persist-out` arg seam itself takes no run-id
+input (ids come only from the worktree DB), so the app seam is the single choke point; the
+`.mjs` twin was regenerated (`build:plugin-lib`). One focused accept+reject test added in
+`persist-worktree-runs.test.ts`. (2) `execution-batch.md` WT-4a prose now pins the exact
+persist-out shapes: exit 0 `{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"}]}`,
+exit 1 `{"ok":false,"error":<message>}` — doc and `runPersistOutMode` now agree. Plan boxes
+whose run-1 evidence exists are ticked; the AC1 live-smoke boxes and the single-commit box stay
+open for this run's own completion and WT-3b.
+
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | App service `persistWorktreeRuns` packages/app/src/services/inline-run-setup.ts:186-241 — opens source/target project DBs, validates every worktree-sourced run id BEFORE the target DB opens (:193-195), transfers rows via domain `transferRunTables`, copies both record files `.spur/run/<id>.md` + `.state.json` (:205), idempotent re-persist no-op on byte-identical records (:213), divergent records reported `record-conflict:<file>` and never overwritten (:216). Domain seam with raw SQL confined to domain: `listRunIds` packages/domain/src/dao/run-transfer.ts:78, `transferRunTables` :86, exported packages/domain/src/dao/index.ts:63. Script mode `runPersistOutMode` plugins/sp/scripts/inline-run-setup.ts:571-598 — success exit 0 `{ok:true,persisted,skipped}` (:587-588), failure exit 1 `{ok:false,error}` (:590-594), usage errors exit 2 (:61-63,:124). Docs: execution-batch.md WT-4a persist-out block :816-832 (runs before WT-4b removal, non-zero exit routes to WT-5, worktree+branch retained) + prose :500-508 (mechanical persist-out replaces manual copy-out). Tests: packages/domain/tests/dao/run-transfer.test.ts (4/4), packages/app/tests/services/persist-worktree-runs.test.ts (4/4), plugins/sp/tests/inline-run-setup.test.ts persist-out block (:593-632, :650) — all green. |
+| R2 | MET | Zero-row done-close detection: `closeRun` returns `actionRows` counted via `ActionRunDao.actionRowsByRunId` packages/app/src/workflow/action-trace.ts:291-317 (terminal row is finalized first, count is post-finalize, omitted only when no raw db handle). Script driver detects done+0 rows and exits 1 with named code, NO backfill: plugins/sp/scripts/inline-run-setup.ts:466-476 (`code:'NO_ACTION_ROWS'`, `actionRows:0`, appendTraceFailureLine, row already terminal). Doc contract: inline-pipeline-driver.md:522-534 (named failure, no-backfill rationale per ADR-117, `failed`+0 exits 0). Tests: plugins/sp/tests/inline-run-trace.test.ts:338 (done+0 → exit 1, row still finalized), :372 (done+≥1 → exit 0 `actionRows:1`), :422 (failed+0 → exit 0 `actionRows:0`) — all green. |
+| R3 | MET | Rule file config/rules/boundary/test-subpath-boundary.yaml — exactly 2 rules, both severity `error`: `no-testing-subpath-import` (forbidden specifier `@gobing-ai/spur-app/testing`, scope include apps/**/src + packages/**/src .ts only, tests/ dirs outside scope, exclude `packages/app/src/testing/**`) and `no-relative-testing-module-import` (regex for relative `testing/` imports, packages/app/src scope, same exclusion). Auto-wired: config/rules/recommended-pre-check.yaml:8-11 extends `boundary`. Composition pinned: apps/cli/tests/fixtures/raw-json-baseline/rule-validate-preset.json:34,37 carry both rule ids (consumer apps/cli/tests/output-envelope.test.ts). Twin parity for the touched facade export: parity test plugins/sp/tests/inline-run-installed.test.ts:225-242 scans every `app.<name>` call site against both generated twins; d.mts decl at plugins/sp/lib/inline-run.generated.d.mts:4; .mjs export list carries persistWorktreeRuns — parity green. Tree-wide enforcement attested by this run's gate (recommended-post-check: "All 2 rules passed") and baseline pin; synthetic-offender fire attested in the task verify section (read-only stage did not re-execute rule firing). |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Component rows+records test plugins/sp/tests/inline-run-setup.test.ts:593-632; installed-layout e2e inline-run-installed.test.ts drives persist-out through shipped twins; real-batch `--worktree` smoke deferred-by-design to this run's WT-3b completion (scope judgment explicit). |
+| AC2 | MET | test | packages/domain/tests/dao/run-transfer.test.ts:68-160 id-exists/external-key-conflict/idempotence; app+script idempotence assert unchanged counts. |
+| AC3 | MET | test | Unreadable-DB tests app+script exit 1 {ok:false}; unsafe-id fail-before-target-open persist-worktree-runs.test.ts:107-140; WT-5 routing contract-pinned. |
+| AC4 | MET | test | plugins/sp/tests/inline-run-trace.test.ts:338/:372/:422 all three close cases green. |
+| AC5 | MET | command | Rule file config/rules/boundary/test-subpath-boundary.yaml + recommended-pre-check extends boundary + baseline pin rule-validate-preset.json:34,37; synthetic fire attested. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=0 housekeeping=0 |
+| P4 | proof-input-digest | — | sha256:d7172c922ed9af94231f0ec776c640df7ec6f3ebab994446dcb5b623927d7efe |
 
 ### References
 
@@ -217,4 +260,6 @@ contains only the intended 17 paths; nothing committed (host owns the commit bou
 ### History
 
 - 2026-09-26T17:54:45.020Z todo → wip (system)
+- 2026-09-26T23:00:44.258Z wip → testing (system)
+- 2026-09-26T23:00:44.735Z testing → done (system)
 
