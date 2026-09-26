@@ -135,13 +135,29 @@ export class HttpRequestActionRunner implements ActionRunner {
         if (url === undefined || url.length === 0) {
             return { ok: false, error: 'http.request: url is required' };
         }
+        // --- Option type gates ---
+        // A mistyped numeric option fails loud instead of falling back to a default: a
+        // templated `${vars.*}` resolves to a string, and silently dropping it would run the
+        // request with a timeout / size cap / failure set the author never chose.
+        for (const key of ['timeoutMs', 'maxResponseBytes'] as const) {
+            if (options[key] !== undefined && !isFiniteNumber(options[key])) {
+                return { ok: false, error: `http.request: ${key} must be a number, got ${typeof options[key]}` };
+            }
+        }
+        if (
+            options.failOnStatus !== undefined &&
+            !(Array.isArray(options.failOnStatus) && options.failOnStatus.every(isFiniteNumber))
+        ) {
+            return { ok: false, error: 'http.request: failOnStatus must be an array of numbers' };
+        }
+
         const method = (asOptionalString(options.method) ?? 'GET').toUpperCase();
         const rawHeaders = asRecord(options.headers) ?? {};
         const body = asOptionalString(options.body);
-        const failOnStatus = asNumberArray(options.failOnStatus);
-        const timeoutMs = asNumber(options.timeoutMs) ?? DEFAULT_TIMEOUT_MS;
-        const maxResponseBytes = asNumber(options.maxResponseBytes) ?? DEFAULT_MAX_RESPONSE_BYTES;
-        const redirect = asOptionalString(options.redirect) as 'follow' | 'error' | 'manual' | undefined;
+        const failOnStatus = (options.failOnStatus as number[] | undefined) ?? [];
+        const timeoutMs = (options.timeoutMs as number | undefined) ?? DEFAULT_TIMEOUT_MS;
+        const maxResponseBytes = (options.maxResponseBytes as number | undefined) ?? DEFAULT_MAX_RESPONSE_BYTES;
+        const redirect = asOptionalString(options.redirect);
         const bodyVar = asOptionalString(options.bodyVar);
         const statusVar = asOptionalString(options.statusVar);
         const headersVar = asOptionalString(options.headersVar);
@@ -206,6 +222,12 @@ export class HttpRequestActionRunner implements ActionRunner {
                 error: `http.request: redirect:'follow' is not allowed — use 'manual' (default) or 'error' and re-issue the request per hop so each host is re-validated`,
             };
         }
+        if (redirect !== undefined && redirect !== 'manual' && redirect !== 'error') {
+            return {
+                ok: false,
+                error: `http.request: redirect must be 'manual' or 'error', got ${JSON.stringify(redirect)}`,
+            };
+        }
 
         // --- Allowlist gate ---
         if (this.allowlist.size === 0) {
@@ -231,7 +253,7 @@ export class HttpRequestActionRunner implements ActionRunner {
             rawResponse = await this.requester.rawRequest(method, url, body, {
                 headers,
                 timeout: timeoutMs,
-                redirect: redirect ?? 'manual',
+                redirect: (redirect ?? 'manual') as 'manual' | 'error', // validated above
                 maxResponseBytes,
             });
         } catch (err) {
@@ -267,9 +289,8 @@ function asOptionalString(value: unknown): string | undefined {
     return String(value);
 }
 
-function asNumber(value: unknown): number | undefined {
-    if (typeof value !== 'number' || Number.isNaN(value)) return undefined;
-    return value;
+function isFiniteNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value);
 }
 
 function asRecord(value: unknown): Record<string, string> | undefined {
@@ -283,9 +304,4 @@ function asRecord(value: unknown): Record<string, string> | undefined {
         }
     }
     return result;
-}
-
-function asNumberArray(value: unknown): number[] {
-    if (!Array.isArray(value)) return [];
-    return value.filter((v): v is number => typeof v === 'number' && !Number.isNaN(v));
 }

@@ -507,4 +507,44 @@ describe('HttpRequestActionRunner', () => {
         // The request must never be issued when 'follow' is requested.
         expect(fake.calls.length).toBe(0);
     });
+
+    test('unknown redirect mode is rejected, not passed through', async () => {
+        const { runner, fake } = newRunner();
+
+        const result = await runner.execute({ url: 'https://api.example.com/data', redirect: 'bogus' }, makeContext());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain("redirect must be 'manual' or 'error'");
+        expect(fake.calls.length).toBe(0);
+    });
+
+    // --- option type gates: a templated `${vars.*}` resolves to a string; it must fail
+    // loud rather than silently fall back to the default timeout / size cap / failure set.
+
+    test.each([
+        ['timeoutMs', '5000'],
+        ['maxResponseBytes', '1024'],
+        ['timeoutMs', Number.POSITIVE_INFINITY],
+    ])('non-numeric %s (%p) is rejected', async (key, value) => {
+        const { runner, fake } = newRunner();
+
+        const result = await runner.execute({ url: 'https://api.example.com/data', [key]: value }, makeContext());
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain(`${key} must be a number`);
+        expect(fake.calls.length).toBe(0);
+    });
+
+    test.each([['500'], [['500']], [[500, 'x']]])('malformed failOnStatus %p is rejected', async (value) => {
+        const { runner, fake } = newRunner();
+
+        const result = await runner.execute(
+            { url: 'https://api.example.com/data', failOnStatus: value },
+            makeContext(),
+        );
+
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('failOnStatus must be an array of numbers');
+        expect(fake.calls.length).toBe(0);
+    });
 });
