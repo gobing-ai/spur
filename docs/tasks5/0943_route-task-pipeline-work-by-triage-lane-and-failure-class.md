@@ -4,7 +4,7 @@ name: Route task-pipeline work by triage lane and failure class
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.006Z
-updated_at: "2026-09-25T22:04:07.961Z"
+updated_at: "2026-09-26T00:58:58.536Z"
 feature_id: D64
 priority: P2
 tags:
@@ -310,8 +310,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test-rerun + artifact | Live-YAML routing suite packages/app/tests/workflow/task-pipeline-triage-routing.test.ts — 14 pass / 0 fail (fresh re-run): lanes, caller-mode, sensitive, degraded-default, failure-class fix/retryable/stop/cap/missing-decision, frozen contracts; inline-pipeline-parity-check ok (12 actions / 4 guards / 10 workflows, worker report + review); YAML validates |
-| AC2 | MET | artifact | config/workflow-candidates.json:6-20 — candidate with 0938 measured baseline (agentRunCountMedian 0), honest 'projected from 0938, NOT shadow-run-confirmed' status, deadline 2026-11-24, ADR-076 revert clause; promotion check PASS (4 candidates, all verdicts null — spec'd pre-promotion state; verdict citation post-merge via promotion evaluate) |
+| AC1 — Task pipeline routes work by triage lane and failure class | MET | test | Live-YAML routing suite packages/app/tests/workflow/task-pipeline-triage-routing.test.ts — 14 pass / 0 fail (fresh re-run): lanes, caller-mode, sensitive, degraded-default, failure-class fix/retryable/stop/cap/missing-decision, frozen contracts; inline-pipeline-parity-check ok (12 actions / 4 guards / 10 workflows, worker report + review); YAML validates |
+| AC2 — Workflow shape changes are accepted only on measured benefit | MET | command | config/workflow-candidates.json:6-20 — candidate with 0938 measured baseline (agentRunCountMedian 0), honest 'projected from 0938, NOT shadow-run-confirmed' status, deadline 2026-11-24, ADR-076 revert clause; promotion check PASS (4 candidates, all verdicts null — spec'd pre-promotion state; verdict citation post-merge via promotion evaluate) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Add a non-pausing decide workflow action backed by DecisionMaker
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.005Z
-updated_at: "2026-09-25T08:38:29.873Z"
+updated_at: "2026-09-26T00:58:56.324Z"
 feature_id: D64
 priority: P1
 tags:
@@ -272,7 +272,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | example workflow decision-routing-example.yaml:58-74 kind decide non-pausing w/ degraded guards; targeted suites 54+14 pass 0 fail; fingerprint sha256:2851f179407e9c7eb150bf480bd15a6a565fbefa713bd6fd8fdf67b8133ba279 reproduced; gate PASS 9093 tests 0 fail |
+| AC1 — Fuzzy branching uses an explicit non-pausing decide action | MET | test | example workflow decision-routing-example.yaml:58-74 kind decide non-pausing w/ degraded guards; targeted suites 54+14 pass 0 fail; fingerprint sha256:2851f179407e9c7eb150bf480bd15a6a565fbefa713bd6fd8fdf67b8133ba279 reproduced; gate PASS 9093 tests 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

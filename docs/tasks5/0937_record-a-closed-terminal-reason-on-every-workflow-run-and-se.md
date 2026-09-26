@@ -4,7 +4,7 @@ name: Record a closed terminal reason on every workflow run and separate bookkee
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.000Z
-updated_at: "2026-09-25T04:24:00.423Z"
+updated_at: "2026-09-26T00:58:44.291Z"
 feature_id: D64
 priority: P1
 tags:
@@ -160,8 +160,8 @@ Implemented R1–R6. Two phases: an upstream engine release (operator-authorized
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `task show 0935 --json` status done; `task show 0936 --json` status done; full declared chain 0925-0936 closed before implementation start (task doc dependencies + History) |
-| AC2 | MET | test | every engine write surface audited: finalize classified (`action-trace.ts:199,301`, `observability.ts:490`), interrupt enum verbatim (`workflow-service.ts:947-952`), reopen NULLs; DB round-trip proof `terminal-reason.test.ts:100-131` yields terminal_reason='failed-guard' |
+| AC1 — Refactor work starts only after its prerequisite features finish | MET | command | `task show 0935 --json` status done; `task show 0936 --json` status done; full declared chain 0925-0936 closed before implementation start (task doc dependencies + History) |
+| AC2 — Every workflow run ends with a classified terminal reason | MET | test | every engine write surface audited: finalize classified (`action-trace.ts:199,301`, `observability.ts:490`), interrupt enum verbatim (`workflow-service.ts:947-952`), reopen NULLs; DB round-trip proof `terminal-reason.test.ts:100-131` yields terminal_reason='failed-guard' |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

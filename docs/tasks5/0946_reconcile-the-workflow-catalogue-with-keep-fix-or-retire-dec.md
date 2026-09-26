@@ -4,7 +4,7 @@ name: Reconcile the workflow catalogue with keep, fix or retire decisions
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.007Z
-updated_at: "2026-09-25T22:51:16.460Z"
+updated_at: "2026-09-26T00:59:01.856Z"
 feature_id: D64
 priority: P3
 tags:
@@ -317,7 +317,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | workflow validate valid ×9; workflow-catalog-parity.test.ts 1 pass/0 fail; inline-pipeline-parity-check ok (11 actions, 4 guards agree across 9 workflows); spur-check PASS 9176/0 and spur-check-feature PASS recorded in implement-0946-worker.md gates table (review re-ran both fresh). |
+| AC1 — Catalogue workflows are kept, fixed or retired on evidence | MET | test | workflow validate valid ×9; workflow-catalog-parity.test.ts 1 pass/0 fail; inline-pipeline-parity-check ok (11 actions, 4 guards agree across 9 workflows); spur-check PASS 9176/0 and spur-check-feature PASS recorded in implement-0946-worker.md gates table (review re-ran both fresh). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

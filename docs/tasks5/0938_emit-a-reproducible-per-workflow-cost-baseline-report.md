@@ -4,7 +4,7 @@ name: Emit a reproducible per-workflow cost baseline report
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.003Z
-updated_at: "2026-09-25T05:29:26.018Z"
+updated_at: "2026-09-26T00:58:53.034Z"
 feature_id: D64
 priority: P1
 tags:
@@ -200,7 +200,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Byte-equality test real-run-cost.test.ts:509; two live --json runs byte-identical and deep-equal to committed baseline; gate .spur/run/0938-test-gate.status=PASS (43651 B, 9029 pass/0 fail); fingerprint sha256:b8f7b48a2f3e554ded368c939fca0db5ae6d982773b2b2fe59364df1570e6f98 reproduced |
+| AC1 — A per-workflow cost baseline is reproducible from recorded runs | MET | test | Byte-equality test real-run-cost.test.ts:509; two live --json runs byte-identical and deep-equal to committed baseline; gate .spur/run/0938-test-gate.status=PASS (43651 B, 9029 pass/0 fail); fingerprint sha256:b8f7b48a2f3e554ded368c939fca0db5ae6d982773b2b2fe59364df1570e6f98 reproduced |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

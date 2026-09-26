@@ -4,7 +4,7 @@ name: Make idea-pipeline guards legible with terminal reasons on failure edges
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.007Z
-updated_at: "2026-09-25T20:28:19.525Z"
+updated_at: "2026-09-26T00:59:00.753Z"
 feature_id: D64
 priority: P3
 tags:
@@ -294,8 +294,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | structural | 0937 validator enforces terminalReason on every failureState edge; new YAML valid exit 0, old invalid - every failed/cancelled run terminates classified |
-| AC2 | MET | executed-test | Composition baseline 6->6 budget-verified; measured-benefit candidate complete with 0938-coverage citation; benefit-neutral routing proven by 3456-cell executed oracle parity; guard-parity fixture refreshed per 0874->0887 protocol; promotion check PASS; verdict null until post-promotion evaluate (adjudicated) |
+| AC1 — Every workflow run ends with a classified terminal reason | MET | command | 0937 validator enforces terminalReason on every failureState edge; new YAML valid exit 0, old invalid - every failed/cancelled run terminates classified |
+| AC2 — Workflow shape changes are accepted only on measured benefit | MET | test | Composition baseline 6->6 budget-verified; measured-benefit candidate complete with 0938-coverage citation; benefit-neutral routing proven by 3456-cell executed oracle parity; guard-parity fixture refreshed per 0874->0887 protocol; promotion check PASS; verdict null until post-promotion evaluate (adjudicated) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

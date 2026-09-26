@@ -4,7 +4,7 @@ name: Reuse check receipts across task-pipeline stages as a measured candidate
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-25T18:01:29.143Z"
+updated_at: "2026-09-26T00:58:55.218Z"
 feature_id: D64
 priority: P2
 tags:
@@ -266,8 +266,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Check runs once at boundary: recheck no-progress skip (quality-gate.ts:557-575), receipt confirmation at model stages (gate-checklists.md:92-94, secu-review.md:85-87), light accumulation skip at same digest (:452-464), precheck/verify/record gate-free (R4 test); 23/23 receipt tests + 2/2 dedup tests + gate attempt-2 PASS 9127/523 |
-| AC2 | MET | artifact | Candidate bound to 0938 baseline with 60-day evaluate-or-revert deadline (ADR-076); measured confirmation sequenced post-shadow-run per Plan step 5; no unmeasured promotion |
+| AC1 — The comprehensive check runs once at the quality boundary | MET | test | Check runs once at boundary: recheck no-progress skip (quality-gate.ts:557-575), receipt confirmation at model stages (gate-checklists.md:92-94, secu-review.md:85-87), light accumulation skip at same digest (:452-464), precheck/verify/record gate-free (R4 test); 23/23 receipt tests + 2/2 dedup tests + gate attempt-2 PASS 9127/523 |
+| [non-behavior] AC2 — Workflow shape changes are accepted only on measured benefit | MET | static-ref | Candidate bound to 0938 baseline with 60-day evaluate-or-revert deadline (ADR-076); measured confirmation sequenced post-shadow-run per Plan step 5; no unmeasured promotion |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

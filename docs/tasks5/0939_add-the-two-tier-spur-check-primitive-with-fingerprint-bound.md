@@ -4,7 +4,7 @@ name: Add the two-tier spur-check primitive with fingerprint-bound receipts
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-25T06:30:52.015Z"
+updated_at: "2026-09-26T00:58:54.138Z"
 feature_id: D64
 priority: P1
 tags:
@@ -221,8 +221,8 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | fixture light rerun at same digest skipped:3 with 3 skip log lines; quality-gate-receipt.test.ts:331 accumulation test; skip guard quality-gate.ts:407-424 |
-| AC2 | MET | test | run writes the only reusable receipt quality-gate.ts:577-597; readReceiptStatus:257 returns light-only (fixture confirmed); light never demotes full; digest captured at config/workflows/task-pipeline.yaml:419; test :298 never reports reuse |
+| AC1 — Lightweight checks accumulate during development | MET | test | fixture light rerun at same digest skipped:3 with 3 skip log lines; quality-gate-receipt.test.ts:331 accumulation test; skip guard quality-gate.ts:407-424 |
+| AC2 — The comprehensive check runs once at the quality boundary | MET | test | run writes the only reusable receipt quality-gate.ts:577-597; readReceiptStatus:257 returns light-only (fixture confirmed); light never demotes full; digest captured at config/workflows/task-pipeline.yaml:419; test :298 never reports reuse |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
