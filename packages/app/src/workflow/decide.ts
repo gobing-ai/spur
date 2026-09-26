@@ -58,6 +58,11 @@ export interface DecideResult {
     confidence: number | null;
     degraded: boolean;
     reason: 'accepted' | DecideDegradedReason;
+    /**
+     * Decision provenance (0976 R2): `model` only when a backend's answer was accepted;
+     * every degraded row carries the declared default, so a fallback is never read as a decision.
+     */
+    source: 'model' | 'default';
     evidenceDigest: string | null;
     durationMs: number;
 }
@@ -91,6 +96,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
         confidence,
         degraded: true,
         reason,
+        source: 'default',
         evidenceDigest,
         durationMs: deps.now() - started,
     });
@@ -143,6 +149,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
                 confidence: answer.confidence,
                 degraded: false,
                 reason: 'accepted',
+                source: 'model',
                 evidenceDigest,
                 durationMs: deps.now() - started,
             };
@@ -159,6 +166,7 @@ export async function runDecide(options: DecideOptions, deps: DecideDeps): Promi
             confidence,
             degraded: false,
             reason: 'accepted',
+            source: 'model',
             evidenceDigest,
             durationMs: deps.now() - started,
         };

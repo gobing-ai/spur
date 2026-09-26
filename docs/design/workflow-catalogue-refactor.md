@@ -137,8 +137,10 @@ A first-class, **non-pausing** workflow action for fuzzy classification:
   plumbing (`DecisionProvenance`, `redactAndBound`, lazy default maker). Opt-in via
   `workflow.decideDecisionMaker` (default false, sibling of `workflow.hitlDecisionMaker`); when off,
   every `decide` returns its declared default with `degraded: true`.
-- Writes `{value, method, backend, confidence, degraded, reason, evidenceDigest, durationMs}` to
-  `resultFile`; guards read the file like other status files (no re-evaluation in guards).
+- Writes `{value, method, backend, confidence, degraded, reason, source, evidenceDigest, durationMs}`
+  to `resultFile`; guards read the file like other status files (no re-evaluation in guards).
+  `source` is `model` only for an accepted backend answer and `default` for every degraded row
+  (0976); the inline delegate also logs `decide node=… value=… source=… reason=…` to the run log.
 - Inline driver parity: `inline-run-setup --decide` runs the same app function; `decide` joins the
   parity check's documented action kinds.
 - Distinct from ADR-123: that decorates *pausing* HITL actions; `decide` never pauses and never
@@ -151,7 +153,7 @@ Each item is a `config/workflow-candidates.json` record with pinned baseline and
 | Candidate | Change | Expected measure |
 | --- | --- | --- |
 | task-pipeline triage lanes | new deterministic `triage` state (diffstat; sensitive paths force safety), then `decide task-triage`; `low` produces `mode=fast` for the **existing** fast-path edges | fewer `agent.run` per low-risk task |
-| task-pipeline failure triage | `decide failure-class` (retryable / fix / stop) before retry; stop class exits `failed-check` | fewer `retry-exhausted` terminals |
+| task-pipeline failure triage | `decide failure-class` (fix / stop) before retry; stop class exits `failed-check` (0976 collapsed the unreachable `retryable` lane) | fewer `retry-exhausted` terminals |
 | check dedup | review checklists read `check-receipt`; no-progress `test-recheck` skips the gate | wall time of test-recheck and review |
 | wrapup doc-sync | deterministic drift probe produces `mode=fast` for the **existing** fast-path edge; skipping doc-sync also skips learnings capture (weighed in the verdict) | fewer doc-sync `agent.run` |
 | history-anatomy | measurement only (a cache branch already exists); graph decision in Phase 3 | cache-hit rate, failure mix |

@@ -103,6 +103,7 @@ describe('runDecide acceptance', () => {
             confidence: 0.92,
             degraded: false,
             reason: 'accepted',
+            source: 'model',
             evidenceDigest: expect.any(String),
             durationMs: 0,
         });
@@ -173,6 +174,8 @@ describe('runDecide degraded branches (0941 R3: never pause, never throw)', () =
         );
         expect(result.degraded).toBe(true);
         expect(result.reason).toBe('disabled');
+        // 0976 R2: a declared-default fallback is never presented as a model decision.
+        expect(result.source).toBe('default');
         expect(result.value).toBe('stop');
         expect(result.backend).toBeNull();
         expect(result.confidence).toBeNull();
@@ -190,6 +193,7 @@ describe('runDecide degraded branches (0941 R3: never pause, never throw)', () =
         );
         expect(result.degraded).toBe(true);
         expect(result.reason).toBe('no-backend');
+        expect(result.source).toBe('default');
         expect(result.value).toBe('stop');
         expect(result.backend).toBeNull();
     });

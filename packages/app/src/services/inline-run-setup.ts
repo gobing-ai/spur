@@ -425,6 +425,8 @@ export interface InlineDecideOutcome {
     readonly value?: string;
     readonly degraded?: boolean;
     readonly reason?: string;
+    /** Decision provenance (0976 R2): `model` = accepted backend answer; `default` = declared fallback. */
+    readonly source?: 'model' | 'default';
     readonly backend?: string | null;
     readonly confidence?: number | null;
     readonly resultFile?: string;
@@ -469,6 +471,7 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
         value: string;
         degraded: boolean;
         reason: string;
+        source: 'model' | 'default';
         backend: string | null;
         confidence: number | null;
         durationMs: number;
@@ -478,6 +481,7 @@ export async function runDecideForInlineRun(input: InlineDecideInput): Promise<I
         value: decision.value,
         degraded: decision.degraded,
         reason: decision.reason,
+        source: decision.source,
         backend: decision.backend,
         confidence: decision.confidence,
         resultFile: join(resolve(input.workdir), parsed.data.resultFile),
