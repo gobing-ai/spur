@@ -148,10 +148,10 @@ function appendToLedger(event: ToolEvent, command: string | undefined): void {
             session: sessionId,
             type: event.tool_name?.toLowerCase() === 'read' ? 'read' : 'write',
             tool: event.tool_name,
-            path: typeof path === 'string' ? path : null,
+            file: typeof path === 'string' ? path : undefined,
             summary,
             tokens,
-            timestamp: new Date().toISOString(),
+            ts: new Date().toISOString(),
         });
 
         appendFileSync(ledgerFilePath(), `${ledgerEntry}\n`);
@@ -196,7 +196,7 @@ function initSession(): void {
             type: 'session_start',
             agent: session.agent,
             model: session.model,
-            timestamp: session.started_at,
+            ts: session.started_at,
         });
         appendFileSync(ledgerFilePath(), `${startEntry}\n`);
     } catch {
@@ -236,7 +236,7 @@ function cleanupSession(): void {
             reads,
             writes,
             tokens,
-            timestamp: new Date().toISOString(),
+            ts: new Date().toISOString(),
         });
         appendFileSync(ledgerFilePath(), `${endEntry}\n`);
 

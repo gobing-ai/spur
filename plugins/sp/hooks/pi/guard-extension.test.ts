@@ -310,7 +310,7 @@ describe('session lifecycle and token ledger', () => {
 
         const events = readLedger(dir).filter((e) => e.type === 'read');
         expect(events).toHaveLength(1);
-        expect(events[0]?.path).toBe('/x.ts');
+        expect(events[0]?.file).toBe('/x.ts');
         expect(events[0]?.tokens).toBe(0);
     });
 
@@ -321,7 +321,7 @@ describe('session lifecycle and token ledger', () => {
 
         const events = readLedger(dir).filter((e) => e.type === 'read');
         expect(events).toHaveLength(1);
-        expect(events[0]?.path).toBe('/y.ts');
+        expect(events[0]?.file).toBe('/y.ts');
     });
 
     test('secret-bearing commands are redacted before token estimation', async () => {
@@ -361,6 +361,24 @@ describe('session lifecycle and token ledger', () => {
         const events = readLedger(dir).filter((e) => e.type === 'write');
         expect(events[0]?.summary).toBe('TODO');
         expect(events[1]?.summary).toBe('(ToolX)');
+    });
+
+    test('every row carries the fields the ledger reader requires (ts, session, type)', async () => {
+        // parseLedgerLine (packages/app/src/services/token-ledger-service.ts) drops any row
+        // missing a string `ts`/`session`/`type`; Pi rows once used `timestamp` and vanished.
+        const dir = makeTempDir('spur-pi-schema-');
+        await handlers.session_start?.({}, makeCtx());
+        await handlers.tool_result?.({ toolName: 'read', input: { path: '/z.ts' } }, makeCtx());
+        await handlers.session_shutdown?.({}, makeCtx());
+
+        const rows = readLedger(dir);
+        expect(rows.map((r) => r.type)).toEqual(['session_start', 'read', 'session_end']);
+        for (const row of rows) {
+            expect(typeof row.ts).toBe('string');
+            expect(typeof row.session).toBe('string');
+            expect(row.timestamp).toBeUndefined();
+        }
+        expect(rows[1]?.file).toBe('/z.ts');
     });
 
     test('tool_result is a no-op when no session is active', async () => {
