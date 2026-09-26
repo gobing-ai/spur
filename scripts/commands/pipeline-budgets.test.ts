@@ -130,7 +130,7 @@ describe('detectSilentRaises (0607 R3 — no silent budget bump)', () => {
             idea: budget({ modelQueries: 5, wallClockMs: 7200000, decision: priorDecision }),
         };
         expect(detectSilentRaises(withDecision, after)).toHaveLength(1);
-        expect(detectSilentRaises(withDecision, after)[0].pipeline).toBe('task-pipeline');
+        expect(detectSilentRaises(withDecision, after)[0]?.pipeline).toBe('task-pipeline');
     });
 
     test('null → number establishes a budget, not a raise; new pipelines are not raises', () => {

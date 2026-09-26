@@ -185,10 +185,10 @@ export async function loadQueryCounts(workflowsDir: string = WORKFLOWS_DIR): Pro
     try {
         const out: Record<string, number> = {};
         for (const entry of await readdir(workflowsDir)) {
-            const m = /^(.+)\.ya?ml$/.exec(entry);
-            if (!m) continue;
+            const name = /^(.+)\.ya?ml$/.exec(entry)?.[1];
+            if (!name) continue;
             const def = parse(await readFile(join(workflowsDir, entry), 'utf-8'));
-            out[m[1]] = extractResolvedWorkflowFacts(def).modelQueries.length;
+            out[name] = extractResolvedWorkflowFacts(def).modelQueries.length;
         }
         return out;
     } catch {

@@ -45,7 +45,9 @@ describe('isolated eval project', () => {
             expect(first.tasksDir).toContain(`${first.projectDir}/tests/fixtures/pipeline-eval/tasks`);
 
             const localConfig = await Bun.file(join(first.projectDir, '.spur/config.yaml')).text();
-            const repositoryConfig = await Bun.file('.spur/config.yaml').text();
+            const repositoryConfig = await Bun.file(
+                fileURLToPath(new URL('../../.spur/config.yaml', import.meta.url)),
+            ).text();
             expect(localConfig).toContain('tests/fixtures/pipeline-eval/tasks:');
             expect(localConfig).toContain('baseCounter: 9499');
             expect(repositoryConfig).not.toContain('tests/fixtures/pipeline-eval/tasks:');
@@ -144,8 +146,8 @@ describe('workflow facts (0607 R1/R4; SSOT moved to live definitions by 0775)', 
     test('loadWorkflowFacts extracts modelQueries + action keys from the live definitions', async () => {
         const workflowsDir = join(fileURLToPath(new URL('../../', import.meta.url)), 'config/workflows');
         const facts = await loadWorkflowFacts(workflowsDir);
-        expect(facts['task-pipeline'].modelQueries).toContain('implement');
-        expect(facts['task-pipeline'].actions.length).toBeGreaterThan(0);
+        expect(facts['task-pipeline']?.modelQueries).toContain('implement');
+        expect(facts['task-pipeline']?.actions.length).toBeGreaterThan(0);
     });
 
     test('workflowKeyForPipeline maps a definition path to its workflow name', () => {

@@ -25,9 +25,9 @@ const PLUGIN = join(REPO, 'plugins', 'sp');
 function scanValueImports(source: string, onBare: (specifier: string) => void): void {
     const lines = source.split('\n');
     let stmtStart = 0;
-    for (let i = 0; i < lines.length; i++) {
-        if (/^\s*(?:import|export)\b/.test(lines[i])) stmtStart = i;
-        const spec = /(?:from\s*|import\s*|import\s*\(\s*)['"]([^'"]+)['"]/.exec(lines[i])?.[1];
+    for (const [i, line] of lines.entries()) {
+        if (/^\s*(?:import|export)\b/.test(line)) stmtStart = i;
+        const spec = /(?:from\s*|import\s*|import\s*\(\s*)['"]([^'"]+)['"]/.exec(line)?.[1];
         // Report once per statement, on the line carrying the specifier (single-line
         // statements report here; multiline ones report on the `} from '...'` closer).
         if (!spec) continue;

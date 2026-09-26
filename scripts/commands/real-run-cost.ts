@@ -250,7 +250,7 @@ export function nearestRankPercentile(values: number[], p: number): number | nul
     if (values.length === 0) return null;
     const sorted = [...values].sort((a, b) => a - b);
     const rank = Math.min(Math.max(Math.ceil((p / 100) * sorted.length), 1), sorted.length);
-    return sorted[rank - 1];
+    return sorted[rank - 1] ?? null;
 }
 
 /** Aggregate per-workflow wall/active/cost over terminal non-dry runs, with every

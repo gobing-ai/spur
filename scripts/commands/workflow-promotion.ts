@@ -457,7 +457,7 @@ export function countRealTerminalRuns(db: Database): Map<string, number> {
              GROUP BY workflow_name`,
         )
         .all() as Array<{ workflow_name: string; n: number }>;
-    return new Map(rows.map((r) => [r.workflow_name ?? '', r.n]).filter(([name]) => name !== ''));
+    return new Map(rows.map((r): [string, number] => [r.workflow_name ?? '', r.n]).filter(([name]) => name !== ''));
 }
 
 /**

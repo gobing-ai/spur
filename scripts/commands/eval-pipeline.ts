@@ -124,11 +124,11 @@ export async function loadWorkflowFacts(workflowsDir: string): Promise<Record<st
     try {
         const out: Record<string, WorkflowFacts> = {};
         for (const entry of await readdir(workflowsDir)) {
-            const m = /^(.+)\.ya?ml$/.exec(entry);
-            if (!m) continue;
+            const name = /^(.+)\.ya?ml$/.exec(entry)?.[1];
+            if (!name) continue;
             const def = parse(await readFile(join(workflowsDir, entry), 'utf-8'));
             const facts = extractResolvedWorkflowFacts(def);
-            out[m[1]] = { modelQueries: facts.modelQueries, actions: Object.keys(facts.actions) };
+            out[name] = { modelQueries: facts.modelQueries, actions: Object.keys(facts.actions) };
         }
         return out;
     } catch {
