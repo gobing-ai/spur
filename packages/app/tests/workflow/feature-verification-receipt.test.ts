@@ -516,7 +516,27 @@ describe('feature verification receipt (0915, v1 contract)', () => {
                 definitionDigest: 'sha256:different',
             });
             expect(result.ok).toBe(false);
-            if (!result.ok) expect(result.reason).toBe('contract-mismatch');
+            if (!result.ok) {
+                expect(result.reason).toBe('contract-mismatch');
+                expect(result.detail).toEndWith('(definitionDigest)');
+            }
+        } finally {
+            rmSync(repo, { recursive: true, force: true });
+        }
+    });
+
+    // 0957: bundled and source-local CLIs resolve the same shared definition from
+    // different install paths; identical bytes must not read as a changed verifier.
+    test('same definition resolved from a different install path still validates', async () => {
+        const repo = makeTempGitRepo();
+        try {
+            const digest = await captureFeatureReceiptDigest(repo, FEATURE_MD);
+            await recordPass(repo, digest);
+            const result = await validate(repo, undefined, {
+                ...VERIFIER,
+                sourcePath: ['apps', 'cli', 'config', 'workflows', 'feature-verification.yaml'].join('/'),
+            });
+            expect(result.ok).toBe(true);
         } finally {
             rmSync(repo, { recursive: true, force: true });
         }

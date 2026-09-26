@@ -328,7 +328,8 @@ error reasons, checked in order: `missing`, `malformed`, `cross-feature`, `diver
 not done, verifier digest mismatch, or receipt not registered as a run artifact —
 skipped when no run port is supplied), `contract-mismatch` (recorded verifier name/
 layer/digest or `verificationCmd` differs from the currently resolved `feature-verification`
-definition — `--cmd` overrides cannot forge a contract), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
+definition — `--cmd` overrides cannot forge a contract; `sourcePath` is diagnostic only, since
+bundled and source-local CLIs resolve the same shared definition from different paths), and `stale` (digest drift: the recorded `inputDigest` no longer matches the current tree). Git failure during digest capture is
 fail-closed (0751 R1). All completion paths enforce: `feature advance`'s done hop and
 the engine `verifying→done` guard (`feature check --strict --as done`).
 

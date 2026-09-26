@@ -18,8 +18,9 @@
  *     rejection),
  *   - **the verifier contract** — the selected `feature-verification`
  *     definition (name, source path, layer, definition digest) and the
- *     effective check command are recorded and compared at validation against
- *     the currently selected definition (contract-mismatch rejection),
+ *     effective check command are recorded; all but the install-dependent
+ *     source path are compared at validation against the currently selected
+ *     definition (contract-mismatch rejection),
  *   - **the checked inputs** — one digest from the shared proof-input
  *     fingerprint engine (R4: no second digest implementation), captured
  *     before **and** after the pass; a mismatch records FAIL. Tree, spec,
@@ -58,7 +59,7 @@ export const DEFAULT_FEATURE_VERIFICATION_CMD = 'bun run spur-check-feature';
 export interface FeatureVerifierIdentity {
     /** Definition name as resolved (the workflow key, e.g. `feature-verification`). */
     name: string;
-    /** Absolute path of the resolved workflow definition file. */
+    /** Absolute path of the resolved workflow definition file (diagnostic; not part of the identity check). */
     sourcePath: string;
     /** Resolution layer of the definition (`project`, `registered` or `shared`). */
     layer: string;
@@ -449,18 +450,17 @@ export async function validateFeatureVerificationReceipt(
     // Verifier contract: the receipt must match the currently selected
     // definition identity and its configured command — a `--cmd` override that
     // differs from the configured command records a receipt but can never
-    // satisfy completion.
+    // satisfy completion. Identity is name + layer + content digest; the
+    // absolute `sourcePath` is diagnostic only — bundled and source-local CLIs
+    // resolve the same shared definition from different install paths (0957).
     const verifier = latest.verifier;
-    if (
-        verifier.name !== options.currentVerifier.name ||
-        verifier.sourcePath !== options.currentVerifier.sourcePath ||
-        verifier.layer !== options.currentVerifier.layer ||
-        verifier.definitionDigest !== options.currentVerifier.definitionDigest
-    ) {
+    const current = options.currentVerifier;
+    const drifted = (['name', 'layer', 'definitionDigest'] as const).filter((k) => verifier[k] !== current[k]);
+    if (drifted.length > 0) {
         return {
             ok: false,
             reason: 'contract-mismatch',
-            detail: `receipt recorded verifier ${verifier.name}@${verifier.layer} (${verifier.definitionDigest}), completion evaluates ${options.currentVerifier.name}@${options.currentVerifier.layer} (${options.currentVerifier.definitionDigest}) — the selected definition changed after the pass`,
+            detail: `receipt recorded verifier ${verifier.name}@${verifier.layer} (${verifier.definitionDigest}), completion evaluates ${current.name}@${current.layer} (${current.definitionDigest}) — the selected definition changed after the pass (${drifted.join(', ')})`,
         };
     }
     if (latest.verificationCmd !== options.currentVerificationCmd) {
