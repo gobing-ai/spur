@@ -531,11 +531,14 @@ states:
                     mkdir -p .spur/run; if [ -f plugins/sp/scripts/task-diffstat.ts ]; then bun plugins/sp/scripts/task-diffstat.ts --spur-bin "$spurBin"; elif D="$(superskill script path sp task-diffstat.mjs 2>/dev/null)" && [ -f "$D" ]; then node "$D"; else echo "task-diffstat failed closed — task-diffstat script not found — run 'superskill install sp'" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; fi; exit 0
           # (b)+(c) lane pre-guard BEFORE decide: a caller-set mode is projected verbatim (R2b);
           # a sensitive path or >400 changed lines pins safety (R2c) and the decide result below
-          # is never consulted. An unreadable/missing diffstat row leaves the file empty → safety.
+          # is never consulted. A missing/malformed diffstat row (producer crashed or never ran,
+          # disk error) pins safety HERE: an empty mode file would let the low decide row project
+          # the fast lane downstream, so the "never to fast" fail-safe is enforced at the guard,
+          # not by the projection (the full-suite gate run exposed this fail-open path).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; [ -n "$mode" ] && printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt" && exit 0; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' ".spur/run/$wbs-diffstat.json" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
+                    mkdir -p .spur/run; if [ -n "$mode" ]; then printf '%s\n' "$mode" > ".spur/run/$wbs-mode.txt"; exit 0; fi; DF=".spur/run/$wbs-diffstat.json"; if ! jq -e 'type == "object"' "$DF" >/dev/null 2>&1; then printf 'safety\n' > ".spur/run/$wbs-mode.txt"; exit 0; fi; jq -r 'if .sensitive == true or ((.insertions // 0) + (.deletions // 0)) > 400 then "safety" else empty end' "$DF" 2>/dev/null > ".spur/run/$wbs-mode.txt"; exit 0
           # (d) lane decision — degrades to the standard default whenever workflow.decideDecisionMaker
           # is off (R4), so with the flag off this state is pure shell: no model call is made.
           - kind: decide

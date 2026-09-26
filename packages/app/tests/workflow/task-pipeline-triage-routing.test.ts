@@ -12,7 +12,8 @@
  * - triage lane production: low → fast; standard/high → review (empty mode), caller-set mode
  *   is never overridden (R2b), sensitive paths or >400 changed lines pin safety with the
  *   decide result ignored (R2c), a degraded decide default degrades to the standard lane (R4),
- *   and a fail-closed diffstat (missing run base) degrades to safety — never to fast.
+ *   and a fail-closed diffstat (missing run base, or a producer that wrote no row at all)
+ *   degrades to safety — never to fast.
  * - R5: every triage run appends `<runId> <wbs> <reason>` to .spur/memory/task-pipeline-routes.log
  *   with the reason naming the lane origin (caller-set / triage low / deterministic-high / standard).
  * - failure-class routing: stop → failed(failed-check) BEFORE the cap (never mislabeled),
@@ -25,7 +26,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVars } from '@gobing-ai/spur-config';
@@ -291,6 +292,20 @@ describe('task-pipeline 0943 — triage state routing (R1/R2)', () => {
         runOnEnterShells('triage', staged.cwd, staged.vars);
         expect(readMode(staged)).toBe('safety');
         expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
+        rmSync(staged.cwd, { recursive: true, force: true });
+    });
+
+    test('fail-safe: a producer that wrote no diffstat row pins safety, never fast', () => {
+        // A crashed/unstartable task-diffstat writes nothing and its shell still exits 0, so the
+        // ABSENT row must resolve the lane. An empty mode file would then let the `low` decide
+        // row project `fast` downstream (the fail-open path a loaded full-suite run exposed).
+        const staged = stage({ triageDecision: { value: 'low' } });
+        writeFileSync(join(staged.cwd, 'plugins/sp/scripts/task-diffstat.ts'), "throw new Error('producer down');\n");
+        runOnEnterShells('triage', staged.cwd, staged.vars);
+        expect(existsSync(join(staged.cwd, '.spur/run', `${WBS}-diffstat.json`))).toBe(false);
+        expect(readMode(staged)).toBe('safety');
+        expect(firstPassingEdge('triage', staged.cwd, edgeVars(staged)).to).toBe('review');
+        expect(lastRouteLine(staged)).toBe(`${RUN_ID} ${WBS} safety:triage deterministic-high`);
         rmSync(staged.cwd, { recursive: true, force: true });
     });
 });

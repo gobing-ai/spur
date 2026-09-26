@@ -46,6 +46,24 @@ function readRow(cwd: string, wbs = '0943'): Record<string, unknown> {
     return JSON.parse(spawnSync('cat', [join(cwd, '.spur/run', `${wbs}-diffstat.json`)], { encoding: 'utf8' }).stdout);
 }
 
+/**
+ * A fail-safe case's diagnostic is the operator's, not the test runner's: capture the write
+ * so the assertion still pins the message without leaking it into the suite output.
+ */
+function capturingStderr<T>(body: () => T): { result: T; stderr: string } {
+    const seen: string[] = [];
+    const original = process.stderr.write;
+    process.stderr.write = ((chunk: unknown): boolean => {
+        seen.push(String(chunk));
+        return true;
+    }) as typeof process.stderr.write;
+    try {
+        return { result: body(), stderr: seen.join('') };
+    } finally {
+        process.stderr.write = original;
+    }
+}
+
 describe('task-diffstat (0943)', () => {
     test('counts tracked changes plus untracked files against the anchored run base', () => {
         const cwd = makeRepo();
@@ -120,7 +138,8 @@ describe('task-diffstat (0943)', () => {
     test('missing run base fails safe (sensitive, empty diff, exit 0)', () => {
         const cwd = makeRepo();
         writeFileSync(join(cwd, 'apps/cli/src/index.ts'), 'export const changed = true;\n');
-        const result = runDiffstat({ wbs: '0943' }, { cwd });
+        const { result, stderr } = capturingStderr(() => runDiffstat({ wbs: '0943' }, { cwd }));
+        expect(stderr).toContain('run base .spur/run/<wbs>-base.sha missing or malformed');
         expect(result.exitCode).toBe(0);
         expect(result).toMatchObject({ files: 0, insertions: 0, deletions: 0, sensitive: true });
         expect(readRow(cwd)).toMatchObject({ sensitive: true });
@@ -129,14 +148,23 @@ describe('task-diffstat (0943)', () => {
     test('a failing git probe fails safe instead of throwing', () => {
         const cwd = makeRepo();
         anchorBase(cwd);
-        const result = runDiffstat({ wbs: '0943' }, { cwd }, () => ({ status: 128, stdout: '' }));
+        const { result, stderr } = capturingStderr(() =>
+            runDiffstat({ wbs: '0943' }, { cwd }, () => ({ status: 128, stdout: '' })),
+        );
+        expect(stderr).toContain('git diff --numstat failed (status=128)');
         expect(result.exitCode).toBe(0);
         expect(result.sensitive).toBe(true);
     });
 
     test('an empty wbs is a mis-invocation (exit 1) and stray argv is usage (exit 2)', () => {
-        expect(runDiffstat({}, {}).exitCode).toBe(1);
-        expect(main(['unexpected'], { wbs: '0943' })).toBe(2);
+        const { result, stderr } = capturingStderr(() => {
+            const exitCode = runDiffstat({}, {}).exitCode;
+            return { exitCode, usageExit: main(['unexpected'], { wbs: '0943' }) };
+        });
+        expect(stderr).toContain('wbs is empty — refusing to guess the run artifact path');
+        expect(stderr).toContain(TASK_DIFFSTAT_USAGE);
+        expect(result.exitCode).toBe(1);
+        expect(result.usageExit).toBe(2);
         expect(TASK_DIFFSTAT_USAGE).toContain('wbs');
     });
 
