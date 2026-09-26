@@ -4,7 +4,7 @@ name: "Satisfy the D64 feature-done gate: scenario-key verdict evidence and add 
 status: todo
 template: feature-impl
 created_at: 2026-09-25T23:21:04.700Z
-updated_at: "2026-09-26T00:01:28.366Z"
+updated_at: "2026-09-26T00:10:14.667Z"
 feature_id: D64
 
 ac_altitude: task-local
@@ -30,7 +30,7 @@ Scope when picked up: run `/sp:dev-verify 0937..0946` re-keying evidence rows to
 - [ ] R1. Re-key the recorded verdict evidence of tasks 0937–0946 so each mapped D64 scenario has a MET row whose `id` is the task's **full AC label** (e.g. `AC1 — Refactor work starts only after its prerequisite features finish`) per the coverage map in Design; overall verdict PASS. Rows are **additive**: every existing requirement row (`R1`…`Rn`) and its evidence stays; only bare `ACn` ids are replaced by full labels, evidence sentences carried over verbatim. Use the sanctioned correction chain (answer file → `spur task verdict --from-answer` → `spur task record`) so the tracked `## Testing` copy carries the keys too. No production code changes.
 - [ ] R2. Produce the D64 dogfood artifact: drive one D64-delivered surface end-to-end, write `docs/dogfood/<date>-d64-<slug>-dogfood.md`, and append the tracked `docs/dogfood/INDEX.md` line containing a `d64` filename segment (the gate reads INDEX.md; reports are gitignored).
 - [ ] R3. Close 0956 (verdict recorded, status done) **before** the receipt pass — task record/done writes touch the D64 feature file, which is part of the receipt input digest. 0956's AC section must not contain D64 scenario titles (it would become a covering task and its task-local rows would fire `L4.verdict-rows-match-no-scenario`).
-- [ ] R4. Post-close: record a fresh feature-verification receipt with `spur workflow run feature-verification.yaml --vars '{"featureId":"D64"}'` (`bun run spur-check-feature` alone does NOT write a receipt), using the **same `spur` binary** that evaluates the gate; then `spur feature check D64 --strict --as done --json` PASS with zero errors.
+- [ ] R4. Post-close: record a fresh feature-verification receipt with `spur workflow run feature-verification.yaml --vars '{"featureId":"D64"}'` (`bun run spur-check-feature` alone does NOT write a receipt); then `spur feature check D64 --strict --as done --json` PASS with zero errors.
 - [ ] R5. Transition D64 verifying → done, `spur feature refresh D64`, sync derived docs in the same commit; tree ends with only intentional changes.
 
 ### Acceptance Criteria
@@ -83,6 +83,47 @@ Supersedes conflicting points in the earlier entry:
 - **Does `spur-check-feature` refresh the receipt?** No — it only runs checks. The receipt is written only by the `feature-verification` workflow (`config/workflows/feature-verification.yaml`).
 - **Why close 0956 before the receipt?** Digest = git tree (excl. `docs/tasks*`, `docs/features*`) + normalized feature content + learnings. Task record/done updates the D64 feature file (precedent `2b8e5601a`), so any task write after the receipt makes it stale. Likewise no `sp:dev-wrap`/learnings writes between receipt and gate.
 
+#### Q&A entry — 2026-09-26T00:10:14.459Z
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-25T23:53:45.191Z
+
+- **In-place JSON edits vs re-verify?** Never edit `.spur/run/<wbs>-verdict.json` directly — bypassing the record chain breaks the receipt trail. Sanctioned path (the gate's own repair hint): `/sp:dev-verify <wbs>` re-verifies evidence against the tree and re-records keyed rows.
+- **Keep task-local R rows alongside scenario rows?** No. Any row matching no scenario re-fires `L4.verdict-rows-match-no-scenario`; keyed verdicts carry only scenario-titled rows. Risk: the already-closed tasks' own `spur task check --as done` may regress (task-local requirements no longer mirrored). Canary step 2 detects this on 0937 before the batch; acceptance authority for THIS task is the feature gate. If L3 regression hard-blocks, surface to operator — do not silently waive.
+- **A re-verify turns a task non-PASS?** That is a real regression: halt the batch, do not force MET, file a follow-up task, leave the D64 gate open.
+- **0947?** Untouched — pre-batch task, zero gate findings.
+- **Dogfood scope?** One end-to-end drive of a D64-delivered surface (wrapup-pipeline run or the feature-check flow itself), recorded in the established docs/dogfood report shape (commands + outcomes). INDEX.md is the tracked gate evidence; the report file is the audit trail.
+- **Why receipt refresh is last:** any doc/surface mutation after the pass invalidates the fingerprinted receipt again (that is exactly how wrapall `d7cf0c8d5` invalidated the wrapall-time receipt). Refresh order: evidence re-keying → dogfood commit → receipt pass → close 0956 → final gate → transition.
+
+#### Q&A entry — 2026-09-26T00:01:27.921Z
+
+<!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
+     condition. Not a parking lot for open questions — an unanswered question here means the task
+     is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-25T23:53:45.191Z
+
+- **In-place JSON edits vs re-verify?** Never edit `.spur/run/<wbs>-verdict.json` directly — bypassing the record chain breaks the receipt trail. Sanctioned path (the gate's own repair hint): `/sp:dev-verify <wbs>` re-verifies evidence against the tree and re-records keyed rows.
+- **Keep task-local R rows alongside scenario rows?** No. Any row matching no scenario re-fires `L4.verdict-rows-match-no-scenario`; keyed verdicts carry only scenario-titled rows. Risk: the already-closed tasks' own `spur task check --as done` may regress (task-local requirements no longer mirrored). Canary step 2 detects this on 0937 before the batch; acceptance authority for THIS task is the feature gate. If L3 regression hard-blocks, surface to operator — do not silently waive.
+- **A re-verify turns a task non-PASS?** That is a real regression: halt the batch, do not force MET, file a follow-up task, leave the D64 gate open.
+- **0947?** Untouched — pre-batch task, zero gate findings.
+- **Dogfood scope?** One end-to-end drive of a D64-delivered surface (wrapup-pipeline run or the feature-check flow itself), recorded in the established docs/dogfood report shape (commands + outcomes). INDEX.md is the tracked gate evidence; the report file is the audit trail.
+- **Why receipt refresh is last:** any doc/surface mutation after the pass invalidates the fingerprinted receipt again (that is exactly how wrapall `d7cf0c8d5` invalidated the wrapall-time receipt). Refresh order: evidence re-keying → dogfood commit → receipt pass → close 0956 → final gate → transition.
+
+#### Q&A entry — 2026-09-25 refinement correction (verified from source)
+
+Supersedes conflicting points in the earlier entry:
+
+- **Scenario-only rows? No — additive.** `L4.verdict-rows-match-no-scenario` fires only when **no** row matches any scenario (`feature-check.ts:920`, `rows.some(...)`), so task-local `R*` rows are harmless. Dropping them would also fail `verify-answer-lint` (missing requirement IDs) and regress L3 `task check --as done`. Keep all rows; re-key only the AC ids.
+- **What id matches?** Proven with `normalizeTitle` (`packages/domain/src/bdd/coverage.ts:61`): `AC1` / `R1` → no match; `AC1 — <title>` or `R1 — <title>` → match. Each task's AC label already equals `ACn — <scenario text>`, so the full label also satisfies the lint's "task AC label" identity.
+- **Full `/sp:dev-verify` rerun?** Not required. No `<wbs>-verify-answer.txt` survives, but the skill's correction chain (answer file → `task verdict --from-answer` → `task record`) is sanctioned and re-lints anchors against the tree. Reconstruct each answer file from the existing verdict JSON with full-label AC ids. Fall back to `/sp:dev-verify <wbs>` only if lint rejects an anchor (real drift → stop per the earlier entry).
+- **Receipt finding is binary-dependent, not "definition changed".** Recorded and evaluated digests are identical; the mismatch is `sourcePath` — bundled `spur` resolves `apps/cli/config/workflows/feature-verification.yaml`, source-local resolves `config/workflows/…` (identical bytes). The source-local CLI reports `L4.feature-receipt-stale` instead (wrapall `d7cf0c8d5` changed inputs). **Resolved by 0957:** identity now compares name + layer + digest only; `sourcePath` is diagnostic. After the 0957 fix + `build:bundle`, both binaries report `L4.feature-receipt-stale`.
+- **Does `spur-check-feature` refresh the receipt?** No — it only runs checks. The receipt is written only by the `feature-verification` workflow (`config/workflows/feature-verification.yaml`).
+- **Why close 0956 before the receipt?** Digest = git tree (excl. `docs/tasks*`, `docs/features*`) + normalized feature content + learnings. Task record/done updates the D64 feature file (precedent `2b8e5601a`), so any task write after the receipt makes it stale. Likewise no `sp:dev-wrap`/learnings writes between receipt and gate.
+
 ### Design
 
 ## Gate mechanics (verified from source)
@@ -120,7 +161,7 @@ The gate reads tracked `docs/dogfood/INDEX.md` lines and tests each against `( ^
 
 ## Receipt contract
 
-Receipt is written only by `spur workflow run feature-verification.yaml --vars '{"featureId":"D64"}'` (not by `bun run spur-check-feature`). Validation compares verifier name/sourcePath/layer/digest, then the command, then the input digest (git tree excluding `docs/tasks*`/`docs/features*` + normalized feature content + learnings). Current `contract-mismatch` is a `sourcePath` difference between bundled `spur` (`apps/cli/config/workflows/`) and source-local CLI (`config/workflows/`); record and evaluate with the same binary. Any feature-file (incl. task record/done sync), learnings or non-corpus tree change after the pass invalidates it — so the receipt runs last.
+Receipt is written only by `spur workflow run feature-verification.yaml --vars '{"featureId":"D64"}'` (not by `bun run spur-check-feature`). Validation compares verifier name/sourcePath/layer/digest, then the command, then the input digest (git tree excluding `docs/tasks*`/`docs/features*` + normalized feature content + learnings). The earlier `contract-mismatch` was a `sourcePath` difference between bundled and source-local installs, fixed by 0957; the finding is now `L4.feature-receipt-stale` (wrapall changed inputs). Any feature-file (incl. task record/done sync), learnings or non-corpus tree change after the pass invalidates it — so the receipt runs last.
 
 ## Ordering constraints
 
@@ -137,10 +178,10 @@ L3 task-check regression on re-keyed closed tasks (see Q&A); canary-first contai
 3. [ ] Repeat for 0938–0946 per the coverage map; stop on lint rejection or non-PASS (real regression → follow-up task, D64 stays open).
 4. [ ] Intermediate gate: only dogfood-missing + receipt + incomplete-tasks errors remain.
 5. [ ] Dogfood: drive one D64 surface end-to-end → report → INDEX.md line → commit (together with the re-recorded task files).
-6. [ ] File the follow-up task for bundled-vs-source verifier `sourcePath` non-portability (note only, no fix here).
+6. [x] Bundled-vs-source verifier `sourcePath` non-portability — fixed in 0957 (identity = name + layer + digest); both binaries now report `L4.feature-receipt-stale`, the true cause.
 7. [ ] Close 0956: record verdict (AC1–AC4), status done; commit. From here, no task/feature/learnings/tree writes until the gate passes.
 8. [ ] Receipt: `spur workflow run feature-verification.yaml --vars '{"featureId":"D64"}'` → PASS.
-9. [ ] Final `spur feature check D64 --strict --as done --json` → `pass: true`, zero errors (same `spur` binary as step 8).
+9. [ ] Final `spur feature check D64 --strict --as done --json` → `pass: true`, zero errors.
 10. [ ] `spur feature transition D64 done` + `spur feature refresh D64` + derived-doc sync in one commit; `git status` intentional only.
 
 ### Solution
