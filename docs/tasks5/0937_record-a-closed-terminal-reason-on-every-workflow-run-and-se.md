@@ -4,7 +4,7 @@ name: Record a closed terminal reason on every workflow run and separate bookkee
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.000Z
-updated_at: "2026-09-26T02:39:48.903Z"
+updated_at: "2026-09-26T02:49:57.822Z"
 feature_id: D64
 priority: P1
 tags:
@@ -151,17 +151,17 @@ Implemented R1–R6. Two phases: an upstream engine release (operator-authorized
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/workflow/terminal-reason.ts:7-24` — TERMINAL_REASONS (9 closed values), TerminalReason type, isTerminalReason guard; column via `drizzle/0049_spur_cli_runs_terminal_reason.sql:6`; registered `packages/domain/src/migrations.ts:1545-1547` (addColumnIfMissing); nullable read `packages/domain/src/dao/run-dao.ts:121,127` |
-| R2 | MET | finalize seams classify+persist: `action-trace.ts:199,301`, `observability.ts:490`; lifecycle cancel→'cancelled' `lifecycle-adapter.ts:236-247`; interrupt→'interrupted' `workflow-service.ts:945-952`; `--close --reason` closed-set pre-write validation `inline-run-setup.ts:516` (tests `inline-run-close-reason.test.ts:35,52`; parity vs TERMINAL_REASONS `:8`) |
-| R3 | MET | failureState-edge rule `collectTerminalReasonViolations` `workflow-service.ts:2170-2174` wired `:696-701`; 7 failureState YAMLs declare terminalReason, 3 without failureStates need none |
-| R4 | MET | deterministic map `classifyTerminalReason` `terminal-reason.ts:55-69` (passthrough, no-passing-*→failed-guard, iteration-bound-exceeded→retry-exhausted, timeout→failed-timeout, agent.run→failed-agent); table-tested `terminal-reason.test.ts:30-57` |
-| R5 | MET | BOOKKEEPING_WORKFLOWS=['task-lifecycle','feature-lifecycle'] exported once `terminal-reason.ts:31-35`, re-export `packages/app/src/index.ts:897-903`; 0938 report consumer sequenced per design |
-| R6 | MET | classifier never guesses legacy nulls (`terminal-reason.ts:47-49`); migration bare ALTER, no backfill; reopen/claim nulls stale reason |
+| R1 | MET | `packages/app/src/workflow/terminal-reason.ts:7-24` — TERMINAL_REASONS (9 closed values), TerminalReason type, isTerminalReason guard; column via `drizzle/0049_spur_cli_runs_terminal_reason.sql:7`; registered `packages/domain/src/migrations.ts:1545-1547` (addColumnIfMissing); nullable read `packages/domain/src/dao/run-dao.ts:121,127` |
+| R2 | MET | finalize seams classify+persist: `packages/app/src/workflow/action-trace.ts:199,301`, `packages/app/src/workflow/observability.ts:490`; lifecycle cancel→'cancelled' `packages/app/src/workflow/lifecycle-adapter.ts:235-247`; interrupt→'interrupted' `packages/app/src/services/workflow-service.ts:958-967`; `--close --reason` closed-set pre-write validation `plugins/sp/scripts/inline-run-setup.ts:612-618` (tests `plugins/sp/tests/inline-run-close-reason.test.ts:35,52`; parity vs TERMINAL_REASONS `plugins/sp/tests/inline-run-close-reason.test.ts:8`) |
+| R3 | MET | failureState-edge rule `collectTerminalReasonViolations` `packages/app/src/services/workflow-service.ts:2207-2222` wired `packages/app/src/services/workflow-service.ts:709-713`; 7 failureState YAMLs declare terminalReason, 3 without failureStates need none |
+| R4 | MET | deterministic map `classifyTerminalReason` `packages/app/src/workflow/terminal-reason.ts:55-69` (passthrough, no-passing-*→failed-guard, iteration-bound-exceeded→retry-exhausted, timeout→failed-timeout, agent.run→failed-agent); table-tested `packages/app/tests/workflow/terminal-reason.test.ts:30-57` |
+| R5 | MET | BOOKKEEPING_WORKFLOWS=['task-lifecycle','feature-lifecycle'] exported once `packages/app/src/workflow/terminal-reason.ts:31-35`, re-export `packages/app/src/index.ts:918-925`; 0938 report consumer sequenced per design |
+| R6 | MET | classifier never guesses legacy nulls (`packages/app/src/workflow/terminal-reason.ts:53`); migration bare ALTER, no backfill; reopen/claim nulls stale reason |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 — Refactor work starts only after its prerequisite features finish | MET | command | `task show 0935 --json` status done; `task show 0936 --json` status done; full declared chain 0925-0936 closed before implementation start (task doc dependencies + History) |
-| AC2 — Every workflow run ends with a classified terminal reason | MET | test | every engine write surface audited: finalize classified (`action-trace.ts:199,301`, `observability.ts:490`), interrupt enum verbatim (`workflow-service.ts:947-952`), reopen NULLs; DB round-trip proof `terminal-reason.test.ts:100-131` yields terminal_reason='failed-guard' |
+| AC2 — Every workflow run ends with a classified terminal reason | MET | test | every engine write surface audited: finalize classified (`packages/app/src/workflow/action-trace.ts:199,301`, `packages/app/src/workflow/observability.ts:490`), interrupt enum verbatim (`packages/app/src/services/workflow-service.ts:958-967`), reopen NULLs; DB round-trip proof `packages/app/tests/workflow/terminal-reason.test.ts:100-131` yields terminal_reason='failed-guard' |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

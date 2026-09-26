@@ -4,7 +4,7 @@ name: Emit a reproducible per-workflow cost baseline report
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.003Z
-updated_at: "2026-09-26T02:39:57.731Z"
+updated_at: "2026-09-26T02:49:58.647Z"
 feature_id: D64
 priority: P1
 tags:
@@ -192,10 +192,10 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | scripts/commands/real-run-cost.ts:352 readStateMetrics; :366-371 visits via transition_runs.to_state; :414 retries = max(0, visitsInRun-1); :360-366 agent.run count; :422-423 + :247-253 nearest-rank p50/p90; :538-540 CLI --by-state; tests real-run-cost.test.ts:269,323 (21/21 pass); live: task-pipeline/record visits=0 agent.run=0 wall=p50=900ms p90=900ms retries=0 |
-| R2 | MET | real-run-cost.ts:92,95-96,101 WorkflowMetrics agentRunCountMedian/wallMsP50/wallMsP90/terminalReasonMix; :318-324 computed; :296-303 mix keyed via isTerminalReason else unclassified; 0937 vocabulary packages/app/src/workflow/terminal-reason.ts:8-18; tests :368,440; live JSON agentRunCountMedian=0 terminalReasonMix={"done":1} |
-| R3 | MET | BOOKKEEPING_WORKFLOWS/isBookkeepingWorkflow terminal-reason.ts:31-38; consumer real-run-cost.ts:43-47 import, :463-468 scopedWorkflows default-on filter, :517-518 --include-bookkeeping; test :541; live default cohort 8 (bookkeeping excluded), flag = 10 |
-| R4 | MET | --since: real-run-cost.ts:178 AND r.created_at >= ? on INTEGER epoch ms, :182 bound param, :519-526 Date.parse+Number.isFinite; determinism: :449-458 stableJson recursive sort, :474-477 buildReportJson, :431-437+:347-352 workflow-then-state order; tests :455 numeric trap, :495,:503,:509 byte-equality; live two --json runs cmp-identical; --since 2026-10-01 excludes / 2026-09-01 includes; no timestamp in body |
+| R1 | MET | scripts/commands/real-run-cost.ts:353 readStateMetrics; scripts/commands/real-run-cost.ts:374-381 visits via transition_runs.to_state; scripts/commands/real-run-cost.ts:414-415 retries = max(0, visitsInRun-1); scripts/commands/real-run-cost.ts:363-367 agent.run count; scripts/commands/real-run-cost.ts:423-424 + scripts/commands/real-run-cost.ts:245-248 nearest-rank p50/p90; scripts/commands/real-run-cost.ts:541-543 CLI --by-state; tests scripts/commands/real-run-cost.test.ts:269,323 (21/21 pass); live: task-pipeline/record visits=0 agent.run=0 wall=p50=900ms p90=900ms retries=0 |
+| R2 | MET | scripts/commands/real-run-cost.ts:90-102 WorkflowMetrics agentRunCountMedian/wallMsP50/wallMsP90/terminalReasonMix; scripts/commands/real-run-cost.ts:319-325 computed; scripts/commands/real-run-cost.ts:295-303 mix keyed via isTerminalReason else unclassified; 0937 vocabulary packages/app/src/workflow/terminal-reason.ts:8-18; tests scripts/commands/real-run-cost.test.ts:368,440; live JSON agentRunCountMedian=0 terminalReasonMix={"done":1} |
+| R3 | MET | BOOKKEEPING_WORKFLOWS/isBookkeepingWorkflow packages/app/src/workflow/terminal-reason.ts:31-38; consumer scripts/commands/real-run-cost.ts:44-46 import, scripts/commands/real-run-cost.ts:464-471 scopedWorkflows default-on filter, scripts/commands/real-run-cost.ts:518-519 --include-bookkeeping; test scripts/commands/real-run-cost.test.ts:541; live default cohort 8 (bookkeeping excluded), flag = 10 |
+| R4 | MET | --since: scripts/commands/real-run-cost.ts:179 AND r.created_at >= ? on INTEGER epoch ms, scripts/commands/real-run-cost.ts:183 bound param, scripts/commands/real-run-cost.ts:520-528 Date.parse+Number.isFinite; determinism: scripts/commands/real-run-cost.ts:450-458 stableJson recursive sort, scripts/commands/real-run-cost.ts:475-477 buildReportJson, scripts/commands/real-run-cost.ts:429-440 workflow-then-state order; tests scripts/commands/real-run-cost.test.ts:455 numeric trap, scripts/commands/real-run-cost.test.ts:495,503,509 byte-equality; live two --json runs cmp-identical; --since 2026-10-01 excludes / 2026-09-01 includes; no timestamp in body |
 | R5 | MET | docs/reports/2026-09-workflow-cost-baseline.json exists, biome clean, payload deep-equals live rebuild (DEEP-EQUAL true); md twin with ## Per-state baseline byte-identical to live --by-state; cited by 0940:42, 0943:46, 0944:48 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |

@@ -4,7 +4,7 @@ name: Skip clean model passes in wrapup doc-sync and history-anatomy
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.006Z
-updated_at: "2026-09-26T02:40:07.318Z"
+updated_at: "2026-09-26T02:50:03.036Z"
 feature_id: D64
 priority: P3
 tags:
@@ -292,7 +292,7 @@ Each entry cites the first changed line per file (`file:line`).
 | R1 | MET | wrapup-drift-probe.ts:188 reads .spur/run/<runId>-wrapup-tasks.json; :216 per-task spur task show --json; :123-135 changedPathsOf Solution file:line parse; :195 writes <runId>-drift-probe.json {clean,reasons,paths}; plugin-standalone holds (plugin-smoke PASS) |
 | R2 | MET | DOC_OWNED_SURFACES :73-87 all ten spec globs (workflows glob via join for sp-runtime-path rule); KNOWN_TOP_LEVEL :94-102 new-top-level check; fail-safe: empty/unparseable Solution :233, task-show failure :218, unparseable output :228, corrupted capture :210, dirty-first mode write :192; corpus excluded via CORPUS_PREFIXES :113-114; 10-test 13-glob matrix |
 | R3 | MET | wrapup-pipeline.yaml:163-172 probe gated on empty mode; clean -> mode=fast file + file.read.into-var projection (yaml:175-178); fast guard yaml:431 -> metrics-record; fast:drift-probe-clean wrapup-steps.ts:255; safety map entry :199 with guard yaml:438 -> doc-sync; caller mode projected verbatim; ADR-118 repair edge + branch-cleanup HITL untouched; routing tests clean/dirty/safety/empty-Solution all pass |
-| R4 | MET | config/workflow-candidates.json:22-35 candidate wrapup-drift-probe (canonical wrapup-pipeline), deadline 2026-11-24 = +60d, verdict null pre-promotion, rationale cites 1->0 doc-sync agent.run per wrap (structural, pipeline-budgets.json:25) + skipped-learnings measurement method post-promotion, revert-if-loses ADR-076; promotion check PASS |
+| R4 | MET | config/workflow-candidates.json:38-52 candidate wrapup-drift-probe (canonical wrapup-pipeline), deadline 2026-11-24 = +60d, verdict null pre-promotion, rationale cites 1->0 doc-sync agent.run per wrap (structural, config/pipeline-budgets.json:24-25 wrapup-pipeline) + skipped-learnings measurement method post-promotion, revert-if-loses ADR-076; promotion check PASS |
 | R5 | MET | history-anatomy.yaml diff hunks are 0937 terminalReason lines only (zero 0944 graph change); 0938 baseline states[] has 0 history-anatomy rows - honestly named in candidate rationale with 0946 citation; measurement-only honored |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |

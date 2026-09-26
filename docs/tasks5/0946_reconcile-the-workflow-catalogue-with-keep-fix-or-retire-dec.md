@@ -4,7 +4,7 @@ name: Reconcile the workflow catalogue with keep, fix or retire decisions
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.007Z
-updated_at: "2026-09-26T02:40:22.000Z"
+updated_at: "2026-09-26T02:50:04.806Z"
 feature_id: D64
 priority: P3
 tags:
@@ -310,7 +310,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | §10 'Catalogue reconciliation' at docs/design/workflow-catalogue-refactor.md:168-196: exactly 10 rows, one per pre-existing workflow; each with decision keep\|fix\|retire, evidence (0938-window run count, agent.run median, wall p50/p90, terminal-reason mix), live caller count, reason. Bookkeeping (task-lifecycle:179, feature-lifecycle:180) correctness-judged 'cost-exempt'; history-anatomy (:184-186) cites 0944 receipt/finding F3. |
+| R1 | MET | §10 'Catalogue reconciliation' at docs/design/workflow-catalogue-refactor.md:178-202: exactly 10 rows, one per pre-existing workflow; each with decision keep\|fix\|retire, evidence (0938-window run count, agent.run median, wall p50/p90, terminal-reason mix), live caller count, reason. Bookkeeping (task-lifecycle docs/design/workflow-catalogue-refactor.md:194, feature-lifecycle docs/design/workflow-catalogue-refactor.md:195) correctness-judged 'cost-exempt'; history-anatomy (docs/design/workflow-catalogue-refactor.md:199) cites 0944 receipt/finding F3. |
 | R2 | MET | config/workflows/decision-routing-example.yaml deleted (sole 'D' in tree). Zero live callers (grep: only retirements[] record, README note plugins/sp/README.md:635-637, fixture+test, design/help docs, code comment). retirements[] frozen shape exact at config/workflow-candidates.json:84-88. apps/cli/config/workflows/ = 9 YAMLs, none decision-routing-example. Fresh 'promotion check' PASS (4 candidates, no parallel defs). |
 | R3 | MET | No new docs/tasks5/ files attributable to 0946 (0947-0953 pre-exist, committed 2b8e5601a; worker made no commits). Zero fix decisions in §10 (:194-196); fix-shaped gaps owned by 0940/0943/0944/0945 candidates. |
 | R4 | MET | Independently recomputed from .spur/run/0946-real-run-cost.json + fresh sqlite ro probe: decision-routing-example only retire (0 real runs ever, example-only, no live caller). All 9 keeps rule-consistent (task-pipeline 9 runs/~30 callers; six 0-run workflows each have live callers 3-46; bookkeeping exempt). Live drift: task-pipeline 10 vs snapshot 9 — declared point-in-time; retire rests on 0-ever. |

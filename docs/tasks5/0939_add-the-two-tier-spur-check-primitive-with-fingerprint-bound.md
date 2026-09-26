@@ -4,7 +4,7 @@ name: Add the two-tier spur-check primitive with fingerprint-bound receipts
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.004Z
-updated_at: "2026-09-26T02:39:59.035Z"
+updated_at: "2026-09-26T02:49:59.395Z"
 feature_id: D64
 priority: P1
 tags:
@@ -213,16 +213,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | plugins/sp/scripts/quality-gate.ts:360-370 changed scope (git diff HEAD + ls-files --others); :290-313 src-to-test mapping; :333-357 biome check files + cd ws typecheck/test; :407-424 {id,inputDigest} PASS skip; fixture light PASS 3 checks, rerun skipped:3; tests quality-gate-receipt.test.ts:176,202,298,331 |
-| R2 | MET | quality-gate.ts:577-608 receipt written only in run with proofDigest; check-receipt/v1 schema :182; absent digest -> no receipt + logged reason :604-606; fixture full receipt + reuse ok; no-digest run wrote none; tests quality-gate.test.ts:326,358,375 |
-| R3 | MET | quality-gate.ts:623-626 status exit 0 prints {reuse,reason}; :243-258 reasons missing |
-| R4 | MET | quality-gate.ts:574-575 findings+status files; :87-95 bounded findings MAX 20; :528-543 SQLite-busy retry MAX 5; :520-526 recheck probe; :614,:631 soft-fail exit 0; 36 pass / 0 fail incl. pre-existing suites |
-| R5 | MET | plugins/sp/skills/spur-check/SKILL.md:1-13 superskill frontmatter; documents tiers/receipt/reuse//sp:dev-fixall composition; README.md:345 index row; plugin-smoke PASS |
+| R1 | MET | plugins/sp/scripts/quality-gate.ts:387-399 changed scope (git diff HEAD + ls-files --others); plugins/sp/scripts/quality-gate.ts:318-341 src-to-test mapping; plugins/sp/scripts/quality-gate.ts:361-385 biome check files + cd ws typecheck/test; plugins/sp/scripts/quality-gate.ts:453-462 {id,inputDigest} PASS skip; fixture light PASS 3 checks, rerun skipped:3; tests plugins/sp/tests/quality-gate-receipt.test.ts:193,219,315,348 |
+| R2 | MET | plugins/sp/scripts/quality-gate.ts:625-650 receipt written only in run with proofDigest; check-receipt/v1 schema plugins/sp/scripts/quality-gate.ts:187; absent digest -> no receipt + logged reason plugins/sp/scripts/quality-gate.ts:648; fixture full receipt + reuse ok; no-digest run wrote none; tests quality-gate.test.ts:326,358,375 |
+| R3 | MET | plugins/sp/scripts/quality-gate.ts:670-684 status exit 0 prints {reuse,reason}; plugins/sp/scripts/quality-gate.ts:191-192,276-286 reasons missing |
+| R4 | MET | plugins/sp/scripts/quality-gate.ts:620-622 findings+status files; plugins/sp/scripts/quality-gate.ts:69,115-122 bounded findings MAX 20; plugins/sp/scripts/quality-gate.ts:68,74,578-586 SQLite-busy retry MAX 5; plugins/sp/scripts/quality-gate.ts:567-575 recheck probe; plugins/sp/scripts/quality-gate.ts:684 soft-fail exit 0; 36 pass / 0 fail incl. pre-existing suites |
+| R5 | MET | plugins/sp/skills/spur-check/SKILL.md:1-13 superskill frontmatter; documents tiers/receipt/reuse//sp:dev-fixall composition; plugins/sp/README.md:345 index row; plugin-smoke PASS |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Lightweight checks accumulate during development | MET | test | fixture light rerun at same digest skipped:3 with 3 skip log lines; quality-gate-receipt.test.ts:331 accumulation test; skip guard quality-gate.ts:407-424 |
-| AC2 — The comprehensive check runs once at the quality boundary | MET | test | run writes the only reusable receipt quality-gate.ts:577-597; readReceiptStatus:257 returns light-only (fixture confirmed); light never demotes full; digest captured at config/workflows/task-pipeline.yaml:419; test :298 never reports reuse |
+| AC1 — Lightweight checks accumulate during development | MET | test | fixture light rerun at same digest skipped:3 with 3 skip log lines; plugins/sp/tests/quality-gate-receipt.test.ts:348 accumulation test; skip guard plugins/sp/scripts/quality-gate.ts:453-462 |
+| AC2 — The comprehensive check runs once at the quality boundary | MET | test | run writes the only reusable receipt plugins/sp/scripts/quality-gate.ts:625-646; readReceiptStatus plugins/sp/scripts/quality-gate.ts:276-286 returns light-only (fixture confirmed); light never demotes full; digest captured at config/workflows/task-pipeline.yaml:419; test plugins/sp/tests/quality-gate-receipt.test.ts:315 never reports reuse |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

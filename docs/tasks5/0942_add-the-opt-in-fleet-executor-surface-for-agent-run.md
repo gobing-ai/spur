@@ -4,7 +4,7 @@ name: Add the opt-in fleet executor surface for agent.run
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.005Z
-updated_at: "2026-09-26T02:41:51.234Z"
+updated_at: "2026-09-26T02:50:02.156Z"
 feature_id: D64
 priority: P2
 tags:
@@ -270,7 +270,7 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — The agent fleet is an optional executor surface | MET | test | Synthesis of R1-R5 all MET (fleet-dispatch.ts new 217 ln; agent-run.ts:258-405,645-655,1292-1293; builtins.ts:57,71-77; workflow-service.ts:1913-1954,:2754-2757); gate PASS attempt-4 9118 pass/0 fail across 522 files (.spur/run/0942-test-gate.status); review PASS full 482b9d9d + delta adc7d39f (.spur/run/0942-review-section.md); verify PASS daff7c38; fingerprint sha256:f1ecc630feed0b7a06f6d9a1157116b885d3abe630b08745015eb5dc139480c8 reproduced |
+| AC1 — The agent fleet is an optional executor surface | MET | test | Synthesis of R1-R5 all MET (fleet-dispatch.ts new 217 ln; agent-run.ts:258-405,645-655,1292-1293; packages/app/src/workflow/builtins.ts:61-62,74; workflow-service.ts:1913-1954,:2754-2757); gate PASS attempt-4 9118 pass/0 fail across 522 files (.spur/run/0942-test-gate.status); review PASS full 482b9d9d + delta adc7d39f (.spur/run/0942-review-section.md); verify PASS daff7c38; fingerprint sha256:f1ecc630feed0b7a06f6d9a1157116b885d3abe630b08745015eb5dc139480c8 reproduced |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

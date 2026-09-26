@@ -4,7 +4,7 @@ name: Add a non-pausing decide workflow action backed by DecisionMaker
 status: done
 template: feature-impl
 created_at: 2026-09-24T00:13:17.005Z
-updated_at: "2026-09-26T02:40:02.159Z"
+updated_at: "2026-09-26T02:50:01.233Z"
 feature_id: D64
 priority: P1
 tags:
@@ -263,16 +263,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/app/src/workflow/actions/decide.ts:25-52 DecideOptionsSchema (id, method enum, question, choices min2, evidence, default superRefine in choices, minConfidence 0-1 default 0.8, resultFile, strict); decide.ts:24 DEFAULT_MIN_CONFIDENCE; decide.test.ts:150 |
-| R2 | MET | decide.ts:54-67 frozen v1 row; actions/decide.ts:97-100 writes JSON + returns ok:true data.value; row shape asserted actions/decide.test.ts:119-146; engine persists result_json at finalize |
-| R3 | MET | decide.ts:19 closed vocab; degraded() branches disabled :84, no-backend :88-91, error :103-108,125-129,158-166, timeout :160-163 (15s shared factory decision-hitl-responder.ts:235), low-confidence :131-133,151-154; ok:true when degraded actions/decide.test.ts:147-160; 54 pass live |
-| R4 | MET | packages/config/src/index.ts:772 decideDecisionMaker optional; enabled = === true builtins.ts:105 (test :156); enabled path defaultDecisionMaker -> createDecisionMaker timeoutMs 15000; loader projection loader.ts:302-310 |
-| R5 | MET | plugins/sp/scripts/inline-run-setup.ts:466-545 --decide -> app runDecideForInlineRun (services/inline-run-setup.ts:346-386) same DecideActionRunner; trace row :533-543; parity-check DOCUMENTED :53 run ok; driver markdown :26,500-509; plugin suite 14 pass |
-| R6 | MET | collectDecideViolations re-parses runner schema workflow-service.ts:2199-2228 wired :699; rejects missing default / default outside choices / missing resultFile — decide.test.ts:182-202 |
+| R1 | MET | packages/app/src/workflow/actions/decide.ts:22-56 DecideOptionsSchema (id, method enum, question, choices min2, evidence, default superRefine in choices, minConfidence 0-1 default 0.8, resultFile, strict); packages/app/src/workflow/decide.ts:24 DEFAULT_MIN_CONFIDENCE; packages/app/tests/workflow/decide.test.ts:150 |
+| R2 | MET | packages/app/src/workflow/decide.ts:52-63 frozen v1 row; packages/app/src/workflow/actions/decide.ts:99-100 writes JSON + returns ok:true data.value; row shape asserted packages/app/tests/workflow/actions/decide.test.ts:119-146; engine persists result_json at finalize |
+| R3 | MET | packages/app/src/workflow/decide.ts:21 closed vocab; degraded() branches disabled packages/app/src/workflow/decide.ts:99, no-backend packages/app/src/workflow/decide.ts:105, error packages/app/src/workflow/decide.ts:122,134,168-170, timeout packages/app/src/workflow/decide.ts:166-170 (15s shared factory packages/app/src/workflow/decision-hitl-responder.ts:235), low-confidence packages/app/src/workflow/decide.ts:137,153; ok:true when degraded packages/app/tests/workflow/actions/decide.test.ts:147-160; 54 pass live |
+| R4 | MET | packages/config/src/index.ts:772 decideDecisionMaker optional; enabled = === true packages/app/src/workflow/builtins.ts:109 (test packages/app/tests/workflow/decide.test.ts:156); enabled path defaultDecisionMaker -> createDecisionMaker timeoutMs 15000; loader projection loader.ts:302-310 |
+| R5 | MET | plugins/sp/scripts/inline-run-setup.ts:466-545 --decide -> app runDecideForInlineRun (services/inline-run-setup.ts:346-386) same DecideActionRunner; trace row plugins/sp/scripts/inline-run-setup.ts:529-538; parity-check DOCUMENTED plugins/sp/scripts/inline-pipeline-parity-check.ts:52 run ok; driver markdown plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:26,500-509; plugin suite 14 pass |
+| R6 | MET | collectDecideViolations re-parses runner schema packages/app/src/services/workflow-service.ts:2230-2255 wired packages/app/src/services/workflow-service.ts:702; rejects missing default / default outside choices / missing resultFile — packages/app/tests/workflow/actions/decide.test.ts:182-202 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 — Fuzzy branching uses an explicit non-pausing decide action | MET | test | example workflow decision-routing-example.yaml:58-74 kind decide non-pausing w/ degraded guards; targeted suites 54+14 pass 0 fail; fingerprint sha256:2851f179407e9c7eb150bf480bd15a6a565fbefa713bd6fd8fdf67b8133ba279 reproduced; gate PASS 9093 tests 0 fail |
+| AC1 — Fuzzy branching uses an explicit non-pausing decide action | MET | test | example workflow packages/app/tests/services/fixtures/decision-routing-example.yaml:63-68 kind decide non-pausing w/ degraded guards packages/app/tests/services/fixtures/decision-routing-example.yaml:124-139; targeted suites 54+14 pass 0 fail; fingerprint sha256:2851f179407e9c7eb150bf480bd15a6a565fbefa713bd6fd8fdf67b8133ba279 reproduced; gate PASS 9093 tests 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
