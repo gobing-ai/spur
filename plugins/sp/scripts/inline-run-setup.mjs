@@ -30,6 +30,7 @@ function usage() {
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> " + "--status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]");
+  console.error("       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, " + "failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]");
   process.exit(2);
 }
