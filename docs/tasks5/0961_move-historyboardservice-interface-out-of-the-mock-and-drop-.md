@@ -4,7 +4,7 @@ name: Move HistoryBoardService interface out of the mock and drop MockHistoryBoa
 status: done
 template: standard
 created_at: 2026-09-26T04:37:17.893Z
-updated_at: "2026-09-26T07:25:33.520Z"
+updated_at: "2026-09-26T16:31:07.350Z"
 
 feature_id: E82
 ac_numbering: task-local
@@ -108,49 +108,49 @@ Package-surface change only. No public `spur` noun/verb change and no runtime be
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/history-board-service.ts:90` declares `export interface HistoryBoardService`; `rg -n "interface HistoryBoardService" packages/app/src` returns exactly one hit; `rg -l "history-board-mock\|MockHistoryBoardService" packages/app/src` returns only `src/testing/history-board-mock.ts`; `git ls-files packages/app/src/services/history-board-mock-service.ts` empty |
-| R2 | MET | `rg -n "MockHistoryBoardService\|history-board-mock" packages/app/src/index.ts` returns nothing; the fixture is reachable only through the new `./testing` subpath; `bun run test-cf` exit 0 |
-| R3 | MET | `jq -r '.exports["./testing"]' packages/app/package.json` prints `./src/testing/history-board-mock.ts`; all three consumers re-pointed; `git diff --stat -- '**/tests/**'` shows import-line-only diffs |
-| R4 | MET | `git diff --stat -- apps/server/src` is empty; `bun run typecheck` exits 0 across all 7 workspaces |
+| R1 | MET | `packages/app/src/services/history-board-service.ts:90` declares `export interface HistoryBoardService`; re-run 2026-09-26: `rg -n "interface HistoryBoardService" packages/app/src` → 1 hit; `rg -l "history-board-mock\|MockHistoryBoardService" packages/app/src` → only `src/testing/history-board-mock.ts`; `git ls-files` old path empty |
+| R2 | MET | `packages/app/src/index.ts:258` exports only the type from `./services/history-board-service`; `rg -n "MockHistoryBoardService\|history-board-mock" packages/app/src/index.ts` → no output; `bun run test-cf` exit 0 |
+| R3 | MET | `packages/app/src/testing/history-board-mock.ts:17` imports the port type; `jq -r '.exports["./testing"]' packages/app/package.json` → `./src/testing/history-board-mock.ts`; rename-aware `git diff -M dcb27b0e2~1 dcb27b0e2` on tests shows only import-line changes (98-99% similarity renames) |
+| R4 | MET | `git diff --stat dcb27b0e2~1 dcb27b0e2 -- apps/server/src` empty; `bun run typecheck` exit 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC-1 | MET | command | `packages/app/src/services/history-board-service.ts:90` is the only `interface HistoryBoardService` in `packages/app/src`; the mock is the sole `src/` file referencing it; the old `services/history-board-mock-service.ts` path is gone (`git ls-files` empty) |
-| AC-2 | MET | command | `rg -n "MockHistoryBoardService\|history-board-mock" packages/app/src/index.ts` → no output; `bun run test-cf` exit 0 (1 file / 1 test passed) |
-| AC-3 | MET | command | `jq -r '.exports["./testing"]'` → `./src/testing/history-board-mock.ts`; `packages/app` focused suite 41 pass / 0 fail; `apps/server` history suite 7 pass / 0 fail; tests diff is import lines only (2 lines per file) |
-| AC-4 | MET | command | `git diff --stat -- apps/server/src` empty; `bun run typecheck` exit 0. The lens' repo-wide `bun run spur-check` clause is red solely on a pre-existing 0961-unrelated test — full reproduction and attribution in the task's Testing section |
+| AC-1 | MET | command | `packages/app/src/services/history-board-service.ts:90` sole `interface HistoryBoardService`; mock is sole `src/` referrer; old path absent from `git ls-files` |
+| AC-2 | MET | command | `rg` on `packages/app/src/index.ts` → no mock export; `bun run test-cf` exit 0 |
+| AC-3 | MET | test | `apps/server/tests/modules/history/handlers.test.ts:2` imports `@gobing-ai/spur-app/testing`; `packages/app/tests/services/history-response-shape.test.ts:16` and `packages/app/tests/testing/history-board-mock.test.ts:2` import `../../src/testing/history-board-mock`; packages/app focused 41 pass / 0 fail; apps/server history 7 pass / 0 fail |
+| AC-4 | MET | command | apps/server/src diff empty for commit dcb27b0e2; `bun run typecheck` exit 0. Repo-wide spur-check red only on pre-existing 0945 timeout (`.spur/run/0961-test-gate-attribution.txt`), operator-ruled out of scope |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
-**Out-of-scope note — repo-wide quality gate (2026-09-26).** `bun run spur-check` is red repo-wide on a single pre-existing test unrelated to this task: `packages/app/tests/workflow/idea-pipeline-routing.test.ts` — "idea-pipeline 0945 — routing truth-table parity (R3) > live route guards match the frozen pre-refactor oracle over the full cross product". It declares its own 60s budget (`}, 60000)` at the test) but evaluates 3456 cells, each spawning a guard process; wall clock in this environment is 84.9s–86.6s. Reproduced identically on the **unmodified base tree** (`/Users/robin/xprojects/spur-new`, HEAD `53f5fa37c`, task 0961 still at `todo`): same single failure, 84881ms vs 60000ms, 4 pass / 1 fail. The file contains no reference to history-board / MockHistoryBoardService / HistoryBoardService, and no `--timeout` is passed anywhere in the `package.json` test script. Every gate component that 0961 touches is green: lint (biome 1110 files + typecheck 7/7 workspaces), rule presets 47 pre + 2 post, focused suites 48/48, `bun run test-cf`. Full attribution: `.spur/run/0961-test-gate-attribution.txt`. Operator ruled this out of scope for 0961 and directed that a separate follow-up task be filed for the 0945 timeout.
 
 ### Review
 
-Reviewed the 0961 diff (`git diff -M`: 8 files, 23 insertions / 22 deletions, incl. two renames) across the three dimensions the pipeline names.
+Re-review 2026-09-26 of commit `dcb27b0e2` (`git diff -M`: 8 files, 2 renames at 98–99% similarity), using fresh probes from this session. Supersedes the 2026-09-26 pipeline review, whose findings table had a placeholder `P2 | None found` row and an out-of-scope P3 with no machine-readable deferral. The residual sweep scored both as blocking.
 
-**Dimension 1 — functional traceability.** All four requirements are implemented; each is independently probed.
+| Priority | Dimension | Location | Finding | Disposition |
+| --- | --- | --- | --- | --- |
+| P3 | C | `packages/app/tests/workflow/idea-pipeline-routing.test.ts` | Repo-wide `bun run spur-check` fails only on a pre-existing 0945 parity test. It has a 60s budget but takes about 85s because it runs 3456 process-spawning cells. The test predates 0961, has no link to it, and fails the same way on the unmodified base tree (`.spur/run/0961-test-gate-attribution.txt`) | DEFERRED → 0974 (dedup inert-var cells); out of 0961 scope per operator ruling 2026-09-26 |
+| P4 | A | `packages/app/src/testing/history-board-mock.ts:17` | The invariant that no `src/**` module outside `src/testing/` imports it holds (`rg` probe: no importer), but no rule in `config/rules/` enforces it | DEFERRED → 0975 R4 (rule-enforce the test-only subpath) |
+| P4 | A | `packages/app/package.json:14` | `./testing` points at one concrete file, so a second test double will need a barrel or another export entry | Accepted — matches Design §3; revisit when a second double lands |
+| P4 | U | `packages/app/tests/testing/history-board-mock.test.ts:2` | The test file was renamed despite the Q&A saying to keep its name, because `require-corresponding-test` mirrors the source path | RESOLVED — rename via `git mv`, bodies unchanged (99% similarity) |
 
-| Req | Evidence | Status |
+**Functional traceability** — verdict PASS
+
+| Req | Status | Evidence |
 | --- | --- | --- |
-| R1 | `packages/app/src/services/history-board-service.ts:90` declares the port; `rg -n "interface HistoryBoardService" packages/app/src` returns exactly one hit; `rg -l "history-board-mock" packages/app/src` returns only `src/testing/history-board-mock.ts` | PASS |
-| R2 | `rg -n "MockHistoryBoardService / history-board-mock" packages/app/src/index.ts` returns nothing; only the `./testing` subpath reaches the fixture | PASS |
-| R3 | `jq -r '.exports["./testing"]' packages/app/package.json` prints `./src/testing/history-board-mock.ts`; all three consumers re-pointed; tests diff is import-lines-only | PASS |
-| R4 | `git diff --stat -- apps/server/src` is empty; `bun run typecheck` exits 0 | PASS |
+| R1 | MET | `packages/app/src/services/history-board-service.ts:90` declares the port; `rg -n "interface HistoryBoardService" packages/app/src` → 1 hit; `rg -l "history-board-mock\|MockHistoryBoardService" packages/app/src` → only `src/testing/history-board-mock.ts`; old path absent from `git ls-files` |
+| R2 | MET | `packages/app/src/index.ts:258` re-exports the type only; `rg` for the mock in `index.ts` → no output; `bun run test-cf` exit 0 |
+| R3 | MET | `packages/app/package.json:14` `./testing` → `./src/testing/history-board-mock.ts`; consumers at `apps/server/tests/modules/history/handlers.test.ts:2`, `packages/app/tests/services/history-response-shape.test.ts:16`, `packages/app/tests/testing/history-board-mock.test.ts:2`; focused suites 41/41 + 7/7 |
+| R4 | MET | `git diff --stat dcb27b0e2~1 dcb27b0e2 -- apps/server/src` empty; `bun run typecheck` exit 0 |
 
-**Dimension 2 — SECUA.** Security: no new attack surface — the moved module is test-only (no I/O, no network, no secrets), and the only production-visible change is a `type`-only re-export whose target swapped to the module that already owned the contract semantically; `export type` emits nothing at runtime. Efficiency: the change reduces bundle work rather than adding it — a 1,321-line fixture catalog plus its deterministic catalogs leave the public barrel, so the Worker entry no longer pulls them (confirmed by the R2 probe). Correctness: 48 focused tests green (`packages/app` 41, `apps/server` 7), `bun run test-cf` green, `bun run lint` (biome `--error-on-warnings` + typecheck across all 7 workspaces) green, rule presets 47 pre + 2 post green. Usability: n/a — no user-facing surface. Architecture: the dependency direction is corrected — previously `history-board-service.ts` imported its own contract from a test double, so the seam pointed production into test; now production owns the port and the mock consumes it.
+**SECUA.**
+- **S:** Nothing new is exposed. The moved module is a test-only fixture with no I/O and no secrets. `export type` emits nothing at runtime.
+- **E:** The fixture catalogs are out of the root barrel, so the Worker entry no longer loads them.
+- **C:** In the rename-aware diff, the only non-import change moves the interface declaration. Behavior is unchanged.
+- **U:** No user-facing surface changed.
+- **A:** The dependency direction is fixed: tests import from production, not the other way round.
 
-**Dimension 3 — architecture depth.** The port lives in the live implementation's module (`history-board-service.ts:90`), which is where an implementor-driven contract belongs: the mock is a consumer of that type, not its owner. A separate `history-board-port.ts` was explicitly rejected in the task Q&A — one file fewer, and the contract has exactly one production implementor, so a standalone port module would be a shallow indirection.
+**Architecture (code-improvement lenses).** Candidate C1 ("wrong seam"), the reason this task was opened, is resolved. The port lives with its only production implementor, and the mock consumes it. No new shallow modules, coupling, or locality problems. The unenforced invariant above is the only structural residue, and 0975 tracks it.
 
-**Findings.**
-
-| Priority | Finding | Evidence | Disposition |
-| --- | --- | --- | --- |
-| P4 | Deviation from the task Q&A, resolved: the rule `require-corresponding-test` mirrors `src/testing/history-board-mock.ts` to `tests/testing/history-board-mock.test.ts`, but the Q&A chose to keep the old test filename | `config/rules/structure/test-location.yaml` has `requireCorrespondingTest: true` with no basename fallback; the first gate run failed naming the expected mirror path | Renamed via `git mv` to the mirrored path. Assertions and bodies byte-identical; only the import specifier changed, which the Q&A already sanctioned |
-| P4 | Note for later: the `./testing` export targets a concrete file rather than a directory index, so a second test double needs another subpath entry or a barrel | `packages/app/package.json` exports map | Matches Design §3 verbatim — recorded as a future-flow note, no action |
-| P3 | Out of scope, separately tracked: repo-wide `bun run spur-check` is red on a pre-existing 0961-unrelated test that declares a 60s budget but needs about 85s for 3456 process-spawning cells | `.spur/run/0961-test-gate-attribution.txt`; reproduced identically on the unmodified base tree at HEAD 53f5fa37c (84881ms vs 60000ms) | Operator ruled (2026-09-26): land 0961 with this recorded, and file a separate follow-up task for the 0945 timeout |
-| P2 | None found | full diff reviewed across traceability, SECUA and architecture | No action |
-
-**Residual risk.** `src/testing/` sits under `src/`, so it stays inside the typecheck and published-source scope; the design's safety rests on the invariant that no non-test module imports it. That invariant is asserted by the R1 probe (`rg -l` returns only the mock itself) but is not enforced by a lint rule, so a future direct import would not fail CI. Low likelihood, low impact — it would merely re-introduce the coupling this task removed.
-
-**Final disposition.** Only P4/P3 notes; no P1/P2 findings and no requested-scope item unaddressed. Approved for record. The single unresolved gate clause is environmental and tracked separately.
+**Final disposition.** No P1 or P2 findings. The P3 is deferred to 0974 and the enforcement gap to 0975. Approved.
 
 ### References
 
