@@ -26,8 +26,8 @@
  * output matches a SQLite busy/locked error; the delay defaults to 10 seconds and is
  * overridable via `SPUR_QUALITY_GATE_RETRY_DELAY_MS` (tests).
  *
- * Check receipts (task 0939, ADR-124): `run` writes `.spur/run/<wbs>-check-receipt.json`
- * (`check-receipt/v1`) when `proofDigest` is set; without a digest no receipt is written and the
+ * Check receipts (task 0939, ADR-124): `run` and `recheck` write `.spur/run/<wbs>-check-receipt.json`
+ * (`check-receipt/v1`) when `proofDigest` is set (a no-progress skip keeps the receipt it matched); without a digest no receipt is written and the
  * log says why. The gate executes `qualityGateCmd` as one unit, so the full-tier receipt carries
  * a single `test` row for the whole `bun run spur-check` chain (lint | typecheck | test-pre-check
  * | test | test-post-check). `light` accumulates: a sub-check already PASS in a light receipt at
@@ -634,9 +634,12 @@ export function runQualityGate(
     writeFileSync(abs(statusFile), `${status}\n`);
     appendFileSync(abs(logFile), `proof-digest: ${env.proofDigest ?? ''}\n`);
 
-    // 0939 R2: only `run` writes the full-tier receipt, and only with a digest to bind it to.
+    // 0939 R2: the gate writes the full-tier receipt only with a digest to bind it to. 0976 R1:
+    // `recheck` persists the receipt it evaluated too, so a second recheck at the same digest can
+    // take the no-progress skip. A skip leaves the FAIL receipt it matched untouched — a skip never
+    // rewrites a receipt, so it can never launder FAIL into PASS.
     let receiptFile: string | undefined;
-    if (mode === 'run') {
+    if (!noProgressSkip) {
         if ((env.proofDigest ?? '').length > 0) {
             receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
             const receipt = buildReceipt({

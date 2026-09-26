@@ -372,7 +372,7 @@ describe('check-receipt write on run (0939 R2)', () => {
         }
     });
 
-    test('run without proofDigest writes no receipt and the log says why; recheck never writes one', () => {
+    test('run without proofDigest writes no receipt and the log says why; a recheck with one writes it (0976 R1)', () => {
         const { dir, cleanup } = scratch('spur-qg-receipt-absent-');
         try {
             const script = executable(dir, 'gate.sh', 'echo ok');
@@ -381,8 +381,10 @@ describe('check-receipt write on run (0939 R2)', () => {
             expect(readFileSync(join(dir, '.spur/run/0823-test-gate.log'), 'utf8')).toContain(
                 'check-receipt: not written — env `proofDigest` is not set',
             );
-            gate('recheck', dir, script, { proofDigest: 'digest-1' });
+            gate('recheck', dir, script);
             expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(false);
+            gate('recheck', dir, script, { proofDigest: 'digest-1' });
+            expect(existsSync(join(dir, '.spur/run/0823-check-receipt.json'))).toBe(true);
         } finally {
             cleanup();
         }

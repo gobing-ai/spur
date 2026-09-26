@@ -382,7 +382,7 @@ function runQualityGate(mode, env, options = {}) {
   appendFileSync(abs(logFile), `proof-digest: ${env.proofDigest ?? ""}
 `);
   let receiptFile;
-  if (mode === "run") {
+  if (!noProgressSkip) {
     if ((env.proofDigest ?? "").length > 0) {
       receiptFile = join(runDir, `${env.wbs}-check-receipt.json`);
       const receipt = buildReceipt({

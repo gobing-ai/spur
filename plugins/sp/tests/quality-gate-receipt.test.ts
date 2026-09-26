@@ -513,6 +513,62 @@ describe('recheck no-progress skip (0940 R2)', () => {
         }
     });
 
+    // 0976 R1 (AC1): before the fix only `run` wrote receipts, so after a `run` at digest X a
+    // recheck at digest Y never refreshed the receipt and the skip below was unreachable.
+    test('run → recheck → recheck at an unchanged digest: the recheck persists its receipt and the second recheck skips', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0976-refresh-'));
+        const receiptPath = join(dir, '.spur/run/0939-check-receipt.json');
+        const env = { wbs: '0939', gateProbeCmd: 'echo probe-ran', qualityGateCmd: 'echo full-ran; exit 1' };
+        try {
+            silenceStdout(() => runQualityGate('run', { ...env, proofDigest: 'digest-x' }, { cwd: dir }));
+            const first = captureStdout(() =>
+                runQualityGate('recheck', { ...env, proofDigest: 'digest-y' }, { cwd: dir }),
+            );
+            expect(first.value.attempts).toBe(1);
+            expect(first.out).not.toContain('check.skipped-no-progress');
+            const refreshed = JSON.parse(readFileSync(receiptPath, 'utf8')) as CheckReceipt;
+            expect(refreshed.inputDigest).toBe('digest-y');
+            expect(refreshed.tier).toBe('full');
+            expect(refreshed.status).toBe('FAIL');
+
+            const second = captureStdout(() =>
+                runQualityGate('recheck', { ...env, proofDigest: 'digest-y' }, { cwd: dir }),
+            );
+            expect(second.out).toContain('check.skipped-no-progress');
+            expect(second.value.status).toBe('FAIL');
+            expect(second.value.attempts).toBe(0);
+            const log = readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8');
+            expect(log).not.toContain('probe-ran');
+            expect(log).not.toContain('full-ran');
+            // Anti-laundering: the skip never rewrites the receipt it matched.
+            expect(JSON.parse(readFileSync(receiptPath, 'utf8'))).toEqual(refreshed);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a green recheck persists a PASS receipt only because the full gate actually ran', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0976-green-'));
+        try {
+            writeReceipt(dir, receipt({ status: 'FAIL' }));
+            silenceStdout(() =>
+                runQualityGate(
+                    'recheck',
+                    { wbs: '0939', proofDigest: 'digest-2', gateProbeCmd: 'exit 0', qualityGateCmd: 'echo full-ran' },
+                    { cwd: dir },
+                ),
+            );
+            const stored = JSON.parse(
+                readFileSync(join(dir, '.spur/run/0939-check-receipt.json'), 'utf8'),
+            ) as CheckReceipt;
+            expect(stored.inputDigest).toBe('digest-2');
+            expect(stored.status).toBe('PASS');
+            expect(readFileSync(join(dir, '.spur/run/0939-test-gate.log'), 'utf8')).toContain('full-ran');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('a PASS receipt never skips the recheck — only a FAIL receipt does', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0940-pass-'));
         try {
