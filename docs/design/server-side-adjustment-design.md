@@ -181,8 +181,10 @@ and consumed by Spur through a published semver bump or an explicit temporary `b
 fixed in `createApp`:
 
 ```
+0. host guard (Bun serve only) — DNS-rebinding gate in `Bun.serve({ fetch })`, before Hono
 1. secureHeaders()          — X-Frame-Options, X-Content-Type-Options, etc. (existing)
 2. cors()                   — configurable origins; default same-origin
+2a. csrf()                  — same-origin or SPUR_CORS_ORIGINS for form-shaped writes
 3. requestId()              — injects c.var.requestId (UUID v4); threads into logs + errors
 4. bodyLimit({ maxSize })   — rejects oversized bodies before oRPC parse (default 1 MiB)
 5. requestLogger()          — structured log: method, path, requestId; logs response on completion
@@ -194,6 +196,10 @@ fixed in `createApp`:
 **Rationale for the order:**
 
 - `secureHeaders` first: every response gets security headers, including error responses.
+- Host guard before everything (local `spur serve` only; the Worker is behind a real domain):
+  `csrf()` trusts `new URL(c.req.url).origin`, which Bun derives from `Host`, so a rebinding page
+  on `evil.test` → 127.0.0.1 would pass as same-origin. `middleware/host-guard.ts` answers 421
+  unless `Host` is an IP literal, `localhost`, the `--host` bind name, or a `SPUR_CORS_ORIGINS` host.
 - `cors` before `requestId`: CORS preflight (`OPTIONS`) must succeed without a request-id.
 - `requestId` before `requestLogger`: the logger needs the id for correlation.
 - `bodyLimit` before the oRPC handler: defense-in-depth; a 100 MiB body never reaches Zod parse.

@@ -426,7 +426,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
 
                 const results = [];
                 for (const fid of ids) {
-                    const fileName = entries.find((n) => n.match(new RegExp(`^${fid}_.+\\.md$`)));
+                    const fileName = entries.find((n) => isFeatureFile(n, fid));
                     if (!fileName) {
                         writeJsonError(context.output, options, `Feature ${fid} not found`, 'NOT_FOUND');
                         context.setExitCode(1);
@@ -567,6 +567,11 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
  * registration surfaces as a fail-closed `run` rejection at the completion
  * boundary.
  */
+/** `<id>_<slug>.md` match without a RegExp: the id is operator input (`.*` must not match, `(` must not throw). */
+export function isFeatureFile(name: string, id: string): boolean {
+    return name.startsWith(`${id}_`) && name.endsWith('.md') && name.length > id.length + 4;
+}
+
 async function makeReceiptRunPort(context: CliContext): Promise<FeatureReceiptRunPort> {
     const db = await context.getDb();
     const runs = new RunDao(db);
@@ -640,7 +645,7 @@ async function assertFeatureCheckPass(
     const tasksDirs = Object.keys(resolved.foldersConfig.folders).map((p) => context.fs.resolve(p));
     if (!tasksDirs.includes(tasksDir)) tasksDirs.unshift(tasksDir);
     const entries = await context.fs.readDir(featuresDir);
-    const fileName = entries.find((name) => name.match(new RegExp(`^${id}_.+\\.md$`)));
+    const fileName = entries.find((name) => isFeatureFile(name, id));
     if (fileName === undefined) {
         throw new Error(`Feature ${id} not found`);
     }

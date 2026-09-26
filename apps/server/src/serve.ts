@@ -54,6 +54,8 @@ import {
 } from '@gobing-ai/ts-runtime';
 import { createApp, serverBootstrapConfig } from './bootstrap';
 import { createServerContext, type ServerContext, type ServerScheduler } from './context';
+import { allowedHostnames, isAllowedHost, rejectHost } from './middleware/host-guard';
+import { trimOrigins } from './middleware/pipeline';
 import { registerSystemEventTap } from './modules/events/system-event-tap';
 import { type SchedulerScheduleRegistration, setRegisteredSchedules } from './modules/jobs/schedule-registry';
 import { openUrl } from './open-url';
@@ -985,8 +987,10 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 appRt.logger.info('Scheduler entries registered', { jobs: appRt.config.scheduler.jobs.length });
             }
 
+            // DNS-rebinding guard runs before any Hono middleware (csrf trusts the Host-derived origin).
+            const hostAllowlist = allowedHostnames(options.host, trimOrigins(env.SPUR_CORS_ORIGINS ?? ''));
             const server = Bun.serve({
-                fetch: app.fetch,
+                fetch: (req, srv) => (isAllowedHost(req, hostAllowlist) ? app.fetch(req, srv) : rejectHost()),
                 port: options.port,
                 hostname: options.host,
             });

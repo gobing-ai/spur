@@ -18,12 +18,6 @@ mock.module('mermaid', () => ({
     },
 }));
 
-// DOMPurify in the test passes the SVG through unchanged (identity) — we only
-// need to verify MermaidBlock calls it and injects the result.
-mock.module('dompurify', () => ({
-    default: { sanitize: (html: string) => html },
-}));
-
 // Dynamic import is required because happy-dom must be registered before
 // any React/component module loads (the component tree reads from document).
 const { MermaidBlock, languageOf, nodeText, renderCodeBlock } = await import(
@@ -104,8 +98,9 @@ describe('MermaidBlock — mermaid fence rendering', () => {
         const diagram = await findByTestId('mermaid-diagram', {}, WAIT);
         await waitFor(() => expect(renderCalls.length).toBe(1), WAIT);
         expect(renderCalls[0]?.code).toBe('graph TD; A-->B');
-        // The sanitized SVG is injected into the diagram container.
-        await waitFor(() => expect(diagram.querySelector('svg[data-mock="true"]')).not.toBeNull(), WAIT);
+        // The sanitized SVG is injected into the diagram container. Real DOMPurify runs here, and
+        // happy-dom's SVG parsing drops the <svg> wrapper, so assert on the label text it keeps.
+        await waitFor(() => expect(diagram.textContent).toContain('A--'), WAIT);
     });
 
     test('falls back to a raw <pre><code> block when mermaid.render throws', async () => {

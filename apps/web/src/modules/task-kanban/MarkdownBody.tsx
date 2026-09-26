@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify';
 import { useEffect, useId, useRef, useState } from 'react';
 import { MDEditor } from '@/ui';
 
@@ -7,13 +8,24 @@ import { MDEditor } from '@/ui';
  * `mermaid` is loaded lazily on first mount so the (heavy) library stays out of
  * the initial bundle and off the path of tasks whose bodies have no diagrams.
  *
- * Security note: `securityLevel: 'loose'` is intentional. 'strict' causes Mermaid
- * to render node labels via `<foreignObject>` HTML, which DOMPurify's SVG profile
- * strips, making all nodes appear empty. 'loose' uses native SVG `<text>` elements
- * that render correctly without sanitizer interference. All diagram content originates
- * from server-side workflow YAML (not user-supplied HTML), so the risk model is low.
- * Mermaid's own internal sanitization still runs.
+ * Security note: `securityLevel: 'loose'` keeps labels readable ('strict' renders them
+ * as `<foreignObject>` HTML that a bare SVG-profile sanitizer blanks). 'loose' also lets
+ * diagram source carry HTML and click handlers, and this component renders task, feature
+ * and design bodies — agent-written from untrusted input — not just workflow YAML. So the
+ * SVG always passes through `sanitizeMermaidSvg` before injection.
  */
+/**
+ * Strip script, event handlers and `javascript:` URLs from Mermaid output. The html profile
+ * plus `foreignObject` keeps HTML labels (other diagram types still emit them) visible.
+ */
+export function sanitizeMermaidSvg(svg: string): string {
+    // Bind to the live window: the module-level instance is inert if imported before a DOM exists.
+    return DOMPurify(window).sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true, html: true },
+        ADD_TAGS: ['foreignObject'],
+    });
+}
+
 export function MermaidBlock({ code }: { code: string }) {
     const id = useId().replace(/:/g, '');
     const containerRef = useRef<HTMLDivElement>(null);
@@ -55,10 +67,8 @@ export function MermaidBlock({ code }: { code: string }) {
                     flowchart: { htmlLabels: false, useMaxWidth: false },
                 });
                 const rendered = await mermaid.render(`mermaid-${id}`, code);
-                // No DOMPurify: 'loose' mode already sanitizes internally, and all
-                // content is server-generated workflow YAML (not user-supplied HTML).
                 // Patch the SVG to stretch to 100% width so it fills the container.
-                const svgWithFullWidth = rendered.svg
+                const svgWithFullWidth = sanitizeMermaidSvg(rendered.svg)
                     .replace(/(<svg[^>]*?)\s+width="[^"]*"/, '$1 width="100%"')
                     .replace(/(<svg[^>]*?)\s+height="[^"]*"/, '$1 height="auto"');
                 if (!cancelled) setSvg(svgWithFullWidth);
@@ -72,8 +82,7 @@ export function MermaidBlock({ code }: { code: string }) {
     }, [code, id, theme]);
 
     // Inject the rendered SVG via the DOM API — mermaid returns a complete SVG
-    // string with no node-based render alternative. The SVG has been patched
-    // for full-width display and is injected directly (no additional sanitizer).
+    // string with no node-based render alternative. It was sanitized above.
     useEffect(() => {
         if (containerRef.current) {
             containerRef.current.innerHTML = svg ?? '';
