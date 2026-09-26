@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { WorkflowDef } from '@gobing-ai/ts-dual-workflow-engine';
-import { collectUndeclaredShellVarViolations } from '../../src/services/workflow-service';
+import { collectUndeclaredShellVarViolations } from '../../src/workflow/composition-lint';
 
 // 0674 R5: every `$var` a shell action/guard references must have a declared home in the
 // workflow's vars: block (or be provided locally). Drives the collector directly — the
