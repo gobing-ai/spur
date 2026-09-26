@@ -3254,3 +3254,24 @@ wrapup run `f18dd06e-159c-4399-809f-dcb12e02b757`.
 - **Scope discipline:** the doc-evolve operation owns the key documents (`00`–`05`, `99`,
   `AGENTS.md`, `docs/design/*`). Findings outside that set (e.g. `docs/help/`) are reported, not
   edited.
+## 2026-09-26 — task 0962 (workflow-service decomposition, Groups A + B)
+
+**Inline-pipeline driver mechanics (hard-won, will recur).**
+
+- A `task-pipeline.yaml` shell action ends with `exit 0`; running such a command inside a bash *function* terminates the whole harness script silently. Wrap each action body in a subshell — `( eval "$cmd" )` — and read `$?` from the subshell.
+- `set -u` plus a YAML command that embeds `$m`/`$wbs` inside a double-quoted `jq` filter trips "unbound variable" on the harness, not on the action. Escape every `$` the YAML's own single-quote context would have protected, or drop `set -u`.
+- `proof.fingerprint` covers the task file, so any corpus write between the quality-gate capture and the `record` hop invalidates `run.artifact`'s `proofBinding: 'current'`. Correct order: capture digest → `record` (validates the binding) → done-probe (flip checklist boxes) → `done`. Flipping the boxes early cost one full round-trip of revert + re-verify.
+- `updated_at` frontmatter churn does **not** change the proof digest — regenerating the same section bodies restored the exact captured digest. The digest is content-stable against corpus bookkeeping.
+- `quality-gate.ts recheck` never rewrites the check receipt (only `run` does), so `receiptFailsAtDigest` can never fire after a `run` recorded a different digest. Every recheck re-runs the whole gate — budget ~9 minutes per recheck on this repo.
+- `residual-scan fold` is anti-laundering: it preserves an existing `PARTIAL` and never upgrades to `PASS`. Re-derive the verdict from the answer file *before* folding, or the fold keeps a stale downgrade.
+
+**Move-refactor gate calls.**
+
+- `require-corresponding-test` (enforced by `test-pre-check --fail-on warning`) requires a `<module>.test.ts` for **every** new source module. A pure move that creates two modules must also create two test files, or the quality gate fails on a rule finding rather than on behaviour. Budget for it when planning a decomposition.
+- `task record --solution-from-diff` preserves a hand-authored `## Solution` verbatim and generates `## Testing` / `## Review` from the verdict; it ticks the Requirements boxes but leaves AC/Plan unchecked for the done-probe.
+- `verify-answer-lint` resolves an AC row by the bare feature-scenario title or the `AC-N` ordinal — use the scenario title so `feature-check` L4 traceability matches.
+
+**Environment sensitivity.**
+
+- `packages/app/tests/workflow/idea-pipeline-routing.test.ts` ("0945 routing truth-table parity") declares its own 60000 ms timeout and performs ~3,400 `/bin/sh` spawns. Runtime tracks host load: ~86 s at load 13.7 on 10 CPUs (times out, red gate) versus ~57 s at load 8 (green). `bun run spur-check` is therefore load-sensitive on a shared box; a red gate from this test alone is environmental, not a regression.
+
