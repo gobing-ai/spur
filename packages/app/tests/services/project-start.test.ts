@@ -406,7 +406,7 @@ describe('project-start', () => {
 
         it('throws naming the index for an argument containing a double quote (AC2)', () => {
             expect(() => buildWindowsDetachedServeLaunch(['C:\\bun.exe', 'serve', 'he said "hi"'])).toThrow(
-                /argument 2 contains '"', which cannot be passed through cmd\.exe/,
+                /argument 2 contains '"', which the launch spec cannot carry/,
             );
         });
 

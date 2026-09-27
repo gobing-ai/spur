@@ -83,13 +83,13 @@ function flattenEnv(env: NodeJS.ProcessEnv): Record<string, string> {
  * daemon as SPUR_SERVE_ARG_<i> and referenced from PowerShell, which performs no %
  * expansion.
  *
- * The daemon is created with PowerShell `Start-Process`, not `cmd /c start /b`: cmd's
- * `start` forwards every inheritable handle of its own handle table, so the daemon keeps
- * a duplicate of the stdout pipe belonging to whoever piped `spur projects start`. cmd
- * exits, but that pipe never reaches EOF, so a buffered caller (execa under the CLI, pwsh
- * `| Out-String` above it) waits on it forever. Start-Process goes through
- * CreateProcess with an explicit handle list, so the daemon inherits nothing of ours, and
- * no shell parses the daemon's argv.
+ * The daemon is created with PowerShell `Start-Process`, not `cmd /c start /b`: `start` forwards
+ * cmd's whole inheritable handle table, so the daemon keeps a duplicate of the stdout pipe belonging
+ * to whoever piped `spur projects start`. cmd exits, but that pipe never reaches EOF, so a buffered
+ * caller (execa under the CLI, pwsh `| Out-String` above it) waits on it forever — measured on
+ * windows-latest: `start /b` closed the caller stream only when the child died (14.2s for a 12s
+ * child), Start-Process closed it in 0.42s while the daemon kept running. Start-Process hands the
+ * daemon none of our std handles, and no shell parses its argv.
  *
  * @throws if a value cannot survive the handoff: a .cmd/.bat launcher (a batch
  * interpreter re-expands %) or `"` in any argument (the spec keeps argv quote-free).
@@ -109,9 +109,7 @@ export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
     const env: Record<string, string> = {};
     for (const [i, arg] of cmd.entries()) {
         if (arg.includes('"')) {
-            throw new Error(
-                `detached serve launch: argument ${i} contains '"', which cannot be passed through cmd.exe`,
-            );
+            throw new Error(`detached serve launch: argument ${i} contains '"', which the launch spec cannot carry`);
         }
         env[`SPUR_SERVE_ARG_${i}`] = arg;
     }
