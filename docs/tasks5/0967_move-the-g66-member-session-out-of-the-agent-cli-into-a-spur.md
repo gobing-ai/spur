@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Move the G66 member session out of the agent CLI into a spur-app MemberSession service
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-09-26T05:53:30.523Z
-updated_at: "2026-09-26T05:54:13.368Z"
+updated_at: "2026-09-27T06:11:05.087Z"
 feature_id: G67
 
 ---
@@ -174,7 +174,38 @@ export class MemberSession {
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Review — 0967 (G67 R1/R2 extraction), lane `safety` (deterministic, diffstat 1086 changed lines).
+
+**Verdict: PASS with notes.** No functional defect in the extraction. R1–R5 hold; the 90 CLI tests that pin the G66 member-session loop behavior pass unchanged.
+
+#### Functional traceability
+
+| Req | Evidence | Status |
+| --- | --- | --- |
+| R1 | `packages/app/src/services/member-session.ts:29-319` owns the types, `MAX_CONSECUTIVE_FAILED_DRAINS`, `selectsPersistentStdinDispatch`, and `MemberSession` (`mode`/`id`/`process`/`failedDrains`) with `binary`/`resolveMode`/`start`/`ensureProcess`/`reset`/`recordDrain`/`hasLiveState`. `rg "function (memberAgentBinary\|memberDispatchCommand\|resolveMemberSessionMode\|memberProcessOptions\|ensureMemberProcess\|resetMemberSession\|drainedSessionId)\|MAX_CONSECUTIVE_FAILED_DRAINS =" apps/cli/src` → empty. | met |
+| R2 | `MemberSessionDeps` (`:83`) = `executors`/`env`/`getDb`/`warn` + two optional seams. The CLI builds it in one object literal at `apps/cli/src/commands/agent.ts:1282` — the Design's sanctioned adapter. No `CliContext` import. | met |
+| R3 | Five loop sites: `:1282` construct, `:1330` `start`, `:1413` `ensureProcess`, `:1434` resume-id flags, `:1449` `recordDrain`, `:1463-1464` `hasLiveState`/operator reset. Equivalence evidenced by `apps/cli/tests/commands/agent-loop-member-session.test.ts` (10 G66 cases) passing with zero test edits. | met |
+| R4 | `packages/app/tests/services/member-session.test.ts` — 21 tests, no `CliContext`, no spawned agent. | met |
+| R5 | `apps/cli/src/commands/agent.ts:965-975` re-exports; `agent-loop-member-session.test.ts:29` compiles unedited. | met |
+
+#### SECUA
+
+- **Security** — no new input surface; the spawn argv is built by the runner; `env` entries with `undefined` values are dropped before the spawn (tested). No secret handling added.
+- **Efficiency** — spawn/reset cadence unchanged; `start()` resolves once per loop lifetime (`:1330`, before the `while` at `:1344`).
+- **Correctness** — failed-drain counter, `restart` reset and ledger-write ordering match the base revision. The three "observability only" `.catch` fallbacks and the `member-persistent-stdin-unwired` degrade are now covered (function coverage 79.17% → 91.67% on the new file).
+- **Usability** — warning strings and the reset stderr line are byte-identical; the `warn` sink maps to `context.output.error`.
+- **Architecture** — dependency direction CLI → app (ADR-021); `rg "CliContext|apps/cli" packages/app/src/services/member-session.ts` → empty. The service is a deep module: 6 public methods behind a 6-field structural deps object.
+
+#### Findings
+
+- **P2 (process, not code)** — AC1's third verify lens (`git diff 872024cd2 -- apps/cli/tests is empty`) is unsatisfiable from the current branch base. Commits `789e464de` (release-ops timeout) and `aebde9a14` (worktree provenance persistence) changed `apps/cli/tests` between the review base `872024cd2` and this task's branch base `939789e5`. This task's own diff under `apps/cli/tests` is empty (`git diff HEAD -- apps/cli/tests` → no output). Re-anchor the lens to the branch base on the next refine.
+- **P3 (run-level caveat)** — `--agent inline` cannot satisfy the review hop's executor-distinctness gate (`compareExecutorWith: implement`): implement and review share the host executor. A limitation of inline execution, not of this change.
+- **P4** — the `sessionCapability` deps seam is an addition beyond the Design's `MemberSessionDeps`. It is what makes R4's `member-persistent-stdin-unwired` case executable at all: all three persistent-capable runner shims (`omp`/`pi`/`claude`) wire the stdin argv, so the degrade branch is otherwise unreachable without a runner that mis-declares the capability. Mirrors the existing `processFactory` seam. Recorded in Solution.
+- **P4** — `MAX_CONSECUTIVE_FAILED_DRAINS` is re-exported from `agent.ts` for R5 compatibility but now has no in-repo consumer.
+
+#### Residual risk
+
+None in the extracted logic. The loop-side extraction (~9 further symbols) is the G67 sibling task's scope and is not silently deferred here.
 
 ### References
 
@@ -186,4 +217,5 @@ export class MemberSession {
 ### History
 
 - 2026-09-26T05:53:51.603Z backlog → todo (system)
+- 2026-09-27T05:55:08.735Z todo → wip (system)
 

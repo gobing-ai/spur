@@ -332,6 +332,17 @@ export {
 export type { JobWorkerConsumer, JobWorkerServiceOptions } from './services/job-worker-service';
 export { JobHandlerRegistry, JobWorkerService } from './services/job-worker-service';
 export type {
+    MemberAgentProcess,
+    MemberSessionDeps,
+    MemberSessionMode,
+    MemberSessionResetReason,
+} from './services/member-session';
+export {
+    MAX_CONSECUTIVE_FAILED_DRAINS,
+    MemberSession,
+    selectsPersistentStdinDispatch,
+} from './services/member-session';
+export type {
     InvokeEventSnapshot,
     OccupantLifecycle,
     OccupantPin,
