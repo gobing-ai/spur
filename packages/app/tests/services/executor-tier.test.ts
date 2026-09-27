@@ -46,7 +46,7 @@ describe('executorDisabled (0890 single availability reader)', () => {
     test.each([
         ['boolean true', true, true],
         ['boolean false', false, false],
-        ['object form', { owner: 'quota', since: '2026-01-01', reason: 'exhausted' }, true],
+        ['object form', { owner: 'quota', since: '2026-01-01T00:00:00.000Z', reason: 'exhausted' }, true],
         ['undefined executor', undefined, false],
     ] as const)('%s', (_label, raw, expected) => {
         const input = raw === undefined ? undefined : executor({ name: 'e', disabled: raw });
@@ -66,7 +66,7 @@ describe('cheapestEligibleExecutors (0543 R1 single funnel)', () => {
         executor({
             name: 'object-disabled',
             tier: 'capable-1',
-            disabled: { owner: 'quota', since: '2026-01-01', reason: 'x' },
+            disabled: { owner: 'quota', since: '2026-01-01T00:00:00.000Z', reason: 'x' },
         }),
         executor({ name: 'standard', tier: 'standard' }),
         executor({ name: 'below', tier: 'cheap' }),
