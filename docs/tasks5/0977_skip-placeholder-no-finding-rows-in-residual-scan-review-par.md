@@ -4,7 +4,7 @@ name: Skip placeholder no-finding rows in residual-scan review parsing
 status: done
 template: standard
 created_at: 2026-09-26T22:45:20.140Z
-updated_at: "2026-09-26T23:51:42.282Z"
+updated_at: "2026-09-26T23:59:33.105Z"
 feature_id: F961
 priority: P1
 tags:
@@ -95,32 +95,32 @@ Rationale: single-edit root cause per Q&A — one shared regex covers scan, fold
 
 **Pipeline verify results**
 
-- Verdict: PARTIAL (from verdict artifact)
+- Verdict: PASS (from verdict artifact)
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | residual-scan.ts:68 frozen literal (anchored, case-insensitive, optional "(…)" note + period + em-dash) drops placeholder cells; table test residual-scan.test.ts:72-105 asserts 9 dropped rows; committed in afb49c376 |
-| R2 | MET | table test keeps "None of the callers validate input" and "None found (x) but callers skip validation" unchanged; kept-set asserted exactly (5 rows) |
-| R3 | MET | regression test residual-scan.test.ts:72-105 pins R1+R2; residual-scan.mjs regenerated via superskill script convert sp residual-scan.ts (em-dash as \u2014, regex-equivalent) |
+| R1 | MET | `plugins/sp/scripts/residual-scan.ts:68` frozen NONE_FINDING literal, consumed at `plugins/sp/scripts/residual-scan.ts:151`; `plugins/sp/tests/residual-scan.test.ts:72-105` drops 9 placeholder rows (re-run 2026-09-26: 21 pass / 0 fail) |
+| R2 | MET | `plugins/sp/tests/residual-scan.test.ts:98-104` asserts exact kept-set incl. "None of the callers validate input" text unchanged |
+| R3 | MET | `plugins/sp/tests/residual-scan.test.ts:72-105` pins R1+R2; `plugins/sp/scripts/residual-scan.mjs:20` same pattern; `superskill script convert sp residual-scan.ts` re-run → zero git diff |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | residual-scan.ts scan 0964 → blocking=0 advisory=1 (re-run 2026-09-26 16:35); 9 placeholder rows dropped in table test |
-| AC2 | MET | test | table test asserts exact kept-set incl. unknown phrasings (No findings; see P2 / Nothing to report / N/A) per closed Q&A fail-safe decision |
-| AC3 | MET | test | git show --stat afb49c376: exactly residual-scan.{ts,mjs}+test (+39/-2); suite 21/21 pass; full gate green (status=PASS, 0 fails) |
+| Scenario: R1 — Placeholder no-finding rows are not residual findings | MET | command | `bun plugins/sp/scripts/residual-scan.ts scan 0964` → blocking=0 advisory=1 (same via .mjs); test `plugins/sp/tests/residual-scan.test.ts:72` passes |
+| Scenario: R2 — Real findings that start with None still count | MET | test | `plugins/sp/tests/residual-scan.test.ts:98-104` exact kept-set assertion passes |
+| Scenario: R3 — Shipped script matches the tested source | MET | command | regen via `superskill script convert sp residual-scan.ts` → `git status --short` clean; `.mjs` scan 0964 output identical to `.ts` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 <!-- spur:record-review -->
 
-**SECU findings** (pipeline verify step — verdict: PARTIAL)
+**SECU findings** (pipeline verify step — verdict: PASS)
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=3 housekeeping=0 |
 
 ### References
 
