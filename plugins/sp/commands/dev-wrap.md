@@ -17,7 +17,7 @@ Wraps the **wrapup-pipeline.yaml** workflow.
 | `--agent` `<inline\|auto\|name>` | Who runs the wrap's model-bearing steps. Wrap is workflow-backed (headless): `omit` and `--agent inline` resolve identically per task 0687 — tier substitution under objective trigger 3 (durable auditable run record required) with a warning naming the substituted executor; `auto` tier-resolves an executor; a name pins that executor into `vars.agent`. | inline |
 | `--auto` | Skip objective HITL gates. | off |
 | `--merge` | Merge the wrap branch. | off |
-| `--dry-run` | Render the wrap without writing. | off |
+| `--dry-run` | Validate and walk transitions without executing actions. Conditional states therefore resolve to their declared failure edges (their guard files are never written), so a render ending in `failed` is **not** a run failure — it reports "this state's route cannot be decided without running it". Use a real run to preview a route. | off |
 
 For shared semantics, see the [flag glossary](../skills/spur-dev/references/flag-glossary.md).
 
