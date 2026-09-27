@@ -69,6 +69,16 @@ describe('task handlers', () => {
                 },
                 ...overrides,
             }),
+            // Guarded transition (task 0966): the handler routes through this; the gate
+            // itself is unit-tested in transition-gate.test.ts.
+            transitionTask: async () => ({
+                kind: 'transitioned' as const,
+                result: {
+                    ref: { id: '0001', filePath: '/test/0001.md', kind: 'task' as const, folder: '.' },
+                    fromStatus: 'wip',
+                    toStatus: 'done',
+                },
+            }),
             jobQueue: async () => ({ enqueue }),
         } as unknown as ServerContext;
     }

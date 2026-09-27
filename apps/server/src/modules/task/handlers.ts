@@ -85,7 +85,10 @@ export function createTaskHandlers(ctx: ServerContext) {
         }),
 
         transition: os.task.transition.handler(async ({ input }) => {
-            await ctx.taskService().updateStatus(input.wbs, input.toStatus, input.actor);
+            // Guarded transition (task 0966 R3): one shared gate with the CLI — the
+            // structural `testing`/`done` check plus the done-verdict gate. A denial
+            // throws GuardDeniedError → 409 GUARD_DENIED via the error handler.
+            await ctx.transitionTask(input);
             return { ok: true as const, data: { wbs: input.wbs, status: input.toStatus } };
         }),
 

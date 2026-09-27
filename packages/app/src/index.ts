@@ -499,6 +499,8 @@ export {
     schedulerJobTimeoutEnvName,
     validateSchedulerCustomJobPayload,
 } from './services/scheduler-custom-job-service';
+export type { LoadSectionMatrixOptions } from './services/section-matrix-loader';
+export { loadSectionMatrix } from './services/section-matrix-loader';
 export {
     BUILTIN_CLAUDE_COMMANDS,
     type DiscoveredPlugin,
@@ -662,6 +664,13 @@ export {
     TaskService,
     WbsCollisionError,
 } from './services/task-service';
+export type {
+    GuardedTransitionDeps,
+    GuardedTransitionInput,
+    GuardedTransitionResult,
+    TransitionCheckGate,
+} from './services/task-transition';
+export { canonicalStatusOrRaw, transitionTaskGuarded } from './services/task-transition';
 export type { BatchAggregation, BatchTaskOutcome, BatchTaskResult } from './services/task-verdict';
 export { aggregateBatchVerdicts, classifyTaskOutcome, deriveVerdict } from './services/task-verdict';
 export type {

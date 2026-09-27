@@ -63,7 +63,7 @@
     ├── [verifying] **F3**: Feature management CLI ([F3_feature-management-cli.md](./F3_feature-management-cli.md))
         └── [verifying] **F31**: Feature tree restructure kit: audit, hierarchy guide, and /sp:dev-feature-change ([F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md](./F31_feature-tree-restructure-kit-audit-hierarchy-guide-and-sp-dev-featurechange.md))
     ├── [done] **F4**: Lifecycle and events ([F4_lifecycle-and-events.md](./F4_lifecycle-and-events.md))
-        └── [backlog] **F41**: Transport-parity task transition gates: one guarded transition for CLI and server ([F41_transport-parity-task-transition-gates-one-guarded-transition-for-cli-and-server.md](./F41_transport-parity-task-transition-gates-one-guarded-transition-for-cli-and-server.md))
+        └── [done] **F41**: Transport-parity task transition gates: one guarded transition for CLI and server ([F41_transport-parity-task-transition-gates-one-guarded-transition-for-cli-and-server.md](./F41_transport-parity-task-transition-gates-one-guarded-transition-for-cli-and-server.md))
     ├── [done] **F5**: Execution pipeline ([F5_execution-pipeline.md](./F5_execution-pipeline.md))
     ├── [verifying] **F6**: Corpus migration ([F6_corpus-migration.md](./F6_corpus-migration.md))
         └── [done] **F61**: Corpus gate acceptance parity: the per-task gate honors accepted baseline debt ([F61_corpus-citation-repair-pay-down-the-anchor-drift-the-content-gate-revealed.md](./F61_corpus-citation-repair-pay-down-the-anchor-drift-the-content-gate-revealed.md))

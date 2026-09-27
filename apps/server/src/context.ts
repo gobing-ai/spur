@@ -25,6 +25,8 @@ import {
     type EventEmitter,
     enqueueHistoryRefresh,
     FeatureService as FeatureServiceImpl,
+    type GuardedTransitionInput,
+    type GuardedTransitionResult,
     hitlConfirmDefault,
     LiveHistoryBoardService,
     systemEventProjectContext as makeSystemEventProjectContext,
@@ -35,8 +37,11 @@ import {
     RunStoreService as RunStoreServiceImpl,
     SupervisorService as SupervisorServiceImpl,
     type SystemEventProjectContext,
+    TaskCheckService,
+    TaskLocator,
     TaskService as TaskServiceImpl,
     TokenLedgerService as TokenLedgerServiceImpl,
+    transitionTaskGuarded,
     WorkflowAppService as WorkflowAppServiceImpl,
 } from '@gobing-ai/spur-app';
 // CF-safe core import: DEFAULT_* are plain string constants in the dependency-free core
@@ -147,6 +152,26 @@ export interface ServerContext {
 
     /** Lazy, cached TaskService (planning layer). */
     taskService(): TaskService;
+
+    /** Absolute `.spur/run` artifact directory for this project (task 0966). */
+    readonly runDir: string;
+
+    /**
+     * Lazy, cached structural check service for the guarded transition gate (task
+     * 0966 R3). `undefined` when no Section-Status-Matrix was resolved at boot: a
+     * project that cannot load its matrix cannot run the structural check, so the
+     * transition then relies on the verdict gate alone.
+     */
+    checkService(): TaskCheckService | undefined;
+
+    /**
+     * One guarded task-status transition (task 0966 R3) — the server-side peer of
+     * the CLI's `spur task update`. The server has no lifecycle FSM port, so the
+     * structural `testing`/`done` check gate is always supplied (when a matrix is
+     * present) and every `done` transition passes the verdict gate. A denial throws
+     * `GuardDeniedError`, which the error handler maps to HTTP 409 GUARD_DENIED.
+     */
+    transitionTask(input: GuardedTransitionInput): Promise<GuardedTransitionResult>;
 
     /**
      * Reload the merged Spur config for this project (0840). Composition-root
@@ -356,6 +381,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     // ── Lazy caches ──
     let dbPromise: Promise<DbAdapter> | undefined;
     let taskSvc: TaskService | undefined;
+    let checkSvc: TaskCheckService | undefined;
     let featureSvc: FeatureService | undefined;
     let historyBoardSvc: HistoryBoardService | undefined;
     let coordinationSvc: AgentCoordinationService | undefined;
@@ -373,6 +399,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
     return {
         cwd,
         fs,
+        runDir: join(cwd, '.spur', 'run'),
         webDistPath: options.webDistPath,
 
         async getDb(): Promise<DbAdapter> {
@@ -412,6 +439,49 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
                 });
             }
             return taskSvc;
+        },
+
+        checkService(): TaskCheckService | undefined {
+            // `options.sectionMatrix` is absent only for a caller that never booted
+            // through `serve.ts` (tests, CF Workers): `loadSectionMatrix` throws on a
+            // boot failure, so a real server always has one. Returning `undefined`
+            // therefore means "this context cannot run the structural gate" rather
+            // than "the gate is optional" — `transitionTask` omits it and the
+            // verdict gate still applies. Documented by task 0966 review P3-1.
+            if (checkSvc === undefined && options.sectionMatrix !== undefined) {
+                checkSvc = new TaskCheckService(
+                    fs,
+                    options.sectionMatrix,
+                    new TaskLocator({
+                        fs,
+                        tasksDir: folders.tasksDir,
+                        foldersConfig: folders.foldersConfig,
+                    }),
+                );
+            }
+            return checkSvc;
+        },
+
+        async transitionTask(input: GuardedTransitionInput): Promise<GuardedTransitionResult> {
+            const check = this.checkService();
+            return transitionTaskGuarded(
+                {
+                    tasks: this.taskService(),
+                    fs,
+                    runDir: this.runDir,
+                    ...(check !== undefined
+                        ? {
+                              checkGate: {
+                                  service: check,
+                                  ...(folders.severityOverrides !== undefined
+                                      ? { severityOverrides: folders.severityOverrides }
+                                      : {}),
+                              },
+                          }
+                        : {}),
+                },
+                input,
+            );
         },
 
         featureService(): FeatureService {

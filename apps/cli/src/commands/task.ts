@@ -8,14 +8,16 @@ import {
     type AgentQuotaEventBus,
     aggregateBatchVerdicts,
     anchorQualify,
-    type CheckFindings,
     type CoordinationEventBus,
     CorpusMigrator,
+    canonicalStatusOrRaw,
     DependencyMutationError,
     DuplicateFollowUpError,
     type EntityRef,
     ensurePipelineRunLink,
-    evaluateDoneTransition,
+    GuardDeniedError,
+    type GuardedTransitionResult,
+    loadSectionMatrix,
     type MigrationReport,
     PlanningWriteService,
     prepareBatchTaskReady,
@@ -23,10 +25,8 @@ import {
     READY_DONE,
     READY_SKIPPED,
     type ReadinessOutcome,
-    readVerdictArtifact,
     resolvePlanningFolders,
     runCorpusCheck,
-    type SectionMatrix,
     SectionMutationError,
     type SystemEventBus,
     TASK_LIFECYCLE_PROFILE,
@@ -36,11 +36,12 @@ import {
     TaskPreparationError,
     TaskService,
     type TaskSummary,
-    type VerdictAggregate,
+    type TransitionCheckGate,
+    transitionTaskGuarded,
     WbsCollisionError,
 } from '@gobing-ai/spur-app';
 import { AGENT_ID_REGEX } from '@gobing-ai/spur-config';
-import { bundledConfigRoot, loadStructuredSpurConfig } from '@gobing-ai/spur-config/loader';
+import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import {
     extractTemplateBodies,
     normalizeTaskStatus,
@@ -51,7 +52,6 @@ import {
     UNIVERSAL_SECTIONS,
 } from '@gobing-ai/spur-domain';
 import { EventBus } from '@gobing-ai/ts-infra';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { attachAgentQuotaPersistence } from '../agent-quota-persistence';
 import { type Colorize, makeColorize, shouldColor } from '../colors';
 import { EMBEDDED_SPUR_SCHEMAS } from '../config/embedded-schemas';
@@ -89,20 +89,6 @@ const STATUS_TITLE: Record<(typeof TASK_STATUSES)[number], string> = {
  * markdown/glow dependency); `color` is the identity colorizer when the stream is
  * not a TTY, so piped output and tests stay plain text.
  */
-/**
- * Alias-normalize a status string (task 0292 fix pass): `Done`/`DONE`/legacy
- * aliases → canonical lowercase, so gate matches on `'done'` cannot be slipped
- * past with a case variant. Unknown values pass through unchanged — downstream
- * Zod validation owns the clear error for those.
- */
-function canonicalStatusOrRaw(raw: string): string {
-    try {
-        return normalizeTaskStatus(raw);
-    } catch {
-        return raw;
-    }
-}
-
 function renderTaskBoard(
     tasks: TaskSummary[],
     boardTitle: string,
@@ -588,112 +574,88 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     // slip past the `=== 'done'` checks below (verdict gate + P3
                     // backstop).
                     status = canonicalStatusOrRaw(status);
+                    // ── guarded transition (task 0966) ──
+                    // The done/testing structural check gate and the done-verdict gate
+                    // (task 0292) now live ONCE, in `@gobing-ai/spur-app`'s
+                    // `transitionTaskGuarded` — the server's `task.transition` handler
+                    // routes through the same function, so one gate guards both
+                    // transports. The CLI keeps only its transport concerns here: the
+                    // lifecycle-adapter availability decision (and its stderr warning),
+                    // the history-refresh trigger, the stdout/envelope text and exit
+                    // codes.
+                    //
                     // P3 backstop (task 0130 retrospective): the lifecycle YAML runs
-                    // `spur task check` as the wip→testing and testing→done guard. Whenever
-                    // that FSM guard will NOT run, re-run the gate inline so the structural
-                    // check is not silently lost.
+                    // `spur task check` as the wip→testing and testing→done guard.
+                    // Whenever that FSM guard will NOT run, the structural gate is
+                    // supplied inline so the check is not silently lost.
                     //
                     // Two ways the FSM guard goes missing, and BOTH must be covered:
                     //   1. the bundled task-lifecycle workflow can't be resolved (adapter
                     //      undefined) — the SchemaLifecyclePort fallback permits silently;
                     //   2. `--no-lifecycle` was passed — no adapter is built at all.
                     //
-                    // Case 2 used to disable this backstop via `options.lifecycle !== false`,
-                    // which made the flag that suppresses the lifecycle RUN RECORD also
-                    // suppress ENFORCEMENT. That coupling let `--no-lifecycle --force-done`
-                    // walk a task from wip to done carrying L3 errors. `--no-lifecycle` is
-                    // bookkeeping ("the pipeline is already a run; a nested lifecycle run
-                    // would orphan"), never a guard bypass — so the gate now runs regardless.
-                    // In-process (TaskCheckService), so this costs no subprocess.
-                    if (status === 'done' || status === 'testing') {
-                        const adapter =
-                            options.lifecycle === false
-                                ? undefined
-                                : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
-                        if (adapter === undefined) {
-                            if (options.lifecycle !== false) {
-                                context.output.error(
-                                    `warning: lifecycle adapter unavailable — running \`spur task check\` inline as the ${status} gate. ` +
-                                        'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
-                                );
-                            }
-                            const gate = await runDoneGateCheck(context, wbs, options.folder, status);
-                            if (!gate.pass) {
-                                // 0808 R3: name the target-status probe (`--as <status>`) and
-                                // list its error findings — a bare "check failed" reads as a
-                                // contradiction when the plain current-status check passes.
-                                const errors = gate.findings.filter((f) => f.severity === 'error');
-                                const listed = (errors.length > 0 ? errors : gate.findings)
-                                    .map((f) => `${f.code}${f.section === '' ? '' : ` [${f.section}]`}: ${f.message}`)
-                                    .join('; ');
-                                writeJsonError(
-                                    context.output,
-                                    options,
-                                    `Lifecycle transition blocked: \`spur task check ${wbs} --as ${status}\` failed${listed === '' ? '' : ` — ${listed}`}. Fix the findings before transitioning to ${status}.`,
-                                    'GUARD_DENIED',
-                                );
-                                context.setExitCode(1);
-                                return;
-                            }
+                    // `--no-lifecycle` is bookkeeping ("the pipeline is already a run; a
+                    // nested lifecycle run would orphan"), never a guard bypass — so the
+                    // gate runs regardless. In-process (TaskCheckService), so this costs
+                    // no subprocess.
+                    const adapter =
+                        options.lifecycle === false ? undefined : makeLifecycleAdapter(context, TASK_LIFECYCLE_PROFILE);
+                    let checkGate: TransitionCheckGate | undefined;
+                    if (adapter === undefined) {
+                        if (options.lifecycle !== false) {
+                            context.output.error(
+                                `warning: lifecycle adapter unavailable — running \`spur task check\` inline as the ${status} gate. ` +
+                                    'Restore the bundled task-lifecycle workflow to re-enable the real guard.',
+                            );
                         }
+                        const planningFolders = await resolvePlanningFolders(context.fs);
+                        checkGate = {
+                            service: new TaskCheckService(
+                                context.fs,
+                                await loadSectionMatrix(context.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }),
+                                await makeTaskLocator(context),
+                            ),
+                            ...(planningFolders.severityOverrides !== undefined
+                                ? { severityOverrides: planningFolders.severityOverrides }
+                                : {}),
+                        };
                     }
-                    // ── done-transition verdict gate (task 0292) ──
-                    // Replaces the silent PARTIAL/FAIL → done slide. Runs for every `done`
-                    // transition regardless of --no-lifecycle (covers the SchemaLifecyclePort
-                    // fallback that the P3 backstop at line 234 does not cover). The guard
-                    // reads the verify artifact (`.spur/run/<wbs>-verdict.json` by default),
-                    // recomputes the aggregate for consistency (R10), and either allows,
-                    // denies with an actionable message, or records an override.
-                    // The guard returns `allow | deny | noop`. We separately track whether the
-                    // allow was an operator override (R3) so the post-transition block can record
-                    // the `done_forced` audit-trail frontmatter.
-                    let forcedDone = false;
-                    let forcedDoneReason: string | undefined;
-                    let forcedDoneVerdict: VerdictAggregate | undefined;
-                    if (status === 'done') {
-                        const current = await svc.show(wbs);
-                        const verdictDir = options.verdictDir ?? join(context.cwd, '.spur', 'run');
-                        const loaded = await readVerdictArtifact(context.fs, verdictDir, wbs);
-                        const guardOutcome = evaluateDoneTransition({
-                            wbs,
-                            taskFilePath: current.filePath,
-                            // Normalize the stored status too, so a legacy-cased
-                            // `Done` still short-circuits as the R9 no-op instead of
-                            // mis-entering the verdict-denial path.
-                            currentStatus: canonicalStatusOrRaw(String(current.frontmatter.status)),
-                            targetStatus: 'done',
-                            forced: options.forceDone === true,
-                            reason: options.reason,
-                            artifact: loaded.artifact,
-                        });
-                        if (guardOutcome.kind === 'noop') {
-                            // R9: same-status no-op. Exit 0 so scripts/CI can idempotently re-run.
-                            if (options.json) {
-                                context.output.write(
-                                    toEnvelopeJson(
-                                        { ok: true, noop: true, wbs, status: 'done' },
-                                        { enveloped: options.jsonEnvelope },
-                                    ),
-                                );
-                            } else {
-                                context.output.write(guardOutcome.message);
-                            }
-                            return;
-                        }
-                        if (guardOutcome.kind === 'deny') {
-                            writeJsonError(context.output, options, guardOutcome.message, 'GUARD_DENIED');
+                    let outcome: GuardedTransitionResult;
+                    try {
+                        outcome = await transitionTaskGuarded(
+                            {
+                                tasks: svc,
+                                fs: context.fs,
+                                runDir: options.verdictDir ?? join(context.cwd, '.spur', 'run'),
+                                ...(checkGate !== undefined ? { checkGate } : {}),
+                            },
+                            { wbs, toStatus: status, forceDone: options.forceDone === true, reason: options.reason },
+                        );
+                    } catch (err) {
+                        // The shared gate denied: identical message + envelope + exit
+                        // code as the pre-0966 inline gate.
+                        if (err instanceof GuardDeniedError) {
+                            writeJsonError(context.output, options, err.message, 'GUARD_DENIED');
                             context.setExitCode(1);
                             return;
                         }
-                        // `allow` — if it was a forced override (non-PASS or missing artifact),
-                        // record state for the audit-trail write below.
-                        if (guardOutcome.reason === 'forced') {
-                            forcedDone = true;
-                            forcedDoneReason = options.reason;
-                            forcedDoneVerdict = loaded.artifact?.verdict ?? 'UNKNOWN';
-                        }
+                        throw err;
                     }
-                    const result = await svc.updateStatus(wbs, status);
+                    if (outcome.kind === 'noop') {
+                        // R9: same-status no-op. Exit 0 so scripts/CI can idempotently re-run.
+                        if (options.json) {
+                            context.output.write(
+                                toEnvelopeJson(
+                                    { ok: true, noop: true, wbs, status: 'done' },
+                                    { enveloped: options.jsonEnvelope },
+                                ),
+                            );
+                        } else {
+                            context.output.write(outcome.message);
+                        }
+                        return;
+                    }
+                    const result = outcome.result;
                     // Completion trigger (task 0549 R1): task → done enqueues a coalesced
                     // history refresh — off the critical path, opt-in via
                     // `history.refresh.on_completion`. Best-effort; never changes the
@@ -701,29 +663,22 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                     if (status === 'done') {
                         await maybeTriggerHistoryRefresh(context, 'task-done', wbs);
                     }
-                    // R3 override audit-trail: persist done_forced + done_reason so a later
-                    // `spur task show` surfaces that this `done` was an operator override of a
-                    // non-PASS verdict. Best-effort — a write failure here leaves the task at
-                    // `done` without the audit fields; the transition itself is already committed.
-                    if (forcedDone) {
-                        try {
-                            await svc.updateField(wbs, 'done_forced', 'true');
-                            if (forcedDoneReason !== undefined && forcedDoneReason.length > 0) {
-                                await svc.updateField(wbs, 'done_reason', forcedDoneReason);
-                            }
-                        } catch (auditErr) {
-                            context.output.error(
-                                `warning: failed to record done-forced audit fields: ${String(auditErr)}`,
-                            );
-                        }
+                    // R3 override audit-trail: the shared gate persists
+                    // `done_forced`/`done_reason` itself. A write failure there leaves
+                    // the task at `done` without the audit fields — the transition is
+                    // already committed, so it is reported, not thrown.
+                    if (outcome.forced?.auditError !== undefined) {
+                        context.output.error(
+                            `warning: failed to record done-forced audit fields: ${outcome.forced.auditError}`,
+                        );
                     }
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
                     } else {
                         context.output.write(`${result.ref.id}: ${result.fromStatus} → ${result.toStatus}`);
-                        if (forcedDone && forcedDoneVerdict !== undefined) {
+                        if (outcome.forced !== undefined) {
                             context.output.write(
-                                `ⓘ  Override recorded: task advanced to done despite ${forcedDoneVerdict} verdict (done_forced=true).`,
+                                `ⓘ  Override recorded: task advanced to done despite ${outcome.forced.verdict} verdict (done_forced=true).`,
                             );
                         }
                     }
@@ -1750,7 +1705,7 @@ export async function makeService(
         tasksDir,
         writeService,
         getDb: () => context.getDb(),
-        sectionMatrix: await loadSectionMatrix(context.cwd),
+        sectionMatrix: await loadSectionMatrix(context.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }),
         resolveTemplateBodies: (variant: string) => loadTemplateBodies(context.cwd, variant),
         foldersConfig,
     });
@@ -1807,104 +1762,9 @@ export async function makeTaskLocator(context: CliContext): Promise<TaskLocator>
 
 /** 0839: exported for the agent loop's injected dependency gate (`firstBlockingPrerequisite`). */
 export async function makeCheckService(context: CliContext): Promise<TaskCheckService> {
-    return new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
-}
-
-/**
- * Inline lifecycle-gate backstop (P3, task 0130 retrospective). Runs the same
- * `spur task check` guard the lifecycle YAML runs, used ONLY when the lifecycle
- * adapter is unavailable and the transition targets a guarded state (`testing`
- * or `done`). Returns `true` iff the check passes.
- *
- * Target-aware (F92 R3): the check is evaluated AS the transition target —
- *   - wip→testing: `spur task check <wbs> --as testing`
- *   - testing→done: `spur task check <wbs> --as done`
- * so the matrix and status-dependent rules see the target status, matching the
- * lifecycle FSM exactly. Both use default severity (no blanket warning elevation).
- *
- * Bug fixed (0147): the original implementation passed `strict: status === 'done'`, which
- * elevated ALL warnings to errors for the done gate — stricter than the real FSM guard.
- * Previous fix: always pass `strict: false`. (--strict-core never added blanket elevation.)
- */
-async function runDoneGateCheck(
-    context: CliContext,
-    wbs: string,
-    folderOverride: string | undefined,
-    targetStatus: string,
-): Promise<{ pass: boolean; findings: CheckFindings[] }> {
-    const planningFolders = await resolvePlanningFolders(context.fs);
-    const foldersConfig = planningFolders.foldersConfig;
-    const tasksDir = folderOverride ?? context.fs.resolve(foldersConfig.active_folder);
-    const hit = await new TaskLocator({ fs: context.fs, tasksDir, foldersConfig }).findByWbs(wbs);
-    if (!hit) {
-        return { pass: false, findings: [] }; // missing task — let updateStatus throw the real error
-    }
-    const svc = new TaskCheckService(context.fs, await loadSectionMatrix(context.cwd), await makeTaskLocator(context));
-    // Default severity (not --strict, not --strict-core) — hard-core L3/L2-gate
-    // errors are already errors in the base computation. Never pass strict:true.
-    const result = await svc.check(hit.filePath, wbs, {
-        strict: false,
-        asStatus: targetStatus,
-        severityOverrides: planningFolders.severityOverrides,
-    });
-    return { pass: result.pass, findings: result.findings };
-}
-/**
- * Load the Section-Status-Matrix (design §3.2, R2) — the SOLE section authority
- * for both creation and check (F92 R1). Resolution order:
- *   1. `.spur/tasks/section-matrix.yaml` (project-local, seeded by `spur init`)
- *   2. bundled / packaged `tasks/section-matrix.yaml` (data copied/generated from
- *      the canonical build-time matrix asset under the repo `config` `tasks` tree)
- * Fails loudly with the attempted paths when neither asset is reachable — there
- * is NO hand-maintained permissive built-in (one would make the same task
- * validate/render differently by installation layout).
- */
-const sectionMatrixCache = new Map<string, Promise<SectionMatrix>>();
-
-async function loadSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
-    const cached = sectionMatrixCache.get(projectRoot);
-    if (cached !== undefined) return cached;
-
-    const promise = loadSectionMatrixUncached(projectRoot);
-    sectionMatrixCache.set(projectRoot, promise);
-    promise.catch(() => sectionMatrixCache.delete(projectRoot));
-    return promise;
-}
-
-async function loadSectionMatrixUncached(projectRoot: string): Promise<SectionMatrix> {
-    const fs = createNodeFileSystem(projectRoot);
-    // 1. Project-local: .spur/tasks/section-matrix.yaml
-    const localPath = fs.resolve('.spur', 'tasks', 'section-matrix.yaml');
-    if (await fs.exists(localPath)) {
-        const data = await loadStructuredSpurConfig(localPath, {
-            validateJsonSchema: true,
-            embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
-        });
-        // SAFETY: loadStructuredSpurConfig validated the document against the embedded
-        // section-matrix JSON schema, so the parsed shape satisfies SectionMatrix.
-        return data as unknown as SectionMatrix;
-    }
-    // 2. Bundled / packaged fallback: tasks/section-matrix.yaml
-    const root = bundledConfigRoot();
-    if (root !== null) {
-        const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
-        if (await fs.exists(matrixPath)) {
-            const data = await loadStructuredSpurConfig(matrixPath, {
-                validateJsonSchema: true,
-                embeddedSchemas: EMBEDDED_SPUR_SCHEMAS,
-            });
-            // SAFETY: same embedded-schema validation as the project-local path —
-            // the bundled matrix document is schema-checked before this cast.
-            return data as unknown as SectionMatrix;
-        }
-    }
-    // No hand-maintained fallback (F92 R1): the matrix is the sole section
-    // authority. A permissive built-in here would make the same task validate /
-    // render differently by installation layout. Fail loudly with the paths tried.
-    throw new Error(
-        `no canonical section-matrix found for task section authority (F92 R1); tried:\n` +
-            `  - ${localPath}\n` +
-            (root !== null ? `  - ${join(root, 'tasks', 'section-matrix.yaml')}\n` : '') +
-            'copy/generate section-matrix.yaml from the canonical build-time matrix asset (repo `config` `tasks` tree) into one of those paths',
+    return new TaskCheckService(
+        context.fs,
+        await loadSectionMatrix(context.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }),
+        await makeTaskLocator(context),
     );
 }

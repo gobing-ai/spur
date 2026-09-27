@@ -1,5 +1,5 @@
 import { basename, dirname, isAbsolute, join } from 'node:path';
-import type { SectionMatrix, TimeoutPolicyMs } from '@gobing-ai/spur-app';
+import type { TimeoutPolicyMs } from '@gobing-ai/spur-app';
 import {
     type AgentQuotaUpdateConsumer,
     AgentService,
@@ -15,6 +15,7 @@ import {
     isSchedulerCustomActiveConflict,
     JobHandlerRegistry,
     JobWorkerService,
+    loadSectionMatrix,
     normalizeProjectPath,
     ProjectRegistry,
     resolveAgentRoles,
@@ -31,12 +32,7 @@ import {
     terminateJobChildren,
 } from '@gobing-ai/spur-app';
 import { getEnvVars, IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
-import {
-    bundledConfigRoot,
-    loadSpurConfig,
-    loadStructuredSpurConfig,
-    resolveConfigFile,
-} from '@gobing-ai/spur-config/loader';
+import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
 import {
     failOrphanedProcessingJobs,
     failStaleSchedulerCustomJob,
@@ -59,38 +55,6 @@ import { trimOrigins } from './middleware/pipeline';
 import { registerSystemEventTap } from './modules/events/system-event-tap';
 import { type SchedulerScheduleRegistration, setRegisteredSchedules } from './modules/jobs/schedule-registry';
 import { openUrl } from './open-url';
-
-/**
- * Load the Section-Status-Matrix (sole section authority, F92 R1): project-local
- * `.spur/tasks/section-matrix.yaml` first, then the bundled canonical
- * `tasks/section-matrix.yaml`. Throws with the attempted paths when neither is
- * reachable — no permissive hand-maintained fallback (it would make the same task
- * render differently by installation layout).
- */
-async function loadServerSectionMatrix(projectRoot: string): Promise<SectionMatrix> {
-    const nodeFs = createNodeFileSystem(projectRoot);
-    const localPath = nodeFs.resolve('.spur', 'tasks', 'section-matrix.yaml');
-    if (await nodeFs.exists(localPath)) {
-        // SAFETY: the path pins the document shape — `.spur/tasks/section-matrix.yaml` is by contract a SectionMatrix; loader returns the generic structured-config envelope.
-        return (await loadStructuredSpurConfig(localPath, { validateJsonSchema: false })) as unknown as SectionMatrix;
-    }
-    const root = bundledConfigRoot();
-    if (root !== null) {
-        const matrixPath = join(root, 'tasks', 'section-matrix.yaml');
-        if (await nodeFs.exists(matrixPath)) {
-            // SAFETY: same contract as the local path above — the canonical bundled `tasks/section-matrix.yaml` is a SectionMatrix by build-time generation.
-            return (await loadStructuredSpurConfig(matrixPath, {
-                validateJsonSchema: false,
-            })) as unknown as SectionMatrix;
-        }
-    }
-    throw new Error(
-        `no canonical section-matrix found for task creation (F92 R1); tried:\n` +
-            `  - ${localPath}\n` +
-            (root !== null ? `  - ${join(root, 'tasks', 'section-matrix.yaml')}\n` : '') +
-            'copy/generate section-matrix.yaml from the canonical build-time matrix asset (repo `config` `tasks` tree) into one of those paths',
-    );
-}
 
 /** Built-in queue job kind for scheduled system_events retention pruning. */
 export const SYSTEM_EVENTS_PRUNE_JOB = 'system-events-prune';
@@ -671,7 +635,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 fs,
                 dbUrl: options.dbUrl,
                 folders: await resolvePlanningFolders(fs),
-                sectionMatrix: await loadServerSectionMatrix(projectRoot),
+                sectionMatrix: await loadSectionMatrix(projectRoot),
                 webDistPath,
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,

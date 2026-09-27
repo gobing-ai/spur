@@ -252,6 +252,26 @@ export interface ServerContext {
 the `ApplicationRuntime` (for `db`, `events`, `logger`) plus `cwd` and `fs`. Services are
 lazy-initialized on first call — same pattern as `CliContext.agentService()` / `ruleService()`.
 
+**Guarded task transitions (task 0966).** The context exposes `runDir` and a lazily-built
+`checkService()`, and the `task.transition` handler routes through `transitionTaskGuarded`
+(`packages/app/src/services/task-transition.ts`) — the same function `spur task update` calls.
+Before this, the server's `task.transition` wrote the status directly, so an agent could reach
+`done` over oRPC carrying L3 errors and no verify verdict while the CLI refused the identical
+transition. Two choices are deliberate:
+
+- **The gate lives in `packages/app`, not in the handler.** One implementation owns the structural
+  `testing`/`done` check gate, the done-verdict gate, the same-status no-op and the forced-done
+  audit write. The CLI contributes only its transport concerns (adapter-availability decision,
+  stderr warnings, envelopes, exit codes); the server contributes its `runDir` and an always-on
+  check gate, because the server has no lifecycle FSM port and nothing else can run that check.
+- **Not by passing `PlanningFolders` into `TaskService`.** Teaching `TaskService` to run the gates
+  itself was rejected: it would put operator-facing transition policy behind every `updateStatus`
+  call, including the pipeline's own internal writes (`--no-lifecycle` transitions, rollbacks),
+  which must stay ungated.
+
+Denials surface as `GuardDeniedError` → HTTP 409 `GUARD_DENIED` through the existing error mapping
+(§2.6); a same-status `done` returns 200 with the unchanged `{wbs, status}` payload.
+
 **Wiring in `createApp`:**
 
 ```typescript
