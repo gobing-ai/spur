@@ -75,12 +75,24 @@ function flattenEnv(env: NodeJS.ProcessEnv): Record<string, string> {
 }
 
 /**
- * Windows detached-launch spec: argv travels in env vars so cmd.exe never parses argument
- * bytes. cmd.exe expands %VAR% inside double quotes (and !VAR! under delayed expansion),
- * so each element is handed off as SPUR_SERVE_ARG_<i> and referenced, not embedded.
+ * Windows detached-launch spec.
  *
- * @throws if a value cannot survive the handoff: `"` in any argument (closes the quote
- * after expansion) or a .cmd/.bat launcher (a batch interpreter re-expands %).
+ * argv never appears on a command line here: cmd.exe expands %VAR% (and !VAR! under
+ * delayed expansion) and the argv escaping child_process.spawn applies on win32 rewrites
+ * embedded `"` to `\"`, which cmd.exe does not honor. Each element is handed to the
+ * daemon as SPUR_SERVE_ARG_<i> and referenced from PowerShell, which performs no %
+ * expansion.
+ *
+ * The daemon is created with PowerShell `Start-Process`, not `cmd /c start /b`: `start` forwards
+ * cmd's whole inheritable handle table, so the daemon keeps a duplicate of the stdout pipe belonging
+ * to whoever piped `spur projects start`. cmd exits, but that pipe never reaches EOF, so a buffered
+ * caller (execa under the CLI, pwsh `| Out-String` above it) waits on it forever — measured on
+ * windows-latest: `start /b` closed the caller stream only when the child died (14.2s for a 12s
+ * child), Start-Process closed it in 0.42s while the daemon kept running. Start-Process hands the
+ * daemon none of our std handles, and no shell parses its argv.
+ *
+ * @throws if a value cannot survive the handoff: a .cmd/.bat launcher (a batch
+ * interpreter re-expands %) or `"` in any argument (the spec keeps argv quote-free).
  */
 export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
     command: string;
@@ -97,19 +109,22 @@ export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
     const env: Record<string, string> = {};
     for (const [i, arg] of cmd.entries()) {
         if (arg.includes('"')) {
-            throw new Error(
-                `detached serve launch: argument ${i} contains '"', which cannot be passed through cmd.exe`,
-            );
+            throw new Error(`detached serve launch: argument ${i} contains '"', which the launch spec cannot carry`);
         }
         env[`SPUR_SERVE_ARG_${i}`] = arg;
     }
+    const runArgs = cmd
+        .slice(1)
+        .map((_, i) => `$env:SPUR_SERVE_ARG_${i + 1}`)
+        .join(',');
     return {
-        command: 'cmd',
+        command: 'powershell.exe',
         args: [
-            '/d',
-            '/v:off',
-            '/c',
-            `start /b "" ${cmd.map((_, i) => `"%SPUR_SERVE_ARG_${i}%"`).join(' ')} < NUL > NUL 2>&1`,
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            `Start-Process -FilePath $env:SPUR_SERVE_ARG_0 -ArgumentList @(${runArgs}) -WindowStyle Hidden`,
         ],
         env,
     };
@@ -118,20 +133,20 @@ export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
 /**
  * Default production spawn: ProcessExecutor runs `nohup <cmd> &` so the serve
  * daemon outlives the CLI without a direct Bun.spawn / child_process call.
- * On Windows, argv reaches the daemon via SPUR_SERVE_ARG_<i> env vars under
- * `cmd /d /v:off /c start /b` so cmd.exe never expands argument bytes.
+ * On Windows, argv reaches the daemon via SPUR_SERVE_ARG_<i> env vars read by
+ * PowerShell Start-Process (see the builder above for why).
  *
- * The daemon's stdio must be detached on BOTH platforms: POSIX redirects to
- * /dev/null; Windows appends `< NUL > NUL 2>&1` to the `start /b` line (start
- * hands its own — redirected — handles to the child). Without this, a daemon
- * spawned under a piped caller (pwsh `| Out-String`, CI logs) inherits the
- * caller's stdout pipe and keeps it open after the CLI exits, hanging the
- * caller forever waiting for EOF.
+ * The daemon must also inherit none of the caller's stdio on win32: POSIX
+ * redirects to /dev/null, and Start-Process creates the daemon with a fresh
+ * handle table. Without that isolation a daemon keeps a duplicate of the
+ * stdout pipe of any caller that piped `projects start` (pwsh `| Out-String`,
+ * execa's buffered run inside the CLI), so the pipe never reaches EOF and the
+ * caller waits forever — the CLI appears to hang with zero output.
  */
 export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options) => {
     const executor = new NodeProcessExecutor();
     // nohup + background: PE waits only for the shell, which exits immediately.
-    // macOS and Linux both ship nohup; Windows uses start /b via cmd (env handoff above).
+    // macOS and Linux both ship nohup; Windows uses Start-Process (env handoff above).
     const windowsLaunch = process.platform === 'win32' ? buildWindowsDetachedServeLaunch(cmd) : undefined;
     const shell = windowsLaunch ?? {
         command: '/bin/sh',
