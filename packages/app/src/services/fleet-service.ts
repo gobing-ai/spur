@@ -29,7 +29,8 @@ import {
 } from '@gobing-ai/ts-ai-runner';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { resolveAgentRoles } from './agent-roles';
-import { type AgentRoleDefinition, cheapestEligibleExecutors, getExecutorTier } from './agent-service';
+import type { AgentRoleDefinition } from './agent-service';
+import { cheapestEligibleExecutors, getExecutorTier } from './executor-tier';
 import { normalizeProjectPath, ProjectRegistry } from './project-registry';
 
 // ---------------------------------------------------------------------------

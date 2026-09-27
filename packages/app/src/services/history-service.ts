@@ -81,8 +81,8 @@ import {
     runOpenCodeImport,
 } from '@gobing-ai/ts-llm-jsonl-importer';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
-import { getExecutorTier } from './agent-service';
 import type { TimeoutPolicyMs } from './execution-policy';
+import { getExecutorTier } from './executor-tier';
 import { refreshHistoryRollups } from './history-analysis-service';
 import { attributeSessions } from './task-attribution';
 import { deriveVerifiedOutcome } from './verified-outcome';

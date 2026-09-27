@@ -2,12 +2,7 @@ import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { isatty } from 'node:tty';
-import {
-    type ExecutorAvailability,
-    type ExecutorDisabledValue,
-    normalizeExecutorAvailability,
-    type SpurConfig,
-} from '@gobing-ai/spur-config';
+import { type ExecutorAvailability, normalizeExecutorAvailability, type SpurConfig } from '@gobing-ai/spur-config';
 import {
     type CapabilityTier,
     type CoordinationArtifactRef,
@@ -73,9 +68,18 @@ import {
     SESSION_CAPABILITY_AXES,
 } from './capability-attestation';
 import { bridgeEventBus, withInvokeRouting } from './event-bridge';
+import {
+    type AgentExecutorConfig,
+    cheapestEligibleExecutors,
+    executorDisabled,
+    getExecutorTier,
+} from './executor-tier';
 import { classifyDispatch } from './failure-classification';
 import { FleetService } from './fleet-service';
 import { RunSessionObserver, type RunSessionOverlapRegistry } from './run-session-observer';
+
+// Re-exported so the six existing `AgentExecutorConfig` importers stay untouched (0965 R3).
+export type { AgentExecutorConfig } from './executor-tier';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -96,27 +100,6 @@ export interface AgentRunDeps {
      * bound to the service context (DB, output, home, overlap registry).
      */
     sessionObserverFactory?: (runId: string) => RunSessionObserver;
-}
-
-/**
- * A named executor profile: a canonical coding-agent plus an optional opaque
- * model override. Mirrors the CLI's `AgentExecutorConfig` zod shape structurally
- * (the app layer must not import from `apps/cli`, R3).
- *
- * Vocabulary (task 0405, R1): "executor" is the domain-layer term for the role
- * a stage dispatches (reasoned about by `getExecutorTier`, `isTierEligible`,
- * the eligible-executor list). The operator surface says "agent" (CLI `--agent`,
- * the `agent:` config key, this struct's `agent` field naming the canonical
- * tool). The split is deliberate; the boundary is recorded at
- * `AgentConfigSchema` in `@gobing-ai/spur-config`. No alias, no migration.
- */
-export interface AgentExecutorConfig {
-    name: string;
-    agent: string;
-    model?: string;
-    tier?: CapabilityTier;
-    /** 111: routing kill-switch; validated/merged at the config boundary. */
-    disabled: ExecutorDisabledValue;
 }
 
 /**
@@ -2672,16 +2655,6 @@ interface DoctorCacheFile {
  * cached eligibility when an operator flips the kill-switch. Exported for direct unit pins.
  */
 /**
- * Single classified reader for executor availability (0890 review remediation):
- * every eligibility/probe/inventory site branches on this instead of comparing
- * the raw `disabled` field, so the 0890 object form (`{owner,since,reason}`)
- * and the legacy boolean are classified identically.
- */
-function executorDisabled(executor?: AgentExecutorConfig): boolean {
-    return executor !== undefined && normalizeExecutorAvailability(executor.disabled).disabled;
-}
-
-/**
  * Stable fingerprint of the executor roster for the doctor cache; classifies
  * availability via {@link executorDisabled} so a quota disable invalidates the
  * cached roster instead of rendering as 'enabled' (0890 review remediation).
@@ -3290,43 +3263,6 @@ function parseTagsFlag(flags: Record<string, string | boolean>): string[] | unde
         .map((tag) => tag.trim())
         .filter(Boolean);
     return tags.length > 0 ? tags : undefined;
-}
-
-/**
- * Resolve an executor's capability tier (0343).
- * Declared `tier` wins. Inference may only yield `cheap`, `standard`, or
- * `capable-1` — never invent `capable-2`/`capable-3` from a regex.
- * Legacy bare `capable` (if still present on a raw config object) maps to
- * `capable-1`.
- */
-export function getExecutorTier(executor: AgentExecutorConfig): CapabilityTier {
-    if (executor.tier) {
-        // Structural compat: configs that skip zod may still carry legacy `capable`.
-        const declared = executor.tier as CapabilityTier | 'capable';
-        return declared === 'capable' ? 'capable-1' : declared;
-    }
-    const combined = `${executor.name} ${executor.model ?? ''} ${executor.agent}`.toLowerCase();
-    if (/\b(cheap|haiku|flash|lite|mini|fast)\b/.test(combined)) return 'cheap';
-    if (/\b(capable|opus|pro|sonnet|r1|o1|o3|expert)\b/.test(combined)) return 'capable-1';
-    return 'standard';
-}
-
-/**
- * The shared role → executor funnel (0543 R1): eligible executors (tier at or
- * above `minTier`) sorted by tier ascending — cheapest eligible first. One
- * selector, never two: `resolveRole` (`--agent <role>`) and the fleet roster
- * materialization in `FleetService` (role-only members) both route through this, so
- * the two can never disagree. `resolveRole` doctor-walks the result; roster
- * materialization takes the first entry (config-time, no liveness probe).
- */
-export function cheapestEligibleExecutors(
-    executors: readonly AgentExecutorConfig[],
-    minTier: CapabilityTier,
-): AgentExecutorConfig[] {
-    return executors
-        .filter((e) => !executorDisabled(e))
-        .filter((e) => isTierEligible(getExecutorTier(e), minTier))
-        .sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
 }
 
 /**
