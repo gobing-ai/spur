@@ -393,7 +393,7 @@ describe('project-start', () => {
                 '/d',
                 '/v:off',
                 '/c',
-                'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%" "%SPUR_SERVE_ARG_6%"',
+                'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%" "%SPUR_SERVE_ARG_6%" < NUL > NUL 2>&1',
             ]);
             const joined = launch.args.join(' ');
             for (const [i, arg] of cmd.entries()) {
@@ -432,7 +432,7 @@ describe('project-start', () => {
             expect(launch.command).toBe('cmd');
             expect(launch.args.slice(0, 3)).toEqual(['/d', '/v:off', '/c']);
             expect(launch.args[3]).toBe(
-                'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%"',
+                'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%" < NUL > NUL 2>&1',
             );
             expect(launch.env.SPUR_SERVE_ARG_3).toBe('C:\\tmp\\p%x');
         });

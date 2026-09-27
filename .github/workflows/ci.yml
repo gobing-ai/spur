@@ -30,6 +30,7 @@ jobs:
     windows-serve-smoke:
         if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
         runs-on: windows-latest
+        timeout-minutes: 20
 
         steps:
             - uses: actions/checkout@v6
