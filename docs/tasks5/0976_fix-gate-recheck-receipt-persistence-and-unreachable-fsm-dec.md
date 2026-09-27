@@ -4,7 +4,7 @@ name: Fix gate-recheck receipt persistence and unreachable FSM decisions (0962 r
 status: done
 template: standard
 created_at: 2026-09-26T16:33:31.303Z
-updated_at: "2026-09-27T01:37:08.000Z"
+updated_at: "2026-09-27T02:21:37.343Z"
 feature_id: I31
 
 ---
@@ -109,15 +109,15 @@ Generated bundles regenerated: `plugins/sp/scripts/{quality-gate,inline-run-setu
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | plugins/sp/scripts/quality-gate.ts:637-661 — receipt write gated `if (!noProgressSkip)`, `inputDigest: env.proofDigest`, `writeFileSync(abs(receiptFile))` (comment :637-641: a skip never rewrites the receipt it matched → no FAIL→PASS laundering). Test: plugins/sp/tests/quality-gate-receipt.test.ts:516-548 — run→recheck(digest-y) refreshes receipt inputDigest=digest-y (FAIL kept); second recheck at digest-y emits check.skipped-no-progress, attempts=0, no probe/full-gate execution, receipt byte-equal; no-digest recheck writes nothing (quality-gate.test.ts:375). Fresh this cycle: 46 pass / 0 fail (quality-gate-receipt + quality-gate, 3.20s). LIVE: .spur/run/0976-check-receipt.json inputDigest=sha256:613f1dc6c6d935af94a3da3158a67892071aafd58d93ee6b2ef5cbe1000592a4 == env-0976.sh proofDigest, tier full, cmd `bun run spur-check`, status PASS, durationMs 267623, completedAt 2026-09-27T01:26:38.098Z; .spur/run/0976-test-gate.status PASS (attempts: 1). |
-| R2 | MET | packages/app/src/workflow/decide.ts:65 — `source: 'model' \| 'default'` (default on every degraded row, model only on accepted answers). plugins/sp/scripts/inline-run-setup.ts:559-561 — appendRunLogLine appends `decide node=… value=… source=… reason=…` to the run log. Lane collapse: config/workflows/task-pipeline.yaml:600 `choices: [fix, stop]` (retryable attempt shell + test-fail-triage→test-recheck edge removed per closed Q&A (b)). Fail-closed: packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:329 — stale `retryable` row → no lane, no attempt counted. Provenance pinned: packages/app/tests/workflow/decide.test.ts:177 + plugins/sp/tests/inline-run-setup.test.ts:443-454. Fresh this cycle: 43 pass / 0 fail (decide+triage-routing+guard-parity+guards/shell, 1.70s) and 4 pass / 0 fail (inline decide, 0.99s). 13 checkbox ticks → admission evidence folded into R2's Solution row: the only working-tree change is that 13-line docs diff (11 ticks + updated_at + the R2 Solution row citation task-pipeline.yaml :593→:600, re-verified live as the `choices: [fix, stop]` line), and this zero-diff re-certification's admission (packages/app/src/workflow/actions/agent-run.ts:1169-1185 `requireDiffAllowCleanCheck` → taskCheckClean; task-pipeline.yaml:295) is cited through that R2 Solution row — `spur task check 0976` exit 0 (pre-condition, not re-run). |
-| R3 | MET | packages/app/tests/workflow/guards/shell.test.ts:13-14 — `const SPAWN_TIMEOUT_MS = 20_000;` with the spawn-cost comment (cold /bin/sh spawn under full-suite concurrency), applied to both real-spawn metacharacter cases; the semantics case uses an injected executor (wall-clock-free). Fresh this cycle: 8 pass / 0 fail within the 43-test 4-file run (1.70s, no timeout hit). Full-suite stability: gate `bun run spur-check` PASS at this digest (receipt, 267623ms; log 9251 pass / 0 fail across 534 files, 245.52s) with zero guard-timeout occurrences. |
+| R1 | MET | `plugins/sp/scripts/quality-gate.ts:637-661` receipt write gated on `!noProgressSkip` with `inputDigest: env.proofDigest` (skip never rewrites a receipt — anti-laundering); `plugins/sp/tests/quality-gate-receipt.test.ts:516-548` run→recheck→recheck at one digest: refreshed inputDigest, second recheck emits check.skipped-no-progress, attempts=0, no probe/full-gate run, receipt byte-equal; `plugins/sp/tests/quality-gate.test.ts:375-390` no-digest recheck writes nothing. Fresh re-verify run: 64 pass / 0 fail (quality-gate-receipt + quality-gate + inline-run-setup). |
+| R2 | MET | `packages/app/src/workflow/decide.ts:61-65` `source: 'model' \| 'default'`; `plugins/sp/scripts/inline-run-setup.ts:557-561` run-log line `decide node=… value=… source=… reason=…`; `config/workflows/task-pipeline.yaml:600` `choices: [fix, stop]` (retryable lane collapsed per closed Q&A (b)). Fresh: 49 pass / 0 fail (decide + triage-routing + guard-parity + guards); `spur workflow validate config/workflows/task-pipeline.yaml` ok=true. |
+| R3 | MET | `packages/app/tests/workflow/guards/shell.test.ts:12-14` `SPAWN_TIMEOUT_MS = 20_000` with spawn-cost comment on real-spawn cases; `packages/app/tests/workflow/guards/shell.test.ts:48-58` semantics case uses injected executor (no wall clock). Fresh: guards suite passes within the 49-test run, no timeout. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Receipt at THIS digest retained: .spur/run/0976-check-receipt.json inputDigest=sha256:613f1dc6…592a4, PASS, 267623ms; .spur/run/0976-test-gate.status PASS, attempts: 1. Skip path proven by plugins/sp/tests/quality-gate-receipt.test.ts:516-548 — a recheck at an unchanged digest emits check.skipped-no-progress, runs no gate command (probe-ran/full-ran absent from the log), attempts=0, receipt byte-equal; fresh this cycle 46 pass / 0 fail. No gate re-run performed per pre-condition ("do not redo"); anchors re-read fresh (manual-review). |
-| AC2 | MET | test | Provenance recorded and distinguishable: packages/app/src/workflow/decide.ts:65 `source: 'model' \| 'default'`; run-log line plugins/sp/scripts/inline-run-setup.ts:559-561; pinned by decide.test.ts:177 (degraded→'default', accepted→'model') and inline-run-setup.test.ts:443-454 (`decide node=classify value=stop source=default reason=disabled` in stdout, resultFile, and run log); stale `retryable` fails closed with no attempt counted (triage-routing.test.ts:329); collapse live at task-pipeline.yaml:600 `[fix, stop]`. Fresh this cycle: 43 + 4 pass / 0 fail. |
-| AC3 | MET | test | Timing declared: packages/app/tests/workflow/guards/shell.test.ts:13-14 SPAWN_TIMEOUT_MS=20s with spawn-cost comment on both real-spawn cases; fresh 8 pass / 0 fail (no timeout hit). Full suite at THIS digest: receipt PASS 267623ms; log .spur/run/0976-test-gate.log — "9251 pass / 0 fail" across 534 files, 245.52s, zero "timeout" occurrences, trailing proof-digest line == sha256:613f1dc6c6d935af94a3da3158a67892071aafd58d93ee6b2ef5cbe1000592a4. |
+| AC1 | MET | test | `plugins/sp/tests/quality-gate-receipt.test.ts:516-548` asserts receipt inputDigest == evaluated digest, second recheck logs check.skipped-no-progress, log lacks probe-ran/full-ran (no gate command); fresh 64 pass / 0 fail. |
+| AC2 | MET | test | `packages/app/src/workflow/decide.ts:65` provenance field; `plugins/sp/scripts/inline-run-setup.ts:559-561` run-log source line; collapse at `config/workflows/task-pipeline.yaml:600` supersedes `retryable` reachability per closed Q&A (b); fresh 49 + 64 pass / 0 fail. |
+| AC3 | MET | test | `packages/app/tests/workflow/guards/shell.test.ts:12-14` explicit timeout with spawn-cost comment; semantics case wall-clock-free at `packages/app/tests/workflow/guards/shell.test.ts:48-58`; fresh guards run pass. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -130,8 +130,7 @@ Generated bundles regenerated: `plugins/sp/scripts/{quality-gate,inline-run-setu
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=0 housekeeping=0 |
-| P4 | proof-input-digest | — | sha256:613f1dc6c6d935af94a3da3158a67892071aafd58d93ee6b2ef5cbe1000592a4 |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=4 housekeeping=6 |
 
 ### References
 
