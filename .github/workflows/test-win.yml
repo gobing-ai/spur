@@ -12,21 +12,21 @@ on:
             - main
 
 jobs:
-    # Fast no-install probe of the two detached-launch spawn shapes on real cmd.exe:
-    # (A) the old inline-argv shape — expected to leak child stdio into the caller's
-    #     pipe, because execa/win32 escaping rewrites embedded `"` to `\"` which cmd
-    #     misparses, so the `< NUL > NUL 2>&1` redirections do not land;
-    # (B) the batch-file shape the fix uses — child stdio must go to NUL.
-    # Detector: the marker child echoes CHILD_STDIO_LEAK. If that text reaches this
-    # probe's stdout, the child inherited our pipe. Win32_Process dump gives the
-    # exact commandlines for forensics either way.
+    # Fast no-install probe of the three detached-launch shapes on real Windows:
+    # (A) inline argv (`cmd /c start /b "..." < NUL ...`) — pre-0964 shape;
+    # (B) batch file (`cmd /c <batch>`) — shape that still hangs callers;
+    # (C) powershell Start-Process — the fix.
+    # Detector is STREAM CLOSE, not process exit: execa (and any piped caller)
+    # waits for stdout EOF, so a daemon holding a duplicate of our pipe makes the
+    # call hang even after the launched process exits. The marker child prints
+    # CHILD_STDIO_LEAK, giving a second signal if its stdout reaches our pipe.
     spawn-probe:
         if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
         runs-on: windows-latest
         timeout-minutes: 10
 
         steps:
-            - name: Probe cmd spawn shapes (inline argv vs batch file)
+            - name: Probe cmd/PowerShell spawn shapes (stream close must fire)
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Continue'
@@ -34,16 +34,29 @@ jobs:
                   const { spawn } = require('node:child_process');
 
                   (async () => {
-                  function probe(label, argv, env) {
+                  // Resolves on stream close (all write ends gone), like execa does.
+                  function probeClose(label, file, argv, env) {
                     return new Promise((resolve) => {
                       const t0 = Date.now();
                       let output = '';
-                      const p = spawn('cmd', argv, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+                      let closed = false;
+                      let code = null;
+                      const p = spawn(file, argv, { env, stdio: ['ignore', 'pipe', 'pipe'] });
                       p.stdout.on('data', (d) => { output += d; process.stdout.write(`${label} OUT: ${d}`); });
                       p.stderr.on('data', (d) => { output += d; process.stdout.write(`${label} ERR: ${d}`); });
-                      p.on('error', (e) => { console.log(`${label} SPAWN-ERROR: ${e.message}`); resolve({ code: 3, output }); });
-                      p.on('exit', (c) => { console.log(`${label} CMD-EXIT: ${c} after ${Date.now() - t0}ms`); resolve({ code: c ?? 0, output }); });
-                      setTimeout(() => { console.log(`${label} CMD-HUNG-15s`); p.kill(); resolve({ code: 42, output }); }, 15000);
+                      p.on('error', (e) => { console.log(`${label} SPAWN-ERROR: ${e.message}`); });
+                      p.on('exit', (c) => { code = c; console.log(`${label} EXIT: ${c} after ${Date.now() - t0}ms`); });
+                      p.on('close', () => {
+                        closed = true;
+                        console.log(`${label} CLOSE after ${Date.now() - t0}ms`);
+                        resolve({ code, closed, output, leak: output.includes('CHILD_STDIO_LEAK') });
+                      });
+                      setTimeout(() => {
+                        if (closed) return;
+                        console.log(`${label} NO-CLOSE-15s (some process still holds the stdout pipe)`);
+                        try { p.kill(); } catch {}
+                        resolve({ code, closed: false, output, leak: output.includes('CHILD_STDIO_LEAK') });
+                      }, 15000);
                     });
                   }
 
@@ -55,19 +68,21 @@ jobs:
                     SPUR_SERVE_ARG_2: '-Command',
                     SPUR_SERVE_ARG_3: marker,
                   };
-                  const batch = process.argv[2];
+                  const bat = process.argv[2];
 
-                  // (A) inline argv shape — mirrors the pre-fix builder; informational only,
-                  // any outcome here reproduces the known bug rather than gating the job.
-                  const a = await probe('INLINE', ['/d', '/v:off', '/c',
+                  const a = await probeClose('INLINE', 'cmd', ['/d', '/v:off', '/c',
                     'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" < NUL > NUL 2>&1'], env);
-                  console.log(`INLINE VERDICT: exit=${a.code} leak=${a.output.includes('CHILD_STDIO_LEAK')}`);
-                  // (B) batch-file shape — mirrors the fixed builder; this gates the job:
-                  // cmd must exit 0 and the marker's stdout must have gone to NUL.
-                  const b = await probe('BATCH', ['/d', '/v:off', '/c', batch], env);
-                  const leaked = b.output.includes('CHILD_STDIO_LEAK');
-                  console.log(`BATCH VERDICT: exit=${b.code} leak=${leaked}`);
-                  process.exit(b.code === 0 && !leaked ? 0 : 1);
+                  console.log(`INLINE VERDICT: closed=${a.closed} exit=${a.code} leak=${a.leak}`);
+
+                  const b = await probeClose('BATCH', 'cmd', ['/d', '/v:off', '/c', bat], env);
+                  console.log(`BATCH VERDICT: closed=${b.closed} exit=${b.code} leak=${b.leak}`);
+
+                  // (C) the fix under test: PowerShell Start-Process, argv in env vars.
+                  const c = await probeClose('START-PROCESS', 'powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command',
+                    'Start-Process -FilePath $env:SPUR_SERVE_ARG_0 -ArgumentList @($env:SPUR_SERVE_ARG_1,$env:SPUR_SERVE_ARG_2,$env:SPUR_SERVE_ARG_3) -WindowStyle Hidden'], env);
+                  console.log(`START-PROCESS VERDICT: closed=${c.closed} exit=${c.code} leak=${c.leak}`);
+
+                  process.exit(c.closed && c.code === 0 ? 0 : 1);
                   })();
                   '@ | Set-Content -Encoding ascii "$env:RUNNER_TEMP\probe.cjs"
                   Set-Content -Encoding ascii "$env:RUNNER_TEMP\probe-launch.cmd" @(
@@ -80,7 +95,7 @@ jobs:
                   $survivors = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'CHILD_STDIO_LEAK' }
                   $survivors | ForEach-Object { "SURVIVOR pid=$($_.ProcessId) ppid=$($_.ParentProcessId): $($_.CommandLine)" }
                   $survivors | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-                  if ($probeExit -ne 0) { throw "spawn probe failed (exit $probeExit) — see INLINE/BATCH lines above" }
+                  if ($probeExit -ne 0) { throw "spawn probe failed (exit $probeExit) — see VERDICT lines above" }
 
     # 0964 AC3: the win32 detached serve launch can only be exercised on real cmd.exe.
     # A `%` in the project path must reach `spur serve --cwd` literally, and the daemon

@@ -385,26 +385,23 @@ describe('project-start', () => {
     // 0964: the win32 branch of defaultDetachedServeSpawn delegates to the builder below;
     // POSIX hosts (this test host) exercise the same pure launch spec directly.
     describe('buildWindowsDetachedServeLaunch', () => {
-        it('hands every argv element to the daemon via SPUR_SERVE_ARG_<i> under cmd /d /v:off /c start /b (AC1)', () => {
+        it('hands every argv element to the daemon via SPUR_SERVE_ARG_<i> under Start-Process (AC1)', () => {
             const cmd = ['C:\\bun.exe', 'C:\\a%PATH%b', 'x!y!', 'a&b|c', 'p q', '^caret', ''];
             const launch = buildWindowsDetachedServeLaunch(cmd);
-            expect(launch.command).toBe('cmd');
-            // Only the batch path may appear as an argv element — the start line itself must
-            // never travel through argv, where win32 escaping would rewrite every `"` to `\"`.
-            expect(launch.args.slice(0, 3)).toEqual(['/d', '/v:off', '/c']);
-            expect(launch.batchPath).toMatch(/[\\/]spur-serve-\d+-[0-9a-z]+-[0-9a-z]+\.cmd$/);
-            const batch = readFileSync(launch.batchPath, 'utf8');
-            expect(batch).toBe(
-                '@echo off\r\n' +
-                    'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%" "%SPUR_SERVE_ARG_6%" < NUL > NUL 2>&1\r\n',
-            );
-            const joined = `${launch.args.join(' ')}\n${batch}`;
+            expect(launch.command).toBe('powershell.exe');
+            expect(launch.args).toEqual([
+                '-NoProfile',
+                '-ExecutionPolicy',
+                'Bypass',
+                '-Command',
+                'Start-Process -FilePath $env:SPUR_SERVE_ARG_0 -ArgumentList @($env:SPUR_SERVE_ARG_1,$env:SPUR_SERVE_ARG_2,$env:SPUR_SERVE_ARG_3,$env:SPUR_SERVE_ARG_4,$env:SPUR_SERVE_ARG_5,$env:SPUR_SERVE_ARG_6) -WindowStyle Hidden',
+            ]);
+            // argv must never be inlined: no shell may re-parse it (cmd expands %, and win32
+            // argv escaping mangles embedded quotes).
             for (const [i, arg] of cmd.entries()) {
-                // No argument bytes on the command line (empty string is a trivial substring).
-                if (arg !== '') expect(joined.includes(arg)).toBe(false);
+                expect(launch.args.join(' ').includes(arg)).toBe(arg === '');
                 expect(launch.env[`SPUR_SERVE_ARG_${i}`]).toBe(arg);
             }
-            rmSync(launch.batchPath, { force: true });
         });
 
         it('throws naming the index for an argument containing a double quote (AC2)', () => {
@@ -433,15 +430,12 @@ describe('project-start', () => {
                 '--port',
                 '4100',
             ]);
-            expect(launch.command).toBe('cmd');
-            expect(launch.args.slice(0, 3)).toEqual(['/d', '/v:off', '/c']);
-            expect(launch.args[3]).toBe(launch.batchPath);
-            expect(readFileSync(launch.batchPath, 'utf8')).toBe(
-                '@echo off\r\n' +
-                    'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" "%SPUR_SERVE_ARG_4%" "%SPUR_SERVE_ARG_5%" < NUL > NUL 2>&1\r\n',
+            expect(launch.command).toBe('powershell.exe');
+            expect(launch.args.slice(0, 4)).toEqual(['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command']);
+            expect(launch.args[4]).toBe(
+                'Start-Process -FilePath $env:SPUR_SERVE_ARG_0 -ArgumentList @($env:SPUR_SERVE_ARG_1,$env:SPUR_SERVE_ARG_2,$env:SPUR_SERVE_ARG_3,$env:SPUR_SERVE_ARG_4,$env:SPUR_SERVE_ARG_5) -WindowStyle Hidden',
             );
             expect(launch.env.SPUR_SERVE_ARG_3).toBe('C:\\tmp\\p%x');
-            rmSync(launch.batchPath, { force: true });
         });
     });
 });
