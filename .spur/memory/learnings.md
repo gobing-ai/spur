@@ -3329,3 +3329,38 @@ Not verified: I did not run the repo test suite or `bun run spur-check` — the 
 - **Doc sync lands in the same commit as the behavior change.** `e2e24a689` carried `docs/design/workflow-catalogue-refactor.md` with the `decide.ts` change; `f3a555104` carried `inline-pipeline-driver.md` with the run-log line; `954f2a6f1` carried `planning-workflow-contracts.md` with the `requireDiffAllowCleanCheck` option.
 - **Frontmatter `updated_at` is the part in-commit doc sync forgets.** Both satellites had 2026-09-26 content edits under a 2026-09-25 / 2026-09-24 `updated_at`, and neither listed `0976` in `related` — repaired during wrapup.
 - **Claims in prose descend into skill docs.** `plugins/sp/skills/spur-check/SKILL.md:63` still asserts "Only `run`/`full` writes a reusable receipt," which 0976 falsified. Behavior changes need a grep of the skill/reference surface, not just `docs/`.
+Drift repair (task 0967, commit `b15e13d2f`):
+
+- **docs/design/session-pinned-dispatch.md** — §6 said `runAgentLoop` keeps `memberSession = {...}` inline; after 0967 the state lives in `packages/app`'s `MemberSession`. Added dated amendment, appended `"0967"` to `related`, bumped `updated_at`.
+- **docs/03_ARCHITECTURE.md** — §14.1 fleet paragraph never recorded the member-session seam; added the current-topology clause (MemberSession ownership, mode ladder, reason-named reset ledger rows), version 1.55.0 → 1.56.0.
+- **docs/00_ADR.md** — no edit: 0967 enforces ADR-021 and changes no ADR-121 decision or invariant; constitution §6.1 bars non-decision entries.
+- **docs/04_DESIGN.md** — no edit: index rows (session-pinned-dispatch, fleet-config-declaration) remain accurate; no new satellite or CLI surface.
+- **docs/design/fleet-config-declaration.md** — no drift: its G66 member-session section describes behavior (modes, ledger rows, reset reasons), unchanged by the relocation.
+
+Learnings artifact written to `.spur/run/be97dc82-f326-446d-ae76-2c581d042082-wrapup-learnings.md`:
+
+# Wrapup learnings — run be97dc82
+
+## 2026-09-26 — 0967 (G67 R1/R2: member session moved CLI → spur-app)
+
+### Conventions / patterns
+
+- ADR-021 extraction recipe: free functions that take `CliContext` become methods on a class behind a **structural deps object** (`MemberSessionDeps`: executors/env/getDb/warn + optional seams). The CLI satisfies it with one object literal; never pass `CliContext` into `packages/app` (wrong-direction dependency).
+- Mutable loop-lifetime state threaded through ≥3 call sites → a class, not a mutable object literal: call sites read `session.reset('operator')` instead of `resetMemberSession(context, recipient, session, 'operator')`.
+- Keep a **re-export of the moved public names** in the old module so base-revision imports and tests compile with zero edits (R5). Equivalence evidence = the 90 existing CLI tests passing unedited, not new assertions.
+- A move is not a rewrite: doc comments carrying G66 R-references move verbatim — they are the WHY.
+- New service tests: in-memory SQLite `getDb` + stub `MemberAgentProcess`, no `CliContext`, no spawned agent. 21 tests replaced a 545-line CLI-driven suite as the unit surface.
+- Wrapup doc-sync pattern: design satellites get a dated `**Amendment (date, task):**` note + `related` id + `updated_at` bump; `03` gets a version bump and a current-topology clause; `00` stays untouched when the change enforces an existing ADR (ADR-021) instead of deciding anew; `04` index needs no edit when no satellite or CLI surface changed.
+
+### Errors fixed / gotchas
+
+- The `member-persistent-stdin-unwired` degrade branch is **unreachable in production** (all three persistent-capable shims — omp/pi/claude — wire the stdin argv), so testing it required adding an optional `sessionCapability` deps seam beyond the task's Design. Test-only degrade branches need an injection seam; mirror the existing `processFactory` precedent.
+- Verify lenses pinned to a review-base commit rot: `git diff 872024cd2 -- apps/cli/tests is empty` was unsatisfiable because unrelated commits (`789e464de`, `aebde9a14`) touched that tree between review base and branch base. Diff the task's own delta (`git diff HEAD -- <path>`) instead (review finding F1).
+- `--agent inline` cannot satisfy the pipeline review hop's `compareExecutorWith: implement` gate — implement and review share the host executor (F2). Run the pipeline with distinct executors when the gate matters.
+- `MAX_CONSECUTIVE_FAILED_DRAINS` is re-exported for compatibility but has no in-repo consumer (F4) — accepted dead surface; don't add a consumer to justify it.
+- Known flake: `agent-run-fleet` R3 times out at 5s under a full-suite run and passes in isolation — record it, don't chase it.
+- Hashline-range replacements must re-include trailing link/reference lines: replacing `Boundary details:` + the following link line and ending the body at `Boundary details:` silently drops the link. Re-read after edit and restore.
+
+### Deferred
+
+- The loop-side extraction (~9 more symbols, `runAgentLoop` body) is sibling task 0968 under G67; the loop itself still lives in `apps/cli/src/commands/agent.ts` until then.
