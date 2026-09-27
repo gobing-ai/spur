@@ -4,9 +4,11 @@ name: Verify standalone binary installs against release SHA256SUMS with atomic r
 status: todo
 template: feature-impl
 created_at: 2026-09-26T06:35:35.906Z
-updated_at: "2026-09-26T06:37:36.050Z"
+updated_at: "2026-09-27T16:45:06.058Z"
 feature_id: A33
 
+priority: P2
+estimate_hours: 5
 ---
 
 ## 0971. Verify standalone binary installs against release SHA256SUMS with atomic replace
@@ -23,6 +25,10 @@ Found by `/sp:dev-review scripts` (2026-09-25, SECUA P2 Security).
 No release step produces checksums: `scripts/commands/build-binaries.ts` only compiles the four targets into `dist/cli/`, and nothing under `scripts/` or `.github/` mentions `sha256`/`checksum`. The binaries are built with `bun run build:binaries` (`apps/cli/package.json:47`) and uploaded to the GitHub Release by hand; CI (`.github/workflows/publish.yml`) publishes only the npm package.
 
 This task closes both defects without touching CI: the build emits `SHA256SUMS`, and the installer verifies it and swaps the binary in atomically.
+
+**Refine corrections (2026-09-27)**
+
+- The rollout choice was open, so implementation could produce an installer that fails against current latest. Chose the next-release path and made asset availability a merge prerequisite.
 
 ### Requirements
 
@@ -66,6 +72,10 @@ Graduates feature A33 scenarios R1–R3 (exact titles below).
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-27T16:44:08.905Z
+
+CLOSED (2026-09-27): choose next-release rollout. The installer and checksum assets land together; no published release is changed.
+
 ### Design
 
 **Chosen approach**: checksum file plus temp-file-and-rename. This is the minimum that gives integrity against corruption and CDN/asset tampering that doesn't also rewrite SHA256SUMS, and makes the install atomic.
@@ -107,9 +117,7 @@ mv -f "${tmp}" "${target}"
 - Verifying inside `spur` itself: the binary under test can't vouch for itself.
 - Automating the upload in `.github/workflows/publish.yml`: CI edits need explicit operator approval (AGENTS.md). Record it as a Note and do not edit.
 
-**Rollout caveat (must handle)**: the currently published release has no `SHA256SUMS`, so the new installer fails by default against `latest` until a release carries one. Before merging, do one of the following (record which in Solution):
-- (a) Generate SHA256SUMS for the current release's assets (`gh release download <tag> -p 'spur-*'`, then `shasum -a 256 spur-* > SHA256SUMS`) and `gh release upload <tag> SHA256SUMS`. This is an outward-facing action, so ask the operator first.
-- (b) Land it together with the next binary release.
+**Rollout (closed).** Land the installer change with the next binary release, after that release includes `SHA256SUMS`. Do not merge a default-fail installer while `latest` still points to a release without the checksum file. Do not modify an already published release. The release operation itself remains a separate operator-approved action.
 
 ### Plan
 
@@ -119,7 +127,7 @@ mv -f "${tmp}" "${target}"
 4. `install-sh.test.ts`: the five AC2/AC3/R4 cases, using `file://` releases in `mkdtemp` dirs. Clean up in `afterEach`.
 5. Docs per R8.
 6. Run `(cd scripts/.. && bun test scripts/commands/build-binaries.test.ts scripts/commands/install-sh.test.ts)`, then `bun run spur-check`.
-7. Handle the rollout caveat (Design): ask the operator (a) vs (b) before merge.
+7. Stage this change with the next binary release. Before merge, verify its release assets include all binaries and SHA256SUMS; stop if they do not. Publication is a separate operator-approved step.
 
 ### Solution
 

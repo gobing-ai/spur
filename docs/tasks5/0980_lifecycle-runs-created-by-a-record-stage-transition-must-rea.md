@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Lifecycle runs created by a record-stage transition must reach a terminal status
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-27T07:11:01.671Z
-updated_at: "2026-09-27T07:11:49.841Z"
+updated_at: "2026-09-27T16:45:11.215Z"
 feature_id: D3
 
 ac_numbering: task-local
 ac_altitude: task-local
+priority: P1
+estimate_hours: 3
 ---
 
 ## 0980. Lifecycle runs created by a record-stage transition must reach a terminal status
@@ -26,17 +28,22 @@ The task had already moved `todo → wip` (pipeline `command.gate`, `--no-lifecy
 
 Task 0622 R2 (feature D3) already required "lifecycle workflows reach a terminal state, and stop orphan accumulation recurring"; two fresh orphans in one run is that recurrence. Note `spur task record --transition` exposes no `--no-lifecycle` equivalent, so the FSM's own transition verb is the creator here.
 
+**Refine corrections (2026-09-27)**
+
+- A lifecycle row running while its task is at testing is expected; the defect is a row left running after the pipeline's later done transition bypasses lifecycle bookkeeping.
+- The observed feature-lifecycle row may legitimately remain running while its feature is nonterminal; this task addresses the task-lifecycle row created by record.
+
 ### Requirements
 
-- [ ] R1. A lifecycle run created by a record-stage transition reaches a terminal status (`done`/`failed` with a terminal reason) once that transition completes, or is explicitly `paused` with a recorded reason — never left `running` with no child rows.
-- [ ] R2. The mechanism is identified and fixed at its owner (find-or-create lifecycle run finalization), not by a post-hoc sweep.
-- [ ] R3. A regression test pins the run-row status after the record transition, so the orphan cannot silently return.
+- [ ] R1. The task pipeline does not create a second task-lifecycle run when its record stage moves the task to testing. It still performs the target-aware testing gate.
+- [ ] R2. Standalone `spur task record --transition testing` retains its lifecycle behavior. A pipeline run that later marks the task done with `--no-lifecycle` leaves no new record-less lifecycle run behind.
+- [ ] R3. A regression test covers the pipeline's record and done commands and checks both task status and lifecycle-run rows.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — after `spur task record <wbs> --transition testing` on a scratch task, no lifecycle run for that task remains `running` (test)
-- [ ] AC2 — R2 — the fix names the owner surface (lifecycle adapter finalization or the transition port) in Solution, not a cleanup script
-- [ ] AC3 — R3 — the regression test fails against the current tree before the fix and passes after (mutation check recorded in Testing)
+- [ ] AC1 — A pipeline record transition reaches testing without creating a task-lifecycle row (req: R1)
+- [ ] AC2 — Standalone record transitions retain lifecycle behavior (req: R2)
+- [ ] AC3 — The pipeline reaches done without a new running lifecycle orphan (req: R2, R3)
 
 ### Q&A
 
@@ -46,14 +53,16 @@ Task 0622 R2 (feature D3) already required "lifecycle workflows reach a terminal
 
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+The pipeline's `task record --transition testing` currently constructs a lifecycle adapter, while its later `task update done --no-lifecycle` bypasses that adapter. A lifecycle row created by the former therefore remains `running` after the pipeline finishes. A `running` lifecycle row while a task is genuinely at `testing` is expected; the defect is the completed pipeline's orphan.
+
+Add `--no-lifecycle` to the existing `task record` verb and pass it to the existing `makeService(context, folder, noLifecycle)` seam. Use the flag only in `config/workflows/task-pipeline.yaml`'s record command. The task service still runs its target-aware check when no lifecycle adapter is present. Keep standalone record's default unchanged. Check feature-lifecycle rows separately: the record-stage feature sync can create them, but this task only changes the task transition it owns.
 
 ### Plan
 
-- [ ] Reproduce: scratch task + `spur task record <wbs> --solution-from-diff --transition testing`, then read `runs`/`action_runs` in `.spur/spur.db` and record which lifecycle run is left non-terminal and why (created-not-finalized vs paused).
-- [ ] Trace find-or-create + finalization for lifecycle runs (`packages/app/src/workflow/lifecycle-adapter.ts`, task-lifecycle/feature-lifecycle definitions) and fix the terminal transition.
-- [ ] Add the regression test at the lifecycle/task-service surface; keep `task_run_links` expectations explicit.
-- [ ] `bun run spur-check` green; note in Testing whether any pre-existing orphan rows need one-time cleanup.
+- [ ] Reproduce the pipeline sequence: `task record --transition testing` followed by `task update done --no-lifecycle`; confirm the task-lifecycle row is `running` after done.
+- [ ] Add `--no-lifecycle` to `task record` and the pipeline's record command, using the existing `makeService` flag.
+- [ ] Test the pipeline path and the unchanged standalone path, including target-aware guard denial.
+- [ ] Run focused task-service/CLI tests and `bun run spur-check`.
 
 ### Solution
 
@@ -72,3 +81,6 @@ Task 0622 R2 (feature D3) already required "lifecycle workflows reach a terminal
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-27T16:45:11.215Z backlog → todo (system)
+

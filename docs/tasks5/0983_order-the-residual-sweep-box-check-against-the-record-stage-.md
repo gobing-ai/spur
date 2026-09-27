@@ -4,10 +4,13 @@ name: Order the residual-sweep box check against the record-stage box flip
 status: todo
 template: feature-impl
 created_at: 2026-09-27T07:11:28.202Z
-updated_at: "2026-09-27T07:12:01.260Z"
+updated_at: "2026-09-27T16:46:44.115Z"
 feature_id: F96
 
 ac_altitude: task-local
+dependencies: ["0958"]
+priority: P1
+estimate_hours: 4
 ---
 
 ## 0983. Order the residual-sweep box check against the record-stage box flip
@@ -34,18 +37,24 @@ So on the first pass — and on every pass — verify folds `PARTIAL` on a task 
 
 Related prior work: 0949 (scanner modes), 0950 (sweep wired into task-pipeline), 0951 (standalone verify + C6 recovery), 0977 (placeholder review rows).
 
+**Refine corrections (2026-09-27)**
+
+- The verdict can prove Requirement/AC boxes, but the six Plan boxes in the 0967 failure are not record-owned and must remain blockers until completed.
+- The scanner runs before record; the corrected design moves the existing scan after record rather than deferring unchecked boxes by section.
+
 ### Requirements
 
-- [ ] R1. A task whose Requirement/AC boxes are flipped by `task record` must reach `record → done` with a `PASS` verdict artifact on the normal pipeline path — no hand-certification, no extra gate run.
-- [ ] R2. The chosen rule lives in exactly one owner (the residual-sweep design satellite), and both `residual-scan` and the pipeline conform to it; do not duplicate the rule in workflow prose.
-- [ ] R3. A genuinely unticked box that no verdict proves must still block the fold (the sweep's protective intent is preserved — do not weaken it to "all unchecked boxes are deferrable").
-- [ ] R4. Regression coverage fails if a verdict-proven, not-yet-flipped Requirement/AC box makes `foldVerdict` downgrade `PASS`.
+- [ ] R1. The residual sweep evaluates unchecked boxes after the record stage has applied the verdict-driven Requirement/AC flips. A PASS verdict with all other boxes completed reaches the normal done guard without hand-certification.
+- [ ] R2. Any box still unchecked after record, including an unproven Requirement/AC box or an unfinished Plan box, remains blocking; none becomes deferrable by section alone.
+- [ ] R3. The reordered sweep can downgrade the verdict before `record → done`, preserving the fail-closed completion gate and its proof checks.
+- [ ] R4. A regression test covers both the proven-box pass path and an unproven/Plan-box fail path.
+- [ ] R5. If the post-record sweep downgrades the verdict, the task's Testing section reflects that final verdict before the run exits.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Verdict-proven Requirement and AC boxes do not block the fold (req: R1, R3)
-- [ ] AC2 — Unproven unchecked boxes still block, and the rule has one owner (req: R2, R3)
-- [ ] AC3 — A regression test pins the fold's box classification (req: R4)
+- [ ] AC1 — Verdict-proven Requirement/AC boxes are flipped before the sweep and do not block (req: R1)
+- [ ] AC2 — Unproven Requirement/AC and unfinished Plan boxes still block the done hop (req: R2, R3)
+- [ ] AC3 — Pipeline order and both outcomes have regression coverage (req: R4, R5)
 
 ### Q&A
 
@@ -55,28 +64,17 @@ Related prior work: 0949 (scanner modes), 0950 (sweep wired into task-pipeline),
 
 ### Design
 
-**Chosen direction — make the box classification section-aware in `scanResiduals`.** A `unchecked-box` item located in `## Requirements` or `## Acceptance Criteria` classifies as `deferrable` rather than `blocking`; a `unchecked-box` anywhere else (`## Plan`, `## Background`, prose) stays `blocking`. Those two sections are exactly the set `task record` flips from the verdict, so the fold stops double-counting work that a later state owns, while Plan items keep their gate.
+Move the existing `residual-scan scan|fold` action from verify to record, immediately after `task record` flips verdict-proven Requirement/AC boxes and before `record → done` evaluates the verdict. Keep `findUncheckedBoxes` and its blocking classification unchanged: the scan reads the actual post-record task file, so it needs no duplicate proof matcher or section-wide exemption. The `record → done` guard already requires PASS and `task check --as done`, and the existing failed edge handles a downgraded verdict.
 
-Touch points: `plugins/sp/scripts/residual-scan.ts` (the `classify`/`scanResiduals` path around :290 and the box collection at :318) plus the residual-sweep design satellite for the rule text. `residual-scan` already parses sections for review findings, so the section lookup is available rather than new machinery.
-
-**Rejected alternatives.**
-
-- **Move the flip into `verify`.** Verify is observe-only by contract (`/sp:dev-verify --fix none`; ADR-071 — "the verifier certifies the state, it never repairs its own subject"). Making certify mutate the corpus inverts that invariant and would let a verifier manufacture the boxes it claims to prove.
-- **Have the implement agent tick Requirement/AC boxes.** Implement cannot prove AC rows (the verifier owns that verdict) and would pre-flip rows the verdict could still mark `UNMET`, which is exactly the silent-pass the fold protects against.
-- **Make every `unchecked-box` deferrable.** Removes the gate for Plan items, which have no other blocker.
-- **Tick boxes before `verify` in the workflow.** Requires a pre-verify flip driven by a verdict that does not exist yet — circular.
-
-**Rule owner.** The residual-sweep design satellite (`docs/design/…residual-sweep…`, the F96 contract owner referenced at `plugins/sp/scripts/residual-scan.ts:5`) carries the section-scoped classification rule; the script implements it and the pipeline relies on it.
+This task depends on 0958's checkbox-canonical proof fingerprint: record-time flips must not invalidate the registered proof. Plan boxes are not flipped by `task record`; they must be completed before verification or remain a valid blocker. The 0967 run's six unchecked Plan boxes were a separate unfinished-work condition. Update the residual-sweep design satellite as the rule owner.
+If the fold changes PASS to PARTIAL, re-record the task's Testing section from the final artifact before taking the failed edge; a failed task must not retain a stale PASS Testing narrative.
 
 ### Plan
 
-- [ ] Add section-scoped classification for `unchecked-box` in `plugins/sp/scripts/residual-scan.ts` (`deferrable` in Requirements/Acceptance Criteria, `blocking` elsewhere) and update the rule in the residual-sweep design satellite.
-- [ ] Extend the scanner's tests: a verdict-proven-but-unflipped Requirement/AC box folds `PASS`; a Plan box still folds `PARTIAL`.
-- [ ] Re-run the affected path end to end (focused scanner tests, then the pipeline's verify→record sequence on a fixture task) and confirm `PASS` survives the fold with unflipped R/AC boxes.
-
-**Out of scope.** The digest-move cost when a proof-input section changes (tracked as a separate finding — the gate re-run is a consequence, not the defect). The `task record` flip mechanics themselves (`packages/app/src/services/task-record.ts`) stay as they are.
-
-**Evidence already resolved by the source session.** The 0967 run completed via hand-certification; this task removes the need for that recovery, not the 0967 evidence.
+- [ ] Confirm the current verify and record action order and the existing record-to-done guard.
+- [ ] Move the scanner's scan/fold action after `task record` in the record state; leave its classification unchanged.
+- [ ] Cover a PASS verdict with proven R/AC boxes and already-complete Plan, plus unproven R/AC and open Plan cases; assert a downgraded verdict is re-recorded in Testing.
+- [ ] Update the residual-sweep design satellite, run focused tests and `bun run spur-check`.
 
 ### Solution
 

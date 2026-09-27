@@ -4,9 +4,11 @@ name: Verify standard-script twins by content instead of mtime
 status: todo
 template: feature-impl
 created_at: 2026-09-26T06:13:44.341Z
-updated_at: "2026-09-26T06:18:48.322Z"
+updated_at: "2026-09-27T16:45:04.915Z"
 feature_id: A32
 
+priority: P1
+estimate_hours: 3
 ---
 
 ## 0970. Verify standard-script twins by content instead of mtime

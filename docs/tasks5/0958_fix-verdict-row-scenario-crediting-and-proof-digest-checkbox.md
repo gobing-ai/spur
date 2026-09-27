@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: Fix verdict-row scenario crediting and proof-digest checkbox invalidation in the completion gate
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-26T00:29:55.505Z
-updated_at: "2026-09-26T17:03:44.532Z"
+updated_at: "2026-09-27T16:45:00.539Z"
 feature_id: F91
 
 ac_altitude: task-local
+priority: P1
+estimate_hours: 6
 ---
 
 ## 0958. Fix verdict-row scenario crediting and proof-digest checkbox invalidation in the completion gate
@@ -233,7 +235,7 @@ item text and assert it changes.
 ### Plan
 
 - [ ] 1. `feature-check.ts`: add `label` to both alias builders (:796, :1262). Extend `rowMatchesScenario` (:1206) with the three explicit embedded-reference forms, evaluated over the raw id. Unit tests: credited forms, bare-`R<n>` non-match, unchanged title/alias paths, and a scenario without an `R<n>` label.
-- [ ] 2. `feature-check.ts`: add `verdictScenarioKeyGap` (covering-task scoped, reusing `verdictRowsMatchScenarios`). Wire it into `task verdict` (`apps/cli/src/commands/task.ts:1265`): no artifact write and a non-zero exit on a gap. Replace the 0700 R3 comment with the reason this check differs. Tests: covering-task fail, pass-after-rekey, non-covering task-local, orphan task, scenario-less feature.
+- [ ] 2. `feature-check.ts`: add `verdictScenarioKeyGap` (covering-task scoped, reusing `verdictRowsMatchScenarios`). Wire it into `task verdict` (`apps/cli/src/commands/task.ts:1265`): no artifact write and a non-zero exit on a gap. Replace the 0700 R3 comment with the reason this check differs. Tests: covering-task fail (including the AC1 vs AC-1 case from 0966/0985), pass-after-rekey, non-covering task-local, orphan task, scenario-less feature.
 - [ ] 3. Improve the `L4_VERDICT_ROWS_MATCH_NO_SCENARIO` message to name the offending row ids and accepted forms; update the finding's test expectations.
 - [ ] 4. `proof-input-fingerprint.ts`: add `canonicalizeCheckboxMarkers` and apply it in `extractTaskProofData` (:302) and `extractFeatureProofData` (:343); comment the one-time digest-change note.
 - [ ] 5. Add the four fingerprint test cases: tick-only identical, text edit differs, marker variants identical, section add/remove differs.
@@ -271,3 +273,6 @@ item text and assert it changes.
 - Provenance owner: **0960**, project-first script resolution (the stale vendored `inline-run-setup.ts`)
 
 ### History
+
+- 2026-09-27T16:45:00.539Z backlog → todo (system)
+

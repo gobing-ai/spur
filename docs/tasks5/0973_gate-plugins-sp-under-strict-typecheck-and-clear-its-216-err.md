@@ -4,9 +4,12 @@ name: Gate plugins/sp under strict typecheck and clear its 216 errors
 status: todo
 template: feature-impl
 created_at: 2026-09-26T07:23:27.739Z
-updated_at: "2026-09-26T07:31:45.486Z"
+updated_at: "2026-09-27T16:45:08.325Z"
 feature_id: A33
 
+ac_altitude: task-local
+priority: P1
+estimate_hours: 8
 ---
 
 ## 0973. Gate plugins/sp under strict typecheck and clear its 216 errors
@@ -58,9 +61,15 @@ edits that were then reverted:
 After fixes 1 and 2 (with fix 2's mapping), **211 errors remain**, all inside `plugins/sp/`. Their per-file counts
 are in `### Design`.
 
+**Refine corrections (2026-09-27)**
+
+- The earlier prose R labels and unlabeled AC checkboxes were not canonical verdict/record identities; converted them to R1–R9 and AC1–AC8.
+
+AC altitude: task-local. These regression checks do not add feature ship criteria.
+
 ### Requirements
 
-- **R1** Add `plugins/sp/tsconfig.json`:
+- [ ] R1. Add `plugins/sp/tsconfig.json`:
   ```json
   {
       "extends": "../../tooling/typescript/base.json",
@@ -73,24 +82,24 @@ are in `### Design`.
   ```
   Without `baseUrl`, `paths` resolves relative to the tsconfig's directory, and TS 6 rejects `baseUrl` (TS5101).
   Exclude nothing unless a file has a proven reason; if you exclude one, record the reason in `### Solution`.
-- **R2** Change the root `package.json` `typecheck` to
+- [ ] R2. Change the root `package.json` `typecheck` to
   `bun run --filter '*' typecheck && tsc -p scripts/tsconfig.json --noEmit && tsc -p plugins/sp/tsconfig.json --noEmit`.
-- **R3** In `plugins/sp/scripts/feature-verification-steps.ts:48-53`, change every `import('../../packages/app/src/`
+- [ ] R3. In `plugins/sp/scripts/feature-verification-steps.ts:48-53`, change every `import('../../packages/app/src/`
   to `import('../../../packages/app/src/`. These are type-only positions; do not change any runtime import.
-- **R4** Add `| 'gobing_ai_import'` to the `Violation.kind` union in `plugins/sp/scripts/script-contract-check.ts:39-45`.
-- **R5** In `plugins/sp/scripts/inline-run-setup.ts`, narrow the trace status so no cast is needed:
+- [ ] R4. Add `| 'gobing_ai_import'` to the `Violation.kind` union in `plugins/sp/scripts/script-contract-check.ts:39-45`.
+- [ ] R5. In `plugins/sp/scripts/inline-run-setup.ts`, narrow the trace status so no cast is needed:
   - Make `ACTION_STATUSES` (`:337`) a typed set of `'done' | 'failed'`.
   - Add a type guard, e.g. `isActionStatus(s: string): s is 'done' | 'failed'`.
   - Use the guard at the existing validation point (`:634`, `if (!ACTION_STATUSES.has(status)) usage();`).
   - Type `TraceModeInput.status` as `'done' | 'failed'`.
   - `WorkflowStatus` (`'running' | 'done' | 'failed' | 'paused' | 'interrupted'`, from `ts-dual-workflow-engine`)
     is not re-exported from `@gobing-ai/spur-app`, so do not import it; the literal union is assignable to it.
-- **R6** In `plugins/sp/tests/surface-drift-inventory.test.ts`, remove the `, 60_000` describe argument at `:434`.
+- [ ] R6. In `plugins/sp/tests/surface-drift-inventory.test.ts`, remove the `, 60_000` describe argument at `:434`.
   Pass `60_000` as the third argument to each of the three `test(...)` calls in the `runCli` block (`:413-433`)
   instead, so the timeout actually applies.
-- **R7** Delete the unused `_boxId` declaration at `plugins/sp/tests/residual-scan.test.ts:391`. Keep the explanatory
+- [ ] R7. Delete the unused `_boxId` declaration at `plugins/sp/tests/residual-scan.test.ts:391`. Keep the explanatory
   comment only if it still reads correctly without the line.
-- **R8** Fix the remaining ~211 mechanical errors with no weakening:
+- [ ] R8. Fix the remaining ~211 mechanical errors with no weakening:
   - Forbidden: `// @ts-ignore`, `// @ts-expect-error`, `as any`, `noUncheckedIndexedAccess: false`, and
     `skipLibCheck` changes.
   - Use the same idioms as the scripts triage:
@@ -102,20 +111,27 @@ are in `### Design`.
       preferred.
   - A non-null `!` in non-test code needs an earlier guard that makes presence certain, plus a one-line
     comment saying why.
-- **R9** Behavior must not change. The plugin tests and `plugin-smoke` pass before and after. No test is skipped,
+- [ ] R9. Behavior must not change. The plugin tests and `plugin-smoke` pass before and after. No test is skipped,
   deleted or loosened to go green.
 
 ### Acceptance Criteria
 
-- [ ] `plugins/sp/tsconfig.json` exists as specified in R1, and `tsc -p plugins/sp/tsconfig.json --noEmit` exits 0.
-- [ ] Root `bun run typecheck` runs the workspace, `scripts/` and `plugins/sp/` legs and exits 0.
-- [ ] Gate proof: temporarily append `export const __probe: number = 's';` to `plugins/sp/scripts/quality-gate.ts`,
-      confirm `bun run typecheck` exits non-zero, then remove the probe.
-- [ ] `git diff main -- plugins/sp | rg '^\+.*(@ts-ignore|@ts-expect-error|as any)'` prints nothing.
-- [ ] `rg -n "import\('\.\./\.\./packages" plugins/sp/scripts/feature-verification-steps.ts` prints nothing.
-- [ ] `(cd plugins/sp && bun test)` passes with the same test count as on `main` before this task, and 0 fail.
-- [ ] `bun run plugin-smoke` prints PASS.
-- [ ] `bun run spur-check` is green.
+- [ ] AC1 — Plugin strict TypeScript config compiles cleanly (req: R1, R3, R4, R5, R6, R7, R8)
+  - Verify: `tsc -p plugins/sp/tsconfig.json --noEmit` exits 0.
+- [ ] AC2 — Root typecheck includes the plugin leg (req: R2)
+  - Verify: `bun run typecheck` exits 0 and runs workspaces, scripts and plugin checks.
+- [ ] AC3 — The typecheck gate rejects a plugin type error (req: R2)
+  - Verify: temporarily add `export const __probe: number = 's';` to `plugins/sp/scripts/quality-gate.ts`; typecheck fails; revert.
+- [ ] AC4 — No suppression weakens strictness (req: R8)
+  - Verify: added plugin lines contain no `@ts-ignore`, `@ts-expect-error` or `as any`.
+- [ ] AC5 — Wrong type-only app paths are removed (req: R3)
+  - Verify: `rg -n "import\('\.\./\.\./packages" plugins/sp/scripts/feature-verification-steps.ts` finds none.
+- [ ] AC6 — Plugin behavior tests retain their baseline pass count (req: R9)
+  - Verify: `(cd plugins/sp && bun test)` passes with no deleted or loosened assertions.
+- [ ] AC7 — Standalone plugin smoke passes (req: R9)
+  - Verify: `bun run plugin-smoke` prints PASS.
+- [ ] AC8 — Repository task gate passes (req: R2, R9)
+  - Verify: `bun run spur-check` is green.
 
 ### Q&A
 

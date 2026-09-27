@@ -4,10 +4,12 @@ name: Move the self-draining agent loop out of the agent CLI into a spur-app loo
 status: todo
 template: feature-impl
 created_at: 2026-09-26T05:53:31.176Z
-updated_at: "2026-09-26T05:53:52.891Z"
+updated_at: "2026-09-27T16:45:02.687Z"
 feature_id: G67
 
 dependencies: ["0967"]
+priority: P2
+estimate_hours: 6
 ---
 
 ## 0968. Move the self-draining agent loop out of the agent CLI into a spur-app loop service

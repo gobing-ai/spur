@@ -4,9 +4,11 @@ name: Route Pi ledger and session events through the shared Claude hook cores
 status: todo
 template: feature-impl
 created_at: 2026-09-26T06:13:43.199Z
-updated_at: "2026-09-26T06:18:47.624Z"
+updated_at: "2026-09-27T16:45:03.793Z"
 feature_id: H21
 
+priority: P2
+estimate_hours: 5
 ---
 
 ## 0969. Route Pi ledger and session events through the shared Claude hook cores

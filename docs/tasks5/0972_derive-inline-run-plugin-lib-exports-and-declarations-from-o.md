@@ -4,9 +4,11 @@ name: Derive inline-run plugin-lib exports and declarations from one table
 status: todo
 template: feature-impl
 created_at: 2026-09-26T06:35:37.358Z
-updated_at: "2026-09-26T06:37:36.590Z"
+updated_at: "2026-09-27T16:45:07.194Z"
 feature_id: A33
 
+priority: P2
+estimate_hours: 3
 ---
 
 ## 0972. Derive inline-run plugin-lib exports and declarations from one table

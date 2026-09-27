@@ -1,13 +1,15 @@
 ---
 schema_version: 1
 name: Make pipeline script resolution revision-safe across the project copy and the installed twin
-status: backlog
+status: todo
 template: issue
 created_at: 2026-09-26T00:36:38.726Z
-updated_at: "2026-09-26T17:10:49.565Z"
+updated_at: "2026-09-27T16:45:01.921Z"
 feature_id: I
 
 ac_altitude: task-local
+priority: P1
+estimate_hours: 8
 ---
 
 ## 0960. Make pipeline script resolution revision-safe across the project copy and the installed twin
@@ -53,25 +55,29 @@ So vendoring was never needed. The probe then executed the vendored copy, which 
 - **0970** (A32) checks twin-vs-source parity inside the spur repo. It is a different defect with no overlap.
 - There is no overlap in 0964–0976. `rg` for vendor / project-first / `superskill script path` / marketplace / `SETUP_SCRIPT` finds only 0975's use of the `$SETUP_SCRIPT` variable, which it inherits unchanged.
 
+**Refine corrections (2026-09-27)**
+
+- The separately checked R1a/AC1a labels normalize to R1/AC1 in the checklist parser; moved them to R7/AC7 while retaining their feature-verification scope.
+
 ### Requirements
 
 - [ ] R1. Every project-first `plugins/sp/scripts/` probe (the 18 sites in Background) takes the project-tree branch only inside the Spur source repo, detected by `config/plugin-scripts.json`. Everywhere else, a step resolves only through `superskill script path sp <rel>`, so a vendored `plugins/sp/scripts/` copy in a consuming project is never executed.
-- [ ] R1a. `feature-verification.yaml:56` gains the same twin fallback (`superskill script path sp feature-verification-steps.mjs`) and a fail-closed branch that writes the step's FAIL status, matching the other pipelines.
 - [ ] R2. Each of `task-pipeline`, `wrapup-pipeline`, `idea-pipeline` and `feature-verification` runs one resolution action at run start. It writes `.spur/run/<runId>-script-root.json` with `{ mode: "source-repo" | "installed", source, dir, scriptSetDigest }`. `source` and `dir` come from `superskill script path … --json`. `scriptSetDigest` is one sha256 over the sorted `name:sha256` list of the resolved dir's files. The same action prints one warning naming an ignored vendored `plugins/sp/scripts/` dir when one exists outside the source repo.
 - [ ] R3. Fail-closed behaviour is unchanged: when no script resolves, each step still writes its per-step FAIL status or error exactly as today. The run-start action never aborts the run.
 - [ ] R4. Every fail-closed remedy message names the working install command, `superskill install sp --marketplace gobing-ai/spur`, instead of the bare `superskill install sp`.
 - [ ] R5. script-contract-check rule 4 also scans `config/workflows/*.yaml`, and it flags any project-first `plugins/sp/scripts/` reference (`[ -f`, `S=`, `*_SCRIPT=`, or `bun plugins/sp/scripts/`) that is not inside the source-repo guard. A new ungated probe then fails `bun run script-contract-check`.
 - [ ] R6. The Spur source repo keeps its dogfood behaviour: with `config/plugin-scripts.json` present, steps still run `bun plugins/sp/scripts/<name>.ts`, and `script-root.json` records `mode: "source-repo"`.
+- [ ] R7. `feature-verification.yaml:56` gains the same twin fallback (`superskill script path sp feature-verification-steps.mjs`) and a fail-closed branch that writes the step's FAIL status, matching the other pipelines.
 
 ### Acceptance Criteria
 
 - [ ] AC1 — In a project without `config/plugin-scripts.json` that carries a stale vendored `plugins/sp/scripts/`, every step runs the installed twin, and the run prints one warning naming the ignored dir (req: R1, R2)
-- [ ] AC1a — In a consumer with no vendored copy, the feature-verification `verify` step runs the installed twin; with no twin, it writes FAIL and names the install command (req: R1a, R4)
 - [ ] AC2 — A run writes `script-root.json` with mode, source, dir and a script-set digest that changes when any resolved script changes (req: R2)
 - [ ] AC3 — With no resolvable script, each step keeps its existing per-step fail-closed output, and the run is not aborted (req: R3)
 - [ ] AC4 — Every fail-closed remedy names `superskill install sp --marketplace gobing-ai/spur` (req: R4)
 - [ ] AC5 — A fixture workflow with an ungated `S=plugins/sp/scripts/x.ts` probe fails script-contract-check, and the shipped YAMLs pass (req: R5)
 - [ ] AC6 — Inside the source repo, steps run `plugins/sp/scripts/*.ts` and `script-root.json` records `source-repo` (req: R6)
+- [ ] AC7 — In a consumer with no vendored copy, the feature-verification `verify` step runs the installed twin; with no twin, it writes FAIL and names the install command (req: R7, R4)
 
 ### Q&A
 
@@ -138,7 +144,7 @@ S=; [ -f config/plugin-scripts.json ] && S=plugins/sp/scripts/X.ts;
 - Where a site currently falls back to a `.ts` twin (for example `task-size-precheck.ts`, `verify-answer-lint.ts`), keep the existing `rel` and runner selection. This task changes *which tree*, not *which file*.
 - Edit only `config/workflows/*.yaml` and `plugins/sp/…`. `apps/cli/config/` and `apps/cli/plugins/` are regenerated by `build:bundle`.
 
-**`feature-verification.yaml:56` (R1a).** Convert it to the if-form above. For the fail-closed branch, write FAIL to the same status file that `feature-verification-steps.ts verify` writes, so the existing transition guard routes the run to `failed`. Verify: the guard reads that file, not the exit code.
+**`feature-verification.yaml:56` (R7).** Convert it to the if-form above. For the fail-closed branch, write FAIL to the same status file that `feature-verification-steps.ts verify` writes, so the existing transition guard routes the run to `failed`. Verify: the guard reads that file, not the exit code.
 
 **Run-start resolution action (R2).** A new plugin script, `plugins/sp/scripts/script-root.ts`, plus its `.mjs` twin, is registered in `config/plugin-scripts.json` as `contract: standard`. It stays standalone (node/bun builtins only).
 
@@ -165,7 +171,7 @@ S=; [ -f config/plugin-scripts.json ] && S=plugins/sp/scripts/X.ts;
 
 ### Plan
 
-- [ ] 1. Apply the guard idiom at all 18 sites (task-pipeline 10, wrapup 5, idea 1, feature-verification 1, `inline-pipeline-driver.md` 1). The feature-verification site also gains the twin and fail-closed branches (R1a). Keep the twin and fail-closed branches byte-identical apart from the R4 remedy text.
+- [ ] 1. Apply the guard idiom at all 18 sites (task-pipeline 10, wrapup 5, idea 1, feature-verification 1, `inline-pipeline-driver.md` 1). The feature-verification site also gains the twin and fail-closed branches (R7). Keep the twin and fail-closed branches byte-identical apart from the R4 remedy text.
 - [ ] 2. Add `plugins/sp/scripts/script-root.ts`, build its `.mjs` twin (`bun run build:scripts`), and register it in `config/plugin-scripts.json`. Unit tests cover source-repo mode, installed mode (fake `superskill` on PATH), unresolved mode (exit 0), the digest changing on one file edit, and the vendored-dir warning.
 - [ ] 3. Wire `script-root` as the first action of task-, wrapup-, idea- and feature-verification pipelines, and into the inline driver's setup step.
 - [ ] 4. Replace the 13 remedy strings (R4).
@@ -203,4 +209,5 @@ The project-first probe was written for dogfooding in the Spur repo, but it is u
 ### History
 
 - 2026-09-26T00:37:29.824Z todo → backlog (system)
+- 2026-09-27T16:45:01.921Z backlog → todo (system)
 

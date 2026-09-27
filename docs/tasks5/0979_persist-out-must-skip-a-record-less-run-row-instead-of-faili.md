@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Persist-out must skip a record-less run row instead of failing the transfer
-status: backlog
+status: cancelled
 template: feature-impl
 created_at: 2026-09-27T07:10:45.437Z
-updated_at: "2026-09-27T07:11:49.273Z"
+updated_at: "2026-09-27T16:29:33.182Z"
 feature_id: D63
 
 ac_numbering: task-local
@@ -27,15 +27,11 @@ The worktree DB held two runs with **zero** child rows and no record files — `
 
 ### Requirements
 
-- [ ] R1. A persisted run id whose `.spur/run/<id>.md` or `<id>.state.json` record is absent is reported as a skip (same shape as the existing `record-conflict:<file>`, e.g. `record-missing:<file>`) and does **not** abort the transfer; every run that does have records is still copied.
-- [ ] R2. The existing fail-closed cases are unchanged: an unreadable source DB, an unsafe run id (charset guard), and an unwritable target still throw so the caller routes to WT-5.
-- [ ] R3. The return contract stays `{ok, persisted, skipped}`; `persisted` counts only rows actually inserted, and a record-skip for an already-persisted id does not inflate it.
+- [x] R1. Superseded by task 0984; no independent work remains.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — a worktree DB containing one record-less run row and one normal run persists the normal run and reports the record-less id in `skipped` with a `record-missing:` reason (test)
-- [ ] AC2 — R2 — the missing/unreadable-DB and unsafe-id paths still throw (existing behaviour asserted by test)
-- [ ] AC3 — R3 — `ok`/`persisted`/`skipped` semantics pinned by the same test
+- [x] AC1 — Superseded by task 0984 (req: R1)
 
 ### Q&A
 
@@ -49,10 +45,7 @@ The worktree DB held two runs with **zero** child rows and no record files — `
 
 ### Plan
 
-- [ ] Reproduce against the record-copy loop in `persistWorktreeRuns` (`packages/app/src/services/inline-run-setup.ts`, the `for (const id of persistedIds)` block that reads `${id}.md` / `${id}.state.json`) with a synthetic worktree DB: one run row with both records, one with neither.
-- [ ] Turn the record read into a tolerated skip (catch the missing-file case only; keep every other error fatal), mirroring the `record-conflict:<file>` reason format.
-- [ ] Extend the existing persist-out test surface (`packages/app/tests/services/` — the 0975 suite that covers `persistWorktreeRuns`) with the two-run case plus a keep-failing case for an unreadable source DB.
-- [ ] Run the suite in its workspace, then `bun run spur-check`.
+- [x] Superseded by task 0984.
 
 ### Solution
 
@@ -68,6 +61,9 @@ The worktree DB held two runs with **zero** child rows and no record files — `
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+Merged into task 0984: the same persist-out service owns the record-less row case and the worktree evidence copy.
 
 ### History
+
+- 2026-09-27T16:25:44.206Z backlog → cancelled (system)
+

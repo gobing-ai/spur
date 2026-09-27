@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Make the feature-lifecycle R4 (0872) guard test load-deterministic
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-27T07:11:02.973Z
-updated_at: "2026-09-27T07:11:50.409Z"
+updated_at: "2026-09-27T16:45:12.633Z"
 feature_id: D63
 
 ac_numbering: task-local
 ac_altitude: task-local
+priority: P2
+estimate_hours: 2
 ---
 
 ## 0981. Make the feature-lifecycle R4 (0872) guard test load-deterministic
@@ -26,17 +28,21 @@ error: Guard "shell" denied transition from "verifying" to "done" — {"stdout":
 
 The 5 s bound was not found in `LifecycleAdapterOptions` (`makeFixtureAdapter`, `:183-197`) nor in `config/workflows/feature-lifecycle.yaml`; it is most likely an engine/adapter default for spawned guard shells.
 
+**Refine corrections (2026-09-27)**
+
+- The 5001 ms boundary is Bun's default per-test timeout (`bun test --help`); the planned fix is a test-local override, not a production guard change.
+
 ### Requirements
 
-- [ ] R1. The R4 (0872) test and its 0418 sibling are deterministic under full-suite CPU load (no 5 s wall-clock cliff on a spawned guard).
-- [ ] R2. Guard semantics are preserved: the test still fails when the real guard denies a hop (the R4 mutation check stays meaningful).
-- [ ] R3. The located bound is named in Solution with its file and symbol, and any test-only override is scoped to the fixture (no production guard timeout is weakened without a stated reason).
+- [ ] R1. The R4 (0872) and R4 (0418) integration tests have a test-local timeout large enough for the real CLI guard under full-suite CPU load.
+- [ ] R2. The real guard still executes, and the existing denial assertions stay meaningful. Production guard timeouts and workflow definitions are unchanged.
+- [ ] R3. The 5001 ms boundary is identified from the test runner and recorded in Solution; no engine timeout is changed without separate evidence.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — two consecutive full-suite `bun run spur-check` runs under load are green, with the R4 test's duration reported (test)
-- [ ] AC2 — R2 — a deliberately denying fixture still fails the hop, pinned by an existing or added assertion (test)
-- [ ] AC3 — R3 — the bound's location is named in `## Solution` (static-ref)
+- [ ] AC1 — The two named integration tests pass under a loaded test run with explicit test-local timeouts (req: R1)
+- [ ] AC2 — Missing or FAIL feature receipts still deny the hop, while a current PASS receipt allows it (req: R2)
+- [ ] AC3 — Solution names Bun's test timeout and shows the scoped override (req: R3)
 
 ### Q&A
 
@@ -46,14 +52,13 @@ The 5 s bound was not found in `LifecycleAdapterOptions` (`makeFixtureAdapter`, 
 
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+The failure duration was 5001 ms, matching Bun's default per-test timeout. The fixture adapter has no timeout setting, and the workflow guard has no 5 s bound. Set the third `test(..., ..., timeout)` argument on the R4 (0872) and R4 (0418) tests only, with a measured margin (initially 20_000 ms). Keep the live CLI guard and its PASS/FAIL assertions. If a longer local timeout still kills the child at 5 s, locate that second bound before changing production code.
 
 ### Plan
 
-- [ ] Locate the bound: grep the engine/adapter for the guard-shell timeout that produces the 5001 ms kill (`packages/app/src/workflow/lifecycle-adapter.ts` → engine `ActionRunner`/guard options); confirm by instrumenting the fixture with a slow guard.
-- [ ] Fix at the narrowest correct layer (fixture-scoped override if the bound is an engine default; definition change only if the shipped guard is genuinely under-provisioned).
-- [ ] Verify: run `bun run spur-check` twice, and reproduce the loaded condition (e.g. two concurrent suite runs) once to confirm the cliff is gone.
-- [ ] Record the before/after durations in `## Testing`.
+- [ ] Confirm the boundary by running the R4 tests with a test-local timeout override under load.
+- [ ] Add the measured timeout to the two tests; keep their guard assertions unchanged.
+- [ ] Run the focused file under load and one `bun run spur-check`; record durations.
 
 ### Solution
 
@@ -72,3 +77,6 @@ The 5 s bound was not found in `LifecycleAdapterOptions` (`makeFixtureAdapter`, 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-27T16:45:12.633Z backlog → todo (system)
+

@@ -4,9 +4,12 @@ name: Dedup inert-var cells in idea-pipeline routing parity truth table
 status: todo
 template: feature-impl
 created_at: 2026-09-26T07:23:28.154Z
-updated_at: "2026-09-26T07:31:45.679Z"
+updated_at: "2026-09-27T16:45:09.452Z"
 feature_id: D64
 
+ac_altitude: task-local
+priority: P2
+estimate_hours: 2
 ---
 
 ## 0974. Dedup inert-var cells in idea-pipeline routing parity truth table
@@ -37,37 +40,43 @@ oracle over the full cross product", dominates this file's runtime.
 48 evaluations run but only 14 are unique (2 ac-generate edges × 3 profile values + 2 feature-check edges × 4 answer
 values). That makes **1008 unique cells of 3456 (29%)**, so the expected runtime after the fix is roughly 7–8 s.
 
+**Refine corrections (2026-09-27)**
+
+- The earlier prose R labels and unlabeled AC checkboxes were not canonical verdict/record identities; converted them to R1–R5 and AC1–AC5.
+
+AC altitude: task-local. These regression checks do not add feature ship criteria.
+
 ### Requirements
 
-- **R1** Restructure the parity loop so each case enumerates only its **live** var:
+- [ ] R1. Restructure the parity loop so each case enumerates only its **live** var:
   - Give each case a `liveVar` (`'profile'` or `'__hitlAnswer'`) and its `liveValues`.
   - Keep `inertVar`/`fixed` as they are.
   - The outer loops cover only the file-state dimensions (design × needs × ac × cov).
   - For each case, iterate its `liveValues`, set `{ [c.liveVar]: v, [c.inertVar]: c.fixed }`, and call
     `evaluatePair` once.
   - Keep `evaluatePair`, `ORACLE_GUARDS`, `guardCommand` and the writer memo unchanged.
-- **R2** Keep the parity semantics:
+- [ ] R2. Keep the parity semantics:
   - Assert every unique cell's oracle-vs-live comparison with the same `describeState` failure message.
   - Update the inert-var comment (`:293-294`) to explain that the inert var is pinned *and not enumerated*.
-- **R3** Change the tripwire to `expect(cells).toBe(1008)`, with a one-line derivation comment:
+- [ ] R3. Change the tripwire to `expect(cells).toBe(1008)`, with a one-line derivation comment:
   `// 72 file states × (2 ac-generate edges × 3 profiles + 2 feature-check edges × 4 answers)`.
-- **R4** Remove the `60000` timeout override if the measured runtime is under 2.5 s. Otherwise set it to about
+- [ ] R4. Remove the `60000` timeout override if the measured runtime is under 2.5 s. Otherwise set it to about
   3× the measured runtime, rounded up to 5 s.
-- **R5** Do not memoise or batch spawns (the rejected alternatives in `### Design`). Scope is the loop
+- [ ] R5. Do not memoise or batch spawns (the rejected alternatives in `### Design`). Scope is the loop
   restructure only.
 
 ### Acceptance Criteria
 
-- [ ] `(cd packages/app && bun test tests/workflow/idea-pipeline-routing.test.ts)` shows 5 pass, 0 fail.
-      Its wall time is ≤ 40% of a pre-change run measured on the same machine in the same session. Record both
-      numbers in `### Testing`; the filing-time baseline was 24.74 s.
-- [ ] The tripwire asserts `1008`, and the derivation comment is present.
-- [ ] Mutation check: temporarily replace `ORACLE_GUARDS['feature-check→decompose']`'s leading
-      `test "$__hitlAnswer" = yes` with `test "$__hitlAnswer" = no`. The parity test must fail. Revert.
-- [ ] Mutation check 2: temporarily change `ORACLE_GUARDS['ac-generate→decompose']`'s `test "$profile" = auto` to
-      `test "$profile" = standard`. The parity test must fail. This proves the live var is still enumerated.
-      Revert.
-- [ ] `bun run spur-check` is green.
+- [ ] AC1 — Routing parity holds with at most 40% of the same-session baseline wall time (req: R1, R2)
+  - Verify: `(cd packages/app && bun test tests/workflow/idea-pipeline-routing.test.ts)` has 5 pass/0 fail; record before/after times.
+- [ ] AC2 — The unique-cell tripwire is 1008 (req: R3)
+  - Verify: assert `expect(cells).toBe(1008)` with the derivation comment.
+- [ ] AC3 — A feature-check oracle mutation fails parity (req: R2)
+  - Verify: invert the feature-check/decompose answer guard, observe failure, then revert.
+- [ ] AC4 — An ac-generate oracle mutation fails parity (req: R2)
+  - Verify: change the ac-generate/decompose profile guard, observe failure, then revert.
+- [ ] AC5 — The scoped gate remains green with an appropriate measured timeout (req: R4, R5)
+  - Verify: `bun run spur-check` passes.
 
 ### Q&A
 

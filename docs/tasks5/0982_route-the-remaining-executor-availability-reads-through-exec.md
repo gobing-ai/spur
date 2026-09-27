@@ -1,14 +1,16 @@
 ---
 schema_version: 1
 name: Route the remaining executor-availability reads through executorDisabled
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-27T07:11:11.665Z
-updated_at: "2026-09-27T07:11:50.958Z"
+updated_at: "2026-09-27T16:45:14.026Z"
 feature_id: B21
 
 ac_numbering: task-local
 ac_altitude: task-local
+priority: P2
+estimate_hours: 2
 ---
 
 ## 0982. Route the remaining executor-availability reads through executorDisabled
@@ -29,17 +31,21 @@ Direct `normalizeExecutorAvailability(...)` reads remain in `packages/app/src/se
 
 A second, larger observation from the same review (`agent-service.ts:2124-2133` keeps its own eligible-executor filter adding `exclude`/`exhaustedAgents` predicates on top of `executorDisabled` + `getExecutorTier` + `isTierEligible`) needs a design decision and is explicitly **out of scope** here — 0965 deliberately changed no behaviour.
 
+**Refine corrections (2026-09-27)**
+
+- The earlier out-of-scope inline tier selector duplicates `cheapestEligibleExecutors`; it is now included with the boolean availability reads.
+
 ### Requirements
 
-- [ ] R1. Every enablement/eligibility decision in `agent-service.ts` classifies availability through `executorDisabled`; a site that genuinely needs the full availability object (e.g. the doctor report at `:2949`) keeps the object read and carries a one-line justification naming why the boolean would lose information.
-- [ ] R2. No behaviour change: identical decisions for the boolean form, the `{owner,since,reason}` object form, and `undefined`/absent `disabled`.
-- [ ] R3. `rg -n "normalizeExecutorAvailability\(" packages/app/src/services/agent-service.ts` yields only justified object-reporting sites, and the justification is a source comment at each one.
+- [ ] R1. Every boolean enablement decision in `agent-service.ts` uses `executorDisabled`. Full availability-object reads remain only where callers use owner/since/reason metadata.
+- [ ] R2. The resource-exhaustion selection path obtains tier-filtered, tier-sorted candidates from `cheapestEligibleExecutors`, then applies its local `exclude` and exhausted-agent filters. No second tier-selection/sort funnel remains.
+- [ ] R3. Decisions and ordering are unchanged for boolean, object and absent `disabled`, including excluded and exhausted candidates.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — classification sites route through `executorDisabled` or carry an in-place justification (`rg` probe pasted into Testing) (command)
-- [ ] AC2 — R2 — `bun run spur-check` green, including the existing `agent-service` / `fleet-service` suites, with no assertion changes (test)
-- [ ] AC3 — R3 — each remaining direct read names its reason in a comment (static-ref)
+- [ ] AC1 — Boolean availability decisions use the shared helper; object consumers keep their metadata (req: R1)
+- [ ] AC2 — Resource-exhaustion selection uses the shared tier funnel and preserves local exclusions (req: R2, R3)
+- [ ] AC3 — Focused agent/fleet tests and the task gate pass (req: R3)
 
 ### Q&A
 
@@ -49,14 +55,16 @@ A second, larger observation from the same review (`agent-service.ts:2124-2133` 
 
 ### Design
 
-<!-- Chosen implementation approach, key tradeoffs, invariants, and impacted surfaces. -->
+Replace the three boolean `normalizeExecutorAvailability(...).disabled` reads with `executorDisabled`. Keep the availability-object lookup and doctor report as object reads because their callers use metadata, without adding comments that merely repeat the type.
+
+At the resource-exhaustion path, start with `cheapestEligibleExecutors(executors, targetTier)`, then apply the existing `exclude` and exhausted-agent predicates. This reuses the helper's disabled filtering and ascending tier order while keeping the stage-specific exclusions local. Check stable ordering and unknown-agent handling with focused tests. This closes both parts of 0965 review finding P4-2 rather than leaving its inline tier funnel behind.
 
 ### Plan
 
-- [ ] Read each listed site and decide boolean-reader vs object-need; convert the enablement decisions (`:569`, `:636`, `:712`) to `executorDisabled`, and keep `:452`/`:2949` only with a justification comment (or convert them too if the object is unused downstream).
-- [ ] Re-point the imports if `normalizeExecutorAvailability` becomes unused in the file (Biome flags it).
-- [ ] Run `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/fleet-service.test.ts)` and `bun run spur-check`.
-- [ ] Paste the `rg` probe + suite results into `## Testing`.
+- [ ] Trace each direct availability read and the resource-exhaustion selection callers.
+- [ ] Replace boolean reads and use `cheapestEligibleExecutors` in the selection path, preserving exclusions and ordering.
+- [ ] Test boolean/object/absent disabled forms, excluded/exhausted candidates and unknown-agent behavior.
+- [ ] Run focused agent/fleet suites and `bun run spur-check`.
 
 ### Solution
 
@@ -75,3 +83,6 @@ A second, larger observation from the same review (`agent-service.ts:2124-2133` 
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-27T16:45:14.026Z backlog → todo (system)
+

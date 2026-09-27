@@ -1,12 +1,13 @@
 ---
 schema_version: 1
 name: Require the feature-credited AC id form in the verify-answer lint
-status: backlog
+status: cancelled
 template: feature-impl
 created_at: 2026-09-27T07:21:48.389Z
-updated_at: "2026-09-27T07:21:57.006Z"
+updated_at: "2026-09-27T16:29:52.303Z"
 feature_id: F91
 
+ac_altitude: task-local
 ---
 
 ## 0985. Require the feature-credited AC id form in the verify-answer lint
@@ -43,25 +44,15 @@ The answer-contract reference now states the narrower credited form
 narrower than the lint's accepted set") — this task makes the lint enforce it instead of only
 documenting it.
 
+AC altitude: task-local. This cancelled regression task does not add feature F91 ship criteria; 0958 owns the feature-crediting change.
+
 ### Requirements
 
-- [ ] R1. When a task links a feature, `verify-answer-lint` does not accept an AC row id that the
-  feature L4 gate cannot credit: an id that resolves only through the task's AC checklist label while
-  the linked feature's scenarios are titled otherwise is reported (error or warning with a named code)
-  rather than silently passed.
-- [ ] R2. The diagnostic names the credited forms — the `AC-N` ordinal alias (1-based, hyphenated) or
-  the exact linked scenario title — and quotes the offending id.
-- [ ] R3. A row already keyed `AC-N` or by a matching scenario title is unaffected, and a task with no
-  linked feature keeps today's behaviour for every accepted id form.
-- [ ] R4. The credited-form rule is taken from the feature L4 layer's own alias derivation, not
-  re-implemented as a second copy that can drift.
+- [x] R1. Superseded by task 0958; no independent work remains.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — The lint rejects the uncredited ordinal form for a linked-feature task (req: R1)
-- [ ] AC2 — R2 — The rejection names the credited forms and the offending id (req: R2)
-- [ ] AC3 — R3 — Credited forms and unlinked tasks are unaffected (req: R3)
-- [ ] AC4 — R4 — The lint and the L4 layer agree on one alias rule (req: R4)
+- [x] AC1 — Superseded by task 0958 (req: R1)
 
 ### Q&A
 
@@ -88,15 +79,7 @@ serve its purpose) and keep the unlinked case untouched.
 
 ### Plan
 
-- [ ] Read `verify-answer-lint.ts` `resolveAcIdentity`/`normalizeAcTitle` and `feature-check.ts`
-  `scenarioAliases`/`rowMatchesScenario` and confirm the exact divergence (bare ordinal accepted vs
-  `AC-N` credited).
-- [ ] Export one scenario-alias predicate from the feature-check surface.
-- [ ] Add the additive lint check with its own finding code and the credited-form hint.
-- [ ] Fixtures: an `AC1`-form answer for a linked-feature task (fails), the `AC-N` form (passes), the
-  same `AC1` form for an unlinked task (passes).
-- [ ] Re-run the 0966 reproduction above and confirm it now reports instead of passing.
-- [ ] Gate: `bun run spur-check` plus the plugin-script contract rules.
+- [x] Superseded by task 0958.
 
 ### Solution
 
@@ -112,6 +95,9 @@ serve its purpose) and keep the unlinked case untouched.
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+Duplicate of task 0958 R2: its verdict-time scenario-credit check catches the observed 0966 all-AC1 answer before feature close-out. Keep the plugin lint standalone; do not duplicate the feature gate's matching rule.
 
 ### History
+
+- 2026-09-27T16:25:44.206Z backlog → cancelled (system)
+

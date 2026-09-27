@@ -1,12 +1,15 @@
 ---
 schema_version: 1
 name: Assert the wrapup learnings artifact shape before appending it to memory
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-27T07:21:49.963Z
-updated_at: "2026-09-27T07:21:57.271Z"
+updated_at: "2026-09-27T16:45:17.742Z"
 feature_id: D62
 
+ac_altitude: task-local
+priority: P2
+estimate_hours: 2
 ---
 
 ## 0986. Assert the wrapup learnings artifact shape before appending it to memory
@@ -39,23 +42,24 @@ learnings capture is not covered by that predicate.
 `adec4790` run record `learnings-append/shell` → `.spur/memory/learnings.md`; the committed
 `chore(wrap): record 0966 wrap-up metrics and learnings` (0f92bdd0c) whose message records the repair.
 
+AC altitude: task-local. These regression scenarios validate the wrapup pipeline's append contract; they are not new D62 feature ship criteria.
+
+**Refine corrections (2026-09-27)**
+
+- `expectFile` checks existence only; content validity needs a validation state before append. Invalid shape routes to repair with a distinct status.
+
 ### Requirements
 
-- [ ] R1. The wrapup learnings artifact carries a minimal shape contract (a dated task heading and at
-  least one authored bullet), asserted before it is consumed.
-- [ ] R2. An artifact that misses the shape is treated as the declared contract violation and routes
-  to the existing violation/repair edge — it is not appended.
-- [ ] R3. `learnings-append` never appends a preamble-only artifact to `.spur/memory/learnings.md`;
-  the tracked memory file is unchanged on a shape failure.
-- [ ] R4. A well-formed artifact appends exactly once, byte-for-byte, and the run log distinguishes the
-  shape failure from an executor failure.
+- [ ] R1. Before append, the learnings artifact must contain a date, a task WBS, and at least one markdown bullet; no exact heading format is required.
+- [ ] R2. A nonempty narration-only artifact routes to the existing repair state with a distinct `invalid-learnings-shape` status, without appending it.
+- [ ] R3. A valid artifact appends exactly once as captured; the existing empty/missing soft-skip behavior remains.
+- [ ] R4. Tests cover narration-only rejection, valid append, and the unchanged executor-failure route.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — The shape contract is asserted for the learnings artifact (req: R1)
-- [ ] AC2 — R2 — A narration-only fixture routes to the violation/repair edge (req: R2)
-- [ ] AC3 — R3 — `.spur/memory/learnings.md` is untouched on a shape failure (req: R3)
-- [ ] AC4 — R4 — A well-formed artifact still appends exactly once (req: R4)
+- [ ] AC1 — Narration-only capture reaches repair and leaves memory unchanged (req: R1, R2)
+- [ ] AC2 — A dated WBS bullet appends once without rewriting its bytes (req: R1, R3)
+- [ ] AC3 — Empty/missing capture and executor failure retain their existing routes (req: R3, R4)
 
 ### Q&A
 
@@ -65,29 +69,16 @@ learnings capture is not covered by that predicate.
 
 ### Design
 
-Two candidate seats, both better than prompt prose:
+`expectFile` checks existence; the engine's `contract-violation` trigger is not a content predicate. After a successful doc-sync action, route through a small `learnings-validate` state. Its shell action writes PASS or `invalid-learnings-shape` to a run-scoped status after checking for a date, a four-digit WBS, and one markdown bullet. Route PASS to `learnings-append` and invalid shape to the existing `repair` state. The append action remains byte-for-byte and retains its soft skip for empty/missing captures. Amend repair's status text to distinguish shape failure from the existing missing-file contract violation.
 
-1. **Contract predicate on the doc-sync `agent.run` step** — reuse the same "declared post-condition"
-   predicate shape the pipeline already has for a missed `answerFile`/`expectFile` (0871's repair
-   edge), extended from existence to a minimal shape (a dated `## … — <wbs>` heading plus one bullet).
-2. **Guard inside `learnings-append`** — the shell step resolves the artifact and the script refuses
-   to append when the shape is absent, writing the failure into the run record.
-
-The predicate belongs in the contract layer, not in the agent prompt: a prompt cannot make its own
-output a post-condition, which is exactly how this slipped through. Keep the shape check deliberately
-weak (structure, not content) so it cannot reject a legitimate short learnings entry, and route the
-failure through the violation edge so the run reports it instead of committing narration.
+Keep this a structural check only; the doc-sync prompt owns the prose quality. No new engine-level content contract is needed.
 
 ### Plan
 
-- [ ] Read the wrapup-pipeline `doc-sync` / `learnings-append` / `repair` states and the 0871 repair
-  edge predicate; confirm where a shape predicate can sit without re-dispatching the stage.
-- [ ] Implement the shape predicate and wire it to the violation/repair edge.
-- [ ] Fixtures: a narration-only artifact (must not append; routes to the edge) and a well-formed
-  artifact (appends once).
-- [ ] Verify against a real wrap run on a `done` task and confirm the run log distinguishes the shape
-  failure from an executor failure.
-- [ ] Gate: `bun run spur-check` plus the workflow contract checks.
+- [ ] Add a post-doc-sync validation state and status file; keep the existing contract-violation and executor-failure routes.
+- [ ] Route valid capture to append and invalid nonempty capture to repair, with a distinct log reason.
+- [ ] Test narration-only, valid dated WBS bullet, empty/missing, and executor-failure paths.
+- [ ] Run workflow validation, focused wrapup tests, and `bun run spur-check`.
 
 ### Solution
 
@@ -106,3 +97,6 @@ failure through the violation edge so the run reports it instead of committing n
 <!-- Links to the parent feature, design docs, related tasks, or external references. -->
 
 ### History
+
+- 2026-09-27T16:45:17.742Z backlog → todo (system)
+
