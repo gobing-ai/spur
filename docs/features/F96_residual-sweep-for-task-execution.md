@@ -2,11 +2,11 @@
 schema_version: 1
 id: "F96"
 name: "Residual sweep for task execution"
-status: done
+status: active
 priority: P2
 tags: []
 created_at: "2026-09-24T18:48:46.363Z"
-updated_at: "2026-09-24T22:49:19.910Z"
+updated_at: "2026-09-27T07:11:56.529Z"
 ---
 
 # F96: Residual sweep for task execution
@@ -101,6 +101,7 @@ Feature: Residual sweep for task execution
 | 0950 | Wire the residual sweep into task-pipeline: base capture, verify fold, done settle, failed report | done |
 | 0951 | Residual sweep for standalone verify, next-router C6 recovery row, and owning docs | done |
 | 0952 | dev-runall batch wrap covers only done tasks and reports the rest | done |
+| 0983 | Order the residual-sweep box check against the record-stage box flip | backlog |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
@@ -111,4 +112,5 @@ Feature: Residual sweep for task execution
 - 2026-09-24T22:39:04.152Z backlog → active (system)
 - 2026-09-24T22:39:05.729Z active → verifying (system)
 - 2026-09-24T22:49:19.910Z verifying → done (system)
+- 2026-09-27T07:11:56.529Z done → active (system)
 
