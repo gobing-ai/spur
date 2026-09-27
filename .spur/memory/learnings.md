@@ -3364,3 +3364,24 @@ Learnings artifact written to `.spur/run/be97dc82-f326-446d-ae76-2c581d042082-wr
 ### Deferred
 
 - The loop-side extraction (~9 more symbols, `runAgentLoop` body) is sibling task 0968 under G67; the loop itself still lives in `apps/cli/src/commands/agent.ts` until then.
+
+# Wrapup learnings — run adec4790
+
+## 2026-09-27 — 0966 (F41: one guarded done/testing transition gate for CLI + server)
+
+### Conventions / patterns
+
+- The done/testing structural gate and the done-verdict gate belong once in `packages/app` (`task-transition.ts`); each transport supplies only what it owns — the CLI its lifecycle-adapter decision (backstop gate only when the adapter is absent), the server an always-on gate plus `runDir`. One implementation, byte-identical denial text.
+- A resolver that must differ per caller takes an optional seam, not a fork: `loadSectionMatrix(embeddedSchemas?, bundledRoot?)` lets the CLI keep validating with its binary-embedded schemas while the server keeps its unvalidated load. Bun does **not** honour `/* c8 ignore */`, so a defence-in-depth branch (the compile-only "no bundled tree" throw) needs such a seam to be coverable at all.
+- Verdict AC rows must be keyed `AC-N` (hyphen). `verify-answer-lint` resolves both `AC1` and `AC-1`, but `feature-check.rowMatchesScenario` only aliases `AC-${ordinal}`, so a bare ordinal credits **no** feature scenario and the feature's `verifying → done` gate denies with opaque `L4.scenario-unverified` findings.
+
+### Errors fixed / gotchas
+
+- Tick the task's Requirements/AC/Plan boxes **before** the test-stage proof digest is captured. `residual-scan`'s `unchecked-box` class is non-deferrable (`plugins/sp/scripts/residual-scan.ts:290`), so an un-ticked box folds verify PASS → PARTIAL; ticking it afterwards mutates the planning digest (Requirements/AC/Plan are digest-bound) and forces a full test → review → verify re-entry. Filed as 0983.
+- `--persist-out` (WT-4a) fails closed on any run row whose inline two-file record is absent — a `feature-lifecycle` row created by `feature sync` has none by contract — and it copies no **evidence** artifacts, so `<wbs>-verdict.json` and friends die with the worktree while the merged corpus cites them. Symptom here: the wrap's metrics recorded `verdict: UNKNOWN` for a PASS task. Filed as 0979 / 0984; this run's artifacts were copied out by hand.
+- A `--worktree` run's WT-4 FF-merge can be refused by base-ref movement alone (12 commits from other sessions in ~90 minutes). Retention is the contract; the recovery is a rebase whose generated-file overlaps (`docs/features/INDEX.md`, `packages/app/src/index.ts`) auto-merged cleanly — verify that with `git diff main..<branch> -- <file>` showing additions only.
+- The wrap's `learnings-append` capture can land the *agent's narration* ("Let me read the task…") instead of its answer, and `.spur/run/<runId>-wrapup-learnings.md` then carries a preamble. Read the artifact before committing it.
+
+### Deferred
+
+- 0979 (persist-out must skip a record-less run row), 0983 (order the residual-sweep box check against the record-stage box flip), 0984 (persist worktree run evidence) carry the three harness repairs this run exposed.
