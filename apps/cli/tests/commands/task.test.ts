@@ -3598,3 +3598,165 @@ exit 1
         expect(parsed.error.code).toBe('invalid-usage');
     });
 });
+
+// ── verdict scenario-key gap (task 0958 R2/AC4) ──
+// Prevention at certify time: a covering task whose derived verdict rows name no scenario of
+// its linked feature must fail BEFORE the artifact is written. The recorded failure loop
+// (runall-d6-4440) was: task reaches done with unkeyed rows → feature done gate rejects →
+// manual re-key + re-derive + re-bind.
+describe('spur task CLI — verdict scenario-key gate (0958)', () => {
+    const AC = [
+        '```gherkin',
+        'Feature: fallback envelope',
+        '  Scenario: R3 — Explicit fallback list is honored in order',
+        '    Given x',
+        '  Scenario: R6 — Explicit unknown or unconfigured provider still throws at selection',
+        '    Given x',
+        '```',
+    ].join('\n');
+
+    async function seedGapCwd(): Promise<string> {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-gap-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        await mkdir(join(isoCwd, 'docs', 'features'), { recursive: true });
+        await writeFile(
+            join(isoCwd, 'docs', 'features', 'D9_fallback-envelope.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "D9"',
+                'name: "Fallback envelope"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-09-25T00:00:00.000Z',
+                'updated_at: 2026-09-25T00:00:00.000Z',
+                '---',
+                '',
+                '# D9: Fallback envelope',
+                '',
+                '## Goal',
+                '',
+                'Fallback selection semantics.',
+                '',
+                '## Scope',
+                '',
+                'In scope: envelope and selection.',
+                '',
+                '## Acceptance Criteria',
+                '',
+                AC,
+                '',
+            ].join('\n'),
+        );
+        await writeFile(
+            join(isoCwd, 'docs', 'tasks', '0961_covering-task.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "Covering task"',
+                'status: wip',
+                'feature_id: D9',
+                'priority: P1',
+                'created_at: 2026-09-25T00:00:00.000Z',
+                'updated_at: 2026-09-25T00:00:00.000Z',
+                '---',
+                '',
+                '## 0961. Covering task',
+                '',
+                '### Acceptance Criteria',
+                '',
+                AC,
+                '',
+            ].join('\n'),
+        );
+        return isoCwd;
+    }
+
+    const gapArtifacts: string[] = [];
+    afterAll(() => {
+        for (const p of gapArtifacts) rmSync(p, { force: true });
+    });
+
+    test('verdict fails a covering task whose rows name no scenario, before any artifact write', async () => {
+        const isoCwd = await seedGapCwd();
+        try {
+            const answerPath = join(isoCwd, '0961-verify-answer.txt');
+            await writeFile(
+                answerPath,
+                [
+                    '| Req | Status | Evidence |',
+                    '|-----|--------|----------|',
+                    '| Req1 — envelope shape | MET | `src/x.ts:1` |',
+                    '| Req2 — contract honored | MET | `src/x.ts:2` |',
+                ].join('\n'),
+            );
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'verdict', '0961', '--from-answer', answerPath, '--json'], {
+                cwd: isoCwd,
+                output,
+            });
+            expect(exitCode).toBe(1);
+            // Plain `--json` (raw mode) surfaces writeJsonError text on the error sink.
+            const errorText = output.errors.join(' ');
+            expect(errorText).toContain('D9');
+            expect(errorText).toContain('Req2 — contract honored');
+            expect(errorText).toContain('(feature R<n>)');
+            // No artifact: the failure happens before certification.
+            const artifactPath = join(process.cwd(), '.spur', 'run', '0961-verdict.json');
+            gapArtifacts.push(artifactPath);
+            expect(existsSync(artifactPath)).toBe(false);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('verdict passes once one row carries an explicit scenario reference', async () => {
+        const isoCwd = await seedGapCwd();
+        try {
+            const answerPath = join(isoCwd, '0961-verify-answer.txt');
+            await writeFile(
+                answerPath,
+                [
+                    '| Req | Status | Evidence |',
+                    '|-----|--------|----------|',
+                    '| Req1 — envelope shape | MET | `src/x.ts:1` |',
+                    '| Req2 (feature R3) — contract honored | MET | `src/x.ts:2` |',
+                ].join('\n'),
+            );
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'verdict', '0961', '--from-answer', answerPath, '--json'], {
+                cwd: isoCwd,
+                output,
+            });
+            expect(exitCode).toBe(0);
+            const artifactPath = join(process.cwd(), '.spur', 'run', '0961-verdict.json');
+            gapArtifacts.push(artifactPath);
+            expect(existsSync(artifactPath)).toBe(true);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+
+    test('a task with no linked feature keeps verdicting without the gate (R6)', async () => {
+        const isoCwd = join(import.meta.dir, '..', `.tmp-task-gap-none-${Date.now()}`);
+        await mkdir(join(isoCwd, 'docs', 'tasks'), { recursive: true });
+        try {
+            const answerPath = join(isoCwd, '8001-verify-answer.txt');
+            await writeFile(
+                answerPath,
+                '| Req | Status | Evidence |\n|-----|--------|----------|\n| R1 | MET | done |\n',
+            );
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'verdict', '8001', '--from-answer', answerPath, '--json'], {
+                cwd: isoCwd,
+                output,
+            });
+            expect(exitCode).toBe(0);
+            const artifactPath = join(process.cwd(), '.spur', 'run', '8001-verdict.json');
+            gapArtifacts.push(artifactPath);
+            expect(existsSync(artifactPath)).toBe(true);
+        } finally {
+            rmSync(isoCwd, { recursive: true, force: true });
+        }
+    });
+});

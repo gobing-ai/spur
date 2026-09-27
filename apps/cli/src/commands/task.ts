@@ -1226,7 +1226,9 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
-            const { deriveVerdict } = await import('@gobing-ai/spur-app');
+            const { deriveVerdict, VERDICT_SCENARIO_KEY_FORMS, verdictScenarioKeyGap } = await import(
+                '@gobing-ai/spur-app'
+            );
             const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
             let answerText: string;
             try {
@@ -1243,14 +1245,36 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             const taskCheckPassed = true; // Pipeline runs its own check guard
             const result = deriveVerdict(answerText, taskCheckPassed);
 
-            // 0700 R3/AC5: the "no verdict row matches any scenario" complaint used to be
-            // re-emitted here on every derivation. It is now a finding at the feature done
-            // gate (`L4.verdict-rows-match-no-scenario`, feature-check.ts), where it can be
-            // acted on. Two reasons the warning had to go rather than sit alongside it:
-            // it fired every run with no way to clear it, and it read only `requirements`
-            // while the gate credits `[...requirements, ...acceptanceCriteria]` — so a
-            // verdict whose scenario keys live in the AC table (the answer-file contract's
-            // own shape) was warned about a block that would never happen.
+            // 0958 R2: the 0700 R3 removal retired an unclearable, requirements-only warning;
+            // this check is its scoped successor — covering tasks only, so re-keying one row
+            // clears it, and it reads both tables exactly as the done gate credits them. It
+            // runs here, before the artifact exists, so the repair is a re-key instead of the
+            // recorded manual re-derive + re-bind loop at the feature done gate.
+            const { foldersConfig, featuresDir } = await resolvePlanningFolders(context.fs);
+            const gap = await verdictScenarioKeyGap(
+                wbs,
+                [...result.requirements, ...(result.acceptanceCriteria ?? [])],
+                {
+                    fs: context.fs,
+                    tasksDir: context.fs.resolve(options.folder ?? foldersConfig.active_folder),
+                    foldersConfig,
+                    featuresDir: context.fs.resolve(featuresDir),
+                },
+            );
+            if (gap !== null) {
+                const ids = gap.offendingIds.map((id) => `\`${id}\``);
+                const listed = ids.slice(0, 5);
+                const extra = ids.length - listed.length;
+                const summary = extra > 0 ? `${listed.join(', ')} (+${extra} more)` : listed.join(', ');
+                writeJsonError(
+                    context.output,
+                    options,
+                    `Verdict rows key to no scenario of linked feature ${gap.featureId}: ${summary}. ` +
+                        `Key each row by ${VERDICT_SCENARIO_KEY_FORMS} (repair: /sp:dev-verify ${wbs})`,
+                );
+                context.setExitCode(1);
+                return;
+            }
 
             // Emit verdict artifact.
             const jsonOut = JSON.stringify({ wbs, ...result, source: 'spur-task-verdict' }, null, 2);

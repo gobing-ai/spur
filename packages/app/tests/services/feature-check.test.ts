@@ -2,12 +2,14 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parseFeature } from '@gobing-ai/spur-domain';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import {
     type CheckFeatureResult,
     FeatureCheckService,
     matchedScenarioKeys,
     verdictRowsMatchScenarios,
+    verdictScenarioKeyGap,
 } from '../../src/services/feature-check';
 import { FINDING_CODES } from '../../src/services/finding-codes';
 
@@ -3538,4 +3540,434 @@ test('0700 R4: an untracked report on disk does not satisfy a ledger without the
     rmSync(dir, { recursive: true, force: true });
     const dogfoodFindings = result.findings.filter((f) => f.message.includes('dogfood'));
     expect(dogfoodFindings).toHaveLength(1);
+});
+
+// ---------------------------------------------------------------------------
+// 0958 — verdict-row scenario crediting for explicit embedded references
+// (R1) and prevention at `task verdict` (R2), plus the bounded done-gate
+// finding (R5). The reproduction is the recorded D6 run (runall-d6-4440):
+// prose-keyed rows `ReqN (feature R<n>) — …` were credited by nothing.
+// ---------------------------------------------------------------------------
+
+/** The D6 feature AC shape: scenarios whose titles carry leading `R<n>` labels. */
+const AC_0958 = [
+    'Feature: fallback envelope',
+    '  Scenario: R3 — Explicit fallback list is honored in order',
+    '    Given a configured fallback list',
+    '  Scenario: R6 — Explicit unknown or unconfigured provider still throws at selection',
+    '    Given an unknown provider',
+].join('\n');
+
+describe('embedded scenario references in verdict row ids (0958 R1)', () => {
+    test('AC1: an embedded (feature R<n>) reference is credited', () => {
+        expect(
+            verdictRowsMatchScenarios([{ id: 'Req2 (feature R3) — `resolveFallbackOrder` contract' }], AC_0958),
+        ).toBe(true);
+        expect(verdictRowsMatchScenarios([{ id: 'Req3 (feature R6) — selection unchanged' }], AC_0958)).toBe(true);
+    });
+
+    test('AC2: an embedded (covers: R<n>) or [R<n>] reference is credited', () => {
+        // `(covers: …)` may carry a title after the R<n> token — only the leading token counts.
+        expect(
+            verdictRowsMatchScenarios(
+                [{ id: 'AC1 (covers: R3 — Explicit fallback list is honored in order)' }],
+                AC_0958,
+            ),
+        ).toBe(true);
+        expect(verdictRowsMatchScenarios([{ id: '[R6] selection throws' }], AC_0958)).toBe(true);
+    });
+
+    test('the delimited forms are case-insensitive', () => {
+        expect(verdictRowsMatchScenarios([{ id: 'req2 (FEATURE r3) — contract' }], AC_0958)).toBe(true);
+        expect(verdictRowsMatchScenarios([{ id: '[r6] selection' }], AC_0958)).toBe(true);
+    });
+
+    test('AC3: a bare R<n> substring outside the three delimiters is NOT credited', () => {
+        // The exact under-credited row shape from the run: R<n> appears only as prose.
+        expect(
+            verdictRowsMatchScenarios(
+                [{ id: 'Req1 — `fallback?: true | string[]` on the envelope; resolved in R3 order' }],
+                AC_0958,
+            ),
+        ).toBe(false);
+        expect(verdictRowsMatchScenarios([{ id: 'R3' }], AC_0958)).toBe(false);
+        // A reference to a scenario the feature does not have credits nothing.
+        expect(verdictRowsMatchScenarios([{ id: '(feature R9) — nonexistent scenario' }], AC_0958)).toBe(false);
+        // `covers` without the colon delimiter is not the binding form.
+        expect(verdictRowsMatchScenarios([{ id: 'AC1 (covers R3 casually) — note' }], AC_0958)).toBe(false);
+    });
+
+    test('AC7: title-keyed and AC-N-keyed rows still match unchanged', () => {
+        expect(verdictRowsMatchScenarios([{ id: 'R3 — Explicit fallback list is honored in order' }], AC_0958)).toBe(
+            true,
+        );
+        expect(verdictRowsMatchScenarios([{ id: 'AC-2' }], AC_0958)).toBe(true);
+    });
+
+    test('a scenario without an R<n> prefix keeps the embedded-reference branch off', () => {
+        const noLabelAc = ['Feature: plain', '  Scenario: Just a plain scenario', '    Given x'].join('\n');
+        expect(verdictRowsMatchScenarios([{ id: '(feature R1) — plain row' }], noLabelAc)).toBe(false);
+        // Title matching is untouched for the same scenario.
+        expect(verdictRowsMatchScenarios([{ id: 'Just a plain scenario' }], noLabelAc)).toBe(true);
+    });
+
+    test('matchedScenarioKeys credits an explicit reference with a MET row', () => {
+        expect(matchedScenarioKeys([{ id: 'Req2 (feature R3) — contract', status: 'MET' }], AC_0958)).toEqual([
+            'R3 — Explicit fallback list is honored in order',
+        ]);
+    });
+});
+
+describe('scenario enumeration parity with parseFeature (0958 re-review P3)', () => {
+    // `verdictScenarioKeyGap` matches via indexScenarioAliases while the done gate enumerates
+    // via parseFeature. parseFeature counts `Scenario Outline:` entries and skips `"""`
+    // doc-strings; the indexer must produce the same scenarios in the same order or the AC-N
+    // ordinals diverge between certify time and the gate.
+    const ac = [
+        'Feature: ordering',
+        '  Scenario: R1 — first plain scenario',
+        '    Given a',
+        '  Scenario Outline: R2 — outlined scenario',
+        '    Given <x>',
+        '    Examples:',
+        '      | x |',
+        '      | 1 |',
+        '  Scenario: R3 — second plain scenario',
+        '    Given b',
+        '    Then the block below is doc-string content, not a scenario',
+        '    """',
+        '    Scenario: decoy — inside a doc string',
+        '      Given never indexed',
+        '    """',
+        '  Scenario: R4 — third plain scenario',
+        '    Given c',
+    ].join('\n');
+
+    test('Scenario Outline: entries count toward AC-N ordinals', () => {
+        expect(matchedScenarioKeys([{ id: 'AC-2', status: 'MET' }], ac)).toEqual(['R2 — outlined scenario']);
+        expect(matchedScenarioKeys([{ id: 'AC-3', status: 'MET' }], ac)).toEqual(['R3 — second plain scenario']);
+        // Title-keyed rows are immune to ordinal shifts either way.
+        expect(verdictRowsMatchScenarios([{ id: 'R4 — third plain scenario' }], ac)).toBe(true);
+    });
+
+    test('doc-string content is not enumerated', () => {
+        // The decoy exists only inside a `"""` block — parseFeature skips it; a regex
+        // enumeration that counts it would consume an AC-N ordinal and false-fail certify time.
+        expect(verdictRowsMatchScenarios([{ id: 'decoy — inside a doc string' }], ac)).toBe(false);
+        expect(matchedScenarioKeys([{ id: 'AC-4', status: 'MET' }], ac)).toEqual(['R4 — third plain scenario']);
+    });
+
+    test('enumeration equals parseFeature scenario order, ordinals included', () => {
+        const parsed = parseFeature(ac);
+        if (parsed === null) throw new Error('fixture AC must parse');
+        expect(
+            matchedScenarioKeys(
+                ['AC-1', 'AC-2', 'AC-3', 'AC-4'].map((id) => ({ id, status: 'MET' })),
+                ac,
+            ),
+        ).toEqual(parsed.scenarios.map((s) => s.name));
+    });
+});
+
+describe('0958 — the recorded D6 reproduction at the done gate', () => {
+    function seedD6Shape(filesDir: string, verdictRows: Array<{ id: string; status: string; evidence: string }>): void {
+        const featuresDir = join(filesDir, 'features');
+        const tasksDir = join(filesDir, 'tasks');
+        const runDir = join(filesDir, '.spur', 'run');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        mkdirSync(runDir, { recursive: true });
+        writeFileSync(
+            join(featuresDir, 'D9_fallback-envelope.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "D9"',
+                'name: "Fallback envelope"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-09-25T00:00:00.000Z',
+                'updated_at: 2026-09-25T00:00:00.000Z',
+                '---',
+                '',
+                '# D9: Fallback envelope',
+                '',
+                '## Goal',
+                '',
+                'Fallback selection semantics.',
+                '',
+                '## Scope',
+                '',
+                'In scope: envelope and selection.',
+                '',
+                '## Acceptance Criteria',
+                '',
+                '```gherkin',
+                ...AC_0958.split('\n'),
+                '```',
+                '',
+                '## Tasks',
+                '',
+                '- [x] 0951: fallback envelope task',
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(tasksDir, '0951_fallback-envelope.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'name: "Fallback envelope task"',
+                'status: done',
+                'feature_id: D9',
+                'priority: P1',
+                'created_at: 2026-09-25T00:00:00.000Z',
+                'updated_at: 2026-09-25T00:00:00.000Z',
+                '---',
+                '',
+                '## 0951. Fallback envelope task',
+                '',
+                '### Acceptance Criteria',
+                '',
+                '```gherkin',
+                ...AC_0958.split('\n'),
+                '```',
+                '',
+                '### Solution',
+                '',
+                'Implemented.',
+            ].join('\n'),
+        );
+        writeFileSync(
+            join(runDir, '0951-verdict.json'),
+            JSON.stringify({ verdict: 'PASS', requirements: verdictRows, acceptanceCriteria: [] }),
+        );
+    }
+
+    /** The five rows verbatim from the recorded run's verdict artifact (0958 Background, Defect A). */
+    const RECORDED_ROWS = [
+        {
+            id: 'Req1 — `fallback?: true | string[]` on the envelope; defaulted to caller order',
+            status: 'MET',
+            evidence: 'tests/x.test.ts:1',
+        },
+        { id: 'Req2 (feature R3) — `resolveFallbackOrder` contract', status: 'MET', evidence: 'tests/x.test.ts:2' },
+        { id: 'Req3 (feature R6) — selection unchanged', status: 'MET', evidence: 'tests/x.test.ts:3' },
+        { id: 'AC1 — explicit fallback list honored in order (R3)', status: 'MET', evidence: 'tests/x.test.ts:4' },
+        {
+            id: 'AC2 — explicit unknown/unconfigured provider still throws at selection (R6)',
+            status: 'MET',
+            evidence: 'tests/x.test.ts:5',
+        },
+    ];
+
+    test('prose-keyed rows with (feature R<n>) references reach done-gate PASS without re-keying', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0958-'));
+        seedD6Shape(dir, RECORDED_ROWS);
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(dir, 'features', 'D9_fallback-envelope.md'), 'D9', {
+            featuresDir: join(dir, 'features'),
+            tasksDir: join(dir, 'tasks'),
+            runDir: join(dir, '.spur', 'run'),
+        });
+        expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_SCENARIO_UNVERIFIED)).toHaveLength(0);
+        expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO)).toHaveLength(
+            0,
+        );
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('AC6: the finding names the offending row ids, the count, and the accepted forms', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0958b-'));
+        const rows = RECORDED_ROWS.map((r) => ({ ...r, id: r.id.replace(/ \((?:feature R\d+|R\d+)\)/g, '') }));
+        seedD6Shape(dir, rows);
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(dir, 'features', 'D9_fallback-envelope.md'), 'D9', {
+            featuresDir: join(dir, 'features'),
+            tasksDir: join(dir, 'tasks'),
+            runDir: join(dir, '.spur', 'run'),
+        });
+        const noScenario = result.findings.filter((f) => f.code === FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO);
+        expect(noScenario).toHaveLength(1);
+        const message = noScenario[0]?.message ?? '';
+        for (const row of rows) {
+            expect(message).toContain(`\`${row.id}\``);
+        }
+        expect(message).toContain('5 row(s)');
+        expect(message).toContain('(feature R<n>)');
+        expect(message).toContain('(covers: R<n>)');
+        expect(message).toContain('[R<n>]');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('the bounded summary caps the list at five ids with a count', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-fc-0958c-'));
+        const rows = Array.from({ length: 7 }, (_, i) => ({
+            id: `Req${i + 1} — unmatched prose ${i + 1}`,
+            status: 'MET',
+            evidence: 'tests/x.test.ts:1',
+        }));
+        seedD6Shape(dir, rows);
+        const svc = new FeatureCheckService(createNodeFileSystem());
+        const result = await svc.check(join(dir, 'features', 'D9_fallback-envelope.md'), 'D9', {
+            featuresDir: join(dir, 'features'),
+            tasksDir: join(dir, 'tasks'),
+            runDir: join(dir, '.spur', 'run'),
+        });
+        const noScenario = result.findings.filter((f) => f.code === FINDING_CODES.L4_VERDICT_ROWS_MATCH_NO_SCENARIO);
+        expect(noScenario).toHaveLength(1);
+        const message = noScenario[0]?.message ?? '';
+        expect(message).toContain('`Req5 — unmatched prose 5` (+2 more)');
+        expect(message).not.toContain('Req6');
+        rmSync(dir, { recursive: true, force: true });
+    });
+});
+
+describe('verdictScenarioKeyGap (0958 R2)', () => {
+    interface GapSeedOptions {
+        featureAcScenarios?: string[];
+    }
+
+    function seedGapCorpus(filesDir: string, options?: GapSeedOptions): void {
+        const featuresDir = join(filesDir, 'features');
+        const tasksDir = join(filesDir, 'tasks');
+        mkdirSync(featuresDir, { recursive: true });
+        mkdirSync(tasksDir, { recursive: true });
+        const featureScenarios = options?.featureAcScenarios ?? [
+            'R3 — Explicit fallback list is honored in order',
+            'R6 — Explicit unknown or unconfigured provider still throws at selection',
+        ];
+        const featureAc =
+            featureScenarios.length === 0
+                ? 'Prose-only acceptance criteria, no Gherkin.'
+                : [
+                      '```gherkin',
+                      'Feature: fallback envelope',
+                      ...featureScenarios.flatMap((s) => [`  Scenario: ${s}`, '    Given x']),
+                      '```',
+                  ].join('\n');
+        writeFileSync(
+            join(featuresDir, 'D9_fallback-envelope.md'),
+            [
+                '---',
+                'schema_version: 1',
+                'id: "D9"',
+                'name: "Fallback envelope"',
+                'status: verifying',
+                'priority: P1',
+                'created_at: 2026-09-25T00:00:00.000Z',
+                'updated_at: 2026-09-25T00:00:00.000Z',
+                '---',
+                '',
+                '# D9: Fallback envelope',
+                '',
+                '## Goal',
+                '',
+                'Fallback selection semantics.',
+                '',
+                '## Scope',
+                '',
+                'In scope: envelope and selection.',
+                '',
+                '## Acceptance Criteria',
+                '',
+                featureAc,
+                '',
+                '## Tasks',
+                '',
+                '- [x] 0951: covering task',
+                '- [x] 0952: task-local task',
+            ].join('\n'),
+        );
+        const taskAc = [
+            '```gherkin',
+            'Feature: task ac',
+            ...featureScenarios.flatMap((s) => [`  Scenario: ${s}`, '    Given x']),
+            '```',
+        ].join('\n');
+        const writeTask = (wbs: string, slug: string, featureId: string | null, ac: string): void => {
+            writeFileSync(
+                join(tasksDir, `${wbs}_${slug}.md`),
+                [
+                    '---',
+                    'schema_version: 1',
+                    `name: "Task ${wbs}"`,
+                    'status: wip',
+                    ...(featureId !== null ? [`feature_id: ${featureId}`] : []),
+                    'priority: P1',
+                    'created_at: 2026-09-25T00:00:00.000Z',
+                    'updated_at: 2026-09-25T00:00:00.000Z',
+                    '---',
+                    '',
+                    `## ${wbs}. Task ${wbs}`,
+                    '',
+                    '### Acceptance Criteria',
+                    '',
+                    ac,
+                    '',
+                ].join('\n'),
+            );
+        };
+        writeTask('0951', 'covering-task', 'D9', taskAc);
+        writeTask(
+            '0952',
+            'task-local-task',
+            'D9',
+            '```gherkin\nFeature: local\n  Scenario: Task-local behavior only\n    Given x\n```',
+        );
+        writeTask('0953', 'orphan-task', null, taskAc);
+    }
+
+    const gapDeps = (filesDir: string) => ({
+        fs: createNodeFileSystem(),
+        tasksDir: join(filesDir, 'tasks'),
+        featuresDir: join(filesDir, 'features'),
+    });
+
+    test('AC4 (fail half): a covering task whose rows name no scenario yields a gap naming every id', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-gap-1-'));
+        seedGapCorpus(dir);
+        const rows = [{ id: 'Req1 — envelope shape' }, { id: 'Req2 — contract honored' }];
+        const gap = await verdictScenarioKeyGap('0951', rows, gapDeps(dir));
+        expect(gap).not.toBeNull();
+        expect(gap?.featureId).toBe('D9');
+        expect(gap?.offendingIds).toEqual(['Req1 — envelope shape', 'Req2 — contract honored']);
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('AC4 (pass half): re-keying one row with an explicit reference clears the gap', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-gap-2-'));
+        seedGapCorpus(dir);
+        const rows = [{ id: 'Req1 — envelope shape' }, { id: 'Req2 (feature R3) — contract honored' }];
+        expect(await verdictScenarioKeyGap('0951', rows, gapDeps(dir))).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R6: a non-covering task-local task never trips the gap (0956 R3)', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-gap-3-'));
+        seedGapCorpus(dir);
+        expect(await verdictScenarioKeyGap('0952', [{ id: 'Req1 — task-local row' }], gapDeps(dir))).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R6: a task with no linked feature and an unresolvable wbs are never gaps', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-gap-4-'));
+        seedGapCorpus(dir);
+        expect(await verdictScenarioKeyGap('0953', [{ id: 'Req1 — anything' }], gapDeps(dir))).toBeNull();
+        expect(await verdictScenarioKeyGap('9999', [{ id: 'Req1 — anything' }], gapDeps(dir))).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('R6: a feature with no parseable scenarios is never a gap', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-gap-5-'));
+        seedGapCorpus(dir, { featureAcScenarios: [] });
+        expect(await verdictScenarioKeyGap('0951', [{ id: 'Req1 — anything' }], gapDeps(dir))).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    test('empty rows are never a gap (UNKNOWN verdicts pass through)', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-gap-6-'));
+        seedGapCorpus(dir);
+        expect(await verdictScenarioKeyGap('0951', [], gapDeps(dir))).toBeNull();
+        rmSync(dir, { recursive: true, force: true });
+    });
 });

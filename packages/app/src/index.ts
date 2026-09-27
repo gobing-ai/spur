@@ -213,7 +213,15 @@ export type {
     FeatureMatrixEntry,
     FeatureSectionMatrix,
 } from './services/feature-check';
-export { DEFAULT_FEATURE_MATRIX, FeatureCheckService, verdictRowsMatchScenarios } from './services/feature-check';
+export {
+    DEFAULT_FEATURE_MATRIX,
+    FeatureCheckService,
+    VERDICT_SCENARIO_KEY_FORMS,
+    type VerdictScenarioKeyGap,
+    type VerdictScenarioKeyGapDeps,
+    verdictRowsMatchScenarios,
+    verdictScenarioKeyGap,
+} from './services/feature-check';
 export type {
     FeatureActionJob,
     FeatureActionName,
@@ -898,6 +906,7 @@ export {
 } from './workflow/progress-projection';
 export {
     type ComputeProofInputOptions,
+    canonicalizeCheckboxMarkers,
     computeProofInputFingerprint,
     createGitAlternateTree,
     extractFeatureProofData,

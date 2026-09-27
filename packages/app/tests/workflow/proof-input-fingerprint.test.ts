@@ -539,3 +539,94 @@ describe('readProofInputContents task-document shape (task 0818 R4)', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// 0958 R3/R4 — checkbox-marker canonicalization: the verification tick is
+// write-state, not proof content. Ticking `- [ ]` → `- [x]` (the exact
+// `spur task update` write of the implement→verify→done cycle) must not move
+// the digest; any other edit inside a checklist item still must.
+// ---------------------------------------------------------------------------
+
+describe('canonicalizeCheckboxMarkers (task 0958 R3/R4)', () => {
+    const executor = {
+        run: async () => ({
+            exitCode: 0,
+            stdout: 'tree-sha-1234\n',
+            stderr: '',
+            command: 'git',
+            args: [],
+            durationMs: 0,
+        }),
+    } as unknown as import('@gobing-ai/ts-runtime').ProcessExecutor;
+
+    const checklistTask = (listBody: string): string => `---
+schema_version: 1
+wbs: "0100"
+name: "Sample task"
+status: wip
+---
+
+## 0100. Sample task
+
+### Requirements
+${listBody}
+`;
+
+    test('extracted sections fold every checkbox marker to the canonical `- [x]` form', () => {
+        const data = extractTaskProofData(
+            checklistTask('- [ ] R1. First\n  * [X] R2. Second\n\t+ [ ] R3. Third\n1. R4. Ordered stays as-is\n'),
+        );
+        expect(data.sections.Requirements).toBe(
+            '- [x] R1. First\n  - [x] R2. Second\n\t- [x] R3. Third\n1. R4. Ordered stays as-is',
+        );
+    });
+
+    test('digest (a): a tick-only edit produces an identical digest', async () => {
+        const before = await ProofInputFingerprint.compute({
+            taskContent: checklistTask('- [ ] R1. First\n- [ ] R2. Second'),
+            processExecutor: executor,
+        });
+        const after = await ProofInputFingerprint.compute({
+            taskContent: checklistTask('- [x] R1. First\n- [x] R2. Second'),
+            processExecutor: executor,
+        });
+        expect(after).toBe(before);
+    });
+
+    test('digest (b): an edit inside a checkbox item still changes the digest (0958 R4)', async () => {
+        const before = await ProofInputFingerprint.compute({
+            taskContent: checklistTask('- [x] R1. First'),
+            processExecutor: executor,
+        });
+        const after = await ProofInputFingerprint.compute({
+            taskContent: checklistTask('- [x] R1. First, refined'),
+            processExecutor: executor,
+        });
+        expect(after).not.toBe(before);
+    });
+
+    test('digest (c): bullet, indentation, and case variants produce the same digest as `- [ ]`', async () => {
+        const digestFor = (listBody: string): Promise<string> =>
+            ProofInputFingerprint.compute({ taskContent: checklistTask(listBody), processExecutor: executor });
+        const baseline = await digestFor('- [ ] R1. First\n- [ ] R2. Second');
+        expect(await digestFor('* [ ] R1. First\n* [x] R2. Second')).toBe(baseline);
+        expect(await digestFor('- [X] R1. First\n+ [x] R2. Second')).toBe(baseline);
+    });
+
+    test('digest (d): adding or removing a checklist section still changes the digest', async () => {
+        const before = await ProofInputFingerprint.compute({
+            taskContent: checklistTask('- [x] R1. First'),
+            processExecutor: executor,
+        });
+        const added = await ProofInputFingerprint.compute({
+            taskContent: checklistTask('- [x] R1. First\n- [x] R2. Second'),
+            processExecutor: executor,
+        });
+        const removed = await ProofInputFingerprint.compute({
+            taskContent: checklistTask(''),
+            processExecutor: executor,
+        });
+        expect(added).not.toBe(before);
+        expect(removed).not.toBe(before);
+    });
+});

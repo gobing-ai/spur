@@ -294,6 +294,23 @@ export async function createGitAlternateTree(
 }
 
 /**
+ * 0958 R3: canonicalize the checkbox tick marker so a verification-state write — ticking
+ * `- [ ]` to `- [x]` via `spur task update` — cannot move the proof digest. Every checkbox
+ * marker (`-`/`*`/`+`, any indentation, `[ ]`/`[x]`/`[X]`) folds to the one form `- [x]`, so
+ * tick-state cannot influence the digest while the item's text still can (0958 R4: any
+ * non-marker edit keeps moving it). Deliberately NOT normalized: list bullets, indentation of
+ * non-checkbox lines, and checkbox ordering — those stay spec content (0958 Q&A).
+ *
+ * Compatibility note (0958 Q&A): digest values for specs containing checkboxes change once
+ * this lands. The digest is per-run state re-captured at the pipeline's proof capture points,
+ * not a persisted cross-version contract, so a live run spanning the upgrade sees one expected
+ * mismatch rather than a silent pass.
+ */
+export function canonicalizeCheckboxMarkers(body: string): string {
+    return body.replace(/^([ \t]*)[-*+][ \t]+\[[ xX]\]/gm, '$1- [x]');
+}
+
+/**
  * Parses and normalizes task frontmatter and specification sections for proof computation.
  *
  * @param content - Raw task markdown content.
@@ -320,7 +337,7 @@ export function extractTaskProofData(content: string): TaskProofData {
         if (doc.hasSection(sec)) {
             const body = doc.getSection(sec);
             if (body !== null) {
-                sections[sec] = body.trim();
+                sections[sec] = canonicalizeCheckboxMarkers(body.trim());
             }
         }
     }
@@ -353,7 +370,7 @@ export function extractFeatureProofData(content: string): FeatureProofData {
         if (doc.hasSection(sec)) {
             const body = doc.getSection(sec);
             if (body !== null) {
-                sections[sec] = body.trim();
+                sections[sec] = canonicalizeCheckboxMarkers(body.trim());
             }
         }
     }

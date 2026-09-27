@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix verdict-row scenario crediting and proof-digest checkbox invalidation in the completion gate
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-26T00:29:55.505Z
-updated_at: "2026-09-27T16:45:00.539Z"
+updated_at: "2026-09-27T19:50:16.348Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -104,22 +104,22 @@ The consuming project measured Defect B with a hand-rolled digest runner. Its st
 
 ### Requirements
 
-- [ ] R1. The feature done gate credits a verdict row to a scenario when the row's `id` carries an explicit reference to that scenario. The accepted embedded forms are a parenthesised `(feature R<n>)`, a parenthesised `(covers: R<n>)`, and a bracketed `[R<n>]` tag. The reference must be one of these delimited tokens; a bare `R<n>` substring anywhere else in the row does not count. Both alias builders (`scenarioAliases` and `indexScenarioAliases`) carry the scenario label, so the gate and the verified-scenario lookup agree.
-- [ ] R2. `spur task verdict --from-answer` exits non-zero with an actionable message when three conditions all hold: the task covers at least one scenario of its linked feature (the same `checkAcCoverage` semantics the done gate uses to select covering tasks), that feature's scenarios parse, and no derived row names any of those scenarios. The message lists the offending row ids and the accepted key forms. The check reuses `rowMatchesScenario` in-process, so the check and the done gate cannot disagree.
-- [ ] R3. The proof digest is unchanged when the only difference in a proof-input section is checkbox tick-state (`- [ ]` against `- [x]`, including `*`/`+` bullets, indentation and case variants).
-- [ ] R4. The proof digest still changes when the text of a proof-input section changes (any edit other than the checkbox marker), and when a proof-input section is added or removed.
-- [ ] R5. The `L4.verdict-rows-match-no-scenario` finding names the offending row ids (bounded: the first 5 plus a count) and the accepted key forms, so the repair can be derived from the finding alone.
-- [ ] R6. Existing behaviour is preserved. A row keyed by the scenario's exact title or by `AC-<n>` still matches. A task with no linked feature, a task that covers no scenario (task-local rows), and a feature with no parseable scenarios are unaffected and never trip R2.
+- [x] R1. The feature done gate credits a verdict row to a scenario when the row's `id` carries an explicit reference to that scenario. The accepted embedded forms are a parenthesised `(feature R<n>)`, a parenthesised `(covers: R<n>)`, and a bracketed `[R<n>]` tag. The reference must be one of these delimited tokens; a bare `R<n>` substring anywhere else in the row does not count. Both alias builders (`scenarioAliases` and `indexScenarioAliases`) carry the scenario label, so the gate and the verified-scenario lookup agree.
+- [x] R2. `spur task verdict --from-answer` exits non-zero with an actionable message when three conditions all hold: the task covers at least one scenario of its linked feature (the same `checkAcCoverage` semantics the done gate uses to select covering tasks), that feature's scenarios parse, and no derived row names any of those scenarios. The message lists the offending row ids and the accepted key forms. The check reuses `rowMatchesScenario` in-process, so the check and the done gate cannot disagree.
+- [x] R3. The proof digest is unchanged when the only difference in a proof-input section is checkbox tick-state (`- [ ]` against `- [x]`, including `*`/`+` bullets, indentation and case variants).
+- [x] R4. The proof digest still changes when the text of a proof-input section changes (any edit other than the checkbox marker), and when a proof-input section is added or removed.
+- [x] R5. The `L4.verdict-rows-match-no-scenario` finding names the offending row ids (bounded: the first 5 plus a count) and the accepted key forms, so the repair can be derived from the finding alone.
+- [x] R6. Existing behaviour is preserved. A row keyed by the scenario's exact title or by `AC-<n>` still matches. A task with no linked feature, a task that covers no scenario (task-local rows), and a feature with no parseable scenarios are unaffected and never trip R2.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — An embedded `(feature R<n>)` reference is credited by that scenario at the done gate (req: R1)
-- [ ] AC2 — An embedded `(covers: R<n>)` or `[R<n>]` reference is credited by that scenario (req: R1)
-- [ ] AC3 — A row whose only scenario-like token is an unrelated bare `R<n>` substring is NOT credited, so the new rule cannot over-credit (req: R1)
-- [ ] AC4 — `spur task verdict --from-answer` fails with a named message for a covering task whose rows name no linked-feature scenario, and passes once a row is re-keyed (req: R2)
-- [ ] AC5 — A checkbox-only edit to Requirements or Acceptance Criteria leaves the proof digest byte-identical; a text edit changes it (req: R3, R4)
-- [ ] AC6 — The done-gate finding names the offending row ids (req: R5)
-- [ ] AC7 — Title-keyed, `AC-<n>`-keyed, orphan-task, non-covering task-local and scenario-less-feature cases are unchanged (req: R6)
+- [x] AC1 — An embedded `(feature R<n>)` reference is credited by that scenario at the done gate (req: R1)
+- [x] AC2 — An embedded `(covers: R<n>)` or `[R<n>]` reference is credited by that scenario (req: R1)
+- [x] AC3 — A row whose only scenario-like token is an unrelated bare `R<n>` substring is NOT credited, so the new rule cannot over-credit (req: R1)
+- [x] AC4 — `spur task verdict --from-answer` fails with a named message for a covering task whose rows name no linked-feature scenario, and passes once a row is re-keyed (req: R2)
+- [x] AC5 — A checkbox-only edit to Requirements or Acceptance Criteria leaves the proof digest byte-identical; a text edit changes it (req: R3, R4)
+- [x] AC6 — The done-gate finding names the offending row ids (req: R5)
+- [x] AC7 — Title-keyed, `AC-<n>`-keyed, orphan-task, non-covering task-local and scenario-less-feature cases are unchanged (req: R6)
 
 ### Q&A
 
@@ -234,25 +234,99 @@ item text and assert it changes.
 
 ### Plan
 
-- [ ] 1. `feature-check.ts`: add `label` to both alias builders (:796, :1262). Extend `rowMatchesScenario` (:1206) with the three explicit embedded-reference forms, evaluated over the raw id. Unit tests: credited forms, bare-`R<n>` non-match, unchanged title/alias paths, and a scenario without an `R<n>` label.
-- [ ] 2. `feature-check.ts`: add `verdictScenarioKeyGap` (covering-task scoped, reusing `verdictRowsMatchScenarios`). Wire it into `task verdict` (`apps/cli/src/commands/task.ts:1265`): no artifact write and a non-zero exit on a gap. Replace the 0700 R3 comment with the reason this check differs. Tests: covering-task fail (including the AC1 vs AC-1 case from 0966/0985), pass-after-rekey, non-covering task-local, orphan task, scenario-less feature.
-- [ ] 3. Improve the `L4_VERDICT_ROWS_MATCH_NO_SCENARIO` message to name the offending row ids and accepted forms; update the finding's test expectations.
-- [ ] 4. `proof-input-fingerprint.ts`: add `canonicalizeCheckboxMarkers` and apply it in `extractTaskProofData` (:302) and `extractFeatureProofData` (:343); comment the one-time digest-change note.
-- [ ] 5. Add the four fingerprint test cases: tick-only identical, text edit differs, marker variants identical, section add/remove differs.
-- [ ] 6. Replay the recorded reproduction end-to-end: prose-keyed rows reach done-gate PASS without re-keying, and a checkbox flip leaves the digest unchanged. Record the before/after evidence.
-- [ ] 7. Update the `task verdict` entry in the owning design satellite (new failure mode on an existing verb; no new noun/verb). `bun run spur-check` green; no suppressions.
+- [x] 1. `feature-check.ts`: add `label` to both alias builders (:796, :1262). Extend `rowMatchesScenario` (:1206) with the three explicit embedded-reference forms, evaluated over the raw id. Unit tests: credited forms, bare-`R<n>` non-match, unchanged title/alias paths, and a scenario without an `R<n>` label.
+- [x] 2. `feature-check.ts`: add `verdictScenarioKeyGap` (covering-task scoped, reusing `verdictRowsMatchScenarios`). Wire it into `task verdict` (`apps/cli/src/commands/task.ts:1265`): no artifact write and a non-zero exit on a gap. Replace the 0700 R3 comment with the reason this check differs. Tests: covering-task fail (including the AC1 vs AC-1 case from 0966/0985), pass-after-rekey, non-covering task-local, orphan task, scenario-less feature.
+- [x] 3. Improve the `L4_VERDICT_ROWS_MATCH_NO_SCENARIO` message to name the offending row ids and accepted forms; update the finding's test expectations.
+- [x] 4. `proof-input-fingerprint.ts`: add `canonicalizeCheckboxMarkers` and apply it in `extractTaskProofData` (:302) and `extractFeatureProofData` (:343); comment the one-time digest-change note.
+- [x] 5. Add the four fingerprint test cases: tick-only identical, text edit differs, marker variants identical, section add/remove differs.
+- [x] 6. Replay the recorded reproduction end-to-end: prose-keyed rows reach done-gate PASS without re-keying, and a checkbox flip leaves the digest unchanged. Record the before/after evidence.
+- [x] 7. Update the `task verdict` entry in the owning design satellite (new failure mode on an existing verb; no new noun/verb). `bun run spur-check` green; no suppressions.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map (0958; F91). **R1** — `feature-check.ts`: explicit embedded-reference extractor (`EMBEDDED_SCENARIO_REF_RES` + `embeddedScenarioRefs`, `packages/app/src/services/feature-check.ts:1243-1253`) runs over the RAW row id (`:1280`, before `bodyStripped` strips the carrying parenthetical) against a scenario `label` carried by both alias builders (`scenarioKeys` `:1208`, `indexScenarioAliases` `:1331`); a bare `R<n>` substring never credits (AC3). **R2** — `verdictScenarioKeyGap` (`:1414`) decides "covering" with the gate's own `checkAcCoverage` call and reuses `verdictRowsMatchScenarios`, so check and gate cannot disagree; `task verdict` (`apps/cli/src/commands/task.ts:1254-1277`) fails before any artifact write, naming the feature id, bounded offending ids, and `VERDICT_SCENARIO_KEY_FORMS` (`:1379`); `verify-answer-lint.ts` unchanged (plugin-standalone). **R5** — the done-gate `L4.verdict-rows-match-no-scenario` message names the first 5 offending ids, `(+N more)`, and all five accepted forms (`packages/app/src/services/feature-check.ts:917-926`). **R3/R4** — `canonicalizeCheckboxMarkers` (`packages/app/src/workflow/proof-input-fingerprint.ts:309`) folds every checkbox marker (`-`/`*`/`+`, any indent, `[ ]`/`[x]`/`[X]`) to one form inside `extractTaskProofData` (`:340`) and `extractFeatureProofData` (`:373`); only the marker is canonicalized — item text, bullets, ordering still move the digest (R4) — and the git-tree half is untouched. **Enumeration parity (re-review P3):** `indexScenarioAliases` now mirrors `parseFeature` — it counts `Scenario Outline:` entries and skips `"""` doc-strings in the parser's line order — so certify-time AC-N ordinals match the gate; pinned by the parity tests in `packages/app/tests/services/feature-check.test.ts`.
+
+Digest compatibility (Q&A 2026-09-26, closed): checkbox-canonicalized digests change ONCE, when 0958 lands, for any spec whose proof-input sections contain checkboxes — per-run state re-captured at the pipeline's proof capture points, not a persisted cross-version contract; noted beside the helper (`packages/app/src/workflow/proof-input-fingerprint.ts:296-308`) so a live run spanning the upgrade is diagnosable, not mysterious.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | feature-check.ts:1280 extractor over raw row id; `(feature R3)` credited, tests feature-check.test.ts (126 pass) |
+| R2 | MET | feature-check.ts:1393 `verdictScenarioKeyGap` covering-scoped; task.ts:1253-1277 CLI transport, exit 1, no artifact; tests task.test.ts (190 pass) |
+| R3 | MET | proof-input-fingerprint.ts:309 `canonicalizeCheckboxMarkers`; tick-only invariant tests proof-input-fingerprint.test.ts (26 pass) |
+| R4 | MET | proof-input-fingerprint.ts:340,373 applied in both extractTaskProofData and extractFeatureProofData |
+| R5 | MET | feature-check.ts:917-926 bounded done-gate finding names first 5 ids + count + accepted forms |
+| R6 | MET | shared `taskCoversScenario` helper; task-local/orphan/scenario-less no-op cases tested |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `(feature R3)` row credited — feature-check tests |
+| AC2 | MET | test | `(covers: R6)` and `[R6]` forms credited — feature-check tests |
+| AC3 | MET | test | bare `R3`/prose `R<n>` rejected — negative tests |
+| AC4 | MET | test | CLI gap → exit 1, no artifact; re-keyed row → exit 0 — task.test.ts |
+| AC5 | MET | test | tick-only digest invariant; variant fold; content-edit sensitivity; section add/remove |
+| AC6 | MET | test | finding names ids, count, accepted forms — bounded message tests |
+| AC7 | MET | test | title/alias matching unchanged; task-local/orphan/scenario-less unchanged |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0958 (fifth review; fresh post-incident verification pass superseding the fourth)
+
+**Scope:** working-tree diff vs `1196be573` (10 files, +1052/−64) — `feature-check.ts`, `proof-input-fingerprint.ts`, `task.ts` (CLI), `index.ts`, three test files, design satellite, task markdown, generated bundle. This pass re-verified the restored task file (12:12 `taskfile-section-wipe` incident: Requirements/AC/Plan restored from HEAD with ticks, Solution recovered) and re-ran all scoped evidence fresh.
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory) | architecture | The CLI inlines the bounded first-5 + `(+N more)` row summary instead of reusing `summarizeRowIds` (still private) — two copies of one presentation rule can drift (gate message calls the helper; the CLI re-implements it). Accept or export the helper in a follow-up. | `apps/cli/src/commands/task.ts:1265-1268` |
+| 2 | P4 (advisory) | architecture | Weak locality: `readFeatureAcBody` re-implements the `<id>_*.md` prefix scan already present in `task-service.resolveFeatureAcBody` and the CLI's `isFeatureFile` — third copy of the feature-resolution rule; fold into one shared helper if it ever changes shape. | `packages/app/src/services/feature-check.ts:1456-1467` |
+| 3 | P4 (advisory) | correctness | The four digest tests (tick-only, text-edit, marker variants, add/remove) exercise only the Requirements section; AC5's "or Acceptance Criteria" half is covered by mechanism (`TASK_SPEC_SECTIONS` canonicalizes every proof-input section uniformly, `packages/app/src/workflow/proof-input-fingerprint.ts:337-341,367-374`), not by an AC-section digest assertion. | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584-640` |
+| 4 | P4 (advisory) | correctness | Plan 6's "replay the reproduction against the OLD build" half was not literally executed; the AC6 negative-path done-gate test covers the equivalent failing behavior on the new build. | `docs/tasks5/0958_…md` Plan 6 |
+
+No P1–P3 findings. Incident cross-check: the restored Requirements/AC/Plan text is byte-identical to HEAD modulo the checkbox ticks (diff shows tick flips only), and the recovered `### Solution`'s digest-compatibility citation (`packages/app/src/workflow/proof-input-fingerprint.ts:296-308`) resolves to the real note this run.
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `packages/app/src/services/feature-check.ts:1243-1253` — `EMBEDDED_SCENARIO_REF_RES` + `embeddedScenarioRefs` over the RAW id (branch at `:1280`, before `bodyStripped` strips the carrying parenthetical); `R<n>` label carried by both builders (`scenarioKeys:1208`, `indexScenarioAliases:1331`); bare-`R<n>` non-credit pinned by AC3 tests (`packages/app/tests/services/feature-check.test.ts:3561` describe) — anchors re-resolved in current source this run |
+| R2 | MET | `verdictScenarioKeyGap:1414` reuses the gate's own `checkAcCoverage` covering decision (`taskCoversScenario:1359`) and `verdictRowsMatchScenarios`, so check and gate cannot disagree; CLI wiring `apps/cli/src/commands/task.ts:1254-1277`: gap → named error, no artifact write, exit 1 (fail/pass CLI pair asserts both halves incl. artifact absence); `parseFeature` parity pinned (`feature-check.test.ts:3621-3666`) |
+| R3 | MET | `canonicalizeCheckboxMarkers` at `packages/app/src/workflow/proof-input-fingerprint.ts:309`, applied `:340` (task) and `:373` (feature); tick-only and marker-variant digest tests green fresh this run (26 pass / 0 fail) |
+| R4 | MET | text-edit (`:596`) and section add/remove (`:616`) digest tests green fresh this run; the git-tree half of the digest is untouched |
+| R5 | MET | the done-gate finding names bounded offending ids plus all five accepted forms (`packages/app/src/services/feature-check.ts:915-926`, `summarizeRowIds:1368`, shared `VERDICT_SCENARIO_KEY_FORMS:1379`); bounded-summary test (7 rows → 5 + `(+2 more)`, `Req6` absent) green |
+| R6 | MET | AC7 tests: title-keyed and `AC-<n>` rows unchanged; orphan task, unresolvable wbs, non-covering task-local task, scenario-less feature, empty rows → no gap (`feature-check.test.ts:3825` describe; D6 done-gate reproduction at `:3672`) |
+
+AC1–AC7: all MET — each AC maps to a named test in the three suites below, all green in this run's fresh execution. Security lens: the diff adds only pure string transforms, `matchAll` over module-level global regexes (safe — `matchAll` iterates a clone, never advancing the source's `lastIndex`), corpus reads scoped to the features dir, and no new shell/exec/secret surface.
+
+##### Verification Evidence
+
+Fresh this run:
+
+- `bun test packages/app/tests/workflow/proof-input-fingerprint.test.ts` → 26 pass / 0 fail (91 expect)
+- `bun test packages/app/tests/services/feature-check.test.ts` → 129 pass / 0 fail (592 expect)
+- `bun test apps/cli/tests/commands/task.test.ts` → 190 pass / 0 fail (622 expect)
+- `spur task check 0958` → `0958 (wip): PASS`, zero findings, exit 0
+- Delta proof: `git diff --numstat` = 10 files, +1052/−64; mtimes — only the task markdown (12:35) postdates the last code/test edit (`feature-check.ts` 12:03, its test 12:05, everything else ≤ 11:11)
+- All pass-4 line anchors re-resolved in current source (`EMBEDDED_SCENARIO_REF_RES:1243`, raw-id branch `:1280`, `verdictScenarioKeyGap:1414`, `canonicalizeCheckboxMarkers:309/340/373`, CLI gap `:1254-1277`)
+- Test hygiene: no `apps/cli/tests/.tmp-task-gap-*` or verdict-artifact leftovers after the run
+
+Carried from pass 2/4 (valid — nothing outside the task markdown changed since, per the delta proof above):
+
+- `bun run spur-check` → lint + pre-check (49 rules) + post-check (2 rules) green; full suite 9339 pass / 0 fail (42096 expect)
+- `biome check` clean over the touched files; `tsc --noEmit` exit 0 in `packages/app` and `apps/cli`
+- `plugins/sp/lib/inline-run.generated.mjs` carries the new code (`canonicalizeCheckboxMarkers` present; re-grep fresh this run)
+
+Design conformance: Plan items 1–7 DONE (Plan 6's old-build replay half → advisory #4); design satellite row for `task verdict` updated (`docs/design/planning-record-contracts.md`, cites `apps/cli/src/commands/task.ts:1253-1277`).
+
+**Next:** `/sp:dev-verify 0958` → `spur task record` to fill `## Testing` and proceed toward `done`; the four P4s are accept-or-fold.
 
 ### References
 
@@ -275,4 +349,7 @@ item text and assert it changes.
 ### History
 
 - 2026-09-27T16:45:00.539Z backlog → todo (system)
+- 2026-09-27T18:13:22.759Z todo → wip (system)
+- 2026-09-27T19:49:46.477Z wip → testing (system)
+- 2026-09-27T19:50:16.348Z testing → done (system)
 
