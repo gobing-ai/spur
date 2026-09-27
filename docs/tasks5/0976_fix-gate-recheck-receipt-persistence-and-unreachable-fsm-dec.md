@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Fix gate-recheck receipt persistence and unreachable FSM decisions (0962 run findings)
-status: wip
+status: done
 template: standard
 created_at: 2026-09-26T16:33:31.303Z
-updated_at: "2026-09-27T00:17:14.832Z"
+updated_at: "2026-09-27T01:37:08.000Z"
 feature_id: I31
 
 ---
@@ -30,15 +30,15 @@ Owned by elsewhere — recorded here as pointers, not requirements:
 
 ### Requirements
 
-- [ ] R1. On the recheck path the gate persists the receipt it actually evaluated, so the declared no-progress skip is reachable: after a `run` and a subsequent `recheck` at an unchanged proof digest, the receipt's `inputDigest` names the digest that `recheck` evaluated, and a second `recheck` at that same digest takes the `check.skipped-no-progress` path instead of re-running the gate command.
-- [ ] R2. The classification source of every FSM `decide` is recorded and distinguishable: a run log or trace row states whether an action's value came from a decision backend or from the declared default, and the `failure-class` lane's `retryable` outcomes are reachable when a backend is configured.
-- [ ] R3. Spawn-bearing guard tests declare an explicit time budget, so full-suite wall-clock load cannot turn a passing assertion into a failure: the guard suite passes repeated consecutive full-suite runs, or the affected tests carry an explicit `timeout` with a comment naming the spawn cost as the reason.
+- [x] R1. On the recheck path the gate persists the receipt it actually evaluated, so the declared no-progress skip is reachable: after a `run` and a subsequent `recheck` at an unchanged proof digest, the receipt's `inputDigest` names the digest that `recheck` evaluated, and a second `recheck` at that same digest takes the `check.skipped-no-progress` path instead of re-running the gate command.
+- [x] R2. The classification source of every FSM `decide` is recorded and distinguishable: a run log or trace row states whether an action's value came from a decision backend or from the declared default, and the `failure-class` lane's `retryable` outcomes are reachable when a backend is configured.
+- [x] R3. Spawn-bearing guard tests declare an explicit time budget, so full-suite wall-clock load cannot turn a passing assertion into a failure: the guard suite passes repeated consecutive full-suite runs, or the affected tests carry an explicit `timeout` with a comment naming the spawn cost as the reason.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — R1 — A recheck at an unchanged digest does not re-run the gate command (req: R1)
-- [ ] AC2 — R2 — Decision provenance is recorded and `retryable` is reachable (req: R2)
-- [ ] AC3 — R3 — Guard-test timing is declared, not left to the suite default (req: R3)
+- [x] AC1 — R1 — A recheck at an unchanged digest does not re-run the gate command (req: R1)
+- [x] AC2 — R2 — Decision provenance is recorded and `retryable` is reachable (req: R2)
+- [x] AC3 — R3 — Guard-test timing is declared, not left to the suite default (req: R3)
 
 **Verify lens**
 
@@ -70,11 +70,11 @@ Fix direction per finding; the owner picks the final shape.
 
 ### Plan
 
-- [ ] Reproduce F-A: one `run` + two `recheck` at a fixed digest; capture the receipt before/after and confirm the second recheck re-executes the gate command.
-- [ ] Implement the chosen R1 shape in `plugins/sp/scripts/quality-gate.ts`; extend `plugins/sp/tests/quality-gate.test.ts` (or the existing receipt tests) to assert the skip path fires and that a FAIL digest is never laundered to PASS.
-- [ ] Decide the F-B policy with the owner, then implement the chosen shape and record decision provenance; assert `retryable` reachability (or the collapsed guard set) in the workflow tests.
-- [ ] Apply the F-C timing fix and run the guard suite inside a full `bun run gate` at least twice to confirm stability.
-- [ ] Gates: `bun run gate`; `spur rule run --json`; any pipeline-relevant YAML guard changes re-validated with `spur workflow validate`.
+- [x] Reproduce F-A: one `run` + two `recheck` at a fixed digest; capture the receipt before/after and confirm the second recheck re-executes the gate command.
+- [x] Implement the chosen R1 shape in `plugins/sp/scripts/quality-gate.ts`; extend `plugins/sp/tests/quality-gate.test.ts` (or the existing receipt tests) to assert the skip path fires and that a FAIL digest is never laundered to PASS.
+- [x] Decide the F-B policy with the owner, then implement the chosen shape and record decision provenance; assert `retryable` reachability (or the collapsed guard set) in the workflow tests.
+- [x] Apply the F-C timing fix and run the guard suite inside a full `bun run gate` at least twice to confirm stability.
+- [x] Gates: `bun run gate`; `spur rule run --json`; any pipeline-relevant YAML guard changes re-validated with `spur workflow validate`.
 
 ### Solution
 
@@ -89,7 +89,7 @@ Three findings fixed per the Q&A decisions (F-A (a) refresh single receipt; F-B 
 | R2 | `packages/app/src/workflow/decide.ts:65` | `DecideResult.source: 'model' \| 'default'` — `default` on every degraded row, `model` only on accepted answers. |
 | R2 | `packages/app/src/services/inline-run-setup.ts:484` | Inline decide outcome threads `source`. |
 | R2 | `plugins/sp/scripts/inline-run-setup.ts:561` | `--decide` appends `decide node=… value=… source=… reason=…` to the run log (helper renamed `appendRunLogLine`). |
-| R2 | `config/workflows/task-pipeline.yaml:593` | `failure-class` choices collapsed to `[fix, stop]`; retryable attempt-count shell and `test-fail-triage → test-recheck` edge removed. |
+| R2 | `config/workflows/task-pipeline.yaml:600` | `failure-class` choices collapsed to `[fix, stop]`; retryable attempt-count shell and `test-fail-triage → test-recheck` edge removed. |
 | R2 | `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:329` | Stale `retryable` row fails closed; frozen order is stop, cap, fix, defense. |
 | R2 | `packages/app/tests/workflow/guard-parity.test.ts:93` | Baseline fixture drops the retryable edge; `retryable` kept as a boundary value. |
 | R2 | `packages/app/tests/workflow/decide.test.ts:177` | Degraded rows pin `source: 'default'`; accepted row pins `source: 'model'`. |
@@ -103,11 +103,35 @@ Generated bundles regenerated: `plugins/sp/scripts/{quality-gate,inline-run-setu
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | plugins/sp/scripts/quality-gate.ts:637-661 — receipt write gated `if (!noProgressSkip)`, `inputDigest: env.proofDigest`, `writeFileSync(abs(receiptFile))` (comment :637-641: a skip never rewrites the receipt it matched → no FAIL→PASS laundering). Test: plugins/sp/tests/quality-gate-receipt.test.ts:516-548 — run→recheck(digest-y) refreshes receipt inputDigest=digest-y (FAIL kept); second recheck at digest-y emits check.skipped-no-progress, attempts=0, no probe/full-gate execution, receipt byte-equal; no-digest recheck writes nothing (quality-gate.test.ts:375). Fresh this cycle: 46 pass / 0 fail (quality-gate-receipt + quality-gate, 3.20s). LIVE: .spur/run/0976-check-receipt.json inputDigest=sha256:613f1dc6c6d935af94a3da3158a67892071aafd58d93ee6b2ef5cbe1000592a4 == env-0976.sh proofDigest, tier full, cmd `bun run spur-check`, status PASS, durationMs 267623, completedAt 2026-09-27T01:26:38.098Z; .spur/run/0976-test-gate.status PASS (attempts: 1). |
+| R2 | MET | packages/app/src/workflow/decide.ts:65 — `source: 'model' \| 'default'` (default on every degraded row, model only on accepted answers). plugins/sp/scripts/inline-run-setup.ts:559-561 — appendRunLogLine appends `decide node=… value=… source=… reason=…` to the run log. Lane collapse: config/workflows/task-pipeline.yaml:600 `choices: [fix, stop]` (retryable attempt shell + test-fail-triage→test-recheck edge removed per closed Q&A (b)). Fail-closed: packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:329 — stale `retryable` row → no lane, no attempt counted. Provenance pinned: packages/app/tests/workflow/decide.test.ts:177 + plugins/sp/tests/inline-run-setup.test.ts:443-454. Fresh this cycle: 43 pass / 0 fail (decide+triage-routing+guard-parity+guards/shell, 1.70s) and 4 pass / 0 fail (inline decide, 0.99s). 13 checkbox ticks → admission evidence folded into R2's Solution row: the only working-tree change is that 13-line docs diff (11 ticks + updated_at + the R2 Solution row citation task-pipeline.yaml :593→:600, re-verified live as the `choices: [fix, stop]` line), and this zero-diff re-certification's admission (packages/app/src/workflow/actions/agent-run.ts:1169-1185 `requireDiffAllowCleanCheck` → taskCheckClean; task-pipeline.yaml:295) is cited through that R2 Solution row — `spur task check 0976` exit 0 (pre-condition, not re-run). |
+| R3 | MET | packages/app/tests/workflow/guards/shell.test.ts:13-14 — `const SPAWN_TIMEOUT_MS = 20_000;` with the spawn-cost comment (cold /bin/sh spawn under full-suite concurrency), applied to both real-spawn metacharacter cases; the semantics case uses an injected executor (wall-clock-free). Fresh this cycle: 8 pass / 0 fail within the 43-test 4-file run (1.70s, no timeout hit). Full-suite stability: gate `bun run spur-check` PASS at this digest (receipt, 267623ms; log 9251 pass / 0 fail across 534 files, 245.52s) with zero guard-timeout occurrences. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Receipt at THIS digest retained: .spur/run/0976-check-receipt.json inputDigest=sha256:613f1dc6…592a4, PASS, 267623ms; .spur/run/0976-test-gate.status PASS, attempts: 1. Skip path proven by plugins/sp/tests/quality-gate-receipt.test.ts:516-548 — a recheck at an unchanged digest emits check.skipped-no-progress, runs no gate command (probe-ran/full-ran absent from the log), attempts=0, receipt byte-equal; fresh this cycle 46 pass / 0 fail. No gate re-run performed per pre-condition ("do not redo"); anchors re-read fresh (manual-review). |
+| AC2 | MET | test | Provenance recorded and distinguishable: packages/app/src/workflow/decide.ts:65 `source: 'model' \| 'default'`; run-log line plugins/sp/scripts/inline-run-setup.ts:559-561; pinned by decide.test.ts:177 (degraded→'default', accepted→'model') and inline-run-setup.test.ts:443-454 (`decide node=classify value=stop source=default reason=disabled` in stdout, resultFile, and run log); stale `retryable` fails closed with no attempt counted (triage-routing.test.ts:329); collapse live at task-pipeline.yaml:600 `[fix, stop]`. Fresh this cycle: 43 + 4 pass / 0 fail. |
+| AC3 | MET | test | Timing declared: packages/app/tests/workflow/guards/shell.test.ts:13-14 SPAWN_TIMEOUT_MS=20s with spawn-cost comment on both real-spawn cases; fresh 8 pass / 0 fail (no timeout hit). Full suite at THIS digest: receipt PASS 267623ms; log .spur/run/0976-test-gate.log — "9251 pass / 0 fail" across 534 files, 245.52s, zero "timeout" occurrences, trailing proof-digest line == sha256:613f1dc6c6d935af94a3da3158a67892071aafd58d93ee6b2ef5cbe1000592a4. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=0 housekeeping=0 |
+| P4 | proof-input-digest | — | sha256:613f1dc6c6d935af94a3da3158a67892071aafd58d93ee6b2ef5cbe1000592a4 |
 
 ### References
 
@@ -116,4 +140,6 @@ Generated bundles regenerated: `plugins/sp/scripts/{quality-gate,inline-run-setu
 ### History
 
 - 2026-09-26T23:20:50.985Z backlog → wip (system)
+- 2026-09-27T01:36:58.487Z wip → testing (system)
+- 2026-09-27T01:37:08.000Z testing → done (system)
 
