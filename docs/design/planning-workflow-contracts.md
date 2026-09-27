@@ -156,7 +156,14 @@ before implementation begins.
 the exact files and explicit directory/glob prefixes backticked in the target task's body, naming
 the rogue files; new files beside an exact declared file are allowed, and a task body naming no
 paths fails open. The guard snapshots the non-corpus tree before dispatch, so pre-existing dirt is
-not attributed to the implementer. Set `--vars '{"implementScopeGuard":"off"}'` to bypass. **Edit surface:** change this YAML under
+not attributed to the implementer. Set `--vars '{"implementScopeGuard":"off"}'` to bypass.
+**Verification-only re-run admission (task 0976):** the implement step also declares the static
+option `requireDiffAllowCleanCheck: true`. When `requireDiff` is about to fail on zero non-corpus
+changes (the implementation already landed through another path, e.g. a re-run of a task whose code
+shipped in a prior batch), the action runs `${vars.spurBin} task check ${vars.wbs} --json`; a PASS
+admits the empty implement as a certification pass, and any failure (or a missing `vars.wbs`) keeps
+the 0424 R3 empty-implement violation with the check output named in the step error. Static YAML
+option by design (ADR-115) — deliberately no run-var knob. **Edit surface:** change this YAML under
 `config/workflows/task-pipeline.yaml` only (see §2.3 monorepo path model) — no hand-sync to
 `.spur/workflows` or `apps/cli/config`.
 

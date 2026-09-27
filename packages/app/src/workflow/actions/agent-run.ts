@@ -143,6 +143,12 @@ export function parseExecutorPin(raw: unknown): ExecutorPin | undefined {
  *   Also gates diff *scope* (R1, task 0487): when `vars.wbs` names a task whose
  *   body backticks at least one path, changes outside those paths fail
  *   the step by name. Bypass with the run var `implementScopeGuard: "off"`.
+ * - `requireDiffAllowCleanCheck` (boolean, optional): admission for
+ *   verification-only re-runs (task 0976). When `requireDiff` is about to fail
+ *   on zero non-corpus changes, run `<vars.spurBin> task check <vars.wbs>
+ *   --json` instead; a PASS admits the empty implement as a certification
+ *   re-run, any failure (or missing `vars.wbs`) keeps the 0424 R3 violation.
+ *   Static YAML option by design (ADR-115) — no run-var knob.
  * - `timeoutMs` (number): subprocess timeout in milliseconds. Forwarded via
  *   `AgentRunOptions.timeout` to `ProcessExecutor.run`, which kills the child
  *   on elapse. On timeout, the agent step exits non-zero → `ok:false` → pipeline
@@ -286,6 +292,7 @@ export class AgentRunActionRunner implements ActionRunner {
             'answerFile',
             'escalationFile',
             'requireDiff',
+            'requireDiffAllowCleanCheck',
             'maxTokens',
             'maxCostUsd',
             'requiresCapabilities',
@@ -696,6 +703,7 @@ export class AgentRunActionRunner implements ActionRunner {
         const expectFile = asOptionalString(options.expectFile);
         const escalationFile = asOptionalString(options.escalationFile);
         const requireDiff = asOptionalBoolean(options.requireDiff);
+        const requireDiffAllowCleanCheck = asOptionalBoolean(options.requireDiffAllowCleanCheck);
         const capture = asOptionalBoolean(options.capture) || answerFile !== undefined;
 
         // Capability requirements (0706 R4/R8): validate the closed vocabulary at
@@ -1153,14 +1161,39 @@ export class AgentRunActionRunner implements ActionRunner {
                         ? await gitNonCorpusChangedFiles(cwd, this.agentConfig.excludeGlobs)
                         : await gitChangesSinceSnapshot(cwd, diffBaseline, this.agentConfig.excludeGlobs);
                 if (changed.length === 0) {
-                    return this.contractViolation(
-                        context,
-                        agentLabel,
-                        'requireDiff',
-                        'empty',
-                        `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
-                        buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
-                    );
+                    // Verification-only re-run admission (task 0976): an empty
+                    // implement is legitimate when the task's declared solution
+                    // state is already clean — a passing `spur task check` proves
+                    // the corpus is complete and anchored, so this run certifies
+                    // rather than implements.
+                    if (requireDiffAllowCleanCheck === true) {
+                        const admission = await taskCheckClean(
+                            cwd,
+                            String(context.vars.wbs ?? ''),
+                            String(context.vars.spurBin ?? 'spur'),
+                        );
+                        if (admission.ok) {
+                            // Admitted: fall through to normal step completion.
+                        } else {
+                            return this.contractViolation(
+                                context,
+                                agentLabel,
+                                'requireDiff',
+                                'empty',
+                                `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes, and the verification-only admission failed — ${admission.detail}. Fix the task corpus (task check must pass) or make a real change.`,
+                                buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                            );
+                        }
+                    } else {
+                        return this.contractViolation(
+                            context,
+                            agentLabel,
+                            'requireDiff',
+                            'empty',
+                            `agent.run '${stepLabel}' (${agentLabel}) exited 0 but produced zero non-corpus file changes — empty implement (no-op). The implement agent must change at least one file outside the configured task/feature folders; fix the implement input and re-run the pipeline.`,
+                            buildResultData(exitCode, agentLabel, capture, answer, invocation, usage),
+                        );
+                    }
                 }
                 // R1 (task 0487): diff-scope guard. An implement step that wandered
                 // into a *sibling* task's surfaces is the 0486 failure mode — two
@@ -1663,6 +1696,34 @@ async function gitDiffStat(cwd: string): Promise<string> {
  * R1 (0487): returns the paths rather than a boolean — the scope guard needs to
  * name the rogue file, and "is the diff empty" is just `length === 0`.
  */
+/**
+ * Verification-only re-run admission for the requireDiff gate (task 0976):
+ * `<spurBin> task check <wbs> --json` exit 0 means the task corpus declares a
+ * clean, anchor-verified solution state — an empty non-corpus diff is then a
+ * legitimate certification re-run, not a silent no-op. Any spawn/check failure
+ * is reported in `detail` so the step violation names the actual blocker.
+ */
+async function taskCheckClean(cwd: string, wbs: string, spurBin: string): Promise<{ ok: boolean; detail: string }> {
+    if (wbs === '') return { ok: false, detail: 'vars.wbs is missing — cannot run task check' };
+    try {
+        const result = await new NodeProcessExecutor().run({
+            command: spurBin,
+            args: ['task', 'check', wbs, '--json'],
+            cwd,
+            maxOutput: 1024 * 1024,
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+        const tail = (result.stdout || result.stderr).trim().split('\n').slice(-2).join(' | ');
+        return {
+            ok: result.exitCode === 0,
+            detail: `\`${spurBin} task check ${wbs}\` exit ${result.exitCode}: ${tail || '(no output)'}`,
+        };
+    } catch (error) {
+        return { ok: false, detail: `\`${spurBin} task check ${wbs}\` spawn failed: ${String(error)}` };
+    }
+}
+
 interface ChangedPath {
     path: string;
     untracked: boolean;

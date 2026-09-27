@@ -286,6 +286,13 @@ states:
                 # a silent no-op routes the run to `failed` here instead of drifting
                 # into test/review and being caught a full pass later.
                 requireDiff: true
+                # Verification-only re-run admission (task 0976): when requireDiff
+                # sees zero non-corpus changes because the implementation already
+                # landed through another path, `spur task check <wbs>` PASS admits
+                # the empty implement as a certification pass; a check failure
+                # keeps the 0424 R3 empty-implement violation. Static option —
+                # deliberately no run-var knob (ADR-115).
+                requireDiffAllowCleanCheck: true
                 # 0933 R26: escalation contract — the agent.run option names the QUESTION
                 # file (the pause signal, deleted pre-dispatch for freshness); a paused
                 # attempt (agent wrote its question there and exited 0) succeeds with

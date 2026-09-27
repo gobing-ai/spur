@@ -801,6 +801,52 @@ describe('AgentRunActionRunner empty-implement guard (requireDiff, task 0424)', 
         expect(result.error).toContain('zero non-corpus file changes');
     });
 
+    // Verification-only re-run admission (task 0976): zero changes + clean task
+    // check admits the empty implement; a failing check keeps the violation.
+    test('requireDiffAllowCleanCheck: zero changes + task check PASS → admitted', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-admit-'));
+        // Not a git repo → zero non-corpus changes → gate would fire; the
+        // admission runs the fake spur binary instead.
+        const spur = join(dir, 'fake-spur');
+        writeFileSync(spur, '#!/bin/sh\nexit 0\n');
+        chmodSync(spur, 0o755);
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            {
+                role: 'coder',
+                input: 'implement',
+                requireDiff: true,
+                requireDiffAllowCleanCheck: true,
+                cwd: dir,
+            },
+            makeCtx({ vars: { wbs: '0976', spurBin: spur } }),
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    test('requireDiffAllowCleanCheck: zero changes + task check FAIL → violation names the check', async () => {
+        dir = mkdtempSync(join(tmpdir(), 'agent-run-admit-fail-'));
+        const spur = join(dir, 'fake-spur');
+        writeFileSync(spur, '#!/bin/sh\necho "task check failed" >&2\nexit 1\n');
+        chmodSync(spur, 0o755);
+        const svc = svcWithRunTraced({ exitCode: 0, stdout: '', invocation: invocation() });
+        const runner = new AgentRunActionRunner(svc);
+        const result = await runner.execute(
+            {
+                role: 'coder',
+                input: 'implement',
+                requireDiff: true,
+                requireDiffAllowCleanCheck: true,
+                cwd: dir,
+            },
+            makeCtx({ vars: { wbs: '0976', spurBin: spur } }),
+        );
+        expect(result.ok).toBe(false);
+        expect(result.error).toContain('verification-only admission failed');
+        expect(result.error).toContain('exit 1');
+    });
+
     test('exit-0 + requireDiff with only corpus changes → rejected (docs/tasks3 excluded)', async () => {
         dir = mkdtempSync(join(tmpdir(), 'agent-run-corpus-'));
         gitInit(dir);
