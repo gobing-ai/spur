@@ -42,6 +42,8 @@ This feature is a wayfinder map (`wayfinder-map` tag), not a specified deliverab
 | 0903 | Audit post-delivery CLI-plugin-workflow contract adoption and existing backlog ownership | done |
 | 0904 | Validate usage-to-availability decisions with sanitized fixtures and dry-run evidence | done |
 | 0905 | Measure complete-run reliability and execution cost across inline, pipeline, and fleet | done |
+| 0975 | Close the inline-run bookkeeping gaps and enforce the test-only subpath invariant | done |
+| 0976 | Fix gate-recheck receipt persistence and unreachable FSM decisions (0962 run findings) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
