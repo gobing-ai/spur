@@ -4,7 +4,7 @@ name: Fix gate-recheck receipt persistence and unreachable FSM decisions (0962 r
 status: wip
 template: standard
 created_at: 2026-09-26T16:33:31.303Z
-updated_at: "2026-09-26T23:20:50.985Z"
+updated_at: "2026-09-27T00:17:14.832Z"
 feature_id: I31
 
 ---
@@ -93,7 +93,7 @@ Three findings fixed per the Q&A decisions (F-A (a) refresh single receipt; F-B 
 | R2 | `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:329` | Stale `retryable` row fails closed; frozen order is stop, cap, fix, defense. |
 | R2 | `packages/app/tests/workflow/guard-parity.test.ts:93` | Baseline fixture drops the retryable edge; `retryable` kept as a boundary value. |
 | R2 | `packages/app/tests/workflow/decide.test.ts:177` | Degraded rows pin `source: 'default'`; accepted row pins `source: 'model'`. |
-| R2 | `plugins/sp/tests/inline-run-setup.test.ts:453` | `--decide` provenance pinned in stdout, resultFile and run log. |
+| R2 | `plugins/sp/tests/inline-run-setup.test.ts:443-454` | `--decide` provenance pinned in stdout, resultFile and run log. |
 | R2 | `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:515` | Driver doc names the `source` field and run-log line. |
 | R2 | `docs/design/workflow-catalogue-refactor.md:143` | Decide row shape + failure-triage lane table updated. |
 | R3 | `packages/app/tests/workflow/guards/shell.test.ts:48` | Semantics case uses an injected executor (no wall clock). |
