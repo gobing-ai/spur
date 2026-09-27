@@ -46,8 +46,17 @@ jobs:
               run: |
                   $f = 'node_modules/@gobing-ai/ts-infra/dist/application/index.js'
                   $c = Get-Content $f -Raw
-                  $c = $c -replace 'state\\.pluginHost\\.stopAll', 'state.pluginHost?.stopAll' -replace 'state\\.pluginHost\\.unloadAll', 'state.pluginHost?.unloadAll'
+                  $c = $c -replace 'state\.pluginHost\.stopAll', 'state.pluginHost?.stopAll' -replace 'state\.pluginHost\.unloadAll', 'state.pluginHost?.unloadAll'
                   Set-Content -Path $f -Value $c -NoNewline
+                  Select-String -Path $f -Pattern 'pluginHost\?\.' | ForEach-Object { $_.Line.Trim() }
+            # TEMPORARY DEBUG: micro-probe of the suspected Bun-Windows failure:
+            # attachFileObserver computes the parent of a backslash path via
+            # lastIndexOf('/') -> '.', then mkdirSync('.', recursive) via the
+            # node fs writer. Print exactly what each call does on this runner.
+            - name: 'DEBUG: fs micro-probe'
+              shell: pwsh
+              run: |
+                  bun -e "const path = require('node:path'); const fs = require('node:fs'); const p = path.resolve(process.cwd(), '.spur', 'logs', 'system-events.jsonl'); console.log('resolved:', p); const idx = p.lastIndexOf('/'); const parent = idx <= 0 ? '.' : p.slice(0, idx); console.log('parentDir:', JSON.stringify(parent)); try { fs.mkdirSync(parent, { recursive: true }); console.log('mkdirSync ok'); } catch (e) { console.log('mkdirSync FAILED:', e.message); }"
             # TEMPORARY DEBUG: bootstrap-only probe with a plain path. If this also
             # crashes, the failure is independent of the `%` path argument.
             - name: 'DEBUG: plain-path bootstrap probe'
