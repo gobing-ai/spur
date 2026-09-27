@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Move the G66 member session out of the agent CLI into a spur-app MemberSession service
-status: wip
+status: done
 template: feature-impl
 created_at: 2026-09-26T05:53:30.523Z
-updated_at: "2026-09-27T06:11:05.087Z"
+updated_at: "2026-09-27T06:19:56.360Z"
 feature_id: G67
 
 ---
@@ -44,28 +44,28 @@ Why it matters:
 
 ### Requirements
 
-- [ ] R1. `packages/app/src/services/member-session.ts` owns everything in the Background table:
+- [x] R1. `packages/app/src/services/member-session.ts` owns everything in the Background table:
   - the types, `MAX_CONSECUTIVE_FAILED_DRAINS` and `selectsPersistentStdinDispatch`;
   - a `MemberSession` class holding the loop-lifetime state (`mode`, resume `id`, live `process`, consecutive failed-drain count);
   - that class's methods for mode resolution, ensure-process, reset, resume-id capture and failed-drain accounting.
 
   `apps/cli/src/commands/agent.ts` declares none of these symbols afterwards.
-- [ ] R2. The service depends on a structural `MemberSessionDeps` object, not on `CliContext`. `CliContext` must satisfy it (or satisfy it with a one-line adapter).
-- [ ] R3. `runAgentLoop` in the CLI uses the class at the five sites listed in Background. Every stderr line, ledger event (`MEMBER_SESSION_RESET_EVENT` payload `{reason, mode, ...detail}`, `recordMemberSession` rows), exit code and `AgentLoopRuntime.memberProcessFactory` seam behaves byte-for-byte as before.
-- [ ] R4. `packages/app/tests/services/member-session.test.ts` covers, without a `CliContext` or a spawned agent:
+- [x] R2. The service depends on a structural `MemberSessionDeps` object, not on `CliContext`. `CliContext` must satisfy it (or satisfy it with a one-line adapter).
+- [x] R3. `runAgentLoop` in the CLI uses the class at the five sites listed in Background. Every stderr line, ledger event (`MEMBER_SESSION_RESET_EVENT` payload `{reason, mode, ...detail}`, `recordMemberSession` rows), exit code and `AgentLoopRuntime.memberProcessFactory` seam behaves byte-for-byte as before.
+- [x] R4. `packages/app/tests/services/member-session.test.ts` covers, without a `CliContext` or a spawned agent:
   - persistent / resume / one-shot resolution, including the `member-persistent-stdin-unwired` degrade;
   - the `restart` reset on a dead process;
   - the `failed-drains` reset at exactly `MAX_CONSECUTIVE_FAILED_DRAINS` with the counter restarting;
   - resume-id capture from an exact `run_sessions` row and no capture from an inexact row;
   - the `operator` reset only when there is live state.
-- [ ] R5. `MemberAgentProcess` and `selectsPersistentStdinDispatch` stay importable from `apps/cli/src/commands/agent` (a re-export), so `agent-loop-member-session.test.ts:29` compiles with no edit.
+- [x] R5. `MemberAgentProcess` and `selectsPersistentStdinDispatch` stay importable from `apps/cli/src/commands/agent` (a re-export), so `agent-loop-member-session.test.ts:29` compiles with no edit.
 
 ### Acceptance Criteria
 
 Graduates feature G67 scenarios R1 and R2 (exact titles below); the numbered rows are the verify lens. G67 R3 and R4 belong to task 0968.
 
-- [ ] AC1 — R1 — Member session logic is an application service (req: R1, R3, R5)
-- [ ] AC2 — R2 — The member session is testable without a CLI context (req: R2, R4)
+- [x] AC1 — R1 — Member session logic is an application service (req: R1, R3, R5)
+- [x] AC2 — R2 — The member session is testable without a CLI context (req: R2, R4)
 
 **Verify lens**
 
@@ -157,20 +157,55 @@ export class MemberSession {
 
 ### Plan
 
-- [ ] Create `packages/app/src/services/member-session.ts` (Design) by moving the code verbatim, then export it from the barrel.
-- [ ] Add `packages/app/tests/services/member-session.test.ts`: an in-memory SQLite `getDb` (per AGENTS.md DAO test guidance), a stub `MemberAgentProcess`, and executor fixtures modeled on `apps/cli/tests/commands/agent-loop-member-session.test.ts`. Cover the R4 cases.
-- [ ] Rewire `runAgentLoop` (Design, CLI edits), add the R5 re-export and remove the dead imports.
-- [ ] Focused tests: `(cd packages/app && bun test tests/services/member-session.test.ts)` and `(cd apps/cli && bun test tests/commands/agent-loop-member-session.test.ts tests/commands/agent-loop-wake.test.ts tests/commands/agent.test.ts tests/commands/agent-team.test.ts)`. Known load flake: `agent-run-fleet` R3 times out at 5s under a full-suite run and passes in isolation. Record it if it appears.
-- [ ] Gates: `bun run spur-check`. Run the AC1 `rg` and `git diff` probes and paste their output.
-- [ ] One commit: `refactor(agent): move the G66 member session into spur-app (<wbs>)`.
+- [x] Create `packages/app/src/services/member-session.ts` (Design) by moving the code verbatim, then export it from the barrel.
+- [x] Add `packages/app/tests/services/member-session.test.ts`: an in-memory SQLite `getDb` (per AGENTS.md DAO test guidance), a stub `MemberAgentProcess`, and executor fixtures modeled on `apps/cli/tests/commands/agent-loop-member-session.test.ts`. Cover the R4 cases.
+- [x] Rewire `runAgentLoop` (Design, CLI edits), add the R5 re-export and remove the dead imports.
+- [x] Focused tests: `(cd packages/app && bun test tests/services/member-session.test.ts)` and `(cd apps/cli && bun test tests/commands/agent-loop-member-session.test.ts tests/commands/agent-loop-wake.test.ts tests/commands/agent.test.ts tests/commands/agent-team.test.ts)`. Known load flake: `agent-run-fleet` R3 times out at 5s under a full-suite run and passes in isolation. Record it if it appears.
+- [x] Gates: `bun run spur-check`. Run the AC1 `rg` and `git diff` probes and paste their output.
+- [x] One commit: `refactor(agent): move the G66 member session into spur-app (<wbs>)`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Extract the G66 member session from the agent CLI into a spur-app service (ADR-021 — apps are thin
+transports). The CLI keeps re-exports so the base revision's imports still resolve.
+
+**Change map**
+
+| Change | Location |
+| --- | --- |
+| New `MemberSession` service: the mode types, `MAX_CONSECUTIVE_FAILED_DRAINS`, `selectsPersistentStdinDispatch` | `packages/app/src/services/member-session.ts:30` |
+| `MemberSessionDeps` — the structural seam the CLI satisfies | `packages/app/src/services/member-session.ts:84` |
+| `MemberSession` class owning the loop-lifetime state (`mode`, resume `id`, live `process`, failed-drain budget) | `packages/app/src/services/member-session.ts:180` |
+| Barrel export of the moved surface | `packages/app/src/index.ts:339` |
+| The 232-line inlined member-session block replaced by the R5 re-export | `apps/cli/src/commands/agent.ts:953` |
+| Loop wiring: session constructed from `CliContext` fields plus the `memberProcessFactory` seam | `apps/cli/src/commands/agent.ts:1282` |
+| Loop wiring: mode resolution once per loop lifetime | `apps/cli/src/commands/agent.ts:1330` |
+| Loop wiring: persistent ensure-process | `apps/cli/src/commands/agent.ts:1413` |
+| Loop wiring: failed-drain budget and resume-id capture | `apps/cli/src/commands/agent.ts:1449` |
+| Loop wiring: operator reset on shutdown | `apps/cli/src/commands/agent.ts:1463` |
+| New service tests (21) covering the R4 cases | `packages/app/tests/services/member-session.test.ts:1` |
+
+**Design divergence.** `MemberSessionDeps.sessionCapability` (optional, `packages/app/src/services/member-session.ts:104`) is not in the task's Design deps list. It is the only way to execute R4's `member-persistent-stdin-unwired` case: all three persistent-capable runner shims (`omp`/`pi`/`claude`) wire the stdin argv, so the degrade branch is unreachable without a runner whose capability record disagrees with its shim. It mirrors the existing `processFactory` test seam.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/member-session.ts` owns the moved symbols: the three types at lines 30/39/46, `MAX_CONSECUTIVE_FAILED_DRAINS` (:59), `selectsPersistentStdinDispatch` (:74), `MemberSessionDeps` (:84) and class `MemberSession` (:182) holding `mode`/`id`/`process`/`failedDrains` with methods `binary`/`resolveMode`/`start`/`ensureProcess`/`reset`/`recordDrain`/`hasLiveState`. The CLI declares none of them: a rg for the seven former helper definitions plus `MAX_CONSECUTIVE_FAILED_DRAINS =` across `apps/cli/src` returns nothing (exit 1). |
+| R2 | MET | `MemberSessionDeps` is structural (executors, env, getDb, warn + 2 optional seams) with no `CliContext` import; `rg "CliContext" packages/app/src/services/member-session.ts` returns nothing. The CLI satisfies it with one object literal at `apps/cli/src/commands/agent.ts:1282`. |
+| R3 | MET | The loop drives the class at all five sites (`:1282` construct, `:1330` start, `:1413` ensureProcess, `:1434` resume-id flags, `:1449` recordDrain, `:1463-1464` hasLiveState/operator reset) with the `memberProcessFactory` seam forwarded into `MemberSessionDeps.processFactory`. Behavior is pinned by `apps/cli/tests/commands/agent-loop-member-session.test.ts` (10 G66 cases: resume, one-shot warning, operator reset, failed-drains at the limit, argv gate, restart) which passes unedited, plus `agent-team.test.ts`/`agent.test.ts`/`agent-loop-wake.test.ts` — 90 tests, 0 fail. |
+| R4 | MET | `packages/app/tests/services/member-session.test.ts` — 21 tests, in-memory DB, no `CliContext`, no spawned agent. Covers persistent/resume/one-shot resolution incl. the `member-persistent-stdin-unwired` degrade and its resume/one-shot variants, the `restart` reset on a dead process, `failed-drains` at exactly `MAX_CONSECUTIVE_FAILED_DRAINS` with the counter restarting, resume-id capture from an exact row and non-capture from an inexact/unresolved/absent row, and the `operator` reset only with live state. |
+| R5 | MET | `apps/cli/src/commands/agent.ts:965-975` re-exports `MemberSession`, `selectsPersistentStdinDispatch`, `MAX_CONSECUTIVE_FAILED_DRAINS` and the four types from `@gobing-ai/spur-app`; `agent-loop-member-session.test.ts:29` and `agent-team.test.ts:12` compile with no edit. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Quality gate PASS on the current digest (`bun run spur-check`: 9270 tests, 0 fail; receipt `.spur/run/0967-check-receipt.json` tier full, inputDigest sha256:ac78bd41…). The four CLI suites named in the AC lens pass (90 tests, 0 fail). The seven helper definitions resolve nowhere under `apps/cli/src`. Caveat on the AC's third lens: `git diff 872024cd2 -- apps/cli/tests` is non-empty from base drift (commits 789e464de and aebde9a14 landed test changes between the review base 872024cd2 and this branch base 939789e5) — this task's own delta under `apps/cli/tests` is empty (`git diff HEAD -- apps/cli/tests` has no output). Recorded as review finding P2. |
+| AC2 | MET | test | `(cd packages/app && bun test tests/services/member-session.test.ts)` — 21 pass, 0 fail; function coverage on the new service 91.67%, lines 100% (threshold 90%). `rg "CliContext\|apps/cli" packages/app/src/services/member-session.ts` returns nothing (exit 1). The quality gate's `bun run spur-check` chain (lint, typecheck, test-pre-check, test, test-post-check) is green. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
@@ -198,10 +233,12 @@ Review — 0967 (G67 R1/R2 extraction), lane `safety` (deterministic, diffstat 1
 
 #### Findings
 
-- **P2 (process, not code)** — AC1's third verify lens (`git diff 872024cd2 -- apps/cli/tests is empty`) is unsatisfiable from the current branch base. Commits `789e464de` (release-ops timeout) and `aebde9a14` (worktree provenance persistence) changed `apps/cli/tests` between the review base `872024cd2` and this task's branch base `939789e5`. This task's own diff under `apps/cli/tests` is empty (`git diff HEAD -- apps/cli/tests` → no output). Re-anchor the lens to the branch base on the next refine.
-- **P3 (run-level caveat)** — `--agent inline` cannot satisfy the review hop's executor-distinctness gate (`compareExecutorWith: implement`): implement and review share the host executor. A limitation of inline execution, not of this change.
-- **P4** — the `sessionCapability` deps seam is an addition beyond the Design's `MemberSessionDeps`. It is what makes R4's `member-persistent-stdin-unwired` case executable at all: all three persistent-capable runner shims (`omp`/`pi`/`claude`) wire the stdin argv, so the degrade branch is otherwise unreachable without a runner that mis-declares the capability. Mirrors the existing `processFactory` seam. Recorded in Solution.
-- **P4** — `MAX_CONSECUTIVE_FAILED_DRAINS` is re-exported from `agent.ts` for R5 compatibility but now has no in-repo consumer.
+| Id | Priority | Kind | Finding | Evidence |
+| --- | --- | --- | --- | --- |
+| F1 | P2 | Process, not code | AC1's third verify lens (`git diff 872024cd2 -- apps/cli/tests is empty`) is unsatisfiable from the current branch base. | Commits `789e464de` (release-ops timeout) and `aebde9a14` (worktree provenance persistence) changed `apps/cli/tests` between the review base `872024cd2` and this task's branch base `939789e5`; this task's own delta under `apps/cli/tests` is empty (`git diff HEAD -- apps/cli/tests` → no output). |
+| F2 | P3 | Run-level caveat | `--agent inline` cannot satisfy the review hop's executor-distinctness gate (`compareExecutorWith: implement`): implement and review share the host executor. | `config/workflows/task-pipeline.yaml` review onEnter `compareExecutorWith: implement`; the run used `--agent inline`, so both hops ran in the host session. |
+| F3 | P4 | Design divergence | The `sessionCapability` deps seam is an addition beyond the Design's `MemberSessionDeps`; required to execute R4's `member-persistent-stdin-unwired` case. | `packages/app/src/services/member-session.ts:104`; all three persistent-capable shims (`omp`/`pi`/`claude`) wire the stdin argv, so the degrade is otherwise unreachable. Mirrors the existing `processFactory` seam. |
+| F4 | P4 | Dead surface | `MAX_CONSECUTIVE_FAILED_DRAINS` is re-exported from `agent.ts` for R5 compatibility but now has no in-repo consumer. | `apps/cli/src/commands/agent.ts:965`; `rg MAX_CONSECUTIVE_FAILED_DRAINS apps packages` shows only the re-export, the service and its tests. |
 
 #### Residual risk
 
@@ -218,4 +255,6 @@ None in the extracted logic. The loop-side extraction (~9 further symbols) is th
 
 - 2026-09-26T05:53:51.603Z backlog → todo (system)
 - 2026-09-27T05:55:08.735Z todo → wip (system)
+- 2026-09-27T06:19:43.371Z wip → testing (system)
+- 2026-09-27T06:19:56.360Z testing → done (system)
 
