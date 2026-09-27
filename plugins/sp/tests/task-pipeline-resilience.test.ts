@@ -314,8 +314,9 @@ esac`,
     // green gates print a one-line status, red gates print at most the last 40 lines, and the
     // durable log keeps everything — is asserted in plugins/sp/tests/quality-gate.test.ts.
 
-    // F96 residual sweep (0950): scan/fold wired into verify between task verdict and the
-    // jq proof bind; settle/report at the terminal states; base capture is resume-safe.
+    // F96 residual sweep (0950, reordered 0983): scan/fold wired into record AFTER the
+    // `task record` box flips and before the done guard; settle/report at the terminal
+    // states; base capture is resume-safe.
     function shellCommands(stateId: string): string[] {
         return (
             PIPELINE.states
@@ -332,18 +333,108 @@ esac`,
         expect(cmd).toMatch(/\[ -f "?\.spur\/run\/\$wbs-base\.sha"? \] \|\|/);
     });
 
-    test('verify orders scan+fold between task verdict and the jq proof bind (F96 R2)', () => {
+    // 0983: the sweep left verify — a pre-record scan folds unticked-but-verdict-proven
+    // boxes (flipped only later by `task record`) and makes the done guard unreachable
+    // (0967). Verify binds the verdict straight to the proof digest; record sweeps.
+    test('verify no longer sweeps; the verdict binds straight to the proof digest (0983 R1)', () => {
         const cmds = shellCommands('verify');
         const verdictIdx = cmds.findIndex((c) => c.includes('task verdict'));
-        const residualIdx = cmds.findIndex((c) => c.includes('residual-scan') && c.includes('fold'));
         const bindIdx = cmds.findIndex((c) => c.includes('+ {proof:'));
         expect(verdictIdx).toBeGreaterThanOrEqual(0);
-        expect(residualIdx).toBeGreaterThan(verdictIdx);
-        expect(bindIdx).toBeGreaterThan(residualIdx);
-        // Hard action: no exit-0 blanket — a scanner crash must fail verify closed.
-        expect(cmds[residualIdx].trim().endsWith('exit 0')).toBe(false);
+        expect(bindIdx).toBeGreaterThan(verdictIdx);
+        expect(cmds.find((c) => c.includes('residual-scan'))).toBeUndefined();
+    });
+
+    test('record sweeps after the box flips and before the done guard (0983 R1/R3)', () => {
+        const cmds = shellCommands('record');
+        const foldIdx = cmds.findIndex((c) => c.includes('residual-scan') && c.includes('fold'));
+        expect(foldIdx).toBeGreaterThan(0); // after the feature-sync soft step (index 0)
+        expect(foldIdx).toBe(cmds.length - 2); // followed only by the R5 re-record step
+        // Hard action: no exit-0 blanket — a scanner crash must fail record closed.
+        expect(cmds[foldIdx].trim().endsWith('exit 0')).toBe(false);
         // Repo-first, then superskill twin, failing closed (quality-gate pattern).
-        expect(cmds[residualIdx]).toContain('superskill script path sp residual-scan.mjs');
+        expect(cmds[foldIdx]).toContain('superskill script path sp residual-scan.mjs');
+        // Fail-closed completion gate: the done guard still re-asserts PASS + proof digest,
+        // so a fold-downgraded PARTIAL verdict can never certify done (0983 R3).
+        const doneGuard = PIPELINE.transitions?.find((t) => t.from === 'record' && t.to === 'done')?.guard?.options
+            ?.command;
+        expect(doneGuard).toContain('task check');
+        expect(doneGuard).toContain('.verdict');
+        expect(doneGuard).toContain('.proof.digest');
+    });
+
+    test('post-record sweep passes a flipped task and downgrades an open box (0983 R1/R2)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0983-sweep-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            // Stage the scanner exactly as the pipeline finds it in-repo. It imports
+            // ../lib/env (getEnvVars) — stage it too (self-contained node builtins).
+            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
+            mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
+            copyFileSync(
+                join(import.meta.dir, '..', 'scripts', 'residual-scan.ts'),
+                join(dir, 'plugins', 'sp', 'scripts', 'residual-scan.ts'),
+            );
+            copyFileSync(join(import.meta.dir, '..', 'lib', 'env.ts'), join(dir, 'plugins', 'sp', 'lib', 'env.ts'));
+            const fold = shellCommands('record').find((c) => c.includes('residual-scan') && c.includes('fold'));
+            if (fold === undefined) throw new Error('record sweep command missing');
+            const verdict = { wbs: '0983', verdict: 'PASS', requirements: [], checks: [] };
+            const stubFor = (content: string): string =>
+                executable(
+                    dir,
+                    `spur-${content.length}`,
+                    `printf '%s\\n' '${JSON.stringify({ content, feature_id: 'F96' })}'`,
+                );
+            // Pass path: post-record, every box flipped (record flipped the proven R/AC ones).
+            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
+            const pass = runShell(fold, dir, { wbs: '0983', spurBin: stubFor('## Plan\n\n- [x] plan step\n') });
+            expect(pass.exitCode).toBe(0);
+            const kept = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
+                verdict: string;
+                checks: Array<{ name: string; status: string }>;
+            };
+            expect(kept.verdict).toBe('PASS');
+            expect(kept.checks.find((c) => c.name === 'residual-sweep')?.status).toBe('pass');
+
+            // Fail path: one open Plan box stays blocking and downgrades PASS → PARTIAL —
+            // no section becomes deferrable (0983 R2).
+            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), `${JSON.stringify(verdict)}\n`);
+            const fail = runShell(fold, dir, { wbs: '0983', spurBin: stubFor('## Plan\n\n- [ ] open plan step\n') });
+            expect(fail.exitCode).toBe(0);
+            const folded = JSON.parse(readFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), 'utf8')) as {
+                verdict: string;
+                checks: Array<{ name: string; status: string }>;
+            };
+            expect(folded.verdict).toBe('PARTIAL');
+            expect(folded.checks.find((c) => c.name === 'residual-sweep')?.status).toBe('fail');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('a downgraded verdict re-records Testing; a PASS sweep is a no-op (0983 R5)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0983-rerecord-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            const rerun = shellCommands('record').find(
+                (c) => c.includes('jq -r .verdict') && c.includes('task record'),
+            );
+            if (rerun === undefined) throw new Error('post-downgrade re-record step missing');
+            // Soft: the step always exits 0 — only the record → done guard decides.
+            expect(rerun.trim().endsWith('exit 0')).toBe(true);
+            // PASS sweep → the re-record never runs (canary spurBin untouched).
+            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), '{"verdict":"PASS"}\n');
+            const canary = executable(dir, 'spur-canary', 'echo invoked >> canary.log');
+            expect(runShell(rerun, dir, { wbs: '0983', spurBin: canary }).exitCode).toBe(0);
+            expect(existsSync(join(dir, 'canary.log'))).toBe(false);
+            // Downgraded sweep → re-record from the final artifact.
+            writeFileSync(join(dir, '.spur', 'run', '0983-verdict.json'), '{"verdict":"PARTIAL"}\n');
+            const result = runShell(rerun, dir, { wbs: '0983', spurBin: canary });
+            expect(result.exitCode).toBe(0);
+            expect(readFileSync(join(dir, 'canary.log'), 'utf8')).toContain('invoked');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test('test-fix appends the residual artifact to the gate log (F96 R3)', () => {

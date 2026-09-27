@@ -3,7 +3,7 @@ kind: design
 title: "Task residual sweep"
 status: implemented
 created_at: 2026-09-24
-updated_at: 2026-09-24
+updated_at: 2026-09-27
 related: [F96]
 tags: [system, F96, planning]
 adr: ADR-071, ADR-076
@@ -24,23 +24,34 @@ This design takes that path:
 
 - **No new pipeline state and no new model query on the clean path.** The scan is a
   deterministic script. A clean scan costs only a file read and a `git diff`.
-- **Detection is observe-only (ADR-071).** The scan writes only under `.spur/run/`. It runs inside
-  `verify` after the digest bracket, so it never invalidates proof.
-- **Remediation reuses the existing loop.** A blocking residual downgrades PASS to PARTIAL. The
-  existing `verify → test-fix` transition, bounded by `qualityGateMaxFixAttempts`, repairs it and
-  re-enters `test-recheck → review → verify` on a fresh digest.
-- **Mutations happen after proof.** Follow-up filing and staging cleanup run on `done` entry.
-  `record` cannot host them: its first action (`run.artifact`) registers `<wbs>-verdict.json`,
-  and creating a task file before the done transition would change the tree the proof covers.
+- **Detection is observe-only (ADR-071).** The scan writes only under `.spur/run/`. Since 0983 it
+  runs inside `record`, after the registration and the verdict-proven box flips, so it reads the
+  actual post-record task file; record-time flips are proof-canonical (0958), so the sweep never
+  invalidates the bound proof.
+- **Blocking leftovers fail closed at the done hop (0983).** A still-unchecked box — an unproven
+  Requirement/AC box or an unfinished Plan box — downgrades PASS to PARTIAL, and the existing
+  `record → done` guard (PASS + proof re-assertion) fails into `record → failed`. Classification
+  is unchanged: nothing becomes deferrable by section. The `verify → test-fix` remediation loop
+  stays reserved for a verifier non-PASS verdict (unmet requirements), not record-owned boxes.
+- **Mutations happen after proof.** The record-stage sweep folds the verdict artifact in place
+  (a `.spur/run/` write only) and re-records Testing from the final artifact on a downgrade (R5);
+  Testing writes do not move the proof digest. Follow-up filing and staging cleanup still run on
+  `done` entry: creating a task file before the done transition would change the tree the proof
+  covers.
 
 ## Pipeline flow
 
 ```text
 precheck ─(+ write .spur/run/<wbs>-base.sha)→ implement → test → review → verify
-verify:  agent answer → answer-lint → task verdict → residual-scan fold → proof bind (jq)
-         ├─ PASS (no blocking)          → record → done (settle: file follow-ups, clean /tmp/<wbs>-*)
-         ├─ PARTIAL, attempts < max     → test-fix (residuals in findings + gate log) → recheck → review → verify
-         └─ PARTIAL, attempts exhausted → failed (+ residual-report.md, recovery line); task stays wip
+verify:  agent answer → answer-lint → task verdict → proof bind (jq)
+         ├─ PASS + proof block      → record
+         ├─ PARTIAL, attempts < max → test-fix (verifier non-PASS) → recheck → review → verify
+         └─ otherwise               → failed (+ residual-report.md, recovery line)
+record:  task record (flips verdict-proven R/AC boxes) → feature sync
+         → residual-scan scan+fold (post-record sweep)
+         ├─ PASS (no blocking)      → done (settle: file follow-ups, clean /tmp/<wbs>-*)
+         └─ blocking downgrade      → re-record Testing from the final artifact (R5) → failed
+                                       (+ residual-report.md, recovery line); task stays testing
 ```
 
 ## Scanner
@@ -51,8 +62,8 @@ verify:  agent answer → answer-lint → task verdict → residual-scan fold �
 
 | Mode | Caller | Effect |
 | --- | --- | --- |
-| `scan <wbs>` | pipeline `verify`, `/sp:dev-verify`, `/sp:dev-verifyall` | Writes `.spur/run/<wbs>-residuals.json` |
-| `fold <wbs>` | same, after `spur task verdict` | Downgrades PASS→PARTIAL in `<wbs>-verdict.json` when blocking > 0; adds a `residual-sweep` check; appends blocking anchors to `<wbs>-test-gate.findings` |
+| `scan <wbs>` | pipeline `record` (post-record sweep, 0983), `/sp:dev-verify`, `/sp:dev-verifyall` | Writes `.spur/run/<wbs>-residuals.json` |
+| `fold <wbs>` | pipeline `record` after `spur task record`; standalone verify after `spur task verdict` | Downgrades PASS→PARTIAL in `<wbs>-verdict.json` when blocking > 0; adds a `residual-sweep` check; appends blocking anchors to `<wbs>-test-gate.findings`. Standalone surfaces still fold pre-record (proven boxes can downgrade there); that order is tracked by follow-up 0987, not blessed here |
 | `settle <wbs>` | pipeline `done` entry, `/sp:dev-verify --next` after its done transition | Files one follow-up task for deferrables (`spur task create --feature <f> --skip-ready`, dedup guard) and removes `/tmp/<wbs>-*` files |
 | `report <wbs>` | `failed` state entry | No-op unless the verdict carries a failing `residual-sweep` check; otherwise writes `.spur/run/<wbs>-residual-report.md` and prints the recovery line |
 
@@ -94,7 +105,7 @@ Item id = `<category>:<first 8 hex of sha256(location + normalized text)>`, so a
 re-scans while unrelated items get fixed, and a deferral entry written by the fix hop still
 matches on the next scan.
 
-Classes: `blocking` downgrades PASS; `deferrable` becomes a follow-up task at `record`;
+Classes: `blocking` downgrades PASS; `deferrable` becomes a follow-up task at `done`;
 `advisory` (P4) appears only in the verdict's `residual-sweep` check evidence, with no task and no
 downgrade; `housekeeping` is cleaned on `done` entry.
 
@@ -109,11 +120,12 @@ before registration. `settle` failures are printed with a re-run command (`resid
 | Outcome | Task status | Artifacts | Next step |
 | --- | --- | --- | --- |
 | Clean or deferrable-only | `done` | deferred ids in the verdict's `residual-sweep` check; follow-up WBS in `<wbs>-residuals.json` | `/sp:dev-wrap <wbs>` |
-| Blocking after budget | `wip` (run `failed`) | `<wbs>-residual-report.md`, verdict with failing `residual-sweep` check | Fix the listed items, then `/sp:dev-run <wbs>` (fresh budget: `quality-gate.ts run` resets the counter) |
+| Blocking at the post-record sweep | `testing` (run `failed`) | `<wbs>-residual-report.md`, downgraded verdict with failing `residual-sweep` check | Fix the listed items, then `/sp:dev-run <wbs>` |
 
 Next-router row **C6** (A4/A5 when `<wbs>-verdict.json` carries a failing `residual-sweep`
 check): HITL STOP that prints the report and the recovery command. It never starts another
-automatic fix loop, because the bounded loop has already failed twice.
+automatic fix loop: a sweep blocker is deterministic, self-evidenced residue (an unchecked box
+does not disappear by re-running the gate).
 
 `/sp:dev-wrap` still refuses tasks that are not `done`. That refusal is correct and stays.
 `/sp:dev-runall --wrap` passes only the `done` subset to one batch wrap and lists each excluded
@@ -124,7 +136,7 @@ reason instead of failing.
 
 | Surface | Change |
 | --- | --- |
-| `config/workflows/task-pipeline.yaml` | precheck writes `base.sha`; verify adds `scan`+`fold` before the jq proof bind; `done` entry adds `settle`; `failed` entry adds `report` |
+| `config/workflows/task-pipeline.yaml` | precheck writes `base.sha`; `done` entry adds `settle`; `failed` entry adds `report`; 0983 moved `scan`+`fold` from verify to record (after the box flips, before the done guard) and added the R5 Testing re-record on a downgrade |
 | `plugins/sp/commands/dev-verify.md`, `dev-verifyall.md` | Residual scan + fold under every `--fix` mode; `settle` only on the `--next` done transition |
 | `plugins/sp/commands/dev-fixall.md` | Residual findings as fix targets; the deferral-file contract |
 | `plugins/sp/commands/dev-runall.md` | Done-subset batch wrap; remove the per-task `--wrap` contradiction |

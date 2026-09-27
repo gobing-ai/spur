@@ -243,12 +243,11 @@ recorded, so a later `/sp:dev-verify --next` cannot legally reach `done`. Call
 
 #### Leftovers (residual sweep)
 
-Verification (pipeline or standalone) runs an observe-only **residual sweep**: leftover task
-evidence outside the task's declared paths (staging residue, review files, unchecked plan boxes)
-downgrade a PASS verdict to PARTIAL instead of silently certifying them. When that happens, the
+The pipeline's record stage and standalone verification run an observe-only **residual sweep**:
+leftover task evidence (staging residue, review files, unchecked plan or requirement boxes)
+downgrades a PASS verdict to PARTIAL instead of silently certifying it. When that happens, the
 router stops for you (C6) and prints `.spur/run/<wbs>-residual-report.md` plus the recovery
-command `/sp:dev-run <wbs>` — re-run the pipeline rather than fixing by hand, so the normal
-remediation budget applies.
+command `/sp:dev-run <wbs>` — re-run the pipeline rather than fixing by hand.
 
 Shortcuts: `/sp:dev-run 0042 --auto --wrap` folds step 2 into step 1. Unsure of the current
 state? `/sp:dev-next 0042` reads the status and dispatches the right hop (backlog → refine,

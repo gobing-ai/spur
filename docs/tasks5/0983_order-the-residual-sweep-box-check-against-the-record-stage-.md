@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Order the residual-sweep box check against the record-stage box flip
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:28.202Z
-updated_at: "2026-09-27T16:46:44.115Z"
+updated_at: "2026-09-27T23:28:39.431Z"
 feature_id: F96
 
 ac_altitude: task-local
@@ -44,17 +44,17 @@ Related prior work: 0949 (scanner modes), 0950 (sweep wired into task-pipeline),
 
 ### Requirements
 
-- [ ] R1. The residual sweep evaluates unchecked boxes after the record stage has applied the verdict-driven Requirement/AC flips. A PASS verdict with all other boxes completed reaches the normal done guard without hand-certification.
-- [ ] R2. Any box still unchecked after record, including an unproven Requirement/AC box or an unfinished Plan box, remains blocking; none becomes deferrable by section alone.
-- [ ] R3. The reordered sweep can downgrade the verdict before `record → done`, preserving the fail-closed completion gate and its proof checks.
-- [ ] R4. A regression test covers both the proven-box pass path and an unproven/Plan-box fail path.
-- [ ] R5. If the post-record sweep downgrades the verdict, the task's Testing section reflects that final verdict before the run exits.
+- [x] R1. The residual sweep evaluates unchecked boxes after the record stage has applied the verdict-driven Requirement/AC flips. A PASS verdict with all other boxes completed reaches the normal done guard without hand-certification.
+- [x] R2. Any box still unchecked after record, including an unproven Requirement/AC box or an unfinished Plan box, remains blocking; none becomes deferrable by section alone.
+- [x] R3. The reordered sweep can downgrade the verdict before `record → done`, preserving the fail-closed completion gate and its proof checks.
+- [x] R4. A regression test covers both the proven-box pass path and an unproven/Plan-box fail path.
+- [x] R5. If the post-record sweep downgrades the verdict, the task's Testing section reflects that final verdict before the run exits.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Verdict-proven Requirement/AC boxes are flipped before the sweep and do not block (req: R1)
-- [ ] AC2 — Unproven Requirement/AC and unfinished Plan boxes still block the done hop (req: R2, R3)
-- [ ] AC3 — Pipeline order and both outcomes have regression coverage (req: R4, R5)
+- [x] AC1 — Verdict-proven Requirement/AC boxes are flipped before the sweep and do not block (req: R1)
+- [x] AC2 — Unproven Requirement/AC and unfinished Plan boxes still block the done hop (req: R2, R3)
+- [x] AC3 — Pipeline order and both outcomes have regression coverage (req: R4, R5)
 
 ### Q&A
 
@@ -71,22 +71,79 @@ If the fold changes PASS to PARTIAL, re-record the task's Testing section from t
 
 ### Plan
 
-- [ ] Confirm the current verify and record action order and the existing record-to-done guard.
-- [ ] Move the scanner's scan/fold action after `task record` in the record state; leave its classification unchanged.
-- [ ] Cover a PASS verdict with proven R/AC boxes and already-complete Plan, plus unproven R/AC and open Plan cases; assert a downgraded verdict is re-recorded in Testing.
-- [ ] Update the residual-sweep design satellite, run focused tests and `bun run spur-check`.
+- [x] Confirm the current verify and record action order and the existing record-to-done guard.
+- [x] Move the scanner's scan/fold action after `task record` in the record state; leave its classification unchanged.
+- [x] Cover a PASS verdict with proven R/AC boxes and already-complete Plan, plus unproven R/AC and open Plan cases; assert a downgraded verdict is re-recorded in Testing.
+- [x] Update the residual-sweep design satellite, run focused tests and `bun run spur-check`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Moved the residual sweep from verify to record so it reads the post-record task file; classification unchanged (scan/fold only re-ordered).
+
+- `config/workflows/task-pipeline.yaml:17-19` — removed the verify scan+fold action; verify now binds the verdict straight to the proof digest (0967 root cause: a pre-record fold folded unticked-but-verdict-proven boxes the `record` stage had not flipped yet).
+- `config/workflows/task-pipeline.yaml:800` — record gains the scan+fold hard action after `task record` (box flips) and feature sync, before `record → done`; any box still unchecked post-record (unproven R/AC, open Plan) stays blocking and fails the done guard closed (R1–R3).
+- `config/workflows/task-pipeline.yaml:809` — R5 soft step: on a folded non-PASS verdict, re-runs `task record` from the final artifact so Testing carries the downgraded verdict (idempotent; no-op on PASS; soft exit 0 so the failed state still renders the recovery report — a hard failure would bypass it).
+- `plugins/sp/tests/task-pipeline-resilience.test.ts:334` — reordered-sweep coverage: verify no longer sweeps (R1), record orders fold after the flips and before the PASS+proof done guard (R3), behavioral pass/fail paths through the real scanner (R2), and the R5 re-record no-op/act split.
+- `docs/design/task-residual-sweep.md` — rule-owner update: sweep runs in record, downgrade fails at the done hop (no remediation hop for record-owned boxes), Testing re-record rule, pipeline-flow diagram, terminal-path table (failed sweep leaves the task `testing`).
+- `plugins/sp/skills/next-router/references/routing-table.md:116` + `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:246` — C6 row and the help section reworded for the record-stage sweep.
 
 ### Testing
 
-Not yet implemented — capture only.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | task-pipeline.yaml:800 — scan+fold shell action moved into record state onEnter, sequenced after `task record` (verdict-proven R/AC flips via flipVerifiedCheckboxes, task-record.ts:201) and feature sync, before the record→done guard; verify state no longer sweeps (task-pipeline.yaml:721 binds verdict→proof directly); ordering pinned by plugins/sp/tests/task-pipeline-resilience.test.ts |
+| R2 | MET | residual-scan.ts:290,336,387 — findUncheckedBoxes + blocking classification unchanged; scanner reads the post-record task file, so unproven R/AC and open Plan boxes stay blocking (behavioral test: open Plan box → PARTIAL + failing residual-sweep check) |
+| R3 | MET | task-pipeline.yaml:1166-1175 — record→done guard requires verdict==PASS and proof.digest match; fold downgrade before the guard routes to the failed edge (fail-closed preserved; verified in reordered-coverage tests) |
+| R4 | MET | plugins/sp/tests/task-pipeline-resilience.test.ts — 4 rewritten tests incl. behavioral pass/fail through the real scanner in a temp dir (flipped-plan PASS kept; open-plan PARTIAL) — both outcomes covered |
+| R5 | MET | task-pipeline.yaml:808 — soft step: folded non-PASS → re-record from final artifact (`task record --solution-from-diff --transition testing`, legal flags task.ts:1184-1195, idempotent transition task-service.ts:1502-1503); no-op on PASS; tested both branches (canary spur-bin untouched on PASS) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC3 | MET | test | 25+25+38 tests pass / 0 fail across task-pipeline-resilience, lifecycle-drift (record.onEnter length 5 asserted), focused suites; `bun run spur-check` 9342/9342 green |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0983
+
+**Scope:** working-tree diff of task 0983 (7 files: `config/workflows/task-pipeline.yaml`, `docs/design/task-residual-sweep.md`, `plugins/sp/tests/task-pipeline-resilience.test.ts`, `packages/domain/tests/planning/lifecycle-drift.test.ts`, `plugins/sp/skills/next-router/references/routing-table.md`, `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md`, task file)
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+Re-review (disposition pass). Functional traceability remains PASS (R1–R5 all MET, fresh evidence below), and the prior pass's sole blocker (P2: standalone verify folds before record) is now dispositioned via the option that finding itself offered — follow-up 0987 is filed (backlog; R1 `/sp:dev-verify`, R2 `/sp:dev-verifyall`, R3 rule-owner doc, R4 standalone ordering regression pin; citations verified this run: `plugins/sp/commands/dev-verify.md:43-46`, `plugins/sp/commands/dev-verifyall.md:75-78`), and the rule-owner doc no longer blesses the pre-record order (`docs/design/task-residual-sweep.md:66` — "tracked by follow-up 0987, not blessed here"). The defect stays live on the standalone surface until 0987 lands (residual risk below); it no longer blocks this task's pipeline-scope gate. No diff drift since the prior pass: anchors re-confirmed at `config/workflows/task-pipeline.yaml:800` (sweep), `:809` (R5 soft re-record), `:1161-1177` (done guard).
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P4 (advisory, dispositioned) | correctness | Standalone verify/verifyall: standalone verify/verifyall still run `residual-scan scan`+`fold` BEFORE `spur task record`, so a clean task with unticked-but-verdict-proven R/AC boxes folds PASS→PARTIAL pre-flip (the 0967 root cause surviving on the standalone surface) and `foldVerdict` never restores PARTIAL→PASS. Disposition: follow-up 0987 filed with rationale (R1–R4 cover both surfaces, the rule-owner doc, and the ordering pin); `docs/design/task-residual-sweep.md:66` explicitly unblesses the order. Non-blocking for 0983; fixed by 0987. | `plugins/sp/commands/dev-verify.md:43-46` |
+| 2 | P4 (advisory) | correctness | R5 step reads `jq -r .verdict`; a valid-JSON artifact missing the field yields literal `null`, which passes `-n` and `!= PASS`, triggering a spurious re-record. Harmless (record is idempotent, soft exit 0); every real artifact carries `.verdict` (verify-answer-lint enforces). | `config/workflows/task-pipeline.yaml:809` |
+| 3 | P4 (advisory) | architecture | The fold-after-flip invariant is asserted only for the pipeline surface (`plugins/sp/tests/task-pipeline-resilience.test.ts:348-364`, `packages/domain/tests/planning/lifecycle-drift.test.ts:169-181`); the standalone ordering tripwire is owned by 0987 R4 ("a regression test or scripted check pins the standalone ordering for both surfaces") and lands with it. | `plugins/sp/tests/task-pipeline-resilience.test.ts:339-347` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | `config/workflows/task-pipeline.yaml:790-800` — scan+fold is a record onEnter action ordered after the `task record` `command.gate` (id `:767`; flips via `flipVerifiedCheckboxes` `packages/app/src/services/task-record.ts:201`) and feature sync (`:785-789`); verify no longer sweeps (`:719-735`); ordering asserted at `plugins/sp/tests/task-pipeline-resilience.test.ts:348-359` and pass reachability proven behaviorally at `:366-396` |
+| R2 | MET | Classification untouched (scanner not in this diff; re-verified this run): `plugins/sp/scripts/residual-scan.ts:290` (deferral exemption excludes `unchecked-box`), `:221` (`findUncheckedBoxes` over the whole file), `:387` (`foldVerdict`); open Plan box → PARTIAL with `residual-sweep: fail` at `plugins/sp/tests/task-pipeline-resilience.test.ts:377-413` |
+| R3 | MET | `config/workflows/task-pipeline.yaml:1161-1177` — record→done guard re-asserts `task check --as done` + `.verdict == PASS` + `.proof.digest == $proofDigest` (`:1177`); record→failed names the post-record downgrade (`:1178-1181`); guard contents asserted at `plugins/sp/tests/task-pipeline-resilience.test.ts:355-364` |
+| R4 | MET | `plugins/sp/tests/task-pipeline-resilience.test.ts:366-413` — proven-box pass path + open-box fail path through the real scanner; fresh run: 25 pass / 0 fail |
+| R5 | MET | `config/workflows/task-pipeline.yaml:802-809` — soft re-record from the post-fold artifact; flags legal (`apps/cli/src/commands/task.ts:1184` `--solution-from-diff`) and `--transition testing` is an idempotent no-op when already `testing` (`packages/app/src/services/task-service.ts:1500-1504`); no-op/act split tested via spurBin canary at `plugins/sp/tests/task-pipeline-resilience.test.ts:415-438` |
+| AC1 | MET | R1/R2 pass-path evidence: flipped task keeps `verdict: PASS` + `residual-sweep: pass` (`plugins/sp/tests/task-pipeline-resilience.test.ts:385-396`) |
+| AC2 | MET | R2 fail path + guard: open Plan box → PARTIAL (`:398-413`) and the PASS-only done guard (`config/workflows/task-pipeline.yaml:1170-1177`) |
+| AC3 | MET | R4/R5 tests + lifecycle drift guard at 5 record actions with certification FIRST (`packages/domain/tests/planning/lifecycle-drift.test.ts:169-181`); 25 pass / 0 fail fresh |
+
+Design conformance: 4/4 design claims DONE (post-record move, unchanged classification, satellite update, R5 re-record) — no deviations, no scope creep.
+
+Fresh verification evidence (this run): `bun test plugins/sp/tests/task-pipeline-resilience.test.ts` → 25 pass / 0 fail (172 expects); `bun test packages/domain/tests/planning/lifecycle-drift.test.ts` → 25 pass / 0 fail (183 expects); `bun test packages/app/tests/workflow/wayfinder-resolution.test.ts packages/app/tests/workflow/task-pipeline-proof-chain.test.ts` → 38 pass / 0 fail (242 expects).
+
+Residual risk: until 0987 ships, standalone `/sp:dev-verify` / `/sp:dev-verifyall --next` of a clean task with unticked-but-verdict-proven R/AC boxes still downgrades PASS→PARTIAL; recovery is the router C6 HITL STOP (deterministic, self-evidenced residue), not silent corruption.
+
+**Next:** No blocker on 0983 — implement 0987 to clear finding 1; findings 2–3 advisory.
 
 ### References
 
@@ -95,4 +152,7 @@ Not yet implemented — capture only.
 ### History
 
 - 2026-09-27T07:12:01.260Z backlog → todo (system)
+- 2026-09-27T19:55:45.594Z todo → wip (system)
+- 2026-09-27T23:25:44.684Z wip → testing (system)
+- 2026-09-27T23:28:39.431Z testing → done (system)
 

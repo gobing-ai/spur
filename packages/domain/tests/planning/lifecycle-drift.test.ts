@@ -169,8 +169,10 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         // task 0612 / ADR-071; 0785 R3 replaced the bare fingerprint compare with the bound
         // run.artifact registration, which re-captures the proof inputs itself). 0931 R5 moved
         // the sync chain into record-feature-sync.ts and added the deferFeatureSync guard in
-        // the shell; certification stays FIRST and the sync stays last.
-        expect(record?.onEnter ?? []).toHaveLength(3);
+        // the shell; certification stays FIRST. 0983 appended the post-record residual sweep
+        // (+ the R5 Testing re-record) AFTER the sync, so the sweep reads the post-record
+        // task file and folds before the done guard.
+        expect(record?.onEnter ?? []).toHaveLength(5);
         // Certification must be FIRST: it refuses unless the verdict artifact's proof block
         // certifies a fresh capture over the canonical task spec (+ linked feature) — so it has
         // to run before any record write. Ordering is the guarantee here — a certification
