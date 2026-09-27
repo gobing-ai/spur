@@ -2653,8 +2653,7 @@ interface DoctorCacheFile {
  * with sha256. Sorting makes the key independent of config ordering; including tier
  * invalidates when inference changes; including the disabled flag (111 R5) invalidates
  * cached eligibility when an operator flips the kill-switch. Exported for direct unit pins.
- */
-/**
+ *
  * Stable fingerprint of the executor roster for the doctor cache; classifies
  * availability via {@link executorDisabled} so a quota disable invalidates the
  * cached roster instead of rendering as 'enabled' (0890 review remediation).
