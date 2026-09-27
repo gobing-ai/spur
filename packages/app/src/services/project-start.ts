@@ -105,7 +105,12 @@ export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
     }
     return {
         command: 'cmd',
-        args: ['/d', '/v:off', '/c', `start /b "" ${cmd.map((_, i) => `"%SPUR_SERVE_ARG_${i}%"`).join(' ')}`],
+        args: [
+            '/d',
+            '/v:off',
+            '/c',
+            `start /b "" ${cmd.map((_, i) => `"%SPUR_SERVE_ARG_${i}%"`).join(' ')} < NUL > NUL 2>&1`,
+        ],
         env,
     };
 }
@@ -115,6 +120,13 @@ export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
  * daemon outlives the CLI without a direct Bun.spawn / child_process call.
  * On Windows, argv reaches the daemon via SPUR_SERVE_ARG_<i> env vars under
  * `cmd /d /v:off /c start /b` so cmd.exe never expands argument bytes.
+ *
+ * The daemon's stdio must be detached on BOTH platforms: POSIX redirects to
+ * /dev/null; Windows appends `< NUL > NUL 2>&1` to the `start /b` line (start
+ * hands its own — redirected — handles to the child). Without this, a daemon
+ * spawned under a piped caller (pwsh `| Out-String`, CI logs) inherits the
+ * caller's stdout pipe and keeps it open after the CLI exits, hanging the
+ * caller forever waiting for EOF.
  */
 export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options) => {
     const executor = new NodeProcessExecutor();

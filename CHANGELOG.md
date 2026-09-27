@@ -1,5 +1,73 @@
 # Changelog
 
+## [0.3.94] - 2026-09-27
+
+### Added
+
+- admit verification-only re-runs through implement requireDiff (954f2a6f1)
+- widen dev-review --triage to file multiple tasks; add --worktree (ac95c914b)
+- worktree provenance persistence, zero-row done-close guard, test-subpath boundary rule (aebde9a14)
+- record decide provenance as source model or default (e2e24a689)
+
+### Fixed
+
+- persist check receipt on gate recheck for evaluated digest (1b5d7d17f)
+- export persistWorktreeRuns + runDecideForInlineRun from inline-run twins (296ef1d90)
+- redact Pi ledger summaries, quote quality-gate shell args, align Pi guard escape hatches (2d430c7f5)
+- write Pi ledger rows in the reader schema (ts, file) (3571e710a)
+- pass Windows detached serve argv via env to defeat cmd %VAR% expansion (0964) (398241590)
+- fail loud on release-path defects from scripts review (41f2335a2)
+- name the --reason terminal-reason enum in the inline-run-setup usage (543b1bd60)
+- run-2 review closure — listRunIds DAO seam, persisted-out twin regen, WT-4a doc wiring (0975) (752ebc1eb)
+- close DNS-rebinding hole, sanitize Mermaid SVG, literal feature-id match (872024cd2)
+- fail loud on mistyped numeric and redirect options (959f84bd6)
+- skip placeholder no-finding rows in residual-scan, keep real findings (afb49c376)
+- collapse unreachable retryable lane in failure triage (f59e0fcfc)
+
+### Changed
+
+- convert all standard script twins in build:scripts (58bd10d78)
+- record 0962 learnings, metrics and D91 feature transition (05215e161)
+- adapt to strict noUncheckedIndexedAccess typecheck (2728a51ed)
+- regenerate inline-run-setup.mjs twin after --reason usage fix (3166da837)
+- record 0962 evidence, verdict and done transition (33a20e2c3)
+- record 0975 run-2 inline pipeline lessons (5fd3f0bdc)
+- merge 'sp/run-0962-0021' — extract workflow composition lint + run-record modules (0962) into main (9a65cf595)
+- record 0977 metrics (9f56b4e7f)
+- log worktree-evidence-loss incident from 0964 wrap closeout (caecc7ce0)
+- record 0964 done_forced state + wrapup metrics (0964) (dc127d5f2)
+- record 0961 metrics (ee6dbd6ad)
+- sync inline delegate provenance logging and guard exemptions (f3a555104)
+- add windows-serve-smoke job for detached daemon + %-path handoff (206901174)
+- record 0975 run-2 — verdict PASS, R/AC/plan boxes reconciled, Testing+Review sections (027ff0f26)
+- record 0964 forced re-verify (PARTIAL: AC3 no Windows host) (09de6c3c9)
+- updat tasks after verification (16a0a2e82)
+- file plugins-review follow-ups 0969-0970 under H21 and A32 (1d342974b)
+- updat tasks after verification (1eb7b2d9d)
+- record 0975 and 0976 acceptance evidence (286131ae8)
+- file 0973 + 0974 follow-ups from review-session triage (31061dfd3)
+- record F961 residual-scan placeholder backlog (3270cb63c)
+- file 0976 — gate-recheck receipt persistence + FSM decision provenance (34df68079)
+- link packages-review follow-ups to child features and make them implementation-ready (53f5fa37c)
+- updat tasks after verification (5acbff5cd)
+- updat tasks after verification (61697e706)
+- close F961 after 0977 done and index its dogfood note (6534cb75b)
+- re-record 0977 verify evidence with scenario-keyed AC rows (72a1579bd)
+- certify 0976 checklist and correct Solution citation (run e2cafaf5) (7fcf8631e)
+- file apps-review follow-ups 0966-0968 under F41 and G67 (8d875d555)
+- triage 0975/0976 inline-run findings into task specs (938ec4c30)
+- fix run-2 review P3 — WT-4a pinned-shapes cite R1, not R2 (0975) (9804863be)
+- re-verify 0976 (forced) and refresh Testing evidence (ad0a546f4)
+- updat tasks after refinment (d15b63280)
+- fix 0976 solution anchor citation to provenance test block (dea849c45)
+- add 0975 — inline-run bookkeeping gaps and the test-only subpath invariant (e2966fc79)
+- file packages review follow-ups 0961-0965 (e7a606407)
+- file scripts-review follow-ups 0971-0972 under A33 (f00ff7da1)
+- extract workflow composition lint module (0962) (71c4b9d56)
+- own HistoryBoardService in the live module; mock moves to /testing subpath (0961) (dcb27b0e2)
+- extract workflow run-record module (0962) (f919bc434)
+- add corresponding tests for the extracted workflow modules (0962) (89b1f2ca0)
+
 ## [0.3.93] - 2026-09-25
 
 ### Added

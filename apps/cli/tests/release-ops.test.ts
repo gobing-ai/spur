@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,6 +7,10 @@ import { createCapturedOutput } from './helpers';
 
 // Task 0617 R3: the test sibling the spur-dev release command never had. Every case drives
 // a throwaway git repo so the tag/push paths run against real git (a local bare "origin").
+
+// Each case makes ~10 real git spawns (plus `bun install` on --all); under full-suite concurrency
+// that can exceed bun's 5s default while the assertions are sound (same class as 0976 R3).
+setDefaultTimeout(20_000);
 
 const repos: string[] = [];
 

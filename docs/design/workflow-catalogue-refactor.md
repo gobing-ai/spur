@@ -3,8 +3,8 @@ kind: design
 title: "Workflow catalogue refactor — measured, decision-explicit, check-deduplicated, fleet-optional"
 status: implemented
 created_at: 2026-09-23
-updated_at: 2026-09-25
-related: [D64, "0937", "0938", "0939", "0940", "0941", "0942", "0943", "0944", "0945", "0946"]
+updated_at: 2026-09-26
+related: [D64, "0937", "0938", "0939", "0940", "0941", "0942", "0943", "0944", "0945", "0946", "0976"]
 tags: [system, D64, workflow]
 ---
 
@@ -85,6 +85,11 @@ value-import it (standalone contract): it takes the digest the pipeline already 
 the current fingerprint → reuse (trace row `check.reused`). Otherwise run `full`. The invariant
 "`review` is entered only after a green full gate" (task-pipeline vars comment) is preserved by
 construction: only `full` writes the receipt consulted at `review`.
+
+**Writers (0976).** `run` and `recheck` both persist the full-tier receipt for the digest they
+actually evaluated; a no-progress skip writes nothing, so a skip can never launder a FAIL receipt
+into PASS. Persisting on `recheck` is what makes the `check.skipped-no-progress` path below
+reachable — while `run` was the only writer, a `recheck` at any later digest re-ran the whole gate.
 
 **Composition.** Implementation absorbs `plugins/sp/scripts/quality-gate.ts` (run/recheck, bounded
 findings, SQLite-busy retry) rather than adding a parallel script; `<wbs>-test-gate.status` stays as a

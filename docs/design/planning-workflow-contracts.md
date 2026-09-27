@@ -3,8 +3,8 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-24
-related: ["0889", "0898", "0949"]
+updated_at: 2026-09-26
+related: ["0889", "0898", "0949", "0976"]
 tags: [contract, planning, workflow]
 ---
 

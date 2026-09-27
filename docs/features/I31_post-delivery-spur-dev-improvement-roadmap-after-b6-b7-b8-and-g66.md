@@ -2,11 +2,11 @@
 schema_version: 1
 id: "I31"
 name: "Post-delivery spur-dev improvement roadmap after B6 B7 B8 and G66"
-status: active
+status: done
 priority: P2
 tags: ["wayfinder-map"]
 created_at: "2026-09-20T00:48:57.385Z"
-updated_at: "2026-09-20T15:50:10.795Z"
+updated_at: "2026-09-27T02:40:48.882Z"
 ---
 
 # I31: Post-delivery spur-dev improvement roadmap after B6 B7 B8 and G66
@@ -125,4 +125,6 @@ A pre-write check of completed parent I3 reports L4.dogfood-missing. This is pre
 ## History
 
 - 2026-09-20T03:00:54.605Z backlog → active (system)
+- 2026-09-27T02:39:10.344Z active → verifying (system)
+- 2026-09-27T02:40:48.882Z verifying → done (system)
 
