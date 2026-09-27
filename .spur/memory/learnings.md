@@ -3281,3 +3281,51 @@ wrapup run `f18dd06e-159c-4399-809f-dcb12e02b757`.
 - What: `git worktree remove` executed before verifying the evidence copy; the `cp -p spur-new-dev-run-0964-bf63/.spur/run/0964-*` glob used a wrong relative path (worktree is a SIBLING of the primary checkout, needs `../`), failed silently under `2>/dev/null`, and the run-scoped artifacts (verdict/residuals/review-report/gate logs/runlogs 64be6f77 + 13c9e002) were deleted with the tree. No TM snapshot, no Trash.
 - Lesson: (1) sibling checkouts need `../` paths — verify with `ls` BEFORE the destructive op; (2) never `2>/dev/null` a cp that is the only copy; (3) worktree closeout order = copy evidence → verify listing → THEN remove.
 - Residual: conclusions survive (task doc Review section, done_reason, commits 39824159/dc127d5f, metrics ledger, pi subagent transcripts); only the gitignored run scratch is gone.
+**Verification & confidence**
+
+| Claim | Evidence | Confidence |
+| --- | --- | --- |
+| `recheck` now persists the receipt (write gated on `!noProgressSkip`) | Read `plugins/sp/scripts/quality-gate.ts:637-665` directly this session | HIGH |
+| `docs/design/workflow-catalogue-refactor.md` lacked the writer rule before my edit | Read lines 60-175; only tier-scoped claim at :87 | HIGH |
+| `plugins/sp/skills/spur-check/SKILL.md:63` is now false | Read line 63 + the source it describes | HIGH |
+| Both satellites had stale `updated_at` | `git log -1 --date=short` = 2026-09-26 vs frontmatter 09-25 / 09-24 | HIGH |
+| `03_ARCHITECTURE.md:1114` omitted `source` | Read lines 1100-1129 before editing | HIGH |
+| No ADR entry required (§6.1 bug-fix exclusion) | Read §6.1 + ADR-124/125 text; judgment call on "restores an existing contract" | MEDIUM |
+| `04_DESIGN.md` needs no edit (§4.5 unchanged pointer) | Read :66 and §4.5 | HIGH |
+| Repairs pass gates | `spur rule run --json` → 49 rules, `findings: []`. Biome ignores `.md`, so no formatter check ran on these files | HIGH |
+| Learnings below are faithful to 0976 | Sourced from the task record and the four implementation commits, not memory | HIGH |
+| `retryable` has no other stale reference | `rg` over `docs/`, `config/`, `plugins/sp/skills` — bounded to those paths, not repo-wide | MEDIUM |
+
+Not verified: I did not run the repo test suite or `bun run spur-check` — the changes are documentation-only and no test asserts on this prose.
+
+## 2026-09-26
+
+### Task 0976 — Fix gate-recheck receipt persistence and unreachable FSM decisions (feature I31)
+
+#### Errors fixed
+
+- **A write gated on the wrong axis makes a declared fast path unreachable.** `quality-gate.ts` gated the check-receipt write on `mode === 'run'`, while the no-progress skip compared `receipt.inputDigest === currentDigest`. Because only `run` ever wrote a receipt, any `recheck` at a digest newer than the last `run` could never match, so the declared `check.skipped-no-progress` path was dead code. Observed cost in one task: three full gate invocations (67 s, 541 s, 349 s), with the 349 s `recheck` leaving the receipt byte-identical. Fix: gate the write on `!noProgressSkip` (`plugins/sp/scripts/quality-gate.ts:642`) so whichever mode actually evaluated the digest persists it.
+- **A guard set implying three outcomes while only one is reachable is a silent bug, not a harmless default.** `decide test-fail-triage` always returned `{"value":"fix","degraded":true,"reason":"disabled"}` on the inline path, so the `jq -e '.value == "retryable"'` guard could never pass. The failure was invisible because the default was usually the right answer; it only surfaced when the gate failure was environmental. Fixed on two axes: record provenance (`source: 'model' | 'default'` on `DecideResult`) and collapse the dead lane (`choices: [fix, stop]`, `test-fail-triage → test-recheck` edge removed).
+- **A spawn-bearing test inherits the suite's wall-clock load.** `EnvShellGuardRunner > passed reflects exit code` timed out at bun's 5000 ms default inside a concurrency-20 full suite, yet ran 8 pass / 116 ms in isolation. Fix pattern: inject the executor for the semantics case (removes the wall-clock dependency entirely), keep real-spawn cases end-to-end but give them an explicit `SPAWN_TIMEOUT_MS = 20_000` with a comment naming spawn cost as the reason.
+
+#### Patterns
+
+- **Anti-laundering by omission.** Rather than adding a "don't downgrade PASS→FAIL" rule, the receipt write is simply skipped on the no-progress path. A skip that writes nothing cannot launder a FAIL receipt into PASS — the invariant holds by construction instead of by check.
+- **Provenance beats a resolvable backend when the fallback is the intended answer.** Closed Q&A chose deterministic default (b) over wiring a backend (a): an inline driver must not depend on a configured backend. The honesty requirement is met by recording `source: default`, not by making the model decide. `retryable` reachability in the original AC was explicitly superseded by the collapse.
+- **Provenance threads through every surface or it is not provenance.** `source` had to land in four places to be readable: `decide.ts` (the field), `inline-run-setup.ts` service (threading), the plugin script (`decide node=… value=… source=… reason=…` in the run log), and the tests pinning it in stdout, resultFile and run log.
+- **Test the negative case for a conditional write.** The receipt tests assert both directions: the second recheck at an unchanged digest writes nothing and runs no gate command, and a green recheck persists PASS *only because* the gate actually ran (`quality-gate-receipt.test.ts:518,550`).
+- **A collapsed enum leaves a boundary-value test behind.** `guard-parity.test.ts` dropped the retryable edge from the baseline fixture but kept `retryable` as a boundary value, and `task-pipeline-triage-routing.test.ts` made a stale `retryable` row fail closed — the removal is pinned, not just deleted.
+
+#### Gotchas
+
+- **Inline `--worktree` runs destroy their own provenance.** The worktree's `spur.db` dies with `git worktree remove`, so run rows become unqueryable and evidence survives only if copied out by hand. Reproduced independently here; owned by 0975.
+- **Generated bundles are part of the diff.** Source edits to `plugins/sp/scripts/{quality-gate,inline-run-setup}.ts` require regenerating `*.mjs`, `plugins/sp/lib/inline-run.generated.mjs` and the CLI config bundle — `config/rules/structure/protected-files.yaml` also needed a guard exemption for the new logging.
+- **Empty-implement violations fire on verification-only re-runs.** When a task's code already landed, `requireDiff` sees zero non-corpus changes and raises the 0424 R3 violation. `requireDiffAllowCleanCheck: true` admits the pass when `spur task check <wbs>` is green; a failing check keeps the violation with the check output named in the error. Static YAML option by design (ADR-115) — deliberately no run-var knob.
+- **Don't claim a performance target from one run's gate invocations.** The 0912 baseline marks F3/F4 INSUFFICIENT_EVIDENCE pending a 3-run sample, so the 67/541/349 s numbers are this run's own measurements, not a target.
+
+#### Conventions
+
+- **A bug fix restoring a declared contract needs no ADR** (constitution §6.1). 0976 restored what ADR-124/125 already declared, so `docs/00_ADR.md` correctly took no entry — only the owning design satellites and `03`'s mechanism description needed synchronization.
+- **Doc sync lands in the same commit as the behavior change.** `e2e24a689` carried `docs/design/workflow-catalogue-refactor.md` with the `decide.ts` change; `f3a555104` carried `inline-pipeline-driver.md` with the run-log line; `954f2a6f1` carried `planning-workflow-contracts.md` with the `requireDiffAllowCleanCheck` option.
+- **Frontmatter `updated_at` is the part in-commit doc sync forgets.** Both satellites had 2026-09-26 content edits under a 2026-09-25 / 2026-09-24 `updated_at`, and neither listed `0976` in `related` — repaired during wrapup.
+- **Claims in prose descend into skill docs.** `plugins/sp/skills/spur-check/SKILL.md:63` still asserts "Only `run`/`full` writes a reusable receipt," which 0976 falsified. Behavior changes need a grep of the skill/reference surface, not just `docs/`.

@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.54.0
+version: 1.55.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-25
+updated_at: 2026-09-26
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -1113,8 +1113,10 @@ catalogue of §20/§27 keeps running unchanged by default.
   repo-wide checks feature-scoped, and a public `spur check` verb needs separate consent.
 - **`decide` action (ADR-125).** A first-class non-pausing action wraps the upstream DecisionMaker
   behind `workflow.decideDecisionMaker` (default off), writes value, confidence, backend, degraded
-  flag and reason to a declared `resultFile` that guards read, and falls back to a declared default
-  when no backend is configured, the backend errors, or confidence is below threshold. It complements
+  flag, reason and a `source` provenance field to a declared `resultFile` that guards read, and falls
+  back to a declared default when no backend is configured, the backend errors, or confidence is
+  below threshold. `source` is `model` only for an accepted backend answer and `default` for every
+  degraded row, so a declared fallback is never readable as a model decision. It complements
   ADR-123, which decorates *pausing* HITL actions, and leaves deterministic facts with commands.
   Inline and subprocess drivers execute it through one shared application service for parity.
 - **Fleet executor surface (ADR-126).** When `agent.fleet.enabled` and the operator selects it
