@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join, resolve } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
 import { NodeProcessExecutor } from '@gobing-ai/ts-runtime';
 import { isPortLive, normalizeProjectPath, type ProjectRegistry } from './project-registry';
@@ -79,6 +80,12 @@ function flattenEnv(env: NodeJS.ProcessEnv): Record<string, string> {
  * bytes. cmd.exe expands %VAR% inside double quotes (and !VAR! under delayed expansion),
  * so each element is handed off as SPUR_SERVE_ARG_<i> and referenced, not embedded.
  *
+ * The `start /b` line is written to a temp .cmd batch instead of being passed as an argv
+ * element: execa hands args to child_process.spawn without windowsVerbatimArguments, so
+ * win32 escaping rewrites every embedded `"` to `\"` — which cmd.exe does not honor. A
+ * batch file carries the command byte-exact and needs only one quote-free argv token.
+ *
+ * @returns the executor spec plus `batchPath`; the caller deletes it after cmd exits.
  * @throws if a value cannot survive the handoff: `"` in any argument (closes the quote
  * after expansion) or a .cmd/.bat launcher (a batch interpreter re-expands %).
  */
@@ -86,6 +93,7 @@ export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
     command: string;
     args: string[];
     env: Record<string, string>;
+    batchPath: string;
 } {
     const launcher = cmd[0];
     if (launcher === undefined) {
@@ -103,30 +111,29 @@ export function buildWindowsDetachedServeLaunch(cmd: readonly string[]): {
         }
         env[`SPUR_SERVE_ARG_${i}`] = arg;
     }
-    return {
-        command: 'cmd',
-        args: [
-            '/d',
-            '/v:off',
-            '/c',
-            `start /b "" ${cmd.map((_, i) => `"%SPUR_SERVE_ARG_${i}%"`).join(' ')} < NUL > NUL 2>&1`,
-        ],
-        env,
-    };
+    const batchPath = join(
+        tmpdir(),
+        `spur-serve-${process.pid}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.cmd`,
+    );
+    const batch =
+        `@echo off\r\n` + `start /b "" ${cmd.map((_, i) => `"%SPUR_SERVE_ARG_${i}%"`).join(' ')} < NUL > NUL 2>&1\r\n`;
+    writeFileSync(batchPath, batch, 'utf8');
+    return { command: 'cmd', args: ['/d', '/v:off', '/c', batchPath], env, batchPath };
 }
 
 /**
  * Default production spawn: ProcessExecutor runs `nohup <cmd> &` so the serve
  * daemon outlives the CLI without a direct Bun.spawn / child_process call.
- * On Windows, argv reaches the daemon via SPUR_SERVE_ARG_<i> env vars under
- * `cmd /d /v:off /c start /b` so cmd.exe never expands argument bytes.
+ * On Windows, argv reaches the daemon via SPUR_SERVE_ARG_<i> env vars referenced
+ * from a temp .cmd batch under `cmd /d /v:off /c` (see the builder above for why
+ * the line cannot travel as an argv element).
  *
  * The daemon's stdio must be detached on BOTH platforms: POSIX redirects to
- * /dev/null; Windows appends `< NUL > NUL 2>&1` to the `start /b` line (start
- * hands its own — redirected — handles to the child). Without this, a daemon
- * spawned under a piped caller (pwsh `| Out-String`, CI logs) inherits the
- * caller's stdout pipe and keeps it open after the CLI exits, hanging the
- * caller forever waiting for EOF.
+ * /dev/null; the batch line ends in `< NUL > NUL 2>&1` (start hands its own —
+ * redirected — handles to the child). Without this, a daemon spawned under a
+ * piped caller (pwsh `| Out-String`, CI logs) inherits the caller's stdout pipe
+ * and keeps it open after the CLI exits, hanging the caller forever waiting
+ * for EOF.
  */
 export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options) => {
     const executor = new NodeProcessExecutor();
@@ -137,14 +144,26 @@ export const defaultDetachedServeSpawn: DetachedServeSpawn = async (cmd, options
         command: '/bin/sh',
         args: ['-c', `nohup ${cmd.map(shQuote).join(' ')} </dev/null >/dev/null 2>&1 &`],
     };
-    await executor.run({
-        command: shell.command,
-        args: shell.args,
-        ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-        env: { ...flattenEnv(options.env ?? getEnvVars()), ...windowsLaunch?.env },
-        forceBuffered: true,
-        rejectOnError: false,
-    });
+    try {
+        await executor.run({
+            command: shell.command,
+            args: shell.args,
+            ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
+            env: { ...flattenEnv(options.env ?? getEnvVars()), ...windowsLaunch?.env },
+            forceBuffered: true,
+            rejectOnError: false,
+        });
+    } finally {
+        // cmd has exited (run() resolved), so the batch handle is closed; the daemon
+        // reads env vars, not the file. Best-effort: a stale file in tmpdir is harmless.
+        if (windowsLaunch !== undefined) {
+            try {
+                rmSync(windowsLaunch.batchPath, { force: true });
+            } catch {
+                // Deletion must never mask the spawn outcome.
+            }
+        }
+    }
     return { exitCode: null, unref: () => {} };
 };
 

@@ -12,11 +12,80 @@ on:
             - main
 
 jobs:
-    # 0964 AC3: the win32 detached serve launch (cmd /d /v:off /c start /b + SPUR_SERVE_ARG_<i>
-    # env handoff) can only be exercised on real cmd.exe. A `%` in the project path must reach
-    # `spur serve --cwd` literally, and the daemon must outlive the `projects start` CLI.
+    # Fast no-install probe of the two detached-launch spawn shapes on real cmd.exe:
+    # (A) the old inline-argv shape — expected to leak child stdio into the caller's
+    #     pipe, because execa/win32 escaping rewrites embedded `"` to `\"` which cmd
+    #     misparses, so the `< NUL > NUL 2>&1` redirections do not land;
+    # (B) the batch-file shape the fix uses — child stdio must go to NUL.
+    # Detector: the marker child echoes CHILD_STDIO_LEAK. If that text reaches this
+    # probe's stdout, the child inherited our pipe. Win32_Process dump gives the
+    # exact commandlines for forensics either way.
+    spawn-probe:
+        if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+        runs-on: windows-latest
+        timeout-minutes: 10
+
+        steps:
+            - name: Probe cmd spawn shapes (inline argv vs batch file)
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Continue'
+                  @'
+                  const { spawn } = require('node:child_process');
+
+                  (async () => {
+                  function probe(label, argv, env) {
+                    return new Promise((resolve) => {
+                      const t0 = Date.now();
+                      let output = '';
+                      const p = spawn('cmd', argv, { env, stdio: ['ignore', 'pipe', 'pipe'] });
+                      p.stdout.on('data', (d) => { output += d; process.stdout.write(`${label} OUT: ${d}`); });
+                      p.stderr.on('data', (d) => { output += d; process.stdout.write(`${label} ERR: ${d}`); });
+                      p.on('error', (e) => { console.log(`${label} SPAWN-ERROR: ${e.message}`); resolve({ code: 3, output }); });
+                      p.on('exit', (c) => { console.log(`${label} CMD-EXIT: ${c} after ${Date.now() - t0}ms`); resolve({ code: c ?? 0, output }); });
+                      setTimeout(() => { console.log(`${label} CMD-HUNG-15s`); p.kill(); resolve({ code: 42, output }); }, 15000);
+                    });
+                  }
+
+                  const marker = 'Write-Output CHILD_STDIO_LEAK; Start-Sleep -Seconds 12';
+                  const env = {
+                    ...process.env,
+                    SPUR_SERVE_ARG_0: 'powershell.exe',
+                    SPUR_SERVE_ARG_1: '-NoProfile',
+                    SPUR_SERVE_ARG_2: '-Command',
+                    SPUR_SERVE_ARG_3: marker,
+                  };
+                  const batch = process.argv[2];
+
+                  // (A) inline argv shape — mirrors the pre-fix builder; informational only,
+                  // any outcome here reproduces the known bug rather than gating the job.
+                  const a = await probe('INLINE', ['/d', '/v:off', '/c',
+                    'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" < NUL > NUL 2>&1'], env);
+                  console.log(`INLINE VERDICT: exit=${a.code} leak=${a.output.includes('CHILD_STDIO_LEAK')}`);
+                  // (B) batch-file shape — mirrors the fixed builder; this gates the job:
+                  // cmd must exit 0 and the marker's stdout must have gone to NUL.
+                  const b = await probe('BATCH', ['/d', '/v:off', '/c', batch], env);
+                  const leaked = b.output.includes('CHILD_STDIO_LEAK');
+                  console.log(`BATCH VERDICT: exit=${b.code} leak=${leaked}`);
+                  process.exit(b.code === 0 && !leaked ? 0 : 1);
+                  })();
+                  '@ | Set-Content -Encoding ascii "$env:RUNNER_TEMP\probe.cjs"
+                  Set-Content -Encoding ascii "$env:RUNNER_TEMP\probe-launch.cmd" @(
+                      '@echo off'
+                      'start /b "" "%SPUR_SERVE_ARG_0%" "%SPUR_SERVE_ARG_1%" "%SPUR_SERVE_ARG_2%" "%SPUR_SERVE_ARG_3%" < NUL > NUL 2>&1'
+                  )
+                  node "$env:RUNNER_TEMP\probe.cjs" "$env:RUNNER_TEMP\probe-launch.cmd"
+                  $probeExit = $LASTEXITCODE
+                  Start-Sleep -Seconds 2
+                  $survivors = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'CHILD_STDIO_LEAK' }
+                  $survivors | ForEach-Object { "SURVIVOR pid=$($_.ProcessId) ppid=$($_.ParentProcessId): $($_.CommandLine)" }
+                  $survivors | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+                  if ($probeExit -ne 0) { throw "spawn probe failed (exit $probeExit) — see INLINE/BATCH lines above" }
+
+    # 0964 AC3: the win32 detached serve launch can only be exercised on real cmd.exe.
+    # A `%` in the project path must reach `spur serve --cwd` literally, and the daemon
+    # must outlive the `projects start` CLI with its stdio detached (no pipe EOF hang).
     windows-serve-smoke:
-        # Release commits only bump versions — this already ran on the prior push.
         if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
         runs-on: windows-latest
         timeout-minutes: 20
@@ -31,16 +100,54 @@ jobs:
               shell: pwsh
               run: |
                   $ErrorActionPreference = 'Stop'
+                  $repo = $env:GITHUB_WORKSPACE
+
+                  # 1. Strict stdio-detach probe: `projects start` under a real pipe must
+                  #    reach EOF within 90s. A stdio leak shows up as a Wait-Job timeout
+                  #    instead of a silent 20-minute job hang; the dump below is evidence.
+                  $probeName = 'pp%USERNAME%q'
+                  $probeProj = Join-Path $env:RUNNER_TEMP $probeName
+                  New-Item -ItemType Directory -Force -Path $probeProj | Out-Null
+                  $probe = Start-Job -ScriptBlock {
+                      param($repo, $proj)
+                      Set-Location $repo
+                      bun apps/cli/src/index.ts projects start $proj --json | Out-String
+                  } -ArgumentList $repo, $probeProj
+                  if (Wait-Job $probe -Timeout 90) {
+                      $probeRaw = Receive-Job $probe
+                      $probeStart = $probeRaw | ConvertFrom-Json
+                      if (-not $probeStart.running) {
+                          Write-Host "probe start output: $probeRaw"
+                          throw 'probe projects start did not report running'
+                      }
+                      bun apps/cli/src/index.ts projects stop $probeName --json | Out-Null
+                  } else {
+                      Write-Host '=== piped projects start never reached EOF in 90s — process evidence ==='
+                      Get-CimInstance Win32_Process |
+                          Where-Object { $_.Name -match 'bun|cmd|pwsh|powershell' } |
+                          Select-Object ProcessId, ParentProcessId, Name, CommandLine |
+                          Format-List | Out-String -Width 300 | Write-Host
+                      Stop-Job $probe
+                      Remove-Job $probe -Force
+                      throw 'stdio leak: piped projects start did not reach EOF within 90s'
+                  }
+
+                  # 2. Functional AC: % must survive to `serve --cwd` on a daemon that
+                  #    outlives the CLI. start/stop run with file redirection so the
+                  #    step stays robust even if a daemon handle leaks.
                   $name = 'p%USERNAME%x'
                   $proj = Join-Path $env:RUNNER_TEMP $name
                   New-Item -ItemType Directory -Force -Path $proj | Out-Null
 
-                  $start = bun apps/cli/src/index.ts projects start $proj --json | Out-String | ConvertFrom-Json
+                  bun apps/cli/src/index.ts projects start $proj --json > "$env:RUNNER_TEMP\start.json" 2> "$env:RUNNER_TEMP\start.err"
+                  Get-Content "$env:RUNNER_TEMP\start.err" | Write-Host
+                  $start = Get-Content "$env:RUNNER_TEMP\start.json" -Raw | ConvertFrom-Json
                   $start | ConvertTo-Json -Depth 5
                   if (-not $start.running) { throw 'projects start did not report running' }
 
                   # The start CLI has exited; the daemon must still be listening.
                   Start-Sleep -Seconds 5
+                  bun apps/cli/src/index.ts projects list --json | Out-String | Write-Host
                   $list = bun apps/cli/src/index.ts projects list --json | Out-String | ConvertFrom-Json
                   $entry = $list.projects | Where-Object { $_.name -eq $name }
                   $entry | ConvertTo-Json -Depth 5
