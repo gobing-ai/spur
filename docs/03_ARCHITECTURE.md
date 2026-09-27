@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.55.0
+version: 1.56.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-26
@@ -543,7 +543,12 @@ checker and dependency gate. `WriteSlotService` atomically reserves the project 
 renews ownership and that lease while `AgentService.runTraced` executes the existing task pipeline.
 A final launch guard checks owner/strategy after executor resolution. Capacity receipts correlate
 the originating owner and write generation; reconciliation precedes slot release. Rest starts no
-queued assignments. This adds no message transport or workflow engine. Boundary details:
+queued assignments. This adds no message transport or workflow engine. A member's coding-agent
+session is loop-lifetime state owned by the `MemberSession` service in `packages/app` (ADR-021,
+task 0967): the CLI's `agent loop` constructs it over a structural deps seam and drives mode
+resolution, resets and resume-id capture; the mode resolves once per loop lifetime from the runner
+capability record (`persistentStdin` → `resumeById` → one-shot) and each deliberate reset writes a
+reason-named `fleet.member-session-reset` ledger row (ADR-121, G66). Boundary details:
 [project fleet dispatch](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
 
 Server startup materializes declared fleet specs after the quota-update drain and before autostart

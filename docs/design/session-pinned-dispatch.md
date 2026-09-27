@@ -3,8 +3,8 @@ kind: design
 title: "Session-pinned headless dispatch and the executor availability lifecycle"
 status: accepted
 created_at: 2026-09-17
-updated_at: 2026-09-22
-related: [B6, B7, B8, G66, H53, I31, "0888", "0889", "0890", "0891", "0892", "0893"]
+updated_at: 2026-09-26
+related: [B6, B7, B8, G66, H53, I31, "0888", "0889", "0890", "0891", "0892", "0893", "0967"]
 tags: [system, B6, B7, B8, G66, H53, I31, agent, workflow]
 ---
 
@@ -128,6 +128,12 @@ Spur consumers: `agent-run.ts` affinity branches, `agent doctor --json` (`capabi
 | else | `one-shot` | today's behaviour; one warning per member lifetime |
 
 Reset on supervisor restart, `agent stop`/`start`, or `MAX_CONSECUTIVE_FAILED_DRAINS` (constant, 3) failures; the run record names the reason. The fleet snapshot and process entry expose `session: { mode, id }`. The 0834 reconcile-before-first-drain and 0831 settle guarantees are untouched: session continuity is an agent-memory property, delivery state stays in the DB.
+
+**Amendment (2026-09-26, task 0967):** the session mechanics above moved out of the CLI transport
+into `packages/app/src/services/member-session.ts` as a `MemberSession` class behind a structural
+`MemberSessionDeps` seam (ADR-021). `runAgentLoop` constructs and drives the class at the five
+former inline sites and re-exports `MemberAgentProcess` / `selectsPersistentStdinDispatch` for the
+existing tests. Modes, reset reasons, the failed-drain budget and every ledger row are unchanged.
 
 ## 7. Sequencing and dependencies
 
