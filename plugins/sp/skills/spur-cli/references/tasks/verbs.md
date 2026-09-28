@@ -334,6 +334,14 @@ column to distinguish AC rows from requirement rows:
 `Status`: `MET` | `PARTIAL` | `UNMET` | `N/A`. `Evidence Type`: `test` | `command` | `static-ref`
 (or `static`) | `manual-review` (or `manual`) | `llm-judge` (or `judge`) | `n/a` (or `na`).
 
+**Graduating tasks — one row keyed to both checks (0993).** A task whose linked feature has
+`ac_altitude: graduating` must satisfy two independent id spaces: the feature scenario alias
+`AC-<i>` (which credits the scenario) and the task checkbox id `AC<i>` (which the box flip needs).
+Key the row **`AC<n> — <scenario title>`**, omitting the scenario's own `R<n>` label — then one row
+does both: `normalizeTitle` strips the `AC<n>` prefix so the row still matches the scenario title,
+and `prefixId` normalizes `AC<n>` so the box flips. A bare `AC<n>` credits no scenario; a bare
+`AC-<i>` flips no box; a title carrying the scenario's `R<n>` label matches neither.
+
 **Evidence rule (behavior-bearing AC):** an AC row with `status: MET` on a behavior-bearing id
 (no `[advisory]`/`[non-core]`/`[non-behavior]`/`[docs-only]` marker) MUST carry `test` or
 `command` evidence; any other evidence type downgrades the row to `PARTIAL` and caps the verdict.
