@@ -9,6 +9,9 @@
 #
 # The binary is verified against the release's SHA256SUMS before it replaces an
 # existing install; a failed download or mismatch leaves the old binary untouched.
+# The checksum is a code-execution boundary, not just an integrity check: this
+# script then runs the binary it downloaded (`spur init`), so keep
+# SPUR_SKIP_VERIFY=1 exceptional.
 #
 # Overrides:
 #   SPUR_VERSION      release tag to install          (default: latest)

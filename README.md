@@ -82,9 +82,10 @@ curl -fsSL https://raw.githubusercontent.com/gobing-ai/spur/main/scripts/install
 ```
 
 Installs to `~/.local/bin` (override via `SPUR_INSTALL`), embeds the Bun runtime, and runs
-`spur init` for you. The binary is verified against the release `SHA256SUMS` before install. Full
-options, verification and Windows/WSL notes live in the
-[CLI README](./apps/cli/README.md#install).
+`spur init` for you. The binary is verified against the release `SHA256SUMS` before install — and
+because the installer then *runs* that binary, the checksum is a code-execution boundary, not just
+an integrity check; keep the `SPUR_SKIP_VERIFY=1` bypass exceptional. Full options, verification and
+Windows/WSL notes live in the [CLI README](./apps/cli/README.md#install).
 
 ```bash
 spur --help

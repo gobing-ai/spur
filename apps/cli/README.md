@@ -61,9 +61,14 @@ Windows: use the Bun path under WSL.
 
 **Verification.** The installer downloads to a temp file, checks it against the release's
 `SHA256SUMS`, and only then atomically replaces `spur`. A failed download, a checksum mismatch, or a
-missing `SHA256SUMS` leaves an existing install untouched and exits non-zero. `SPUR_SKIP_VERIFY=1` is
-the one explicit bypass (it prints a warning). `SPUR_RELEASE_URL` overrides the download base URL
-(a mirror, or a `file://` directory in tests).
+missing `SHA256SUMS` leaves an existing install untouched and exits non-zero. `SPUR_RELEASE_URL`
+overrides the download base URL (a mirror, or a `file://` directory in tests).
+
+The checksum is a **code-execution** boundary, not just an integrity check: having verified the
+download, the installer *runs* it (`spur init`), so a release whose `SHA256SUMS` cannot be verified
+is a release you cannot safely install. `SPUR_SKIP_VERIFY=1` is the single explicit bypass and
+prints a warning — keep it for local or air-gapped installs, and pipe the script into `sh` only from
+a source you trust.
 
 **Releasing standalone binaries.** Run `bun run build:binaries` in `apps/cli`, then upload **all**
 of `dist/cli/spur-*` **and** `dist/cli/SHA256SUMS` to the GitHub Release for the tag. A release
