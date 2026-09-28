@@ -82,3 +82,13 @@ test('inline application bundle regenerates deterministically with only runtime 
         expect(imported.path.startsWith('node:') || imported.path.startsWith('bun:')).toBe(true);
     }
 });
+
+test('inline-run runtime exports and declared names are the same set (task 0972)', async () => {
+    // Tripwire for drift between the committed artifacts: a name exported without a declaration
+    // (or declared without an export) fails here even if the generator table is bypassed.
+    const lib = join(import.meta.dir, '../../plugins/sp/lib');
+    const exported = Object.keys(await import(join(lib, 'inline-run.generated.mjs'))).sort();
+    const dmts = readFileSync(join(lib, 'inline-run.generated.d.mts'), 'utf8');
+    const declared = [...dmts.matchAll(/^export declare (?:const|function) (\w+)/gm)].map((m) => m[1]).sort();
+    expect(declared).toEqual(exported);
+});

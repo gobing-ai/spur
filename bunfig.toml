@@ -24,5 +24,8 @@ coveragePathIgnorePatterns = [
     "../ts-libs/**",
     "packages/domain/src/schema/**",
     "apps/web/tests/**/*.ts",
-    "scripts/**"
+    "scripts/**",
+    # Build output of scripts/commands/bundle-plugin-lib.ts; its source modules are
+    # covered where they live, so measuring the bundle double-counts them.
+    "plugins/sp/lib/*.generated.mjs"
 ]

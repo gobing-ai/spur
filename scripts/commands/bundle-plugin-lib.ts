@@ -106,6 +106,93 @@ export async function bundleIdeaHandoffLib(outDir: string = OUT_DIR): Promise<{ 
     return { mjs, dmts };
 }
 
+interface InlineRunExport {
+    name: string;
+    /** Repo-relative source module, no extension. */
+    from: string;
+    /** The full `.d.mts` line for `name`. */
+    declare: string;
+}
+
+const appExports = (from: string, ...names: string[]): InlineRunExport[] =>
+    names.map((name) => ({
+        name,
+        from,
+        declare: `export declare const ${name}: typeof import('@gobing-ai/spur-app').${name};`,
+    }));
+
+/**
+ * The inline-run surface: one row per export (task 0972). The bundle entry and the `.d.mts` are
+ * both derived from it, so a name cannot be exported without being declared (or vice versa).
+ * Row order is the entry's module/name order — changing it changes the generated `.mjs`.
+ */
+const INLINE_RUN_EXPORTS: readonly InlineRunExport[] = [
+    // Task 0975 verify P1: the worktree close-out path (--persist-out) and the
+    // --decide mode are driver-facade calls (`app.persistWorktreeRuns` /
+    // `app.runDecideForInlineRun`); omitting them left both dead in installed
+    // layouts. plugins/sp/tests/inline-run-installed.test.ts pins facade↔twin parity.
+    ...appExports(
+        'packages/app/src/services/inline-run-setup',
+        'createOrAttachInlineRun',
+        'openInlineRunProjectDb',
+        'persistWorktreeRuns',
+        'runDecideForInlineRun',
+    ),
+    ...appExports(
+        'packages/app/src/workflow/proof-input-fingerprint',
+        'computeProofInputFingerprint',
+        'readProofInputContents',
+    ),
+    ...appExports('packages/app/src/workflow/action-trace', 'createWorkflowActionTraceWriter'),
+    {
+        name: 'splitLaunchCommand',
+        from: 'packages/app/src/workflow/split-launch-command',
+        declare:
+            'export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };',
+    },
+    // Feature verification receipt (D63 task 0915): the standard script
+    // records/validates receipts and resolves the selected verifier
+    // definition through the same seams in both layouts.
+    ...appExports(
+        'packages/app/src/workflow/feature-verification-receipt',
+        'captureFeatureReceiptDigest',
+        'completeFeatureVerificationReceipt',
+        'DEFAULT_FEATURE_VERIFICATION_CMD',
+        'featureReceiptPaths',
+        'startFeatureVerificationReceipt',
+        'validateFeatureVerificationReceipt',
+    ),
+    ...appExports('packages/app/src/workflow/workflow-resolver', 'resolveWorkflowDefinition'),
+    // Decide-enabled switch (task 0941 gate fix): the facade derivation the delegate
+    // calls at its composition boundary — the app service takes the flag as an
+    // explicit parameter (ADR-082), so the loader call stays out of app services.
+    {
+        name: 'resolveDecideDecisionMakerEnabled',
+        from: 'packages/config/src/loader',
+        declare:
+            "export declare const resolveDecideDecisionMakerEnabled: typeof import('@gobing-ai/spur-config/loader').resolveDecideDecisionMakerEnabled;",
+    },
+    ...['ArtifactDao', 'RunDao'].map((name) => ({
+        name,
+        from: 'packages/domain/src/dao',
+        declare: `export declare const ${name}: typeof import('@gobing-ai/spur-domain').${name};`,
+    })),
+    {
+        name: 'EMBEDDED_SPUR_SCHEMAS',
+        from: 'apps/cli/src/config/embedded-schemas',
+        declare: 'export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;',
+    },
+];
+
+/** One `export { … } from` line per source module, in first-seen row order. */
+function inlineRunEntry(): string {
+    const byModule = new Map<string, string[]>();
+    for (const { name, from } of INLINE_RUN_EXPORTS) {
+        byModule.set(from, [...(byModule.get(from) ?? []), name]);
+    }
+    return [...byModule].map(([from, names]) => `export { ${names.join(', ')} } from '../${from}';`).join('\n');
+}
+
 /** Bundle only the inline driver's existing application operations and schema assets. */
 export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mjs: string; dmts: string }> {
     // Keep the temporary entry inside the repo so workspace dependencies resolve consistently.
@@ -115,30 +202,7 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
     try {
         mkdirSync(scratch, { recursive: true });
         const entry = join(scratch, 'entry.ts');
-        writeFileSync(
-            entry,
-            [
-                // Task 0975 verify P1: the worktree close-out path (--persist-out) and the
-                // --decide mode are driver-facade calls (`app.persistWorktreeRuns` /
-                // `app.runDecideForInlineRun`); omitting them left both dead in installed
-                // layouts. plugins/sp/tests/inline-run-installed.test.ts pins facade↔twin parity.
-                "export { createOrAttachInlineRun, openInlineRunProjectDb, persistWorktreeRuns, runDecideForInlineRun } from '../packages/app/src/services/inline-run-setup';",
-                "export { computeProofInputFingerprint, readProofInputContents } from '../packages/app/src/workflow/proof-input-fingerprint';",
-                "export { createWorkflowActionTraceWriter } from '../packages/app/src/workflow/action-trace';",
-                "export { splitLaunchCommand } from '../packages/app/src/workflow/split-launch-command';",
-                // Feature verification receipt (D63 task 0915): the standard script
-                // records/validates receipts and resolves the selected verifier
-                // definition through the same seams in both layouts.
-                "export { captureFeatureReceiptDigest, completeFeatureVerificationReceipt, DEFAULT_FEATURE_VERIFICATION_CMD, featureReceiptPaths, startFeatureVerificationReceipt, validateFeatureVerificationReceipt } from '../packages/app/src/workflow/feature-verification-receipt';",
-                "export { resolveWorkflowDefinition } from '../packages/app/src/workflow/workflow-resolver';",
-                // Decide-enabled switch (task 0941 gate fix): the facade derivation the delegate
-                // calls at its composition boundary — the app service takes the flag as an
-                // explicit parameter (ADR-082), so the loader call stays out of app services.
-                "export { resolveDecideDecisionMakerEnabled } from '../packages/config/src/loader';",
-                "export { ArtifactDao, RunDao } from '../packages/domain/src/dao';",
-                "export { EMBEDDED_SPUR_SCHEMAS } from '../apps/cli/src/config/embedded-schemas';",
-            ].join('\n'),
-        );
+        writeFileSync(entry, inlineRunEntry());
         const result = await Bun.build({
             entrypoints: [entry],
             target: 'node',
@@ -158,30 +222,7 @@ export async function bundleInlineRunLib(outDir: string = OUT_DIR): Promise<{ mj
             dmts,
             [
                 '/** GENERATED by scripts/commands/bundle-plugin-lib.ts — do not edit. Requires Bun for SQLite. */',
-                ...[
-                    'createOrAttachInlineRun',
-                    'openInlineRunProjectDb',
-                    'persistWorktreeRuns',
-                    'runDecideForInlineRun',
-                    'computeProofInputFingerprint',
-                    'readProofInputContents',
-                    'createWorkflowActionTraceWriter',
-                ].map((name) => `export declare const ${name}: typeof import('@gobing-ai/spur-app').${name};`),
-                ...[
-                    'captureFeatureReceiptDigest',
-                    'completeFeatureVerificationReceipt',
-                    'DEFAULT_FEATURE_VERIFICATION_CMD',
-                    'featureReceiptPaths',
-                    'startFeatureVerificationReceipt',
-                    'validateFeatureVerificationReceipt',
-                    'resolveWorkflowDefinition',
-                ].map((name) => `export declare const ${name}: typeof import('@gobing-ai/spur-app').${name};`),
-                ...['ArtifactDao', 'RunDao'].map(
-                    (name) => `export declare const ${name}: typeof import('@gobing-ai/spur-domain').${name};`,
-                ),
-                'export declare const EMBEDDED_SPUR_SCHEMAS: ReadonlyMap<string, string>;',
-                "export declare const resolveDecideDecisionMakerEnabled: typeof import('@gobing-ai/spur-config/loader').resolveDecideDecisionMakerEnabled;",
-                'export declare function splitLaunchCommand(value: string, label: string): { command: string; leadingArgs: string[] } | { error: string };',
+                ...INLINE_RUN_EXPORTS.map((e) => e.declare),
                 '',
             ].join('\n'),
         );
