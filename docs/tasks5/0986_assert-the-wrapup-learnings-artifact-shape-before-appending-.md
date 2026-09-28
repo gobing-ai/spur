@@ -4,7 +4,7 @@ name: Assert the wrapup learnings artifact shape before appending it to memory
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:21:49.963Z
-updated_at: "2026-09-28T21:26:46.584Z"
+updated_at: "2026-09-28T23:23:47.532Z"
 feature_id: D62
 
 ac_altitude: task-local
@@ -104,16 +104,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `config/workflows/wrapup-pipeline.yaml` — the `learnings-validate` shell asserts a date (`[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]`), a four-digit WBS, and a markdown bullet (`/^[[:space:]]*[-*] /`) before writing PASS; pinned by `packages/app/tests/workflow/wrapup-pipeline.test.ts` "learnings-validate is a shell-only structural gate that names its status file" |
-| R2 | MET | `wrapup-pipeline.yaml` — the invalid-shape edge routes `learnings-validate → repair` on the `invalid-learnings-shape` status; test "R1/R2: a narration-only capture fails the gate, routes to repair, and never appends" asserts the status, the route, and that `.spur/memory/learnings.md` is never created |
-| R3 | MET | `wrapup-pipeline.yaml` — a valid capture routes to the unchanged byte-for-byte `learnings-append` (`cat "$LEARNINGS_FILE" >> .spur/memory/learnings.md`); test "R3: a dated WBS bullet passes and appends once, byte-for-byte" asserts memory equals the capture plus one newline; the empty/missing test asserts the soft skip |
-| R4 | MET | `packages/app/tests/workflow/wrapup-pipeline.test.ts` — covers narration-only rejection, valid append, empty/missing soft skip, the unclassifiable-status defense, and the unchanged doc-sync executor-failure route ("R4: the doc-sync executor-failure route is unchanged") |
+| R1 | MET | `config/workflows/wrapup-pipeline.yaml:269` — date, standalone four-digit WBS (fix: a date's year no longer satisfies it), and markdown-bullet predicates; `packages/app/tests/workflow/wrapup-pipeline.test.ts:738` dated bullet without WBS rejected |
+| R2 | MET | `config/workflows/wrapup-pipeline.yaml:528` invalid-shape edge to repair; `config/workflows/wrapup-pipeline.yaml:314` distinct repair status; `packages/app/tests/workflow/wrapup-pipeline.test.ts:688` narration-only rejected, memory untouched |
+| R3 | MET | `config/workflows/wrapup-pipeline.yaml:289` byte-for-byte append with soft skip; `packages/app/tests/workflow/wrapup-pipeline.test.ts:716` append once; `packages/app/tests/workflow/wrapup-pipeline.test.ts:750` empty/missing soft skip |
+| R4 | MET | `packages/app/tests/workflow/wrapup-pipeline.test.ts:610` executor-failure edge pinned; `(cd packages/app && bun test tests/workflow/wrapup-pipeline.test.ts)` 36 pass / 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `(cd packages/app && bun test tests/workflow/wrapup-pipeline.test.ts)` → 35 pass / 0 fail; the narration case asserts `invalid-learnings-shape` and leaves `.spur/memory/learnings.md` absent |
-| AC2 | MET | test | same run; the valid-capture case asserts `readFileSync('.spur/memory/learnings.md') === capture + '\n'` — appended once, bytes unrewritten |
-| AC3 | MET | test | same run; the empty/missing case asserts PASS + soft skip, and the doc-sync edge pin asserts `[repair contract-violation, learnings-validate action-ok, failed always]` (executor failure unchanged) |
+| AC1 | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:688` — narration-only → invalid-learnings-shape, repair route, memory absent (36 pass / 0 fail) |
+| AC2 | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:716` — memory equals capture + newline |
+| AC3 | MET | test | `packages/app/tests/workflow/wrapup-pipeline.test.ts:750` soft skip; `packages/app/tests/workflow/wrapup-pipeline.test.ts:610` executor-failure edge unchanged |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -126,7 +126,6 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:f9388f7d1682e22c58301a5ca66f0337fd7969cfcc6cf3d8e37fe27840657ec9 |
 
 ### References
 

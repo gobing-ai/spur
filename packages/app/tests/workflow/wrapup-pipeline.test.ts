@@ -735,6 +735,18 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             }
         });
 
+        test('R1: a dated bullet without a WBS fails — the date year is not a WBS', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0986-nowbs-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                writeFileSync(join(cwd, `.spur/run/${runId}-wrapup-learnings.md`), '- 2026-09-28: learned x\n');
+                expect(runShell(validateCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(statusOf(cwd, runId)).toBe('invalid-learnings-shape');
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
         test('R3: empty and missing captures keep the soft skip', () => {
             const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0986-empty-'));
             try {
