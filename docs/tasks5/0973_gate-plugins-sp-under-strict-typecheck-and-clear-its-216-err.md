@@ -4,7 +4,7 @@ name: Gate plugins/sp under strict typecheck and clear its 216 errors
 status: done
 template: feature-impl
 created_at: 2026-09-26T07:23:27.739Z
-updated_at: "2026-09-28T08:08:38.775Z"
+updated_at: "2026-09-28T15:39:21.602Z"
 feature_id: A33
 
 ac_altitude: task-local
@@ -238,37 +238,38 @@ Evidence: `tsc -p plugins/sp/tsconfig.json --noEmit` 0 errors; `bun run typechec
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/tsconfig.json:1-8` — extends `../../tooling/typescript/base.json`, `types: ["bun"]`, `paths` maps `@gobing-ai/spur-app`; no file excluded |
-| R2 | MET | `package.json:63` — `typecheck` now chains `tsc -p scripts/tsconfig.json --noEmit && tsc -p plugins/sp/tsconfig.json --noEmit` |
-| R3 | MET | `plugins/sp/scripts/feature-verification-steps.ts:48-53` — all six type-only `typeof import(...)` paths use `../../../packages/app/src/` |
-| R4 | MET | `plugins/sp/scripts/script-contract-check.ts:48` — `Violation.kind` gains `'gobing_ai_import'` (emitted at `:378`) |
-| R5 | MET | `plugins/sp/scripts/inline-run-setup.ts:362-366,384,741` — typed `ACTION_STATUSES`, `isActionStatus` guard, `TraceModeInput.status` narrowed; no engine import |
-| R6 | MET | `plugins/sp/tests/surface-drift-inventory.test.ts:414-435` — describe argument removed; `60_000` passed to each of the three `runCli` tests |
-| R7 | MET | `plugins/sp/tests/residual-scan.test.ts:426-427` — unused `_boxId` removed; the explanatory comment still reads correctly |
-| R8 | MET | 211 → 0 errors across 43 files with `?.`/`??`/guards/tuple map types; `plugins/sp/scripts/quality-gate.ts:673-679` is one representative guard; no suppression added |
-| R9 | MET | plugin suite 1674 pass / 0 fail (baseline count); `plugin-smoke` PASS; regenerated `.mjs` twins match a fresh convert |
+| R1 | MET | `plugins/sp/tsconfig.json:1-8` — extends `../../tooling/typescript/base.json`, `types: ["bun"]`, `paths` maps `@gobing-ai/spur-app`, no `baseUrl`, no excludes |
+| R2 | MET | `package.json:63` — `typecheck` chains `tsc -p scripts/tsconfig.json --noEmit && tsc -p plugins/sp/tsconfig.json --noEmit`; `bun run lint` (biome + typecheck) exit 0 on 2026-09-28 |
+| R3 | MET | `plugins/sp/scripts/feature-verification-steps.ts:48-53` — six `typeof import('../../../packages/app/src/…')` type-only paths |
+| R4 | MET | `plugins/sp/scripts/script-contract-check.ts:48` — `'gobing_ai_import'` in `Violation.kind`; emitted at `:378` |
+| R5 | MET | `plugins/sp/scripts/inline-run-setup.ts:362-367` typed `ACTION_STATUSES` + `isActionStatus`; `:384` `TraceModeInput.status` literal union (CHANGED: includes close-only `paused`, rationale at `:380-383`); `:741` guard use; no `WorkflowStatus` import |
+| R6 | MET | `plugins/sp/tests/surface-drift-inventory.test.ts:413-434` — describe has no third arg; each of the three `test(...)` calls ends `}, 60_000);` |
+| R7 | MET | `rg -n _boxId plugins/sp/tests/residual-scan.test.ts` → no hits |
+| R8 | MET | `bunx tsc -p plugins/sp/tsconfig.json --noEmit` exit 0; fix pass removed the last cast: `plugins/sp/scripts/quality-gate.ts:675` `rawEnv: Partial<QualityGateEnv> = getEnvVars()`, `:683` `wbs` guard, `:688` narrowed `env`; no `@ts-ignore`/`@ts-expect-error`/`as any`/`biome-ignore` in added lines |
+| R9 | MET | `(cd plugins/sp && bun test)` → 1674 pass / 0 fail (baseline 1674; `tests/quality-gate.test.ts` 20/0 incl. empty-`wbs` exit 2); `bun run plugin-smoke` PASS; `bun run script-contract-check` PASS after twin regen |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `bunx tsc -p plugins/sp/tsconfig.json --noEmit` → 0 errors |
-| AC2 | MET | command | `bun run typecheck` → exit 0 (workspaces + scripts + plugin leg) |
-| AC3 | MET | command | injected `export const __probe: number = 's';` in `plugins/sp/scripts/quality-gate.ts` → 1 type error; reverted → 0 |
-| AC4 | MET | command | `rg -n '@ts-ignore\|@ts-expect-error\|as any' plugins/sp/scripts plugins/sp/hooks plugins/sp/tests` → no added suppressions; repo-wide `biome check . --error-on-warnings` clean |
-| AC5 | MET | command | `rg -n "import\('\.\./\.\./packages" plugins/sp/scripts/feature-verification-steps.ts` → none |
-| AC6 | MET | command | `(cd plugins/sp && bun test)` → 1674 pass / 0 fail (baseline 1674) |
-| AC7 | MET | command | `bun run plugin-smoke` → PASS |
-| AC8 | MET | command | `bun run spur-check` → 9381 pass / 0 fail, lint+typecheck clean, 2 rules passed |
+| AC1 | MET | command | `bunx tsc -p plugins/sp/tsconfig.json --noEmit` → exit 0 (post-fix, 2026-09-28) |
+| AC2 | MET | command | `bun run lint` → `biome check . --error-on-warnings && bun run typecheck` exit 0 (workspaces + scripts + plugin leg) |
+| AC3 | MET | command | appended `export const __probe: number = 's';` to `plugins/sp/scripts/quality-gate.ts` → 1 `error TS`; restored → tsc exit 0 |
+| AC4 | MET | command | `git show 779497665 -- plugins/sp` and fix-pass `git diff -- plugins/sp` added lines: 0 matches for `@ts-ignore\|@ts-expect-error\|as any\|biome-ignore`; the `as QualityGateEnv` cast is removed |
+| AC5 | MET | command | `rg -n "import\('\.\./\.\./packages" plugins/sp/scripts/feature-verification-steps.ts` → no matches |
+| AC6 | MET | command | `(cd plugins/sp && bun test)` → 1674 pass / 0 fail across 61 files (post-fix) |
+| AC7 | MET | command | `bun run plugin-smoke` → "plugin-install-smoke PASS — plugin surface is standalone and installs clean" (post-fix) |
+| AC8 | MET | command | `bun run spur-check` @f88278427: biome + typecheck exit 0, 49 rules pass, 9334 pass / 1 fail — sole fail `apps/cli/tests/commands/feature.test.ts:33` fixture `git init` denied by session sandbox (nested `.git/config` write); untouched by 779497665 and the fix pass. Post-fix `bun run lint` exit 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 **SECU findings** (self-review)
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|---------|
-| P3 | Correctness | `plugins/sp/scripts/quality-gate.ts:673-679` | The `getEnvVars() as QualityGateEnv` cast bypasses the compiler for the default parameter; `wbs` is validated at `:679` before use, so no unvalidated read escapes. |
-| P4 | Maintainability | `plugins/sp/tests/stage-registry-parity.test.ts:210-214` | `as string` widens literal-union actuals to compare with text-parsed domain values. Accepted: the canonical side stays strongly typed and the alternative is a hand-maintained cast map. |
-| P4 | Scope | `plugins/sp/scripts/*.mjs` (11 twins) | The twins changed only because their sources did; regenerated by `build:scripts`, byte-checked by `script-contract-check`. |
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|---------|-------------|
+| P3 | Correctness | `plugins/sp/scripts/quality-gate.ts:675-688` | The `getEnvVars() as QualityGateEnv` cast bypassed the compiler for the default parameter (it typed a possibly-absent `wbs` as `string`). | FIXED 2026-09-28 (verify --fix all): `main` now takes `rawEnv: Partial<QualityGateEnv> = getEnvVars()` with no cast, guards `wbs` at `:683`, then builds `const env: QualityGateEnv = { ...rawEnv, wbs }` at `:688`; `.mjs` twin regenerated via `bun run build:scripts`. |
+| P4 | Maintainability | `plugins/sp/tests/stage-registry-parity.test.ts:210-214` | `as string` widens literal-union actuals to compare with text-parsed domain values. | Accepted: the canonical side stays strongly typed and the alternative is a hand-maintained cast map. |
+| P4 | Scope | `plugins/sp/scripts/*.mjs` (11 twins) | The twins changed only because their sources did. | Accepted: regenerated by `build:scripts`, byte-checked by `script-contract-check`. |
+| P4 | Maintainability | `plugins/sp/scripts/inline-run-setup.ts:384` | `TraceModeInput.status` is `'done' \| 'failed' \| 'paused'`, wider than R5's `'done' \| 'failed'`, because close mode accepts `paused`. | Accepted: goal-equivalent; rationale in the code comment at `:380-383`. |
 
 No P1–P2 findings. Behavior is unchanged: every fix is a type-level narrowing or a fallback on a value already guaranteed present, and the plugin suite's pass count is identical to baseline.
 

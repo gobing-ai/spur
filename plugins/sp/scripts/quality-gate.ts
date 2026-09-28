@@ -672,9 +672,7 @@ export const QUALITY_GATE_USAGE =
 
 export function main(
     argv: string[],
-    // `getEnvVars()` is the raw process env; `wbs` is validated below, so the index-signature
-    // record is narrowed to QualityGateEnv here.
-    env: QualityGateEnv = getEnvVars() as QualityGateEnv,
+    rawEnv: Partial<QualityGateEnv> = getEnvVars(),
     options: QualityGateOptions = {},
 ): number {
     const mode = argv[0];
@@ -682,10 +680,12 @@ export function main(
         process.stderr.write(`${QUALITY_GATE_USAGE}\n`);
         return 2;
     }
-    if ((env.wbs ?? '').length === 0) {
+    const wbs = rawEnv.wbs ?? '';
+    if (wbs.length === 0) {
         process.stderr.write('quality-gate: env `wbs` is required\n');
         return 2;
     }
+    const env: QualityGateEnv = { ...rawEnv, wbs };
     if (mode === 'light') {
         runLightGate(env);
     } else if (mode === 'status') {

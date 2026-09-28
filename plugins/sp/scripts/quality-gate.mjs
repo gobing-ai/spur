@@ -410,17 +410,19 @@ function runQualityGate(mode, env, options = {}) {
   return { status, attempts: gateAttempt, logFile, findingsFile, statusFile, attemptFile, receiptFile };
 }
 var QUALITY_GATE_USAGE = "usage: quality-gate.ts <run|recheck|light|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)";
-function main(argv, env = getEnvVars(), options = {}) {
+function main(argv, rawEnv = getEnvVars(), options = {}) {
   const mode = argv[0];
   if (mode !== "run" && mode !== "recheck" && mode !== "light" && mode !== "status") {
     process.stderr.write(`${QUALITY_GATE_USAGE}
 `);
     return 2;
   }
-  if ((env.wbs ?? "").length === 0) {
+  const wbs = rawEnv.wbs ?? "";
+  if (wbs.length === 0) {
     process.stderr.write("quality-gate: env `wbs` is required\n");
     return 2;
   }
+  const env = { ...rawEnv, wbs };
   if (mode === "light") {
     runLightGate(env);
   } else if (mode === "status") {
