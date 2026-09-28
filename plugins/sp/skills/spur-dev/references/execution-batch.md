@@ -492,7 +492,8 @@ batch can never destroy its own evidence. Reuse mode retains its operator-owned 
 persists the Step 5 report under the invoking tree; the reused tree's `.spur/run/` remains the live
 copy while that tree lives on. The per-run provenance — the worktree DB's run/action rows and the
 `.spur/run/<runId>.md` + `.state.json` records — is persisted mechanically by WT-4a's
-`inline-run-setup.ts --persist-out --from <worktree>` call, not by hand.
+`inline-run-setup.ts --persist-out --from <worktree> [--task-file <merged-task>]...` call,
+not by hand.
 
 **Stage records are worktree-local too (0948 R9, E7 Finding 5; persisted by 0975 R1).** Each task's
 own per-stage run record (`.spur/run/<runId>.md` + `.state.json`) and the worktree DB's run rows are
@@ -500,10 +501,24 @@ written inside the worktree and **are removed with it** in create mode — the E
 this evidence. Copying them out is no longer a manual audit-time duty: WT-4a (create-mode block
 below) runs `inline-run-setup.ts --persist-out --from "$WT_PATH"` **before** WT-4b holder cleanup,
 which copies the run/action/phase/transition/workflow-state rows and both record files into the
-invoking tree. The shapes are pinned (task 0975 R1): idempotent on re-persist; success exits 0
-printing `{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"}]}`
+invoking tree.
+
+**Cited evidence rides the same call (0984 R1/R2).** The driver forwards each merged task file with
+repeatable `--task-file <path>` (paths resolved in the invoking tree after the FF merge, e.g.
+`spur task show <wbs> --json` → `.filePath`), and persist-out then copies/verifies every literal
+`.spur/run/<file>` that file cites — WBS verdicts, check receipts, test-gate logs, run-ID records —
+so a merged task file never anchors a path that died with the tree. Abbreviated references
+(`fadca099-…`, `run-*-ac87.log`, `{batch-report.md,…}`) are not literal files and carry no
+obligation. A citation missing in BOTH trees, a divergent cited file (never overwritten — reconcile
+by hand), an unreadable task file, or more than 64 distinct cited files fails the pass → WT-5.
+
+The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;
+success exits 0 printing
+`{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"}]}`
 — an `id-exists` / `external-key-conflict` skip never modifies the pre-existing target rows, a
-`record-conflict:<file>` skip never overwrites a divergent invoking-tree record — and any failure
+`record-conflict:<file>` skip never overwrites a divergent invoking-tree record, and a
+`record-missing:<file>` skip is a known `task-lifecycle`/`feature-lifecycle` row with no record file
+at all (its inserted DB row still counts in `persisted` — 0984 R5). Any failure
 exits 1 printing `{"ok":false,"error":<message>}` (a worktree DB run id that is not a single safe
 filename component is rejected before any target write). Any persist-out failure
 routes to **WT-5** — worktree and branch retained — the same copy-out-first contract as the
@@ -828,12 +843,17 @@ git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or
 WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4b below
 # WT-4a provenance persist-out (task 0975 R1): copy the worktree DB's run rows plus
 # the .spur/run/<runId>.md + .state.json records into THIS tree. Run from the main
-# tree (cwd = the invoking tree). Idempotent; conflicts are reported, never
-# overwritten. A non-zero exit — including a half-readable worktree — must NOT
-# proceed to WT-4b removal:
+# tree (cwd = the invoking tree). --task-file (0984 R2) forwards each merged task
+# file (post-merge path) so the cited .spur/run/<file> evidence is copied/verified
+# too. Resolve the merged path(s) BEFORE this block — an empty value exits 2:
+#   TASK_FILE="$(spur task show <wbs> --json | jq -r .filePath)"   # per done task;
+#   build TASK_FILE_ARGS=(--task-file "$TASK_FILE")                # one flag each
+# Idempotent; conflicts are reported, never overwritten. A non-zero exit —
+# including an unresolved or divergent citation, or a half-readable worktree — must
+# NOT proceed to WT-4b removal:
 SETUP_SCRIPT="plugins/sp/scripts/inline-run-setup.ts"
 [ -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)"
-bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" \
+bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; exit 1; }
 #
 # WT-4b — bounded CWD-holder cleanup (task 0720 R1). $WT_PATH above is the EXACT

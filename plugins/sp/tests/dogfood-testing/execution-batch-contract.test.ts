@@ -178,3 +178,20 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
         expect(SPEC).toContain('spur workflow progress --json` in the\ninvoking tree shows the merged run `done`');
     });
 });
+
+describe('execution-batch spec contract (task 0984 — cited run evidence survives teardown)', () => {
+    test('WT-4a — the persist-out call forwards the merged task file(s) via repeatable --task-file', () => {
+        expect(SPEC).toContain('bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}"');
+        expect(SPEC).toContain('spur task show <wbs> --json | jq -r .filePath');
+        expect(SPEC).toContain('repeatable `--task-file <path>`');
+        // The driver resolves paths in the invoking tree post-merge, via the task-show fast path.
+        expect(SPEC).toContain('spur task show <wbs> --json` → `.filePath`');
+    });
+
+    test('prose — citation failure semantics and the record-missing skip are pinned', () => {
+        expect(SPEC).toContain('A citation missing in BOTH trees');
+        expect(SPEC).toContain('`record-missing:<file>`');
+        expect(SPEC).toContain('0984 R5');
+        expect(SPEC).toContain('Abbreviated references');
+    });
+});

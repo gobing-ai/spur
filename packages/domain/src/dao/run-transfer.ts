@@ -70,13 +70,23 @@ async function tableColumns(db: DbAdapter, table: string): Promise<Set<string>> 
     return new Set(rows.map((row) => row.name));
 }
 
+/** One worktree run-row identity: the id plus its workflow name (task 0984 R5). */
+export interface RunIdRow {
+    readonly id: string;
+    /** Declared workflow name (`task-lifecycle`, `task-pipeline`, …); null for legacy rows. */
+    readonly workflowName: string | null;
+}
+
 /**
- * List the run ids present in `from`. Raw SQL lives here (domain-only rule): the app-side
- * persistWorktreeRuns validation seam reads worktree-sourced ids through this instead of
+ * List the run identities present in `from`. Raw SQL lives here (domain-only rule): the
+ * app-side persistWorktreeRuns validation seam reads worktree-sourced ids (and their
+ * workflow names, which decide the record-missing tolerance) through this instead of
  * inlining its own queries.
  */
-export async function listRunIds(from: DbAdapter): Promise<string[]> {
-    return (await from.queryAll<{ id: string }>('SELECT id FROM runs')).map((row) => row.id);
+export async function listRunIdRows(from: DbAdapter): Promise<RunIdRow[]> {
+    return (
+        await from.queryAll<{ id: string; workflow_name: string | null }>('SELECT id, workflow_name FROM runs')
+    ).map((row) => ({ id: row.id, workflowName: row.workflow_name }));
 }
 
 /**

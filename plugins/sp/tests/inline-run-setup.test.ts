@@ -684,6 +684,9 @@ test('0975 --persist-out: usage errors exit 2', () => {
             // Mixed with another mode.
             ['--persist-out', '--from', '/tmp/x', '--close', '--run-id', 'r', '--status', 'done'],
             ['--persist-out', '--from', '/tmp/x', '--run-id', 'r'],
+            // 0984 R2: --task-file belongs to persist-out (repeatable), but a value-less
+            // occurrence collapses to an empty path — a usage error, never a silent skip.
+            ['--persist-out', '--from', '/tmp/x', '--task-file'],
         ]) {
             const proc = spawnSync('bun', [SCRIPT, ...args], { cwd: to, stdio: 'pipe', encoding: 'utf8' });
             expect(proc.status, `expected usage exit 2 for ${args.join(' ')}`).toBe(2);
@@ -692,3 +695,50 @@ test('0975 --persist-out: usage errors exit 2', () => {
         rmSync(to, { recursive: true, force: true });
     }
 });
+
+test('0984 --persist-out: --task-file copies the evidence the merged task file cites into the invoking tree', () => {
+    const from = makeWorktree('persist-out-cited-from-', 'run-0984-cited');
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-cited-to-'));
+    try {
+        writeFileSync(join(from.dir, '.spur', 'run', '0984-check-receipt.json'), '{"ok":true}\n');
+        mkdirSync(join(to, 'docs'), { recursive: true });
+        writeFileSync(
+            join(to, 'docs', 'task-0984.md'),
+            '## Testing\n\nEvidence: `.spur/run/run-0984-cited.md`, `.spur/run/0984-check-receipt.json`\n',
+        );
+        const proc = spawnSync(
+            'bun',
+            [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/task-0984.md'],
+            { cwd: to, stdio: 'pipe', encoding: 'utf8' },
+        );
+        expect(proc.status, proc.stderr).toBe(0);
+        expect(JSON.parse(proc.stdout)).toEqual({ ok: true, persisted: 1, skipped: [] });
+        // The run-ID record and the WBS-cited artifact both resolve in the invoking tree.
+        expect(existsSync(join(to, '.spur', 'run', 'run-0984-cited.md'))).toBe(true);
+        expect(existsSync(join(to, '.spur', 'run', '0984-check-receipt.json'))).toBe(true);
+    } finally {
+        from.cleanup();
+        rmSync(to, { recursive: true, force: true });
+    }
+}, 60_000);
+
+test('0984 --persist-out: a citation missing in both trees exits 1 with {ok:false}', () => {
+    const from = makeWorktree('persist-out-dangle-from-', 'run-0984-dangle');
+    const to = mkdtempSync(join(tmpdir(), 'persist-out-dangle-to-'));
+    try {
+        mkdirSync(join(to, 'docs'), { recursive: true });
+        writeFileSync(join(to, 'docs', 'task-0984.md'), '## Testing\n\nEvidence: `.spur/run/0984-vanished.json`\n');
+        const proc = spawnSync(
+            'bun',
+            [SCRIPT, '--persist-out', '--from', from.dir, '--task-file', 'docs/task-0984.md'],
+            { cwd: to, stdio: 'pipe', encoding: 'utf8' },
+        );
+        expect(proc.status).toBe(1);
+        const out = JSON.parse(proc.stdout) as { ok: boolean; error?: string };
+        expect(out.ok).toBe(false);
+        expect(out.error).toContain('0984-vanished.json');
+    } finally {
+        from.cleanup();
+        rmSync(to, { recursive: true, force: true });
+    }
+}, 60_000);

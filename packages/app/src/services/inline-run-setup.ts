@@ -30,13 +30,13 @@
 // runtime-boundaries fs rule (recommended pre-check preset) forbids a static node:fs
 // import in application sources.
 const { mkdirSync, writeFileSync } = await import('node:fs');
-const { readFile } = await import('node:fs/promises');
+const { lstat, readFile } = await import('node:fs/promises');
 
 import { join, resolve } from 'node:path';
 import type { DbAdapter, RunDefinitionSource } from '@gobing-ai/spur-domain';
 import {
     createMigratedDb,
-    listRunIds,
+    listRunIdRows,
     normalizePersistedWorkflowLayer,
     RunDao,
     transferRunTables,
@@ -49,6 +49,7 @@ import {
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
 import { DecideActionRunner, DecideOptionsSchema } from '../workflow/actions/decide';
 import { InvalidWorkflowRunIdError } from '../workflow/run-record';
+import { isBookkeepingWorkflow } from '../workflow/terminal-reason';
 import { assertInventoryIdentity, parseWorkflowInventory } from '../workflow/workflow-inventory';
 import {
     type ResolvedWorkflowDefinition,
@@ -150,6 +151,14 @@ export interface PersistWorktreeRunsInput {
     readonly fromWorkdir: string;
     /** Invoking tree that receives the DB rows and run records. */
     readonly toWorkdir: string;
+    /**
+     * Merged task file paths (relative to `toWorkdir` or absolute) whose literal
+     * `.spur/run/<file>` citations must resolve in the invoking tree (0984 R1/R2). The
+     * worktree driver forwards one per merged task; the service owns citation selection,
+     * safe-path validation and conflict behavior. Omitted = no citation pass (callers
+     * keep the rows + two-file records contract).
+     */
+    readonly taskFiles?: readonly string[];
 }
 
 /** Successful persist-out: inserted run-row count plus the collision / record skips. */
@@ -157,7 +166,13 @@ export interface PersistWorktreeRunsSuccess {
     readonly ok: true;
     /** Runs whose rows were inserted into the target DB. */
     readonly persisted: number;
-    /** Collision skips — DB reasons from the transfer, plus per-file `record-conflict:<file>`. */
+    /**
+     * Collision skips — DB reasons from the transfer, plus per-file `record-conflict:<file>`
+     * (divergent invoking-tree record, never overwritten), `record-missing:<file>` (a known
+     * bookkeeping lifecycle row with no record file; its row still counts in `persisted`,
+     * 0984 R5) and `cited-directory:<name>` (a citation resolving to a directory is not a
+     * file the copy set can own).
+     */
     readonly skipped: ReadonlyArray<{ id: string; reason: string }>;
 }
 
@@ -171,39 +186,167 @@ export interface PersistWorktreeRunsSuccess {
 const SAFE_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /**
- * Persist a worktree's inline-run provenance into the invoking tree (task 0975 R1):
- * transfer the `runs` row plus its `action_runs` / `phase_runs` / `transition_runs` /
- * `workflow_states` children with {@link transferRunTables}, then copy each persisted
- * run's two-file run record (`.spur/run/<id>.md` + `.state.json`). An existing target
- * record is left untouched — identical bytes are an idempotent no-op, divergent bytes
- * are reported as `skipped[{id, reason:'record-conflict:<file>'}]` rather than
- * overwritten. Any persistence failure (unreadable worktree DB, unwritable target,
- * missing source record, or a source run id that is not a safe filename component —
- * rejected as {@link InvalidWorkflowRunIdError} before any target write) throws — the
- * caller routes to WT-5 and the worktree is retained, so a green run can never destroy
- * its own evidence.
+ * Cap on distinct literal `.spur/run/<file>` citations one persist-out copies/verifies for
+ * the merged task files (0984 R3). A fixed bound keeps the copy set proportional to the
+ * batch's corpus, not to whatever a hand-edited task file lists.
+ */
+export const MAX_CITED_RUN_FILES = 64;
+
+/**
+ * A cited run-evidence reference extracted from a merged task file (0984 R3): `.spur/run/`
+ * followed by name characters. The charset deliberately includes template metachars
+ * (`*`, `…`, `{`, `<`, `?`, `,`) so abbreviated and glob references stay attached to one
+ * capture and are classified non-literal by {@link asLiteralRunFileName}, instead of a
+ * truncated prefix (`fadca099-` out of `fadca099-…-wrapup-learnings.md`) masquerading as a
+ * real filename. The leading alnum requirement already refuses `<runId>-…` placeholders and
+ * `..` traversal outright.
+ */
+const RUN_CITATION_RE = /\.spur\/run\/([A-Za-z0-9][A-Za-z0-9._*?<>{}|,\u2026-]*)/g;
+
+/**
+ * Reduce one captured reference to a literal direct-child file name, or `undefined` when it
+ * is not one (0984 R3): template/abbreviated references (`fadca099-…`, `run-*-ac87.log`,
+ * `{batch-report.md,…}`) and `..` runs are not literal files, so they carry no copy
+ * obligation and never fail the pass. A surviving name is a single safe component — joining
+ * it under `.spur/run/` cannot escape the directory.
+ */
+function asLiteralRunFileName(citation: string): string | undefined {
+    if (!SAFE_RUN_ID_RE.test(citation) || citation.includes('..')) return undefined;
+    return citation;
+}
+
+/**
+ * Persist a worktree's inline-run provenance into the invoking tree (task 0975 R1; citations
+ * per 0984): transfer the `runs` row plus its `action_runs` / `phase_runs` /
+ * `transition_runs` / `workflow_states` children with {@link transferRunTables}, then copy
+ * each persisted run's two-file run record (`.spur/run/<id>.md` + `.state.json`). An
+ * existing target record is left untouched — identical bytes are an idempotent no-op,
+ * divergent bytes are reported as `skipped[{id, reason:'record-conflict:<file>'}]` rather
+ * than overwritten.
+ *
+ * Cited evidence (0984 R1–R4): when the driver forwards merged task file paths via
+ * `taskFiles`, every literal `.spur/run/<file>` citation in those files must resolve in the
+ * invoking tree after this call. Files present in the worktree are copied (absent target),
+ * treated as idempotent no-ops (byte-identical target), or refused (divergent target — a
+ * conflict throws, blocking teardown, never overwriting). A citation missing in both trees,
+ * an unreadable task file, or a citation set over {@link MAX_CITED_RUN_FILES} throws with
+ * zero writes performed — the caller routes to WT-5 and the worktree is retained.
+ *
+ * Record tolerance (0984 R5): a known bookkeeping lifecycle row (`task-lifecycle` /
+ * `feature-lifecycle`, created by record-stage transitions) may have no two-file record at
+ * all — its source ENOENT is reported as `skipped[{id, reason:'record-missing:<file>'}]`
+ * while its inserted DB row still counts in {@link PersistWorktreeRunsSuccess.persisted}.
+ * A missing task-pipeline record stays fatal, preserving the green-run evidence guarantee.
+ *
+ * Any other persistence failure (unreadable worktree DB, unwritable target, or a source run
+ * id that is not a safe filename component — rejected as {@link InvalidWorkflowRunIdError}
+ * before any target write) throws — the caller routes to WT-5 and the worktree is retained,
+ * so a green run can never destroy its own evidence.
  */
 export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Promise<PersistWorktreeRunsSuccess> {
     const fromDir = resolve(input.fromWorkdir);
     const toDir = resolve(input.toWorkdir);
+    const fromRunDir = join(fromDir, '.spur', 'run');
+    const toRunDir = join(toDir, '.spur', 'run');
+
+    // 0984 R1–R3: citation selection and validation run BEFORE any DB or file write, so an
+    // unresolved/unsafe/over-cap citation fails with zero side effects (the driver blocks
+    // teardown on the non-zero exit and retains the worktree via WT-5).
+    const citedNames = new Set<string>();
+    for (const taskFile of input.taskFiles ?? []) {
+        let content: string;
+        try {
+            content = await readFile(resolve(toDir, taskFile), 'utf8');
+        } catch (error) {
+            throw new Error(`persist-out: merged task file ${taskFile} is unreadable: ${String(error)}`);
+        }
+        for (const match of content.matchAll(RUN_CITATION_RE)) {
+            const name = asLiteralRunFileName(match[1] ?? '');
+            if (name === undefined || citedNames.has(name)) continue;
+            if (citedNames.size >= MAX_CITED_RUN_FILES) {
+                throw new Error(
+                    `persist-out: merged task files cite more than ${MAX_CITED_RUN_FILES} distinct ` +
+                        '.spur/run/ files — over the fixed citation cap (0984 R3); split the batch or prune the citations',
+                );
+            }
+            citedNames.add(name);
+        }
+    }
+    const citedCopies: Array<{ name: string; sourcePath: string; targetPath: string }> = [];
+    const citedSkips: Array<{ id: string; reason: string }> = [];
+    for (const name of citedNames) {
+        const sourcePath = join(fromRunDir, name);
+        const targetPath = join(toRunDir, name);
+        const sourceStat = await lstat(sourcePath).catch(() => undefined);
+        const targetBytes = await readFile(targetPath).catch(() => undefined);
+        if (sourceStat === undefined) {
+            if (targetBytes === undefined) {
+                throw new Error(
+                    `persist-out: cited run evidence .spur/run/${name} is missing in both the worktree and ` +
+                        'the invoking tree — resolve or drop the citation before teardown (0984 R1)',
+                );
+            }
+            continue; // already resolves in the invoking tree — nothing to copy
+        }
+        if (!sourceStat.isFile()) {
+            // A citation resolving to a directory (`.spur/run/<dir>/…` references capture their
+            // first segment) is not a file the copy set can own; report it and leave it to the
+            // copy-out step that produced the directory.
+            citedSkips.push({ id: name, reason: `cited-directory:${name}` });
+            continue;
+        }
+        if (targetBytes !== undefined) {
+            const sourceBytes = await readFile(sourcePath);
+            if (!targetBytes.equals(sourceBytes)) {
+                throw new Error(
+                    `persist-out: cited run evidence .spur/run/${name} diverges from the invoking tree's ` +
+                        'existing file — refusing to overwrite; reconcile the two copies by hand (0984 R4)',
+                );
+            }
+            continue; // byte-identical — idempotent no-op
+        }
+        citedCopies.push({ name, sourcePath, targetPath });
+    }
+
     const source = await openInlineRunProjectDb(fromDir);
     try {
         // Fail closed BEFORE the target DB is even opened: a hostile worktree row id must
         // never reach a `.spur/run/<id>` path, and rejection leaves zero partial state.
-        for (const id of await listRunIds(source.adapter)) {
-            if (!SAFE_RUN_ID_RE.test(id)) throw new InvalidWorkflowRunIdError(id);
+        const runRows = await listRunIdRows(source.adapter);
+        for (const row of runRows) {
+            if (!SAFE_RUN_ID_RE.test(row.id)) throw new InvalidWorkflowRunIdError(row.id);
         }
         const target = await openInlineRunProjectDb(toDir);
         try {
             const { persistedIds, skipped } = await transferRunTables(source.adapter, target.adapter);
+            const workflowNameById = new Map(runRows.map((row) => [row.id, row.workflowName]));
             const recordSkips: Array<{ id: string; reason: string }> = [];
-            if (persistedIds.length > 0) {
-                const fromRunDir = join(fromDir, '.spur', 'run');
-                const toRunDir = join(toDir, '.spur', 'run');
+            if (persistedIds.length > 0 || citedCopies.length > 0) {
                 mkdirSync(toRunDir, { recursive: true });
                 for (const id of persistedIds) {
+                    const workflowName = workflowNameById.get(id);
                     for (const fileName of [`${id}.md`, `${id}.state.json`]) {
-                        const sourceBytes = await readFile(join(fromRunDir, fileName));
+                        let sourceBytes: Buffer;
+                        try {
+                            sourceBytes = await readFile(join(fromRunDir, fileName));
+                        } catch (error) {
+                            // 0984 R5: a known bookkeeping lifecycle row may have no two-file
+                            // record at all (record-stage transitions create rows with zero
+                            // children) — its source ENOENT is a reported skip, not an aborted
+                            // transfer; the inserted row still counts in `persisted`. Every
+                            // other workflow (task-pipeline runs above all) keeps the fatal
+                            // green-run evidence guarantee, and non-ENOENT read errors stay fatal.
+                            if (
+                                workflowName !== null &&
+                                workflowName !== undefined &&
+                                isBookkeepingWorkflow(workflowName) &&
+                                (error as NodeJS.ErrnoException).code === 'ENOENT'
+                            ) {
+                                recordSkips.push({ id, reason: `record-missing:${fileName}` });
+                                continue;
+                            }
+                            throw error;
+                        }
                         const targetPath = join(toRunDir, fileName);
                         let existing: Buffer | undefined;
                         try {
@@ -219,11 +362,33 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
                         writeFileSync(targetPath, sourceBytes);
                     }
                 }
+                // 0984 R3/R4: copy the validated cited evidence. Re-check the target at write
+                // time — the record copy above may have created an identical `<runId>.md` /
+                // `.state.json` citation since the validation pass ran.
+                for (const cited of citedCopies) {
+                    const sourceBytes = await readFile(cited.sourcePath);
+                    let existing: Buffer | undefined;
+                    try {
+                        existing = await readFile(cited.targetPath);
+                    } catch {
+                        existing = undefined;
+                    }
+                    if (existing !== undefined) {
+                        if (!existing.equals(sourceBytes)) {
+                            throw new Error(
+                                `persist-out: cited run evidence .spur/run/${cited.name} diverges from the invoking ` +
+                                    "tree's existing file — refusing to overwrite; reconcile the two copies by hand (0984 R4)",
+                            );
+                        }
+                        continue; // byte-identical — idempotent no-op
+                    }
+                    writeFileSync(cited.targetPath, sourceBytes);
+                }
             }
             return {
                 ok: true,
                 persisted: persistedIds.length,
-                skipped: [...skipped, ...recordSkips],
+                skipped: [...skipped, ...recordSkips, ...citedSkips],
             };
         } finally {
             target.close();

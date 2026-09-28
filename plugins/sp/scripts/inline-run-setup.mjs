@@ -30,7 +30,7 @@ function usage() {
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --fingerprint --task-file <path> [--feature-file <path>] [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --action --run-id <id> --node <state> --kind <kind> " + "--status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]");
-  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--spur-bin <path>]");
+  console.error("       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]");
   console.error("       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, " + "failed-timeout, failed-guard, cancelled, interrupted, retry-exhausted");
   console.error("       bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]");
   process.exit(2);
@@ -276,7 +276,11 @@ async function runPersistOutMode(input) {
   try {
     const { entry } = resolveAppEntry(input.spurBin);
     const app = await import(entry);
-    const result = await app.persistWorktreeRuns({ fromWorkdir: input.from, toWorkdir: process.cwd() });
+    const result = await app.persistWorktreeRuns({
+      fromWorkdir: input.from,
+      toWorkdir: process.cwd(),
+      ...input.taskFiles.length > 0 ? { taskFiles: input.taskFiles } : {}
+    });
     process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}
 `);
     return 0;
@@ -299,7 +303,7 @@ async function main() {
   let runId = "";
   let file = "";
   let fingerprint = false;
-  let taskFile = "";
+  const taskFiles = [];
   let featureFile = "";
   let action = false;
   let close = false;
@@ -323,7 +327,7 @@ async function main() {
     else if (argv[i] === "--fingerprint")
       fingerprint = true;
     else if (argv[i] === "--task-file")
-      taskFile = argv[++i] ?? "";
+      taskFiles.push(argv[++i] ?? "");
     else if (argv[i] === "--feature-file")
       featureFile = argv[++i] ?? "";
     else if (argv[i] === "--action")
@@ -354,12 +358,12 @@ async function main() {
       spurBin = argv[++i] ?? spurBin;
   }
   if (fingerprint) {
-    if (runId !== "" || file !== "" || taskFile.trim() === "")
+    if (runId !== "" || file !== "" || taskFiles.length !== 1 || (taskFiles[0] ?? "").trim() === "")
       usage();
-    process.exit(await printFingerprint(taskFile, featureFile, spurBin));
+    process.exit(await printFingerprint(taskFiles[0] ?? "", featureFile, spurBin));
   }
   if (decide) {
-    if (action || close || fingerprint || file !== "" || taskFile !== "")
+    if (action || close || fingerprint || file !== "" || taskFiles.length > 0)
       usage();
     if (runId.trim() === "" || node.trim() === "" || optionsJson.trim() === "")
       usage();
@@ -368,11 +372,11 @@ async function main() {
     process.exit(await runDecideMode({ runId, node, optionsFile: optionsJson, spurBin }));
   }
   if (persistOut) {
-    if (fingerprint || decide || action || close || runId !== "" || file !== "" || taskFile !== "")
+    if (fingerprint || decide || action || close || runId !== "" || file !== "")
       usage();
-    if (from.trim() === "")
+    if (from.trim() === "" || taskFiles.some((taskFile) => taskFile.trim() === ""))
       usage();
-    process.exit(await runPersistOutMode({ from, spurBin }));
+    process.exit(await runPersistOutMode({ from, taskFiles, spurBin }));
   }
   if (action || close) {
     if (action && close)

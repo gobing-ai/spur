@@ -60,7 +60,13 @@ export {
     type RunSessionMechanism,
     type RunSessionRow,
 } from './run-session-dao';
-export { listRunIds, type RunTransferResult, type RunTransferSkipped, transferRunTables } from './run-transfer';
+export {
+    listRunIdRows,
+    type RunIdRow,
+    type RunTransferResult,
+    type RunTransferSkipped,
+    transferRunTables,
+} from './run-transfer';
 export {
     type CreateSystemEventInput,
     type EventSummaryRecentError,

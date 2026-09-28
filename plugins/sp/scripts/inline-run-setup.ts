@@ -34,7 +34,7 @@
  *   bun plugins/sp/scripts/inline-run-setup.ts --decide --run-id <id> --node <state> --options-json <file> [--spur-bin <path>]
  *       --status <done|failed> --ok <true|false> --duration-ms <n> [--spur-bin <path>]
  *   bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]
- *   bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--spur-bin <path>]
+ *   bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]
  *
  * The `--fingerprint` mode prints the engine's proof-input digest for the given spec files and
  * creates nothing (task 0862 R5).
@@ -56,8 +56,12 @@
  * `--worktree` run executes BEFORE teardown: it copies the worktree's run provenance — the
  * `runs`/`action_runs`/`phase_runs`/`transition_runs`/`workflow_states` rows and the two-file
  * run records — into THIS tree's project DB and `.spur/run/` (cwd = the invoking tree).
- * Idempotent; collisions are reported as `skipped[{id,reason}]`, never overwrites. Exit 0 =
- * persisted (possibly with skips); exit 1 = fail closed — the driver routes to WT-5 and
+ * Repeatable `--task-file <path>` (0984 R2) forwards each merged task file so the app service
+ * also copies/verifies the `.spur/run/<file>` evidence that file cites; citation selection,
+ * safe-path validation and conflict behavior live entirely in the app service. Idempotent;
+ * collisions are reported as `skipped[{id,reason}]`, never overwrites. Exit 0 = persisted
+ * (possibly with skips); exit 1 = fail closed — an unreadable/unsafe/over-cap/unresolved
+ * citation or a divergent cited file fails the pass too — the driver routes to WT-5 and
  * retains the worktree; usage errors exit 2.
  *
  * Exit 2 is reserved for usage errors.
@@ -112,7 +116,7 @@ function usage(): never {
         '       bun plugins/sp/scripts/inline-run-setup.ts --close --run-id <id> --status <done|failed|paused> [--reason <terminal-reason>] [--spur-bin <path>]',
     );
     console.error(
-        '       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--spur-bin <path>]',
+        '       bun plugins/sp/scripts/inline-run-setup.ts --persist-out --from <worktree-path> [--task-file <path>]... [--spur-bin <path>]',
     );
     console.error(
         '       terminal-reason is a closed enum (0937 R2): done, paused-operator, failed-check, failed-agent, ' +
@@ -574,23 +578,34 @@ async function runDecideMode(input: {
 }
 
 /**
- * `--persist-out --from <worktree-path>` (task 0975 R1): resolve the app through the shared
- * chain and copy the worktree's inline-run provenance into THIS tree. No persistence policy
- * lives here — the app's `persistWorktreeRuns` (→ domain `transferRunTables`) owns the DB
- * transfer, the idempotence and the conflict skips. Success prints
- * `{ok:true,persisted:<n>,skipped:[…]}` and exits 0; any failure prints `{ok:false,error}`
- * and exits 1 (the driver routes to WT-5 and retains the worktree).
+ * `--persist-out --from <worktree-path>` (task 0975 R1; `--task-file` per 0984 R2): resolve
+ * the app through the shared chain and copy the worktree's inline-run provenance into THIS
+ * tree. No persistence policy lives here — the app's `persistWorktreeRuns` (→ domain
+ * `transferRunTables`) owns the DB transfer, the citation selection/copy rules, the
+ * idempotence and the conflict skips; this delegate only forwards the merged task file
+ * paths. Success prints `{ok:true,persisted:<n>,skipped:[…]}` and exits 0; any failure
+ * prints `{ok:false,error}` and exits 1 (the driver routes to WT-5 and retains the
+ * worktree).
  */
-async function runPersistOutMode(input: { from: string; spurBin: string }): Promise<number> {
+async function runPersistOutMode(input: {
+    from: string;
+    taskFiles: readonly string[];
+    spurBin: string;
+}): Promise<number> {
     try {
         const { entry } = resolveAppEntry(input.spurBin);
         const app = (await import(entry)) as {
             persistWorktreeRuns: (i: {
                 fromWorkdir: string;
                 toWorkdir: string;
+                taskFiles?: readonly string[];
             }) => Promise<{ ok: true; persisted: number; skipped: ReadonlyArray<{ id: string; reason: string }> }>;
         };
-        const result = await app.persistWorktreeRuns({ fromWorkdir: input.from, toWorkdir: process.cwd() });
+        const result = await app.persistWorktreeRuns({
+            fromWorkdir: input.from,
+            toWorkdir: process.cwd(),
+            ...(input.taskFiles.length > 0 ? { taskFiles: input.taskFiles } : {}),
+        });
         process.stdout.write(`${JSON.stringify({ ok: true, persisted: result.persisted, skipped: result.skipped })}\n`);
         return 0;
     } catch (error) {
@@ -612,7 +627,7 @@ async function main(): Promise<void> {
     let runId = '';
     let file = '';
     let fingerprint = false;
-    let taskFile = '';
+    const taskFiles: string[] = [];
     let featureFile = '';
     let action = false;
     let close = false;
@@ -632,7 +647,7 @@ async function main(): Promise<void> {
         if (argv[i] === '--run-id') runId = argv[++i] ?? '';
         else if (argv[i] === '--file') file = argv[++i] ?? '';
         else if (argv[i] === '--fingerprint') fingerprint = true;
-        else if (argv[i] === '--task-file') taskFile = argv[++i] ?? '';
+        else if (argv[i] === '--task-file') taskFiles.push(argv[++i] ?? '');
         else if (argv[i] === '--feature-file') featureFile = argv[++i] ?? '';
         else if (argv[i] === '--action') action = true;
         else if (argv[i] === '--close') close = true;
@@ -651,9 +666,10 @@ async function main(): Promise<void> {
 
     // Two mutually exclusive modes share this entry point: create/attach a run (run-id + file), or
     // print the proof digest for the inline driver (task 0862 R5). Mixing them is a usage error.
+    // `--task-file` belongs to the fingerprint (exactly one) and persist-out (zero or more) modes.
     if (fingerprint) {
-        if (runId !== '' || file !== '' || taskFile.trim() === '') usage();
-        process.exit(await printFingerprint(taskFile, featureFile, spurBin));
+        if (runId !== '' || file !== '' || taskFiles.length !== 1 || (taskFiles[0] ?? '').trim() === '') usage();
+        process.exit(await printFingerprint(taskFiles[0] ?? '', featureFile, spurBin));
     }
 
     // ADR-117 emission modes (task 0868): the inline driver reports one completed action
@@ -663,18 +679,20 @@ async function main(): Promise<void> {
     // fingerprint, and trace modes; it requires the run id (filename-guarded), the state id
     // for the trace row, and the options JSON file.
     if (decide) {
-        if (action || close || fingerprint || file !== '' || taskFile !== '') usage();
+        if (action || close || fingerprint || file !== '' || taskFiles.length > 0) usage();
         if (runId.trim() === '' || node.trim() === '' || optionsJson.trim() === '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
         process.exit(await runDecideMode({ runId, node, optionsFile: optionsJson, spurBin }));
     }
 
     // Worktree provenance persist-out (task 0975 R1): mutually exclusive with every other
-    // mode; requires the source worktree path. Runs with cwd = the invoking tree.
+    // mode; requires the source worktree path and accepts zero or more merged task files
+    // (0984 R2) whose cited `.spur/run/` evidence the app service copies/verifies. Runs
+    // with cwd = the invoking tree.
     if (persistOut) {
-        if (fingerprint || decide || action || close || runId !== '' || file !== '' || taskFile !== '') usage();
-        if (from.trim() === '') usage();
-        process.exit(await runPersistOutMode({ from, spurBin }));
+        if (fingerprint || decide || action || close || runId !== '' || file !== '') usage();
+        if (from.trim() === '' || taskFiles.some((taskFile) => taskFile.trim() === '')) usage();
+        process.exit(await runPersistOutMode({ from, taskFiles, spurBin }));
     }
 
     if (action || close) {

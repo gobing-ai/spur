@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Persist worktree run evidence so merged task files carry no dangling .spur/run anchors
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-27T07:12:01.569Z
-updated_at: "2026-09-27T16:45:15.960Z"
+updated_at: "2026-09-28T01:46:38.938Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -35,18 +35,18 @@ Related prior work: 0975 (done) defined persist-out's scope as rows + the two-fi
 
 ### Requirements
 
-- [ ] R1. After successful create-mode worktree teardown, every existing `.spur/run/` file cited by the merged task file resolves in the invoking tree. A citation missing in both trees fails before teardown.
-- [ ] R2. The worktree driver supplies the merged task file path to persist-out; the app service owns citation selection, copying, safe-path validation and conflict behavior. The plugin script remains a thin delegate.
-- [ ] R3. Copy only regular files directly under the worktree's `.spur/run/` that this task file cites, with a fixed maximum file count and safe single-component names. No wholesale directory copy or path traversal.
-- [ ] R4. Existing target evidence is never overwritten on a byte conflict; a conflict on a cited file is reported and blocks teardown. Byte-identical copies remain no-ops.
-- [ ] R5. A known task-lifecycle or feature-lifecycle row with no two-file run record no longer aborts persistence: source ENOENT is reported as `record-missing:<file>`, its inserted DB row still counts in `persisted`. A missing pipeline run record, unreadable DB, unsafe id, or unwritable target remains fatal.
-- [ ] R6. Regression coverage exercises cited-artifact survival, missing-artifact refusal, a record-less lifecycle row beside a normal run, and conflict/idempotence reporting.
+- [x] R1. After successful create-mode worktree teardown, every existing `.spur/run/` file cited by the merged task file resolves in the invoking tree. A citation missing in both trees fails before teardown.
+- [x] R2. The worktree driver supplies the merged task file path to persist-out; the app service owns citation selection, copying, safe-path validation and conflict behavior. The plugin script remains a thin delegate.
+- [x] R3. Copy only regular files directly under the worktree's `.spur/run/` that this task file cites, with a fixed maximum file count and safe single-component names. No wholesale directory copy or path traversal.
+- [x] R4. Existing target evidence is never overwritten on a byte conflict; a conflict on a cited file is reported and blocks teardown. Byte-identical copies remain no-ops.
+- [x] R5. A known task-lifecycle or feature-lifecycle row with no two-file run record no longer aborts persistence: source ENOENT is reported as `record-missing:<file>`, its inserted DB row still counts in `persisted`. A missing pipeline run record, unreadable DB, unsafe id, or unwritable target remains fatal.
+- [x] R6. Regression coverage exercises cited-artifact survival, missing-artifact refusal, a record-less lifecycle row beside a normal run, and conflict/idempotence reporting.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Cited pipeline evidence survives worktree teardown, while missing cited evidence prevents teardown (req: R1, R2, R3)
-- [ ] AC2 — Copying is WBS-bounded, idempotent, and never overwrites a conflicting target file (req: R3, R4)
-- [ ] AC3 — A record-less lifecycle row is reported without aborting a normal run's transfer; fatal paths stay fatal (req: R5, R6)
+- [x] AC1 — Cited pipeline evidence survives worktree teardown, while missing cited evidence prevents teardown (req: R1, R2, R3)
+- [x] AC2 — Copying is WBS-bounded, idempotent, and never overwrites a conflicting target file (req: R3, R4)
+- [x] AC3 — A record-less lifecycle row is reported without aborting a normal run's transfer; fatal paths stay fatal (req: R5, R6)
 
 ### Q&A
 
@@ -62,23 +62,66 @@ The same app service transfers all run DB rows. A known task-lifecycle or featur
 
 ### Plan
 
-- [ ] Identify how the worktree driver resolves the current merged task-file path and forward it to persist-out.
-- [ ] Copy only safe, capped `.spur/run/` files actually cited by that task; fail before teardown on unresolved citations.
-- [ ] Tolerate source ENOENT only for known lifecycle rows, not pipeline runs; preserve row counts and fatal error behavior.
-- [ ] Extend the persist-out tests with WBS and run-ID citations, missing citation, unsafe/over-cap citation, normal and record-less runs, target conflict, and unreadable DB/unsafe run id.
-- [ ] Update the worktree isolation contract line and run focused tests plus `bun run spur-check`.
+- [x] Identify how the worktree driver resolves the current merged task-file path and forward it to persist-out.
+- [x] Copy only safe, capped `.spur/run/` files actually cited by that task; fail before teardown on unresolved citations.
+- [x] Tolerate source ENOENT only for known lifecycle rows, not pipeline runs; preserve row counts and fatal error behavior.
+- [x] Extend the persist-out tests with WBS and run-ID citations, missing citation, unsafe/over-cap citation, normal and record-less runs, target conflict, and unreadable DB/unsafe run id.
+- [x] Update the worktree isolation contract line and run focused tests plus `bun run spur-check`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+`persistWorktreeRuns` (packages/app/src/services/inline-run-setup.ts:255) accepts `taskFiles`; citations extracted/validated pre-write (safe names :204-220, cap 64 :193, regular-file lstat :292), copied with write-time re-check (:368-383); lifecycle rows tolerate record ENOENT (`record-missing:` :342-347) while pipeline records stay fatal; `listRunIdRows` (packages/domain/src/dao/run-transfer.ts) carries workflowName; plugin script forwards repeatable `--task-file` (plugins/sp/scripts/inline-run-setup.ts:581); WT-4a recipe resolves TASK_FILE (plugins/sp/skills/spur-dev/references/execution-batch.md).
 
 ### Testing
 
-Not yet implemented — capture only.
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Citation validation before any write inline-run-setup.ts:280-290; missing-in-both-trees throws with zero side effects (test: runs count 0, no .spur/run created); literal-name capture :204-220 rejects abbreviations/globs |
+| R2 | MET | App service owns selection/safe-path/conflict inline-run-setup.ts:255-309; plugin script thin repeatable --task-file delegate inline-run-setup.ts:581-620 with .mjs parity; driver-supply half defined in WT-4a recipe execution-batch.md (TASK_FILE resolution + TASK_FILE_ARGS array), pinned execution-batch-contract.test.ts:184-186 |
+| R3 | MET | SAFE_RUN_ID_RE single-component names, cap 64 :193, lstat regular-file-only :292; template/glob/directory citations skipped not failed |
+| R4 | MET | Divergent bytes throw at validation :302-305 and write time :373-380; identical = idempotent no-op; overwrite asserted absent |
+| R5 | MET | ENOENT tolerated only when isBookkeepingWorkflow :342-347; row still persisted (persisted:2 asserted); task-pipeline missing record stays fatal; unreadable DB/unsafe id fatal |
+| R6 | MET | 9 app tests (persist-worktree-runs.test.ts) + 2 plugin e2e + usage case; app 13/0, persist subset 6/0, contract 25/0 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | Cited evidence copied on success; missing cited evidence throws pre-teardown inline-run-setup.ts:280-290 (zero-write test) |
+| AC2 | MET | test | WBS-bounded (citations only), cap 64, identical no-op, divergent refusal inline-run-setup.ts:289-309,368-383 |
+| AC3 | MET | test | Record-less lifecycle row beside normal run (persisted includes it :342-347); fatal paths tested (pipeline record, DB, id) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 0984
+
+**Scope:** working-tree diff (10 task files + task doc). Verdict: **PASS** — P2 finding #1 remediated in-commit (see disposition).
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Citation validation before any write (inline-run-setup.ts:280-290); missing-in-both throws, zero-write asserted; nested-citation skip class documented under accepted P3 |
+| R2 | MET | Script forwards repeatable --task-file, thin delegate (:581-620, .mjs parity); app service owns selection/safe-path/conflict (:255-309); driver-supply half now defined in the WT-4a recipe (execution-batch.md: TASK_FILE resolution + TASK_FILE_ARGS array, contract test pinned at execution-batch-contract.test.ts:184-186) |
+| R3 | MET | Safe single-component names (:204-220), cap 64 (:193), lstat regular-file-only (:292); no wholesale copy |
+| R4 | MET | Divergent bytes throw in validation (:302-305) and at write time (:373-380); identical = no-op; overwrite asserted absent |
+| R5 | MET | ENOENT tolerated only for isBookkeepingWorkflow (:342-347); row still persisted (persisted:2); task-pipeline missing record fatal |
+| R6 | MET | 9 app tests + 2 plugin e2e + usage case; 13/0 app, 6/0 persist subset, 25/0 contract suite |
+
+##### Findings & Disposition
+
+| # | P | Finding | Disposition |
+|---|---|---------|-------------|
+| 1 | P2 | WT-4a recipe used undefined $TASK_FILE — literal drivers failed closed | **Fixed in-commit**: recipe now defines TASK_FILE resolution (`spur task show <wbs> --json \| jq -r .filePath`) + TASK_FILE_ARGS array; contract test updated, 25/0 |
+| 2 | P3 | Nested citation (`.spur/run/<dir>/<file>`) captures segment-1 → reported as cited-directory skip, file may stay dangling | Accepted: skip is surfaced in persist-out JSON; R1's guarantee is scoped to literal files directly under .spur/run/ (Design). Follow-up candidate |
+| 3 | P4 | Write-time divergence throws after transferRunTables committed (partial state) | Advisory: WT-5 retains tree; re-persist idempotent |
+| 4 | P4 | Compare-and-decide duplicated between validation and copy loops | Advisory: fold into code-improvement backlog |
+| 5 | P4 | feature-lifecycle record-missing covered transitively only | Advisory: acceptable — isBookkeepingWorkflow membership is the contract |
+
+**Residual risk:** concurrent-session doc edits present in tree but excluded from this task's diff and commit.
 
 ### References
 
@@ -87,4 +130,7 @@ Not yet implemented — capture only.
 ### History
 
 - 2026-09-27T07:12:22.662Z backlog → todo (system)
+- 2026-09-28T01:32:20.060Z todo → wip (system)
+- 2026-09-28T01:46:37.798Z wip → testing (system)
+- 2026-09-28T01:46:38.938Z testing → done (system)
 
