@@ -156,7 +156,7 @@ backfill, and a lifecycle transition. Collapses the pipeline's record step to on
 | ---- | ------ |
 | `--verdict-file <path>` | Verdict JSON (default `.spur/run/<wbs>-verdict.json`). |
 | `--solution-from-diff` | Backfill `Solution` from `git diff -U0` **only when Solution is bare**. |
-| `--transition <status>` | Optional lifecycle transition after writing. **Never `done`.** |
+| `--transition <status>` | Optional lifecycle transition after writing. `done` is a **guarded** path: it requires a PASS verdict, auto-walks `wip → testing → done`, and auto-creates the pipeline run-link; a non-PASS verdict errors instead of transitioning. |
 
 **Verdict shape** (`.spur/run/<wbs>-verdict.json`):
 
