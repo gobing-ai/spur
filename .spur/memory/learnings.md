@@ -3446,3 +3446,53 @@ Evidence: task record `docs/tasks5/0958_fix-verdict-row-scenario-crediting-and-p
 - The CLI re-implements the bounded first-5 row summary instead of exporting the private `summarizeRowIds` — two copies of one presentation rule can drift (P4 #1).
 - `readFeatureAcBody` is a third copy of the `<id>_*.md` feature-resolution scan (also `task-service.resolveFeatureAcBody` and the CLI's `isFeatureFile`); fold into one shared helper if the shape ever changes (P4 #2).
 - A stale vendored `inline-run-setup.ts` lacking `--fingerprint` was a provenance defect owned by `0960`, not `0958` — do not fix a sibling owner's defect inside the current task.
+Drift repaired and verified. `docs/03_ARCHITECTURE.md` §20.3 and `docs/design/workflow-composition-contract.md:14` were the only T3-stale owners of 0983's verify→record move; `00_ADR` and `04_DESIGN` returned zero delta (§6.1 / §4.5). No task/feature corpus touched. Two files modified (uncommitted):
+
+| # | Doc | Doc said | Repair |
+|---|---|---|---|
+| 1 | `docs/03_ARCHITECTURE.md` §20.3 | scan "runs inside `verify` … downgrades PASS to PARTIAL onto the bounded `verify → test-fix` loop" | record-stage order + fail-closed `record → done` guard; version 1.57.0→1.58.0 |
+| 2 | `docs/design/workflow-composition-contract.md:14` | "observe-only in-`verify` scan" | "inside `record`, after the verdict-proven box flips (task 0983)"; `updated_at` bumped |
+
+Verification: stale-phrasing `rg` sweep now returns NONE across the four targets; frontmatter parses and matches §4.1/§6.4/§6.5; `bun run link-check` OK; `adr-supersession.test.ts` 7/0. Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/2cfac826-47c9-42b3-8ad8-da4dbb3fb99c-wrapup-learnings.md`.
+
+Doc-evolve wrapup complete: 2 confirmed T3 drift findings repaired in the owning `03` and `docs/design/` files; `00_ADR` and `04_DESIGN` returned zero delta. No task/feature corpus written.
+
+| # | Doc | Reality | Doc said | Trigger | Repair |
+|---|---|---|---|---|---|
+| 1 | `docs/03_ARCHITECTURE.md` §20.3 | 0983 moved `residual-scan scan\|fold` into `record`, after `spur task record` flips the verdict-proven R/AC boxes and before the `record → done` guard; a blocking residual downgrades PASS→PARTIAL so the guard fails closed into `record → failed` (`config/workflows/task-pipeline.yaml:804`/`:816`) | "runs inside `verify` after the digest bracket … downgrades PASS to PARTIAL onto the existing bounded `verify → test-fix` loop" | T3 | replaced with the record-stage order and the fail-closed done guard; version `1.57.0` → `1.58.0` (§4.3) |
+| 2 | `docs/design/workflow-composition-contract.md:14` | scan runs inside `record`, post-flip (0983) | "Residual completeness shipped as an observe-only in-`verify` scan" | T3 | reworded to "inside `record`, after the verdict-proven box flips (task 0983)"; `updated_at` `2026-09-24` → `2026-09-27` |
+
+Zero-delta (checks run): `rg` stale-phrasing sweep (`runs inside \`verify\`|in-\`verify\` scan`) across `00_ADR`, `03_ARCHITECTURE`, `04_DESIGN`, `docs/design/` → NONE after repair; `00_ADR` ADR-071 note and ADR-076 history still accurate (a bugfix restoring an existing contract does not justify an ADR entry, §6.1); `04_DESIGN` index pointer unchanged and resolves (§4.5); `docs/design/task-residual-sweep.md` already updated by 0983 (rule owner). Frontmatter parses on both edited files and `owns`/`authority`/`edit_rules` match §4.1 and §6.4/§6.5; `bun run link-check` OK; `repo-wide-tests/adr-supersession.test.ts` 7 pass / 0 fail; no test pins the repaired doc text.
+
+Artifact written: `/Users/robin/xprojects/spur-new/.spur/run/2cfac826-47c9-42b3-8ad8-da4dbb3fb99c-wrapup-learnings.md`
+
+# Working learnings — wrapup batch `2cfac826-47c9-42b3-8ad8-da4dbb3fb99c`
+
+Tasks: `0983` — Order the residual-sweep box check against the record-stage box flip.
+Evidence: task record `docs/tasks5/0983_order-the-residual-sweep-box-check-against-the-record-stage-.md`; commit `8e5509611` (feat); drift repair in this wrapup.
+
+## 2026-09-27 · 0983
+
+### Conventions
+- A pipeline action that mutates the task file must be ordered after `spur task record` flips the verdict-proven boxes and before the `record → done` guard. The scan then reads the actual post-record file and the completion guard stays closed (fail-closed), instead of folding on boxes no stage has ticked yet.
+- Fix an ordering defect by re-ordering, not by re-classifying. `findUncheckedBoxes` and the blocking classification stay unchanged; no duplicate proof matcher and no section-wide exemption were added.
+- Record-time box flips must not invalidate the registered proof. This task depends on 0958's checkbox-canonical proof fingerprint; the sweep only adds confined `.spur/run/` writes.
+- A post-downgrade re-record (R5) must be a soft step (exit 0) so the failed state still renders its recovery report; a hard failure would bypass the report. `--transition testing` is an idempotent no-op when already `testing`.
+- Update the rule-owner satellite in the same task as the behavior change (T3), and sweep every doc that names the moved location — not just the owner.
+
+### Errors fixed
+- **0967 run deadlock.** `verify`'s residual sweep folded `PASS` → `PARTIAL` with `blocking=13 deferrable=0` — 5 Requirement, 2 AC and 6 Plan unchecked boxes — making the `record → done` guard (`jq -r .verdict … == "PASS"`) unreachable on every pass. Root cause: the fold ran before the only component that flips those boxes (`flipVerifiedCheckboxes`, inside `record`). Fix: move the existing `scan|fold` action from `verify` to `record`.
+- **Second-order digest cost (measured).** The Requirement/AC/Plan boxes are inside the proof-input scope: the certified digest moved `sha256:ac78bd41…` → `sha256:d5a73aa2…` from box flips alone, invalidating the gate receipt and forcing a 4m45s gate re-run plus a manual re-capture. `## Review` / `## Testing` / `## Solution` writes do **not** move the digest.
+- **Hand-certification recovery** (tick 13 boxes via `spur task update --section`, re-capture with `inline-run-setup.ts --fingerprint`, re-run `bun run spur-check`, re-run `residual-scan scan|fold`, re-bind the verdict) cost ~4m45s of extra gate time — prevention is the ordering fix.
+- **Doc drift left by 0983 (repaired in this wrapup).** The design satellite was updated but `docs/03_ARCHITECTURE.md` §20.3 still said the scan "runs inside `verify`", and `docs/design/workflow-composition-contract.md:14` still said "observe-only in-`verify` scan".
+
+### Patterns
+- Mirror-surface parity: a pipeline-scope fix must file a follow-up for the standalone surface. `/sp:dev-verify` and `/sp:dev-verifyall` still ran `scan|fold` before `spur task record` and carried the identical defect until 0987; the follow-up pins the ordering with a regression test on both surfaces.
+- Plan boxes are **not** record-owned — `task record` flips only verdict-proven R/AC boxes. An unfinished Plan box is genuine unfinished work and must stay a blocker; only the re-order removes the false positive.
+- A behavior move invalidates *descriptions of the location*, not just the owning satellite. Grep the moved mechanism's name across `00`/`03`/`04`/`docs/design/` and repair every stale location claim (here: two sites, §7.2 automatic repair).
+
+### Gotchas
+- `findUncheckedBoxes` scans the **whole** task file with no section exemption (`plugins/sp/scripts/residual-scan.ts:221`/`:336`), and the deferral exemption deliberately excludes `unchecked-box` (`:290`) — an unchecked box can never be deferred by `residual-deferrals.json`. Do not "fix" this by adding a section exemption; that would let real unfinished work through.
+- `jq -r .verdict` on a valid-JSON artifact missing the field yields literal `null`, which passes `-n` and `!= PASS`, triggering a spurious re-record. Harmless (record is idempotent, soft exit 0) because verify-answer-lint enforces `.verdict` on every real artifact.
+- The pre-record standalone order was initially blessed by the rule-owner doc; the review required explicitly unblessing it. The satellite's `scan`/`fold` rows (`docs/design/task-residual-sweep.md:65-66`) now name the post-record order and follow-up 0987, and the re-review disposition records "tracked by follow-up 0987, not blessed here" — so the doc cannot be read as sanctioning the defect.
+- Line citations drift: the re-review re-anchored `task-pipeline.yaml:800` (sweep), `:809` (R5 soft re-record), `:1161-1177` (done guard); the R5 command itself resolves at `:816`, not the Review's `:820`. Re-resolve anchors at wrap-up rather than trusting recorded numbers.
