@@ -766,7 +766,11 @@ states:
             options:
                 id: task-record-transition
                 executable: "${vars.spurBin}"
-                args: ["task", "record", "${vars.wbs}", "--solution-from-diff", "--transition", "testing"]
+                # 0980: --no-lifecycle mirrors the wip/done hops — the pipeline run is
+                # already the lifecycle record, so a record-stage transition must not
+                # spawn a nested task-lifecycle run that outlives the pipeline as a
+                # `running` orphan. The target-aware check gate still runs (inline).
+                args: ["task", "record", "${vars.wbs}", "--solution-from-diff", "--transition", "testing", "--no-lifecycle"]
                 retry:
                     maxAttempts: 2
                     delayMs: 2000
@@ -803,10 +807,13 @@ states:
           # task must not retain a stale PASS Testing narrative. Soft (exit 0): the downgrade
           # itself already fails the record → done guard; a re-record failure prints its
           # re-run command and the failed state renders the recovery report.
+          # 0980: --no-lifecycle for the same orphan reason as the main record command —
+          # inert today (the task is already at testing, so this is a same-status no-op),
+          # but it keeps the no-nested-lifecycle invariant if the flow shifts.
           - kind: shell
             options:
                 command: >-
-                    verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)"; if [ -n "$verdict" ] && [ "$verdict" != PASS ]; then $spurBin task record $wbs --solution-from-diff --transition testing || echo "post-downgrade re-record failed — re-run: $spurBin task record $wbs" >&2; fi; exit 0
+                    verdict="$(jq -r .verdict .spur/run/$wbs-verdict.json 2>/dev/null)"; if [ -n "$verdict" ] && [ "$verdict" != PASS ]; then $spurBin task record $wbs --solution-from-diff --transition testing --no-lifecycle || echo "post-downgrade re-record failed — re-run: $spurBin task record $wbs" >&2; fi; exit 0
 
     - id: done
       description: >

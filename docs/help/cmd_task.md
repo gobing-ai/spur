@@ -257,6 +257,7 @@ spur task record [options] <wbs>
 |---|---|
 | `--verdict-file <path>` | Path to verdict JSON (default: `.spur/run/<wbs>-verdict.json`) |
 | `--solution-from-diff` | Backfill `## Solution` from `git diff` when bare |
+| `--no-lifecycle` | Suppress lifecycle workflow run creation (used by `task-pipeline.yaml` to avoid orphaned lifecycle runs) |
 | `--transition <status>` | Optional lifecycle transition (e.g. `testing`) |
 | `--folder <path>` | Custom tasks folder |
 | `--json` | Output machine-readable JSON |

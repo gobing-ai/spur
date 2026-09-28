@@ -14,6 +14,7 @@ import { FINDING_CODES, TaskCandidateInvalidError, TaskService, WbsCollisionErro
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/spur-config';
 import * as configModule from '@gobing-ai/spur-config/loader';
 import { apiErrorSchema } from '@gobing-ai/spur-contracts';
+import { MarkdownDocument } from '@gobing-ai/spur-domain';
 import { main } from '../../src/index';
 import type { CommandOutput } from '../../src/output';
 import { type CapturedOutput, createCapturedOutput } from '../helpers';
@@ -2185,6 +2186,87 @@ Only this section exists.
         const summary = output.messages.join(' ');
         expect(summary).toContain('Testing written');
         expect(summary).toContain('Review written');
+    });
+
+    test('0980: the pipeline record → done sequence leaves the task done with --no-lifecycle', async () => {
+        // WHY: `spur task record --transition testing` used to construct the lifecycle
+        // adapter while the pipeline's later `task update done --no-lifecycle` bypassed
+        // it — leaving a `running` task-lifecycle row orphaned after every pipeline run
+        // (task_run_links empty). This replays the pipeline's exact record and done
+        // commands and checks the task status at both hops; the zero-lifecycle-row
+        // assertion lives in packages/app/tests/services/task-record.test.ts (0980),
+        // which probes the runs/task_run_links rows this sequence must NOT create.
+        const out = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Pipeline record 0980'], { cwd, output: out });
+        const wbs = createdWbs(out);
+        const taskPath = createdPath(out);
+
+        // Seed the sections the target-aware gates require at testing/done. Solution
+        // carries a file:line citation (L3 hard rule; the diff backfill is a no-op here
+        // because Solution is non-bare). AC box checked: the open-box rule is an error
+        // when `--as` names a differing target (0800 R1).
+        const writeSection = async (section: string, body: string): Promise<void> => {
+            const bodyFile = join(cwd, `0980-${section.toLowerCase()}.md`);
+            await Bun.write(bodyFile, body);
+            await main(['task', 'update', wbs, '--section', section, '--from-file', bodyFile], {
+                cwd,
+                output: createCapturedOutput(),
+            });
+        };
+        await writeSection('Requirements', 'R1. The pipeline record stage must not orphan a lifecycle run.\n');
+        await writeSection('Acceptance Criteria', '- [x] Scenario: record reaches testing without a lifecycle row.\n');
+        await writeSection('Solution', 'Applied in `apps/cli/src/commands/task.ts:1180`.\n');
+
+        // Pipeline precheck shape: status hops run with --no-lifecycle.
+        await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+        await main(['task', 'update', wbs, 'wip', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
+
+        // The pipeline's record command (task-pipeline.yaml task-record-transition),
+        // with the 0980 --no-lifecycle flag.
+        await mkdir(join(cwd, '.spur', 'run'), { recursive: true });
+        const verdictPath = join(cwd, '.spur', 'run', `${wbs}-verdict.json`);
+        await Bun.write(
+            verdictPath,
+            `${JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidenceType: '', evidence: 'tests pass' }],
+                acceptanceCriteria: [],
+                checks: [{ name: 'Security', status: 'P1', evidence: 'no bypass' }],
+            })}\n`,
+        );
+        const recordOutput = createCapturedOutput();
+        const recordExit = await main(
+            [
+                'task',
+                'record',
+                wbs,
+                '--verdict-file',
+                verdictPath,
+                '--solution-from-diff',
+                '--transition',
+                'testing',
+                '--no-lifecycle',
+            ],
+            { cwd, output: recordOutput },
+        );
+        expect(recordExit).toBe(0);
+        expect(recordOutput.messages.join(' ')).toContain('testing');
+
+        // Status at the record hop: testing (target-aware gate passed inline).
+        expect(MarkdownDocument.parse(await Bun.file(taskPath).text(), 'task').frontmatterData?.status).toBe('testing');
+
+        // The pipeline's done command (task update done --no-lifecycle).
+        const doneOutput = createCapturedOutput();
+        const doneExit = await main(['task', 'update', wbs, 'done', '--no-lifecycle'], {
+            cwd,
+            output: doneOutput,
+        });
+        expect(doneExit).toBe(0);
+        expect(doneOutput.errors.every((e) => !e.includes('blocked'))).toBe(true);
+
+        // Status at the done hop — terminal, with no lifecycle machinery involved.
+        expect(MarkdownDocument.parse(await Bun.file(taskPath).text(), 'task').frontmatterData?.status).toBe('done');
     });
 
     // ── verdict ──

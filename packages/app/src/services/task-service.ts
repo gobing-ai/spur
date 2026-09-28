@@ -51,6 +51,7 @@ import {
     renderTesting,
 } from './task-record';
 import { evaluateTaskSize } from './task-size-precheck';
+import { runTransitionCheckGate } from './task-transition';
 import type { VerifyVerdict as CanonicalVerifyVerdict } from './verify-verdict';
 
 /**
@@ -1497,6 +1498,19 @@ export class TaskService {
         if (opts.transition !== undefined) {
             const target = opts.transition;
             const current = ((doc.frontmatterData?.status as string | undefined) ?? '').toLowerCase();
+
+            // 0980 R1: with the lifecycle FSM suppressed (`--no-lifecycle`), the YAML's
+            // target-aware `spur task check --as <target>` guard would be silently lost
+            // (the SchemaLifecyclePort fallback permits). The caller injects the same P3
+            // backstop `task update` supplies (task 0130). The gate runs HERE — after the
+            // section writes above, matching the adapter guard's timing, because the
+            // matrix counts record's own Testing/Solution output as required at the
+            // target status; a pre-record check would deny on placeholders record fills.
+            // Same-status hops skip the gate: no status change means no lifecycle
+            // request, so with the adapter attached no guard would run either.
+            if (current !== target && opts.checkGate !== undefined && (target === 'testing' || target === 'done')) {
+                await runTransitionCheckGate(opts.checkGate, wbs, filePath, target);
+            }
 
             if (current === target) {
                 // Already there — idempotent no-op (avoids an invalid self-transition).

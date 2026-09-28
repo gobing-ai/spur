@@ -13,6 +13,7 @@
 
 import { parseChecklist } from '@gobing-ai/spur-domain';
 import { BunSyncProcessExecutor, type FileSystem } from '@gobing-ai/ts-runtime';
+import type { TransitionCheckGate } from './task-transition';
 import {
     aggregateVerifyVerdict,
     type VerifyVerdict as CanonicalVerifyVerdict,
@@ -78,6 +79,13 @@ export interface RecordOptions {
      *  a PASS verdict auto-walks `wip → testing → done` and auto-creates the
      *  pipeline run-link (task 0436 R4); a non-PASS verdict to `done` errors. */
     transition?: string;
+    /** 0980: structural gate supplied when the caller suppresses the lifecycle
+     *  FSM (`task record --no-lifecycle`). Without the FSM, its target-aware
+     *  `spur task check --as <target>` YAML guard would be silently lost, so the
+     *  caller injects the same P3 backstop `task update` uses (task 0130). Runs
+     *  only when the status actually changes — matching the adapter guard, which
+     *  fires on `requestTransition` and never on a same-status no-op. */
+    checkGate?: TransitionCheckGate;
 }
 
 /** Result returned by TaskService.record(). */

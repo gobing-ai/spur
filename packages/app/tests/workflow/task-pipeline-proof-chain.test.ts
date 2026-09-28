@@ -405,6 +405,10 @@ describe('task-pipeline busy-retry classifiers, done guard projection, route-id 
         expect(argsOf('implement')).toContain('"wip"');
         expect(argsOf('record')).toContain('--solution-from-diff');
         expect(argsOf('record')).toContain('"testing"');
+        // 0980: the record stage's transition must not spawn a nested task-lifecycle
+        // run — the pipeline run is the lifecycle record; a nested run outlives the
+        // pipeline as a `running` orphan (task_run_links empty, zero child rows).
+        expect(argsOf('record')).toContain('--no-lifecycle');
         expect(argsOf('done')).toContain('--no-lifecycle');
     });
 

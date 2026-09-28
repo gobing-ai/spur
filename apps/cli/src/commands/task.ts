@@ -1183,16 +1183,42 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option('--verdict-file <path>', 'Path to verdict JSON (default: .spur/run/<wbs>-verdict.json)')
         .option('--solution-from-diff', 'Backfill Solution from git diff when bare')
         .option('--transition <status>', 'Optional lifecycle transition (e.g. testing)')
+        .option(
+            '--no-lifecycle',
+            'Suppress lifecycle workflow run creation (use during pipeline runs to avoid orphaned lifecycle runs; the target-aware check gate still runs for --transition)',
+        )
         .option(...SHARED_OPTIONS.folderTasks)
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
-            const svc = await makeService(context, options.folder);
+            const svc = await makeService(context, options.folder, options.lifecycle === false);
             try {
+                // 0980: with `--no-lifecycle` no lifecycle FSM is built, so its target-aware
+                // `spur task check --as <target>` YAML guard would be silently lost. Supply
+                // the same inline structural gate the `update` command uses as its P3
+                // backstop (task 0130) — TaskService.record runs it at the adapter guard's
+                // timing (after the section writes, before the status write). Without the
+                // flag, standalone record keeps its default: the adapter (when available)
+                // owns the guard, unchanged.
+                let checkGate: TransitionCheckGate | undefined;
+                if (options.lifecycle === false && options.transition !== undefined) {
+                    const planningFolders = await resolvePlanningFolders(context.fs);
+                    checkGate = {
+                        service: new TaskCheckService(
+                            context.fs,
+                            await loadSectionMatrix(context.cwd, { embeddedSchemas: EMBEDDED_SPUR_SCHEMAS }),
+                            await makeTaskLocator(context),
+                        ),
+                        ...(planningFolders.severityOverrides !== undefined
+                            ? { severityOverrides: planningFolders.severityOverrides }
+                            : {}),
+                    };
+                }
                 const result = await svc.record(wbs, {
                     verdictFile: options.verdictFile,
                     solutionFromDiff: options.solutionFromDiff === true,
                     transition: options.transition,
+                    ...(checkGate !== undefined ? { checkGate } : {}),
                 });
                 // 0936 R1: scenario-key carry-forward warnings — loud on stderr in
                 // both modes (stderr never pollutes the --json stdout payload, which

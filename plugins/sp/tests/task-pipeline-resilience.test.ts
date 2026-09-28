@@ -262,6 +262,8 @@ esac`,
         expect(argsOf('implement')).toContain('--no-lifecycle');
         expect(argsOf('record')).toContain('--solution-from-diff');
         expect(argsOf('record')).toContain('testing');
+        // 0980: the record stage's transition must not spawn a nested task-lifecycle run.
+        expect(argsOf('record')).toContain('--no-lifecycle');
         expect(argsOf('done')).toContain('--no-lifecycle');
     });
 

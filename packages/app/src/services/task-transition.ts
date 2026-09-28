@@ -96,6 +96,39 @@ export type GuardedTransitionResult =
       };
 
 /**
+ * Run one target-aware structural check gate (`spur task check --as <target>`
+ * semantics) and throw {@link GuardDeniedError} on failure. Shared by
+ * {@link transitionTaskGuarded} (`task update`) and `TaskService.record`
+ * (0980): whenever the lifecycle FSM will NOT run its YAML guard — adapter
+ * unavailable or `--no-lifecycle` — the caller supplies this gate so the
+ * structural check is not silently lost (P3 backstop, task 0130).
+ */
+export async function runTransitionCheckGate(
+    gate: TransitionCheckGate,
+    wbs: string,
+    filePath: string,
+    target: string,
+): Promise<void> {
+    const result = await gate.service.check(filePath, wbs, {
+        strict: false,
+        asStatus: target,
+        severityOverrides: gate.severityOverrides,
+    });
+    if (!result.pass) {
+        // 0808 R3: name the target-status probe (`--as <status>`) and list
+        // its error findings — a bare "check failed" reads as a
+        // contradiction when the plain current-status check passes.
+        const errors = result.findings.filter((f) => f.severity === 'error');
+        const listed = (errors.length > 0 ? errors : result.findings)
+            .map((f) => `${f.code}${f.section === '' ? '' : ` [${f.section}]`}: ${f.message}`)
+            .join('; ');
+        throw new GuardDeniedError(
+            `Lifecycle transition blocked: \`spur task check ${wbs} --as ${target}\` failed${listed === '' ? '' : ` — ${listed}`}. Fix the findings before transitioning to ${target}.`,
+        );
+    }
+}
+
+/**
  * Canonicalize a status argument, tolerating legacy aliases. Unknown strings
  * pass through raw so the downstream write surfaces a precise FSM/schema error
  * instead of a generic "invalid enum" one.
@@ -139,23 +172,7 @@ export async function transitionTaskGuarded(
     let checkedTask: Awaited<ReturnType<TaskService['show']>> | undefined;
     if ((status === 'done' || status === 'testing') && deps.checkGate !== undefined) {
         checkedTask = await deps.tasks.show(wbs);
-        const gate = await deps.checkGate.service.check(checkedTask.filePath, wbs, {
-            strict: false,
-            asStatus: status,
-            severityOverrides: deps.checkGate.severityOverrides,
-        });
-        if (!gate.pass) {
-            // 0808 R3: name the target-status probe (`--as <status>`) and list
-            // its error findings — a bare "check failed" reads as a
-            // contradiction when the plain current-status check passes.
-            const errors = gate.findings.filter((f) => f.severity === 'error');
-            const listed = (errors.length > 0 ? errors : gate.findings)
-                .map((f) => `${f.code}${f.section === '' ? '' : ` [${f.section}]`}: ${f.message}`)
-                .join('; ');
-            throw new GuardDeniedError(
-                `Lifecycle transition blocked: \`spur task check ${wbs} --as ${status}\` failed${listed === '' ? '' : ` — ${listed}`}. Fix the findings before transitioning to ${status}.`,
-            );
-        }
+        await runTransitionCheckGate(deps.checkGate, wbs, checkedTask.filePath, status);
     }
 
     // ── done-transition verdict gate (task 0292) ──

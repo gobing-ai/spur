@@ -9,13 +9,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { applyCliMigrations, MarkdownDocument, TaskRunLinkDao } from '@gobing-ai/spur-domain';
-import { createDbAdapter } from '@gobing-ai/ts-db';
-import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
+import { createDbAdapter, type DbAdapter } from '@gobing-ai/ts-db';
+import { createNodeFileSystem, type FileSystem } from '@gobing-ai/ts-runtime';
 import { GuardDeniedError } from '../../src/errors';
 import type { SectionMatrix } from '../../src/services/planning-check-base';
-import { type EntityRef, PlanningWriteService } from '../../src/services/planning-write-service';
+import { type EntityRef, type LifecyclePort, PlanningWriteService } from '../../src/services/planning-write-service';
+import type { TaskCheckService } from '../../src/services/task-check';
 import {
     escapeTablePipe,
     flipVerifiedCheckboxes,
@@ -27,9 +28,29 @@ import {
     renderTesting,
 } from '../../src/services/task-record';
 import { sectionIsBare, TaskService } from '../../src/services/task-service';
+import type { TransitionCheckGate } from '../../src/services/task-transition';
 import { aggregateVerifyVerdict, type VerifyVerdict } from '../../src/services/verify-verdict';
 
 // ─── Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Minimal matrix shared by the record describes — the `testing`/`done` required
+ * sets drive both the record section writes and the 0980 check-gate probes.
+ */
+const RECORD_SECTION_MATRIX: SectionMatrix = {
+    variants: {
+        standard: {
+            backlog: {
+                required: ['Background'],
+                optional: ['Requirements', 'Acceptance Criteria', 'Design', 'Plan', 'Solution', 'Testing', 'Review'],
+            },
+            todo: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+            wip: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
+            testing: { required: ['Solution', 'Testing'] },
+            done: { required: ['Solution', 'Testing', 'Review'], gate: true },
+        },
+    },
+};
 
 function makeVerdict(overrides?: Partial<VerifyVerdict>): VerifyVerdict {
     return {
@@ -652,28 +673,6 @@ describe('renderSolutionFromDiff', () => {
 
 describe('TaskService.record', () => {
     let tasksDir: string;
-    const RECORD_SECTION_MATRIX: SectionMatrix = {
-        variants: {
-            standard: {
-                backlog: {
-                    required: ['Background'],
-                    optional: [
-                        'Requirements',
-                        'Acceptance Criteria',
-                        'Design',
-                        'Plan',
-                        'Solution',
-                        'Testing',
-                        'Review',
-                    ],
-                },
-                todo: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
-                wip: { required: ['Background', 'Acceptance Criteria', 'Design', 'Plan'] },
-                testing: { required: ['Solution', 'Testing'] },
-                done: { required: ['Solution', 'Testing', 'Review'], gate: true },
-            },
-        },
-    };
 
     let svc: TaskService;
 
@@ -1465,6 +1464,233 @@ describe('parseTesting — hollow MET rows (0721)', () => {
         expect(out.kind).toBe('valid');
         if (out.kind === 'valid') {
             expect(aggregateVerifyVerdict(out.verdict)).toBe('PARTIAL');
+        }
+    });
+});
+
+// ─── 0980: --no-lifecycle record keeps the gate, creates no lifecycle run ──
+
+describe('record with a suppressed lifecycle FSM (0980)', () => {
+    /**
+     * Stub gate — the subject here is that record CONSULTS the injected gate at
+     * the adapter guard's timing and propagates its denial, not the check rules
+     * themselves (covered by task-check tests and the real-gate backstop in
+     * apps/cli/tests/commands/task.test.ts).
+     */
+    function makeCheckGate(pass: boolean, calls: string[] = []): TransitionCheckGate {
+        return {
+            service: {
+                check: async (_filePath: string, wbs: string, options: { asStatus?: string }) => {
+                    calls.push(`${wbs}:${options.asStatus ?? ''}`);
+                    return {
+                        wbs,
+                        pass,
+                        findings:
+                            pass === true
+                                ? []
+                                : [
+                                      {
+                                          layer: 'L3',
+                                          code: 'L3.test',
+                                          severity: 'error',
+                                          section: '',
+                                          message: 'stub gate denial',
+                                      },
+                                  ],
+                    };
+                },
+            } as unknown as TaskCheckService,
+        };
+    }
+
+    function makeRecordingPort(calls: Array<{ from: string; to: string }>): LifecyclePort {
+        return {
+            requestTransition: (_ref, from, to) => {
+                calls.push({ from, to });
+                return { allowed: true, from, to };
+            },
+        };
+    }
+
+    /** Pipeline-shaped seam: plain writeService (no adapter) + DB for run-row probes. */
+    async function makeDbService(): Promise<{
+        svc: TaskService;
+        fs: FileSystem;
+        root: string;
+        db: DbAdapter;
+        dir: string;
+    }> {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-0980-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const db = await createDbAdapter({ driver: 'bun-sqlite', url: ':memory:' });
+        await applyCliMigrations(db);
+        const svc = new TaskService({
+            fs,
+            tasksDir: dir,
+            writeService: new PlanningWriteService({ fs }),
+            getDb: async () => db,
+            sectionMatrix: RECORD_SECTION_MATRIX,
+        });
+        return { svc, fs, root, db, dir };
+    }
+
+    async function lifecycleRowCounts(db: DbAdapter): Promise<{ runs: number; links: number }> {
+        const runRows = await db.queryAll<{ id: string }>("SELECT id FROM runs WHERE workflow_name = 'task-lifecycle'");
+        const linkRows = await db.queryAll<{ run_id: string }>(
+            "SELECT run_id FROM task_run_links WHERE kind = 'lifecycle'",
+        );
+        return { runs: runRows.length, links: linkRows.length };
+    }
+
+    test('AC1: pipeline-shaped record reaches testing with zero task-lifecycle rows', async () => {
+        const { svc, fs, root, db, dir } = await makeDbService();
+        try {
+            const created = await svc.create({ title: 'Record 0980 no row', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            // Pipeline precheck hop: todo → wip already ran with --no-lifecycle.
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify(makeVerdict({ wbs })));
+
+            const gateCalls: string[] = [];
+            const result = await svc.record(wbs, {
+                verdictFile: verdictPath,
+                solutionFromDiff: true,
+                transition: 'testing',
+                checkGate: makeCheckGate(true, gateCalls),
+            });
+
+            expect(result.transitionedTo).toBe('testing');
+            // The target-aware gate ran once, for the transition target.
+            expect(gateCalls).toEqual([`${wbs}:testing`]);
+            const raw = await fs.readFile(`${dir}/${basename(created.ref.filePath)}`);
+            expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('testing');
+            // The defect 0980 fixes: no task-lifecycle run and no lifecycle link.
+            expect(await lifecycleRowCounts(db)).toEqual({ runs: 0, links: 0 });
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('AC3: the pipeline done hop leaves no new running lifecycle orphan', async () => {
+        const { svc, fs, root, db, dir } = await makeDbService();
+        try {
+            const created = await svc.create({ title: 'Record 0980 done orphan', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify(makeVerdict({ wbs })));
+            await svc.record(wbs, {
+                verdictFile: verdictPath,
+                transition: 'testing',
+                checkGate: makeCheckGate(true),
+            });
+
+            // `task update done --no-lifecycle` seam: updateStatus through the
+            // adapter-less port. PASS-verdict gating lives in the CLI layer
+            // (transitionTaskGuarded), already covered by its own suite.
+            await svc.updateStatus(wbs, 'done');
+
+            const raw = await fs.readFile(`${dir}/${basename(created.ref.filePath)}`);
+            expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('done');
+            const counts = await lifecycleRowCounts(db);
+            expect(counts).toEqual({ runs: 0, links: 0 });
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a denied gate blocks the record transition and preserves the status', async () => {
+        const { svc, fs, root, db, dir } = await makeDbService();
+        try {
+            const created = await svc.create({ title: 'Record 0980 denied', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify(makeVerdict({ wbs })));
+
+            await expect(
+                svc.record(wbs, {
+                    verdictFile: verdictPath,
+                    transition: 'testing',
+                    checkGate: makeCheckGate(false),
+                }),
+            ).rejects.toThrow(/Lifecycle transition blocked: `spur task check .* --as testing` failed/);
+
+            // Status write never happened — the gate aborts the transition.
+            const raw = await fs.readFile(`${dir}/${basename(created.ref.filePath)}`);
+            expect(MarkdownDocument.parse(raw, 'task').frontmatterData?.status).toBe('wip');
+            expect(await lifecycleRowCounts(db)).toEqual({ runs: 0, links: 0 });
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('a same-status re-record skips the gate (no status change, no lifecycle request)', async () => {
+        // The pipeline's post-downgrade re-record hits an already-testing task;
+        // with the adapter attached no requestTransition fires, so the injected
+        // gate must not fire either.
+        const { svc, fs, root, db } = await makeDbService();
+        try {
+            const created = await svc.create({ title: 'Record 0980 same-status', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify(makeVerdict({ wbs })));
+            await svc.record(wbs, {
+                verdictFile: verdictPath,
+                transition: 'testing',
+                checkGate: makeCheckGate(true),
+            });
+
+            const gateCalls: string[] = [];
+            const result = await svc.record(wbs, {
+                verdictFile: verdictPath,
+                transition: 'testing',
+                checkGate: makeCheckGate(false, gateCalls),
+            });
+            expect(result.transitionedTo).toBe('testing');
+            expect(gateCalls).toEqual([]);
+        } finally {
+            db.close();
+            rmSync(root, { recursive: true, force: true });
+        }
+    });
+
+    test('AC2: standalone record (no checkGate) still routes the transition through the lifecycle port', async () => {
+        const root = mkdtempSync(join(tmpdir(), 'spur-record-0980-standalone-'));
+        const dir = join(root, 'tasks');
+        const fs = createNodeFileSystem(root);
+        await fs.ensureDir(dir);
+        await fs.ensureDir(join(root, '.spur', 'run'));
+        const portCalls: Array<{ from: string; to: string }> = [];
+        const svc = new TaskService({
+            fs,
+            tasksDir: dir,
+            // Standalone default: the adapter-backed port (real adapter covered by
+            // lifecycle-adapter.test.ts create-or-attach) — here recorded via a stub.
+            writeService: new PlanningWriteService({ fs, lifecycle: makeRecordingPort(portCalls) }),
+            sectionMatrix: RECORD_SECTION_MATRIX,
+        });
+        try {
+            const created = await svc.create({ title: 'Record 0980 standalone', dedupeWithinSec: null });
+            const wbs = created.ref.id;
+            await svc.updateStatus(wbs, 'wip');
+            const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+            await fs.writeFile(verdictPath, JSON.stringify(makeVerdict({ wbs })));
+
+            const result = await svc.record(wbs, { verdictFile: verdictPath, transition: 'testing' });
+
+            expect(result.transitionedTo).toBe('testing');
+            expect(portCalls).toContainEqual({ from: 'wip', to: 'testing' });
+        } finally {
+            rmSync(root, { recursive: true, force: true });
         }
     });
 });
