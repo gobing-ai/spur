@@ -2,11 +2,11 @@
 schema_version: 1
 id: "A32"
 name: "Content-verified standard-script twins"
-status: verifying
+status: done
 priority: P2
 tags: []
 created_at: "2026-09-26T06:12:08.085Z"
-updated_at: "2026-09-28T15:36:53.090Z"
+updated_at: "2026-09-28T17:28:26.028Z"
 ---
 
 # A32: Content-verified standard-script twins
@@ -55,4 +55,5 @@ Feature: Content-verified standard-script twins
 
 - 2026-09-28T15:36:48.955Z backlog → active (system)
 - 2026-09-28T15:36:53.090Z active → verifying (system)
+- 2026-09-28T17:28:26.028Z verifying → done (system)
 
