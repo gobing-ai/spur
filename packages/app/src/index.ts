@@ -72,6 +72,14 @@ export {
     resolveRoleTarget,
 } from './services/agent-instance-store';
 export {
+    type AgentLoopDeps,
+    type AgentLoopRunInput,
+    type AgentLoopRuntime,
+    DEFAULT_LOOP_POLL_MS,
+    loopSleep,
+    runAgentLoopCore,
+} from './services/agent-loop-service';
+export {
     type AgentQuotaDrainSummary,
     type AgentQuotaEventBus,
     type AgentQuotaRecordOutcome,

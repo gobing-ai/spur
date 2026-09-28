@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Move the self-draining agent loop out of the agent CLI into a spur-app loop service
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-26T05:53:31.176Z
-updated_at: "2026-09-27T16:45:02.687Z"
+updated_at: "2026-09-28T22:29:16.050Z"
 feature_id: G67
 
 dependencies: ["0967"]
@@ -45,7 +45,7 @@ These tests are the behavior lock for this refactor.
 
 ### Requirements
 
-- [ ] R1. `packages/app/src/services/agent-loop-service.ts` exports an `AgentLoopService` (or `runAgentLoopCore`) that owns:
+- [x] R1. `packages/app/src/services/agent-loop-service.ts` exports an `AgentLoopService` (or `runAgentLoopCore`) that owns:
   - the orchestrator claim, heartbeat and release;
   - the reconcile-before-first-drain step and its report text;
   - the orchestrator resume;
@@ -55,10 +55,10 @@ These tests are the behavior lock for this refactor.
   - the member drain and settle sequence;
   - idle-hold recording with key dedupe;
   - the `ownershipLost` exit code (2).
-- [ ] R2. The service depends on a structural `AgentLoopDeps` object, not on `CliContext`. CLI-only collaborators are injected as functions: the ledger attach, the drain, the settle, the strategy-runtime factory, the spec listing, and the `write`/`error` output sinks. No module under `packages/app/src` imports from `apps/`.
-- [ ] R3. `runAgentLoop` in the CLI keeps its exported signature `(context, flags, runtime?, deps?) => Promise<number>`. It validates `--spec` (exit 2 with the same message), parses `--poll`, builds `AgentLoopDeps` from the context, and returns the service's exit code. Every stdout/stderr line, ledger row, exit code and `AgentLoopRuntime` field is unchanged.
-- [ ] R4. The existing loop tests pass with no assertion edits: `agent-loop-wake`, `agent-loop-member-session`, and the loop cases in `agent.test.ts` and `agent-team.test.ts`.
-- [ ] R5. `packages/app/tests/services/agent-loop-service.test.ts` unit-covers, with stub deps and an in-memory DB:
+- [x] R2. The service depends on a structural `AgentLoopDeps` object, not on `CliContext`. CLI-only collaborators are injected as functions: the ledger attach, the drain, the settle, the strategy-runtime factory, the spec listing, and the `write`/`error` output sinks. No module under `packages/app/src` imports from `apps/`.
+- [x] R3. `runAgentLoop` in the CLI keeps its exported signature `(context, flags, runtime?, deps?) => Promise<number>`. It validates `--spec` (exit 2 with the same message), parses `--poll`, builds `AgentLoopDeps` from the context, and returns the service's exit code. Every stdout/stderr line, ledger row, exit code and `AgentLoopRuntime` field is unchanged.
+- [x] R4. The existing loop tests pass with no assertion edits: `agent-loop-wake`, `agent-loop-member-session`, and the loop cases in `agent.test.ts` and `agent-team.test.ts`.
+- [x] R5. `packages/app/tests/services/agent-loop-service.test.ts` unit-covers, with stub deps and an in-memory DB:
   - `waitForWake` returns on the first wake event, consumes non-wake rows, never replays a row, and falls back to `backstop-timeout` at the deadline and on abort;
   - the idle hold writes one row per distinct hold key and resets after a non-empty drain;
   - a not-accepted persistent send settles `not-started`;
@@ -68,8 +68,8 @@ These tests are the behavior lock for this refactor.
 
 Graduates feature G67 scenarios R3 and R4 (exact titles below); the numbered rows are the verify lens.
 
-- [ ] AC1 — R3 — The agent loop is an application service (req: R1, R2, R3)
-- [ ] AC2 — R4 — Loop behavior is unchanged (req: R4, R5)
+- [x] AC1 — R3 — The agent loop is an application service (req: R1, R2, R3)
+- [x] AC2 — R4 — Loop behavior is unchanged (req: R4, R5)
 
 **Verify lens**
 
@@ -161,28 +161,76 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
 
 ### Plan
 
-- [ ] Confirm that task 0967 is `done`, then re-read `agent.ts` and re-anchor the Background lines.
-- [ ] Create `agent-loop-service.ts` (Design) by moving the code verbatim, and export it from `packages/app/src/index.ts`.
-- [ ] Thin `runAgentLoop` in the CLI (Design, CLI steps 1-5) and remove the imports that become unused.
-- [ ] Add `packages/app/tests/services/agent-loop-service.test.ts` covering the R5 cases: an in-memory `SystemEventDao` for `waitForWake`, and stub `drain`/`settle`/`agentService`.
-- [ ] Focused tests:
+- [x] Confirm that task 0967 is `done`, then re-read `agent.ts` and re-anchor the Background lines.
+- [x] Create `agent-loop-service.ts` (Design) by moving the code verbatim, and export it from `packages/app/src/index.ts`.
+- [x] Thin `runAgentLoop` in the CLI (Design, CLI steps 1-5) and remove the imports that become unused.
+- [x] Add `packages/app/tests/services/agent-loop-service.test.ts` covering the R5 cases: an in-memory `SystemEventDao` for `waitForWake`, and stub `drain`/`settle`/`agentService`.
+- [x] Focused tests:
   - `(cd packages/app && bun test tests/services/agent-loop-service.test.ts tests/services/member-session.test.ts)`
   - `(cd apps/cli && bun test tests/commands/agent-loop-wake.test.ts tests/commands/agent-loop-member-session.test.ts tests/commands/agent.test.ts tests/commands/agent-team.test.ts)`
-- [ ] Gates: `bun run spur-check`. Run the AC1 `rg` probes and the AC2 `git diff` probe and paste their output. Known flake: `agent-run-fleet` R3 has a 5s timeout under full-suite load. Re-run it in isolation and record the result.
-- [ ] Record the follow-up note (move drain, settle and ledger-attach into `packages/app`) in Review as out-of-scope.
-- [ ] One commit: `refactor(agent): move the self-draining agent loop into spur-app (<wbs>)`.
+- [x] Gates: `bun run spur-check`. Run the AC1 `rg` probes and the AC2 `git diff` probe and paste their output. Known flake: `agent-run-fleet` R3 has a 5s timeout under full-suite load. Re-run it in isolation and record the result.
+- [x] Record the follow-up note (move drain, settle and ledger-attach into `packages/app`) in Review as out-of-scope.
+- [x] One commit: `refactor(agent): move the self-draining agent loop into spur-app (<wbs>)`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `apps/cli/src/commands/agent.ts:0` |
+| `apps/cli/src/commands/agent.ts:1021` |
+| `apps/cli/src/commands/agent.ts:1023` |
+| `apps/cli/src/commands/agent.ts:1039` |
+| `apps/cli/src/commands/agent.ts:1046` |
+| `apps/cli/src/commands/agent.ts:1063` |
+| `apps/cli/src/commands/agent.ts:1065` |
+| `apps/cli/src/commands/agent.ts:11` |
+| `apps/cli/src/commands/agent.ts:14` |
+| `apps/cli/src/commands/agent.ts:16` |
+| `apps/cli/src/commands/agent.ts:17` |
+| `apps/cli/src/commands/agent.ts:21` |
+| `apps/cli/src/commands/agent.ts:32` |
+| `apps/cli/src/commands/agent.ts:36` |
+| `apps/cli/src/commands/agent.ts:38` |
+| `apps/cli/src/commands/agent.ts:42` |
+| `apps/cli/src/commands/agent.ts:5` |
+| `apps/cli/src/commands/agent.ts:968` |
+| `apps/cli/src/commands/agent.ts:996` |
+| `packages/app/src/index.ts:74` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/agent-loop-service.ts` (new) owns the orchestrator claim/heartbeat/release (`ProjectClaimDao`, `CLAIM_TTL_MS`), reconcile-before-first-drain (`formatReconcileReport`), orchestrator resume, member-session setup (`MemberSession`), the wake-then-drain loop (`waitForWake`, `loopSleep`, `WAKE_EVENT_NAMES`, `IDLE_HOLD_EVENT`, `WAKE_FOLLOW_BATCH`), orchestrator `dispatchNext`, member drain+settle, idle-hold dedupe, and the `ownershipLost → 2` exit |
+| R2 | MET | `AgentLoopDeps` is structural; the ledger attach, drain, settle, strategy-runtime factory, spec listing and `write`/`error` sinks are injected. Probe: `rg -n "from '(\.\./)+.*apps/\|CliContext" packages/app/src/services/agent-loop-service.ts` → none |
+| R3 | MET | `runAgentLoop` keeps its signature and `--spec` exit-2 message + `parseLoopPoll`; it builds `AgentLoopDeps` from the context and returns the service's code. `awk` size: 40 lines. `export type { AgentLoopRuntime }` preserved on `agent.ts` |
+| R4 | MET | `(cd apps/cli && bun test tests/commands/agent-loop-wake.test.ts tests/commands/agent-loop-member-session.test.ts tests/commands/agent.test.ts tests/commands/agent-team.test.ts)` → 90 pass / 0 fail with no assertion edits (`git diff HEAD -- apps/cli/tests` empty) |
+| R5 | MET | `packages/app/tests/services/agent-loop-service.test.ts` → 6 pass / 0 fail: waitForWake first-wake + consumed non-wake row + no replay, deadline fallback, abort fallback; idle hold one-row-per-key + reset; not-accepted persistent send settles `not-started`; a refused orchestrator claim exits 2 |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R3 — The agent loop is an application service | MET | command | Probe 1 `rg -n "function (waitForWake\|recordIdleHold\|loopSleep\|formatReconcileReport)\|WAKE_EVENT_NAMES =\|IDLE_HOLD_EVENT =" apps/cli/src` → none; probe 2 (no `apps/`/`CliContext` in the service) → none; probe 3 `runAgentLoop` → 40 lines |
+| R4 — Loop behavior is unchanged | MET | command | `(cd apps/cli && bun test …agent-loop-wake…agent-loop-member-session…agent…agent-team)` → 90 pass / 0 fail; `git diff HEAD -- apps/cli/tests` → empty (no `expect(` edits); `(cd packages/app && bun test tests/services/agent-loop-service.test.ts)` → 6 pass; `bun run spur-check` → 9421 pass / 0 fail |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:5ea53c7775e64b7400c6a2ab0bf60dd2b9d1c260f275194e577c6c86b0f61861 |
 
 ### References
 
@@ -193,4 +241,7 @@ export async function runAgentLoopCore(deps: AgentLoopDeps, input: AgentLoopRunI
 ### History
 
 - 2026-09-26T05:53:52.891Z backlog → todo (system)
+- 2026-09-28T22:28:47.199Z todo → wip (system)
+- 2026-09-28T22:28:47.841Z wip → testing (system)
+- 2026-09-28T22:29:16.050Z testing → done (system)
 
