@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Frameable fixture app</title>
+        <style>
+            body {
+                margin: 0;
+                font-family: system-ui, sans-serif;
+                min-height: 1200px;
+            }
+            [data-frame-fixture] {
+                padding: 8px;
+            }
+        </style>
+    </head>
+    <body>
+        <!--
+      Owned frame-PERMITTING fixture (task 0988 R5). Served by the proof harness on its own origin
+      with `Content-Security-Policy: frame-ancestors *`. Tall enough that the proof can observe
+      scrolling inside the embedded document.
+    -->
+        <div data-frame-fixture="permitted">permitted frame fixture</div>
+    </body>
+</html>

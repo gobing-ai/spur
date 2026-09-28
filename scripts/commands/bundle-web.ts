@@ -6,6 +6,11 @@
  * (see `resolveWebDistPath` in apps/server/src/serve.ts). Without this step,
  * `/board` returns `{"error":"Not Found"}` after a global npm/bun install.
  *
+ * Since task 0988 the board distribution also advertises the runtime it provides: the copied tree
+ * must carry the import map in `index.html` and the distribution-root `board-runtime.json` whose
+ * facade URLs resolve to emitted assets. A board build without that manifest is not packageable —
+ * a consumer would map `react` to a missing asset instead of the renderer's module instance.
+ *
  * Source: repo-root `dist/web` (produced by `bun run --filter '@gobing-ai/spur-web' build`).
  * Target: `apps/cli/web` by default (override with the first CLI arg).
  */
@@ -17,9 +22,50 @@ const REPO_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const DEFAULT_SOURCE = join(REPO_ROOT, 'dist/web');
 const DEFAULT_TARGET = join(REPO_ROOT, 'apps/cli/web');
 
+/** Frozen protocol version the packaged board must advertise (task 0988 R2). */
+export const BOARD_RUNTIME_MANIFEST_FILE = 'board-runtime.json';
+export const BOARD_RUNTIME_MANIFEST_VERSION = 1;
+
 /** True when `dir/index.html` exists (board SPA entry). */
 async function hasBoardIndex(dir: string): Promise<boolean> {
     return Bun.file(join(dir, 'index.html')).exists();
+}
+
+/**
+ * Assert a copied board distribution advertises the runtime protocol it was built for.
+ * Throws naming the offending file so a packaging regression is never silent.
+ */
+async function verifyBoardRuntime(dir: string): Promise<void> {
+    const manifestPath = join(dir, BOARD_RUNTIME_MANIFEST_FILE);
+    const manifestFile = Bun.file(manifestPath);
+    if (!(await manifestFile.exists())) {
+        throw new Error(`bundle-web: ${manifestPath} is missing — rebuild the board with the boardRuntime integration`);
+    }
+    let manifest: { manifestVersion?: number; contributionApiVersion?: number; imports?: Record<string, string> };
+    try {
+        manifest = JSON.parse(await manifestFile.text()) as typeof manifest;
+    } catch (error) {
+        throw new Error(`bundle-web: ${manifestPath} is not valid JSON: ${String(error)}`);
+    }
+    if (manifest.manifestVersion !== BOARD_RUNTIME_MANIFEST_VERSION) {
+        throw new Error(
+            `bundle-web: ${manifestPath} advertises manifestVersion ${String(manifest.manifestVersion)}, expected ${BOARD_RUNTIME_MANIFEST_VERSION}`,
+        );
+    }
+    const imports = manifest.imports ?? {};
+    for (const specifier of ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime']) {
+        if (!imports[specifier]) {
+            throw new Error(`bundle-web: ${manifestPath} does not map "${specifier}" to a facade asset`);
+        }
+    }
+    for (const [specifier, url] of Object.entries(imports)) {
+        if (!url.startsWith('/') || url.includes('*')) {
+            throw new Error(`bundle-web: ${manifestPath} maps "${specifier}" to the unsupported URL "${url}"`);
+        }
+        if (!(await Bun.file(join(dir, url.replace(/^\//, ''))).exists())) {
+            throw new Error(`bundle-web: facade asset for "${specifier}" is missing from the packaged board`);
+        }
+    }
 }
 
 /**
@@ -59,6 +105,7 @@ export async function bundleWeb(
     source: string = DEFAULT_SOURCE,
 ): Promise<{ source: string; target: string }> {
     const resolvedSource = await ensureWebBuild(source);
+    await verifyBoardRuntime(resolvedSource);
     await rm(target, { recursive: true, force: true });
     await cp(resolvedSource, target, { recursive: true });
     if (!(await hasBoardIndex(target))) {

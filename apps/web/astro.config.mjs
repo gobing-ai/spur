@@ -2,6 +2,7 @@ import react from '@astrojs/react';
 import honoDevServer from '@hono/vite-dev-server';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'astro/config';
+import { boardRuntime } from './scripts/board-runtime';
 
 // Unified dev (W5 / 0081): one Astro/Vite dev server on one port serves the
 // board (HMR) AND the Hono API in-process — no proxy, no CORS. honoDevServer
@@ -10,7 +11,7 @@ import { defineConfig } from 'astro/config';
 // worker's stand-alone `/`→/api/health redirect never shadows the board.
 export default defineConfig({
     output: 'static',
-    integrations: [react()],
+    integrations: [react(), boardRuntime()],
     vite: {
         resolve: {
             alias: { '@': '/src' },

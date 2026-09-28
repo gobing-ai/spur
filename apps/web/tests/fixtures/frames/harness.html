@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Frame embedding proof harness</title>
+        <style>
+            body {
+                margin: 0;
+                font-family: system-ui, sans-serif;
+            }
+            iframe {
+                width: 100%;
+                height: 200px;
+                border: 1px solid #999;
+            }
+        </style>
+    </head>
+    <body>
+        <!--
+      Frame proof harness (task 0988 R5). ONE harness embeds an owned frame-permitting app and an
+      owned frame-denying app, offers an always-available external-open link per embed, and records
+      what the parent document can and cannot observe.
+
+      It deliberately records NO readiness from a frame's `load` event: a blocked frame still fires
+      `load` in Chromium, so readiness for the permitted app is established only by evaluating inside
+      its own execution context (the CDP harness does that), and the denied app's readiness stays
+      `not-claimed`.
+    -->
+        <main data-frame-harness>
+            <h1>Frame embedding proof harness</h1>
+        </main>
+        <script>
+            (() => {
+                const proof = {
+                    loadFired: {},
+                    readiness: { permitted: 'not-claimed', denied: 'not-claimed' },
+                    activeElement: null,
+                    inlineWidth: null,
+                    viewportWidth: window.innerWidth,
+                };
+                window.__frameProof = proof;
+
+                const fixtures = {
+                    permitted: '__PERMITTED_URL__',
+                    denied: '__DENIED_URL__',
+                };
+
+                for (const [name, url] of Object.entries(fixtures)) {
+                    const section = document.createElement('section');
+                    section.setAttribute('data-frame-section', name);
+
+                    const frame = document.createElement('iframe');
+                    frame.setAttribute('data-frame', name);
+                    frame.setAttribute('title', `${name} fixture embed`);
+                    frame.src = url;
+                    // A load event is NOT readiness: recorded, never interpreted (design §4.3).
+                    frame.addEventListener('load', () => {
+                        proof.loadFired[name] = true;
+                    });
+                    section.appendChild(frame);
+
+                    const link = document.createElement('a');
+                    link.setAttribute('data-external-open', name);
+                    link.href = url;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.textContent = `Open ${name} externally`;
+                    section.appendChild(link);
+
+                    document.querySelector('main').appendChild(section);
+                }
+
+                // Focus observation the parent can make without reading the child document.
+                const permittedFrame = document.querySelector('iframe[data-frame="permitted"]');
+                permittedFrame.focus();
+                proof.activeElement = document.activeElement?.getAttribute('data-frame') ?? null;
+                proof.inlineWidth = `${permittedFrame.clientWidth}`;
+            })();
+        </script>
+    </body>
+</html>
