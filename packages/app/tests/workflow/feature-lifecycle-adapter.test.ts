@@ -196,6 +196,14 @@ function makeFixtureAdapter(root: string, db: DbAdapter): LifecycleAdapter {
     return new LifecycleAdapter(opts);
 }
 
+// The two R4 guard tests below spawn the real CLI guard as a child process.
+// Under a saturated full-suite run that child can outlive Bun's 5000 ms default
+// per-test timeout (observed at 5001 ms), so they carry an explicit budget.
+const CLI_GUARD_TIMEOUT_MS = 20_000;
+const testCliGuard = (label: string, fn: () => Promise<void>): void => {
+    test(label, fn, CLI_GUARD_TIMEOUT_MS);
+};
+
 describe('FeatureLifecycleAdapter (engine integration)', () => {
     test('R1: allows a transition declared in the feature-lifecycle graph (backlog → active)', async () => {
         const { adapter, db } = await makeAdapter();
@@ -278,7 +286,7 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         db.close();
     });
 
-    test('R4 (0418): a two-P0-active corpus is recoverable through the CLI guard chain', async () => {
+    testCliGuard('R4 (0418): a two-P0-active corpus is recoverable through the CLI guard chain', async () => {
         // The deadlock fixture: F2 + F4 both P0 `active`, both finished (linked
         // tasks all done). Driving F2 active→verifying→done through the real FSM
         // shell guards (which pass `--as verifying` / `--as done`) must succeed,
@@ -355,7 +363,7 @@ describe('FeatureLifecycleAdapter (engine integration)', () => {
         rmSync(root, { recursive: true, force: true });
     });
 
-    test('R4 (0872): verifying→done refuses until the feature-scoped pass records PASS', async () => {
+    testCliGuard('R4 (0872): verifying→done refuses until the feature-scoped pass records PASS', async () => {
         // ADR-119 (task 0872): a feature cannot reach done while its repo-wide
         // verification pass is failing. The verifying→done shell guard reads
         // `.spur/run/<id>-feature-verification.status` and only proceeds to the
