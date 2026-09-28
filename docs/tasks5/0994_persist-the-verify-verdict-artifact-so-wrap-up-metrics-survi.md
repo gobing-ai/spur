@@ -1,46 +1,50 @@
 ---
 schema_version: 1
-name: Persist the verify verdict artifact so wrap-up metrics survive worktree teardown
+name: Derive the wrap-up metrics verdict from the tracked Testing record
 status: todo
 template: feature-impl
 created_at: 2026-09-28T08:31:25.123Z
-updated_at: "2026-09-28T08:32:39.050Z"
+updated_at: "2026-09-28T17:46:22.353Z"
 feature_id: D62
 
 ac_altitude: task-local
 ---
 
-## 0994. Persist the verify verdict artifact so wrap-up metrics survive worktree teardown
+## 0994. Derive the wrap-up metrics verdict from the tracked Testing record
 
 ### Background
 
-Found during the 2026-09-28 `sp:dev-review-session --triage` of the 0981 → 0974 → 0970 → 0973 run.
+Found during the 2026-09-28 `sp:dev-review-session --triage` of the 0981 → 0974 → 0970 → 0973 run; re-verified 2026-09-28 against the code and `.spur/memory/wrapup-metrics.jsonl`.
 
-`metrics-record` (`plugins/sp/scripts/wrapup-steps.ts:327-340`) derives a task's metric verdict by reading `.spur/run/<wbs>-verdict.json`, defaulting to `UNKNOWN`. `/sp-dev-run --worktree` FF-merges and removes the tree on success (WT-4/WT-5), so that gitignored artifact dies with the tree; `/sp-dev-wrap` then runs in the main tree where the artifact is absent.
+`runMetrics` (`plugins/sp/scripts/wrapup-steps.ts:278`) derives each row's verdict only from the gitignored `.spur/run/<wbs>-verdict.json` (`:326-337`), defaulting to `UNKNOWN`. `/sp:dev-run --worktree` FF-merges and removes the tree on success (WT-4/WT-5), so the artifact dies with the tree and `/sp:dev-wrap` in the main tree finds nothing.
 
-0984 (done) persists worktree run evidence, but only the `.spur/run/<name>` anchors the task file *cites*, and `renderTesting` (`packages/app/src/services/task-record.ts`) emits source/command evidence plus a pathless `Verdict: PASS (from verdict artifact)` line — never a `.spur/run/…` citation for the verdict JSON. So the artifact is not persisted.
+0984 does not cover it: persist-out copies only `.spur/run/<name>` files the fast-forwarded task file *cites* (`RUN_CITATION_RE`, `packages/app/src/services/inline-run-setup.ts:207`), and `renderTesting` (`packages/app/src/services/task-record.ts:150`) writes a pathless `- Verdict: PASS (from verdict artifact)` line.
 
-Observed on 0981: the wrap recorded `{"wbs":"0981",…,"verdict":"UNKNOWN"}` while the task's own verdict artifact read `PASS`; the later wraps only reported `PASS` because the artifact was copied into the main tree by hand before teardown.
+The verdict is not actually lost: `task record` writes it into the tracked `### Testing` section before merge, and `runMetrics` already fetches that content through `spur task show <wbs> --json` (`:309`). It just never reads it.
 
-AC altitude: task-local. These are regression checks on the wrap-up metrics path, not new feature ship criteria.
+Evidence (reproducible now): the log holds 28 `UNKNOWN` rows. Task 0967 is `done` with `- Verdict: PASS` in its tracked Testing section and no `.spur/run/0967-verdict.json` in the main tree; its row (2026-09-27T06:27:31Z) is `UNKNOWN`. The 0981 `UNKNOWN` row cited by the triage is no longer in the log (only a later hand-assisted `PASS` row remains), so 0967 is the reference case.
+
+AC altitude: task-local. Regression fix on the wrap-up metrics path, not a new feature ship criterion.
 
 ### Requirements
 
-- [ ] R1. A completed task's metric verdict is derived from a source that survives worktree teardown — cite `.spur/run/<wbs>-verdict.json` from the recorded `Testing` section so 0984's persist-out copies it, or read the verdict from the tracked task record (F93's direction).
-- [ ] R2. `metrics-record` must not record `verdict: "UNKNOWN"` for a task whose verdict artifact existed and was `PASS`/`PARTIAL`/`FAIL`. A genuinely missing artifact stays `UNKNOWN` but is named in the run record, not silently absorbed.
-- [ ] R3. No change to the metrics row schema; existing `wrapup-metrics.jsonl` rows stay readable.
-- [ ] R4. The fix holds for the documented two-command flow (`dev-run --worktree` then `dev-wrap`), not only for a wrap that runs inside the worktree.
+- [ ] R1. When `.spur/run/<wbs>-verdict.json` is absent or yields no verdict, `runMetrics` derives the row verdict from the `Verdict:` line of the tracked `Testing` section in the `task show --json` content it already fetches. The artifact stays the first source, so existing single-tree behavior is unchanged.
+- [ ] R2. The fallback matches only a line-anchored `Verdict: PASS|PARTIAL|FAIL|UNKNOWN` inside the Testing section, with the same semantics as `parseVerdictLine` (`packages/app/src/services/task-record.ts:336`). Evidence text elsewhere in the task must not match. Because of the plugin standalone contract (ADR-065), the check is a local copy with a comment pointing to `parseVerdictLine`, not an import.
+- [ ] R3. When neither source gives a verdict, the row stays `UNKNOWN` and stderr, which the workflow run log captures, names the task, the missing artifact path and the missing Testing verdict. The step status is unchanged: `UNKNOWN` stays telemetry, not failure (`config/workflows/wrapup-pipeline.yaml:281`).
+- [ ] R4. The metrics row schema does not change (`wbs, feature_id, status, verdict, timestamp`, same key order), so existing rows stay readable.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Metrics verdict survives teardown (req: R1, R2)
-  - Verify: end-to-end `dev-run --worktree` on a PASS task, then `dev-wrap` in the main tree; the appended metrics row records `verdict: "PASS"`.
-- [ ] AC2 — Absent verdict is honest (req: R2)
-  - Verify: with the artifact removed in both trees the row is `UNKNOWN` and the run record names the missing file.
-- [ ] AC3 — Schema unchanged (req: R3)
-  - Verify: the existing metrics-row assertions in the wrapup tests still pass.
-- [ ] AC4 — Repository gate (req: R1, R4)
-  - Verify: `bun run spur-check` green, including the worktree-isolation and wrapup tests.
+- [ ] AC1 — Tracked verdict used when the artifact is gone (req: R1, R2)
+  - Verify: `plugins/sp/tests/wrapup-steps.test.ts` has a case where the stubbed `task show` content has a `### Testing` section with `- Verdict: PASS` and there is no artifact. The row has `verdict: "PASS"`. A second case has `Verdict: FAIL` only inside an evidence table cell, and the row stays `UNKNOWN`.
+- [ ] AC2 — Artifact precedence kept (req: R1)
+  - Verify: a test case where the artifact says `PARTIAL` and the tracked line says `PASS` records `PARTIAL`.
+- [ ] AC3 — Absent verdict is honest (req: R3)
+  - Verify: the existing no-artifact case (`plugins/sp/tests/wrapup-steps.test.ts:290`) still records `UNKNOWN`, and stderr names `.spur/run/0770-verdict.json`.
+- [ ] AC4 — Schema unchanged (req: R4)
+  - Verify: the key-order assertion at `plugins/sp/tests/wrapup-steps.test.ts:294` passes unchanged.
+- [ ] AC5 — Real-data reproduction (req: R1)
+  - Verify: in a scratch copy, a metrics run over a capture of `["0967"]` in the main tree records `PASS` (before the fix: `UNKNOWN`). Then `bun run spur-check` is green.
 
 ### Q&A
 
@@ -50,22 +54,29 @@ AC altitude: task-local. These are regression checks on the wrap-up metrics path
 
 ### Design
 
-Two candidate mechanisms — pick one, keep the other as the absent-artifact path:
+**Chosen: read the tracked task record as the fallback** (F93's direction: the gate reads the tracked record). Artifact first, tracked `Testing` verdict line second, honest `UNKNOWN` last. This is about 15 lines in `runMetrics`, with no new process call, because the `task show --json` content is already in hand.
 
-- **Cite it.** Add the `.spur/run/<wbs>-verdict.json` anchor to the `Testing` section `record` writes, so 0984's citation pass copies it before teardown. Smallest change; reuses the existing persist-out contract, whose cap and de-duplication (0984 R3) the added anchor must respect.
-- **Read the task record.** Derive the metric verdict from the tracked `Testing` table (F93's "gate reads the tracked task record" direction) when the artifact is absent.
+**Rejected: citing `.spur/run/<wbs>-verdict.json` from `renderTesting`** so 0984's persist-out copies it:
+- 0984 R1 makes a cited file that is missing in both trees *block teardown*. That would turn a telemetry gap into a merge blocker.
+- It adds a gitignored path to every tracked task file. The path dangles in any fresh clone.
+- It only fixes future worktree runs. The copied file is still gitignored, so it is lost on another clone. The 28 existing `UNKNOWN` rows' tasks stay unrecoverable.
+- It changes `renderTesting` output, which every task record and its tests pin.
 
-Rejected: reading the verdict inside the worktree during `dev-run` — `dev-run` is not the wrap producer, and it would couple two commands' responsibilities.
+**Rejected: a derived `verdict` field on `spur task show --json`.** It is a public CLI surface change (needs consent), and the plugin can already read the line.
 
-The honest-`UNKNOWN` requirement stays satisfied either way: when neither source exists, the row is `UNKNOWN` and the missing path is named in the run record.
+**Rejected: reading the verdict inside the worktree during `dev-run`.** `dev-run` does not produce the wrap, so this would couple two commands' responsibilities.
+
+Out of scope (note only): backfilling the 28 historical `UNKNOWN` rows. The log is append-only telemetry. A rerun of `/sp:dev-wrap` for a task would append a corrected row if anyone needs it.
+
+Residual: a stale main-tree artifact from an earlier non-worktree attempt still wins over a newer tracked verdict. This is the existing behavior and is not widened by this fix.
 
 ### Plan
 
-- [ ] Reproduce: run the two-command flow on a throwaway PASS task and confirm the `UNKNOWN` row.
-- [ ] Add the failing assertion (metrics row reads `PASS`) to the wrapup test.
-- [ ] Implement the chosen mechanism; keep the other as the absent-artifact path.
-- [ ] Re-run the reproduction with the artifact removed to confirm the honest `UNKNOWN` plus the named file.
-- [ ] Run `bun run spur-check`; commit.
+- [ ] Add the failing tests (AC1, AC2, AC3 stderr) to `plugins/sp/tests/wrapup-steps.test.ts`.
+- [ ] Implement the Testing-section slice + line-anchored verdict match in `runMetrics`; add the stderr line for the no-source case.
+- [ ] Regenerate the `plugins/sp/scripts/wrapup-steps.mjs` twin (`superskill script convert sp wrapup-steps.ts`, part of `bun run build:scripts`), then run `bun run plugin-smoke`.
+- [ ] AC5 real-data reproduction on 0967 in a scratch copy (do not append to the real metrics log).
+- [ ] `bun run spur-check`; commit.
 
 ### Solution
 
