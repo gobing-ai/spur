@@ -2,7 +2,7 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.55.0
+version: 1.56.0
 owner: Robin Min
 updated_at: 2026-09-28
 read_before: any structural change; before diverging from a decision
@@ -1995,3 +1995,12 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Consequence:** Spur owns a supported browser ABI and asset-serving boundary. Native code is trusted within the Board document; framed applications retain browser embedding restrictions. Config changes use restart/reload, and the actual installed-Board runtime proof is required before production loader work.
 - **Retains:** ADR-012's upstream lifecycle ownership and removal of unused backend plugin machinery; ADR-019's runtime separation; ADR-021's thin transports; ADR-027's single config loader.
 - **Detail:** `03 §30`; [downstream Board module contract](design/downstream-board-modules.md). This decision does not claim implementation.
+
+## ADR-129: One Ledger and Session Core; Host Extensions Are Normalizing Adapters
+
+- **Status:** Accepted · **Date:** 2026-09-28 · **Feature:** H21 · **Task:** 0969
+- **Decision:** The indexed-context token ledger and session lifecycle have exactly one implementation — the Claude hook cores `recordToolUseEvent` (`context-post-tool.ts`), `recordSessionStart` (`context-session-start.ts`) and `recordSessionEnd` (`context-session-stop.ts`) in `plugins/sp/hooks`. Every other host is a thin adapter that normalizes its native event into the canonical Claude payload and calls those cores; no host re-implements the ledger row, `.session.json`, token cascade, redaction or session reuse. Pi's `guard-extension.ts` keeps only `normalizePiToolEvent` plus three one-line handlers. Alternatives rejected: a host-neutral core DTO with per-host mappers (a second schema free to drift) and duplicate per-host cores (the status quo, which drifted three times — raw secrets in summaries, `timestamp` vs `ts`, `path` vs `file` — plus a nested-totals gap, a wrong session schema and no tier mapping).
+- **Why:** Cross-host parity is a data invariant, not a per-host feature; one core turns drift into a test failure instead of a silent reader break and keeps the ledger contract single-sourced.
+- **Consequence:** A new host (omp, Codex) adds a normalizer, not a ledger implementation. The cores stay plugin-local under the standalone contract (ADR-065) rather than moving into `packages/app`, so hook processes keep running without the monorepo. Claude and Pi rows are equal on every `ts`-independent field.
+- **Retains:** ADR-012/065 (plugin standalone, portable entrypoints), ADR-056 (one observability envelope seam), ADR-068 (capture at the producing boundary).
+- **Detail:** `03 §31`; [observability contracts](design/observability-contracts.md) §7.8b; feature H21.

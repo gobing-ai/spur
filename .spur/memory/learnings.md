@@ -3714,3 +3714,58 @@ Evidence: `git show --name-only 0eaad428a` — 0968 touched no doc but its task 
 - **Repaired (2 files):** `docs/03_ARCHITECTURE.md` — mechanism sentence now names `runAgentLoopCore` in `packages/app/src/services/agent-loop-service.ts` as the constructor/driver and the CLI as the delegating transport, version `1.60.0 → 1.61.0` (§6.4). `docs/design/session-pinned-dispatch.md` — `updated_at 2026-09-26 → 2026-09-28`, `related += "0968"`, and a dated 0968 amendment superseding the 0967 wording (§6.5, T9).
 - **Zero-finding:** `docs/04_DESIGN.md` index pointer unchanged (same satellite slug, §7.1 "unchanged owners need no edit"); `docs/00_ADR.md` needs no entry because ADR-021 ("Functionality Lives in `packages/app`") already governs the move, so no new architectural choice (T1 not triggered); the satellite's §1 "Problem, measured" snapshot was left as dated history per §7.2; the existing `project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62` anchor still resolves.
 - **Verification:** referenced path/symbols exist (`agent-loop-service.ts`, `runAgentLoopCore`, `AgentLoopDeps`, CLI re-exports); `bun run link-check` OK. The repo has no markdown-anchor checker and Biome ignores `docs/**`, so link verification was done by resolving the one affected anchor directly.
+Doc-evolve wrapup for task `0969` (feature H21) is done. One T1 drift finding, repaired; no T3/T4/T9 edits needed.
+
+## Drift report — 2026-09-28
+
+Checks run: 8 (§7 items) · Findings: 1
+
+| # | Doc | Reality says | Doc says | Authority | Trigger | Repair |
+|---|-----|--------------|----------|-----------|---------|--------|
+| 1 | `docs/00_ADR.md` + `docs/03_ARCHITECTURE.md` | One ledger/session core in `plugins/sp/hooks`; Pi is a normalizing adapter (`normalizePiToolEvent` → `recordToolUseEvent` / `recordSessionStart` / `recordSessionEnd`); host rows equal on all `ts`-independent fields | No record of the cross-host invariant; `03` never described the hook layer | `00` (ADR-000 admission), `03 §6.4` | T1 | Added **ADR-129** (bump 1.55.0→1.56.0) and a concise **`03 §31`** invariant (bump 1.61.0→1.62.0) |
+
+Zero-finding checks (command-backed):
+- **CLI/API/config/schema drift (T3):** `git show --stat 9114be3e8 --name-only | rg "apps/cli|packages/contracts|packages/config|drizzle"` → none. Ledger row contract already owned by `docs/design/observability-contracts.md §7.8b`; the schema was *restored*, not altered → no T3 edit.
+- **Stale host claim:** `rg -n "\bPi\b" docs --glob '!tasks*/**' --glob '!features/**' --glob '!plans/**'` → only `docs/help/environment_variables.md` (outside the target set) and unrelated history-importer satellites. No doc asserted the old Pi reimplementation.
+- **AGENTS.md doc map == §4.1:** extracted both file sets → identical (9 files).
+- **`03` modules vs tree / `04` coverage / `01` scope / `02` phases:** no new module, command, flag, config, schema, or scope row.
+- **Frontmatter/`updated_at`:** both edited docs already `updated_at: 2026-09-28`; versions bumped.
+
+No task/feature corpus written; `git status --short` shows only `docs/00_ADR.md` and `docs/03_ARCHITECTURE.md` (plus the gitignored run-scoped artifact).
+
+# Wrap-up learnings — run a5897859-d16c-4abb-a1b0-d3db1abde1f5
+
+Source: `.spur/run/a5897859-d16c-4abb-a1b0-d3db1abde1f5-wrapup-tasks.json` → task `0969` (feature H21). Only the normalized, validated WBS list was read; raw input was not re-parsed.
+
+## 2026-09-28 — 0969 (H21) Route Pi ledger and session events through the shared Claude hook cores
+
+### Conventions
+
+- **Cross-host parity is a data invariant, not a per-host feature.** One ledger/session core lives in `plugins/sp/hooks`: `recordToolUseEvent` (`context-post-tool.ts`), `recordSessionStart` (`context-session-start.ts`), `recordSessionEnd` (`context-session-stop.ts`). Every other host is a thin adapter that normalizes its native event into the canonical Claude payload and calls those cores. A new host (omp, Codex) adds a normalizer — never a ledger implementation. Recorded as **ADR-129** with a concise `03 §31` pointer.
+- **Extend the shared core with a parameter, not a host branch.** `recordSessionStart(dir, env, now, agentFallback)` gained an optional agent fallback; Pi passes `'pi'` so one code path serves both hosts.
+- **Keep the cores plugin-local.** They stay under `plugins/sp/hooks` (standalone contract, ADR-065) rather than moving into `packages/app`, so hook processes run without the monorepo.
+- **TDD order for a consolidation:** add the parity tests first against the existing temp-dir + fake `pi` harness (`guard-extension.test.ts` session-lifecycle describe), confirm they fail against current code, then extract/rewire.
+- **Assert parity by deep-equality after deleting `ts`.** The comparable fields are `session`, `type`, `file`, `summary`, `tokens`, `action`, `agent`, `model`; each mapped tool is driven once through the Pi adapter and once as a raw Claude payload into two temp dirs.
+- **"No private implementation" is proven by a command probe, not by reading.** `rg -n "function (appendToLedger|summarizeToolEvent|readSessionId|generateSessionId|initSession|cleanupSession)\b" plugins/sp/hooks/pi/guard-extension.ts` must return none (AC R5).
+- **Delete, don't layer.** Removing Pi's private helpers is the acceptance evidence; the file keeps only `normalizePiToolEvent` plus three one-line handlers.
+
+### Errors fixed (the drift classes this closes)
+
+- Pi's second implementation had drifted from the Claude contract repeatedly: **raw secrets in summaries, `timestamp` vs `ts`, `path` vs `file`**, plus a nested-totals gap, a wrong session schema (`session_id` / `started_at` instead of `session` / `started`), and no tier mapping. Root cause was a duplicate implementation, so the fix is one core, not another patch.
+- **Latent module-load side effect removed.** `context-session-stop.ts` ran `main()` at import time; extracting `recordSessionEnd` means importing the file no longer executes the hook.
+- Prior drift patches (`2d430c7f5`, `3571e710a`) fixed symptoms; this task removed the class.
+
+### Gotchas
+
+- **Existing Pi tests encoded the old Pi-only shapes** (`session_id`, flat totals, `type:'write'` for bash). The new shape *is* the requirement — update the assertions and note each changed assertion in `### Solution`.
+- **Do not weaken the Claude-side tests to make Pi pass.** R5's test evidence included `git diff HEAD -- plugins/sp/hooks/context-hooks.test.ts` showing no removed `expect(`.
+- **Hook-change gate set (run from the repo root):** `bun test plugins/sp/hooks`, `bun run typecheck`, `bunx biome check plugins/sp`, `bun run plugin-smoke` (standalone contract), `bun run spur-check` (9428 pass / 0 fail).
+- **Doc obligation (T1, not T3).** The refactor established a lasting cross-host invariant, so it needed a new ADR (ADR-129) plus `03 §31`. The ledger row contract already lived in `docs/design/observability-contracts.md §7.8b` and did **not** change — the schema was *restored*, not altered, so no T3 edit.
+- **No doc in the target set described the old Pi implementation**, so there was no stale claim to correct; the repair was recording the invariant, not rewriting contradicting prose.
+- **Feature/task corpus stays tool-owned.** H21's status and the task's status are updated through `spur feature` / `spur task`; a wrap-up must not raw-edit `docs/features/` or `docs/tasks*/`.
+
+### Patterns worth reusing
+
+- **End a recurring drift class by deleting the duplicate implementation**, not by patching each symptom. The consolidation makes drift a test failure instead of a silent reader break.
+- **Host-parity test shape:** drive the same event through the host adapter and the canonical payload into two temp dirs, delete the non-deterministic field (`ts`), then deep-equal the rows.
+- **Normalize at the adapter boundary into the existing canonical payload** rather than inventing a host-neutral DTO — a second schema is free to drift, and the adapter is a pure function that is cheap to test.

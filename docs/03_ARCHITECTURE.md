@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.61.0
+version: 1.62.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-28
@@ -1185,3 +1185,14 @@ installed-package shared-runtime proof remains a prerequisite, not an observed c
 Configuration and native asset changes require server restart and browser reload. Worker
 deployments do not acquire project-filesystem loading. Exact declarations, lifecycle rules and
 alternatives: [downstream Board module contract](design/downstream-board-modules.md).
+
+## 31. Cross-Platform Hook Core — built (ADR-129; task 0969)
+
+`plugins/sp/hooks` owns one indexed-context implementation. `recordToolUseEvent`
+(`context-post-tool.ts`), `recordSessionStart` (`context-session-start.ts`) and `recordSessionEnd`
+(`context-session-stop.ts`) append to `.spur/context/token-ledger.jsonl` and manage `.session.json`.
+Claude Code reaches them through its hook entries; the Pi extension (`hooks/pi/guard-extension.ts`)
+normalizes `tool_result` / `session_start` / `session_shutdown` into the canonical Claude payload via
+`normalizePiToolEvent` and calls the same cores (agent fallback `pi`). Hosts never re-implement the
+row schema, token cascade, redaction or session reuse — a new host adds a normalizer. Row and
+session-event contracts: [observability contracts](design/observability-contracts.md) §7.8b.
