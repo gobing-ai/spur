@@ -1,5 +1,6 @@
 import { oc } from '@orpc/contract';
 import { z } from 'zod';
+import { boardContract } from './board';
 import { featureContract } from './feature';
 import { fleetContract, processesContract } from './fleet';
 import { historyContract } from './history';
@@ -28,6 +29,7 @@ export const contract = {
         })
         .output(healthResponseSchema),
     task: { ...taskContract },
+    board: { ...boardContract },
     feature: { ...featureContract },
     history: { ...historyContract },
     fleet: { ...fleetContract },
@@ -37,6 +39,7 @@ export const contract = {
 
 /** Type-level alias for the public Spur oRPC contract. */
 export type SpurContract = typeof contract;
+export * from './board';
 export { featureCreateInputSchema, featureListResponseSchema, featureShowResponseSchema } from './feature';
 // Fleet snapshot + supervised process wire schemas (0897) — the routes are
 // Hono-served; the contracts document them for the generated OpenAPI.

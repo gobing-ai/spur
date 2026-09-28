@@ -1,5 +1,6 @@
 import { getEnvVars } from '@gobing-ai/ts-utils';
 import { z } from 'zod';
+import { boardModuleDeclarationsSchema } from './board-modules';
 import { isRfc3339Timestamp } from './rfc3339';
 
 // NOTE: this is the CF-safe CORE entry of @gobing-ai/spur-config.
@@ -901,13 +902,30 @@ export const bootstrapOptionsSchema = z.object({
 });
 
 /**
+ * The merged `bootstrap` section: runtime options plus the explicit downstream Board
+ * module declarations (task 0989 R1).
+ *
+ * `modules` is absent when the key is absent; the empty default is resolved by
+ * `declaredBoardModules` so a partial config never has to restate it. `bootstrap.options`
+ * is preserved untouched for every existing reader (task 0902). Cross-declaration rules (duplicate ids, host collisions)
+ * need the host inventory and are applied by {@link validateBoardModuleDeclarations} on the
+ * serve path, which is where that inventory exists.
+ */
+export const bootstrapSectionSchema = bootstrapOptionsSchema.extend({
+    modules: boardModuleDeclarationsSchema.optional(),
+});
+
+/** Inferred type for the merged {@link bootstrapSectionSchema}. */
+export type BootstrapSection = z.infer<typeof bootstrapSectionSchema>;
+
+/**
  * Root schema for a merged `.spur/config.yaml` document (global + project layers,
  * loaded exclusively by {@link loadSpurConfig} per ADR-027).
  */
 export const spurConfigSchema = z.object({
     version: z.string().optional(),
     name: z.string().optional(),
-    bootstrap: bootstrapOptionsSchema.optional(),
+    bootstrap: bootstrapSectionSchema.optional(),
     agent: AgentConfigSchema.optional(),
     rules: RulesConfigSchema.optional(),
     workflows: WorkflowsConfigSchema.optional(),
@@ -941,6 +959,20 @@ export {
     removeEnvVar,
     setEnvVar,
 } from '@gobing-ai/ts-utils';
+export {
+    BOARD_MODULE_ID_PATTERN,
+    BOARD_MODULE_ROUTE_PREFIX,
+    BoardModuleConfigError,
+    type BoardModuleDeclaration,
+    type BoardModuleReservedIdentity,
+    boardModuleDeclarationSchema,
+    boardModuleDeclarationsSchema,
+    boardModuleRoute,
+    isBoardModuleConfigError,
+    isSafeFrameUrl,
+    parseBoardModuleDeclarations,
+    validateBoardModuleDeclarations,
+} from './board-modules';
 
 /**
  * Top-level keys that belong at the project layer, never the global layer, per the

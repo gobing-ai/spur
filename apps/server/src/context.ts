@@ -6,6 +6,7 @@ import type {
     HistoryBoardService,
     PlanningEvent as PlanningEventType,
     PlanningFolders,
+    PreparedBoardModules,
     ProcessInventoryService,
     RuleService,
     RunStoreService,
@@ -143,6 +144,13 @@ export interface ServerContext {
      * the load failed — resolvers treat it as absent config, not fatal.
      */
     readonly spurConfig?: SpurConfig;
+
+    /**
+     * Frozen project Board module snapshot prepared before `Bun.serve` (task 0989 R6/AC5).
+     * `undefined` when the server was built without one (stand-alone/test contexts): the
+     * catalog procedure then answers an empty catalog and no asset mount is registered.
+     */
+    readonly boardModules?: PreparedBoardModules;
 
     /** Lazy, cached migrated DbAdapter. May throw D1NotConfiguredError on CF. */
     getDb(): Promise<DbAdapter>;
@@ -304,6 +312,8 @@ export interface CreateServerContextOptions {
     env?: Record<string, string | undefined>;
     fs: FileSystem;
     webDistPath?: string;
+    /** Prepared project Board module snapshot (task 0989) — see {@link ServerContext.boardModules}. */
+    boardModules?: PreparedBoardModules;
     dbUrl?: string;
     /** Pre-built EventBus from bootstrapper. Defaults to appRt.events. */
     eventsBus?: EventBus<ServerEventMap>;
@@ -401,6 +411,7 @@ export function createServerContext(appRt: ApplicationRuntime, options: CreateSe
         fs,
         runDir: join(cwd, '.spur', 'run'),
         webDistPath: options.webDistPath,
+        boardModules: options.boardModules,
 
         async getDb(): Promise<DbAdapter> {
             if (!dbPromise) {
