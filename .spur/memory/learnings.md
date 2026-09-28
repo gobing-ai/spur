@@ -3636,3 +3636,24 @@ Task set: **0984** (feature H1). Doc-sync scope: `docs/00_ADR.md`, `docs/03_ARCH
 - Trailing sentence punctuation after a citation is prose, not a filename: `… .spur/run/x.json.` must not become a phantom `x.json.` (fatal, blocks teardown), and `… .spur/run/x.json, …` must not be dropped as non-literal.
 - Divergent target record bytes are never overwritten — `record-conflict:<file>` is a skip, not a merge.
 - Doc-evolve judgment: a doc merely **silent** about new behavior is not drift, but a verb's own contract row is a §5 T3 obligation — omitting a changed behavior from the verb's owning row is the drift (the 0980 `--no-lifecycle` precedent).
+Updated ADR-003 and the architecture and gate contracts; the `04` index already points to the right satellite. `git diff --check` passed. Learnings saved to [the run-scoped artifact](</Users/robin/xprojects/spur-new/.spur/run/bd191503-9713-4e36-8d8e-6252f4dd10ef-wrapup-learnings.md>).
+
+# Working learnings
+
+## 2026-09-26 — WBS 0973
+
+- Bun workspace typecheck filtering does not cover standalone TypeScript trees. Give each tree its own strict `tsconfig.json` extending the shared base, then include it in the root `typecheck` command.
+- In TypeScript 6, `paths` can resolve relative to the config directory without `baseUrl`; adding `baseUrl` triggers the TS5101 deprecation error.
+- For a plugin's type-only reference to an app facade, a local `paths` mapping resolves types without linking the app package or adding a runtime dependency. Keep the plugin standalone and avoid importing engine internals when a locally narrowed literal union suffices.
+- `noUncheckedIndexedAccess` fixes are usually explicit guards, optional access, or a fallback for proven-present values. Prefer iteration over entries when indexing is only used to read an array element; type tuple-producing map callbacks explicitly.
+- Apply Bun test timeouts to individual `test(...)` calls. The `describe(...)` type accepts only a label and callback, so a third block-level timeout argument is not type-supported; runtime behavior was not confirmed in this task.
+- Type-only path corrections do not change runtime loading. Preserve that boundary and verify with the standalone contract and behavior tests.
+
+## 2026-09-27 — WBS 0973
+
+- Use canonical `R1…` requirement and `AC1…` acceptance identities when recording task verdicts; descriptive labels and bare checkboxes are not stable record identities.
+
+## 2026-09-28 — WBS 0973
+
+- When changing `plugins/sp/scripts/*.ts`, regenerate committed `.mjs` twins with `bun run build:scripts`; do not hand-edit generated twins. Type-only edits may leave them unchanged, but the contract check determines parity.
+- Include plugin tests in the strict plugin TypeScript config: stale test contracts exposed real type errors, and test files are part of the shipped repository gate.

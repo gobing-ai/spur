@@ -3,7 +3,7 @@ kind: design
 title: "Workflow execution economy"
 status: accepted
 created_at: 2026-09-16
-updated_at: 2026-09-24
+updated_at: 2026-09-28
 related: [D62, "0867", "0868", "0872", "0873", "0876", "0877"]
 tags: [system, D62, workflow]
 ---
@@ -176,7 +176,7 @@ The per-task pipeline's quality gate is `bun run spur-check` (task-pipeline `qua
 | `dependency-drift-check` | `bun.lock` ↔ installed `@gobing-ai/ts-*` versions | repo-wide (environment invariant) |
 | `importer-schema-check` | the SQLite DB's recorded importer schema version ≡ the installed importer package | repo-wide (shared-DB invariant) |
 | `history-surface-freeze-check` | the frozen History UI + transport contract are unchanged vs the merge base (E91) | repo-wide (whole-branch frozen-surface invariant) |
-| `lint` (biome + typecheck) | the tree compiles and is formatted | task-local (violated by the diff that breaks it) |
+| `lint` (biome + typecheck) | the workspaces and standalone `scripts/` and `plugins/sp/` TypeScript trees compile and are formatted | task-local (violated by the diff that breaks it) |
 | `test-pre-check` (rule preset) | source respects the typescript/structure/boundary/surface/ui/strict rules | task-local (violated by the diff that introduces the pattern) |
 | `test` (`bun test`) | each package's tests pass | task-local, **except** repo-wide test files relocated to `repo-wide-tests/` (e.g. `adr-supersession.test.ts`, which diffs `docs/00_ADR.md` against HEAD and fires on a sibling's uncommitted ADR addition) |
 | `test-post-check` (`tsdoc-exports` + `coverage-gate`) | exported symbols are documented; per-file line coverage ≥ 90% | task-local for `tsdoc-exports`; the `coverage-gate` is repo-wide in principle but inert in the per-task gate (no lcov unless `test:coverage` ran) and only fires in the deliberate `:full`/`check` chain, which is not the per-task pipeline |

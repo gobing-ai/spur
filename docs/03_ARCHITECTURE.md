@@ -2,10 +2,10 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.59.0
+version: 1.60.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
-updated_at: 2026-09-27
+updated_at: 2026-09-28
 read_before: cross-module, seam, or schema work
 edit_rules: 99 §6.4
 sync: [T1]
@@ -34,8 +34,13 @@ spur/
 │   ├── domain/      DAOs + schema + analytics + migrations; sole ts-db importer (ADR-011)
 ├── plugins/sp/      Agent-facing layer: Fat Skills + thin command/subagent wrappers (ADR-016/023)
 ├── config/          Spur-owned default config SSOT — rules/, workflows/, plugins/ (ADR-015)
-├── tooling/typescript/   Shared tsconfig presets (base/server/react)
+├── tooling/typescript/   Shared tsconfig presets (base/server/react); workspace and standalone TypeScript configs extend them
 └── drizzle/         0000_spur_cli_foundation.sql + incremental _spur_cli_ migrations +_legacy_reference/ (inert)
+
+The root `typecheck` gate covers workspace projects plus the standalone `scripts/` and `plugins/sp/`
+trees. Each standalone tree has its own `tsconfig.json` extending the shared strict base; the plugin
+config includes tests and uses a type-only path mapping for the app facade, without making the
+standalone plugin a workspace member.
 
 ### 1.1 External dependency boundary (ADR-004/006/021)
 

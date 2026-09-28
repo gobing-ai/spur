@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.54.0
+version: 1.55.0
 owner: Robin Min
-updated_at: 2026-09-27
+updated_at: 2026-09-28
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -50,7 +50,7 @@ Keep every issued ADR number and decision history; older misplaced entries are n
 ## ADR-003: Shared TypeScript Tooling from ts-base
 
 - **Status:** Accepted · **Date:** 2026-05-30
-- **Decision:** Reuse `ts-base` Biome, Lefthook, and shared TypeScript presets; gate on Biome plus per-workspace `tsc --noEmit`.
+- **Decision:** Reuse `ts-base` Biome, Lefthook, and shared TypeScript presets; gate on Biome plus strict `tsc --noEmit` for each workspace and standalone TypeScript tree.
 - **Why:** Shared tooling prevents style and compiler drift across sibling projects.
 - **Detail:** `AGENTS.md` and `03 §1`.
 
