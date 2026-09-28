@@ -4,7 +4,7 @@ name: Lifecycle runs created by a record-stage transition must reach a terminal 
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:01.671Z
-updated_at: "2026-09-28T00:52:53.816Z"
+updated_at: "2026-09-28T03:00:49.040Z"
 feature_id: D3
 
 ac_numbering: task-local
@@ -66,32 +66,15 @@ Add `--no-lifecycle` to the existing `task record` verb and pass it to the exist
 
 ### Solution
 
-Change-map (auto-generated — implement step did not record a Solution).
-Each entry cites the first changed line per file (`file:line`).
+The pipeline's record stage called `spur task record --transition testing` without `--no-lifecycle`, so the CLI built a lifecycle FSM and spawned a nested `task-lifecycle` run that outlived the pipeline as a `running` orphan (the wip and done hops already passed `--no-lifecycle`).
 
-| Change (`file:line`) |
-|----------------------|
-| `apps/cli/src/commands/task.ts:1186` |
-| `apps/cli/src/commands/task.ts:1194` |
-| `apps/cli/src/commands/task.ts:1196` |
-| `apps/cli/src/commands/task.ts:1221` |
-| `apps/cli/tests/commands/task.test.ts:17` |
-| `apps/cli/tests/commands/task.test.ts:2191` |
-| `packages/app/src/services/task-record.ts:16` |
-| `packages/app/src/services/task-record.ts:82` |
-| `packages/app/src/services/task-service.ts:1502` |
-| `packages/app/src/services/task-service.ts:54` |
-| `packages/app/src/services/task-transition.ts:175` |
-| `packages/app/src/services/task-transition.ts:98` |
-| `packages/app/tests/services/task-record.test.ts:12` |
-| `packages/app/tests/services/task-record.test.ts:14` |
-| `packages/app/tests/services/task-record.test.ts:1470` |
-| `packages/app/tests/services/task-record.test.ts:18` |
-| `packages/app/tests/services/task-record.test.ts:31` |
-| `packages/app/tests/services/task-record.test.ts:36` |
-| `packages/app/tests/services/task-record.test.ts:675` |
-| `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:408` |
-| `plugins/sp/tests/task-pipeline-resilience.test.ts:265` |
+- `config/workflows/task-pipeline.yaml:773` — the record-stage transition passes `--no-lifecycle`; the post-downgrade re-record (`config/workflows/task-pipeline.yaml:816`) does the same to keep the no-nested-lifecycle invariant.
+- `apps/cli/src/commands/task.ts:1187` — `task record` gains `--no-lifecycle`; with it and `--transition`, the handler builds the same inline `TaskCheckService` gate `task update` uses (`apps/cli/src/commands/task.ts:1203`), so the target-aware `--as <target>` check is not lost with the FSM.
+- `packages/app/src/services/task-record.ts:88` — `RecordOptions.checkGate`.
+- `packages/app/src/services/task-service.ts:1502-1513` — `record` runs the gate after its section writes and before the status write, only on a real status change to testing/done (same-status re-records skip it, as the adapter would).
+- `packages/app/src/services/task-transition.ts:106` — `runTransitionCheckGate` extracted from `transitionTaskGuarded` and shared by both callers (one message format, 0808 R3).
+- Standalone `task record` without the flag is unchanged: the lifecycle port owns the transition (R2).
+- `docs/help/cmd_task.md:260` — flag documented.
 
 ### Testing
 
@@ -101,15 +84,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | task-pipeline.yaml:773 — pipeline record args carry --no-lifecycle (with orphan-rationale comment); task.ts:1194 builds makeService(..., options.lifecycle === false) so no lifecycle adapter/run is created; target-aware testing gate retained inline task.ts:1203-1216 + task-service.ts:1509-1512; zero-row proof task-record.test.ts:1548 (real sqlite: no task_lifecycle row after pipeline-path record) |
-| R2 | MET | Flag defaults off task.ts:1194 — standalone `task record --transition testing` still creates/updates the lifecycle run (task-record.test.ts:1666 standalone wip→testing); subsequent `done --no-lifecycle` leaves no new record-less run (task-record.test.ts:1579 runs=0, links=0) |
-| R3 | MET | apps/cli/tests/commands/task.test.ts:2191 — regression replays record→done asserting task status at both hops AND lifecycle-run rows; task-record.test.ts:1548-1604 probes task_lifecycle + task_run_links via real sqlite; target-aware guard denial covered (gate throws GuardDeniedError task-transition.ts:106-126) |
+| R1 | MET | `config/workflows/task-pipeline.yaml:773` record transition passes `--no-lifecycle`; inline target-aware gate `packages/app/src/services/task-service.ts:1502-1513` via `packages/app/src/services/task-transition.ts:106`; tests `packages/app/tests/services/task-record.test.ts:1548` / `:1608` / `:1635` (125 pass fresh) |
+| R2 | MET | standalone path unchanged `packages/app/tests/services/task-record.test.ts:1666`; done hop `config/workflows/task-pipeline.yaml:836` leaves no orphan `packages/app/tests/services/task-record.test.ts:1579` |
+| R3 | MET | record + done pipeline sequence checks status and lifecycle rows `packages/app/tests/services/task-record.test.ts:1548` / `:1579`; CLI sequence `apps/cli/tests/commands/task.test.ts:2191` (191 pass fresh); YAML pins `plugins/sp/tests/task-pipeline-resilience.test.ts:265`, `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:408` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Pipeline record transition reaches testing with no task-lifecycle row: YAML :773 flag → makeService no-adapter path task.ts:1194; test task-record.test.ts:1548 |
-| AC2 | MET | test | Standalone record transitions retain lifecycle behavior: default-off flag task.ts:1194; standalone-path test task-record.test.ts:1666 |
-| AC3 | MET | test | Pipeline reaches done with no running orphan: sequence test task.test.ts:2191 (status+rows both checked); runs=0/links=0 after done hop task-record.test.ts:1579 |
+| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:1548` |
+| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1666` |
+| AC3 | MET | test | `packages/app/tests/services/task-record.test.ts:1579`; `apps/cli/tests/commands/task.test.ts:2191` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
