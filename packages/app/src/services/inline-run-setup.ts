@@ -208,11 +208,14 @@ const RUN_CITATION_RE = /\.spur\/run\/([A-Za-z0-9][A-Za-z0-9._*?<>{}|,\u2026-]*)
  * is not one (0984 R3): template/abbreviated references (`fadca099-…`, `run-*-ac87.log`,
  * `{batch-report.md,…}`) and `..` runs are not literal files, so they carry no copy
  * obligation and never fail the pass. A surviving name is a single safe component — joining
- * it under `.spur/run/` cannot escape the directory.
+ * it under `.spur/run/` cannot escape the directory. Trailing sentence punctuation is prose,
+ * not name: `… .spur/run/x.json.` must not become a phantom `x.json.` (fatal, blocks
+ * teardown) and `… .spur/run/x.json, …` must not drop the citation as non-literal.
  */
 function asLiteralRunFileName(citation: string): string | undefined {
-    if (!SAFE_RUN_ID_RE.test(citation) || citation.includes('..')) return undefined;
-    return citation;
+    const name = citation.replace(/[.,]+$/, '');
+    if (!SAFE_RUN_ID_RE.test(name) || name.includes('..')) return undefined;
+    return name;
 }
 
 /**

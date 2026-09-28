@@ -271,6 +271,32 @@ describe('persistWorktreeRuns cited evidence + record tolerance (task 0984)', ()
         }
     });
 
+    test('unquoted prose citations drop trailing sentence punctuation (R1/R3)', async () => {
+        const from = makeDir('cited-prose-from-');
+        const to = makeDir('cited-prose-to-');
+        try {
+            await seedWorktree(from.dir, 'run_0984p');
+            writeFileSync(join(from.dir, '.spur', 'run', '0984-a.json'), '{}\n');
+            writeFileSync(join(from.dir, '.spur', 'run', '0984-b.json'), '{}\n');
+            mkdirSync(join(to.dir, 'docs'), { recursive: true });
+            writeFileSync(
+                join(to.dir, 'docs', 'task-0984p.md'),
+                'See .spur/run/0984-a.json, then .spur/run/0984-b.json.\n',
+            );
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: ['docs/task-0984p.md'],
+            });
+            expect(result.ok).toBe(true);
+            expect(existsSync(join(to.dir, '.spur', 'run', '0984-a.json'))).toBe(true);
+            expect(existsSync(join(to.dir, '.spur', 'run', '0984-b.json'))).toBe(true);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('a citation resolving to a directory is reported, not copied or fatal (R3)', async () => {
         const from = makeDir('cited-dir-from-');
         const to = makeDir('cited-dir-to-');

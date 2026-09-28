@@ -181,7 +181,7 @@ describe('execution-batch spec contract (task 0975 R1 — per-run provenance per
 
 describe('execution-batch spec contract (task 0984 — cited run evidence survives teardown)', () => {
     test('WT-4a — the persist-out call forwards the merged task file(s) via repeatable --task-file', () => {
-        expect(SPEC).toContain('bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}"');
+        expect(SPEC).toContain(`bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "\${TASK_FILE_ARGS[@]}"`);
         expect(SPEC).toContain('spur task show <wbs> --json | jq -r .filePath');
         expect(SPEC).toContain('repeatable `--task-file <path>`');
         // The driver resolves paths in the invoking tree post-merge, via the task-show fast path.

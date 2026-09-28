@@ -4,7 +4,7 @@ name: Persist worktree run evidence so merged task files carry no dangling .spur
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:12:01.569Z
-updated_at: "2026-09-28T01:46:38.938Z"
+updated_at: "2026-09-28T03:02:42.104Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -70,7 +70,9 @@ The same app service transfers all run DB rows. A known task-lifecycle or featur
 
 ### Solution
 
-`persistWorktreeRuns` (packages/app/src/services/inline-run-setup.ts:255) accepts `taskFiles`; citations extracted/validated pre-write (safe names :204-220, cap 64 :193, regular-file lstat :292), copied with write-time re-check (:368-383); lifecycle rows tolerate record ENOENT (`record-missing:` :342-347) while pipeline records stay fatal; `listRunIdRows` (packages/domain/src/dao/run-transfer.ts) carries workflowName; plugin script forwards repeatable `--task-file` (plugins/sp/scripts/inline-run-setup.ts:581); WT-4a recipe resolves TASK_FILE (plugins/sp/skills/spur-dev/references/execution-batch.md).
+`persistWorktreeRuns` (`packages/app/src/services/inline-run-setup.ts:249`) accepts `taskFiles`; citations are extracted and validated before any write (citation regex `:204`, literal/safe-name reduction `:215`, cap 64 `:193`, regular-file `lstat` check `:294`), then copied with a write-time re-check (`:368-392`). Lifecycle rows tolerate a missing record (`record-missing:` at `:348`); pipeline records stay fatal. `listRunIdRows` (`packages/domain/src/dao/run-transfer.ts:86`) carries `workflowName`. The plugin script forwards a repeatable `--task-file` (`plugins/sp/scripts/inline-run-setup.ts:581`). The WT-4a recipe resolves `TASK_FILE` (`plugins/sp/skills/spur-dev/references/execution-batch.md:846-856`).
+
+Verify fix pass (2026-09-27): `asLiteralRunFileName` now strips trailing sentence punctuation. Before this, an unquoted prose citation `.spur/run/x.json.` became a phantom `x.json.`, which was fatal and blocked teardown. `.spur/run/x.json,` was dropped as non-literal. Pinned by `packages/app/tests/services/persist-worktree-runs.test.ts:274`. `plugins/sp/lib/inline-run.generated.mjs` was regenerated.
 
 ### Testing
 
@@ -80,18 +82,18 @@ The same app service transfers all run DB rows. A known task-lifecycle or featur
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Citation validation before any write inline-run-setup.ts:280-290; missing-in-both-trees throws with zero side effects (test: runs count 0, no .spur/run created); literal-name capture :204-220 rejects abbreviations/globs |
-| R2 | MET | App service owns selection/safe-path/conflict inline-run-setup.ts:255-309; plugin script thin repeatable --task-file delegate inline-run-setup.ts:581-620 with .mjs parity; driver-supply half defined in WT-4a recipe execution-batch.md (TASK_FILE resolution + TASK_FILE_ARGS array), pinned execution-batch-contract.test.ts:184-186 |
-| R3 | MET | SAFE_RUN_ID_RE single-component names, cap 64 :193, lstat regular-file-only :292; template/glob/directory citations skipped not failed |
-| R4 | MET | Divergent bytes throw at validation :302-305 and write time :373-380; identical = idempotent no-op; overwrite asserted absent |
-| R5 | MET | ENOENT tolerated only when isBookkeepingWorkflow :342-347; row still persisted (persisted:2 asserted); task-pipeline missing record stays fatal; unreadable DB/unsafe id fatal |
-| R6 | MET | 9 app tests (persist-worktree-runs.test.ts) + 2 plugin e2e + usage case; app 13/0, persist subset 6/0, contract 25/0 |
+| R1 | MET | pre-write validation `packages/app/src/services/inline-run-setup.ts:255`; missing-in-both throws `:288`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:165` / `:202` / `:274` (15 pass fresh) |
+| R2 | MET | service owns selection `packages/app/src/services/inline-run-setup.ts:249`; thin delegate `plugins/sp/scripts/inline-run-setup.ts:581`; recipe `plugins/sp/skills/spur-dev/references/execution-batch.md:846-856`; tests `plugins/sp/tests/inline-run-setup.test.ts:699` / `:725`, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:183` |
+| R3 | MET | direct-child regular files only `packages/app/src/services/inline-run-setup.ts:204` / `:215` / `:294`, cap `:193`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:245` / `:300` / `:320` |
+| R4 | MET | never overwrite `packages/app/src/services/inline-run-setup.ts:306` / `:383`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:225` (conflict) / `:165` (idempotent) |
+| R5 | MET | ENOENT tolerance for bookkeeping lifecycle only `packages/app/src/services/inline-run-setup.ts:348`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:342` / `:377` |
+| R6 | MET | all four regression classes above; `packages/app/tests/services/persist-worktree-runs.test.ts` 15/15, `plugins/sp/tests/inline-run-setup.test.ts` 20/20, contract 25/25 pass fresh |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | Cited evidence copied on success; missing cited evidence throws pre-teardown inline-run-setup.ts:280-290 (zero-write test) |
-| AC2 | MET | test | WBS-bounded (citations only), cap 64, identical no-op, divergent refusal inline-run-setup.ts:289-309,368-383 |
-| AC3 | MET | test | Record-less lifecycle row beside normal run (persisted includes it :342-347); fatal paths tested (pipeline record, DB, id) |
+| AC1 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:165` / `:202`; CLI `plugins/sp/tests/inline-run-setup.test.ts:699` / `:725` |
+| AC2 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:225` / `:245` / `:320` |
+| AC3 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:342` / `:377` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
