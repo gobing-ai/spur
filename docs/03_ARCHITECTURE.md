@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.57.0
+version: 1.58.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-27
@@ -908,11 +908,12 @@ before transition. This statically disqualified the former `task-pipeline2.yaml`
 editing-capable verify action and post-PASS residual `agent.run` could mutate proof inputs before
 record. That graph was deleted rather than promoted (ADR-076, 2026-08-20). The canonical task
 pipeline now carries residual completeness under this rule (F96): a deterministic `residual-scan`
-runs inside `verify` after the digest bracket with evidence writes confined to `.spur/run/`, and a
-blocking residual folds a failing `residual-sweep` check into the verdict and downgrades PASS to
-PARTIAL onto the existing bounded `verify → test-fix` loop; follow-up filing and staging cleanup
-are confined to `done` entry, after certification. Shapes live in
-`docs/design/task-residual-sweep.md`.
+runs inside `record`, after `spur task record` flips the verdict-proven boxes (0983), with evidence
+writes confined to `.spur/run/`; a blocking residual folds a failing `residual-sweep` check into the
+verdict and downgrades PASS to PARTIAL, so the `record → done` guard fails closed into
+`record → failed` and Testing is re-recorded from the final artifact. The bounded `verify → test-fix`
+loop stays reserved for a verifier non-PASS; follow-up filing and staging cleanup are confined to
+`done` entry, after certification. Shapes live in `docs/design/task-residual-sweep.md`.
 
 Enforceable invariants:
 
