@@ -53,6 +53,25 @@ function writeResolveStub(cwd: string, json: string): string {
 }
 
 /**
+ * Stub `spur` whose `task show` prints a JSON payload file, so task content carrying
+ * newlines and quotes survives the shell unescaped.
+ */
+function writeTaskShowStub(cwd: string, payload: unknown): string {
+    const jsonFile = join(cwd, 'stub-payload.json');
+    writeFileSync(jsonFile, JSON.stringify(payload));
+    const stub = join(cwd, 'stub-spur');
+    writeFileSync(stub, `#!/bin/sh\ncase "$1 $2" in "task show") cat '${jsonFile}';; esac\nexit 0\n`);
+    chmodSync(stub, 0o755);
+    return stub;
+}
+
+/** One metrics row written by a single-task run; throws when the run wrote none. */
+function onlyMetricsRow(cwd: string): Record<string, string> {
+    const raw = readFileSync(join(cwd, '.spur/memory/wrapup-metrics.jsonl'), 'utf8').trim();
+    return JSON.parse(raw.split('\n')[0] ?? '') as Record<string, string>;
+}
+
+/**
  * Stub spurBin dispatching `feature sync` / `feature show` / `feature check`, with a
  * failing `superskill` earlier on PATH so the producer chain deterministically takes the
  * plain `spur feature sync` branch (the temp cwd has no plugins/ scaffold).
@@ -293,6 +312,87 @@ test('a resolvable task appends exactly one well-formed metrics row and PASSes',
         // row schema and the timestamp is UTC.
         expect(Object.keys(row)).toEqual(['wbs', 'feature_id', 'status', 'verdict', 'timestamp']);
         expect(row.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+        // 0994 R3: with neither source present the run log names both the missing artifact and
+        // the missing tracked verdict — the row stays UNKNOWN, never a silent blank.
+        expect(run.err).toContain('.spur/run/0770-verdict.json');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0994 R1: a missing artifact derives the verdict from the tracked Testing section', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-metrics-'));
+    try {
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        writeFileSync(join(cwd, '.spur/run/r-tracked-wrapup-tasks.json'), '["0967"]\n');
+        const spurBin = writeTaskShowStub(cwd, {
+            frontmatter: { status: 'done', feature_id: 'G67' },
+            content:
+                '### Testing\n\n**Pipeline verify results**\n\n- Verdict: PASS (from verdict artifact)\n\n' +
+                '| Requirement | Status | Evidence |\n|-------------|--------|----------|\n| R1 | MET | moved the symbols |\n',
+        });
+        const run = runSteps(['metrics'], { __runId: 'r-tracked', spurBin }, cwd);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(cwd, '.spur/run/r-tracked-wrapup-metrics.status'), 'utf8')).toContain('PASS');
+        expect(onlyMetricsRow(cwd)).toMatchObject({ wbs: '0967', feature_id: 'G67', verdict: 'PASS' });
+        // A source was found: the honest-UNKNOWN diagnostic must not fire.
+        expect(run.err).toBe('');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0994 R2: a mid-line verdict inside an evidence cell is not the Testing verdict', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-metrics-'));
+    try {
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        writeFileSync(join(cwd, '.spur/run/r-cell-wrapup-tasks.json'), '["0770"]\n');
+        const spurBin = writeTaskShowStub(cwd, {
+            frontmatter: { status: 'done', feature_id: 'D61' },
+            content:
+                '### Testing\n\n| Requirement | Status | Evidence |\n|-------------|--------|----------|\n' +
+                '| R1 | UNMET | the pipeline reported Verdict: FAIL before remediation |\n',
+        });
+        const run = runSteps(['metrics'], { __runId: 'r-cell', spurBin }, cwd);
+        expect(run.code).toBe(0);
+        expect(onlyMetricsRow(cwd)).toMatchObject({ wbs: '0770', verdict: 'UNKNOWN' });
+        expect(run.err).toContain('.spur/run/0770-verdict.json');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0994 R1: an existing artifact outranks the tracked Testing verdict', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-metrics-'));
+    try {
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        writeFileSync(join(cwd, '.spur/run/r-prec-wrapup-tasks.json'), '["0967"]\n');
+        writeFileSync(join(cwd, '.spur/run/0967-verdict.json'), '{"verdict":"PARTIAL"}\n');
+        const spurBin = writeTaskShowStub(cwd, {
+            frontmatter: { status: 'done', feature_id: 'G67' },
+            content: '### Testing\n\n- Verdict: PASS (from verdict artifact)\n',
+        });
+        const run = runSteps(['metrics'], { __runId: 'r-prec', spurBin }, cwd);
+        expect(run.code).toBe(0);
+        expect(onlyMetricsRow(cwd)).toMatchObject({ wbs: '0967', verdict: 'PARTIAL' });
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+test('0994 R1: an artifact carrying no verdict falls back to the tracked Testing verdict', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-metrics-'));
+    try {
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        writeFileSync(join(cwd, '.spur/run/r-nofield-wrapup-tasks.json'), '["0967"]\n');
+        writeFileSync(join(cwd, '.spur/run/0967-verdict.json'), '{"wbs":"0967"}\n');
+        const spurBin = writeTaskShowStub(cwd, {
+            frontmatter: { status: 'done', feature_id: 'G67' },
+            content: '### Testing\n\n**Verdict: FAIL**\n',
+        });
+        const run = runSteps(['metrics'], { __runId: 'r-nofield', spurBin }, cwd);
+        expect(run.code).toBe(0);
+        expect(onlyMetricsRow(cwd)).toMatchObject({ wbs: '0967', verdict: 'FAIL' });
     } finally {
         cleanup(cwd);
     }

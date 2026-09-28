@@ -172,6 +172,30 @@ function readFileSyncSafe(path) {
     return null;
   }
 }
+function verdictFromTestingSection(content) {
+  const heading = /^#{2,4}\s+Testing\s*$/m.exec(content);
+  if (!heading)
+    return null;
+  const rest = content.slice(heading.index + heading[0].length);
+  const next = /^#{2,4}\s+\S/m.exec(rest);
+  const section = next ? rest.slice(0, next.index) : rest;
+  for (const line of section.split(`
+`)) {
+    const m = /^(?:-\s*|\*\*)?Verdict:\s*(PASS|PARTIAL|FAIL|UNKNOWN)\b/i.exec(line.trim());
+    if (m?.[1] !== undefined)
+      return m[1].toUpperCase();
+  }
+  return null;
+}
+function verdictOfArtifact(verdictPath) {
+  try {
+    const raw = jqPick(JSON.parse(readFileSync(verdictPath, "utf8")).verdict, "");
+    const text = jqText(raw);
+    return text.length > 0 ? text : null;
+  } catch {
+    return null;
+  }
+}
 function runMetrics(env, options = {}) {
   const cwd = options.cwd;
   const runId = env.__runId ?? "";
@@ -212,15 +236,13 @@ function runMetrics(env, options = {}) {
     const frontmatter = parsed.frontmatter !== null && typeof parsed.frontmatter === "object" ? parsed.frontmatter : {};
     const featureId = String(jqPick(frontmatter.feature_id, parsed.feature_id, ""));
     const status2 = String(jqPick(frontmatter.status, parsed.status, "unknown"));
-    let verdict = "UNKNOWN";
     const verdictPath = join(".spur", "run", `${wbs}-verdict.json`);
-    if (existsSync(abs(verdictPath))) {
-      try {
-        const raw = jqPick(JSON.parse(readFileSync(abs(verdictPath), "utf8")).verdict, "UNKNOWN");
-        const text = raw === "UNKNOWN" ? "UNKNOWN" : jqText(raw);
-        if (text.length > 0)
-          verdict = text;
-      } catch {}
+    const artifactVerdict = verdictOfArtifact(abs(verdictPath));
+    const trackedVerdict = verdictFromTestingSection(typeof parsed.content === "string" ? parsed.content : "");
+    const verdict = artifactVerdict ?? trackedVerdict ?? "UNKNOWN";
+    if (artifactVerdict === null && trackedVerdict === null) {
+      process.stderr.write(`metrics-record: task ${wbs} has no verdict \u2014 ${verdictPath} is missing or carries none, and the tracked Testing section has no Verdict: line \u2014 recording UNKNOWN telemetry
+`);
     }
     const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
     const row = { wbs, feature_id: featureId, status: status2, verdict, timestamp };
@@ -403,6 +425,7 @@ function main(argv, env = getEnvVars(), options = {}) {
 }
 export {
   writeRouteReason,
+  verdictFromTestingSection,
   taskStatusOf,
   spurCommand,
   runMetrics,

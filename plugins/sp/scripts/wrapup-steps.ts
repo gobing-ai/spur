@@ -269,6 +269,42 @@ function readFileSyncSafe(path: string): string | null {
     }
 }
 
+/**
+ * Verdict from a task record's tracked `Testing` section — the durable copy that outlives a
+ * worktree teardown or clone (F93). Local copy of `parseVerdictLine`
+ * (`packages/app/src/services/task-record.ts`) because ADR-065 keeps plugin scripts on builtin
+ * and relative imports only; keep the two in step by hand. Returns null when the section or the
+ * verdict line is absent.
+ */
+export function verdictFromTestingSection(content: string): string | null {
+    const heading = /^#{2,4}\s+Testing\s*$/m.exec(content);
+    if (!heading) return null;
+    const rest = content.slice(heading.index + heading[0].length);
+    const next = /^#{2,4}\s+\S/m.exec(rest);
+    const section = next ? rest.slice(0, next.index) : rest;
+    for (const line of section.split('\n')) {
+        // Line-anchored (optionally after `- ` bullet or `**` bold) so evidence text
+        // containing a mid-line "Verdict:" token cannot be misread as the section verdict.
+        const m = /^(?:-\s*|\*\*)?Verdict:\s*(PASS|PARTIAL|FAIL|UNKNOWN)\b/i.exec(line.trim());
+        if (m?.[1] !== undefined) return m[1].toUpperCase();
+    }
+    return null;
+}
+
+/**
+ * `verdict` field of a verdict artifact; null when the file is absent, unreadable, malformed or
+ * carries no usable verdict (jq `//` semantics: null, undefined and false all count as missing).
+ */
+function verdictOfArtifact(verdictPath: string): string | null {
+    try {
+        const raw = jqPick((JSON.parse(readFileSync(verdictPath, 'utf8')) as { verdict?: unknown }).verdict, '');
+        const text = jqText(raw);
+        return text.length > 0 ? text : null;
+    } catch {
+        return null;
+    }
+}
+
 export interface MetricsResult {
     status: 'PASS' | 'FAIL';
     statusFile: string;
@@ -323,17 +359,18 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
         const featureId = String(jqPick(frontmatter.feature_id, parsed.feature_id, ''));
         const status = String(jqPick(frontmatter.status, parsed.status, 'unknown'));
 
-        // jq `//` semantics: null and false count as missing; an empty string result stays UNKNOWN.
-        let verdict = 'UNKNOWN';
+        // The verdict artifact stays the first source (F93 R2); when it is gone — a worktree run
+        // fast-forwards and removes the tree, taking the gitignored artifact with it — the tracked
+        // `Testing` line `task record` already wrote into the task file is the durable copy. Honest
+        // UNKNOWN is the last resort, and it is telemetry, never proof of completion.
         const verdictPath = join('.spur', 'run', `${wbs}-verdict.json`);
-        if (existsSync(abs(verdictPath))) {
-            try {
-                const raw = jqPick(JSON.parse(readFileSync(abs(verdictPath), 'utf8')).verdict, 'UNKNOWN');
-                const text = raw === 'UNKNOWN' ? 'UNKNOWN' : jqText(raw);
-                if (text.length > 0) verdict = text;
-            } catch {
-                // unreadable verdict file keeps UNKNOWN telemetry
-            }
+        const artifactVerdict = verdictOfArtifact(abs(verdictPath));
+        const trackedVerdict = verdictFromTestingSection(typeof parsed.content === 'string' ? parsed.content : '');
+        const verdict = artifactVerdict ?? trackedVerdict ?? 'UNKNOWN';
+        if (artifactVerdict === null && trackedVerdict === null) {
+            process.stderr.write(
+                `metrics-record: task ${wbs} has no verdict — ${verdictPath} is missing or carries none, and the tracked Testing section has no Verdict: line — recording UNKNOWN telemetry\n`,
+            );
         }
 
         const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
