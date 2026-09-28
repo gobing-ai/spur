@@ -509,7 +509,8 @@ repeatable `--task-file <path>` (paths resolved in the invoking tree after the F
 `.spur/run/<file>` that file cites — WBS verdicts, check receipts, test-gate logs, run-ID records —
 so a merged task file never anchors a path that died with the tree. Abbreviated references
 (`fadca099-…`, `run-*-ac87.log`, `{batch-report.md,…}`) are not literal files and carry no
-obligation. A citation missing in BOTH trees, a divergent cited file (never overwritten — reconcile
+obligation; neither do root-qualified paths (`knowledge-kit/.spur/run/…`, `/abs/.spur/run/…`),
+which cite another project's evidence — cite foreign run artifacts that way, never bare. A citation missing in BOTH trees, a divergent cited file (never overwritten — reconcile
 by hand), an unreadable task file, or more than 64 distinct cited files fails the pass → WT-5.
 
 The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;

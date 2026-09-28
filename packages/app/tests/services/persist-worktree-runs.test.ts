@@ -297,6 +297,40 @@ describe('persistWorktreeRuns cited evidence + record tolerance (task 0984)', ()
         }
     });
 
+    test('root-qualified citations are foreign evidence: no copy, no missing-in-both refusal (R1/R3)', async () => {
+        const from = makeDir('cited-foreign-from-');
+        const to = makeDir('cited-foreign-to-');
+        try {
+            await seedWorktree(from.dir, 'run_0984f');
+            writeFileSync(join(from.dir, '.spur', 'run', '0984-local.json'), '{}\n');
+            mkdirSync(join(to.dir, 'docs'), { recursive: true });
+            writeFileSync(
+                join(to.dir, 'docs', 'task-0984f.md'),
+                [
+                    'Local: `.spur/run/0984-local.json`.',
+                    'Foreign: `knowledge-kit/.spur/run/runall-d6-4440-batch-report.md`,',
+                    '`/abs/proj/.spur/run/abs.json`, `~/.spur/run/home.json`, `../kk/.spur/run/rel.json`.',
+                ].join('\n'),
+            );
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: ['docs/task-0984f.md'],
+            });
+            expect(result.ok).toBe(true);
+            expect(existsSync(join(to.dir, '.spur', 'run', '0984-local.json'))).toBe(true);
+
+            // The same file name cited bare (repo-relative) is still local and still fatal when missing.
+            writeFileSync(join(to.dir, 'docs', 'task-0984f.md'), 'Bare: `.spur/run/runall-d6-4440-batch-report.md`\n');
+            await expect(
+                persistWorktreeRuns({ fromWorkdir: from.dir, toWorkdir: to.dir, taskFiles: ['docs/task-0984f.md'] }),
+            ).rejects.toThrow('missing in both');
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
     test('a citation resolving to a directory is reported, not copied or fatal (R3)', async () => {
         const from = makeDir('cited-dir-from-');
         const to = makeDir('cited-dir-to-');

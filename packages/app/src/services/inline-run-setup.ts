@@ -199,9 +199,12 @@ export const MAX_CITED_RUN_FILES = 64;
  * capture and are classified non-literal by {@link asLiteralRunFileName}, instead of a
  * truncated prefix (`fadca099-` out of `fadca099-…-wrapup-learnings.md`) masquerading as a
  * real filename. The leading alnum requirement already refuses `<runId>-…` placeholders and
- * `..` traversal outright.
+ * `..` traversal outright. The lookbehind keeps only repo-relative citations (`.spur/run/…`,
+ * `./.spur/run/…`): a root-qualified path (`knowledge-kit/.spur/run/…`, `/abs/.spur/run/…`,
+ * `~/.spur/run/…`) is another project's evidence, which this teardown neither owns nor can
+ * lose, so it must not trip the missing-in-both refusal.
  */
-const RUN_CITATION_RE = /\.spur\/run\/([A-Za-z0-9][A-Za-z0-9._*?<>{}|,\u2026-]*)/g;
+const RUN_CITATION_RE = /(?<![\w~:-]|[\w~:-]\/)\.spur\/run\/([A-Za-z0-9][A-Za-z0-9._*?<>{}|,\u2026-]*)/g;
 
 /**
  * Reduce one captured reference to a literal direct-child file name, or `undefined` when it

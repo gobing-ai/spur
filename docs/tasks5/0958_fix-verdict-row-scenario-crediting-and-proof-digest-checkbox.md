@@ -4,7 +4,7 @@ name: Fix verdict-row scenario crediting and proof-digest checkbox invalidation 
 status: done
 template: feature-impl
 created_at: 2026-09-26T00:29:55.505Z
-updated_at: "2026-09-28T02:48:22.891Z"
+updated_at: "2026-09-28T03:25:57.348Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -34,11 +34,11 @@ The verifier wrote its traceability rows keyed by prose:
 | `AC1 — explicit fallback list honored in order (R3)` | MET |
 | `AC2 — explicit unknown/unconfigured provider still throws at selection (R6)` | MET |
 
-`spur feature check D6 --as done` then reported:
+`spur feature check D6 --as done` then reported (run in knowledge-kit; its run-artifact path is root-qualified below):
 
 ```
 D6 (done): FAIL
-  [ERR] L4 Acceptance Criteria: Task 0165 verdict evidence (.spur/run/0165-verdict.json) carries 5
+  [ERR] L4 Acceptance Criteria: Task 0165 verdict evidence (knowledge-kit/.spur/run/0165-verdict.json) carries 5
         row(s) matching no scenario of this feature — key rows by scenario title or AC-N alias
         (repair: /sp:dev-verify 0165)
   [ERR] L4 Acceptance Criteria: Feature scenario "R3 — Explicit fallback list is honored in order" is
@@ -340,7 +340,7 @@ Design conformance: Plan items 1–7 DONE (Plan 6's old-build replay half → ad
 - Source: `packages/app/src/workflow/proof-input-fingerprint.ts` (`extractTaskProofData` :302, `extractFeatureProofData` :343, `computeProofInputFingerprint` :376)
 - Source: `packages/app/src/workflow/actions/proof-fingerprint.ts` (the `proof.fingerprint` action)
 - Source: `config/workflows/task-pipeline.yaml` (proofDigest capture at `test` entry; R6 carve-out comment; `test-recheck` R4 re-capture)
-- Evidence of record: batch run `runall-d6-4440` (knowledge-kit, feature D6, 2026-09-25) — `.spur/run/runall-d6-4440-batch-report.md`, verdict artifacts `.spur/run/0164-verdict.json`, `.spur/run/0165-verdict.json` (rows verbatim in Background), `.spur/run/0166-verdict.json`
+- Evidence of record: batch run `runall-d6-4440` (knowledge-kit, feature D6, 2026-09-25) — `knowledge-kit/.spur/run/runall-d6-4440-batch-report.md`, verdict artifacts `knowledge-kit/.spur/run/0164-verdict.json`, `knowledge-kit/.spur/run/0165-verdict.json` (rows verbatim in Background), `knowledge-kit/.spur/run/0166-verdict.json`
 - Sibling workaround (done): `docs/tasks5/0956_satisfy-the-d64-feature-done-gate-scenario-key-verdict-evide.md`: data-level re-key of D64 evidence (tasks 0937–0946)
 - Related (done, no overlap): `docs/tasks5/0957_feature-receipt-verifier-identity-must-not-bind-the-absolute.md`
 - Folded-in pointers: **0975** (F3, capture ordering; removed there), **0976** (Background pointer)
