@@ -1,8 +1,15 @@
 import { expect, spyOn, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadManifest, parseArgs, run, type ScriptManifest, validateContract } from '../scripts/script-contract-check';
+import {
+    loadManifest,
+    parseArgs,
+    run,
+    type ScriptManifest,
+    spawnConvertTwin,
+    validateContract,
+} from '../scripts/script-contract-check';
 
 const SCRIPT = join(import.meta.dir, '..', 'scripts', 'script-contract-check.ts');
 
@@ -31,6 +38,17 @@ function createTempEnv() {
         cleanup: () => rmSync(root, { recursive: true, force: true }),
     };
 }
+
+/** Deterministic stand-in for the real `superskill script convert` output. */
+const twinOf = (source: string): string => `// twin\n${source}`;
+
+/** A fake converter that regenerates a fixture twin exactly as the real one would. */
+const fakeConvert =
+    (scriptsDir: string) =>
+    (rel: string, outPath: string): boolean => {
+        writeFileSync(outPath, twinOf(readFileSync(join(scriptsDir, rel), 'utf8')));
+        return true;
+    };
 
 test('parseArgs parses custom flags', () => {
     const res = parseArgs(['--manifest', 'foo.json', '--scripts-dir', 'bar', '--plugin-dir', 'baz']);
@@ -115,53 +133,93 @@ test('R5 — type-only @gobing-ai imports are exempt (erased at bundle)', () => 
     }
 });
 
-test('R1 — stale .mjs twin older than .ts source fails the gate', () => {
+test('R1 — twin content differing from a fresh convert fails stale_twin, even with a newer mtime', () => {
     const env = createTempEnv();
     try {
         const tsPath = join(env.scriptsDir, 'tool.ts');
         const mjsPath = join(env.scriptsDir, 'tool.mjs');
-        writeFileSync(tsPath, 'console.log("new");\n');
-        writeFileSync(mjsPath, 'console.log("old");\n');
+        writeFileSync(tsPath, 'A\n');
+        writeFileSync(mjsPath, twinOf('B\n'));
 
-        // Set mtime of mjs to 100 seconds in the past
-        const past = (Date.now() - 100000) / 1000;
-        utimesSync(mjsPath, past, past);
+        // The twin is 100s NEWER than its source: the old mtime rule passed this, which is
+        // exactly the committed-stale-twin case the gate exists to catch.
+        const future = (Date.now() + 100_000) / 1000;
+        utimesSync(mjsPath, future, future);
 
         const manifest: ScriptManifest = {
             entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
         };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
-        expect(violations.some((v) => v.kind === 'stale_twin')).toBe(true);
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: fakeConvert(env.scriptsDir),
+        });
+        expect(violations.some((v) => v.kind === 'stale_twin' && v.target === 'tool.ts')).toBe(true);
     } finally {
         env.cleanup();
     }
 });
 
-test('R1 — fresh-checkout sub-second twin mtime delta does not fail stale_twin', () => {
-    // A `git worktree add` stamps every checked-out file within the same millisecond, and the
-    // lexicographic write order (`tool.mjs` < `tool.ts`) makes the twin spuriously "older" by a
-    // sub-millisecond delta. This regression test encodes that case: a real stale twin is
-    // seconds-to-minutes old, so sub-second deltas must never trip the gate (task 0606 R1
-    // eval-worktree blocker — without the tolerance, the eval fixture worktree could not pass
-    // qualityGateCmd and the promotion bar was unreachable).
+test('R1 — twin content matching a fresh convert passes, even with an older mtime', () => {
     const env = createTempEnv();
     try {
         const tsPath = join(env.scriptsDir, 'tool.ts');
         const mjsPath = join(env.scriptsDir, 'tool.mjs');
-        writeFileSync(tsPath, 'console.log("new");\n');
-        writeFileSync(mjsPath, 'console.log("twin");\n');
+        writeFileSync(tsPath, 'A\n');
+        writeFileSync(mjsPath, twinOf('A\n'));
 
-        // Twin written ~0.07ms before source — the exact fresh-worktree artifact delta.
-        const tsSeconds = (Date.now() - 0.07) / 1000;
-        utimesSync(tsPath, tsSeconds, tsSeconds);
-        const mjsSeconds = tsSeconds - 0.0001; // mjs marginally older by sub-millisecond
-        utimesSync(mjsPath, mjsSeconds, mjsSeconds);
+        const past = (Date.now() - 100_000) / 1000;
+        utimesSync(mjsPath, past, past);
 
         const manifest: ScriptManifest = {
             entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
         };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: fakeConvert(env.scriptsDir),
+        });
         expect(violations.some((v) => v.kind === 'stale_twin')).toBe(false);
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('R3 — a converter that cannot run reports one converter_unavailable and no stale_twin', () => {
+    const env = createTempEnv();
+    try {
+        writeFileSync(join(env.scriptsDir, 'a.ts'), 'A\n');
+        writeFileSync(join(env.scriptsDir, 'a.mjs'), 'old-a\n');
+        writeFileSync(join(env.scriptsDir, 'b.ts'), 'B\n');
+        writeFileSync(join(env.scriptsDir, 'b.mjs'), 'old-b\n');
+        const manifest: ScriptManifest = {
+            entries: [
+                { rel: 'a.ts', contract: 'standard', twin: 'a.mjs' },
+                { rel: 'b.ts', contract: 'standard', twin: 'b.mjs' },
+            ],
+        };
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: () => false,
+        });
+        expect(violations.filter((v) => v.kind === 'converter_unavailable')).toHaveLength(1);
+        expect(violations.some((v) => v.kind === 'stale_twin')).toBe(false);
+    } finally {
+        env.cleanup();
+    }
+});
+
+test('R3 — the default converter fails loudly when its binary is missing', () => {
+    const env = createTempEnv();
+    try {
+        writeFileSync(join(env.scriptsDir, 'tool.ts'), 'A\n');
+        writeFileSync(join(env.scriptsDir, 'tool.mjs'), 'old\n');
+        const manifest: ScriptManifest = {
+            entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
+        };
+        const convert = spawnConvertTwin(env.root, 'superskill-not-installed');
+        expect(convert('tool.ts', join(env.root, 'out.mjs'))).toBe(false);
+        expect(convert.lastError ?? '').toContain('superskill-not-installed');
+
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: convert,
+        });
+        expect(violations.some((v) => v.kind === 'converter_unavailable')).toBe(true);
     } finally {
         env.cleanup();
     }
@@ -241,7 +299,7 @@ test('R4 — forbidden invocation in shipped command/skill/agent/README fails', 
     const env = createTempEnv();
     try {
         writeFileSync(join(env.scriptsDir, 'tool.ts'), 'console.log("tool");\n');
-        writeFileSync(join(env.scriptsDir, 'tool.mjs'), 'console.log("tool");\n');
+        writeFileSync(join(env.scriptsDir, 'tool.mjs'), twinOf('console.log("tool");\n'));
         writeFileSync(
             join(env.pluginDir, 'commands', 'bad-command.md'),
             '# Bad Command\n\nRun `bun plugins/sp/scripts/tool.ts` here\n',
@@ -249,7 +307,9 @@ test('R4 — forbidden invocation in shipped command/skill/agent/README fails', 
         const manifest: ScriptManifest = {
             entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }],
         };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: fakeConvert(env.scriptsDir),
+        });
         expect(violations.some((v) => v.kind === 'forbidden_invocation' && v.message.includes('bad-command.md'))).toBe(
             true,
         );
@@ -262,7 +322,7 @@ test('Clean setup with standard twins and repo-only scripts passes', () => {
     const env = createTempEnv();
     try {
         writeFileSync(join(env.scriptsDir, 'ship.ts'), 'console.log("ship");\n');
-        writeFileSync(join(env.scriptsDir, 'ship.mjs'), 'console.log("ship");\n');
+        writeFileSync(join(env.scriptsDir, 'ship.mjs'), twinOf('console.log("ship");\n'));
         writeFileSync(join(env.scriptsDir, 'local.ts'), 'console.log("local");\n');
         writeFileSync(
             join(env.pluginDir, 'commands', 'good-command.md'),
@@ -274,7 +334,9 @@ test('Clean setup with standard twins and repo-only scripts passes', () => {
                 { rel: 'local.ts', contract: 'repo-only' },
             ],
         };
-        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir);
+        const violations = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: fakeConvert(env.scriptsDir),
+        });
         expect(violations).toEqual([]);
     } finally {
         env.cleanup();
@@ -290,7 +352,7 @@ test('CLI runner exits 0 for live repo manifest and scripts', () => {
     const stdout = new TextDecoder().decode(proc.stdout);
     expect(proc.exitCode).toBe(0);
     expect(stdout).toContain('PASS');
-});
+}, 30_000);
 
 test('in-process run() handles success, manifest error, and validation failure', () => {
     const logSpy = spyOn(console, 'log').mockImplementation(() => {});
@@ -300,13 +362,12 @@ test('in-process run() handles success, manifest error, and validation failure',
         const errCode = run(['--manifest', join(env.root, 'nonexistent.json')]);
         expect(errCode).toBe(1);
 
+        // repo-only: run() supplies the real spawn-based converter, so a standard entry here
+        // would need a genuine `superskill script convert` twin. Rule 1's content check is
+        // covered by the validateContract tests and the live-repo runner test.
         writeFileSync(join(env.scriptsDir, 'ship.ts'), 'console.log("ship");\n');
-        writeFileSync(join(env.scriptsDir, 'ship.mjs'), 'console.log("ship");\n');
         const manifestPath = join(env.configDir, 'plugin-scripts.json');
-        writeFileSync(
-            manifestPath,
-            JSON.stringify({ entries: [{ rel: 'ship.ts', contract: 'standard', twin: 'ship.mjs' }] }),
-        );
+        writeFileSync(manifestPath, JSON.stringify({ entries: [{ rel: 'ship.ts', contract: 'repo-only' }] }));
 
         const successCode = run([
             '--manifest',

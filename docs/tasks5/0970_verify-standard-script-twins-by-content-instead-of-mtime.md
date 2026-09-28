@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Verify standard-script twins by content instead of mtime
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-26T06:13:44.341Z
-updated_at: "2026-09-27T16:45:04.915Z"
+updated_at: "2026-09-28T06:45:16.594Z"
 feature_id: A32
 
 priority: P1
@@ -27,18 +27,18 @@ Origin: `/sp:dev-review plugins` minor finding (correctness).
 
 ### Requirements
 
-- [ ] R1. Rule 1's staleness test compares content. For each `contract: standard` entry whose `.ts` and twin both exist, the check regenerates the twin into a temp dir with `superskill script convert sp <rel> --out <tmp>/<twin>` and reports `stale_twin` when the bytes differ from the committed twin. File mtimes are no longer consulted, and `STALE_TWIN_TOLERANCE_MS` and its comment are deleted.
-- [ ] R2. The converter is injectable. `validateContract(manifest, scriptsDir, pluginDir, opts?: { convertTwin?: (rel: string, outPath: string) => boolean })`, where the function returns false when conversion could not run. `run()` supplies the real spawn-based converter; unit tests supply a deterministic fake.
-- [ ] R3. When the converter cannot run (spawn error / ENOENT, non-zero exit, or no output file), the check reports one `converter_unavailable` violation naming the command and its stderr, then stops content-checking the remaining entries. It never silently passes.
-- [ ] R4. The live-repo gate (`bun run script-contract-check`) passes at HEAD and fails when any committed standard twin is edited by hand, regardless of mtimes.
+- [x] R1. Rule 1's staleness test compares content. For each `contract: standard` entry whose `.ts` and twin both exist, the check regenerates the twin into a temp dir with `superskill script convert sp <rel> --out <tmp>/<twin>` and reports `stale_twin` when the bytes differ from the committed twin. File mtimes are no longer consulted, and `STALE_TWIN_TOLERANCE_MS` and its comment are deleted.
+- [x] R2. The converter is injectable. `validateContract(manifest, scriptsDir, pluginDir, opts?: { convertTwin?: (rel: string, outPath: string) => boolean })`, where the function returns false when conversion could not run. `run()` supplies the real spawn-based converter; unit tests supply a deterministic fake.
+- [x] R3. When the converter cannot run (spawn error / ENOENT, non-zero exit, or no output file), the check reports one `converter_unavailable` violation naming the command and its stderr, then stops content-checking the remaining entries. It never silently passes.
+- [x] R4. The live-repo gate (`bun run script-contract-check`) passes at HEAD and fails when any committed standard twin is edited by hand, regardless of mtimes.
 
 ### Acceptance Criteria
 
 Graduates all three of feature A32's scenarios (exact titles below); the numbered rows are the verify lens.
 
-- [ ] AC1 — R1 — Stale twin with a newer mtime is caught (req: R1, R2)
-- [ ] AC2 — R2 — Fresh twin with an older mtime passes (req: R1, R2)
-- [ ] AC3 — R3 — Missing converter fails loudly (req: R3)
+- [x] AC1 — R1 — Stale twin with a newer mtime is caught (req: R1, R2)
+- [x] AC2 — R2 — Fresh twin with an older mtime passes (req: R1, R2)
+- [x] AC3 — R3 — Missing converter fails loudly (req: R3)
 
 **Verify lens**
 
@@ -98,24 +98,61 @@ export function validateContract(manifest, scriptsDir, pluginDir, opts: { conver
 
 ### Plan
 
-1. Branch `fix/script-twin-content-check` from main.
-2. Tests first: rewrite the tests at `:118` and `:140` into AC1/AC2, add the AC3 tests, and add `fakeConvert`/`twinOf` helpers. Confirm AC1 fails against current code: the twin is newer, so the mtime rule passes it.
-3. Implement `ConvertTwin`, `spawnConvertTwin`, the `opts` parameter and the new Rule 1 loop. Delete the tolerance code and update the header comment.
-4. Thread `fakeConvert` into the existing tests that declare standard entries (`:70`, `:84`, `:101`, `:261`, `:295`, if they reach Rule 1 with both files present).
-5. Gates: `bun test plugins/sp/tests/script-contract-check.test.ts`, `bun run script-contract-check`, the manual drift proof from the AC R4 lens, `bun run typecheck`, `bunx biome check plugins/sp/scripts plugins/sp/tests`, `bun run spur-check-feature`.
-6. Commit: `fix(scripts): verify standard-script twins by content instead of mtime`.
+- [x] Branch from main (executed on pipeline worktree branch `sp/run-0970-87caae`).
+- [x] Tests first: rewrite the mtime tests into AC1/AC2, add the AC3 tests, add `fakeConvert`/`twinOf`. Confirm AC1 fails against the pre-change behavior (a newer twin passed the mtime rule).
+- [x] Implement `ConvertTwin`, `spawnConvertTwin`, the `opts` parameter and the new Rule 1 loop. Delete the tolerance code and update the header comment.
+- [x] Thread `fakeConvert` into the existing tests that reach Rule 1 with both files present (R4 forbidden-invocation, "Clean setup"); adapt the in-process `run()` fixture (see Solution).
+- [x] Gates: focused test file, `bun run script-contract-check`, the drift proof, `bun run typecheck`, `bunx biome check plugins/sp/scripts plugins/sp/tests`, `bun run spur-check-feature`, `bun run spur-check`.
+- [x] Commit: `fix(scripts): verify standard-script twins by content instead of mtime`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+`plugins/sp/scripts/script-contract-check.ts`
+
+- `plugins/sp/scripts/script-contract-check.ts:7` — header rule 1 now reads "byte-identical to a fresh convert of its .ts source".
+- `plugins/sp/scripts/script-contract-check.ts:47` — `Violation['kind']` gains `'converter_unavailable'`.
+- `plugins/sp/scripts/script-contract-check.ts:226-245` — `ConvertTwin` and `spawnConvertTwin(repoRoot, bin = 'superskill')`, which runs `superskill script convert sp <rel> --out <out>` from the repo root and returns false (never throws), recording the command plus stderr in `lastError`.
+- `plugins/sp/scripts/script-contract-check.ts:248-254` — `validateContract(..., opts: { convertTwin?: ConvertTwin } = {})`.
+- `plugins/sp/scripts/script-contract-check.ts:270-311` — Rule 1: `missing_twin` unchanged; otherwise regenerate into one `mkdtempSync` dir and compare bytes; a converter failure pushes one `converter_unavailable` and sets `converterDown`, and the temp dir is removed in `finally`. `STALE_TWIN_TOLERANCE_MS` and its comment are deleted; mtime is no longer read for staleness.
+
+`plugins/sp/tests/script-contract-check.test.ts`
+
+- `plugins/sp/tests/script-contract-check.test.ts:136,161,184,207` — `twinOf`/`fakeConvert` helpers plus the AC1/AC2/AC3 tests.
+- `plugins/sp/tests/script-contract-check.test.ts:355` — the live-repo runner timeout is raised to 30 s (measured 1.5 s; headroom for loaded full-suite runs, cf. task 0981).
+- `plugins/sp/tests/script-contract-check.test.ts:370` — the in-process `run()` fixture is now `repo-only`: `run()` supplies the real converter and cannot inject a fake, so a standard entry there would require a genuine `superskill` convert. Rule 1's content path stays covered by the `validateContract` tests and the live-repo runner test.
+
+Evidence: focused file 18 pass / 0 fail; plugin suite 1674 pass / 0 fail; `bun run script-contract-check` PASS at HEAD; drift proof — append `// drift` to `plugins/sp/scripts/quality-gate.mjs` and touch → FAIL `stale_twin`, `git checkout` → PASS; `bun run spur-check-feature` green; `bun run spur-check` 9381 pass / 0 fail. A targeted strict `tsc` on both files adds 0 new errors (the remaining ones are task 0973's `plugins/sp` backlog, including `'gobing_ai_import'` in the same union).
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 (covers: R1) [R2] | MET | `plugins/sp/scripts/script-contract-check.ts:270-311` — Rule 1 regenerates into a temp dir and compares bytes; mtime is not read; `STALE_TWIN_TOLERANCE_MS` deleted; header `:7` updated |
+| R2 | MET | `plugins/sp/scripts/script-contract-check.ts:226-254` — `ConvertTwin`, `spawnConvertTwin`, and the optional `opts.convertTwin` parameter |
+| R3 (covers: R3) | MET | `plugins/sp/scripts/script-contract-check.ts:296-302` — one `converter_unavailable` violation naming the command/stderr, then `converterDown` stops further checks; never a silent pass |
+| R4 | MET | `bun run script-contract-check` PASS at HEAD; drift proof (append `// drift` to `quality-gate.mjs` + touch) → FAIL `stale_twin`; `git checkout` → PASS |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `plugins/sp/tests/script-contract-check.test.ts:136` — feature A32 R1: newer-mtime twin with differing content → `stale_twin`; mutation disabling the byte compare makes it fail |
+| AC2 | MET | test | `plugins/sp/tests/script-contract-check.test.ts:161` — feature A32 R2: older-mtime twin matching a fresh convert → no `stale_twin` |
+| AC3 | MET | test | `plugins/sp/tests/script-contract-check.test.ts:184,207` — feature A32 R3: fake returning false → exactly one `converter_unavailable`; bogus binary → `converter_unavailable` with the command in `lastError` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (self-review)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | Performance | `plugins/sp/scripts/script-contract-check.ts:270-311` | The gate now spawns `superskill` once per standard entry (~1.5 s for 17). Acceptable for a repo gate; the cost buys mtime-independent proof. |
+| P4 | Test coverage | `plugins/sp/tests/script-contract-check.test.ts:370` | The in-process `run()` test no longer exercises a standard entry, because `run()` cannot inject a converter. Accepted: the `validateContract` tests and the live-repo runner cover Rule 1. |
+
+No P1–P3 findings. The gate is now fail-closed: a missing converter reports `converter_unavailable` instead of passing.
 
 ### References
 
@@ -128,4 +165,7 @@ export function validateContract(manifest, scriptsDir, pluginDir, opts: { conver
 ### History
 
 - 2026-09-26T06:18:48.322Z backlog → todo (system)
+- 2026-09-28T06:30:57.278Z todo → wip (system)
+- 2026-09-28T06:30:58.118Z wip → testing (system)
+- 2026-09-28T06:43:21.796Z testing → done (system)
 

@@ -4,7 +4,7 @@
  * (task 0600, feature I, ADR-065).
  *
  * Enforces superskill's standard plugin script contract across plugins/sp:
- * 1. A 'standard' entry must have a valid .mjs twin not older than its .ts source.
+ * 1. A 'standard' entry must have a valid .mjs twin byte-identical to a fresh convert of its .ts source.
  * 2. A .mjs twin on disk must be registered under a 'standard' entry (never 'repo-only' or unlisted).
  * 3. Every script file under plugins/sp/scripts/ must have a manifest entry (two-sided).
  * 4. No shipped surface (commands/, skills/, agents/, README.md) may reference 'bun plugins/sp/scripts/'.
@@ -18,8 +18,10 @@
  * Exit code: 0 on success, 1 on any violation.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 
 export type ScriptContractType = 'standard' | 'repo-only';
 
@@ -42,6 +44,7 @@ export interface Violation {
         | 'unexpected_twin'
         | 'unregistered_script'
         | 'forbidden_invocation'
+        | 'converter_unavailable'
         | 'incomplete';
     target: string;
     message: string;
@@ -219,7 +222,35 @@ function findGobingAiValueImports(dir: string): { file: string; line: number }[]
     return hits;
 }
 
-export function validateContract(manifest: ScriptManifest, scriptsDir: string, pluginDir: string): Violation[] {
+/** Regenerates a standard script's twin into `outPath`; false when conversion could not run. */
+export type ConvertTwin = (rel: string, outPath: string) => boolean;
+
+/**
+ * The real converter: `superskill script convert sp <rel> --out <outPath>` run from the repo
+ * root, because `convert` resolves `plugins/<plugin>/scripts/<rel>` against the process cwd.
+ * Returns false — never throws — on spawn error, non-zero exit, or a missing output file, and
+ * records the command plus stderr in `lastError` for the `converter_unavailable` violation.
+ */
+export function spawnConvertTwin(repoRoot: string, bin = 'superskill'): ConvertTwin & { lastError?: string } {
+    const convert: ConvertTwin & { lastError?: string } = (rel, outPath) => {
+        const args = ['script', 'convert', 'sp', rel, '--out', outPath];
+        const res = spawnSync(bin, args, { cwd: repoRoot, encoding: 'utf-8' });
+        if (res.error || res.status !== 0 || !existsSync(outPath)) {
+            const detail = (res.stderr ?? '').trim() || res.error?.message || `exit ${res.status}`;
+            convert.lastError = `${bin} ${args.join(' ')}: ${detail}`;
+            return false;
+        }
+        return true;
+    };
+    return convert;
+}
+
+export function validateContract(
+    manifest: ScriptManifest,
+    scriptsDir: string,
+    pluginDir: string,
+    opts: { convertTwin?: ConvertTwin } = {},
+): Violation[] {
     const violations: Violation[] = [];
     const { tsFiles, mjsFiles } = listDiskScripts(scriptsDir);
 
@@ -236,37 +267,51 @@ export function validateContract(manifest: ScriptManifest, scriptsDir: string, p
         manifestMap.set(entry.rel, entry);
     }
 
-    // Rule 1: standard entries must have valid .mjs twins not older than the .ts source.
-    // mtime is only meaningful when a build genuinely ran: a `git worktree add` stamps
-    // every checked-out file within the same millisecond, and the lexicographic write
-    // order (`tool.mjs` < `tool.ts`) makes the twin spuriously "older" by <1ms. Tolerate
-    // sub-second deltas so a fresh checkout is never flagged; real build staleness is
-    // seconds-to-minutes, far beyond this window (task 0606 R1 eval-worktree blocker).
-    const STALE_TWIN_TOLERANCE_MS = 1000;
-    for (const entry of manifest.entries) {
-        if (entry.rel && entry.contract === 'standard') {
-            const expectedTwinRel = entry.twin ?? entry.rel.replace(/\.ts$/, '.mjs');
-            const twinPath = join(scriptsDir, expectedTwinRel);
-            const tsPath = join(scriptsDir, entry.rel);
+    // Rule 1: standard entries must have a .mjs twin byte-identical to a fresh convert.
+    // mtime is never consulted: git does not store mtimes, so a committed stale twin looks
+    // freshly checked-out in every clone and worktree. Only regenerating the twin proves it
+    // matches its source (task 0970; replaces the 0606 sub-second mtime tolerance).
+    const twinTmpDir = mkdtempSync(join(tmpdir(), 'script-twin-'));
+    try {
+        const convertTwin = opts.convertTwin ?? spawnConvertTwin(resolve(pluginDir, '..', '..'));
+        let converterDown = false;
+        for (const entry of manifest.entries) {
+            if (entry.rel && entry.contract === 'standard') {
+                const expectedTwinRel = entry.twin ?? entry.rel.replace(/\.ts$/, '.mjs');
+                const twinPath = join(scriptsDir, expectedTwinRel);
+                const tsPath = join(scriptsDir, entry.rel);
 
-            if (!existsSync(twinPath)) {
-                violations.push({
-                    kind: 'missing_twin',
-                    target: entry.rel,
-                    message: `standard script ${entry.rel} is missing its .mjs twin (${expectedTwinRel})`,
-                });
-            } else if (existsSync(tsPath)) {
-                const tsStat = statSync(tsPath);
-                const twinStat = statSync(twinPath);
-                if (twinStat.mtimeMs < tsStat.mtimeMs - STALE_TWIN_TOLERANCE_MS) {
+                if (!existsSync(twinPath)) {
                     violations.push({
-                        kind: 'stale_twin',
+                        kind: 'missing_twin',
                         target: entry.rel,
-                        message: `standard script .mjs twin ${expectedTwinRel} is older than source ${entry.rel}`,
+                        message: `standard script ${entry.rel} is missing its .mjs twin (${expectedTwinRel})`,
                     });
+                } else if (existsSync(tsPath) && !converterDown) {
+                    const outPath = join(twinTmpDir, expectedTwinRel);
+                    mkdirSync(dirname(outPath), { recursive: true });
+                    if (!convertTwin(entry.rel, outPath)) {
+                        // One violation, then stop: a broken converter is one environment failure,
+                        // not 17 stale twins. It never silently passes (task 0970 R3).
+                        const detail = (convertTwin as { lastError?: string }).lastError;
+                        violations.push({
+                            kind: 'converter_unavailable',
+                            target: entry.rel,
+                            message: `could not regenerate ${expectedTwinRel} from ${entry.rel}${detail ? ` — ${detail}` : ''}; twin content cannot be verified`,
+                        });
+                        converterDown = true;
+                    } else if (!readFileSync(outPath).equals(readFileSync(twinPath))) {
+                        violations.push({
+                            kind: 'stale_twin',
+                            target: entry.rel,
+                            message: `standard script .mjs twin ${expectedTwinRel} does not match a fresh convert of ${entry.rel} — run bun run build:scripts`,
+                        });
+                    }
                 }
             }
         }
+    } finally {
+        rmSync(twinTmpDir, { recursive: true, force: true });
     }
 
     // Rule 2: committed .mjs files must belong to a 'standard' entry
