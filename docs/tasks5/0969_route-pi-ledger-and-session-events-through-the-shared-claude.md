@@ -4,7 +4,7 @@ name: Route Pi ledger and session events through the shared Claude hook cores
 status: done
 template: feature-impl
 created_at: 2026-09-26T06:13:43.199Z
-updated_at: "2026-09-28T23:09:54.918Z"
+updated_at: "2026-09-28T23:33:46.810Z"
 feature_id: H21
 
 priority: P2
@@ -208,19 +208,19 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `plugins/sp/hooks/pi/guard-extension.ts` `normalizePiToolEvent` (pure Pi→Claude adapter) feeds the shared `recordToolUseEvent`; `plugins/sp/hooks/pi/guard-extension.test.ts` "Pi/Claude ledger parity" records each of read/write/edit/grep/find/bash through the extension into dir A and the equivalent Claude payload through `recordToolUseEvent` into dir B, asserting deep-equality after deleting `ts`; `ls` and an unknown tool write no row |
-| R2 | MET | The `session_start` handler calls `recordSessionStart(spurContextDir(), getEnvVars(), undefined, 'pi')`; `context-session-start.ts` gained the optional `agentFallback` (line 143 → `resolveAgentHint(env, agentFallback)`). Test asserts `session` matches `/^session-\d{4}-\d{2}-\d{2}-\d{4}$/`, `started` present, no `session_id`/`started_at`, `agent === 'pi'`, one `session_start` row with `contextFreshness`, and byte-identical reuse under `SPUR_RUN_ID` |
-| R3 | MET | `context-session-stop.ts` exports `recordSessionEnd(dir, now?)` (reads the pointer, computes totals, appends `{ts, session, type:'session_end', totals}`, removes the pointer, returns the event/null); its entrypoint and Pi's `session_shutdown` both call it. Unit tests cover happy path, missing pointer, corrupt pointer and empty id |
-| R4 | MET | `rg -n "function (appendToLedger\|summarizeToolEvent\|readSessionId\|generateSessionId\|initSession\|cleanupSession)\b" plugins/sp/hooks/pi/guard-extension.ts` → none; the file keeps 4 `pi.on(` handlers and only the normalizer plus three one-line handlers |
-| R5 | MET | `git diff HEAD -- plugins/sp/hooks/context-hooks.test.ts` has no removed `expect(` line; the Claude-side hook tests (80 tests across `context-hooks` + `guard-extension`) pass; `bun run spur-check` → 9428 pass / 0 fail |
+| R1 | MET | `plugins/sp/hooks/pi/guard-extension.ts:148` `normalizePiToolEvent` feeds `recordToolUseEvent` at `plugins/sp/hooks/pi/guard-extension.ts:246`; parity test `plugins/sp/hooks/pi/guard-extension.test.ts:534` (now incl. a Pi `content` text-part case) and row filter `plugins/sp/hooks/pi/guard-extension.test.ts:557` |
+| R2 | MET | `plugins/sp/hooks/pi/guard-extension.ts:255` calls `recordSessionStart(..., 'pi')` (`plugins/sp/hooks/context-session-start.ts:125`); `plugins/sp/hooks/pi/guard-extension.test.ts:567`, `plugins/sp/hooks/pi/guard-extension.test.ts:598` |
+| R3 | MET | `plugins/sp/hooks/context-session-stop.ts:58` exported `recordSessionEnd`, called by Claude entrypoint `plugins/sp/hooks/context-session-stop.ts:99` and Pi `plugins/sp/hooks/pi/guard-extension.ts:264`; `plugins/sp/hooks/pi/guard-extension.test.ts:616`, `plugins/sp/hooks/context-hooks.test.ts:762` |
+| R4 | MET | `rg -n "function (appendToLedger\|summarizeToolEvent\|readSessionId\|generateSessionId\|initSession\|cleanupSession)" plugins/sp/hooks/pi` → none |
+| R5 | MET | `git diff 3571e710a -- plugins/sp/hooks/context-hooks.test.ts plugins/sp/hooks/token-estimate.test.ts \| rg '^-.*expect\('` → none; `bun test plugins/sp/hooks` → 308 pass / 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R1 — Pi tool rows match Claude tool rows | MET | test | "every mapped Pi tool row deep-equals the Claude row for the same event after ts" (6 tool cases) + "an ls event and an unknown custom tool write no row" |
-| R2 — Pi session file uses the Claude schema | MET | test | "session_start writes the Claude schema with a pi agent fallback and a freshness stamp" |
-| R3 — Pi reuses an in-flight session like Claude | MET | test | "a fresh session with SPUR_RUN_ID is reused byte-identically with no new row" |
-| R4 — Pi shutdown rolls up like Claude | MET | test | "session_end carries nested totals, satisfies the reader contract, and removes the pointer" + `recordSessionEnd` core unit tests |
-| R5 — Pi has no private ledger or session implementation | MET | command | AC5 `rg` probe → none; `bunx biome check plugins/sp` clean; `bun run plugin-smoke` PASS; `bun run spur-check` EXIT 0 |
+| R1 — Pi tool rows match Claude tool rows | MET | test | `plugins/sp/hooks/pi/guard-extension.test.ts:534` read/write/edit/grep/find/bash + content-bearing bash deep-equal (fails when the normalizer drops `tool_response`); `plugins/sp/hooks/pi/guard-extension.test.ts:557` ls/custom write no row |
+| R2 — Pi session file uses the Claude schema | MET | test | `plugins/sp/hooks/pi/guard-extension.test.ts:567` |
+| R3 — Pi reuses an in-flight session like Claude | MET | test | `plugins/sp/hooks/pi/guard-extension.test.ts:598` |
+| R4 — Pi shutdown rolls up like Claude | MET | test | `plugins/sp/hooks/pi/guard-extension.test.ts:616`; `plugins/sp/hooks/context-hooks.test.ts:762` missing/corrupt/empty pointer return null and now assert no ledger write |
+| R5 — Pi has no private ledger or session implementation | MET | command | AC5 `rg` probe → none; no removed `expect(` lines since 3571e710a; `bun test plugins/sp/hooks` 308 pass; `bun run plugin-smoke` PASS; `bun run typecheck` exit 0 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -233,7 +233,6 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:e96fbffa3bed6447378948dab7cfe5e415bd41ef4270f8fd2ec8cca3f8932734 |
 
 ### References
 

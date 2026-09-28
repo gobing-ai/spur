@@ -769,6 +769,8 @@ describe('context-session-stop — recordSessionEnd core (0969 R3)', () => {
             expect(recordSessionEnd(contextDir)).toBeNull();
             writeFileSync(join(contextDir, '.session.json'), JSON.stringify({ session: '' }));
             expect(recordSessionEnd(contextDir)).toBeNull();
+            // Fail-open paths write nothing.
+            expect(existsSync(join(contextDir, 'token-ledger.jsonl'))).toBe(false);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

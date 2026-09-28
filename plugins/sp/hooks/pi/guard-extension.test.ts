@@ -492,6 +492,8 @@ describe('Pi/Claude ledger parity (0969 R1)', () => {
         input: Record<string, unknown>;
         claude: string;
         claudeInput: Record<string, unknown>;
+        content?: unknown;
+        claudeResponse?: unknown;
     }> = [
         { pi: 'read', input: { path: '/a.ts' }, claude: 'Read', claudeInput: { file_path: '/a.ts' } },
         {
@@ -519,13 +521,21 @@ describe('Pi/Claude ledger parity (0969 R1)', () => {
             claudeInput: { pattern: '*.md', path: 'docs' },
         },
         { pi: 'bash', input: { command: 'ls -la' }, claude: 'Bash', claudeInput: { command: 'ls -la' } },
+        {
+            pi: 'bash',
+            input: { command: 'cat x' },
+            content: [{ type: 'text', text: 'abcdefgh' }],
+            claude: 'Bash',
+            claudeInput: { command: 'cat x' },
+            claudeResponse: { content: 'abcdefgh' },
+        },
     ];
 
     test('every mapped Pi tool row deep-equals the Claude row for the same event after ts', async () => {
         for (const c of cases) {
             const dirA = makeTempDir('parity-pi-');
             await handlers.session_start?.({}, makeCtx());
-            await handlers.tool_result?.({ toolName: c.pi, input: c.input }, makeCtx());
+            await handlers.tool_result?.({ toolName: c.pi, input: c.input, content: c.content }, makeCtx());
             const piRow = readLedger(dirA).find((r) => r.type !== 'session_start');
 
             // dir B: the same `.session.json`, the equivalent Claude payload through the core.
@@ -533,7 +543,11 @@ describe('Pi/Claude ledger parity (0969 R1)', () => {
             const bCtx = join(dirB, '.spur', 'context');
             mkdirSync(bCtx, { recursive: true });
             writeFileSync(join(bCtx, '.session.json'), readFileSync(join(dirA, '.spur', 'context', '.session.json')));
-            recordToolUseEvent(bCtx, { tool_name: c.claude, tool_input: c.claudeInput });
+            recordToolUseEvent(bCtx, {
+                tool_name: c.claude,
+                tool_input: c.claudeInput,
+                ...(c.claudeResponse ? { tool_response: c.claudeResponse } : {}),
+            } as Parameters<typeof recordToolUseEvent>[1]);
             const claudeRow = readLedger(dirB).find((r) => r.type !== 'session_start');
 
             expect(withoutTs(piRow), `${c.pi} vs ${c.claude}`).toEqual(withoutTs(claudeRow));
