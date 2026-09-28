@@ -1192,7 +1192,7 @@ describe('TaskService.record', () => {
             const body = scenarios.map((s) => `  Scenario: ${s}\n    Given x\n    Then y`).join('\n\n');
             await fs.writeFile(
                 join(featuresDir, `${id}_record-guard.md`),
-                `---\nid: ${id}\nname: "record-guard"\n---\n\n# ${id}\n\n## Acceptance Criteria\n\n\`\`\`gherkin\n${body}\n\`\`\`\n`,
+                `---\nid: ${id}\nname: "record-guard"\n---\n\n# ${id}\n\n## Acceptance Criteria\n\n\`\`\`gherkin\nFeature: record-guard\n${body}\n\`\`\`\n`,
             );
         }
 
@@ -1286,10 +1286,17 @@ describe('TaskService.record', () => {
             expect(result.scenarioWarnings).toBeUndefined();
         });
 
-        test('rows matching no feature scenario warn in parity with task verdict', async () => {
+        async function writeTaskAc(wbs: string, ac: string): Promise<void> {
+            const acFile = join(root(), `${wbs}-ac.md`);
+            await createNodeFileSystem(root()).writeFile(acFile, ac);
+            await svc.updateSection(wbs, 'Acceptance Criteria', acFile);
+        }
+
+        test('a covering task whose rows match no feature scenario warns in parity with task verdict', async () => {
             await seedRecordFeature('Z5', ['Only scenario']);
             const wbs = await createTask(svc);
             await svc.updateField(wbs, 'feature_id', 'Z5');
+            await writeTaskAc(wbs, '```gherkin\n  Scenario: Only scenario\n    Given x\n    Then y\n```\n');
             const verdictPath = await writeVerdictRows(wbs, [
                 { id: 'R1', status: 'MET' },
                 { id: 'R2', status: 'MET' },
@@ -1298,6 +1305,19 @@ describe('TaskService.record', () => {
 
             expect(result.scenarioWarnings).toHaveLength(1);
             expect(result.scenarioWarnings?.[0]).toContain('matching no scenario of this feature');
+        });
+
+        // 0984: the done gate and `task verdict` scope the no-match check to covering tasks;
+        // record warned for task-local tasks too, so a PASS task-local record always nagged.
+        test('a task-local task whose rows match no feature scenario stays silent', async () => {
+            await seedRecordFeature('Z6', ['Only scenario']);
+            const wbs = await createTask(svc);
+            await svc.updateField(wbs, 'feature_id', 'Z6');
+            await writeTaskAc(wbs, '- [ ] AC1 — a task-local outcome the feature does not name\n');
+            const verdictPath = await writeVerdictRows(wbs, [{ id: 'AC1', status: 'MET' }]);
+            const result = await svc.record(wbs, { verdictFile: verdictPath });
+
+            expect(result.scenarioWarnings).toBeUndefined();
         });
     });
 });

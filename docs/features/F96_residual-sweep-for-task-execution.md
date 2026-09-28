@@ -101,7 +101,8 @@ Feature: Residual sweep for task execution
 | 0950 | Wire the residual sweep into task-pipeline: base capture, verify fold, done settle, failed report | done |
 | 0951 | Residual sweep for standalone verify, next-router C6 recovery row, and owning docs | done |
 | 0952 | dev-runall batch wrap covers only done tasks and reports the rest | done |
-| 0983 | Order the residual-sweep box check against the record-stage box flip | backlog |
+| 0983 | Order the residual-sweep box check against the record-stage box flip | done |
+| 0987 | Order the standalone verify surfaces' residual-scan fold after record flips | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

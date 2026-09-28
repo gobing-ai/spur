@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { InvalidWorkflowRunIdError, openInlineRunProjectDb, persistWorktreeRuns } from '../../src';
@@ -345,6 +345,28 @@ describe('persistWorktreeRuns cited evidence + record tolerance (task 0984)', ()
             });
             expect(result.ok).toBe(true);
             expect(result.skipped).toEqual([{ id: '0984-verdicts', reason: 'cited-directory:0984-verdicts' }]);
+        } finally {
+            from.cleanup();
+            to.cleanup();
+        }
+    });
+
+    test('a citation resolving to a symlink is reported as a symlink, never followed or copied (R3)', async () => {
+        const from = makeDir('cited-link-from-');
+        const to = makeDir('cited-link-to-');
+        try {
+            await seedWorktree(from.dir, 'run_0984s');
+            writeFileSync(join(from.dir, 'outside.json'), '{}');
+            symlinkSync(join(from.dir, 'outside.json'), join(from.dir, '.spur', 'run', '0984-link.json'));
+            const taskFile = writeTaskFile(to.dir, 'docs/task-0984s.md', ['0984-link.json']);
+            const result = await persistWorktreeRuns({
+                fromWorkdir: from.dir,
+                toWorkdir: to.dir,
+                taskFiles: [taskFile],
+            });
+            expect(result.ok).toBe(true);
+            expect(result.skipped).toEqual([{ id: '0984-link.json', reason: 'cited-symlink:0984-link.json' }]);
+            expect(existsSync(join(to.dir, '.spur', 'run', '0984-link.json'))).toBe(false);
         } finally {
             from.cleanup();
             to.cleanup();

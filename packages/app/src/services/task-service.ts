@@ -30,7 +30,7 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
-import { matchedScenarioKeys } from './feature-check';
+import { matchedScenarioKeys, readFeatureAcBody, taskCoversAnyFeatureScenario } from './feature-check';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import { type CheckFindings, FINDING_CODES, type SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
@@ -1309,42 +1309,21 @@ export class TaskService {
 
     /**
      * Resolve the linked feature's Acceptance Criteria body for a task file —
-     * frontmatter `feature_id` → prefix-scan `<tasksDir>/../features/<id>_*.md`.
-     * Shared by {@link checkAcSubsetWarning} and {@link checkScenarioKeyRegression}
-     * (0936 R1: extracted behavior-preserving from the subset warning). Returns
-     * null on any miss — no feature_id, no feature file, empty AC — so both
-     * callers stay silent in the same cases.
+     * frontmatter `feature_id` → `<tasksDir>/../features/<id>_*.md` via feature-check's
+     * {@link readFeatureAcBody}. Shared by {@link checkAcSubsetWarning} and
+     * {@link checkScenarioKeyRegression}. Returns null on any miss — no feature_id,
+     * no feature file, empty AC — so both callers stay silent in the same cases.
      */
-    private async resolveFeatureAcBody(taskFilePath: string): Promise<{ featureId: string; ac: string } | null> {
-        const raw = await this.ctx.fs.readFile(taskFilePath);
-        const doc = MarkdownDocument.parse(raw, 'task');
+    private async resolveFeatureAcBody(
+        taskFilePath: string,
+    ): Promise<{ featureId: string; ac: string; taskAc: string } | null> {
+        const doc = MarkdownDocument.parse(await this.ctx.fs.readFile(taskFilePath), 'task');
         const fm = doc.frontmatterData ?? {};
         const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
         if (!featureId || featureId.length === 0) return null;
-
-        const tasksDir = dirname(taskFilePath);
-        const featuresDir = join(tasksDir, '..', 'features');
-        // Feature files are named `<id>_<slug>.md` (e.g. `H1_spur-dev-skill.md`), so resolve by
-        // prefix scan — matching `task-check.ts` findFeatureFile. Probing `<id>_feature.md` /
-        // `<id>.md` never matches a real file and silently disabled this warning (0479 R3).
-        const featurePath = await (async (): Promise<string | null> => {
-            try {
-                for (const name of await this.ctx.fs.readDir(featuresDir)) {
-                    if (name.startsWith(`${featureId}_`) && name.endsWith('.md')) {
-                        return `${featuresDir}/${name}`;
-                    }
-                }
-            } catch {
-                // Directory missing or unreadable — no resolution to make.
-            }
-            return null;
-        })();
-        if (featurePath === null) return null;
-
-        const featureRaw = await this.ctx.fs.readFile(featurePath);
-        const featureDoc = MarkdownDocument.parse(featureRaw, 'feature');
-        const featureAc = stripAcFence(featureDoc.getSection('Acceptance Criteria') ?? '');
-        return featureAc.trim() ? { featureId, ac: featureAc } : null;
+        const ac = await readFeatureAcBody(this.ctx.fs, join(dirname(taskFilePath), '..', 'features'), featureId);
+        if (ac === null) return null;
+        return { featureId, ac, taskAc: stripAcFence(doc.getSection('Acceptance Criteria') ?? '') };
     }
 
     /**
@@ -1385,8 +1364,13 @@ export class TaskService {
                         `satisfaction edge (L4.scenario-unverified regresses otherwise).`,
                 );
             }
-            // No-match parity with `task verdict` / L4.verdict-rows-match-no-scenario.
-            if (newRows.length > 0 && newKeys.length === 0) {
+            // No-match parity with `task verdict` / L4.verdict-rows-match-no-scenario — including
+            // their covering scope: a task-local task's rows are not expected to name a scenario.
+            if (
+                newRows.length > 0 &&
+                newKeys.length === 0 &&
+                taskCoversAnyFeatureScenario(resolved.taskAc, resolved.ac)
+            ) {
                 warnings.push(
                     `Task ${wbs} verdict evidence carries ${newRows.length} row(s) matching no scenario of this ` +
                         `feature — key rows by scenario title or AC-N alias (repair: /sp:dev-verify ${wbs})`,

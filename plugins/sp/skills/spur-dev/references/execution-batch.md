@@ -515,7 +515,7 @@ by hand), an unreadable task file, or more than 64 distinct cited files fails th
 
 The shapes are pinned (task 0975 R1; `record-missing` and citation behavior per 0984): idempotent on re-persist;
 success exits 0 printing
-`{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"}]}`
+`{"ok":true,"persisted":<n>,"skipped":[{"id":<run-id>,"reason":"id-exists"|"external-key-conflict"|"record-conflict:<file>"|"record-missing:<file>"|"cited-directory:<name>"|"cited-symlink:<name>"|"cited-non-file:<name>"}]}`
 — an `id-exists` / `external-key-conflict` skip never modifies the pre-existing target rows, a
 `record-conflict:<file>` skip never overwrites a divergent invoking-tree record, and a
 `record-missing:<file>` skip is a known `task-lifecycle`/`feature-lifecycle` row with no record file

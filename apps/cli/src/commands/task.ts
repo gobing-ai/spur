@@ -1252,7 +1252,7 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
-            const { deriveVerdict, VERDICT_SCENARIO_KEY_FORMS, verdictScenarioKeyGap } = await import(
+            const { deriveVerdict, summarizeRowIds, VERDICT_SCENARIO_KEY_FORMS, verdictScenarioKeyGap } = await import(
                 '@gobing-ai/spur-app'
             );
             const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
@@ -1288,14 +1288,11 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                 },
             );
             if (gap !== null) {
-                const ids = gap.offendingIds.map((id) => `\`${id}\``);
-                const listed = ids.slice(0, 5);
-                const extra = ids.length - listed.length;
-                const summary = extra > 0 ? `${listed.join(', ')} (+${extra} more)` : listed.join(', ');
                 writeJsonError(
                     context.output,
                     options,
-                    `Verdict rows key to no scenario of linked feature ${gap.featureId}: ${summary}. ` +
+                    `Verdict rows key to no scenario of linked feature ${gap.featureId}: ` +
+                        `${summarizeRowIds(gap.offendingIds)}. ` +
                         `Key each row by ${VERDICT_SCENARIO_KEY_FORMS} (repair: /sp:dev-verify ${wbs})`,
                 );
                 context.setExitCode(1);

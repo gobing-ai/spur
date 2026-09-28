@@ -4,7 +4,7 @@ name: Persist worktree run evidence so merged task files carry no dangling .spur
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:12:01.569Z
-updated_at: "2026-09-28T03:28:10.709Z"
+updated_at: "2026-09-28T03:37:44.093Z"
 feature_id: H1
 
 ac_altitude: task-local
@@ -70,11 +70,18 @@ The same app service transfers all run DB rows. A known task-lifecycle or featur
 
 ### Solution
 
-`persistWorktreeRuns` (`packages/app/src/services/inline-run-setup.ts:249`) accepts `taskFiles`; citations are extracted and validated before any write (citation regex `:204`, literal/safe-name reduction `:215`, cap 64 `:193`, regular-file `lstat` check `:294`), then copied with a write-time re-check (`:368-392`). Lifecycle rows tolerate a missing record (`record-missing:` at `:348`); pipeline records stay fatal. `listRunIdRows` (`packages/domain/src/dao/run-transfer.ts:86`) carries `workflowName`. The plugin script forwards a repeatable `--task-file` (`plugins/sp/scripts/inline-run-setup.ts:581`). The WT-4a recipe resolves `TASK_FILE` (`plugins/sp/skills/spur-dev/references/execution-batch.md:846-856`).
+`persistWorktreeRuns` (`packages/app/src/services/inline-run-setup.ts:252`) accepts `taskFiles`. It extracts and validates citations before any write: the citation regex is at `:207`, the literal/safe-name reduction at `:218`, the 64-file cap at `:193`, and the regular-file `lstat` check at `:297`. It then copies them, re-checking each at write time (`:372-393`). A lifecycle row may have no record file (`record-missing:` at `:350`); a missing pipeline record stays fatal. `listRunIdRows` (`packages/domain/src/dao/run-transfer.ts:86`) carries `workflowName`. The plugin script forwards a repeatable `--task-file` (`plugins/sp/scripts/inline-run-setup.ts:581`), and the WT-4a recipe resolves `TASK_FILE` (`plugins/sp/skills/spur-dev/references/execution-batch.md:846-858`).
 
-Verify fix pass (2026-09-27): `asLiteralRunFileName` now strips trailing sentence punctuation. Before this, an unquoted prose citation `.spur/run/<file>.json.` became a phantom `x.json.`, which was fatal and blocked teardown. `.spur/run/<file>.json,` was dropped as non-literal. Pinned by `packages/app/tests/services/persist-worktree-runs.test.ts:274`. `plugins/sp/lib/inline-run.generated.mjs` was regenerated.
+Verify fix pass (2026-09-27): `asLiteralRunFileName` now strips trailing sentence punctuation. Before, an unquoted prose citation ending in `.json.` became a phantom `x.json.` file, which was fatal and blocked teardown; a trailing comma dropped the citation as non-literal. Pinned by `packages/app/tests/services/persist-worktree-runs.test.ts:274`.
 
-Verify fix pass 2 (2026-09-27): foreign run evidence no longer blocks teardown. `RUN_CITATION_RE` (`packages/app/src/services/inline-run-setup.ts:207`) now has a lookbehind so it matches only repo-relative `.spur/run/<file>` citations. A root-qualified path (`knowledge-kit/.spur/run/…`, `/abs/.spur/run/…`, `~/.spur/run/…`) is another project's evidence, which this teardown neither owns nor can lose. Before, 0958's knowledge-kit citations counted as "missing in both trees" and would have retained the worktree. R1 is unchanged for local citations. Regression test at `packages/app/tests/services/persist-worktree-runs.test.ts:300`: it fails against the old regex, and the bare form stays fatal. The spec rule is at `plugins/sp/skills/spur-dev/references/execution-batch.md:512`. I regenerated `plugins/sp/lib/inline-run.generated.mjs`. The references in 0958 are now root-qualified, and 0984's own example paths no longer read as literal citations.
+Verify fix pass 2 (2026-09-27): foreign run evidence no longer blocks teardown. `RUN_CITATION_RE` (`packages/app/src/services/inline-run-setup.ts:207`) now has a lookbehind that skips root-qualified paths (`knowledge-kit/.spur/run/…`, `/abs/.spur/run/…`, `~/.spur/run/…`); those are another project's evidence, which this teardown neither owns nor can lose. Pinned by `packages/app/tests/services/persist-worktree-runs.test.ts:300`, which fails against the old regex. The spec rule is at `plugins/sp/skills/spur-dev/references/execution-batch.md:512`. 0958's references are now root-qualified.
+
+Verify fix pass 3 (2026-09-27): three follow-ups closed.
+- A non-regular citation is labelled by its real kind (`cited-directory` / `cited-symlink` / `cited-non-file`, `packages/app/src/services/inline-run-setup.ts:302`). Before, a symlink was reported as `cited-directory`. Pinned by `packages/app/tests/services/persist-worktree-runs.test.ts:354`, and the output contract is updated at `plugins/sp/skills/spur-dev/references/execution-batch.md:518`.
+- `spur task record` warned "rows matching no scenario" for task-local tasks, although the done gate and `task verdict` both limit that check to tasks that cover a feature scenario. Every PASS record of this task-local task therefore warned. The shared scope is now `taskCoversAnyFeatureScenario` (`packages/app/src/services/feature-check.ts:1454`), used by the verdict gap check and by record (`packages/app/src/services/task-service.ts:1372`). Pinned by `packages/app/tests/services/task-record.test.ts:1312`, which fails when the scope is removed, and `:1295`.
+- Two duplicated helpers are now single copies: `summarizeRowIds` (`packages/app/src/services/feature-check.ts:1368`, exported and reused by the CLI at `apps/cli/src/commands/task.ts:1295`) and the feature-AC lookup `readFeatureAcBody` (`packages/app/src/services/feature-check.ts:1464`, reused by `TaskService.resolveFeatureAcBody` at `packages/app/src/services/task-service.ts:1317`).
+
+`plugins/sp/lib/inline-run.generated.mjs` was regenerated.
 
 ### Testing
 
@@ -84,18 +91,18 @@ Verify fix pass 2 (2026-09-27): foreign run evidence no longer blocks teardown. 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | pre-write validation `packages/app/src/services/inline-run-setup.ts:258`; missing-in-both throws `packages/app/src/services/inline-run-setup.ts:291`; root-qualified citations excluded as foreign evidence `packages/app/src/services/inline-run-setup.ts:207`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:165` / `:202` / `:274` / `:300` (15 pass fresh) |
+| R1 | MET | pre-write validation `packages/app/src/services/inline-run-setup.ts:258`; missing-in-both throws `packages/app/src/services/inline-run-setup.ts:291`; root-qualified citations excluded as foreign evidence `packages/app/src/services/inline-run-setup.ts:207`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:165` / `:202` / `:274` / `:300` (16 pass fresh) |
 | R2 | MET | service owns selection `packages/app/src/services/inline-run-setup.ts:252`; thin delegate `plugins/sp/scripts/inline-run-setup.ts:581`; recipe `plugins/sp/skills/spur-dev/references/execution-batch.md:846-858`; tests `plugins/sp/tests/inline-run-setup.test.ts:699` / `:725`, `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:183` |
-| R3 | MET | direct-child regular files only `packages/app/src/services/inline-run-setup.ts:207` / `:218` / `:297`, cap `:193`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:245` / `:300` / `:334` / `:354` |
-| R4 | MET | never overwrite `packages/app/src/services/inline-run-setup.ts:306` / `:383`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:225` (conflict) / `:165` (idempotent) |
-| R5 | MET | ENOENT tolerance for bookkeeping lifecycle only `packages/app/src/services/inline-run-setup.ts:349`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:376` / `:411` |
-| R6 | MET | all four regression classes above; `packages/app/tests/services/persist-worktree-runs.test.ts` 15/15, `plugins/sp/tests/inline-run-setup.test.ts` 20/20, contract 34/34 pass fresh |
+| R3 | MET | direct-child regular files only `packages/app/src/services/inline-run-setup.ts:207` / `:218` / `:297`, non-file kinds labelled `:302`, cap `:193`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:245` / `:300` / `:334` / `:354` / `:376` |
+| R4 | MET | never overwrite `packages/app/src/services/inline-run-setup.ts:310` / `:387`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:225` (conflict) / `:165` (idempotent) |
+| R5 | MET | ENOENT tolerance for bookkeeping lifecycle only `packages/app/src/services/inline-run-setup.ts:350`; tests `packages/app/tests/services/persist-worktree-runs.test.ts:398` / `:433` |
+| R6 | MET | all four regression classes above; `packages/app/tests/services/persist-worktree-runs.test.ts` 16/16, `plugins/sp/tests/inline-run-setup.test.ts` 20/20, contract 34/34 pass fresh |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:165` / `:202` / `:300`; CLI `plugins/sp/tests/inline-run-setup.test.ts:699` / `:725` |
-| AC2 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:225` / `:245` / `:354` |
-| AC3 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:376` / `:411` |
+| AC2 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:225` / `:245` / `:376` |
+| AC3 | MET | test | `packages/app/tests/services/persist-worktree-runs.test.ts:398` / `:433` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -216,6 +216,7 @@ export type {
 export {
     DEFAULT_FEATURE_MATRIX,
     FeatureCheckService,
+    summarizeRowIds,
     VERDICT_SCENARIO_KEY_FORMS,
     type VerdictScenarioKeyGap,
     type VerdictScenarioKeyGapDeps,

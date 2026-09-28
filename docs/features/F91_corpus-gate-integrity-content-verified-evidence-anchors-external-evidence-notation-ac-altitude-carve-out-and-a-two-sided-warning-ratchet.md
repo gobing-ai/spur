@@ -106,8 +106,8 @@ Feature: Corpus gate integrity
 | 0727 | Harden inline pipeline driver observability: todo reconciliation, implement-stage timeout, run-log timestamps | done |
 | 0728 | Generalize verify-answer-lint requirement/AC ID extraction to the full corpus convention set | done |
 | 0816 | Close the plugins conflict-audit residuals: 0587 AC-altitude ruling, bare-basename anchor re-authoring, and the six surface/gate drifts left open | done |
-| 0958 | Fix verdict-row scenario crediting and proof-digest checkbox invalidation in the completion gate | backlog |
-| 0985 | Require the feature-credited AC id form in the verify-answer lint | backlog |
+| 0958 | Fix verdict-row scenario crediting and proof-digest checkbox invalidation in the completion gate | done |
+| 0985 | Require the feature-credited AC id form in the verify-answer lint | cancelled |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

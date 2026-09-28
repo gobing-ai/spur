@@ -107,6 +107,9 @@ Feature: Workflow run reliability defects
 | 0435 | Shell guard commands still interpolate vars into shell - same injection class as 0432 | done |
 | 0571 | workflow engine: file.read.into-var setVars never reach downstream steps or ${vars.X} templates | done |
 | 0622 | Harness reliability post-mortem: executor routing residue, lifecycle terminals, and history data-plane defects | done |
+| 0901 | Harden workflow engine: shell-output persistence, async continue, terminal-id guard (kk dogfood 091825) | done |
+| 0902 | Design upstream ts-dual-workflow-engine checkpoint/interruption contract (ts-libs packages/dual-workflow-engine) — prerequisite for 0901 R2 safe-resume | done |
+| 0980 | Lifecycle runs created by a record-stage transition must reach a terminal status | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

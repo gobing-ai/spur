@@ -170,8 +170,8 @@ export interface PersistWorktreeRunsSuccess {
      * Collision skips — DB reasons from the transfer, plus per-file `record-conflict:<file>`
      * (divergent invoking-tree record, never overwritten), `record-missing:<file>` (a known
      * bookkeeping lifecycle row with no record file; its row still counts in `persisted`,
-     * 0984 R5) and `cited-directory:<name>` (a citation resolving to a directory is not a
-     * file the copy set can own).
+     * 0984 R5) and `cited-directory:<name>` / `cited-symlink:<name>` / `cited-non-file:<name>`
+     * (a citation resolving to anything but a regular file is not a file the copy set can own).
      */
     readonly skipped: ReadonlyArray<{ id: string; reason: string }>;
 }
@@ -296,9 +296,10 @@ export async function persistWorktreeRuns(input: PersistWorktreeRunsInput): Prom
         }
         if (!sourceStat.isFile()) {
             // A citation resolving to a directory (`.spur/run/<dir>/…` references capture their
-            // first segment) is not a file the copy set can own; report it and leave it to the
-            // copy-out step that produced the directory.
-            citedSkips.push({ id: name, reason: `cited-directory:${name}` });
+            // first segment), a symlink (`lstat`, never followed) or another special file is not
+            // a file the copy set can own; report it by its real kind and leave it in place.
+            const kind = sourceStat.isDirectory() ? 'directory' : sourceStat.isSymbolicLink() ? 'symlink' : 'non-file';
+            citedSkips.push({ id: name, reason: `cited-${kind}:${name}` });
             continue;
         }
         if (targetBytes !== undefined) {

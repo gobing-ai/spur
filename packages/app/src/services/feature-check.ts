@@ -919,7 +919,7 @@ export class FeatureCheckService extends PlanningCheckService {
                     section: 'Acceptance Criteria',
                     message:
                         `Task ${taskWbs} verdict evidence (${artifact.path}) carries ${rows.length} row(s) ` +
-                        `matching no scenario of this feature — offending row ids: ${summarizeRowIds(rows)}; ` +
+                        `matching no scenario of this feature — offending row ids: ${summarizeRowIds(rows.map((r) => r.id))}; ` +
                         `key rows by ${VERDICT_SCENARIO_KEY_FORMS} (repair: /sp:dev-verify ${taskWbs})`,
                 });
             }
@@ -1365,8 +1365,8 @@ function taskCoversScenario(taskAc: string, sc: ScenarioKey): boolean {
  * 0958 R5: bounded offending-row-id summary — the first 5 backticked ids plus a `(+N more)`
  * count, so a wide table cannot flood the finding while every id stays reachable.
  */
-function summarizeRowIds(rows: Array<{ id: string }>): string {
-    const ids = rows.map((r) => `\`${r.id}\``);
+export function summarizeRowIds(rowIds: readonly string[]): string {
+    const ids = rowIds.map((id) => `\`${id}\``);
     const listed = ids.slice(0, 5);
     const extra = ids.length - listed.length;
     return extra > 0 ? `${listed.join(', ')} (+${extra} more)` : listed.join(', ');
@@ -1439,21 +1439,33 @@ export async function verdictScenarioKeyGap(
     if (deps.featuresDir === undefined) return null;
     const featureAc = await readFeatureAcBody(deps.fs, deps.featuresDir, featureId);
     if (featureAc === null) return null; // no feature file or empty AC
-    const parsed = parseFeature(featureAc);
-    if (parsed === null || parsed.scenarios.length === 0) return null; // scenarios do not parse (R6)
-    const aliases = scenarioKeys(parsed.scenarios);
-    if (!aliases.some((sc) => taskCoversScenario(taskAc, sc))) return null; // task-local rows
+    // Scenarios do not parse (R6), or task-local rows cover none of them.
+    if (!taskCoversAnyFeatureScenario(taskAc, featureAc)) return null;
     // Mirror of the gate's anyMatch: the gap fires only when NO row names a scenario.
     if (verdictRowsMatchScenarios(rows, featureAc)) return null;
     return { featureId, offendingIds: rows.map((r) => r.id) };
 }
 
 /**
- * Fence-stripped Acceptance Criteria of `<featuresDir>/<featureId>_*.md`, or `null` on any miss —
- * the `<id>_<slug>.md` prefix scan `task-service.resolveFeatureAcBody` and the CLI's
- * `isFeatureFile` already use.
+ * Whether the task's AC covers at least one scenario of the feature AC — the covering scope the
+ * done gate applies, shared by the verdict gap check and the record-time no-match warning so a
+ * task-local task never trips either (0984: record warned where gate and verdict stayed silent).
  */
-async function readFeatureAcBody(fs: FileSystem, featuresDir: string, featureId: string): Promise<string | null> {
+export function taskCoversAnyFeatureScenario(taskAc: string, featureAc: string): boolean {
+    const parsed = parseFeature(featureAc);
+    if (parsed === null) return false;
+    return scenarioKeys(parsed.scenarios).some((sc) => taskCoversScenario(taskAc, sc));
+}
+
+/**
+ * Fence-stripped Acceptance Criteria of `<featuresDir>/<featureId>_*.md`, or `null` on any miss —
+ * the single `<id>_<slug>.md` prefix-scan resolution shared with `task-service`.
+ */
+export async function readFeatureAcBody(
+    fs: FileSystem,
+    featuresDir: string,
+    featureId: string,
+): Promise<string | null> {
     try {
         for (const name of await fs.readDir(featuresDir)) {
             if (!name.startsWith(`${featureId}_`) || !name.endsWith('.md')) continue;

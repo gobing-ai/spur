@@ -606,6 +606,7 @@ Feature: spur-dev umbrella skill
 | 0932 | Add --answer-text to spur workflow continue for input gates | done |
 | 0933 | Pause headless pipeline steps on an operator question and resume with the answer | done |
 | 0934 | Re-verify legacy H1 umbrella scenarios and close out the feature | done |
+| 0984 | Persist worktree run evidence so merged task files carry no dangling .spur/run anchors | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
