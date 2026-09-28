@@ -668,3 +668,38 @@ describe('0933 operator-question escalation', () => {
         }
     });
 });
+
+// 0987: the standalone verify surfaces sweep in the same order as the pipeline `record`
+// state (0983) — `spur task record` flips the verdict-proven boxes first, then scan+fold,
+// then a downgrade-only re-record. A pre-record scan reads unticked-but-proven boxes and
+// folds a clean PASS to PARTIAL (0967); these pins fail if any surface regresses to that.
+describe('standalone verify residual-sweep ordering (0987 R4)', () => {
+    const PLUGIN = join(import.meta.dir, '..');
+    const surfaces = {
+        'dev-verify': join(PLUGIN, 'commands', 'dev-verify.md'),
+        'dev-verifyall': join(PLUGIN, 'commands', 'dev-verifyall.md'),
+        'code-verification': join(PLUGIN, 'skills', 'code-verification', 'SKILL.md'),
+    };
+
+    for (const [name, path] of Object.entries(surfaces)) {
+        test(`${name}: residual sweep is post-record, never "before spur task record"`, () => {
+            const text = readFileSync(path, 'utf8');
+            expect(text).not.toMatch(/before\s+`?spur task record/);
+            expect(text).not.toContain('scan + fold BEFORE record');
+            expect(text).toContain('0987');
+        });
+    }
+
+    test('code-verification: record precedes scan and fold; re-record only on a non-PASS verdict', () => {
+        const text = readFileSync(surfaces['code-verification'], 'utf8');
+        const block = text.slice(text.indexOf('# write .spur/run/<wbs>-verdict.json'));
+        const record = block.indexOf('spur task record <wbs> --verdict-file');
+        const scan = block.indexOf('node "$RESIDUAL" scan <wbs>');
+        const fold = block.indexOf('node "$RESIDUAL" fold <wbs>');
+        const rerecord = block.indexOf('= PASS ]');
+        expect(record).toBeGreaterThanOrEqual(0);
+        expect(scan).toBeGreaterThan(record);
+        expect(fold).toBeGreaterThan(scan);
+        expect(rerecord).toBeGreaterThan(fold);
+    });
+});

@@ -62,8 +62,8 @@ record:  task record (flips verdict-proven R/AC boxes) → feature sync
 
 | Mode | Caller | Effect |
 | --- | --- | --- |
-| `scan <wbs>` | pipeline `record` (post-record sweep, 0983), `/sp:dev-verify`, `/sp:dev-verifyall` | Writes `.spur/run/<wbs>-residuals.json` |
-| `fold <wbs>` | pipeline `record` after `spur task record`; standalone verify after `spur task verdict` | Downgrades PASS→PARTIAL in `<wbs>-verdict.json` when blocking > 0; adds a `residual-sweep` check; appends blocking anchors to `<wbs>-test-gate.findings`. Standalone surfaces still fold pre-record (proven boxes can downgrade there); that order is tracked by follow-up 0987, not blessed here |
+| `scan <wbs>` | pipeline `record` (post-record sweep, 0983); `/sp:dev-verify`, `/sp:dev-verifyall` after their `spur task record` (0987) | Writes `.spur/run/<wbs>-residuals.json` |
+| `fold <wbs>` | after `spur task record` on every surface: pipeline `record` (0983), standalone `/sp:dev-verify` and `/sp:dev-verifyall` (0987) | Downgrades PASS→PARTIAL in `<wbs>-verdict.json` when blocking > 0; adds a `residual-sweep` check; appends blocking anchors to `<wbs>-test-gate.findings`. A downgrade re-records Testing from the final artifact (pipeline R5; standalone downgrade-only re-record) |
 | `settle <wbs>` | pipeline `done` entry, `/sp:dev-verify --next` after its done transition | Files one follow-up task for deferrables (`spur task create --feature <f> --skip-ready`, dedup guard) and removes `/tmp/<wbs>-*` files |
 | `report <wbs>` | `failed` state entry | No-op unless the verdict carries a failing `residual-sweep` check; otherwise writes `.spur/run/<wbs>-residual-report.md` and prints the recovery line |
 
@@ -120,7 +120,7 @@ before registration. `settle` failures are printed with a re-run command (`resid
 | Outcome | Task status | Artifacts | Next step |
 | --- | --- | --- | --- |
 | Clean or deferrable-only | `done` | deferred ids in the verdict's `residual-sweep` check; follow-up WBS in `<wbs>-residuals.json` | `/sp:dev-wrap <wbs>` |
-| Blocking at the post-record sweep | `testing` (run `failed`) | `<wbs>-residual-report.md`, downgraded verdict with failing `residual-sweep` check | Fix the listed items, then `/sp:dev-run <wbs>` |
+| Blocking at the post-record sweep (pipeline or standalone, 0987) | `testing` (pipeline run `failed`; standalone `--next` halts on the folded PARTIAL) | `<wbs>-residual-report.md`, downgraded verdict with failing `residual-sweep` check | Fix the listed items, then `/sp:dev-run <wbs>` |
 
 Next-router row **C6** (A4/A5 when `<wbs>-verdict.json` carries a failing `residual-sweep`
 check): HITL STOP that prints the report and the recovery command. It never starts another
@@ -137,7 +137,7 @@ reason instead of failing.
 | Surface | Change |
 | --- | --- |
 | `config/workflows/task-pipeline.yaml` | precheck writes `base.sha`; `done` entry adds `settle`; `failed` entry adds `report`; 0983 moved `scan`+`fold` from verify to record (after the box flips, before the done guard) and added the R5 Testing re-record on a downgrade |
-| `plugins/sp/commands/dev-verify.md`, `dev-verifyall.md` | Residual scan + fold under every `--fix` mode; `settle` only on the `--next` done transition |
+| `plugins/sp/commands/dev-verify.md`, `dev-verifyall.md`, `code-verification/SKILL.md` | Residual scan + fold under every `--fix` mode, after `spur task record` (0987), with a downgrade-only re-record; `settle` only on the `--next` done transition |
 | `plugins/sp/commands/dev-fixall.md` | Residual findings as fix targets; the deferral-file contract |
 | `plugins/sp/commands/dev-runall.md` | Done-subset batch wrap; remove the per-task `--wrap` contradiction |
 | `plugins/sp/skills/next-router/references/routing-table.md` | Row C6 |

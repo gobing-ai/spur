@@ -259,17 +259,22 @@ the deterministic Testing writer `spur task record` (section authorship never ha
 
 ```bash
 # write .spur/run/<wbs>-verdict.json (shape in references/verdict-schema.md), then:
-# F96 residual sweep (observe-only): scan + fold BEFORE record, under every --fix mode.
+spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ## Testing, flips proven boxes
+# F96 residual sweep (observe-only): scan + fold AFTER record, under every --fix mode (0987).
 RESIDUAL=$(superskill script path sp residual-scan.mjs)
 node "$RESIDUAL" scan <wbs>
 node "$RESIDUAL" fold <wbs>
-spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json  # renders ## Testing
+# Downgrade only: re-record so Testing carries the final (folded) verdict.
+[ "$(jq -r .verdict .spur/run/<wbs>-verdict.json)" = PASS ] \
+  || spur task record <wbs> --verdict-file .spur/run/<wbs>-verdict.json
 ```
 
-> **Residual fold (F96).** `scan` reads `.spur/run/` artifacts and writes `residuals.json` +
-> `residual-report.md`; `fold` rewrites the **just-written** verdict artifact's `residual-sweep`
-> check in place (PASS → PARTIAL when a blocking residual exists), so `record` transcribes the
-> downgraded verdict — a manual verify cannot certify what the pipeline would reject. Resolve the
+> **Residual fold (F96).** `scan` reads `.spur/run/` artifacts and the post-record task file and
+> writes `residuals.json` + `residual-report.md`; `fold` rewrites the verdict artifact's
+> `residual-sweep` check in place (PASS → PARTIAL when a blocking residual exists), and the
+> downgrade-only re-record transcribes it — a manual verify cannot certify what the pipeline would
+> reject. The sweep runs after `record` (same order as the pipeline, 0983/0987): before it, a
+> verdict-proven box is still unticked and a clean PASS would fold to PARTIAL. Resolve the
 > script via `superskill script path sp residual-scan.mjs`; shipped surfaces never reference
 > `plugins/sp/scripts/` directly (script-contract-check rule 4). When the task reaches `done`
 > through `--next`, run `residual-scan settle` (links follow-up tasks; best-effort).

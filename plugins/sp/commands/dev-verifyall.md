@@ -72,8 +72,9 @@ Without `--fix all`, shippable is not evaluated (optional note: use `--fix all` 
 - Batch orchestration: `Skill(skill="sp:spur-dev", args="verifyall $ARGUMENTS")`
 - Per-task verification (inner): `Skill(skill="sp:code-verification", args="verify <wbs> $SHARED_FLAGS")`
 - Shippable gate: once after the batch (same skill § Shippable readiness gate)
-- **Residual sweep (F96 R1, per task):** same contract as `/sp:dev-verify` — after each task's
-  verdict artifact is derived, run `residual-scan scan` + `fold` (under every `--fix` mode) before
-  `spur task record`; on reaching `done` via `--next`, run `settle`. Script resolution:
+- **Residual sweep (F96 R1, per task, post-record since 0987):** same contract as
+  `/sp:dev-verify` — after each task's verdict artifact is derived and `spur task record` has
+  flipped its verdict-proven boxes, run `residual-scan scan` + `fold` (under every `--fix` mode),
+  and re-record only on a downgrade; on reaching `done` via `--next`, run `settle`. Script resolution:
   `superskill script path sp residual-scan.mjs` (never `plugins/sp/scripts/` —
   script-contract-check rule 4).
