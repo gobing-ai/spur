@@ -864,7 +864,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             // 0951 R1: +943B standalone Step 10 residual fold contract (scan+fold before
             // record, superskill script-path resolution, settle on done). Not permanent —
             // candidate for references/verdict-schema.md.
-            'code-verification': 32_146,
+            // 0987: +331B record→scan+fold→downgrade-only re-record ordering pin across
+            // the three verify surfaces. Not permanent — same split candidate.
+            'code-verification': 32_477,
             wayfinder: 26_264,
             // 0622 R9: +921B of live-matrix reconciliation (section table, SPUR_BIN
             // refusal, artifact-size discipline). Not permanent — split into references.
