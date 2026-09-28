@@ -94,6 +94,11 @@
             "contract": "repo-only"
         },
         {
+            "rel": "script-root.ts",
+            "contract": "standard",
+            "twin": "script-root.mjs"
+        },
+        {
             "rel": "stage-registry-adapter.ts",
             "contract": "repo-only"
         },

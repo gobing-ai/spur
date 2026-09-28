@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Make pipeline script resolution revision-safe across the project copy and the installed twin
-status: todo
+status: done
 template: issue
 created_at: 2026-09-26T00:36:38.726Z
-updated_at: "2026-09-27T16:45:01.921Z"
+updated_at: "2026-09-28T22:08:29.473Z"
 feature_id: I
 
 ac_altitude: task-local
@@ -61,23 +61,23 @@ So vendoring was never needed. The probe then executed the vendored copy, which 
 
 ### Requirements
 
-- [ ] R1. Every project-first `plugins/sp/scripts/` probe (the 18 sites in Background) takes the project-tree branch only inside the Spur source repo, detected by `config/plugin-scripts.json`. Everywhere else, a step resolves only through `superskill script path sp <rel>`, so a vendored `plugins/sp/scripts/` copy in a consuming project is never executed.
-- [ ] R2. Each of `task-pipeline`, `wrapup-pipeline`, `idea-pipeline` and `feature-verification` runs one resolution action at run start. It writes `.spur/run/<runId>-script-root.json` with `{ mode: "source-repo" | "installed", source, dir, scriptSetDigest }`. `source` and `dir` come from `superskill script path … --json`. `scriptSetDigest` is one sha256 over the sorted `name:sha256` list of the resolved dir's files. The same action prints one warning naming an ignored vendored `plugins/sp/scripts/` dir when one exists outside the source repo.
-- [ ] R3. Fail-closed behaviour is unchanged: when no script resolves, each step still writes its per-step FAIL status or error exactly as today. The run-start action never aborts the run.
-- [ ] R4. Every fail-closed remedy message names the working install command, `superskill install sp --marketplace gobing-ai/spur`, instead of the bare `superskill install sp`.
-- [ ] R5. script-contract-check rule 4 also scans `config/workflows/*.yaml`, and it flags any project-first `plugins/sp/scripts/` reference (`[ -f`, `S=`, `*_SCRIPT=`, or `bun plugins/sp/scripts/`) that is not inside the source-repo guard. A new ungated probe then fails `bun run script-contract-check`.
-- [ ] R6. The Spur source repo keeps its dogfood behaviour: with `config/plugin-scripts.json` present, steps still run `bun plugins/sp/scripts/<name>.ts`, and `script-root.json` records `mode: "source-repo"`.
-- [ ] R7. `feature-verification.yaml:56` gains the same twin fallback (`superskill script path sp feature-verification-steps.mjs`) and a fail-closed branch that writes the step's FAIL status, matching the other pipelines.
+- [x] R1. Every project-first `plugins/sp/scripts/` probe (the 18 sites in Background) takes the project-tree branch only inside the Spur source repo, detected by `config/plugin-scripts.json`. Everywhere else, a step resolves only through `superskill script path sp <rel>`, so a vendored `plugins/sp/scripts/` copy in a consuming project is never executed.
+- [x] R2. Each of `task-pipeline`, `wrapup-pipeline`, `idea-pipeline` and `feature-verification` runs one resolution action at run start. It writes `.spur/run/<runId>-script-root.json` with `{ mode: "source-repo" | "installed", source, dir, scriptSetDigest }`. `source` and `dir` come from `superskill script path … --json`. `scriptSetDigest` is one sha256 over the sorted `name:sha256` list of the resolved dir's files. The same action prints one warning naming an ignored vendored `plugins/sp/scripts/` dir when one exists outside the source repo.
+- [x] R3. Fail-closed behaviour is unchanged: when no script resolves, each step still writes its per-step FAIL status or error exactly as today. The run-start action never aborts the run.
+- [x] R4. Every fail-closed remedy message names the working install command, `superskill install sp --marketplace gobing-ai/spur`, instead of the bare `superskill install sp`.
+- [x] R5. script-contract-check rule 4 also scans `config/workflows/*.yaml`, and it flags any project-first `plugins/sp/scripts/` reference (`[ -f`, `S=`, `*_SCRIPT=`, or `bun plugins/sp/scripts/`) that is not inside the source-repo guard. A new ungated probe then fails `bun run script-contract-check`.
+- [x] R6. The Spur source repo keeps its dogfood behaviour: with `config/plugin-scripts.json` present, steps still run `bun plugins/sp/scripts/<name>.ts`, and `script-root.json` records `mode: "source-repo"`.
+- [x] R7. `feature-verification.yaml:56` gains the same twin fallback (`superskill script path sp feature-verification-steps.mjs`) and a fail-closed branch that writes the step's FAIL status, matching the other pipelines.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — In a project without `config/plugin-scripts.json` that carries a stale vendored `plugins/sp/scripts/`, every step runs the installed twin, and the run prints one warning naming the ignored dir (req: R1, R2)
-- [ ] AC2 — A run writes `script-root.json` with mode, source, dir and a script-set digest that changes when any resolved script changes (req: R2)
-- [ ] AC3 — With no resolvable script, each step keeps its existing per-step fail-closed output, and the run is not aborted (req: R3)
-- [ ] AC4 — Every fail-closed remedy names `superskill install sp --marketplace gobing-ai/spur` (req: R4)
-- [ ] AC5 — A fixture workflow with an ungated `S=plugins/sp/scripts/x.ts` probe fails script-contract-check, and the shipped YAMLs pass (req: R5)
-- [ ] AC6 — Inside the source repo, steps run `plugins/sp/scripts/*.ts` and `script-root.json` records `source-repo` (req: R6)
-- [ ] AC7 — In a consumer with no vendored copy, the feature-verification `verify` step runs the installed twin; with no twin, it writes FAIL and names the install command (req: R7, R4)
+- [x] AC1 — In a project without `config/plugin-scripts.json` that carries a stale vendored `plugins/sp/scripts/`, every step runs the installed twin, and the run prints one warning naming the ignored dir (req: R1, R2)
+- [x] AC2 — A run writes `script-root.json` with mode, source, dir and a script-set digest that changes when any resolved script changes (req: R2)
+- [x] AC3 — With no resolvable script, each step keeps its existing per-step fail-closed output, and the run is not aborted (req: R3)
+- [x] AC4 — Every fail-closed remedy names `superskill install sp --marketplace gobing-ai/spur` (req: R4)
+- [x] AC5 — A fixture workflow with an ungated `S=plugins/sp/scripts/x.ts` probe fails script-contract-check, and the shipped YAMLs pass (req: R5)
+- [x] AC6 — Inside the source repo, steps run `plugins/sp/scripts/*.ts` and `script-root.json` records `source-repo` (req: R6)
+- [x] AC7 — In a consumer with no vendored copy, the feature-verification `verify` step runs the installed twin; with no twin, it writes FAIL and names the install command (req: R7, R4)
 
 ### Q&A
 
@@ -171,13 +171,13 @@ S=; [ -f config/plugin-scripts.json ] && S=plugins/sp/scripts/X.ts;
 
 ### Plan
 
-- [ ] 1. Apply the guard idiom at all 18 sites (task-pipeline 10, wrapup 5, idea 1, feature-verification 1, `inline-pipeline-driver.md` 1). The feature-verification site also gains the twin and fail-closed branches (R7). Keep the twin and fail-closed branches byte-identical apart from the R4 remedy text.
-- [ ] 2. Add `plugins/sp/scripts/script-root.ts`, build its `.mjs` twin (`bun run build:scripts`), and register it in `config/plugin-scripts.json`. Unit tests cover source-repo mode, installed mode (fake `superskill` on PATH), unresolved mode (exit 0), the digest changing on one file edit, and the vendored-dir warning.
-- [ ] 3. Wire `script-root` as the first action of task-, wrapup-, idea- and feature-verification pipelines, and into the inline driver's setup step.
-- [ ] 4. Replace the 13 remedy strings (R4).
-- [ ] 5. Extend script-contract-check rule 4 (R5). Add a fixture test with an ungated probe (fails) and a guarded probe (passes). Confirm the live-repo test stays green.
-- [ ] 6. Consumer replay: in a temp project with a stale vendored `plugins/sp/scripts/` and no marker, run one pipeline step shell per form. Assert the twin path ran and the warning printed. Record the evidence in Solution.
-- [ ] 7. `bun run --filter @gobing-ai/spur build:bundle`, then `bun run spur-check`, then `bun run plugin-smoke`.
+- [x] 1. Apply the guard idiom at all 18 sites (task-pipeline 10, wrapup 5, idea 1, feature-verification 1, `inline-pipeline-driver.md` 1). The feature-verification site also gains the twin and fail-closed branches (R7). Keep the twin and fail-closed branches byte-identical apart from the R4 remedy text.
+- [x] 2. Add `plugins/sp/scripts/script-root.ts`, build its `.mjs` twin (`bun run build:scripts`), and register it in `config/plugin-scripts.json`. Unit tests cover source-repo mode, installed mode (fake `superskill` on PATH), unresolved mode (exit 0), the digest changing on one file edit, and the vendored-dir warning.
+- [x] 3. Wire `script-root` as the first action of task-, wrapup-, idea- and feature-verification pipelines, and into the inline driver's setup step.
+- [x] 4. Replace the 13 remedy strings (R4).
+- [x] 5. Extend script-contract-check rule 4 (R5). Add a fixture test with an ungated probe (fails) and a guarded probe (passes). Confirm the live-repo test stays green.
+- [x] 6. Consumer replay: in a temp project with a stale vendored `plugins/sp/scripts/` and no marker, run one pipeline step shell per form. Assert the twin path ran and the warning printed. Record the evidence in Solution.
+- [x] 7. `bun run --filter @gobing-ai/spur build:bundle`, then `bun run spur-check`, then `bun run plugin-smoke`.
 
 ### Root Cause
 
@@ -185,15 +185,70 @@ The project-first probe was written for dogfooding in the Spur repo, but it is u
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/tests/workflow/idea-pipeline-definition.test.ts:596` |
+| `packages/app/tests/workflow/task-pipeline-triage-routing.test.ts:154` |
+| `plugins/sp/scripts/script-contract-check.ts:123` |
+| `plugins/sp/scripts/script-contract-check.ts:125` |
+| `plugins/sp/scripts/script-contract-check.ts:136` |
+| `plugins/sp/scripts/script-contract-check.ts:151` |
+| `plugins/sp/scripts/script-contract-check.ts:208` |
+| `plugins/sp/scripts/script-contract-check.ts:241` |
+| `plugins/sp/scripts/script-contract-check.ts:246` |
+| `plugins/sp/scripts/script-contract-check.ts:249` |
+| `plugins/sp/tests/feature-verification-scope.test.ts:80` |
+| `plugins/sp/tests/script-contract-check.test.ts:316` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:136` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:143` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:155` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:173` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:186` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:208` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:298` |
+| `plugins/sp/tests/task-pipeline-resilience.test.ts:310` |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | Guard idiom at all 18 inventoried sites plus a 19th found in `plugins/sp/skills/spur-dev/references/execution-batch.md:855`: `config/workflows/{task-pipeline,wrapup-pipeline,idea-pipeline,feature-verification}.yaml` + the two reference files now take the project branch only under `[ -f config/plugin-scripts.json -a -f … ]`. `bun plugins/sp/scripts/script-contract-check.ts` → 0 violations; consumer replay with a stale vendored dir and no marker ran the installed twin for both probe forms |
+| R2 | MET | `plugins/sp/scripts/script-root.ts` (+ built `script-root.mjs` twin) writes `.spur/run/<runId>-script-root.json` with `{mode, source, dir, scriptSetDigest}`; registered in `config/plugin-scripts.json` as `standard`; wired as the first shell action of task-pipeline `precheck`, wrapup `start`, idea `start`, feature-verification `verify`, and the inline driver's setup snippet. Consumer replay recorded `{"mode":"installed","source":"global","dir":…,"scriptSetDigest":"sha256:…"}` and printed the one vendored-dir warning |
+| R3 | MET | Every `script-root` error path writes `{mode:"unresolved", error}` and exits 0 (`runScriptRoot` never throws past `write`); tests "unresolved mode" and "main … rejects an unknown flag" pin it. The pipeline action appends `; exit 0`. The 0824 fail-closed wrapper contract is unchanged (`bun run spur-check` green, 9414 pass) |
+| R4 | MET | All 13 remedy strings in the three YAMLs (task 7, wrapup 4, idea 1) + the driver reference now name `superskill install sp --marketplace gobing-ai/spur`; `${…}`-free shell keeps the workflow validator green |
+| R5 | MET | `scanShippedSurfaces` gained `config/workflows/*.yaml` (resolved from `pluginDir/../..`) with `[ -f …`, `[A-Z_]*S(?:CRIPT)?=`, and `bun plugins/sp/scripts/` patterns, allowed only when the line/block names `config/plugin-scripts.json`; new fixture test "R5 — an ungated project-first probe in a workflow YAML fails; a guarded probe passes" plus the live-repo test |
+| R6 | MET | `source-repo` mode returns `dir: plugins/sp/scripts`, `source: project`; test "source-repo mode" asserts it never probes superskill. The four sp-probe shells keep running `bun plugins/sp/scripts/<name>.ts` under the marker |
+| R7 | MET | `feature-verification.yaml` `verify` gained the `plugins/sp/scripts/feature-verification-steps.ts` project probe gated on the marker, the `.mjs` twin fallback, and a fail-closed `printf 'FAIL …' > .spur/run/$__runId-feature-verification.status` branch naming the install command |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | `bash /tmp/replay-0960.sh` in a temp project (stale `plugins/sp/scripts/*.ts`, no marker): S=-form → `TWIN tool`, if-form → `TWIN wrapup-steps`, run-start → `TWIN script-root` + the vendored-dir warning |
+| AC2 | MET | test | `plugins/sp/tests/script-root.test.ts` "scriptSetDigest is non-recursive and changes when one resolved file changes"; replay emitted a live `scriptSetDigest` |
+| AC3 | MET | test | "unresolved mode: nothing resolves → error recorded, exit 0, run never aborted"; the pipeline action ends `; exit 0` |
+| AC4 | MET | command | `grep -rn "superskill install sp" config/workflows/*.yaml plugins/sp/skills/spur-dev/references/*.md` — every remedy carries `--marketplace gobing-ai/spur`; `bun run spur-check` rule `recommended-pre-check` green |
+| AC5 | MET | test | `plugins/sp/tests/script-contract-check.test.ts` R5 fixture (ungated → `forbidden_invocation` on `ungated.yaml`; guarded → none); live repo `script-contract-check` → 0 violations |
+| AC6 | MET | test | `script-root.test.ts` "source-repo mode: the marker selects the project tree and never probes superskill"; the four pipelines keep `bun plugins/sp/scripts/<name>.ts` under the marker |
+| AC7 | MET | command | `config/workflows/feature-verification.yaml` `verify` resolves `plugins/sp/scripts/feature-verification-steps.ts` under the marker, else `superskill script path sp feature-verification-steps.mjs`, else writes `FAIL …` naming the install command |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:ffa8724fb6293c925722f90836d0e894b6d9cc16540b7ffc11f6fe52c11f4fa8 |
 
 ### References
 
@@ -210,4 +265,7 @@ The project-first probe was written for dogfooding in the Spur repo, but it is u
 
 - 2026-09-26T00:37:29.824Z todo → backlog (system)
 - 2026-09-27T16:45:01.921Z backlog → todo (system)
+- 2026-09-28T22:08:27.962Z todo → wip (system)
+- 2026-09-28T22:08:28.478Z wip → testing (system)
+- 2026-09-28T22:08:29.473Z testing → done (system)
 

@@ -151,6 +151,9 @@ function stage(options: {
     // ../lib/env, so the plugin lib tree is copied alongside it.
     mkdirSync(join(cwd, 'plugins/sp/scripts'), { recursive: true });
     mkdirSync(join(cwd, 'plugins/sp/lib'), { recursive: true });
+    // 0960: the source-repo marker gates the project-first probe (this fixture is the repo).
+    mkdirSync(join(cwd, 'config'), { recursive: true });
+    writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
     copyFileSync(DIFFSTAT_SCRIPT, join(cwd, 'plugins/sp/scripts/task-diffstat.ts'));
     copyFileSync(join(import.meta.dir, '../../../../plugins/sp/lib', 'env.ts'), join(cwd, 'plugins/sp/lib/env.ts'));
     for (const [path, content] of Object.entries(options.files ?? {})) {

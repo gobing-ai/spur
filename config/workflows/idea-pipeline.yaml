@@ -84,6 +84,12 @@ states:
       handoff — no task execution. Soft agent doctor (status file) so doctor red
       routes to `failed` via transitions instead of a raw lifecycle abort.
     onEnter:
+      # 0960 R2: run-start script-resolution identity — record which tree this run
+      # resolved (source-repo vs installed) before any step executes. Never aborts.
+      - kind: shell
+        options:
+          command: >-
+            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
       - kind: note
         options:
           message: "Idea pipeline start for idea: ${vars.idea}"
@@ -254,12 +260,12 @@ states:
         options:
           command: >-
             mkdir -p .spur/run &&
-            S=plugins/sp/scripts/idea-coverage-check.ts &&
-            if [ ! -f "$S" ]; then S="$(superskill script path sp idea-coverage-check.ts 2>/dev/null)"; fi &&
+            S=plugins/sp/scripts/idea-coverage-check.ts;
+            [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp idea-coverage-check.ts 2>/dev/null)";
             if [ -n "$S" ] && [ -f "$S" ]; then
               bun "$S" --run-id "$__runId" --report ".spur/run/$__runId-idea-eval-report.md" --ac ".spur/run/$__runId-idea-ac-content.md" || printf 'FAIL run=%s checker exited nonzero (bun missing or checker crash)\n' "$__runId" > ".spur/run/$__runId-idea-coverage.reason";
             else
-              printf 'FAIL run=%s checker not found — run superskill install sp\n' "$__runId" | tee ".spur/run/$__runId-idea-coverage.reason" >&2;
+              printf 'FAIL run=%s checker not found — run superskill install sp --marketplace gobing-ai/spur\n' "$__runId" | tee ".spur/run/$__runId-idea-coverage.reason" >&2;
               printf 'FAIL\n' > ".spur/run/$__runId-idea-coverage.status";
             fi
       # 0945 R2: derive the route facts ONCE at this boundary (0769 pattern) — guards read these
@@ -558,7 +564,7 @@ states:
             elif H="$(superskill script path sp idea-handoff.mjs 2>/dev/null)" && [ -f "$H" ]; then
               node "$H";
             else
-              echo "idea handoff failed closed — idea-handoff script not found — run 'superskill install sp'" >&2;
+              echo "idea handoff failed closed — idea-handoff script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
               exit 1;
             fi
   - id: handoff

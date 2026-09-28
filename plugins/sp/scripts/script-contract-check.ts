@@ -120,12 +120,24 @@ export function listDiskScripts(scriptsDir: string): { tsFiles: string[]; mjsFil
 
 export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; line: number; content: string }> {
     const matches: Array<{ file: string; line: number; content: string }> = [];
-    const forbiddenPattern = 'bun plugins/sp/scripts/';
+    const guardMarker = 'config/plugin-scripts.json';
 
-    const searchDirs = ['commands', 'skills', 'agents'];
-    const singleFiles = ['README.md'];
+    // 0960 R5: the probe shapes the guard idiom introduces, plus the legacy literal. A hit is
+    // legal only when its line (or, for a YAML command block, its folded block) names the
+    // source-repo marker — otherwise it is a project-first probe that shadows the installed
+    // twin in a consumer.
+    const projectFirstPatterns = [
+        /\[ -f "?plugins\/sp\/scripts\//,
+        /\b[A-Z_]*S(?:CRIPT)?="?plugins\/sp\/scripts\//,
+        /\bbun plugins\/sp\/scripts\//,
+    ];
+    const isHit = (line: string): boolean => projectFirstPatterns.some((pattern) => pattern.test(line));
 
-    function scanFile(filePath: string): void {
+    function push(file: string, line: number, content: string): void {
+        matches.push({ file, line, content: content.trim() });
+    }
+
+    function scanLines(filePath: string): void {
         if (!existsSync(filePath)) return;
         let text: string;
         try {
@@ -136,13 +148,72 @@ export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; li
         const lines = text.split('\n');
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i] ?? '';
-            if (line.includes(forbiddenPattern)) {
-                matches.push({
-                    file: filePath,
-                    line: i + 1,
-                    content: line.trim(),
-                });
+            const trimmed = line.trim();
+            if (trimmed.startsWith('#')) continue; // comment lines are not executable probes
+            if (!isHit(line)) continue;
+            if (line.includes(guardMarker)) continue; // same-line source-repo guard
+            push(filePath, i + 1, trimmed);
+        }
+    }
+
+    /**
+     * 0960 R5: the repo-root workflow definitions also ship, and their shell lives in folded
+     * `command:` blocks. A guard on one physical line legalizes the invocation on the next, so
+     * the block — not the line — is the unit of judgment. Markdown prose references (backticked
+     * paths with no `[ -f` / assignment / `bun ` prefix) never match the patterns, so they stay
+     * legal.
+     */
+    function scanYamlCommands(filePath: string): void {
+        if (!existsSync(filePath)) return;
+        let text: string;
+        try {
+            text = readFileSync(filePath, 'utf8');
+        } catch {
+            return;
+        }
+        const lines = text.split('\n');
+        let i = 0;
+        while (i < lines.length) {
+            const line = lines[i] ?? '';
+            const blockKey = /^(\s*)command:\s*(?:>[+-]?|\|[+-]?)?\s*$/.exec(line);
+            const inlineKey = /^(\s*)command:\s+(.+)$/.exec(line);
+            if (blockKey) {
+                const indent = (blockKey[1] ?? '').length;
+                const block: Array<{ no: number; text: string }> = [];
+                let j = i + 1;
+                while (j < lines.length) {
+                    const next = lines[j] ?? '';
+                    if (next.trim() === '') {
+                        block.push({ no: j + 1, text: next });
+                        j++;
+                        continue;
+                    }
+                    const nextIndent = (next.match(/^\s*/)?.[0] ?? '').length;
+                    if (nextIndent <= indent) break;
+                    block.push({ no: j + 1, text: next });
+                    j++;
+                }
+                if (!block.some((b) => b.text.includes(guardMarker))) {
+                    for (const b of block) {
+                        const trimmed = b.text.trim();
+                        if (trimmed.startsWith('#')) continue;
+                        if (!isHit(b.text)) continue;
+                        if (b.text.includes(guardMarker)) continue;
+                        push(filePath, b.no, trimmed);
+                    }
+                }
+                i = j;
+                continue;
             }
+            if (inlineKey) {
+                const value = inlineKey[2] ?? '';
+                if (!line.trim().startsWith('#') && isHit(value) && !value.includes(guardMarker)) {
+                    push(filePath, i + 1, line.trim());
+                }
+                i++;
+                continue;
+            }
+            i++;
         }
     }
 
@@ -167,16 +238,27 @@ export function scanShippedSurfaces(pluginDir: string): Array<{ file: string; li
                 st.isFile() &&
                 (entry.endsWith('.md') || entry.endsWith('.json') || entry.endsWith('.yaml') || entry.endsWith('.yml'))
             ) {
-                scanFile(fullPath);
+                scanLines(fullPath);
             }
         }
     }
 
-    for (const d of searchDirs) {
+    for (const d of ['commands', 'skills', 'agents']) {
         walk(join(pluginDir, d));
     }
-    for (const f of singleFiles) {
-        scanFile(join(pluginDir, f));
+    scanLines(join(pluginDir, 'README.md'));
+
+    // 0960 R5: the workflow tree is repo-only (resolved from pluginDir/../..); a consumer's own
+    // workflow definitions are not this rule's subject.
+    const workflowsDir = resolve(pluginDir, '..', '..', 'config', 'workflows');
+    let workflowFiles: string[] = [];
+    try {
+        workflowFiles = readdirSync(workflowsDir).filter((name) => name.endsWith('.yaml') || name.endsWith('.yml'));
+    } catch {
+        workflowFiles = [];
+    }
+    for (const name of workflowFiles.sort()) {
+        scanYamlCommands(join(workflowsDir, name));
     }
 
     return matches;

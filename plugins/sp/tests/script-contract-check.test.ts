@@ -318,6 +318,54 @@ test('R4 — forbidden invocation in shipped command/skill/agent/README fails', 
     }
 });
 
+test('R5 — an ungated project-first probe in a workflow YAML fails; a guarded probe passes', () => {
+    const env = createTempEnv();
+    try {
+        const wfDir = join(env.root, 'config', 'workflows');
+        mkdirSync(wfDir, { recursive: true });
+        writeFileSync(join(env.scriptsDir, 'tool.ts'), 'console.log("tool");\n');
+        writeFileSync(join(env.scriptsDir, 'tool.mjs'), twinOf('console.log("tool");\n'));
+        const manifest: ScriptManifest = { entries: [{ rel: 'tool.ts', contract: 'standard', twin: 'tool.mjs' }] };
+
+        const command = (guard: string): string =>
+            [
+                'name: fixture',
+                'kind: state-machine',
+                'states:',
+                '  - id: start',
+                '    onEnter:',
+                '      - kind: shell',
+                '        options:',
+                '          command: >-',
+                `            ${guard}`,
+                '            [ -f "$S" ] || S="$(superskill script path sp tool.mjs 2>/dev/null)";',
+                '            bun "$S"',
+                '',
+            ].join('\n');
+
+        // Ungated: the probe names the project tree with no source-repo marker in the block.
+        writeFileSync(join(wfDir, 'ungated.yaml'), command('S=plugins/sp/scripts/tool.ts;'));
+        const ungated = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: fakeConvert(env.scriptsDir),
+        });
+        expect(ungated.some((v) => v.kind === 'forbidden_invocation' && v.target.includes('ungated.yaml'))).toBe(true);
+
+        // Guarded: the same probe, marker on the guard line — the folded block is legal.
+        // Remove the ungated fixture first: the scanner covers the whole workflows dir.
+        rmSync(join(wfDir, 'ungated.yaml'), { force: true });
+        writeFileSync(
+            join(wfDir, 'guarded.yaml'),
+            command('S=; [ -f config/plugin-scripts.json ] && S=plugins/sp/scripts/tool.ts;'),
+        );
+        const guarded = validateContract(manifest, env.scriptsDir, env.pluginDir, {
+            convertTwin: fakeConvert(env.scriptsDir),
+        });
+        expect(guarded.filter((v) => v.kind === 'forbidden_invocation')).toEqual([]);
+    } finally {
+        env.cleanup();
+    }
+});
+
 test('Clean setup with standard twins and repo-only scripts passes', () => {
     const env = createTempEnv();
     try {

@@ -77,7 +77,8 @@ describe('feature-verification scope split (task 0872)', () => {
         for (const state of (wf.states as Array<{ onEnter?: Array<{ kind: unknown }> }>) ?? []) {
             for (const action of state.onEnter ?? []) actionKinds.push(action.kind);
         }
-        expect(actionKinds).toEqual(['shell']);
+        // 0960: `verify` now also carries the run-start script-resolution action.
+        expect(actionKinds).toEqual(['shell', 'shell']);
         expect(actionKinds).not.toContain('agent.run');
 
         const guardKinds = new Set<unknown>();

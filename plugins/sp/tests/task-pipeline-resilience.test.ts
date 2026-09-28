@@ -133,14 +133,14 @@ describe('0503 task-pipeline resilience', () => {
         expect(Object.keys(probe?.roles ?? {}).sort()).toEqual(['coder', 'reviewer']);
         expect(probe?.resultFile).toContain('.spur/run/');
         expect(commands.join('\n')).not.toContain('agent doctor');
-        const size = commandFor('precheck', 2);
+        const size = commandFor('precheck', 3);
         expect(size).toContain('task-size-precheck.ts');
         expect(size).not.toContain('--executor');
         // Fail closed: the missing-checker fallback writes FAIL, never PASS.
         expect(size).toContain('"FAIL"');
         expect(size).not.toContain('skipped');
         // Feature reactivation surfaces failure instead of swallowing it (no `|| true`).
-        expect(commandFor('precheck', 1)).not.toContain('|| true');
+        expect(commandFor('precheck', 2)).not.toContain('|| true');
     });
 
     test('precheck size gate fails closed when the checker script is absent (0723 R2)', () => {
@@ -152,7 +152,7 @@ describe('0503 task-pipeline resilience', () => {
             const bin = join(dir, 'bin');
             mkdirSync(bin, { recursive: true });
             executable(bin, 'superskill', 'echo "Script not found" >&2; exit 2');
-            const command = commandFor('precheck', 2);
+            const command = commandFor('precheck', 3);
             const result = runShell(command, dir, {
                 wbs: '0723',
                 spurBin: 'spur',
@@ -170,6 +170,9 @@ describe('0503 task-pipeline resilience', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0723-size-'));
         try {
             mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
+            // 0960: the project-first probe is gated on the source-repo marker.
+            mkdirSync(join(dir, 'config'), { recursive: true });
+            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
             const counter = join(dir, 'size-counter');
             writeFileSync(
                 join(dir, 'plugins', 'sp', 'scripts', 'task-size-precheck.ts'),
@@ -180,7 +183,7 @@ mkdirSync(".spur/run", { recursive: true });
 writeFileSync(".spur/run/" + process.argv[2] + "-precheck-size.status", "PASS\\n");
 `,
             );
-            const result = runShell(commandFor('precheck', 2), dir, { wbs: '0723', spurBin: 'spur' });
+            const result = runShell(commandFor('precheck', 3), dir, { wbs: '0723', spurBin: 'spur' });
             expect(result.exitCode).toBe(0);
             expect(readFileSync(counter, 'utf8').split('\n').filter(Boolean).length).toBe(1);
             expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('PASS\n');
@@ -202,7 +205,7 @@ writeFileSync(".spur/run/" + process.argv[2] + "-precheck-size.status", "PASS\\n
   feature:update) echo y >> "${calls}"; exit "\${UPDATE_RC:-0}" ;;
 esac`,
             );
-            const command = commandFor('precheck', 1);
+            const command = commandFor('precheck', 2);
 
             // Green path: one sync call, exit 0.
             const ok = runShell(command, dir, { profile: 'auto', wbs: '0723', spurBin: spur });
@@ -292,7 +295,7 @@ esac`,
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-dirty-'));
         initGitRepo(dir);
         writeFileSync(join(dir, 'docs', 'tasks4', 'uncommitted.md'), 'corpus edit');
-        const command = commandFor('precheck', 0);
+        const command = commandFor('precheck', 1);
         const result = runShell(command, dir, {});
 
         expect(result.exitCode).toBe(0);
@@ -304,7 +307,7 @@ esac`,
     test('precheck dirty-tree action stays quiet on a clean task corpus', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0511-corpus-clean-'));
         initGitRepo(dir);
-        const command = commandFor('precheck', 0);
+        const command = commandFor('precheck', 1);
         const result = runShell(command, dir, {});
 
         expect(result.exitCode).toBe(0);

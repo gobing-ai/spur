@@ -50,13 +50,16 @@ states:
       digest, run identity) and the coarse status file, always exit 0 so the
       transition guard routes missing/corrupt/FAIL to `failed`.
     onEnter:
+      # 0960 R2: run-start script-resolution identity — record which tree this run
+      # resolved (source-repo vs installed) before the verification step runs. Never aborts.
       - kind: shell
         options:
           command: >-
-            bun plugins/sp/scripts/feature-verification-steps.ts verify
-            --feature-id "$featureId"
-            --run-id "$__runId"
-            --spur-bin "$spurBin"
+            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
+      - kind: shell
+        options:
+          command: >-
+            S=plugins/sp/scripts/feature-verification-steps.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp feature-verification-steps.mjs 2>/dev/null)"; RUNNER=bun; case "" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" verify --feature-id "$featureId" --run-id "$__runId" --spur-bin "$spurBin" || printf 'FAIL feature-verification failed closed — script not found — run superskill install sp --marketplace gobing-ai/spur\n' > ".spur/run/$__runId-feature-verification.status"; exit 0
 
   - id: done
     description: Terminal — repo-wide checks passed and the receipt is bound.

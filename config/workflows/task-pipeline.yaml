@@ -188,6 +188,12 @@ states:
           Fast deterministic task readiness and size checks. Failures route to the
           `failed` terminal state (not a raw lifecycle abort mid-enter).
       onEnter:
+          # 0960 R2: run-start script-resolution identity — record which tree this run
+          # resolved (source-repo vs installed) before any step executes. Never aborts.
+          - kind: shell
+            options:
+                command: >-
+                    S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
           # (e) git-status hygiene advisory; never fails the run (0487 R6 / 0511 R1).
           - kind: shell
             options:
@@ -208,12 +214,12 @@ states:
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; S=plugins/sp/scripts/task-size-precheck.ts; [ -f "$S" ] || S="$(superskill script path sp task-size-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"; else echo "task-size-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-size.status"; fi; exit 0
+                    mkdir -p .spur/run; S=plugins/sp/scripts/task-size-precheck.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp task-size-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"; else echo "task-size-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-size.status"; fi; exit 0
           # (d) task-evidence-precheck.ts owns the check; shell only resolves it and fails closed (0726 R2).
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; S=plugins/sp/scripts/task-evidence-precheck.ts; [ -f "$S" ] || S="$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin"; else echo "task-evidence-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-evidence.status"; fi; exit 0
+                    mkdir -p .spur/run; S=plugins/sp/scripts/task-evidence-precheck.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin"; else echo "task-evidence-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-evidence.status"; fi; exit 0
           # (e) F96 R1 (0950): capture the run's base commit once — a resumed or re-entered run
           # keeps its original base so residual scans stay anchored to the same diff.
           - kind: shell
@@ -433,7 +439,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; if [ -f plugins/sp/scripts/quality-gate.ts ]; then bun plugins/sp/scripts/quality-gate.ts run; elif Q="$(superskill script path sp quality-gate.mjs 2>/dev/null)" && [ -f "$Q" ]; then node "$Q" run; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    mkdir -p .spur/run; if [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/quality-gate.ts ]; then bun plugins/sp/scripts/quality-gate.ts run; elif Q="$(superskill script path sp quality-gate.mjs 2>/dev/null)" && [ -f "$Q" ]; then node "$Q" run; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: test-fix
       description: >
@@ -516,7 +522,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; if [ -f plugins/sp/scripts/quality-gate.ts ]; then bun plugins/sp/scripts/quality-gate.ts recheck; elif Q="$(superskill script path sp quality-gate.mjs 2>/dev/null)" && [ -f "$Q" ]; then node "$Q" recheck; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
+                    mkdir -p .spur/run; if [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/quality-gate.ts ]; then bun plugins/sp/scripts/quality-gate.ts recheck; elif Q="$(superskill script path sp quality-gate.mjs 2>/dev/null)" && [ -f "$Q" ]; then node "$Q" recheck; else echo "quality gate failed closed — quality-gate script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf 'FAIL\n' > ".spur/run/$wbs-test-gate.status"; fi; exit 0
 
     - id: triage
       description: >-
@@ -536,7 +542,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    mkdir -p .spur/run; if [ -f plugins/sp/scripts/task-diffstat.ts ]; then bun plugins/sp/scripts/task-diffstat.ts --spur-bin "$spurBin"; elif D="$(superskill script path sp task-diffstat.mjs 2>/dev/null)" && [ -f "$D" ]; then node "$D"; else echo "task-diffstat failed closed — task-diffstat script not found — run 'superskill install sp'" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; fi; exit 0
+                    mkdir -p .spur/run; if [ -f config/plugin-scripts.json -a -f plugins/sp/scripts/task-diffstat.ts ]; then bun plugins/sp/scripts/task-diffstat.ts --spur-bin "$spurBin"; elif D="$(superskill script path sp task-diffstat.mjs 2>/dev/null)" && [ -f "$D" ]; then node "$D"; else echo "task-diffstat failed closed — task-diffstat script not found — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; printf '{"files":0,"insertions":0,"deletions":0,"paths":[],"sensitive":true}\n' > ".spur/run/$wbs-diffstat.json"; fi; exit 0
           # (b)+(c) lane pre-guard BEFORE decide: a caller-set mode is projected verbatim (R2b);
           # a sensitive path or >400 changed lines pins safety (R2c) and the decide result below
           # is never consulted. A missing/malformed diffstat row (producer crashed or never ran,
@@ -707,10 +713,10 @@ states:
             options:
                 command: >-
                     LINT_SCRIPT="plugins/sp/scripts/verify-answer-lint.ts";
-                    [ -f "$LINT_SCRIPT" ] ||
+                    [ -f config/plugin-scripts.json -a -f "$LINT_SCRIPT" ] ||
                     LINT_SCRIPT="$(superskill script path sp verify-answer-lint.ts 2>/dev/null)";
                     if [ -z "$LINT_SCRIPT" ] || [ ! -f "$LINT_SCRIPT" ]; then
-                      echo "verify-answer-lint: checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'" >&2;
+                      echo "verify-answer-lint: checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
                       exit 1;
                     fi;
                     bun "$LINT_SCRIPT" "$wbs"
@@ -790,7 +796,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    S=plugins/sp/scripts/record-feature-sync.ts; [ -f "$S" ] || S="$(superskill script path sp record-feature-sync.mjs 2>/dev/null)"; [ "$deferFeatureSync" = "true" ] && echo "feature sync deferred to batch integration" >> ".spur/run/$wbs-report.txt" || if [ -f "$S" ]; then bun "$S" --spur-bin "$spurBin"; else echo "feature sync skipped — record-feature-sync not found in plugins/sp/scripts/ nor staged" >> ".spur/run/$wbs-report.txt"; fi; exit 0
+                    S=plugins/sp/scripts/record-feature-sync.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp record-feature-sync.mjs 2>/dev/null)"; [ "$deferFeatureSync" = "true" ] && echo "feature sync deferred to batch integration" >> ".spur/run/$wbs-report.txt" || if [ -f "$S" ]; then bun "$S" --spur-bin "$spurBin"; else echo "feature sync skipped — record-feature-sync not found in plugins/sp/scripts/ nor staged" >> ".spur/run/$wbs-report.txt"; fi; exit 0
           # (d) F96 (0983): residual-scan.ts owns the sweep; shell only resolves it. The
           # scan moved here from verify: it must read the task file AFTER `task record`
           # flipped the verdict-proven Requirement/AC boxes (0692), or a proven-but-unticked
@@ -801,7 +807,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ ! -f "$S" ]; then echo "residual-scan failed closed — scanner not found in plugins/sp/scripts/ nor staged — run 'superskill install sp'" >&2; exit 1; fi; case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" scan "$wbs" --spur-bin "$spurBin" && "$RUNNER" "$S" fold "$wbs" --spur-bin "$spurBin"
+                    S=plugins/sp/scripts/residual-scan.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ ! -f "$S" ]; then echo "residual-scan failed closed — scanner not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 1; fi; case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" scan "$wbs" --spur-bin "$spurBin" && "$RUNNER" "$S" fold "$wbs" --spur-bin "$spurBin"
           # (e) F96 R5 (0983): a sweep downgrade must reach the task record — re-record from
           # the FINAL (post-fold) artifact so Testing carries the downgraded verdict; a failed
           # task must not retain a stale PASS Testing narrative. Soft (exit 0): the downgrade
@@ -827,7 +833,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" settle "$wbs" --spur-bin "$spurBin" || echo "residual-settle failed — re-run: residual-scan settle $wbs" >&2; else echo "residual-scan not staged — settle skipped — re-run: residual-scan settle $wbs" >&2; fi; exit 0
+                    S=plugins/sp/scripts/residual-scan.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" settle "$wbs" --spur-bin "$spurBin" || echo "residual-settle failed — re-run: residual-scan settle $wbs" >&2; else echo "residual-scan not staged — settle skipped — re-run: residual-scan settle $wbs" >&2; fi; exit 0
           # (c) command.gate owns the done transition with classified transient retry.
           - kind: command.gate
             options:
@@ -874,7 +880,7 @@ states:
           - kind: shell
             options:
                 command: >-
-                    S=plugins/sp/scripts/residual-scan.ts; [ -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" report "$wbs" --spur-bin "$spurBin" || echo "residual-report failed — re-run: residual-scan report $wbs" >&2; else echo "residual-scan not staged — report skipped — re-run: residual-scan report $wbs" >&2; fi; exit 0
+                    S=plugins/sp/scripts/residual-scan.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp residual-scan.mjs 2>/dev/null)"; if [ -f "$S" ]; then case "$S" in *.mjs) RUNNER=node ;; *) RUNNER=bun ;; esac; "$RUNNER" "$S" report "$wbs" --spur-bin "$spurBin" || echo "residual-report failed — re-run: residual-scan report $wbs" >&2; else echo "residual-scan not staged — report skipped — re-run: residual-scan report $wbs" >&2; fi; exit 0
 
     - id: cancelled
       description: Terminal — pipeline cancelled by operator at the approval gate (R1).

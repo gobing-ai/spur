@@ -852,8 +852,7 @@ WT_PATH="$(cd "../<worktree-dir>" && pwd)"   # hoisted: needed by WT-4a AND WT-4
 # Idempotent; conflicts are reported, never overwritten. A non-zero exit —
 # including an unresolved or divergent citation, or a half-readable worktree — must
 # NOT proceed to WT-4b removal:
-SETUP_SCRIPT="plugins/sp/scripts/inline-run-setup.ts"
-[ -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)"
+SETUP_SCRIPT=plugins/sp/scripts/inline-run-setup.ts; [ -f config/plugin-scripts.json -a -f "$SETUP_SCRIPT" ] || SETUP_SCRIPT="$(superskill script path sp inline-run-setup.mjs 2>/dev/null)"
 bun "$SETUP_SCRIPT" --persist-out --from "$WT_PATH" "${TASK_FILE_ARGS[@]}" \
   || { echo "halt: worktree run-record persist-out failed - worktree retained (WT-5)" >&2; exit 1; }
 #

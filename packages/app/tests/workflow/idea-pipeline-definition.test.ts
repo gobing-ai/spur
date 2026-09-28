@@ -593,7 +593,9 @@ function guardCommand(from: string, to: string): string {
 
 describe('idea-pipeline definition — 0887 robustness contract', () => {
     test('R1: start persists the idea verbatim to -idea-input.md and fails the run when it is empty', () => {
-        const shell = stateActions('start').find((a) => a.kind === 'shell');
+        const shell = stateActions('start').find(
+            (a) => a.kind === 'shell' && String(a.options?.command ?? '').includes('-idea-input.md'),
+        );
         const command = String(shell?.options?.command ?? '');
         expect(command).toContain('-idea-input.md');
         // Verbatim write of $idea, then a whitespace-aware non-empty check (a bare `test -s`
