@@ -53,6 +53,7 @@ Feature: Repo release-tooling integrity
 | --- | ---- | ------ |
 | 0971 | Verify standalone binary installs against release SHA256SUMS with atomic replace | todo |
 | 0972 | Derive inline-run plugin-lib exports and declarations from one table | todo |
+| 0973 | Gate plugins/sp under strict typecheck and clear its 216 errors | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes
