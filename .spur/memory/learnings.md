@@ -3496,3 +3496,87 @@ Evidence: task record `docs/tasks5/0983_order-the-residual-sweep-box-check-again
 - `jq -r .verdict` on a valid-JSON artifact missing the field yields literal `null`, which passes `-n` and `!= PASS`, triggering a spurious re-record. Harmless (record is idempotent, soft exit 0) because verify-answer-lint enforces `.verdict` on every real artifact.
 - The pre-record standalone order was initially blessed by the rule-owner doc; the review required explicitly unblessing it. The satellite's `scan`/`fold` rows (`docs/design/task-residual-sweep.md:65-66`) now name the post-record order and follow-up 0987, and the re-review disposition records "tracked by follow-up 0987, not blessed here" — so the doc cannot be read as sanctioning the defect.
 - Line citations drift: the re-review re-anchored `task-pipeline.yaml:800` (sweep), `:809` (R5 soft re-record), `:1161-1177` (done guard); the R5 command itself resolves at `:816`, not the Review's `:820`. Re-resolve anchors at wrap-up rather than trusting recorded numbers.
+Doc-evolve wrapup done. Batch `98783ca9` = task **0980** (record-stage transition orphaning lifecycle runs).
+
+**Drift repaired (4 files, docs-only, T3 + §6.4):**
+
+| # | Doc | Drift | Repair |
+|---|---|---|---|
+| 1 | `docs/design/planning-record-contracts.md:52` | owner of the `task record` surface; flag column omitted `--no-lifecycle` | added flag + semantics clause citing ADR-050 |
+| 2 | `docs/design/workflow-shell-ownership.md:232` | pinned pre-0980 `record:onEnter:1` command | appended `--no-lifecycle`; `updated_at` → 2026-09-27 |
+| 3 | `docs/design/planning-workflow-contracts.md:76` | "lifecycle guards apply identically" — false for a suppressed hop | reworded: structural guards, `--no-lifecycle` suppression, inline `--as <target>` gate |
+| 4 | `docs/03_ARCHITECTURE.md` §20.2 | no invariant for the relocated guard | added it (ADR-050; 0980); version `1.58.0` → `1.59.0` |
+
+**Zero-delta:** `00_ADR.md` — ADR-050 already owns "`--no-lifecycle` suppresses only lifecycle run records, never structural checks"; a contract-restoring fix needs no ADR (§6.1). `04_DESIGN.md` — pointers unchanged and resolving (§4.5).
+
+**Reported, not patched** (outside 0980's obligation — stale snapshots need a current-vs-historical decision, not a one-row touch-up):
+- `docs/design/e2e-workflow-for-system-development.md` — row 22 missing the flag **and** row 21 already stale (`--fix all` vs shipped `--fix none`).
+- `docs/design/rd3-migration-design.md` — dated accepted snapshot; §6 still says `record` is `spur task update --section` (superseded by 0108).
+- `docs/help2/task.md` — external help, not parity-tested; record usage line omits the flag.
+- `planning-record-contracts.md` `spur task update` row — omits the pre-existing `--no-lifecycle` (predates 0980).
+
+**Verification:** `help-doc-parity.test.ts` 2/0, `consistency.test.ts` 3/0, `bun run link-check` OK. No task/feature corpus written (`git status` = 4 doc files).
+
+Artifact: `/Users/robin/xprojects/spur-new/.spur/run/98783ca9-e55f-4e84-83ac-0e8500404af1-wrapup-learnings.md`
+
+# Working learnings — wrapup batch `98783ca9-e55f-4e84-83ac-0e8500404af1`
+
+Tasks: `0980` — Lifecycle runs created by a record-stage transition must reach a terminal status.
+Evidence: task record `docs/tasks5/0980_lifecycle-runs-created-by-a-record-stage-transition-must-rea.md`; commit `67096d060` (feat), re-verify `0551d7357`; drift repair performed in this wrapup.
+
+## 2026-09-27 · 0980
+
+### Conventions
+- **Every pipeline status hop must suppress the nested lifecycle run.** The pipeline run *is* the lifecycle record, so each hop passes `--no-lifecycle`: `implement:onEnter:1` (`config/workflows/task-pipeline.yaml:317`, pre-existing), `done:onEnter:0` (`:836`, pre-existing), and now `record:onEnter:1` (`:773`) plus the post-downgrade re-record (`:816`). A hop that omits it spawns a nested `task-lifecycle` run that outlives the pipeline as a `running` orphan.
+- **When the lifecycle FSM is suppressed, relocate the structural guard — never drop it.** ADR-050 is the law: "`--no-lifecycle` suppresses only lifecycle run records, never structural checks". Without the FSM its target-aware `spur task check --as <target>` YAML guard would be silently lost, so the caller injects the same inline `TaskCheckService` gate `task update` uses (task 0130 backstop).
+- **Reuse the sibling seam before inventing one.** Both pieces already existed for `task update`: the suppression parameter on `makeService(context, folder, noLifecycle)` and the inline gate construction. 0980 wired the same two pieces into `record`; it added no new mechanism.
+- **Keep standalone behavior as the default.** The flag defaults off, so standalone `task record` keeps its lifecycle adapter and its FSM-owned guard (R2). Suppression is opt-in and pipeline-only.
+- **Extract the shared denial path rather than duplicating the message.** `runTransitionCheckGate` (`packages/app/src/services/task-transition.ts:106`) now serves `transitionTaskGuarded` and `TaskService.record`; the body moved verbatim, so the `task update` path is behavior-preserving and the 0808 R3 denial wording (`--as <status>` + listed error findings) has exactly one definition.
+- **Match the adapter guard's timing, not a convenient one.** The injected gate runs *after* the section writes and *before* the status write, and only on a real status change into `testing`/`done` — because the matrix counts record's own Testing/Solution output as required at the target status, so a pre-record check would deny on placeholders that record is about to fill. A same-status re-record skips the gate, matching `requestTransition` never firing.
+- **Document a new public flag in the gate-checked help surface.** `docs/help/cmd_task.md:260` is parity-tested against the live commander tree (`apps/cli/tests/help-doc-parity.test.ts`); a flag added to the command without that row fails the gate.
+- **Sweep every doc that names the changed mechanism, not just the owner.** A CLI-flag + pipeline-arg change invalidates the owning surface satellite *and* every doc that pins the old command string or the old behavior claim.
+
+### Errors fixed
+- **Orphaned lifecycle runs (the defect).** After the 0965 run the worktree DB held two `running` lifecycle runs with zero child rows (`action_runs`/`phase_runs` = 0) and empty `task_run_links`; both had to be finalized by hand (`--close --status failed --reason interrupted`) before WT-4a provenance persistence could run. The record-less rows also triggered the `persist-out` ENOENT (0979). Root cause: `task record --transition testing` built a lifecycle FSM and spawned a nested `task-lifecycle` run, while the later `task update done --no-lifecycle` deliberately bypassed lifecycle bookkeeping — so nothing ever closed the nested run.
+- **Recurrence of an already-required invariant.** Task 0622 R2 (feature D3) already required lifecycle workflows to reach a terminal state and stop orphan accumulation; two fresh orphans in one run is that requirement recurring, which is why 0980 is P1 rather than a new feature.
+- **Drift left by 0980 (repaired in this wrapup).** The T3 obligation was unmet: `docs/design/planning-record-contracts.md:52` — the owner of the `task record` surface — omitted `--no-lifecycle` from the record row; `docs/design/workflow-shell-ownership.md:232` still pinned the old `record:onEnter:1` command; `docs/design/planning-workflow-contracts.md:76` still claimed "the lifecycle guards apply identically"; `docs/03_ARCHITECTURE.md` §20.2 lacked the relocated-guard invariant.
+
+### Patterns
+- **Symptom location ≠ cause location.** The orphans were *observed* after `done`, but the *creator* was the earlier `record` hop. Trace the whole pipeline sequence; the last hop is rarely the culprit.
+- **"The flag exists on a sibling verb" is the cheapest fix.** `task update` already had `--no-lifecycle` and already had the inline-gate backstop; 0980 was largely a wiring task. Check the sibling implementation before designing anything.
+- **A refine pass can narrow scope materially — respect it.** A `running` lifecycle row is *expected* while the task genuinely sits at `testing`; only a row still running after the pipeline's later `done` transition is the defect. Likewise a feature-lifecycle row may legitimately stay running while its feature is nonterminal — explicitly out of scope.
+- **A split test suite is legitimate when each layer owns a different fact.** Status assertions live in the CLI suite (`apps/cli/tests/commands/task.test.ts:2191`); lifecycle-row assertions live in the service suite through a real sqlite adapter (`packages/app/tests/services/task-record.test.ts:1548`/`:1579`/`:1666`), with a cross-reference comment instead of duplicating either. Combined coverage satisfies R3.
+- **Pin YAML args with assertions so the pipeline cannot silently lose the flag.** `plugins/sp/tests/task-pipeline-resilience.test.ts:265` and `packages/app/tests/workflow/task-pipeline-proof-chain.test.ts:408` assert the record args; without them a future YAML edit drops `--no-lifecycle` and re-opens the orphan.
+- **A doc the `04` index labels "proposal" is not the current-surface owner.** `docs/design/e2e-workflow-for-system-development.md` row 21 still says `/sp:dev-verify --auto --fix all` while the shipped YAML says `--fix none` (task 0703) — so it is a stale snapshot. Patch the maintained owners; file the snapshot as its own drift item rather than partially touching one row and leaving the neighbouring row lying.
+
+### Gotchas
+- **A "bookkeeping" verb can silently build an engine.** `spur task record --transition` originally exposed no `--no-lifecycle` equivalent, so the FSM's own transition verb was the orphan creator. Audit verbs that look read-only for hidden engine construction.
+- **The orphan signature is child-row count, not run status.** A lifecycle row left `running` with `action_runs`/`phase_runs` = 0 and empty `task_run_links` means no action ever ran — a record-less orphan. Checking only the status column will not distinguish it from a legitimately in-flight run.
+- **`--no-lifecycle --transition done` probes the gate once, for `done`.** The intermediate auto-walk hop to `testing` is not separately probed. No material loss (the `done` set is a superset of `testing`'s: Solution + Testing + Review), and the pipeline's done hop uses `task update`, not record. Recorded as P4 advisory, not fixed.
+- **Pre-existing sibling gap (P4, still open).** When the lifecycle adapter is unavailable for a reason *other* than the flag, `record` still loses the guard silently, whereas the `update` path warns and gates inline. 0980 fixed the flag path only; the unavailable-adapter path remains a follow-up candidate.
+- **The inline gate construction is duplicated (~10 lines)** between the update and record actions (`apps/cli/src/commands/task.ts:603-616` vs `:1204-1216`). A `makeInlineCheckGate(context)` helper would collapse it. Advisory only.
+- **The pipeline YAML was not executed end-to-end this run.** Coverage is at the CLI, service, and YAML-assertion layers. Do not claim an end-to-end YAML run that was not performed.
+- **`docs/help2/task.md` drifts silently.** It is a hand-authored external help set *not* covered by `help-doc-parity.test.ts` (which covers only `docs/help/cmd_*.md`); its `task record` usage line still omits `--no-lifecycle`. The gate-checked surface is correct; the uncovered mirror is not.
+
+## Wrapup drift repair (doc-evolve, §5 T3 + §6.4)
+
+Classified 0980 as **T3** (CLI flag + non-UI behavior change) with no T1: ADR-050 already owns the `--no-lifecycle` invariant, so 0980 restores/extends an existing contract and §6.1 forbids a new ADR or amendment.
+
+| # | Doc | Reality (0980) | Doc said | Repair |
+| --- | --- | --- | --- | --- |
+| 1 | `docs/design/planning-record-contracts.md:52` | `task record` gained `--no-lifecycle`; the target-aware structural gate still runs inline | record row's flag column omitted the flag; no suppression semantics | added `--no-lifecycle` to the flag column + a semantics clause citing ADR-050 |
+| 2 | `docs/design/workflow-shell-ownership.md:232` | task-pipeline `record:onEnter:1` args now `… --transition testing --no-lifecycle` (`task-pipeline.yaml:773`) | pinned the pre-0980 command without the flag | appended `--no-lifecycle`; `updated_at` `2026-09-12` → `2026-09-27` |
+| 3 | `docs/design/planning-workflow-contracts.md:76` | suppression is per-hop; the guard is relocated inline, not dropped | "so the lifecycle guards apply identically" | reworded to structural guards + `--no-lifecycle` suppression with the inline `--as <target>` gate |
+| 4 | `docs/03_ARCHITECTURE.md` §20.2 (`:877`) | a suppressed hop still runs the target-aware structural gate inline | no such invariant recorded | added the relocated-guard invariant (ADR-050; 0980); version `1.58.0` → `1.59.0` |
+
+**Zero-delta (checks run):** `docs/00_ADR.md` — ADR-050's "suppresses only lifecycle run records, never structural checks" already covers the new flag, and a contract-restoring fix needs no ADR entry (§6.1); `docs/04_DESIGN.md` — index pointers/titles unchanged and resolve, so no ceremonial edit (§4.5). Stale-phrasing sweep (`lifecycle guards apply identically`, record-command sweep) leaves no current-owner claim of the old behavior.
+
+**Reported, deliberately not patched (out of the T3 obligation for 0980):**
+- `docs/design/e2e-workflow-for-system-development.md` (04-index-labeled "proposal"): row 22 missing `--no-lifecycle` *and* row 21 already stale (`--fix all` vs shipped `--fix none`) → needs a current-vs-historical decision, not a partial patch.
+- `docs/design/rd3-migration-design.md` (dated `status: accepted`, 2026-06-12): §6 still describes `record` as `spur task update --section`, superseded by 0108 — an already-superseded snapshot.
+- `docs/help2/task.md`: hand-authored external help, not parity-tested; record usage line omits `--no-lifecycle`.
+- `docs/design/planning-record-contracts.md` `spur task update` row: omits the pre-existing `--no-lifecycle` (same defect class, predates 0980).
+
+**Verification:** `help-doc-parity.test.ts` 2 pass / 0 fail (flag consistent between the commander tree and `docs/help/cmd_task.md:260`); `consistency.test.ts` 3 pass / 0 fail (includes the `planning-record-contracts.md` surface check); `bun run link-check` OK; frontmatter parses and `owns`/`authority`/`edit_rules` match §4.1 and §6.4/§6.5. Docs-only diff: 4 files, 12 insertions / 7 deletions; no task/feature corpus written.
+
+Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/98783ca9-e55f-4e84-83ac-0e8500404af1-wrapup-learnings.md`.
