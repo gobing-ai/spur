@@ -184,12 +184,14 @@ export function renderTesting(v: CanonicalVerifyVerdict): string {
 // ─── R2 (0692): Verdict-driven checkbox auto-flip ───────────────────────
 
 /**
- * Normalize a verdict requirement id to its `R\d+` prefix (e.g.
- * `R1 (anchor-drift detection)` → `R1`) so it matches the checkbox id
- * parseChecklist extracts. Non-`R` ids pass through unchanged.
+ * Normalize a verdict row id to its `R\d+` / `AC\d+` prefix (e.g.
+ * `R1 (anchor-drift detection)` → `R1`, `AC1 — <scenario title>` → `AC1`) so it
+ * matches the checkbox id parseChecklist extracts. Other ids pass through unchanged.
+ * Without the AC form, an AC row keyed by scenario title for feature credit
+ * could never tick its own task box.
  */
 function prefixId(id: string): string {
-    const m = /^R\d+/.exec(id);
+    const m = /^(?:AC|R)\d+/.exec(id);
     return m ? m[0] : id;
 }
 

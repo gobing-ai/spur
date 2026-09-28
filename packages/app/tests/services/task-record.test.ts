@@ -1380,6 +1380,18 @@ describe('flipVerifiedCheckboxes', () => {
         expect(out).not.toContain('- [x] R2.');
     });
 
+    test('an AC row keyed by scenario title flips its task AC box', () => {
+        // Feature-linked verdicts key AC rows `AC1 — <scenario title>` so feature check credits
+        // the scenario; the task box is parsed as bare `AC1` and must still flip.
+        const body = '- [ ] AC1 — R4 — one table (req: R1)\n- [ ] AC2 — other\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'AC1 — R4 — one table', status: 'MET', evidenceType: 'test', evidence: 'e' },
+            { id: 'AC-2', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — R4 — one table (req: R1)');
+    });
+
     test('PARTIAL flips only the proven ids and leaves the rest', () => {
         const body = '- [ ] R1. one\n- [ ] R2. two\n- [ ] R3. three\n';
         const out = flipVerifiedCheckboxes(
