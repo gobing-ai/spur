@@ -4,7 +4,7 @@ name: Close the inline-run bookkeeping gaps and enforce the test-only subpath in
 status: done
 template: issue
 created_at: 2026-09-26T16:02:38.308Z
-updated_at: "2026-09-26T23:13:08.609Z"
+updated_at: "2026-09-28T19:48:36.115Z"
 
 feature_id: I31
 ac_altitude: task-local
@@ -221,17 +221,17 @@ open for this run's own completion and WT-3b.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/domain/src/dao/run-transfer.ts:86` transferRunTables (id-exists / external-key-conflict skip, one batch per run); `packages/app/src/services/inline-run-setup.ts:186` persistWorktreeRuns; script `plugins/sp/scripts/inline-run-setup.ts:577` runPersistOutMode; WT-4a wiring `plugins/sp/skills/spur-dev/references/execution-batch.md:836`. Forced re-verify 2026-09-26: domain run-transfer.test.ts 4/4, app persist-worktree-runs + action-trace 23/23, plugins/sp inline-run-setup/trace/installed/execution-batch-contract 52/52 — all green this run. Live: worktree run inline-20260926T215924Z-e9ac (worktree spur-new-run-0975-9039, torn down) is present in the invoking tree .spur/spur.db (status done, 13 action_runs rows) with .md + .state.json in .spur/run/. |
-| R2 | MET | `packages/app/src/workflow/action-trace.ts:290` closeRun returns actionRows; `plugins/sp/scripts/inline-run-setup.ts:470` NO_ACTION_ROWS exit 1 after finalize; tests `plugins/sp/tests/inline-run-trace.test.ts:338` / `:372` / `:403` green this run. |
-| R3 | MET | `config/rules/boundary/test-subpath-boundary.yaml:14` no-testing-subpath-import + `:32` no-relative-testing-module-import, both severity error; preset `spur rule run` (recommended-pre-check) exit 0, 0 findings this run; synthetic fixtures re-fired this run (see AC5). |
+| R1 | MET | `packages/domain/src/dao/run-transfer.ts:96` transferRunTables (id-exists `:104`, external-key-conflict `:116`, one `to.batch` per run `:130`); `packages/app/src/services/inline-run-setup.ts:252` persistWorktreeRuns (safe run-id guard `:324`, record-conflict skip `:366`); `plugins/sp/scripts/inline-run-setup.ts:605` runPersistOutMode; WT-4a wiring `plugins/sp/skills/spur-dev/references/execution-batch.md:857-858` → WT-5. Forced re-verify 2026-09-28: domain 4/0, app 35/0, plugins/sp 63/0 |
+| R2 | MET | `packages/app/src/workflow/action-trace.ts:290-311` closeRun returns actionRows via actionRowsByRunId; `plugins/sp/scripts/inline-run-setup.ts:489` NO_ACTION_ROWS exit 1; driver doc `plugins/sp/skills/spur-dev/references/inline-pipeline-driver.md:535`; tests `plugins/sp/tests/inline-run-trace.test.ts:338`, `:372`, `:403` green 2026-09-28 |
+| R3 | MET | `config/rules/boundary/test-subpath-boundary.yaml` rules `no-testing-subpath-import` + `no-relative-testing-module-import`, both severity error, forbidden-import; clean-tree `spur rule run --file` exit 0 on 2026-09-28 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | Live: `spur workflow progress inline-20260926T215924Z-e9ac --json` in invoking tree → status completed; sqlite action_runs count=13, runs.status=done; `.spur/run/inline-20260926T215924Z-e9ac.md` + `.state.json` exist after worktree teardown. Component test `plugins/sp/tests/inline-run-setup.test.ts:593` green. |
-| AC2 | MET | test | `packages/domain/tests/dao/run-transfer.test.ts:68` id-exists / external-key-conflict / idempotent re-persist — 4/4 green this run; script idempotence `plugins/sp/tests/inline-run-setup.test.ts:593` green. |
-| AC3 | MET | test | Unreadable-DB exit 1 `{ok:false}` in `plugins/sp/tests/inline-run-setup.test.ts:593` block + `packages/app/tests/services/persist-worktree-runs.test.ts:41` green; WT-5 routing pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:155` green. |
-| AC4 | MET | test | `plugins/sp/tests/inline-run-trace.test.ts:338` (done+0 → exit 1 NO_ACTION_ROWS, row terminal), `:372` (≥1 → exit 0 actionRows), `:403` (failed+0 → exit 0) — green this run. |
-| AC5 | MET | command | This run: `spur rule run --file config/rules/boundary/test-subpath-boundary.yaml` clean tree exit 0; allowed-location fixtures (packages/app/src/testing/zz0975-ok.ts, packages/app/tests/zz0975-ok.ts) exit 0; violating fixtures packages/app/src/zz0975-fx.ts (relative ./testing/…) + apps/server/src/zz0975-fx.ts (@gobing-ai/spur-app/testing) → exit 1 naming no-relative-testing-module-import and no-testing-subpath-import; fixtures removed, git status clean. |
+| AC1 | MET | command | 2026-09-28: `spur workflow progress inline-20260926T215924Z-e9ac --json` in invoking tree → completed; sqlite runs.status=done, action_runs=13; `.spur/run/inline-20260926T215924Z-e9ac.md` + `.state.json` exist; component test `plugins/sp/tests/inline-run-setup.test.ts:599` green |
+| AC2 | MET | test | `packages/domain/tests/dao/run-transfer.test.ts:93`, `:115`, `:138` (id-exists, external-key-conflict, idempotent) + `plugins/sp/tests/inline-run-setup.test.ts:631` — green 2026-09-28 |
+| AC3 | MET | test | `plugins/sp/tests/inline-run-setup.test.ts:656` (unreadable DB exit 1 `{ok:false}`) + `packages/app/tests/services/persist-worktree-runs.test.ts:142`; WT-5 routing `plugins/sp/skills/spur-dev/references/execution-batch.md:858` pinned by `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts` — green 2026-09-28 |
+| AC4 | MET | test | `plugins/sp/tests/inline-run-trace.test.ts:338` (done+0 → exit 1 NO_ACTION_ROWS, row terminal), `:372` (≥1 → exit 0 actionRows), `:403` (failed+0 → exit 0) — green 2026-09-28 |
+| AC5 | MET | command | 2026-09-28: `spur rule run --file config/rules/boundary/test-subpath-boundary.yaml` clean tree exit 0; synthetic `packages/app/src/zz0975-fx.ts` (./testing/…) + `apps/server/src/zz0975-fx.ts` (@gobing-ai/spur-app/testing) → exit 1 naming both rule ids; fixtures in `packages/app/src/testing/` and `packages/app/tests/` → 0 findings; fixtures removed |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -244,7 +244,6 @@ open for this run's own completion and WT-3b.
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=3 housekeeping=0 |
 
 ### References
 

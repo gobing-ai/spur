@@ -4,7 +4,7 @@ name: Verify standard-script twins by content instead of mtime
 status: done
 template: feature-impl
 created_at: 2026-09-26T06:13:44.341Z
-updated_at: "2026-09-28T06:45:16.594Z"
+updated_at: "2026-09-28T19:56:40.375Z"
 feature_id: A32
 
 priority: P1
@@ -131,16 +131,16 @@ Evidence: focused file 18 pass / 0 fail; plugin suite 1674 pass / 0 fail; `bun r
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 (covers: R1) [R2] | MET | `plugins/sp/scripts/script-contract-check.ts:270-311` — Rule 1 regenerates into a temp dir and compares bytes; mtime is not read; `STALE_TWIN_TOLERANCE_MS` deleted; header `:7` updated |
-| R2 | MET | `plugins/sp/scripts/script-contract-check.ts:226-254` — `ConvertTwin`, `spawnConvertTwin`, and the optional `opts.convertTwin` parameter |
-| R3 (covers: R3) | MET | `plugins/sp/scripts/script-contract-check.ts:296-302` — one `converter_unavailable` violation naming the command/stderr, then `converterDown` stops further checks; never a silent pass |
-| R4 | MET | `bun run script-contract-check` PASS at HEAD; drift proof (append `// drift` to `quality-gate.mjs` + touch) → FAIL `stale_twin`; `git checkout` → PASS |
+| R1 | MET | `plugins/sp/scripts/script-contract-check.ts:271-317` — Rule 1 regenerates into one `mkdtempSync` dir, compares bytes (`:303`), removes the dir in `finally` (`:315-316`); no mtime read for staleness, `STALE_TWIN_TOLERANCE_MS` absent (`rg` 2026-09-28); header `plugins/sp/scripts/script-contract-check.ts:7` |
+| R2 | MET | `plugins/sp/scripts/script-contract-check.ts:228-254` — `ConvertTwin`, `spawnConvertTwin(repoRoot, bin)`, optional `opts.convertTwin`; default wired at `plugins/sp/scripts/script-contract-check.ts:278` |
+| R3 | MET | `plugins/sp/scripts/script-contract-check.ts:290-301` — one `converter_unavailable` carrying `lastError` (command + stderr), then `converterDown` stops further checks |
+| R4 | MET | 2026-09-28: `bun run script-contract-check` exit 0 at HEAD; append `// drift` + `touch` `plugins/sp/scripts/quality-gate.mjs` → exit 1 `stale_twin … quality-gate.mjs does not match a fresh convert of quality-gate.ts`; `git checkout` → exit 0 |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/script-contract-check.test.ts:136` — feature A32 R1: newer-mtime twin with differing content → `stale_twin`; mutation disabling the byte compare makes it fail |
-| AC2 | MET | test | `plugins/sp/tests/script-contract-check.test.ts:161` — feature A32 R2: older-mtime twin matching a fresh convert → no `stale_twin` |
-| AC3 | MET | test | `plugins/sp/tests/script-contract-check.test.ts:184,207` — feature A32 R3: fake returning false → exactly one `converter_unavailable`; bogus binary → `converter_unavailable` with the command in `lastError` |
+| R1 — Stale twin with a newer mtime is caught | MET | test | `plugins/sp/tests/script-contract-check.test.ts:136` — newer-mtime twin with differing content → `stale_twin`; file 18 pass / 0 fail 2026-09-28 |
+| R2 — Fresh twin with an older mtime passes | MET | test | `plugins/sp/tests/script-contract-check.test.ts:161` — older-mtime twin matching a fresh convert → no `stale_twin`; green 2026-09-28 |
+| R3 — Missing converter fails loudly | MET | test | `plugins/sp/tests/script-contract-check.test.ts:184` (fake false → exactly one `converter_unavailable`) + `plugins/sp/tests/script-contract-check.test.ts:207` (bogus binary → `converter_unavailable`); green 2026-09-28 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

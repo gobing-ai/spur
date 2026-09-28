@@ -4,7 +4,7 @@ name: Gate plugins/sp under strict typecheck and clear its 216 errors
 status: done
 template: feature-impl
 created_at: 2026-09-26T07:23:27.739Z
-updated_at: "2026-09-28T15:39:21.602Z"
+updated_at: "2026-09-28T20:17:07.084Z"
 feature_id: A33
 
 ac_altitude: task-local
@@ -239,25 +239,25 @@ Evidence: `tsc -p plugins/sp/tsconfig.json --noEmit` 0 errors; `bun run typechec
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `plugins/sp/tsconfig.json:1-8` — extends `../../tooling/typescript/base.json`, `types: ["bun"]`, `paths` maps `@gobing-ai/spur-app`, no `baseUrl`, no excludes |
-| R2 | MET | `package.json:63` — `typecheck` chains `tsc -p scripts/tsconfig.json --noEmit && tsc -p plugins/sp/tsconfig.json --noEmit`; `bun run lint` (biome + typecheck) exit 0 on 2026-09-28 |
+| R2 | MET | `package.json:63` — `typecheck` chains `tsc -p scripts/tsconfig.json --noEmit && tsc -p plugins/sp/tsconfig.json --noEmit`; `bun run typecheck` exit 0 (re-run 2026-09-28) |
 | R3 | MET | `plugins/sp/scripts/feature-verification-steps.ts:48-53` — six `typeof import('../../../packages/app/src/…')` type-only paths |
-| R4 | MET | `plugins/sp/scripts/script-contract-check.ts:48` — `'gobing_ai_import'` in `Violation.kind`; emitted at `:378` |
-| R5 | MET | `plugins/sp/scripts/inline-run-setup.ts:362-367` typed `ACTION_STATUSES` + `isActionStatus`; `:384` `TraceModeInput.status` literal union (CHANGED: includes close-only `paused`, rationale at `:380-383`); `:741` guard use; no `WorkflowStatus` import |
+| R4 | MET | `plugins/sp/scripts/script-contract-check.ts:48` — `'gobing_ai_import'` in `Violation.kind`; emitted at `plugins/sp/scripts/script-contract-check.ts:378` |
+| R5 | MET | `plugins/sp/scripts/inline-run-setup.ts:362-367` typed `ACTION_STATUSES` + `isActionStatus`; `plugins/sp/scripts/inline-run-setup.ts:384` `TraceModeInput.status` literal union (CHANGED: includes close-only `paused`, rationale at `plugins/sp/scripts/inline-run-setup.ts:380-383`); `plugins/sp/scripts/inline-run-setup.ts:741` guard use; no `WorkflowStatus` import |
 | R6 | MET | `plugins/sp/tests/surface-drift-inventory.test.ts:413-434` — describe has no third arg; each of the three `test(...)` calls ends `}, 60_000);` |
-| R7 | MET | `rg -n _boxId plugins/sp/tests/residual-scan.test.ts` → no hits |
-| R8 | MET | `bunx tsc -p plugins/sp/tsconfig.json --noEmit` exit 0; fix pass removed the last cast: `plugins/sp/scripts/quality-gate.ts:675` `rawEnv: Partial<QualityGateEnv> = getEnvVars()`, `:683` `wbs` guard, `:688` narrowed `env`; no `@ts-ignore`/`@ts-expect-error`/`as any`/`biome-ignore` in added lines |
-| R9 | MET | `(cd plugins/sp && bun test)` → 1674 pass / 0 fail (baseline 1674; `tests/quality-gate.test.ts` 20/0 incl. empty-`wbs` exit 2); `bun run plugin-smoke` PASS; `bun run script-contract-check` PASS after twin regen |
+| R7 | MET | `rg -n _boxId plugins/sp/tests/residual-scan.test.ts` → no hits (rc=1) |
+| R8 | MET | `bunx tsc -p plugins/sp/tsconfig.json --noEmit` exit 0; `plugins/sp/scripts/quality-gate.ts:675` `rawEnv: Partial<QualityGateEnv> = getEnvVars()`, `plugins/sp/scripts/quality-gate.ts:683` `wbs` guard, `plugins/sp/scripts/quality-gate.ts:688` narrowed `env` (no cast); added lines of 779497665 + cd395dd23 carry no `@ts-ignore`/`@ts-expect-error`/`as any`/`biome-ignore` |
+| R9 | MET | `(cd plugins/sp && bun test)` → 1682 pass / 0 fail across 61 files (≥ baseline 1674; later tasks added tests); `bun run plugin-smoke` PASS |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `bunx tsc -p plugins/sp/tsconfig.json --noEmit` → exit 0 (post-fix, 2026-09-28) |
-| AC2 | MET | command | `bun run lint` → `biome check . --error-on-warnings && bun run typecheck` exit 0 (workspaces + scripts + plugin leg) |
-| AC3 | MET | command | appended `export const __probe: number = 's';` to `plugins/sp/scripts/quality-gate.ts` → 1 `error TS`; restored → tsc exit 0 |
-| AC4 | MET | command | `git show 779497665 -- plugins/sp` and fix-pass `git diff -- plugins/sp` added lines: 0 matches for `@ts-ignore\|@ts-expect-error\|as any\|biome-ignore`; the `as QualityGateEnv` cast is removed |
-| AC5 | MET | command | `rg -n "import\('\.\./\.\./packages" plugins/sp/scripts/feature-verification-steps.ts` → no matches |
-| AC6 | MET | command | `(cd plugins/sp && bun test)` → 1674 pass / 0 fail across 61 files (post-fix) |
-| AC7 | MET | command | `bun run plugin-smoke` → "plugin-install-smoke PASS — plugin surface is standalone and installs clean" (post-fix) |
-| AC8 | MET | command | `bun run spur-check` @f88278427: biome + typecheck exit 0, 49 rules pass, 9334 pass / 1 fail — sole fail `apps/cli/tests/commands/feature.test.ts:33` fixture `git init` denied by session sandbox (nested `.git/config` write); untouched by 779497665 and the fix pass. Post-fix `bun run lint` exit 0 |
+| AC1 | MET | command | `bunx tsc -p plugins/sp/tsconfig.json --noEmit` → exit 0 (re-run 2026-09-28) |
+| AC2 | MET | command | `bun run typecheck` → exit 0, 0 `error TS` (workspaces + scripts + plugin leg) |
+| AC3 | MET | command | appended `export const __probe: number = 's';` to `plugins/sp/scripts/quality-gate.ts` → 1 `error TS`, tsc exit 2; restored from backup → `git diff --quiet` clean |
+| AC4 | MET | command | `git show 779497665 -- plugins/sp` and `git show cd395dd23 -- plugins/sp` added lines: 0 matches for `@ts-ignore\|@ts-expect-error\|as any\|biome-ignore`; the 3 tree-wide `@ts-expect-error` hits predate the task (blame 2026-07-16 / 2026-08-19) |
+| AC5 | MET | command | `rg -n "import\('\.\./\.\./packages" plugins/sp/scripts/feature-verification-steps.ts` → no matches (rc=1) |
+| AC6 | MET | command | `(cd plugins/sp && bun test)` → 1682 pass / 0 fail across 61 files; no assertion deleted or loosened |
+| AC7 | MET | command | `bun run plugin-smoke` → "plugin-install-smoke PASS — plugin surface is standalone and installs clean" |
+| AC8 | MET | command | `bun run spur-check` 2026-09-28 (GIT_TEMPLATE_DIR=empty for the sandbox): biome + typecheck exit 0, 49 rules pass, 9355 pass / 1 fail — sole fail `apps/cli/tests/commands/feature.test.ts:33` fixture `git init` denied by the session sandbox (nested `.git/config` write); untouched by 779497665/cd395dd23 |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
