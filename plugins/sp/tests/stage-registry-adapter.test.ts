@@ -838,6 +838,7 @@ describe('additional coverage', () => {
             reasonKind: 'blocked',
             chain: false,
             requiresConfirmation: true,
+            dispatchCommand: null,
             blocker: 'dependency not met',
         };
         const lines = formatStageResult(result);
@@ -868,7 +869,7 @@ describe('additional coverage', () => {
         const exitSpy = (code?: number) => {
             exitCode = code;
         };
-        process.exit = exitSpy as (code?: number) => void;
+        process.exit = exitSpy as unknown as typeof process.exit;
         try {
             bootMain(['--wbs', 'X'], {
                 run: () => ({ exitCode: 42, stdout: 'test-output', stderr: '' }),

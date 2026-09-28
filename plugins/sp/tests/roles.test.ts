@@ -154,7 +154,9 @@ describe('roles — R2: four distinct tiers from the live vocabulary', () => {
 
     test('each tier is drawn from the live vocabulary', () => {
         for (const row of roles) {
-            expect(LIVE_TIERS, `role ${row.id} tier ${row.tier} not in vocabulary`).toContain(row.tier);
+            expect(LIVE_TIERS as readonly string[], `role ${row.id} tier ${row.tier} not in vocabulary`).toContain(
+                row.tier,
+            );
         }
     });
 });
@@ -337,9 +339,9 @@ describe('roles — R9: roles.md projects config.global.yaml with fallback parit
         expect(roles, 'roles.md must carry exactly the four default roles').toHaveLength(defaults.size);
         for (const row of roles) {
             const def = defaults.get(row.id);
-            expect(def, `role ${row.id} missing from DEFAULT_AGENT_ROLES`).toBeDefined();
-            expect(row.tier, `role ${row.id} tier drifted from DEFAULT_AGENT_ROLES`).toBe(def?.tier);
-            expect(row.stages, `role ${row.id} stages drifted from DEFAULT_AGENT_ROLES`).toEqual(def?.stages);
+            if (def === undefined) throw new Error(`role ${row.id} missing from DEFAULT_AGENT_ROLES`);
+            expect(row.tier, `role ${row.id} tier drifted from DEFAULT_AGENT_ROLES`).toBe(def.tier);
+            expect(row.stages, `role ${row.id} stages drifted from DEFAULT_AGENT_ROLES`).toEqual(def.stages);
         }
     });
 
@@ -379,9 +381,10 @@ describe('roles — R9: roles.md projects config.global.yaml with fallback parit
         );
         for (const [id, row] of Object.entries(table ?? {})) {
             const def = defaults.get(id);
-            expect(row.tier, `role ${id} tier drifted between config.global.yaml and the fallback`).toBe(def?.tier);
+            if (def === undefined) throw new Error(`role ${id} missing from DEFAULT_AGENT_ROLES`);
+            expect(row.tier, `role ${id} tier drifted between config.global.yaml and the fallback`).toBe(def.tier);
             expect(row.stages, `role ${id} stages drifted between config.global.yaml and the fallback`).toEqual(
-                def?.stages,
+                def.stages,
             );
         }
     });

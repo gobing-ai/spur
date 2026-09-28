@@ -89,7 +89,8 @@ function usage(): never {
  * keeps ad-hoc invocations from silently hitting a stale PATH install.
  */
 function defaultSpurBin(): string {
-    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
+    const fromEnv = getEnvVar('SPUR_BIN');
+    if (fromEnv) return fromEnv;
     // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts (fileURLToPath — raw pathname breaks
     // on %-encoded paths, e.g. spaces in the checkout directory)
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
@@ -115,6 +116,7 @@ function parseArgs(argv: string[]): {
     let i = 0;
     while (i < argv.length) {
         const arg = argv[i];
+        if (arg === undefined) break;
         if (arg === '--spur-bin') {
             spurBin = argv[i + 1] ?? defaultSpurBin();
             i += 2;

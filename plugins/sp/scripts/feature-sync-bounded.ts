@@ -251,7 +251,8 @@ Exit: 0 = sync handled (applied / no-op / suppressed-blocked / live-blocked).`;
  * keeps ad-hoc invocations from silently hitting a stale PATH install.
  */
 export function defaultSpurBin(): string {
-    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
+    const fromEnv = getEnvVar('SPUR_BIN');
+    if (fromEnv) return fromEnv;
     // scripts/ -> plugins/sp/ -> <repo>/apps/cli/src/index.ts (fileURLToPath — raw pathname breaks
     // on %-encoded paths, e.g. spaces in the checkout directory)
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
@@ -268,6 +269,7 @@ export function parseBoundedSyncCliArgs(argv: string[]): BoundedSyncCliArgs {
 
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
+        if (a === undefined) continue;
         if (a === '--help' || a === '-h') help = true;
         else if (a === '--json') json = true;
         else if (a === '--spur-bin') spurBin = argv[++i] ?? spurBin;

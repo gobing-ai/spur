@@ -121,7 +121,7 @@ function firstTableUnderHeading(markdown: string, heading: string): string[][] {
     }
     let rows: string[][] | null = null;
     for (let i = start + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
+        const line = lines[i]?.trim() ?? '';
         if (line.startsWith('#')) break;
         if (!line.startsWith('|')) {
             if (rows !== null) break; // first table ended
@@ -182,7 +182,7 @@ const REFERENCE_LAYOUT: Record<string, { file: string; heading: string; format: 
 
 /** Extract `--flag` tokens (same shape the 0512 Commander adapter parses). */
 function flagTokens(text: string): string[] {
-    return [...text.matchAll(/(?:^|\s)(-{1,2}[A-Za-z][A-Za-z0-9-]*)/g)].map((m) => m[1]);
+    return [...text.matchAll(/(?:^|\s)(-{1,2}[A-Za-z][A-Za-z0-9-]*)/g)].map((m) => m[1] ?? '');
 }
 
 /** Parse the first contiguous `| Verb | Purpose | Key flags |` table under `heading`. */
@@ -206,7 +206,7 @@ function commandSurfaceVerbs(markdown: string, heading: string): VerbRow[] {
     const out: VerbRow[] = [];
     let inFence = false;
     for (let i = start + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
+        const line = lines[i]?.trim() ?? '';
         if (line.startsWith('```')) {
             if (!inFence) inFence = true;
             else break;
@@ -215,7 +215,7 @@ function commandSurfaceVerbs(markdown: string, heading: string): VerbRow[] {
         if (line.startsWith('#')) break;
         if (inFence) {
             const m = line.match(/^spur\s+(\S+)\s+(\S+)/);
-            if (m) out.push({ verb: m[2], flags: flagTokens(line) });
+            if (m) out.push({ verb: m[2] ?? '', flags: flagTokens(line) });
         }
     }
     return out;

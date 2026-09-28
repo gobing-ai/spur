@@ -9,6 +9,7 @@ import {
     driftReasonForPath,
     main,
     runDriftProbe,
+    type SpurRunner,
     type SpurShowResult,
     solutionSectionOf,
     WRAPUP_DRIFT_PROBE_USAGE,
@@ -35,7 +36,7 @@ function solutionWith(paths: string[]): string {
     return `# 0944 some task\n\n## Intent\n\nDo things.\n\n### Solution\n\n${map}\n\n### Plan\n\nSteps.\n`;
 }
 
-function fakeSpur(responses: Record<string, SpurShowResult>): SpurShowResult & { calls: string[][] } {
+function fakeSpur(responses: Record<string, SpurShowResult>): SpurRunner & { calls: string[][] } {
     const calls: string[][] = [];
     const runner = (args: string[]): SpurShowResult => {
         calls.push(args);
@@ -90,6 +91,7 @@ describe('wrapup-drift-probe 0944', () => {
         };
         for (const glob of DOC_OWNED_SURFACES) {
             const path = representative[glob];
+            if (path === undefined) throw new Error(`no representative path for doc-owned surface ${glob}`);
             expect(driftReasonForPath(path), glob).toBe(`matches doc-owned surface ${glob}`);
             const cwd = newCwd();
             try {

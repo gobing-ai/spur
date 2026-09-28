@@ -375,9 +375,9 @@ export function checkReportStructure(reportMarkdown: string): { ok: boolean; pro
         for (const row of [...new Set([...knownRows, ...invalidRows])]) {
             // 0686/I9: a pipe row outside the closed first-segment set fails by name instead of
             // being skipped silently by the legacy regex.
-            const segMatch = row.match(/^\|\s*([^:|]+):/);
-            if (segMatch && !(FINDING_CATEGORIES as readonly string[]).includes(segMatch[1].trim())) {
-                problems.push(`finding-invalid-key-category:${segMatch[1].trim()}`);
+            const seg = row.match(/^\|\s*([^:|]+):/)?.[1];
+            if (seg !== undefined && !(FINDING_CATEGORIES as readonly string[]).includes(seg.trim())) {
+                problems.push(`finding-invalid-key-category:${seg.trim()}`);
             }
             // Case-insensitive on BOTH sides — camelCase triage fields otherwise never match a
             // lowercased row.
@@ -630,7 +630,7 @@ export function validateSelector(opts: {
     output?: string;
 }): SelectorValidation {
     const errors: string[] = [];
-    const has = (v?: string) => v !== undefined && v !== '';
+    const has = (v?: string): v is string => v !== undefined && v !== '';
     const val = (v?: string) => (has(v) ? v : null);
     const mode = has(opts.mode) ? opts.mode : 'daily';
     if (mode !== 'daily' && mode !== 'ad-hoc') {

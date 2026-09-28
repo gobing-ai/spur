@@ -271,8 +271,8 @@ describe('normalizeFindings + renderFindings', () => {
             head,
         );
         expect(findings.map((f) => f.kind)).toEqual(['review', 'inline', 'comment']);
-        expect(findings[1].path).toBe('src/a.ts');
-        expect(findings[1].severity).toBe('P1');
+        expect(findings[1]?.path).toBe('src/a.ts');
+        expect(findings[1]?.severity).toBe('P1');
         const rendered = renderFindings(findings);
         expect(rendered).toContain('Findings (3)');
         expect(rendered).toContain('[P1] src/a.ts:42');

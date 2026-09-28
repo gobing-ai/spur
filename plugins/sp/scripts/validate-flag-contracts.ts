@@ -71,7 +71,7 @@ function sectionBetween(raw: string, startRe: RegExp, nextHeading: '## ' | '### 
 function extractFlags(text: string): Set<string> {
     const flags = new Set<string>();
     for (const m of text.matchAll(/(--[a-z][a-z-]*)/g)) {
-        flags.add(m[1]);
+        flags.add(m[1] ?? '');
     }
     return flags;
 }
@@ -80,7 +80,7 @@ function extractFlags(text: string): Set<string> {
 function deprecatedFlagSet(hint: string): Set<string> {
     const out = new Set<string>();
     for (const m of hint.matchAll(/(--[a-z][a-z-]*)\s*\(deprecated\)/g)) {
-        out.add(m[1]);
+        out.add(m[1] ?? '');
     }
     return out;
 }
@@ -104,7 +104,7 @@ function glossaryEntries(glossaryRaw: string): GlossaryEntry[] {
     const entryRe = /^### `(--[a-z][a-z-]*)[^\n]*$/gm;
     for (const m of glossaryRaw.matchAll(entryRe)) {
         const flag = m[1];
-        if (m.index === undefined) continue;
+        if (flag === undefined || m.index === undefined) continue;
         const bodyStart = m.index + m[0].length;
         const next = glossaryRaw.indexOf('\n### ', bodyStart);
         const body = next === -1 ? glossaryRaw.slice(bodyStart) : glossaryRaw.slice(bodyStart, next);
@@ -132,8 +132,8 @@ function glossaryDeclaringClaims(glossaryRaw: string): Map<string, Set<string>> 
     for (const { flag, firstParagraph } of glossaryEntries(glossaryRaw)) {
         const names = new Set<string>();
         for (const paren of firstParagraph.matchAll(/\(([^)]*)\)/g)) {
-            for (const n of paren[1].matchAll(/`(dev-[a-z-]+)`/g)) {
-                names.add(n[1]);
+            for (const n of (paren[1] ?? '').matchAll(/`(dev-[a-z-]+)`/g)) {
+                names.add(n[1] ?? '');
             }
         }
         if (names.size >= 2) claims.set(flag, names);
@@ -210,7 +210,7 @@ function commandTableDefaults(commandRaw: string): Map<string, string> {
     if (!start || start.index === undefined) return out;
     const from = start.index + start[0].length;
     const next = commandRaw.indexOf('\n## ', from);
-    const table = (next === -1 ? commandRaw.slice(from) : commandRaw.slice(from, next)).split(/\n\s*\n/)[0];
+    const table = (next === -1 ? commandRaw.slice(from) : commandRaw.slice(from, next)).split(/\n\s*\n/)[0] ?? '';
     // Split on unescaped pipes only (same as validate-commands.ts parseMarkdownTable),
     // then unescape `\|` → `|` per cell.
     const split = (row: string): string[] =>
@@ -223,10 +223,11 @@ function commandTableDefaults(commandRaw: string): Map<string, string> {
         const trimmed = line.trim();
         if (!trimmed.startsWith('|')) continue;
         const cells = split(trimmed);
-        if (cells.length < 3 || cells[0].startsWith('---') || cells[0] === 'Flag') continue;
-        const flag = cells[0].replace(/`/g, '').split(/\s/)[0];
+        const first = cells[0] ?? '';
+        if (cells.length < 3 || first.startsWith('---') || first === 'Flag') continue;
+        const flag = first.replace(/`/g, '').split(/\s/)[0] ?? '';
         if (!flag.startsWith('--')) continue;
-        out.set(flag, cells[2].replace(/[`*]/g, '').trim());
+        out.set(flag, (cells[2] ?? '').replace(/[`*]/g, '').trim());
     }
     return out;
 }
@@ -237,7 +238,7 @@ function commandToOpHeader(opsRaw: string): Map<string, string> {
     const rowRe = /^\|\s*(\d+[a-z]?)\s*\|\s*([a-z-]+)\s*\|\s*`(dev-[a-z-]+)`/;
     for (const line of opsRaw.split('\n')) {
         const m = line.match(rowRe);
-        if (m) map.set(m[3], `${m[1]}. ${m[2]}`);
+        if (m) map.set(m[3] ?? '', `${m[1] ?? ''}. ${m[2] ?? ''}`);
     }
     return map;
 }
@@ -249,17 +250,18 @@ function opsSectionDefaults(sectionBody: string): Map<string, { value: string; c
         // Pair each default marker with the flag mentioned immediately before it on the line.
         const flags: Array<{ name: string; index: number }> = [];
         for (const m of line.matchAll(/`(--[a-z][a-z-]*)(?: <[^>]+>)?`/g)) {
-            flags.push({ name: m[1], index: m.index });
+            flags.push({ name: m[1] ?? '', index: m.index });
         }
         for (const m of line.matchAll(/\(default:?\s*\*?\*?`?([^`);]+?)\s*`?[;)]/g)) {
-            const value = m[1].replace(/[`*]/g, '').trim();
+            const value = (m[1] ?? '').replace(/[`*]/g, '').trim();
             const preceding = flags.filter((f) => f.index < m.index).pop();
             if (!preceding) continue;
             out.set(preceding.name, { value, claim: line.trim() });
         }
         // `X (default)` trailing form (e.g. "**`full`** (default):" in Modes prose).
         for (const m of line.matchAll(/`([^`]+)`\s*\(default\)/g)) {
-            out.set(m[1], { value: m[1], claim: line.trim() });
+            const v = m[1] ?? '';
+            out.set(v, { value: v, claim: line.trim() });
         }
     }
     return out;
@@ -369,11 +371,12 @@ export function extractValueBehaviorTable(
             .replace(/^\||\|$/g, '')
             .split('|')
             .map((c) => c.trim());
-        if (cells.length < 3 || cells[0].startsWith('---') || cells[0] === 'Value') continue;
-        const valueCell = cells[0].replace(/`/g, '').trim();
-        const value = valueCell.split(/\s/)[0];
+        const first = cells[0] ?? '';
+        if (cells.length < 3 || first.startsWith('---') || first === 'Value') continue;
+        const valueCell = first.replace(/`/g, '').trim();
+        const value = valueCell.split(/\s/)[0] ?? '';
         if (value !== 'inline' && value !== 'auto' && value !== '<name>') continue;
-        const behavior = normalizeSurfaceCell(cells[2]);
+        const behavior = normalizeSurfaceCell(cells[2] ?? '');
         out.set(value, { ...behavior, defaultWhenOmitted: /default when omitted/i.test(valueCell) });
     }
     return out.size === 3 ? out : null;
@@ -395,9 +398,10 @@ export function extractTriggerTable(crossCuttingRaw: string): string[] | null {
             .replace(/^\||\|$/g, '')
             .split('|')
             .map((c) => c.trim());
-        if (cells.length < 3 || cells[0].startsWith('---')) continue;
-        if (cells[0] === 'Trigger') continue;
-        rows.push(cells[0].replace(/\*\*/g, '').replace(/\.\s*$/, ''));
+        const first = cells[0] ?? '';
+        if (cells.length < 3 || first.startsWith('---')) continue;
+        if (first === 'Trigger') continue;
+        rows.push(first.replace(/\*\*/g, '').replace(/\.\s*$/, ''));
     }
     return rows.length >= 4 ? rows : null;
 }
@@ -414,8 +418,12 @@ function adrAgentClaims(adrRaw: string): Map<string, SurfaceBehavior> | null {
             conditional: false,
             defaultWhenOmitted: false,
         });
-        out.set('auto', { surfaces: new Set(['subprocess']), conditional: false });
-        out.set('<name>', { surfaces: new Set(['inline', 'subprocess']), conditional: true });
+        out.set('auto', { surfaces: new Set(['subprocess']), conditional: false, defaultWhenOmitted: false });
+        out.set('<name>', {
+            surfaces: new Set(['inline', 'subprocess']),
+            conditional: true,
+            defaultWhenOmitted: false,
+        });
         return out;
     }
     // Slice from the `## ADR-041` heading to the next `## ADR-` heading or end of input
@@ -429,7 +437,11 @@ function adrAgentClaims(adrRaw: string): Map<string, SurfaceBehavior> | null {
     const out = new Map<string, SurfaceBehavior>();
     // Rule sentence: "if the named executor is … inline; otherwise … subprocess" → <name> conditional.
     if (/the work happens inline;\s*otherwise it dispatches a subprocess/.test(section)) {
-        out.set('<name>', { surfaces: new Set(['inline', 'subprocess']), conditional: true });
+        out.set('<name>', {
+            surfaces: new Set(['inline', 'subprocess']),
+            conditional: true,
+            defaultWhenOmitted: false,
+        });
     }
     // Collapse mapping: `--subprocess` → `--agent <target>`. The target value's behavior is
     // claimed by the mapping itself — parse the target generically so a drifted mapping
@@ -438,12 +450,12 @@ function adrAgentClaims(adrRaw: string): Map<string, SurfaceBehavior> | null {
     // `--subprocess` is matched explicitly (`` `--subprocess` `` in the source).
     const subprocessTarget = section.match(/--subprocess`\s*→\s*`--agent ([a-z]+)/)?.[1];
     if (subprocessTarget === 'auto') {
-        out.set('auto', { surfaces: new Set(['subprocess']), conditional: false });
+        out.set('auto', { surfaces: new Set(['subprocess']), conditional: false, defaultWhenOmitted: false });
     } else if (subprocessTarget === 'inline') {
-        out.set('auto', { surfaces: new Set(['inline']), conditional: false });
+        out.set('auto', { surfaces: new Set(['inline']), conditional: false, defaultWhenOmitted: false });
     }
     if (/--inline`\s*→\s*`--agent inline/.test(section)) {
-        out.set('inline', { surfaces: new Set(['inline']), conditional: false });
+        out.set('inline', { surfaces: new Set(['inline']), conditional: false, defaultWhenOmitted: false });
     }
     return out.size === 0 ? null : out;
 }
@@ -637,8 +649,8 @@ export function checkAgentSsotIntegrity(files: ReadonlyMap<string, string>): Fla
         for (const block of tableBlocks) {
             const valuesFound = new Set<string>();
             for (const row of block) {
-                const firstCell = row.replace(/^\|/, '').split('|')[0].replace(/`/g, '').trim();
-                const token = firstCell.split(/\s/)[0].toLowerCase();
+                const firstCell = (row.replace(/^\|/, '').split('|')[0] ?? '').replace(/`/g, '').trim();
+                const token = (firstCell.split(/\s/)[0] ?? '').toLowerCase();
                 if (token === 'inline' || token === 'auto' || token === '<name>') {
                     valuesFound.add(token);
                 }
@@ -684,7 +696,7 @@ export function headingAnchors(raw: string): Set<string> {
     const anchors = new Set<string>();
     for (const line of raw.split('\n')) {
         const m = line.match(/^#{1,6}\s+(.*)$/);
-        if (m) anchors.add(headingSlug(m[1]));
+        if (m) anchors.add(headingSlug(m[1] ?? ''));
     }
     return anchors;
 }
@@ -704,7 +716,7 @@ export function checkSsotAnchorsResolve(crossCuttingRaw: string, files: Readonly
     for (const [filename, raw] of files) {
         const seen = new Set<string>();
         for (const m of raw.matchAll(/cross-cutting\.md#([\w-]+)/g)) {
-            const anchor = m[1];
+            const anchor = m[1] ?? '';
             if (anchors.has(anchor) || seen.has(anchor)) continue;
             seen.add(anchor);
             violations.push({

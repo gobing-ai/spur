@@ -35,14 +35,15 @@ const DEPRECATED_FLAGS: Record<string, Record<string, string>> = {
 /** Extract the `argument-hint:` value from a command .md frontmatter. */
 function argumentHint(raw: string): string {
     const m = raw.match(/^argument-hint:\s*"(.*)"\s*$/m);
-    return m ? m[1] : '';
+    return m?.[1] ?? '';
 }
 
 /** Extract `--flag` tokens from a string. */
 function extractFlags(text: string): Set<string> {
     const flags = new Set<string>();
     for (const m of text.matchAll(/(--[a-z][a-z-]*)/g)) {
-        flags.add(m[1]);
+        const flag = m[1];
+        if (flag !== undefined) flags.add(flag);
     }
     return flags;
 }
@@ -64,6 +65,7 @@ function commandTableFlags(): Map<string, Set<string>> {
         const nameMatch = line.match(/`(dev-[a-z-]+)`/);
         if (!nameMatch) continue;
         const commandName = nameMatch[1];
+        if (commandName === undefined) continue;
         map.set(commandName, extractFlags(line));
     }
     return map;

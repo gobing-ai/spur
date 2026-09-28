@@ -417,21 +417,21 @@ describe('runCli — exit classification against the source-local CLI', () => {
         const r = runCli(['--help']);
         expect(r.exit).toBe(0);
         expect(r.out).toContain('Commands:');
-    });
+    }, 60_000);
 
     test('a failing command returns its status and captured stderr', () => {
         const r = runCli(['definitely-not-a-noun']);
         expect(r.exit).toBeGreaterThan(0);
         expect(r.exit).not.toBe(124);
         expect(r.err.length).toBeGreaterThan(0);
-    });
+    }, 60_000);
 
     test('a command killed by the timeout is reported as 124, not as a failure', () => {
         // sweepWorkflows treats 124 as unverified rather than drift — a hung dry-run must
         // never be reported as a broken workflow.
         expect(runCli(['--help'], 50).exit).toBe(124);
-    });
-}, 60_000);
+    }, 60_000);
+});
 
 // ─── Seeded live surface ─────────────────────────────────────────────────
 //

@@ -45,6 +45,7 @@ export interface Violation {
         | 'unregistered_script'
         | 'forbidden_invocation'
         | 'converter_unavailable'
+        | 'gobing_ai_import'
         | 'incomplete';
     target: string;
     message: string;
@@ -209,8 +210,9 @@ function findGobingAiValueImports(dir: string): { file: string; line: number }[]
             const lines = readFileSync(full, 'utf8').split('\n');
             let stmtStart = 0;
             for (let i = 0; i < lines.length; i++) {
-                if (/^\s*(?:import|export)\b/.test(lines[i])) stmtStart = i;
-                if (/(?:from\s*|import\s*|import\s*\(\s*)['"]@gobing-ai\//.test(lines[i])) {
+                const line = lines[i] ?? '';
+                if (/^\s*(?:import|export)\b/.test(line)) stmtStart = i;
+                if (/(?:from\s*|import\s*|import\s*\(\s*)['"]@gobing-ai\//.test(line)) {
                     const opener = lines.slice(stmtStart, i + 1).join(' ');
                     if (!/^\s*(?:import|export)\s+type\b/.test(opener)) {
                         hits.push({ file: full, line: i + 1 });

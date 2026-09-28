@@ -1281,7 +1281,7 @@ function resolveFeature(input: ResolutionInput): StageResolution {
             reasonKind: 'dispatch',
             requiresConfirmation: row.requiresConfirmation,
             chain: false,
-            dispatchCommand: dispatchCmd,
+            dispatchCommand: dispatchCmd ?? null,
             nextObservableOutcome: row.rowId === 'B6' ? 'feature transition or wrap' : undefined,
         };
     }

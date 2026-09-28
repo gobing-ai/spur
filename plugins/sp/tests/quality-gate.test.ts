@@ -201,7 +201,7 @@ describe('quality-gate script (0823 d)', () => {
             return true;
         }) as typeof process.stderr.write;
         try {
-            expect(main([], {})).toBe(2);
+            expect(main([], { wbs: '' })).toBe(2);
             expect(writes.join('')).toBe(`${QUALITY_GATE_USAGE}\n`);
             expect(main(['run'], { wbs: '' })).toBe(2);
             expect(writes.join('')).toContain('quality-gate: env `wbs` is required\n');

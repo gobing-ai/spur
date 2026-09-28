@@ -59,7 +59,8 @@ function usage(): never {
 }
 
 function defaultSpurBin(): string {
-    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
+    const fromEnv = getEnvVar('SPUR_BIN');
+    if (fromEnv) return fromEnv;
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
     if (existsSync(local)) return `bun ${local}`;
     return 'spur';
@@ -71,6 +72,7 @@ function parseArgs(argv: string[]): { wbs: string; spurBin: string } {
     let i = 0;
     while (i < argv.length) {
         const arg = argv[i];
+        if (arg === undefined) break;
         if (arg === '--spur-bin') {
             spurBin = argv[i + 1] ?? defaultSpurBin();
             i += 2;
@@ -109,7 +111,7 @@ function writeStatus(wbs: string, status: 'PASS' | 'FAIL'): void {
     writeFileSync(join(statusDir, `${wbs}-precheck-evidence.status`), `${status}\n`);
 }
 
-function fail(wbs: string, reasons: string[]): void {
+function fail(wbs: string, reasons: string[]): never {
     writeStatus(wbs, 'FAIL');
     console.error(`task-evidence-precheck: FAIL`);
     for (const r of reasons) {

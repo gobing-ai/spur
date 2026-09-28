@@ -353,7 +353,7 @@ esac`,
         expect(foldIdx).toBeGreaterThan(0); // after the feature-sync soft step (index 0)
         expect(foldIdx).toBe(cmds.length - 2); // followed only by the R5 re-record step
         // Hard action: no exit-0 blanket — a scanner crash must fail record closed.
-        expect(cmds[foldIdx].trim().endsWith('exit 0')).toBe(false);
+        expect(cmds[foldIdx]?.trim().endsWith('exit 0')).toBe(false);
         // Repo-first, then superskill twin, failing closed (quality-gate pattern).
         expect(cmds[foldIdx]).toContain('superskill script path sp residual-scan.mjs');
         // Fail-closed completion gate: the done guard still re-asserts PASS + proof digest,
@@ -449,7 +449,7 @@ esac`,
         const cmds = shellCommands('done');
         const settleIdx = cmds.findIndex((c) => c.includes('residual-scan') && c.includes('settle'));
         expect(settleIdx).toBe(0);
-        expect(cmds[settleIdx].trim().endsWith('exit 0')).toBe(true);
+        expect(cmds[settleIdx]?.trim().endsWith('exit 0')).toBe(true);
     });
 
     test('failed renders the residual report as a soft action (F96 R5)', () => {

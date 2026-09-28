@@ -974,7 +974,7 @@ describe('CLI assert-clean (0676 R3)', () => {
         const { execFileSync } = await import('node:child_process');
         const dir = mkdtempSync(join(tmpdir(), 'assert-clean-'));
         try {
-            const git = (...args: string[]): void =>
+            const git = (...args: string[]): void => {
                 execFileSync('git', args, {
                     cwd: dir,
                     env: {
@@ -985,6 +985,7 @@ describe('CLI assert-clean (0676 R3)', () => {
                         GIT_COMMITTER_EMAIL: 't@t',
                     },
                 });
+            };
             git('init', '-q');
             // Mirror the real repo: .spur/ run glue is gitignored, so porcelain reports only
             // genuinely undeclared writes outside the sanctioned namespace (0676 R3 scope).
@@ -1328,9 +1329,8 @@ describe('paths grammar validation (0920 — deterministic scope owner)', () => 
             until: null,
         });
         expect(validateSelector({ date: '2026-02-30' })).toMatchObject({ ok: false });
-        expect(
-            validateSelector({ date: '2026-02-30' }).ok === false && validateSelector({ date: '2026-02-30' }).errors[0],
-        ).toContain('--date');
+        const invalidDate = validateSelector({ date: '2026-02-30' });
+        expect(invalidDate.ok === false && invalidDate.errors[0]).toContain('--date');
         expect(validateSelector({ date: '2024-02-29' }).ok).toBe(true); // leap day is real
     });
 
@@ -1353,9 +1353,8 @@ describe('paths grammar validation (0920 — deterministic scope owner)', () => 
 
     test('unknown mode, bad recompute literal fail by name', () => {
         expect(validateSelector({ mode: 'weekly' }).ok).toBe(false);
-        expect(
-            validateSelector({ mode: 'weekly' }).ok === false && validateSelector({ mode: 'weekly' }).errors[0],
-        ).toContain('--mode');
+        const invalidMode = validateSelector({ mode: 'weekly' });
+        expect(invalidMode.ok === false && invalidMode.errors[0]).toContain('--mode');
         expect(validateSelector({ recompute: 'yes' }).ok).toBe(false);
     });
 

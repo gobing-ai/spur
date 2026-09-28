@@ -169,6 +169,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
     const booleans = new Set<string>();
     for (let i = 0; i < rest.length; i++) {
         const tok = rest[i];
+        if (tok === undefined) continue;
         if (BOOL_FLAGS.has(tok)) {
             booleans.add(tok);
         } else if (VALUE_FLAGS.has(tok)) {

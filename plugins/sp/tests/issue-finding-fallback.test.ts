@@ -120,7 +120,7 @@ describe('(0556 R4) fallback categorization reproduces pre-rewrite findings on t
         expect(hits).toBeGreaterThanOrEqual(specRuns);
         // 4 identical runs ⇒ (4-1) × ~2min ≈ 6min ≥ S1 floor (30min–2h band is S1; S1 is the
         // documented minimum severity for this category in expected-findings.json).
-        expect(['S0', 'S1']).toContain(spec?.minSeverity);
+        expect(['S0', 'S1']).toContain(spec?.minSeverity ?? '');
         expect(findings.get('test-loop')).toBeGreaterThanOrEqual(1);
     });
 

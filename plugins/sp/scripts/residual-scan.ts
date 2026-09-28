@@ -105,8 +105,8 @@ export function normalizeAnchor(location: string): string {
 export function locationOf(locationCell: string, finding: string): string {
     const cell = locationCell.trim().replace(/`/g, '');
     if (cell.length > 0 && cell !== '—') return normalizeAnchor(cell);
-    const backtick = finding.match(/`([^`]+)`/);
-    return backtick === null ? '' : normalizeAnchor(backtick[1]);
+    const backtick = finding.match(/`([^`]+)`/)?.[1];
+    return backtick === undefined ? '' : normalizeAnchor(backtick);
 }
 
 /**
@@ -120,7 +120,7 @@ export function parseReviewFindings(
 ): Array<{ priority: string; location: string; text: string; deferral?: string }> {
     const section = taskContent.split(/^### Review\b/m)[1];
     if (section === undefined) return [];
-    const body = section.split(/^### /m)[0];
+    const body = section.split(/^### /m)[0] ?? '';
     const out: Array<{ priority: string; location: string; text: string; deferral?: string }> = [];
     const lines = body.split('\n');
     for (let i = 0; i < lines.length; i++) {

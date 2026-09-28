@@ -125,6 +125,7 @@ export function changedPathsOf(section: string | null): string[] {
     const paths: string[] = [];
     for (const match of section.matchAll(CHANGE_ENTRY)) {
         const path = match[1];
+        if (path === undefined) continue;
         // Path-like: no whitespace and at least one separator or dotted suffix, so prose
         // backticks never masquerade as change-map entries.
         if (/\s/.test(path)) continue;
@@ -148,7 +149,8 @@ const SURFACE_MATCHERS = DOC_OWNED_SURFACES.map((glob) => ({ glob, regex: surfac
 /** 0944 R2 surface match: doc-owned glob, corpus exclusion, new top-level directory. */
 export function driftReasonForPath(path: string): string | null {
     if (CORPUS_PREFIXES.some((prefix) => path.startsWith(prefix))) return null;
-    if (path.includes('/') && !KNOWN_TOP_LEVEL.has(path.split('/')[0])) {
+    const top = path.split('/')[0];
+    if (path.includes('/') && top !== undefined && !KNOWN_TOP_LEVEL.has(top)) {
         return 'new top-level workspace directory';
     }
     const match = SURFACE_MATCHERS.find((entry) => entry.regex.test(path));
@@ -158,7 +160,7 @@ export function driftReasonForPath(path: string): string | null {
 function defaultSpurRunner(env: DriftProbeEnv, cwd?: string): SpurRunner {
     const parts = (env.spurBin ?? 'spur').split(/\s+/).filter((part) => part.length > 0);
     return (args: string[]): SpurShowResult => {
-        const run = spawnSync(parts[0], [...parts.slice(1), ...args], {
+        const run = spawnSync(parts[0] ?? 'spur', [...parts.slice(1), ...args], {
             cwd,
             encoding: 'utf8',
             env: getEnvVars(),

@@ -103,8 +103,9 @@ through unchanged.
 
 Exit: 0 = sync handled (applied / no-op / suppressed-blocked / live-blocked).`;
 function defaultSpurBin() {
-  if (getEnvVar("SPUR_BIN"))
-    return getEnvVar("SPUR_BIN");
+  const fromEnv = getEnvVar("SPUR_BIN");
+  if (fromEnv)
+    return fromEnv;
   const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
   if (existsSync(local))
     return `bun ${local}`;
@@ -118,6 +119,8 @@ function parseBoundedSyncCliArgs(argv) {
   let help = false;
   for (let i = 0;i < argv.length; i++) {
     const a = argv[i];
+    if (a === undefined)
+      continue;
     if (a === "--help" || a === "-h")
       help = true;
     else if (a === "--json")

@@ -42,7 +42,8 @@ function usage(): never {
 }
 
 function defaultSpurBin(): string {
-    if (getEnvVar('SPUR_BIN')) return getEnvVar('SPUR_BIN');
+    const fromEnv = getEnvVar('SPUR_BIN');
+    if (fromEnv) return fromEnv;
     const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
     if (existsSync(local)) return `bun ${local}`;
     return 'spur';
@@ -55,6 +56,7 @@ function parseArgs(argv: string[]): { wbs: string; answer: string; spurBin: stri
     let i = 0;
     while (i < argv.length) {
         const arg = argv[i];
+        if (arg === undefined) break;
         if (arg === '--spur-bin') {
             spurBin = argv[i + 1] ?? defaultSpurBin();
             i += 2;

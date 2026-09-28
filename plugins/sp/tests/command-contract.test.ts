@@ -36,7 +36,7 @@ function slugify(heading: string): string {
 function implSection(raw: string): string {
     const parts = raw.split(/^## Implementation\n/m);
     if (parts.length < 2) return '';
-    return parts[1].split(/\n## /m)[0];
+    return (parts[1] ?? '').split(/\n## /m)[0] ?? '';
 }
 
 /** Create a minimal command .md in a temp plugins/sp/commands/ structure. */
@@ -364,7 +364,7 @@ describe('(c) target resolution — Skill() calls resolve to skills/', () => {
             const impl = implSection(raw);
             const calls = [...impl.matchAll(/Skill\(skill="sp:([a-z][a-z-]+)"/g)];
             for (const c of calls) {
-                const skillName = c[1];
+                const skillName = c[1] ?? '';
                 seen.add(skillName);
                 expect(
                     existsSync(join(SKILLS_DIR, skillName, 'SKILL.md')),
@@ -385,7 +385,7 @@ describe('(c) target resolution — Skill() calls resolve to skills/', () => {
             expect(impl, `${file}: legacy .spur/workflows path`).not.toMatch(/\.spur\/workflows/);
             const refs = [...impl.matchAll(/spur workflow (?:run|validate) ([a-z0-9-]+\.yaml)/g)];
             for (const r of refs) {
-                expect(existsSync(join(wfDir, r[1])), `${file}: unresolved workflow ${r[1]}`).toBe(true);
+                expect(existsSync(join(wfDir, r[1] ?? '')), `${file}: unresolved workflow ${r[1]}`).toBe(true);
             }
         }
     });
@@ -396,7 +396,7 @@ describe('(c) target resolution — Skill() calls resolve to skills/', () => {
             const impl = implSection(raw);
             const refs = [...impl.matchAll(/\[([^\]]*)\]\(([^)]*#([^)]*))\)/g)];
             for (const r of refs) {
-                const filePart = r[2].split('#')[0];
+                const filePart = r[2]?.split('#')[0] ?? '';
                 const anchor = r[3];
                 const resolved = join(COMMANDS_DIR, filePart);
                 if (existsSync(resolved)) {
@@ -465,7 +465,7 @@ describe('(f) validator catches violations in corrupted files', () => {
             const result = validate(tmp);
             const aViolations = result.violations.filter((v) => v.gate === 'a');
             expect(aViolations.length).toBeGreaterThan(0);
-            expect(aViolations[0].message).toContain('Behavior');
+            expect(aViolations[0]?.message).toContain('Behavior');
         } finally {
             rmSync(tmp, { recursive: true, force: true });
         }
@@ -520,7 +520,7 @@ describe('(f) validator catches violations in corrupted files', () => {
             const result = validate(tmp);
             const cViolations = result.violations.filter((v) => v.gate === 'c');
             expect(cViolations.length).toBeGreaterThan(0);
-            expect(cViolations[0].message).toContain('nonexistent');
+            expect(cViolations[0]?.message).toContain('nonexistent');
         } finally {
             rmSync(tmp, { recursive: true, force: true });
         }
@@ -544,7 +544,7 @@ describe('(f) validator catches violations in corrupted files', () => {
             const result = validate(tmp);
             const cViolations = result.violations.filter((v) => v.gate === 'c');
             expect(cViolations.length).toBeGreaterThan(0);
-            expect(cViolations[0].message).toContain('missing2');
+            expect(cViolations[0]?.message).toContain('missing2');
         } finally {
             rmSync(tmp, { recursive: true, force: true });
         }
@@ -557,7 +557,7 @@ describe('(f) validator catches violations in corrupted files', () => {
             const result = validate(tmp);
             const dViolations = result.violations.filter((v) => v.gate === 'd');
             expect(dViolations.length).toBeGreaterThan(0);
-            expect(dViolations[0].message).toContain('Skill');
+            expect(dViolations[0]?.message).toContain('Skill');
         } finally {
             rmSync(tmp, { recursive: true, force: true });
         }
@@ -578,7 +578,7 @@ describe('(f) validator catches violations in corrupted files', () => {
             const result = validate(tmp);
             const dViolations = result.violations.filter((v) => v.gate === 'd');
             expect(dViolations.length).toBeGreaterThan(0);
-            expect(dViolations[0].message).toContain('Skill()');
+            expect(dViolations[0]?.message).toContain('Skill()');
         } finally {
             rmSync(tmp, { recursive: true, force: true });
         }

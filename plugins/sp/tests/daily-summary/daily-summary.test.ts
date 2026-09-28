@@ -742,6 +742,8 @@ describe('git-backed integration', () => {
         const commits = await getGitCommits(today);
         expect(commits.length).toBeGreaterThan(0);
         const c = commits[0];
+        expect(c).toBeDefined();
+        if (!c) throw new Error('expected at least one commit');
         expect(c.hash).toMatch(/^[0-9a-f]+$/);
         expect(c.message).toContain('feat: initial');
         expect(c.filesChanged).toBeGreaterThan(0);

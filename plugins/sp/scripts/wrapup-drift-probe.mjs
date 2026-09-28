@@ -57,6 +57,8 @@ function changedPathsOf(section) {
   const paths = [];
   for (const match of section.matchAll(CHANGE_ENTRY)) {
     const path = match[1];
+    if (path === undefined)
+      continue;
     if (/\s/.test(path))
       continue;
     if (!path.includes("/") && !path.includes("."))
@@ -73,7 +75,8 @@ var SURFACE_MATCHERS = DOC_OWNED_SURFACES.map((glob) => ({ glob, regex: surfaceR
 function driftReasonForPath(path) {
   if (CORPUS_PREFIXES.some((prefix) => path.startsWith(prefix)))
     return null;
-  if (path.includes("/") && !KNOWN_TOP_LEVEL.has(path.split("/")[0])) {
+  const top = path.split("/")[0];
+  if (path.includes("/") && top !== undefined && !KNOWN_TOP_LEVEL.has(top)) {
     return "new top-level workspace directory";
   }
   const match = SURFACE_MATCHERS.find((entry) => entry.regex.test(path));
@@ -82,7 +85,7 @@ function driftReasonForPath(path) {
 function defaultSpurRunner(env, cwd) {
   const parts = (env.spurBin ?? "spur").split(/\s+/).filter((part) => part.length > 0);
   return (args) => {
-    const run = spawnSync(parts[0], [...parts.slice(1), ...args], {
+    const run = spawnSync(parts[0] ?? "spur", [...parts.slice(1), ...args], {
       cwd,
       encoding: "utf8",
       env: getEnvVars()

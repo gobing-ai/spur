@@ -154,6 +154,9 @@ async function printFingerprint(taskFile, featureFile, spurBin) {
   return 0;
 }
 var CLOSE_STATUSES = new Set(["done", "failed", "paused"]);
+function isCloseStatus(status) {
+  return CLOSE_STATUSES.has(status);
+}
 var TERMINAL_REASONS = new Set([
   "done",
   "paused-operator",
@@ -166,6 +169,9 @@ var TERMINAL_REASONS = new Set([
   "retry-exhausted"
 ]);
 var ACTION_STATUSES = new Set(["done", "failed"]);
+function isActionStatus(status) {
+  return ACTION_STATUSES.has(status);
+}
 function runRecordLogPath(runDir, runId) {
   const markdownPath = join(runDir, `${runId}.md`);
   const legacyLogPath = join(runDir, `${runId}.log`);
@@ -258,7 +264,7 @@ async function runDecideMode(input) {
   }
   if (!outcome.ok)
     return decideFailed(outcome.error ?? "decide failed without an error message");
-  process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, node: input.node, ...outcome })}
+  process.stdout.write(`${JSON.stringify({ runId: input.runId, node: input.node, ...outcome, ok: true })}
 `);
   appendRunLogLine(input.runId, `decide node=${input.node} value=${outcome.value ?? ""} source=${outcome.source ?? "default"} reason=${outcome.reason ?? ""}`);
   return await runTraceMode({
@@ -386,7 +392,7 @@ async function main() {
     if (!SAFE_RUN_ID_RE.test(runId))
       refuseUnsafeRunId(runId);
     if (close) {
-      if (!CLOSE_STATUSES.has(status))
+      if (!isCloseStatus(status))
         usage();
       if (reason.trim() === "") {
         if (status === "failed")
@@ -408,7 +414,7 @@ async function main() {
     }
     if (node.trim() === "" || kind.trim() === "")
       usage();
-    if (!ACTION_STATUSES.has(status))
+    if (!isActionStatus(status))
       usage();
     if (okRaw !== "true" && okRaw !== "false")
       usage();

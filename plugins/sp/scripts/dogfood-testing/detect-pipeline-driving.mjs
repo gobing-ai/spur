@@ -133,6 +133,8 @@ function parseCliArgs(argv) {
   let help = false;
   for (let i = 0;i < argv.length; i++) {
     const a = argv[i];
+    if (a === undefined)
+      continue;
     if (a === "--help" || a === "-h") {
       help = true;
     } else if (a === "--json") {

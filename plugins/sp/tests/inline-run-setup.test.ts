@@ -487,7 +487,7 @@ test('--decide threads the config switch through the driver boundary: switch on 
         const outcome = JSON.parse(proc.stdout.trim().split('\n')[0] ?? '{}') as Record<string, unknown>;
         expect(outcome.ok).toBe(true);
         expect(outcome.degraded).toBe(true);
-        expect(['error', 'no-backend']).toContain(outcome.reason);
+        expect(['error', 'no-backend']).toContain(String(outcome.reason));
         expect(outcome.value).toBe('retry');
         const row = JSON.parse(
             readFileSync(join(dir, '.spur', 'run', 'decide-test-cfg.decision.json'), 'utf8'),

@@ -50,8 +50,8 @@ function countLedgerDataRows(markdown: string): number | null {
 }
 
 function declaredExecutedSteps(markdown: string): number | null {
-    const match = markdown.match(/\*\*Steps:\*\*\s*\d+\s+derived,\s*(\d+)\s+executed/);
-    return match ? Number.parseInt(match[1], 10) : null;
+    const match = markdown.match(/\*\*Steps:\*\*\s*\d+\s+derived,\s*(\d+)\s+executed/)?.[1];
+    return match ? Number.parseInt(match, 10) : null;
 }
 
 // ── Cost evidence contract (task 0913, R2) ──────────────────────────────────
@@ -97,15 +97,15 @@ interface LedgerCostRow {
 function parseTokenCell(cell: string): number | null {
     const t = cell.trim();
     if (UNKNOWN_CELLS.has(t)) return null;
-    const m = t.match(/~?(\d+)/);
-    return m ? Number.parseInt(m[1], 10) : null;
+    const m = t.match(/~?(\d+)/)?.[1];
+    return m ? Number.parseInt(m, 10) : null;
 }
 
 function parsePctCell(cell: string): number | null {
     const t = cell.trim();
     if (UNKNOWN_CELLS.has(t)) return null;
-    const m = t.match(/(\d+(?:\.\d+)?)\s*%/);
-    return m ? Number.parseFloat(m[1]) : null;
+    const m = t.match(/(\d+(?:\.\d+)?)\s*%/)?.[1];
+    return m ? Number.parseFloat(m) : null;
 }
 
 function ledgerCostRows(markdown: string): LedgerCostRow[] {
@@ -169,7 +169,7 @@ function validateCostEvidence(markdown: string, errors: string[]): void {
     }
     for (const scope of pctScopes) {
         for (const m of scope.matchAll(/(\d+(?:\.\d+)?)\s*%/g)) {
-            const pct = Number.parseFloat(m[1]);
+            const pct = Number.parseFloat(m[1] ?? '');
             if (pct < 0 || pct > 100) errors.push(`impossible_percentage:${m[0].trim()}`);
         }
     }
@@ -291,6 +291,7 @@ export function parseValidateCliArgs(argv: string[]): ValidateCliArgs {
     let help = false;
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
+        if (a === undefined) continue;
         if (a === '--help' || a === '-h') help = true;
         else if (a === '--json') json = true;
         else if (a === '--file') file = argv[++i] ?? null;

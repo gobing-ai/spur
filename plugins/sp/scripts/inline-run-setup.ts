@@ -333,7 +333,12 @@ async function printFingerprint(taskFile: string, featureFile: string, spurBin: 
 }
 
 /** Terminal statuses the inline driver may declare when closing its run row. */
-const CLOSE_STATUSES = new Set(['done', 'failed', 'paused']);
+const CLOSE_STATUSES: ReadonlySet<string> = new Set<'done' | 'failed' | 'paused'>(['done', 'failed', 'paused']);
+
+/** Narrow an argv `--status` to the close vocabulary (`CLOSE_STATUSES`). */
+function isCloseStatus(status: string): status is 'done' | 'failed' | 'paused' {
+    return CLOSE_STATUSES.has(status);
+}
 
 /**
  * 0937 R2: closed terminal-reason vocabulary the driver may declare on `--close`.
@@ -354,7 +359,12 @@ const TERMINAL_REASONS = new Set([
 ]);
 
 /** Finalize statuses — a finish emission is terminal, so only done|failed are valid (0868 #4). */
-const ACTION_STATUSES = new Set(['done', 'failed']);
+const ACTION_STATUSES: ReadonlySet<string> = new Set<'done' | 'failed'>(['done', 'failed']);
+
+/** Narrow an argv `--status` to the finalize vocabulary (`ACTION_STATUSES`). */
+function isActionStatus(status: string): status is 'done' | 'failed' {
+    return ACTION_STATUSES.has(status);
+}
 
 /** Input for the ADR-117 emission modes (`--action` / `--close`). */
 import type { WorkflowActionTraceWriter } from '@gobing-ai/spur-app';
@@ -366,7 +376,12 @@ interface TraceModeInput {
     readonly kind: string;
     /** Declared terminal reason (0937 R2) — validated against TERMINAL_REASONS before this point. */
     readonly reason?: string;
-    readonly status: string;
+    /**
+     * Trace status: the finalize vocabulary plus the close-only `paused` (`CLOSE_STATUSES`).
+     * Both are assignable to the engine's `WorkflowStatus`; the plugin cannot import that
+     * type (standalone contract), so the literal union stands in for it.
+     */
+    readonly status: 'done' | 'failed' | 'paused';
     readonly ok: boolean;
     readonly durationMs: number;
     readonly spurBin: string;
@@ -557,7 +572,7 @@ async function runDecideMode(input: {
         return decideFailed(error instanceof Error ? error.message : String(error));
     }
     if (!outcome.ok) return decideFailed(outcome.error ?? 'decide failed without an error message');
-    process.stdout.write(`${JSON.stringify({ ok: true, runId: input.runId, node: input.node, ...outcome })}\n`);
+    process.stdout.write(`${JSON.stringify({ runId: input.runId, node: input.node, ...outcome, ok: true })}\n`);
     // 0976 R2: the run log names the decision's provenance, so a declared-default fallback is
     // never read as a model decision. Best-effort through the same run-log appender.
     appendRunLogLine(
@@ -700,7 +715,7 @@ async function main(): Promise<void> {
         if (runId.trim() === '' || status.trim() === '') usage();
         if (!SAFE_RUN_ID_RE.test(runId)) refuseUnsafeRunId(runId);
         if (close) {
-            if (!CLOSE_STATUSES.has(status)) usage();
+            if (!isCloseStatus(status)) usage();
             // 0937 R2: a failed close requires a declared reason, and any declared reason
             // must be a closed-enum value — both fail loudly BEFORE any write happens.
             if (reason.trim() === '') {
@@ -723,7 +738,7 @@ async function main(): Promise<void> {
             );
         }
         if (node.trim() === '' || kind.trim() === '') usage();
-        if (!ACTION_STATUSES.has(status)) usage();
+        if (!isActionStatus(status)) usage();
         // `--ok` and `--duration-ms` are required and exact for the action mode
         // (review finding #2): a miscased `--ok True` or an omitted `--duration-ms`
         // must be a loud usage error, never a silently-defaulted `ok=0` /

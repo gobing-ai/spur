@@ -50,6 +50,8 @@ function parseArgs(argv) {
   const booleans = new Set;
   for (let i = 0;i < rest.length; i++) {
     const tok = rest[i];
+    if (tok === undefined)
+      continue;
     if (BOOL_FLAGS.has(tok)) {
       booleans.add(tok);
     } else if (VALUE_FLAGS.has(tok)) {

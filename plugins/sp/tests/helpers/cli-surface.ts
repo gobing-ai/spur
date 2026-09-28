@@ -48,8 +48,8 @@ function commanderBlock(text: string, header: string): string[] | null {
         return null;
     }
     const block: string[] = [];
-    for (let i = start + 1; i < lines.length && /^ {2}/.test(lines[i]); i++) {
-        block.push(lines[i]);
+    for (let i = start + 1; i < lines.length && /^ {2}/.test(lines[i] ?? ''); i++) {
+        block.push(lines[i] ?? '');
     }
     return block;
 }
@@ -72,7 +72,7 @@ export function parseCommanderHelp(text: string): { commands: string[]; flags: s
             .filter(Boolean) ?? [];
     const flags =
         commanderBlock(text, 'Options:')?.flatMap((line) =>
-            [...line.matchAll(/(?:^|\s)(-{1,2}[A-Za-z][A-Za-z0-9-]*)/g)].map((m) => m[1]),
+            [...line.matchAll(/(?:^|\s)(-{1,2}[A-Za-z][A-Za-z0-9-]*)/g)].map((m) => m[1] ?? ''),
         ) ?? [];
     if (commands.length === 0 && flags.length === 0 && !text.includes('Commands:') && !text.includes('Options:')) {
         throw new Error('parseCommanderHelp: no Commander "Commands:" or "Options:" block found — not Commander help?');
@@ -187,7 +187,7 @@ function tableUnderHeading(markdown: string, heading: string): string[][] {
     }
     const rows: string[][] = [];
     for (let i = start + 1; i < lines.length; i++) {
-        const line = lines[i].trim();
+        const line = (lines[i] ?? '').trim();
         if (line.startsWith('#')) break;
         if (!line.startsWith('|')) continue;
         const cells = tableCells(line);
@@ -261,9 +261,9 @@ function paragraphContaining(text: string, needle: string): string {
         return '';
     }
     let start = idx;
-    while (start > 0 && lines[start - 1].trim() !== '') start--;
+    while (start > 0 && (lines[start - 1] ?? '').trim() !== '') start--;
     let end = idx;
-    while (end < lines.length - 1 && lines[end + 1].trim() !== '') end++;
+    while (end < lines.length - 1 && (lines[end + 1] ?? '').trim() !== '') end++;
     return lines
         .slice(start, end + 1)
         .join('\n')

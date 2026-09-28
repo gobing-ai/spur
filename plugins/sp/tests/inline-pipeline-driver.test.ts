@@ -14,6 +14,11 @@ interface ActionOptions {
     var?: string;
     message?: string;
     requireDiff?: boolean;
+    // Keys of the engine-internal action kinds this smoke harness simulates:
+    // proof.fingerprint (0937), decide (0943/0941), doctor.probe (0608).
+    expect?: string;
+    resultFile?: string;
+    default?: string;
 }
 
 interface PipelineAction {

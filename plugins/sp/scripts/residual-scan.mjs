@@ -47,14 +47,14 @@ function locationOf(locationCell, finding) {
   const cell = locationCell.trim().replace(/`/g, "");
   if (cell.length > 0 && cell !== "\u2014")
     return normalizeAnchor(cell);
-  const backtick = finding.match(/`([^`]+)`/);
-  return backtick === null ? "" : normalizeAnchor(backtick[1]);
+  const backtick = finding.match(/`([^`]+)`/)?.[1];
+  return backtick === undefined ? "" : normalizeAnchor(backtick);
 }
 function parseReviewFindings(taskContent) {
   const section = taskContent.split(/^### Review\b/m)[1];
   if (section === undefined)
     return [];
-  const body = section.split(/^### /m)[0];
+  const body = section.split(/^### /m)[0] ?? "";
   const out = [];
   const lines = body.split(`
 `);

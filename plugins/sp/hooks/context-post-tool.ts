@@ -115,7 +115,7 @@ export function redactText(text: string, capBytes: number = REDACTION_CAP_BYTES)
     if (bytes.length <= capBytes) return s;
     // Truncate on byte boundary then append marker
     let end = capBytes;
-    while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+    while (end > 0 && ((bytes[end] ?? 0) & 0xc0) === 0x80) end--;
     return `${new TextDecoder().decode(bytes.subarray(0, end))}…[truncated]`;
 }
 

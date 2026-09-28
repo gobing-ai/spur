@@ -296,6 +296,7 @@ export function parseCliArgs(argv: string[]): CliArgs {
 
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
+        if (a === undefined) continue;
         if (a === '--help' || a === '-h') {
             help = true;
         } else if (a === '--json') {

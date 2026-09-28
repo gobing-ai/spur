@@ -71,7 +71,10 @@ function anchorSet(file: string): Set<string> {
         for (const line of content.split('\n')) {
             if (/^#{1,6}\s+/.test(line)) anchors.add(slugifyHeading(line.replace(/^#+\s*/, '').trim()));
         }
-        for (const match of content.matchAll(/^\*\*Anchor:\*\*\s*`#([^`]+)`/gm)) anchors.add(match[1]);
+        for (const match of content.matchAll(/^\*\*Anchor:\*\*\s*`#([^`]+)`/gm)) {
+            const anchor = match[1];
+            if (anchor !== undefined) anchors.add(anchor);
+        }
         anchorCache.set(file, anchors);
     }
     return anchors;
@@ -86,9 +89,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     test('R16a — spine and competency skills have disjoint trigger surfaces', () => {
         // The work-unit keywords each competency owns; the spine must NOT trigger on these
         // (it dispatches the competency instead). This is the routing-ambiguity guard.
-        const spineDesc = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8')
-            .split('---')[1] // frontmatter block
-            .toLowerCase();
+        const spineRaw = readFileSync(join(SKILLS_DIR, 'spur-dev', 'SKILL.md'), 'utf8');
+        const spineDesc = (spineRaw.split('---')[1] ?? '').toLowerCase(); // frontmatter block
         // Phrases that belong to a competency's trigger, not the spine's.
         const competencyOnlyTriggers = [
             'decompose this',
@@ -123,6 +125,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             const text = readFileSync(file, 'utf8');
             for (const match of text.matchAll(/\bsp:([a-z][a-z0-9-]+)\b/g)) {
                 const name = match[1];
+                if (name === undefined) continue;
                 if (crossPluginOrCommand(name)) continue;
                 if (ownSkills.has(name) || ownAgents.has(name)) continue;
                 // A `spur-` / `code-` / `sys-` / `expert-` prefixed name is unambiguously meant to be
@@ -145,9 +148,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             const text = raw.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '');
             const dir = join(file, '..');
             for (const match of text.matchAll(linkRe)) {
+                const link = match[1];
+                if (link === undefined) continue;
                 // Skip obvious placeholders (angle-bracket vars like <slug>).
-                if (match[1].includes('<')) continue;
-                const target = join(dir, match[1]);
+                if (link.includes('<')) continue;
+                const target = join(dir, link);
                 try {
                     statSync(target);
                 } catch {
@@ -167,7 +172,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
 
     test('R16c — root AGENTS.md doc-map rows resolve to existing docs/*.md (task 0514 R2)', () => {
         const agentsMd = readFileSync(join(REPO_ROOT, 'AGENTS.md'), 'utf8');
-        const docTargets = [...new Set([...agentsMd.matchAll(/`(docs\/[^`]+\.md)`/g)].map((m) => m[1]))];
+        const docTargets = [...new Set([...agentsMd.matchAll(/`(docs\/[^`]+\.md)`/g)].map((m) => m[1] ?? ''))];
         expect(docTargets.length, 'AGENTS.md must carry a doc-map').toBeGreaterThan(0);
         const missing = docTargets.filter((target) => {
             try {
@@ -1106,7 +1111,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             if (!match?.[1]) {
                 throw new Error(`history-anatomy-cache.ts must keep exporting const ${name}`);
             }
-            return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+            return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '');
         };
         const sections = extractStringArray('REPORT_SECTIONS');
         // 0680 R5: standing Report-only advisories section takes the count to twelve.
@@ -1305,16 +1310,19 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             const lines = text.split('\n');
             let i = 0;
             while (i < lines.length) {
-                const isTable = lines[i].trim().startsWith('|');
-                const isBullet = !isTable && /^\s*[-*]\s+/.test(lines[i]);
+                const line = lines[i] ?? '';
+                const isTable = line.trim().startsWith('|');
+                const isBullet = !isTable && /^\s*[-*]\s+/.test(line);
                 if (!isTable && !isBullet) {
                     i++;
                     continue;
                 }
                 const block: string[] = [];
                 if (isTable) {
-                    while (i < lines.length && lines[i].trim().startsWith('|')) {
-                        block.push(lines[i].trim());
+                    while (i < lines.length) {
+                        const row = lines[i]?.trim();
+                        if (row === undefined || !row.startsWith('|')) break;
+                        block.push(row);
                         i++;
                     }
                     const rows = block.map((l) =>
@@ -1333,9 +1341,9 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
                     }
                 } else {
                     while (i < lines.length) {
-                        const m = lines[i].match(/^\s*[-*]\s+(.*)$/);
+                        const m = lines[i]?.match(/^\s*[-*]\s+(.*)$/);
                         if (!m) break;
-                        block.push(m[1].trim());
+                        block.push((m[1] ?? '').trim());
                         i++;
                     }
                     if (block.length >= 3 && block.every((b) => b.startsWith('`'))) {
@@ -1768,6 +1776,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
             const skillsLine = frontmatter.match(/^skills:\s*\[(.*)\]/m)?.[1] ?? '';
             for (const match of skillsLine.matchAll(/\bsp:([a-z][a-z0-9-]+)\b/g)) {
                 const name = match[1];
+                if (name === undefined) continue;
                 if (!skillDirs.includes(name)) {
                     offenders.push(`${file} -> sp:${name}`);
                 }

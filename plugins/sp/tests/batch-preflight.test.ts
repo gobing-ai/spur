@@ -4,6 +4,7 @@ import {
     parsePreflightCliArgs,
     preflightTask,
     quickReadiness,
+    type ReadinessOperation,
     recoveryHint,
     runPreflightCli,
 } from '../scripts/batch-preflight';
@@ -200,7 +201,9 @@ describe('quickReadiness — command-aware readiness (task 0814 R2)', () => {
     });
 
     test('invalid — unknown operation, or verify/run on an ineligible status', () => {
-        expect(quickReadiness({ wbs: '1', status: 'todo', operation: 'bogus' }).action).toBe('invalid');
+        expect(quickReadiness({ wbs: '1', status: 'todo', operation: 'bogus' as ReadinessOperation }).action).toBe(
+            'invalid',
+        );
         expect(quickReadiness({ wbs: '1', status: 'todo', operation: 'verify' }).action).toBe('invalid');
         expect(quickReadiness({ wbs: '1', status: 'backlog', operation: 'run' }).action).toBe('invalid');
     });

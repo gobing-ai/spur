@@ -424,7 +424,6 @@ describe('CLI modes', () => {
             expect(existsSync(join(tmpScoped, '0949-leftover.txt'))).toBe(false);
             expect(existsSync(otherTmp)).toBe(true);
             // deferral path: mark the box deferrable via deferrals file, settle creates task once
-            const _boxId = makeItemId('unchecked-box', 'task-file:1', '- [ ] box');
             // unchecked boxes are immune; use a diff-marker instead
             writeFileSync(
                 stub,

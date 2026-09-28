@@ -15,6 +15,7 @@
  * hermetic and prove the gate binds rather than whatever the tree currently says.
  */
 import { describe, expect, test } from 'bun:test';
+import type { FlagValidationResult } from '../scripts/validate-flag-contracts';
 import {
     bootMain,
     checkAgentSsotIntegrity,
@@ -179,11 +180,11 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
                 '',
             );
             expect(violations.length, JSON.stringify(violations, null, 2)).toBeGreaterThan(0);
-            expect(violations[0].flag).toBe('--agent');
-            const surfaces = violations[0].surfaces.map((s) => s.name);
+            expect(violations[0]?.flag).toBe('--agent');
+            const surfaces = violations[0]?.surfaces.map((s) => s.name);
             expect(surfaces).toContain('cross-cutting.md');
             expect(surfaces).toContain('flag-glossary.md');
-            expect(violations[0].authority).toBe('cross-cutting.md');
+            expect(violations[0]?.authority).toBe('cross-cutting.md');
         });
 
         test('both surfaces agree (auto → subprocess) → no violation', () => {
@@ -200,8 +201,8 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
         test('resolution order (unconditional subprocess) vs value table (conditional) → violation', () => {
             const violations = checkAgentValueTables(CROSS_CUTTING_NAME_THREE_WAY, GLOSSARY_AGENT_AUTO_SUBPROCESS, '');
             expect(violations.length, JSON.stringify(violations, null, 2)).toBeGreaterThan(0);
-            expect(violations[0].flag).toBe('--agent');
-            expect(violations[0].gate).toBe('C3b');
+            expect(violations[0]?.flag).toBe('--agent');
+            expect(violations[0]?.gate).toBe('C3b');
         });
 
         test('all in-file claims agree (conditional) → no violation', () => {
@@ -214,8 +215,8 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
         test('--keep-going naming dev-verifyall (never declared it) → violation', () => {
             const violations = checkGlossaryMembership(GLOSSARY_KEEP_GOING_DRIFTED, KEEP_GOING_HINTS);
             expect(violations.length, JSON.stringify(violations, null, 2)).toBeGreaterThan(0);
-            expect(violations[0].flag).toBe('--keep-going');
-            const claims = violations[0].surfaces.map((s) => s.claim).join(' ');
+            expect(violations[0]?.flag).toBe('--keep-going');
+            const claims = violations[0]?.surfaces.map((s) => s.claim).join(' ');
             expect(claims).toContain('dev-verifyall');
         });
 
@@ -232,9 +233,9 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
                 OPS_WRAPALL_DEFAULT_DONE,
             );
             expect(violations.length, JSON.stringify(violations, null, 2)).toBeGreaterThan(0);
-            expect(violations[0].flag).toBe('--status');
-            expect(violations[0].gate).toBe('C2');
-            expect(violations[0].authority).toBe('command file');
+            expect(violations[0]?.flag).toBe('--status');
+            expect(violations[0]?.gate).toBe('C2');
+            expect(violations[0]?.authority).toBe('command file');
         });
 
         test('table and ops agree (done) → no violation', () => {
@@ -401,7 +402,7 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
         });
 
         test('runCli human output reports violations on a dirty tree', () => {
-            const dirty = {
+            const dirty: FlagValidationResult = {
                 violations: [
                     {
                         flag: '--x',
@@ -481,17 +482,17 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
             const files = new Map<string, string>([['execution-workflow.md', `## --agent\n\n${PARAPHRASED_TABLE}`]]);
             const violations = checkAgentSsotIntegrity(files);
             expect(violations).toHaveLength(1);
-            expect(violations[0].gate).toBe('C4');
-            expect(violations[0].flag).toBe('--agent');
-            expect(violations[0].surfaces[0].name).toBe('execution-workflow.md');
+            expect(violations[0]?.gate).toBe('C4');
+            expect(violations[0]?.flag).toBe('--agent');
+            expect(violations[0]?.surfaces[0]?.name).toBe('execution-workflow.md');
         });
 
         test('dirty: cmd_agent.md restating the value table is flagged', () => {
             const files = new Map<string, string>([['cmd_agent.md', `# --agent\n\n${PARAPHRASED_TABLE}`]]);
             const violations = checkAgentSsotIntegrity(files);
             expect(violations).toHaveLength(1);
-            expect(violations[0].gate).toBe('C4');
-            expect(violations[0].surfaces[0].name).toBe('cmd_agent.md');
+            expect(violations[0]?.gate).toBe('C4');
+            expect(violations[0]?.surfaces[0]?.name).toBe('cmd_agent.md');
         });
 
         test('dirty: one violation per file even if multiple tables match', () => {
@@ -504,8 +505,8 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
         test('dirty: violation message references SSOT anchor', () => {
             const files = new Map<string, string>([['execution-workflow.md', PARAPHRASED_TABLE]]);
             const violations = checkAgentSsotIntegrity(files);
-            expect(violations[0].message).toContain('cross-cutting.md');
-            expect(violations[0].message).toContain('SSOT anchor');
+            expect(violations[0]?.message).toContain('cross-cutting.md');
+            expect(violations[0]?.message).toContain('SSOT anchor');
         });
     });
 
@@ -562,9 +563,9 @@ describe('sp plugin — cross-surface flag parity gate (task 0415 / H82)', () =>
             ]);
             const violations = checkSsotAnchorsResolve(SSOT_DOC, files);
             expect(violations).toHaveLength(1);
-            expect(violations[0].gate).toBe('C5');
-            expect(violations[0].surfaces[0].name).toBe('dev-operations.md');
-            expect(violations[0].message).toContain('inline-default-execution-surface-ssot-for---agent');
+            expect(violations[0]?.gate).toBe('C5');
+            expect(violations[0]?.surfaces[0]?.name).toBe('dev-operations.md');
+            expect(violations[0]?.message).toContain('inline-default-execution-surface-ssot-for---agent');
         });
 
         // Why C5 exists: substring assertions cannot catch this class, because the correct

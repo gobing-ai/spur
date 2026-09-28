@@ -103,7 +103,7 @@ describe('sp plugin — stage mutation_class values are drawn from the shared vo
         expect(shared.length, 'expected the adapter to share stages with the domain registry').toBeGreaterThan(0);
         for (const stage of shared) {
             expect(
-                stage.mutation_class,
+                stage.mutation_class as string,
                 `stage "${stage.id}" mutation_class disagrees with packages/domain/src/stage-registry/schema.ts`,
             ).toBe(domainPairs.get(stage.id) as string);
         }
@@ -183,30 +183,36 @@ describe('sp plugin — shared stage contracts fully parity-check the canonical 
     test('artifacts (kind/direction/identity) match the canonical registry exactly, order included', () => {
         for (const stage of shared) {
             const domain = domainContracts.get(stage.id);
-            expect(domain, `no domain record parsed for shared stage ${stage.id}`).toBeDefined();
+            if (domain === undefined) throw new Error(`no domain record parsed for shared stage ${stage.id}`);
             expect(
                 stage.artifacts.map((a) => `${a.kind}|${a.direction}|${a.identity ?? ''}`),
                 `stage "${stage.id}" artifacts drifted from packages/domain/src/stage-registry/schema.ts`,
-            ).toEqual(domain?.artifacts);
+            ).toEqual(domain.artifacts);
         }
     });
 
     test('gates (identifier/timing/minimum verdict) match the canonical registry exactly', () => {
         for (const stage of shared) {
             const domain = domainContracts.get(stage.id);
+            if (domain === undefined) throw new Error(`no domain record parsed for shared stage ${stage.id}`);
             expect(
                 (stage.gates ?? []).map((g) => `${g.name}|${g.timing}|${g.min_verdict ?? ''}`),
                 `stage "${stage.id}" gates drifted — the mirror cannot declare richer/cheaper checks than the canonical registry`,
-            ).toEqual(domain?.gates);
+            ).toEqual(domain.gates);
         }
     });
 
     test('reasoning_skill, mutation_class, and execution kind match the canonical registry', () => {
         for (const stage of shared) {
             const domain = domainContracts.get(stage.id);
-            expect(stage.reasoning_skill, `stage "${stage.id}" reasoning_skill drift`).toBe(domain?.reasoningSkill);
-            expect(stage.mutation_class, `stage "${stage.id}" mutation_class drift`).toBe(domain?.mutationClass);
-            expect(stage.execution.kind, `stage "${stage.id}" execution kind drift`).toBe(domain?.executionKind);
+            if (domain === undefined) throw new Error(`no domain record parsed for shared stage ${stage.id}`);
+            expect(stage.reasoning_skill, `stage "${stage.id}" reasoning_skill drift`).toBe(domain.reasoningSkill);
+            expect(stage.mutation_class as string, `stage "${stage.id}" mutation_class drift`).toBe(
+                domain.mutationClass,
+            );
+            expect(stage.execution.kind as string, `stage "${stage.id}" execution kind drift`).toBe(
+                domain.executionKind,
+            );
         }
     });
 

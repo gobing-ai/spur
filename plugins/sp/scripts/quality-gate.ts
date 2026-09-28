@@ -670,7 +670,13 @@ export function runQualityGate(
 export const QUALITY_GATE_USAGE =
     'usage: quality-gate.ts <run|recheck|light|status>  (env: wbs, qualityGateCmd, gateProbeCmd, proofDigest, runId)';
 
-export function main(argv: string[], env: QualityGateEnv = getEnvVars(), options: QualityGateOptions = {}): number {
+export function main(
+    argv: string[],
+    // `getEnvVars()` is the raw process env; `wbs` is validated below, so the index-signature
+    // record is narrowed to QualityGateEnv here.
+    env: QualityGateEnv = getEnvVars() as QualityGateEnv,
+    options: QualityGateOptions = {},
+): number {
     const mode = argv[0];
     if (mode !== 'run' && mode !== 'recheck' && mode !== 'light' && mode !== 'status') {
         process.stderr.write(`${QUALITY_GATE_USAGE}\n`);

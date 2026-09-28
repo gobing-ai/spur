@@ -130,7 +130,7 @@ export function parseArgs(argv: string[] = process.argv.slice(2)): CliOptions {
     for (let i = 0; i < args.length; i++) {
         const arg = args[i];
         if (arg === '--date' && i + 1 < args.length) {
-            options.date = args[++i];
+            options.date = args[++i] ?? options.date;
         } else if (arg === '--dry-run') {
             options.dryRun = true;
         } else if (arg === '--output' && i + 1 < args.length) {
@@ -451,8 +451,8 @@ export async function getGitCommits(date: string): Promise<GitCommit[]> {
                 // This is a numstat line (files changed)
                 const parts = line.split('\t');
                 if (parts.length >= 3) {
-                    const insertions = parseInt(parts[0], 10) || 0;
-                    const deletions = parseInt(parts[1], 10) || 0;
+                    const insertions = parseInt(parts[0] ?? '', 10) || 0;
+                    const deletions = parseInt(parts[1] ?? '', 10) || 0;
                     currentCommit.filesChanged = (currentCommit.filesChanged ?? 0) + 1;
                     currentCommit.insertions = (currentCommit.insertions ?? 0) + insertions;
                     currentCommit.deletions = (currentCommit.deletions ?? 0) + deletions;

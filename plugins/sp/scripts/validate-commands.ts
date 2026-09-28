@@ -66,7 +66,7 @@ function parseCommand(filePath: string, name: string): ParsedCommand {
     // Extract frontmatter between --- delimiters
     const fmMatch = raw.match(/^---\n([\s\S]*?)\n---/);
     const body = fmMatch ? raw.slice(fmMatch[0].length).trim() : raw;
-    const fm = fmMatch ? fmMatch[1] : '';
+    const fm = fmMatch?.[1] ?? '';
 
     const description = extractYamlField(fm, 'description');
     const argumentHint = extractYamlField(fm, 'argument-hint');
@@ -124,9 +124,9 @@ function parseCommand(filePath: string, name: string): ParsedCommand {
 /** Extract a plain YAML string field (handles quoted and unquoted). */
 function extractYamlField(fm: string, key: string): string | undefined {
     const re = new RegExp(`^${key}:\\s*(.+)$`, 'm');
-    const m = fm.match(re);
-    if (!m) return undefined;
-    const value = m[1].trim();
+    const m = fm.match(re)?.[1];
+    if (m === undefined) return undefined;
+    const value = m.trim();
     // Unquote double-quoted YAML scalars
     if (value.startsWith('"') && value.endsWith('"')) {
         return value.slice(1, -1).replace(/\\"/g, '"');
@@ -137,9 +137,9 @@ function extractYamlField(fm: string, key: string): string | undefined {
 /** Extract a YAML flow list ["A", "B"]. */
 function extractYamlList(fm: string, key: string): string[] | undefined {
     const re = new RegExp(`^${key}:\\s*\\[(.*)\\]$`, 'm');
-    const m = fm.match(re);
-    if (!m) return undefined;
-    return [...m[1].matchAll(/"([^"]*)"/g)].map((q) => q[1]);
+    const m = fm.match(re)?.[1];
+    if (m === undefined) return undefined;
+    return [...m.matchAll(/"([^"]*)"/g)].map((q) => q[1] ?? '');
 }
 
 const ALLOWED_HEADINGS: Record<string, true> = { Usage: true, Implementation: true };
@@ -262,7 +262,7 @@ function checkTargetResolution(cmd: ParsedCommand, skillsDir: string, root: stri
 
     // Extract ## Implementation section content
     const implPart = cmd.body.split(/^## Implementation\n/m)[1] ?? '';
-    const implSection = implPart.split(/\n## (?!Usage)/m)[0].trim();
+    const implSection = (implPart.split(/\n## (?!Usage)/m)[0] ?? '').trim();
 
     // Skill() calls: Skill(skill="sp:NAME",
     // The name charset must stay at least as wide as any name a skill directory can
@@ -270,7 +270,7 @@ function checkTargetResolution(cmd: ParsedCommand, skillsDir: string, root: stri
     // would pass a genuinely unresolved reference rather than report it.
     const skillCalls = [...implSection.matchAll(/Skill\(skill="sp:([a-z][a-z0-9-]*)"/g)];
     for (const ref of skillCalls) {
-        const skillName = ref[1];
+        const skillName = ref[1] ?? '';
         const skillPath = join(skillsDir, skillName, 'SKILL.md');
         if (!existsSync(skillPath)) {
             violations.push({
@@ -304,7 +304,7 @@ function checkTargetResolution(cmd: ParsedCommand, skillsDir: string, root: stri
     // Procedure reference + anchor — markdown links with anchors in Implementation
     const anchorRefs = [...implSection.matchAll(/\[([^\]]*)\]\(([^)]*#([^)]*))\)/g)];
     for (const ref of anchorRefs) {
-        const filePart = ref[2].split('#')[0];
+        const filePart = (ref[2] ?? '').split('#')[0] ?? '';
         const anchor = ref[3];
         // Resolve relative paths from commands/ directory
         const resolved = resolve(join(root, 'plugins', 'sp', 'commands'), filePart);
@@ -414,7 +414,7 @@ function parseMarkdownTable(section: string): MarkdownTable | null {
             .replace(/\|$/, '')
             .split(/(?<!\\)\|/)
             .map((c) => c.trim().replace(/\\\|/g, '|'));
-    const header = split(tableLines[0]);
+    const header = split(tableLines[0] ?? '');
     // Skip the separator row (--- cells).
     const dataRows = tableLines
         .slice(1)
@@ -430,7 +430,7 @@ function parseMarkdownTable(section: string): MarkdownTable | null {
 function extractHintTokens(hint: string): { positionals: string[]; flags: string[] } {
     const positionals = [...hint.matchAll(/<[^>]+>/g)].map((m) => m[0]);
     // Flags: capture the `--flag` literal, ignoring the value placeholder that follows.
-    const flags = [...hint.matchAll(/(--[a-z][a-z0-9-]*)/g)].map((m) => m[1]);
+    const flags = [...hint.matchAll(/(--[a-z][a-z0-9-]*)/g)].map((m) => m[1] ?? '');
     // Deduplicate while preserving order.
     return {
         positionals: [...new Set(positionals)],

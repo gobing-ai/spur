@@ -290,9 +290,9 @@ function checkReportStructure(reportMarkdown) {
     const knownRows = findingsBody.match(new RegExp(`^\\|\\s*(?:${catAlt}):[^|]+`, "gm")) ?? [];
     const invalidRows = findingsBody.match(/^\|\s*([^|:\s][^|:]*):[^|]+/gm) ?? [];
     for (const row of [...new Set([...knownRows, ...invalidRows])]) {
-      const segMatch = row.match(/^\|\s*([^:|]+):/);
-      if (segMatch && !FINDING_CATEGORIES.includes(segMatch[1].trim())) {
-        problems.push(`finding-invalid-key-category:${segMatch[1].trim()}`);
+      const seg = row.match(/^\|\s*([^:|]+):/)?.[1];
+      if (seg !== undefined && !FINDING_CATEGORIES.includes(seg.trim())) {
+        problems.push(`finding-invalid-key-category:${seg.trim()}`);
       }
       const rowLower = row.toLowerCase();
       for (const field of FINDING_FIELDS) {

@@ -45,12 +45,12 @@ const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** Shape of the generated inline bundle / repo app source this script consumes. */
 interface VerificationModule {
-    startFeatureVerificationReceipt: typeof import('../../packages/app/src/workflow/feature-verification-receipt')['startFeatureVerificationReceipt'];
-    completeFeatureVerificationReceipt: typeof import('../../packages/app/src/workflow/feature-verification-receipt')['completeFeatureVerificationReceipt'];
-    captureFeatureReceiptDigest: typeof import('../../packages/app/src/workflow/feature-verification-receipt')['captureFeatureReceiptDigest'];
-    resolveWorkflowDefinition: typeof import('../../packages/app/src/workflow/workflow-resolver')['resolveWorkflowDefinition'];
-    splitLaunchCommand: typeof import('../../packages/app/src/workflow/split-launch-command')['splitLaunchCommand'];
-    openInlineRunProjectDb: typeof import('../../packages/app/src/services/inline-run-setup')['openInlineRunProjectDb'];
+    startFeatureVerificationReceipt: typeof import('../../../packages/app/src/workflow/feature-verification-receipt')['startFeatureVerificationReceipt'];
+    completeFeatureVerificationReceipt: typeof import('../../../packages/app/src/workflow/feature-verification-receipt')['completeFeatureVerificationReceipt'];
+    captureFeatureReceiptDigest: typeof import('../../../packages/app/src/workflow/feature-verification-receipt')['captureFeatureReceiptDigest'];
+    resolveWorkflowDefinition: typeof import('../../../packages/app/src/workflow/workflow-resolver')['resolveWorkflowDefinition'];
+    splitLaunchCommand: typeof import('../../../packages/app/src/workflow/split-launch-command')['splitLaunchCommand'];
+    openInlineRunProjectDb: typeof import('../../../packages/app/src/services/inline-run-setup')['openInlineRunProjectDb'];
     ArtifactDao: new (
         adapter: never,
     ) => { record: (input: { runId: string; path: string; kind: string }) => Promise<unknown> };
