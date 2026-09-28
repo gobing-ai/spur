@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Dedup inert-var cells in idea-pipeline routing parity truth table
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-26T07:23:28.154Z
-updated_at: "2026-09-27T16:45:09.452Z"
+updated_at: "2026-09-28T05:56:37.317Z"
 feature_id: D64
 
 ac_altitude: task-local
@@ -48,34 +48,34 @@ AC altitude: task-local. These regression checks do not add feature ship criteri
 
 ### Requirements
 
-- [ ] R1. Restructure the parity loop so each case enumerates only its **live** var:
+- [x] R1. Restructure the parity loop so each case enumerates only its **live** var:
   - Give each case a `liveVar` (`'profile'` or `'__hitlAnswer'`) and its `liveValues`.
   - Keep `inertVar`/`fixed` as they are.
   - The outer loops cover only the file-state dimensions (design × needs × ac × cov).
   - For each case, iterate its `liveValues`, set `{ [c.liveVar]: v, [c.inertVar]: c.fixed }`, and call
     `evaluatePair` once.
   - Keep `evaluatePair`, `ORACLE_GUARDS`, `guardCommand` and the writer memo unchanged.
-- [ ] R2. Keep the parity semantics:
+- [x] R2. Keep the parity semantics:
   - Assert every unique cell's oracle-vs-live comparison with the same `describeState` failure message.
   - Update the inert-var comment (`:293-294`) to explain that the inert var is pinned *and not enumerated*.
-- [ ] R3. Change the tripwire to `expect(cells).toBe(1008)`, with a one-line derivation comment:
+- [x] R3. Change the tripwire to `expect(cells).toBe(1008)`, with a one-line derivation comment:
   `// 72 file states × (2 ac-generate edges × 3 profiles + 2 feature-check edges × 4 answers)`.
-- [ ] R4. Remove the `60000` timeout override if the measured runtime is under 2.5 s. Otherwise set it to about
+- [x] R4. Remove the `60000` timeout override if the measured runtime is under 2.5 s. Otherwise set it to about
   3× the measured runtime, rounded up to 5 s.
-- [ ] R5. Do not memoise or batch spawns (the rejected alternatives in `### Design`). Scope is the loop
+- [x] R5. Do not memoise or batch spawns (the rejected alternatives in `### Design`). Scope is the loop
   restructure only.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Routing parity holds with at most 40% of the same-session baseline wall time (req: R1, R2)
+- [x] AC1 — Routing parity holds with at most 40% of the same-session baseline wall time (req: R1, R2)
   - Verify: `(cd packages/app && bun test tests/workflow/idea-pipeline-routing.test.ts)` has 5 pass/0 fail; record before/after times.
-- [ ] AC2 — The unique-cell tripwire is 1008 (req: R3)
+- [x] AC2 — The unique-cell tripwire is 1008 (req: R3)
   - Verify: assert `expect(cells).toBe(1008)` with the derivation comment.
-- [ ] AC3 — A feature-check oracle mutation fails parity (req: R2)
+- [x] AC3 — A feature-check oracle mutation fails parity (req: R2)
   - Verify: invert the feature-check/decompose answer guard, observe failure, then revert.
-- [ ] AC4 — An ac-generate oracle mutation fails parity (req: R2)
+- [x] AC4 — An ac-generate oracle mutation fails parity (req: R2)
   - Verify: change the ac-generate/decompose profile guard, observe failure, then revert.
-- [ ] AC5 — The scoped gate remains green with an appropriate measured timeout (req: R4, R5)
+- [x] AC5 — The scoped gate remains green with an appropriate measured timeout (req: R4, R5)
   - Verify: `bun run spur-check` passes.
 
 ### Q&A
@@ -136,25 +136,57 @@ Rejected alternatives:
 
 ### Plan
 
-1. Baseline: run `(cd packages/app && bun test tests/workflow/idea-pipeline-routing.test.ts)` twice. Record the
-   lower wall time.
-2. Apply R1–R3 per the `### Design` sketch. Run the test file; expect 5 pass and a fall in the `expect()` count from
-   3526 to about 1078.
-3. Measure the wall time twice. Apply R4 based on the lower number.
-4. Run both mutation checks from the AC, reverting each.
-5. Run `bun run spur-check`. Commit as `test(app): enumerate only live vars in idea routing parity`.
+- [x] Baseline: run `(cd packages/app && bun test tests/workflow/idea-pipeline-routing.test.ts)` twice. Record the lower wall time.
+- [x] Apply R1–R3 per the `### Design` sketch. Run the test file; expect 5 pass and a fall in the `expect()` count from 3526 to about 1078.
+- [x] Measure the wall time twice. Apply R4 based on the lower number.
+- [x] Run both mutation checks from the AC, reverting each.
+- [x] Run `bun run spur-check`. Commit as `test(app): enumerate only live vars in idea routing parity`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+`packages/app/tests/workflow/idea-pipeline-routing.test.ts` — loop restructure only; `evaluatePair`, `ORACLE_GUARDS`, `guardCommand`, and the writer memo are unchanged (R5).
+
+- `packages/app/tests/workflow/idea-pipeline-routing.test.ts:257-260` — comment: each guard family has one live var; the inert var is pinned and deliberately not enumerated.
+- `packages/app/tests/workflow/idea-pipeline-routing.test.ts:261-287` — each case carries `liveVar` + `liveValues`; the outer loops now cover only the four file-state dimensions.
+- `packages/app/tests/workflow/idea-pipeline-routing.test.ts:290-311` — for each case, iterate its `liveValues` and build `{ design, [c.liveVar]: v, [c.inertVar]: c.fixed }`; the `describeState` oracle-vs-live assertion is unchanged.
+- `packages/app/tests/workflow/idea-pipeline-routing.test.ts:317-318` — tripwire `expect(cells).toBe(1008)` with the derivation comment.
+- `packages/app/tests/workflow/idea-pipeline-routing.test.ts:319` — timeout `25_000` (3× the measured 7.56 s, rounded up to the next 5 s).
+
+Measured same-session: baseline **23.25 s / 3526 expect() calls** → **7.56 s / 1078 expect() calls** (32% of baseline; AC1 requires ≤40%). Mutation checks: inverting the `feature-check→decompose` answer guard and switching the `ac-generate→decompose` profile guard each made the parity test fail with a `routing diverged` error; both reverted byte-identically.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:257-311` — cases carry `liveVar`/`liveValues`; outer loops cover only design×needs×ac×cov |
+| R2 | MET | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:257-260,305-311` — inert-var comment says pinned and not enumerated; the `describeState` oracle-vs-live assertion is unchanged |
+| R3 | MET | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:317-318` — tripwire 1008 with the derivation comment |
+| R4 | MET | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:319` — timeout 25_000 (3× measured 7.56 s, rounded up to 5 s) |
+| R5 | MET | `evaluatePair`/`ORACLE_GUARDS`/`guardCommand`/writer memo unchanged; no memoisation or batching added |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | command | baseline 23.25 s → 7.56 s (32% ≤ 40%); 5 pass / 0 fail |
+| AC2 | MET | test | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:318` asserts 1008; run reports 1078 expect() calls |
+| AC3 | MET | test | mutated `ORACLE_GUARDS['feature-check→decompose']` answer guard → parity test failed with `feature-check→decompose routing diverged`; reverted |
+| AC4 | MET | test | mutated `ORACLE_GUARDS['ac-generate→decompose']` profile guard → parity test failed with `ac-generate→decompose routing diverged`; reverted |
+| AC5 | MET | command | `bun run spur-check` → 9379 pass / 0 fail, 2 rules passed |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+**SECU findings** (self-review)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|---------|
+| P4 | Risk | `packages/app/tests/workflow/idea-pipeline-routing.test.ts:319` | 25 s is 3× one machine's measured runtime; a much slower host could still exceed it. Accepted per R4's stated rule. |
+| P4 | Coverage | `:290-311` | The inert var is no longer enumerated. Accepted: its value was overwritten at the old pin, so the dropped cells asserted identical outcomes (Q&A 2026-09-26). |
+
+No P1–P3 findings. The frozen oracle is untouched, so parity remains a real cross-check.
 
 ### References
 
@@ -165,4 +197,7 @@ Rejected alternatives:
 ### History
 
 - 2026-09-26T07:31:45.679Z backlog → todo (system)
+- 2026-09-28T05:55:41.865Z todo → wip (system)
+- 2026-09-28T05:56:36.983Z wip → testing (system)
+- 2026-09-28T05:56:37.317Z testing → done (system)
 

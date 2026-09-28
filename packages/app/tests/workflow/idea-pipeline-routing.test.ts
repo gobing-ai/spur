@@ -254,10 +254,16 @@ describe('idea-pipeline 0945 — routing truth-table parity (R3)', () => {
             ?.command ?? IDEA_ROUTE_WRITER_COMMAND;
 
     test('live route guards match the frozen pre-refactor oracle over the full cross product', () => {
+        // Each guard family decides its route from ONE var; the other is inert for that
+        // family. The inert var is pinned to the value that lets the live var decide, and is
+        // deliberately NOT enumerated — its loop value was invisible to both guards alike, so
+        // enumerating it only re-asserted the same cell.
         const cases: Array<{
             edge: string;
             from: string;
             to: string;
+            liveVar: 'profile' | '__hitlAnswer';
+            liveValues: string[];
             inertVar: 'profile' | '__hitlAnswer';
             fixed: string;
         }> = [
@@ -265,6 +271,8 @@ describe('idea-pipeline 0945 — routing truth-table parity (R3)', () => {
                 edge: `ac-generate→${to}`,
                 from: 'ac-generate',
                 to,
+                liveVar: 'profile' as const,
+                liveValues: ['auto', 'standard', ''],
                 inertVar: '__hitlAnswer' as const,
                 fixed: 'yes',
             })),
@@ -272,48 +280,43 @@ describe('idea-pipeline 0945 — routing truth-table parity (R3)', () => {
                 edge: `feature-check→${to}`,
                 from: 'feature-check',
                 to,
+                liveVar: '__hitlAnswer' as const,
+                liveValues: ['yes', 'no', 'cancel', ''],
                 inertVar: 'profile' as const,
                 fixed: 'auto',
             })),
         ];
         let cells = 0;
-        for (const profile of ['auto', 'standard', '']) {
-            for (const hitlAnswer of ['yes', 'no', 'cancel', '']) {
-                for (const design of DESIGN_VALUES) {
-                    for (const needs of NEEDS_VALUES) {
-                        for (const ac of STATUS_VALUES) {
-                            for (const cov of STATUS_VALUES) {
-                                const state: RouteState = {
-                                    vars: { profile, __hitlAnswer: hitlAnswer, design },
+        for (const design of DESIGN_VALUES) {
+            for (const needs of NEEDS_VALUES) {
+                for (const ac of STATUS_VALUES) {
+                    for (const cov of STATUS_VALUES) {
+                        for (const c of cases) {
+                            for (const v of c.liveValues) {
+                                const cell: RouteState = {
+                                    vars: { design, [c.liveVar]: v, [c.inertVar]: c.fixed },
                                     needs: needs.content,
                                     ac: ac.content,
                                     cov: cov.content,
                                 };
-                                for (const c of cases) {
-                                    // The inert var for this guard family is pinned to its fixed value;
-                                    // the enumerated value would be invisible to both guards alike.
-                                    const cell: RouteState = {
-                                        ...state,
-                                        vars: { ...state.vars, [c.inertVar]: c.fixed },
-                                    };
-                                    const oracle = ORACLE_GUARDS[c.edge];
-                                    if (oracle === undefined) throw new Error(`no oracle guard for edge ${c.edge}`);
-                                    const live = guardCommand(c.from, c.to);
-                                    const { oldPassed, newPassed } = evaluatePair(oracle, live, liveWriter, cell, cwd);
-                                    expect(
-                                        newPassed === oldPassed,
-                                        `${c.edge} routing diverged (oracle=${oldPassed}, live=${newPassed}) for ${describeState(cell)}`,
-                                    ).toBe(true);
-                                    cells++;
-                                }
+                                const oracle = ORACLE_GUARDS[c.edge];
+                                if (oracle === undefined) throw new Error(`no oracle guard for edge ${c.edge}`);
+                                const live = guardCommand(c.from, c.to);
+                                const { oldPassed, newPassed } = evaluatePair(oracle, live, liveWriter, cell, cwd);
+                                expect(
+                                    newPassed === oldPassed,
+                                    `${c.edge} routing diverged (oracle=${oldPassed}, live=${newPassed}) for ${describeState(cell)}`,
+                                ).toBe(true);
+                                cells++;
                             }
                         }
                     }
                 }
             }
         }
-        expect(cells).toBe(3456);
-    }, 60000);
+        // 72 file states × (2 ac-generate edges × 3 profiles + 2 feature-check edges × 4 answers)
+        expect(cells).toBe(1008);
+    }, 25_000);
 
     test('the rewritten guards read the derived files, keep the one-var contract, and stay at 3 logical commands', () => {
         for (const [from, to, varName] of [
