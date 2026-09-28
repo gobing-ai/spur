@@ -13,13 +13,18 @@
 # pauses,
 # even under --auto (Iron Law #6: irreversible action -> surface to human).
 #
-# Shape: start -> task-resolve -> doc-sync -> learnings-append -> metrics-record
+# Shape: start -> task-resolve -> doc-sync -> learnings-validate -> learnings-append
+#          -> metrics-record
 #          -> feature-transition (conditional: if vars.feature set)
 #          -> feature-verify (post-transition feature check gate, 0915 F1)
 #          -> branch-cleanup (conditional: if vars.merge=true)
 #          -> done
 #        doc-sync routes a contract violation to `repair` (cheap, no
 #        re-dispatch — ADR-118 pilot) and an executor failure to `failed`;
+#        learnings-validate (0986) rejects a nonempty narration-only capture to
+#        the same `repair` edge with a distinct invalid-learnings-shape status —
+#        expectFile proves existence, never shape — while empty/missing captures
+#        keep the soft skip by passing through to learnings-append;
 #        task-resolve with a VALIDATED empty list short-circuits to `skipped`;
 #        invalid wrap input, an unresolved/non-completed task, a failed metrics
 #        capture, a failed required sync, or a failed feature gate routes to
@@ -75,7 +80,7 @@
 "$schema": "@gobing-ai/spur/schemas/state-machine-workflow.schema.json"
 kind: state-machine
 name: wrapup-pipeline
-version: "5"
+version: "6"
 description: "Post-execution wrap-up: doc-sync (doc drift + learning capture), metrics, feature-transition, branch-cleanup"
 iterationBound: 10
 initialState: start
@@ -234,6 +239,33 @@ states:
           expectFile: .spur/run/${vars.__runId}-wrapup-learnings.md
           timeoutMs: ${vars.stepTimeoutMs}
 
+  - id: learnings-validate
+    description: >
+      Structural shape gate between doc-sync and the append (0986): expectFile
+      asserts the capture EXISTS and nothing about its shape, so a
+      stream-of-thought capture could be appended verbatim to the tracked
+      memory file. This state classifies a NONEMPTY capture — a date, a
+      four-digit task WBS, and at least one markdown bullet — and writes PASS
+      or invalid-learnings-shape to a run-scoped status. An empty or missing
+      capture keeps the existing soft skip (PASS) so learnings-append still
+      performs its no-op; an unclassifiable status fails loud instead of
+      appending it. Structural check only — the doc-sync prompt owns prose
+      quality; no new engine-level content contract.
+    onEnter:
+      # (warn) structural check only; the doc-sync prompt owns prose quality (0986 Design).
+      - kind: shell
+        options:
+          command: >-
+            mkdir -p .spur/run &&
+            S=".spur/run/$__runId-wrapup-learnings.status" &&
+            F=".spur/run/$__runId-wrapup-learnings.md" &&
+            if [ ! -s "$F" ] || awk '/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/{d=1} /[0-9][0-9][0-9][0-9]/{w=1} /^[[:space:]]*[-*] /{b=1} END{exit !(d+w+b==3)}' "$F"; then
+              printf 'PASS\n' > "$S";
+            else
+              printf 'invalid-learnings-shape\n' > "$S";
+            fi &&
+            exit 0
+
   - id: learnings-append
     description: >
       Best-effort soft append of the captured learnings to .spur/memory/learnings.md
@@ -259,15 +291,22 @@ states:
     description: >
       Contract-violation repair (ADR-118 pilot, 0871): doc-sync's agent.run missed
       its declared post-condition after a clean exit, so wrap-up does NOT re-dispatch
-      the expensive agent on this attempt. The miss is recorded to a run-scoped
-      repair status and wrap-up proceeds to metrics-record — the run log and action
-      trace already name the violated contract and the observed value.
+      the expensive agent on this attempt. Also the destination for a nonempty
+      capture that fails learnings-validate's shape gate (0986). The miss is
+      recorded to a run-scoped repair status — text distinguishing a narration-only
+      shape failure from the missing-file contract violation — and wrap-up proceeds
+      to metrics-record; the run log and action trace already name the violated
+      contract and the observed value.
     onEnter:
       - kind: shell
         options:
           command: >-
             mkdir -p .spur/run &&
-            printf 'contract-violation: doc-sync learnings capture missed its declared contract — repair skipped re-dispatch (ADR-118 pilot)\n' > ".spur/run/$__runId-wrapup-repair.status" &&
+            R=".spur/run/$__runId-wrapup-repair.status" &&
+            V="$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null)" &&
+            if [ "$V" = invalid-learnings-shape ]; then printf 'invalid-learnings-shape: narration-only learnings capture — append skipped, repair recorded (0986)\n' > "$R";
+            else printf 'contract-violation: doc-sync learnings capture missed its declared contract — repair skipped re-dispatch (ADR-118 pilot)\n' > "$R";
+            fi &&
             exit 0
 
   - id: metrics-record
@@ -460,8 +499,8 @@ transitions:
     guard:
       kind: contract-violation
   - from: doc-sync
-    to: learnings-append
-    description: Doc drift repair + learning capture succeeded — append learnings.
+    to: learnings-validate
+    description: Doc drift repair + learning capture succeeded — validate the capture's shape before appending.
     guard:
       kind: action-ok
   - from: doc-sync
@@ -472,6 +511,35 @@ transitions:
       existing fail semantics; a contract violation never falls through here
       because the contract-violation edge is declared first.
     trigger: executor-failure
+    guard:
+      kind: always
+
+  # ── learnings-validate: shape gate (0986) — invalid-shape to repair, PASS to append ──
+  # Declaration order matters: the discriminating invalid-shape edge is tried
+  # first, then PASS; an unreadable status fails loud rather than appending an
+  # unclassified capture.
+  - from: learnings-validate
+    to: repair
+    description: >
+      Nonempty capture failed the structural shape gate (no date/WBS/bullet) —
+      route to the cheap repair edge and never append narration (0986 R2).
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null)" = invalid-learnings-shape'
+  - from: learnings-validate
+    to: learnings-append
+    description: Capture is shape-valid (or empty/missing, keeping the soft skip) — append.
+    guard:
+      kind: shell
+      options:
+        command: 'test "$(cat .spur/run/$__runId-wrapup-learnings.status 2>/dev/null)" = PASS'
+  - from: learnings-validate
+    to: failed
+    terminalReason: failed-check
+    description: >
+      Validation status missing or unreadable — fail loud instead of appending
+      a capture whose shape was never classified.
     guard:
       kind: always
 

@@ -20,7 +20,16 @@
  */
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/spur-config';
@@ -47,6 +56,7 @@ interface TransitionDef {
     from: string;
     to: string;
     trigger?: string;
+    terminalReason?: string;
     guard?: { kind: string; options?: Record<string, unknown> };
 }
 
@@ -99,9 +109,10 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     const def = loadDef('wrapup-pipeline');
 
     test('identity: the definition carries an explicit version tag', () => {
-        // 0944: task-resolve gained the drift-probe + mode projection actions and the
-        // route-reason writer moved behind the wrapup-steps locator (composition caps).
-        expect(def.version).toBe('5');
+        // 0986: learnings-validate inserted between doc-sync and learnings-append.
+        // (0944: task-resolve gained the drift-probe + mode projection actions and the
+        // route-reason writer moved behind the wrapup-steps locator (composition caps).)
+        expect(def.version).toBe('6');
     });
 
     test('default feature gate checks only the selected feature and permits explicit override', () => {
@@ -126,14 +137,15 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
     });
 
     test('0770 definitions are all explicitly versioned (identity tag, not absence)', () => {
-        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '5'
-        // since 0944 added the drift probe + mode projection and moved the route-reason
-        // writer behind the wrapup-steps locator ('4' since 0871's repair edge).
+        // Exact per-definition pins: a silent version bump fails here. wrapup-pipeline is '6'
+        // since 0986 added the learnings shape gate ('5' since 0944 added the drift probe + mode
+        // projection and moved the route-reason writer behind the wrapup-steps locator; '4' since
+        // 0871's repair edge).
         // (feature-dev was pinned '3' until task 0866 retired the definition.)
         const expectedVersions: Record<string, string> = {
             'task-lifecycle': '1',
             'feature-lifecycle': '1',
-            'wrapup-pipeline': '5',
+            'wrapup-pipeline': '6',
         };
         for (const [name, version] of Object.entries(expectedVersions)) {
             expect(loadDef(name).version).toBe(version);
@@ -595,13 +607,13 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
             expect((state?.onEnter ?? []).map((a) => a.kind)).toEqual(['agent.run']);
         });
 
-        test('doc-sync routes contract violation → repair, success → learnings-append, failure → failed', () => {
+        test('doc-sync routes contract violation → repair, success → learnings-validate, failure → failed', () => {
             const edges = def.transitions.filter((t: TransitionDef) => t.from === 'doc-sync');
             // Declaration order is load-bearing: the discriminating contract-violation
             // edge is tried first, then action-ok success, then the always defense.
             expect(edges.map((e) => [e.to, e.guard?.kind, e.trigger ?? null])).toEqual([
                 ['repair', 'contract-violation', 'contract-violation'],
-                ['learnings-append', 'action-ok', null],
+                ['learnings-validate', 'action-ok', null],
                 ['failed', 'always', 'executor-failure'],
             ]);
         });
@@ -644,6 +656,123 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
                 const other = loadDef(name);
                 const uses = other.transitions.some((t: TransitionDef) => t.guard?.kind === 'contract-violation');
                 expect(uses, `${name} must not declare a contract-violation edge`).toBe(false);
+            }
+        });
+    });
+
+    describe('0986: learnings shape gate before append', () => {
+        const validateCmd = (): string => String(shellOf(def, 'learnings-validate', 0).options?.command ?? '');
+        const appendCmd = (): string => String(shellOf(def, 'learnings-append', 0).options?.command ?? '');
+        const repairCmd = (): string => String(shellOf(def, 'repair', 0).options?.command ?? '');
+        const guardCommand = (from: string, to: string): string => {
+            const edge = def.transitions.find(
+                (t: TransitionDef) => t.from === from && t.to === to && t.guard?.kind === 'shell',
+            );
+            return String(edge?.guard?.options?.command ?? '');
+        };
+        const runShell = (command: string, cwd: string, env: Record<string, string>) =>
+            spawnSync('sh', ['-c', command], { cwd, encoding: 'utf8', env: { ...getEnvVars(), ...env } });
+        const statusOf = (cwd: string, runId: string): string =>
+            readFileSync(join(cwd, `.spur/run/${runId}-wrapup-learnings.status`), 'utf8').trim();
+        const runId = 'r0986';
+
+        test('learnings-validate is a shell-only structural gate that names its status file', () => {
+            const state = def.states.find((s) => s.id === 'learnings-validate');
+            expect((state?.onEnter ?? []).map((a) => a.kind)).toEqual(['shell']);
+            expect(validateCmd()).toContain('wrapup-learnings.status');
+            // R1 predicates: a date, a four-digit WBS, and a markdown bullet.
+            expect(validateCmd()).toContain('[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]');
+            expect(validateCmd()).toContain('[-*] ');
+        });
+
+        test('R1/R2: a narration-only capture fails the gate, routes to repair, and never appends', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0986-narration-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                mkdirSync(join(cwd, '.spur/memory'), { recursive: true });
+                writeFileSync(
+                    join(cwd, `.spur/run/${runId}-wrapup-learnings.md`),
+                    'Single task WBS `0966`. Let me read the task, the constitution, and the current state of the docs that need drift repair.\nThe task was run on a worktree branch. Let me find the task file and read the current docs to assess drift.\n',
+                );
+                expect(runShell(validateCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(statusOf(cwd, runId)).toBe('invalid-learnings-shape');
+                // Invalid shape routes to repair; the append guard declines.
+                expect(runShell(guardCommand('learnings-validate', 'repair'), cwd, { __runId: runId }).status).toBe(0);
+                expect(
+                    runShell(guardCommand('learnings-validate', 'learnings-append'), cwd, { __runId: runId }).status,
+                ).not.toBe(0);
+                // Memory untouched — narration was never appended.
+                expect(existsSync(join(cwd, '.spur/memory/learnings.md'))).toBe(false);
+                // Repair status distinguishes the shape failure from the missing-file violation.
+                expect(runShell(repairCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(readFileSync(join(cwd, `.spur/run/${runId}-wrapup-repair.status`), 'utf8')).toContain(
+                    'invalid-learnings-shape',
+                );
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('R3: a dated WBS bullet passes and appends once, byte-for-byte', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0986-valid-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                const capture =
+                    '## 2026-09-27 — Task 0986\n\n- expectFile proves existence, never shape\n- validate before append\n';
+                writeFileSync(join(cwd, `.spur/run/${runId}-wrapup-learnings.md`), capture);
+                expect(runShell(validateCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(statusOf(cwd, runId)).toBe('PASS');
+                expect(
+                    runShell(guardCommand('learnings-validate', 'learnings-append'), cwd, { __runId: runId }).status,
+                ).toBe(0);
+                expect(runShell(guardCommand('learnings-validate', 'repair'), cwd, { __runId: runId }).status).not.toBe(
+                    0,
+                );
+                expect(runShell(appendCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(readFileSync(join(cwd, '.spur/memory/learnings.md'), 'utf8')).toBe(`${capture}\n`);
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('R3: empty and missing captures keep the soft skip', () => {
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0986-empty-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                // Missing capture: PASS, append is a no-op.
+                expect(runShell(validateCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(statusOf(cwd, runId)).toBe('PASS');
+                expect(runShell(appendCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(existsSync(join(cwd, '.spur/memory/learnings.md'))).toBe(false);
+                // Empty capture: same soft skip.
+                writeFileSync(join(cwd, `.spur/run/${runId}-wrapup-learnings.md`), '');
+                expect(runShell(validateCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(statusOf(cwd, runId)).toBe('PASS');
+                expect(runShell(appendCmd(), cwd, { __runId: runId }).status).toBe(0);
+                expect(existsSync(join(cwd, '.spur/memory/learnings.md'))).toBe(false);
+            } finally {
+                cleanup(cwd);
+            }
+        });
+
+        test('an unclassifiable status fails loud instead of appending', () => {
+            const defense = def.transitions.find(
+                (t: TransitionDef) => t.from === 'learnings-validate' && t.to === 'failed',
+            );
+            expect(defense?.guard?.kind).toBe('always');
+            expect(defense?.terminalReason).toBe('failed-check');
+            const cwd = mkdtempSync(join(tmpdir(), 'wrapup-0986-defense-'));
+            try {
+                mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+                // A missing status satisfies neither discriminating guard.
+                expect(runShell(guardCommand('learnings-validate', 'repair'), cwd, { __runId: runId }).status).not.toBe(
+                    0,
+                );
+                expect(
+                    runShell(guardCommand('learnings-validate', 'learnings-append'), cwd, { __runId: runId }).status,
+                ).not.toBe(0);
+            } finally {
+                cleanup(cwd);
             }
         });
     });
