@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Verify standalone binary installs against release SHA256SUMS with atomic replace
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-26T06:35:35.906Z
-updated_at: "2026-09-27T16:45:06.058Z"
+updated_at: "2026-09-28T15:53:11.896Z"
 feature_id: A33
 
 priority: P2
@@ -32,14 +32,14 @@ This task closes both defects without touching CI: the build emits `SHA256SUMS`,
 
 ### Requirements
 
-- [ ] R1. `buildBinaries()` (`scripts/commands/build-binaries.ts`) writes `dist/cli/SHA256SUMS` after all four targets compile. The file has exactly one line per asset in `TARGETS` order, in GNU `sha256sum` format: `<64 lowercase hex>␠␠spur-<os>-<arch>\n`. The digest is computed with `Bun.CryptoHasher('sha256')`. No SHA256SUMS is written when any target fails; the existing `throw` stays. The formatting lives in an exported pure helper `writeSha256Sums(dir: string, assetNames: readonly string[]): Promise<string>` that hashes `<dir>/<name>` and writes and returns the file content, so it can be tested without cross-compiling.
-- [ ] R2. `scripts/install.sh` downloads the binary to a temp file created in `INSTALL_DIR`, never directly to `${target}`. Use `mktemp "${INSTALL_DIR}/.spur-install.XXXXXX"`: the same directory keeps the final `mv` an atomic rename. A `trap` removes the temp files on EXIT/INT/TERM. On any failure the pre-existing `${target}` is byte-identical to before.
-- [ ] R3. The installer downloads `SHA256SUMS` from the same release base URL as the asset (`…/releases/latest/download/SHA256SUMS` or `…/releases/download/${VERSION}/SHA256SUMS`). It picks the line whose second field equals `${asset}` and compares that digest with the downloaded temp file's digest. It uses `sha256sum` when present, else `shasum -a 256`, and fails loudly (`err`) when neither exists. A mismatch fails with `checksum mismatch for <asset>: expected <x>, got <y>`. A missing entry for the asset fails with `no SHA256SUMS entry for <asset>`.
-- [ ] R4. A missing or undownloadable `SHA256SUMS` fails by default, naming the URL. The one explicit escape hatch is `SPUR_SKIP_VERIFY=1`: it prints `spur-install: WARNING — installing <asset> WITHOUT checksum verification` to stderr and continues. No other silent fallback.
-- [ ] R5. Only after verification passes: `chmod +x` the temp file, `mv -f` it onto `${target}`, then run the existing `init` seeding and PATH hint unchanged.
-- [ ] R6. A new env override `SPUR_RELEASE_URL` replaces the computed base URL (`https://github.com/${REPO}/releases/{latest/download|download/${VERSION}}`) when set. The asset and SHA256SUMS are fetched from `${SPUR_RELEASE_URL}/<name>`. It is documented in the header's Overrides block as "mirror / test base URL". This is what makes the installer testable hermetically with `file://` URLs, and curl supports `file://`.
-- [ ] R7. The script stays POSIX `sh` (`#!/usr/bin/env sh`, `set -eu`): no bash-isms (`[[`, arrays, `pipefail`, `local`). Run `shellcheck -s sh scripts/install.sh` if shellcheck is installed; it must be clean.
-- [ ] R8. Docs:
+- [x] R1. `buildBinaries()` (`scripts/commands/build-binaries.ts`) writes `dist/cli/SHA256SUMS` after all four targets compile. The file has exactly one line per asset in `TARGETS` order, in GNU `sha256sum` format: `<64 lowercase hex>␠␠spur-<os>-<arch>\n`. The digest is computed with `Bun.CryptoHasher('sha256')`. No SHA256SUMS is written when any target fails; the existing `throw` stays. The formatting lives in an exported pure helper `writeSha256Sums(dir: string, assetNames: readonly string[]): Promise<string>` that hashes `<dir>/<name>` and writes and returns the file content, so it can be tested without cross-compiling.
+- [x] R2. `scripts/install.sh` downloads the binary to a temp file created in `INSTALL_DIR`, never directly to `${target}`. Use `mktemp "${INSTALL_DIR}/.spur-install.XXXXXX"`: the same directory keeps the final `mv` an atomic rename. A `trap` removes the temp files on EXIT/INT/TERM. On any failure the pre-existing `${target}` is byte-identical to before.
+- [x] R3. The installer downloads `SHA256SUMS` from the same release base URL as the asset (`…/releases/latest/download/SHA256SUMS` or `…/releases/download/${VERSION}/SHA256SUMS`). It picks the line whose second field equals `${asset}` and compares that digest with the downloaded temp file's digest. It uses `sha256sum` when present, else `shasum -a 256`, and fails loudly (`err`) when neither exists. A mismatch fails with `checksum mismatch for <asset>: expected <x>, got <y>`. A missing entry for the asset fails with `no SHA256SUMS entry for <asset>`.
+- [x] R4. A missing or undownloadable `SHA256SUMS` fails by default, naming the URL. The one explicit escape hatch is `SPUR_SKIP_VERIFY=1`: it prints `spur-install: WARNING — installing <asset> WITHOUT checksum verification` to stderr and continues. No other silent fallback.
+- [x] R5. Only after verification passes: `chmod +x` the temp file, `mv -f` it onto `${target}`, then run the existing `init` seeding and PATH hint unchanged.
+- [x] R6. A new env override `SPUR_RELEASE_URL` replaces the computed base URL (`https://github.com/${REPO}/releases/{latest/download|download/${VERSION}}`) when set. The asset and SHA256SUMS are fetched from `${SPUR_RELEASE_URL}/<name>`. It is documented in the header's Overrides block as "mirror / test base URL". This is what makes the installer testable hermetically with `file://` URLs, and curl supports `file://`.
+- [x] R7. The script stays POSIX `sh` (`#!/usr/bin/env sh`, `set -eu`): no bash-isms (`[[`, arrays, `pipefail`, `local`). Run `shellcheck -s sh scripts/install.sh` if shellcheck is installed; it must be clean.
+- [x] R8. Docs:
   - `apps/cli/README.md` (installer section around `:46-55`) gains a short "Verification" note: the installer checks `SHA256SUMS`, and `SPUR_SKIP_VERIFY=1` is the explicit bypass.
   - It also gains a "Releasing standalone binaries" note: run `bun run build:binaries` in `apps/cli`, then upload **all** of `dist/cli/spur-*` **and** `dist/cli/SHA256SUMS` to the GitHub Release for the tag.
   - `README.md:81` gets a one-line pointer only.
@@ -48,9 +48,9 @@ This task closes both defects without touching CI: the build emits `SHA256SUMS`,
 
 Graduates feature A33 scenarios R1–R3 (exact titles below).
 
-- [ ] AC1 — R1 — Release build publishes checksums for every binary (req: R1)
-- [ ] AC2 — R2 — Installer rejects a binary whose checksum does not match (req: R2, R3, R5)
-- [ ] AC3 — R3 — Failed download never destroys a working install (req: R2, R4)
+- [x] AC1 — R1 — Release build publishes checksums for every binary (req: R1)
+- [x] AC2 — R2 — Installer rejects a binary whose checksum does not match (req: R2, R3, R5)
+- [x] AC3 — R3 — Failed download never destroys a working install (req: R2, R4)
 
 **Verify lens**
 
@@ -131,15 +131,58 @@ mv -f "${tmp}" "${target}"
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `scripts/commands/build-binaries.ts:29-37`: exported `writeSha256Sums(dir, assetNames)`. It hashes each asset with `Bun.CryptoHasher('sha256')`, writes GNU-format `<hex>␠␠<name>\n` lines in the given order, and returns the content.
+- `:63-65`: `buildBinaries` calls it after the `failed` throw, so no SUMS file is written on a failed target, with `TARGETS` order. It logs `wrote SHA256SUMS (4 entries)`.
+- `scripts/install.sh:9-17`: the header documents verification plus the `SPUR_RELEASE_URL` (mirror / test base URL) and `SPUR_SKIP_VERIFY` overrides.
+- `:45-51`: `base` comes from `SPUR_RELEASE_URL` when set, otherwise the latest or tag GitHub download base.
+- `:53-61`: `sha256_of` prefers `sha256sum`, falls back to `shasum -a 256`, and `err`s when neither exists.
+- `:69-72`: `mktemp` inside `INSTALL_DIR`, so the final `mv` is an atomic rename. The `EXIT` trap removes the temp and `.sums` files; `INT`/`TERM` → `exit 1`, which runs the EXIT trap once. This is CHANGED from the Design's single `EXIT INT TERM` trap: goal-equivalent, and it avoids running cleanup twice.
+- `:74-84`: download to the temp file, then fetch SHA256SUMS and match with `awk '$2 == a'`. Failures are `no SHA256SUMS entry`, `checksum mismatch … expected … got …`, and `checksum file unavailable: <url>`. `SPUR_SKIP_VERIFY=1` is the only bypass, and it prints a WARNING to stderr.
+- `:85-86`: `chmod +x` and `mv -f` onto the target only after verification. The `init` seeding and PATH hint are unchanged.
+- `scripts/commands/build-binaries.test.ts:10`: AC1. Format regex, per-line digest equality, and `shasum -a 256 -c SHA256SUMS` exits 0.
+- `scripts/commands/install-sh.test.ts:55-127`: drives the real `install.sh` against a `file://` release. Cases: happy path, AC2 mismatch, AC3 missing asset, AC3 interrupted transfer, R4 missing SUMS plus the `SPUR_SKIP_VERIFY` bypass, and R3 missing entry. The interrupted-transfer case (`:85`, a `curl` shim that writes `PARTIAL` to `-o` and then exits 56) was added because a missing `file://` source makes curl fail before it opens `-o`. That case alone cannot tell a temp-file download from a direct-to-target one. The direct-to-target mutant fails it (`Received: "PARTIAL"`).
+- `apps/cli/README.md:62-70`: Verification and Releasing-standalone-binaries notes. `README.md:85`: a one-line pointer.
+
+**Rollout note (Design § Rollout, Plan step 7).** On 2026-09-28, `https://github.com/gobing-ai/spur/releases/latest/download/SHA256SUMS` **and** `…/spur-darwin-arm64` both return 404 to an unauthenticated probe. `latest` currently ships no standalone binaries, so the default-fail checksum gate does not regress a working install path. The next binary release must upload `dist/cli/SHA256SUMS` alongside every `spur-*` asset; that remains a separate operator-approved action. `.github/workflows/publish.yml` was not edited: CI changes need operator approval.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `scripts/commands/build-binaries.ts:29-37` exported `writeSha256Sums` (Bun.CryptoHasher sha256, GNU two-space format, given order); `:63-65` called after the `failed` throw with `TARGETS` order |
+| R2 | MET | `scripts/install.sh:69-72` `mktemp "${INSTALL_DIR}/.spur-install.XXXXXX"` + EXIT trap removing temp/sums (INT/TERM → exit 1 → EXIT trap); `scripts/commands/install-sh.test.ts:85` interrupted transfer leaves target `OLD` and no leftovers |
+| R3 | MET | `scripts/install.sh:74-79` SHA256SUMS fetched from same base, `awk '$2 == a'` match, `checksum mismatch for <asset>: expected …, got …`, `no SHA256SUMS entry for <asset>`; `:53-61` `sha256_of` sha256sum → shasum -a 256 → `err` |
+| R4 | MET | `scripts/install.sh:80-83` missing SUMS → `err "checksum file unavailable: ${base}/SHA256SUMS …"`; only bypass `SPUR_SKIP_VERIFY=1` prints the WARNING to stderr; `scripts/commands/install-sh.test.ts:104` |
+| R5 | MET | `scripts/install.sh:85-86` `chmod +x` + `mv -f` of the verified temp file only after verification; init seeding and PATH hint unchanged |
+| R6 | MET | `scripts/install.sh:45-51` `SPUR_RELEASE_URL` overrides the computed base; `:16` documented as "mirror / test base URL"; tests drive it with `file://` |
+| R7 | MET | `shellcheck -s sh scripts/install.sh` (shellcheck available at /opt/homebrew/bin) → clean; `sh -n` OK; no `[[`, arrays, `pipefail`, `local` |
+| R8 | MET | `apps/cli/README.md:62-70` Verification + Releasing standalone binaries notes (upload all `dist/cli/spur-*` and `dist/cli/SHA256SUMS`); `README.md:85` one-line pointer |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — R1 — Release build publishes checksums for every binary | MET | test | `scripts/commands/build-binaries.test.ts:10` format regex, per-line digest equality, `shasum -a 256 -c SHA256SUMS` exit 0; 1 pass / 0 fail |
+| AC1 | MET | test | same evidence as the `AC1 — …` scenario row above (bare id ticks the task AC box) |
+| AC2 — R2 — Installer rejects a binary whose checksum does not match | MET | test | `scripts/commands/install-sh.test.ts:64` wrong digest → non-zero, `checksum mismatch`, target stays `OLD`, no temp leftovers; `:117` missing entry → `no SHA256SUMS entry`; `:55` happy path; 6 pass / 0 fail; negative proof: HEAD `install.sh` fails happy/AC2/R3/R4 cases |
+| AC2 | MET | test | same evidence as the `AC2 — …` scenario row above (bare id ticks the task AC box) |
+| AC3 — R3 — Failed download never destroys a working install | MET | test | `scripts/commands/install-sh.test.ts:74` missing asset and `:85` interrupted transfer (curl shim writes `PARTIAL` then exits 56) → non-zero, target stays `OLD`, no leftovers; `:104` missing SUMS keeps `OLD`; mutant downloading directly to target fails `:85` (`Received: "PARTIAL"`) |
+| AC3 | MET | test | same evidence as the `AC3 — …` scenario row above (bare id ticks the task AC box) |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
 
 ### References
 
@@ -153,4 +196,7 @@ mv -f "${tmp}" "${target}"
 ### History
 
 - 2026-09-26T06:37:36.050Z backlog → todo (system)
+- 2026-09-28T15:45:08.303Z todo → wip (system)
+- 2026-09-28T15:52:08.738Z wip → testing (system)
+- 2026-09-28T15:53:11.896Z testing → done (system)
 

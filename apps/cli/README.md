@@ -59,6 +59,16 @@ If `~/.local/bin` isn't already on your `PATH`, add it (e.g. `export PATH="$HOME
 in your shell profile). Supported targets: `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`.
 Windows: use the Bun path under WSL.
 
+**Verification.** The installer downloads to a temp file, checks it against the release's
+`SHA256SUMS`, and only then atomically replaces `spur`. A failed download, a checksum mismatch, or a
+missing `SHA256SUMS` leaves an existing install untouched and exits non-zero. `SPUR_SKIP_VERIFY=1` is
+the one explicit bypass (it prints a warning). `SPUR_RELEASE_URL` overrides the download base URL
+(a mirror, or a `file://` directory in tests).
+
+**Releasing standalone binaries.** Run `bun run build:binaries` in `apps/cli`, then upload **all**
+of `dist/cli/spur-*` **and** `dist/cli/SHA256SUMS` to the GitHub Release for the tag. A release
+without `SHA256SUMS` makes the installer fail by default.
+
 ### Package layout (what ships)
 
 The published tarball is a self-contained Bun bundle plus static assets:
