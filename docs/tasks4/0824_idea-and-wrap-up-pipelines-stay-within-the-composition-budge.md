@@ -4,7 +4,7 @@ name: idea and wrap-up pipelines stay within the composition budgets
 status: done
 template: feature-impl
 created_at: 2026-09-10T23:51:14.073Z
-updated_at: "2026-09-13T05:57:12.436Z"
+updated_at: "2026-09-28T19:37:37.054Z"
 feature_id: I21
 priority: P2
 tags:
@@ -419,11 +419,11 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Both graphs and model-query counts preserved. Handoff reuses its bundled application writer; wrap-up status, metrics and sync behavior retain their tests; moved prompts and fail-closed wrappers are covered. `plugins/sp/scripts/idea-handoff.ts:25`; `plugins/sp/scripts/wrapup-steps.ts:128`; `packages/app/tests/workflow/idea-pipeline-definition.test.ts:482`; `plugins/sp/tests/wrapup-steps.test.ts:344`. Executed: `bun run spur-check` (exit 0). |
+| R1 | MET | Both graphs and model-query counts preserved. Handoff reuses its bundled application writer; wrap-up status, metrics and sync behavior retain their tests; moved prompts and fail-closed wrappers are covered. `plugins/sp/scripts/idea-handoff.ts:25`; `plugins/sp/scripts/wrapup-steps.ts:128`; `packages/app/tests/workflow/idea-pipeline-definition.test.ts:482`; `plugins/sp/tests/wrapup-steps.test.ts:452`. Executed: `bun run spur-check` (exit 0). |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| Scenario: R1 — idea and wrap-up pipelines stay within the composition budgets | MET | test | Both graphs and model-query counts preserved. Handoff reuses its bundled application writer; wrap-up status, metrics and sync behavior retain their tests; moved prompts and fail-closed wrappers are covered. `plugins/sp/scripts/idea-handoff.ts:25`; `plugins/sp/scripts/wrapup-steps.ts:128`; `packages/app/tests/workflow/idea-pipeline-definition.test.ts:482`; `plugins/sp/tests/wrapup-steps.test.ts:344`. Executed: `bun run spur-check` (exit 0). |
+| Scenario: R1 — idea and wrap-up pipelines stay within the composition budgets | MET | test | Both graphs and model-query counts preserved. Handoff reuses its bundled application writer; wrap-up status, metrics and sync behavior retain their tests; moved prompts and fail-closed wrappers are covered. `plugins/sp/scripts/idea-handoff.ts:25`; `plugins/sp/scripts/wrapup-steps.ts:128`; `packages/app/tests/workflow/idea-pipeline-definition.test.ts:482`; `plugins/sp/tests/wrapup-steps.test.ts:452`. Executed: `bun run spur-check` (exit 0). |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

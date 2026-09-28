@@ -4,7 +4,7 @@ name: "Residual scanner script: scan, fold, settle and report modes"
 status: done
 template: feature-impl
 created_at: 2026-09-24T18:59:37.116Z
-updated_at: "2026-09-25T00:20:29.623Z"
+updated_at: "2026-09-28T19:37:36.733Z"
 feature_id: F96
 priority: P2
 tags:
@@ -56,7 +56,7 @@ Task-only checks: fold, settle and report behaviour (R4–R6) are proven by unit
 Contract owner: `docs/design/task-residual-sweep.md` (§Scanner, §Artifact). Follow it verbatim; any deviation updates that doc in the same commit.
 
 Decisions:
-- One script, four modes, pure functions plus a thin `main(argv, env)`. This mirrors wrapup-steps.ts (plugins/sp/scripts/wrapup-steps.ts:453) for testability. No class hierarchy.
+- One script, four modes, pure functions plus a thin `main(argv, env)`. This mirrors wrapup-steps.ts (plugins/sp/scripts/wrapup-steps.ts:583) for testability. No class hierarchy.
 - The diff source is `git diff --unified=0 <base>` (working tree vs base, covering committed and uncommitted changes) plus `git ls-files --others --exclude-standard` for untracked files, whose full content counts as added. Parse `+` lines, not `+++`, and track new-file line numbers from hunk headers.
 - Review parsing: split `### Review` (up to the next `### `) into markdown tables; locate the `Priority`/`Finding`/`Location` columns by header name. Take the location from the Location column, else the first backticked `path:line` in the finding. Normalize `path:12-18` to `path:12` for anchors.
 - Task file and feature id come from `<spur-bin> task show <wbs> --json` (`filePath`, `content`, `frontmatter.feature_id`), never a folder guess. The spur-bin resolution mirrors wrapup-steps `spurCommand` (plugins/sp/scripts/wrapup-steps.ts:67).
