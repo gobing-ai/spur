@@ -3580,3 +3580,59 @@ Classified 0980 as **T3** (CLI flag + non-UI behavior change) with no T1: ADR-05
 **Verification:** `help-doc-parity.test.ts` 2 pass / 0 fail (flag consistent between the commander tree and `docs/help/cmd_task.md:260`); `consistency.test.ts` 3 pass / 0 fail (includes the `planning-record-contracts.md` surface check); `bun run link-check` OK; frontmatter parses and `owns`/`authority`/`edit_rules` match §4.1 and §6.4/§6.5. Docs-only diff: 4 files, 12 insertions / 7 deletions; no task/feature corpus written.
 
 Artifact written to `/Users/robin/xprojects/spur-new/.spur/run/98783ca9-e55f-4e84-83ac-0e8500404af1-wrapup-learnings.md`.
+## Drift report — 2026-09-27
+
+**Checks run:** 8 (§7 items) · **Findings:** 1 · **Repaired:** 1
+
+| # | Doc | Reality says | Doc said | Authority | Trigger | Repair |
+|---|-----|--------------|----------|-----------|---------|--------|
+| 1 | `docs/design/planning-record-contracts.md:52` (`spur task record` row) | 0984 scoped the record no-match warning to tasks covering ≥1 feature scenario, via the shared `taskCoversAnyFeatureScenario` matcher (parity with `task verdict` + `L4.verdict-rows-match-no-scenario`) | Row documented flags/transition behavior only — the changed warning contract was absent; the commit synced only the plugin reference | `04` satellite (§4.1) | T3 | Appended the scope clause + 0984 attribution to the row |
+
+**Zero-finding checks (with the command that produced zero):**
+
+- **00_ADR** — `rg -n "record-missing|cited-symlink|persistWorktreeRuns" docs/00_ADR.md` → no delta. 0984 is a bugfix restoring/extending an existing contract; §6.1 excludes it from T1. ADR-127 (`--mode parallel` isolation/integration) is not contradicted.
+- **03_ARCHITECTURE** — §29's three batch bullets (per-task tree, rebase-then-ff, one corpus sync/batch) all still true; §29 explicitly defers the driver contract to `execution-batch.md`. Not defective → no §7.2 repair.
+- **04_DESIGN index** — no satellite added/moved; index facts unchanged (T9 not triggered).
+- **Plugin reference** — `git show fd0a81872 -- plugins/sp/skills/spur-dev/references/execution-batch.md` → the persist-out skip vocabulary (`cited-directory|symlink|non-file`) *was* synced in-commit. Owner per ADR-065 / ADR-127 Detail.
+- **CLI surface** — `rg -n "\.command\('" apps/cli/src/commands/` vs `rg -n '^#### \`spur ' docs/design/` → no verb/flag added by 0984 (the repeatable `--task-file` is on a plugin script, not a `spur` noun).
+- **contract-verify (§4.3)** — `00`/`03`/`04` `owns`/`authority`/`edit_rules`/`sync` match §4.1 rows; `updated_at: 2026-09-27` is current (their last commits are 09-27/28).
+- **AGENTS.md doc map vs §4.1** — matches in meaning (§4.4 satisfied).
+- **Feature status** — `docs/features/INDEX.md` spot-checked; 0984's H1 row is `done`, consistent.
+
+**Changed:** `docs/design/planning-record-contracts.md` (uncommitted). No task/feature corpus written.
+
+---
+
+# Wrapup learnings — 2026-09-27
+
+Task set: **0984** (feature H1). Doc-sync scope: `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md`, `docs/design/*`.
+
+## 0984 — Persist worktree run evidence so merged task files carry no dangling `.spur/run` anchors
+
+### Conventions
+
+- **One scope predicate per diagnostic.** A finding that exists on several surfaces must share a single scope helper. `taskCoversAnyFeatureScenario(taskAc, featureAc)` (exported from `packages/app/src/services/feature-check.ts`) now backs `spur task record`'s no-match warning, `spur task verdict`'s gap error, and the `L4.verdict-rows-match-no-scenario` feature-done-gate finding — three surfaces, one predicate.
+- **A verb's owning contract row is the T3 target.** A non-UI behavior change to `spur <noun> <verb>` must be synced in that verb's row in the owning `docs/design/` satellite, not only in the plugin reference that consumes it. 0984's commit synced `plugins/sp/skills/spur-dev/references/execution-batch.md` but missed `docs/design/planning-record-contracts.md`; wrapup repaired the `spur task record` row.
+- **A plugin-only script's envelope is owned by the plugin reference.** The `persistWorktreeRuns` output vocabulary lives in `plugins/sp/skills/spur-dev/references/execution-batch.md` (ADR-065; ADR-127 Detail pointer) — do not duplicate it into `docs/04_DESIGN.md` or a `docs/design/` satellite.
+- **Bugfix ≠ ADR.** Restoring/extending an existing contract (warning-scope parity) is excluded from `00_ADR.md` by §6.1; no ADR amendment was warranted.
+
+### Errors fixed
+
+- `spur task record` warned "rows matching no scenario of this feature" for **task-local** tasks, whose rows are legitimately not scenario-keyed. Now gated on `taskCoversAnyFeatureScenario(taskAc, ac)`: a covering task with `newRows > 0` and `newKeys === 0` warns; a task-local task never does.
+- Citation classification collapsed every non-regular-file citation into `cited-directory:<name>`. Now labelled by the real kind: `cited-directory:` / `cited-symlink:` / `cited-non-file:`.
+- A known bookkeeping lifecycle row (`task-lifecycle` / `feature-lifecycle`) with **no** two-file record aborted persist-out. Now reported as `skipped[{id, reason:'record-missing:<file>'}]` while the inserted DB row still counts in `persisted`; a missing *task-pipeline* record stays fatal (green-run evidence guarantee).
+- Duplicated gate logic (`summarizeRowIds`, AC-body read, scenario-coverage check) existed across the CLI, `feature-check.ts`, and `task-service.ts`. Extracted to shared exports (`summarizeRowIds`, `readFeatureAcBody`, `taskCoversAnyFeatureScenario`), re-exported from `packages/app/src/index.ts`.
+
+### Patterns
+
+- **Persist-out copy-set contract (0984 R1–R4).** `persistWorktreeRuns({ taskFiles })`: every literal `.spur/run/<file>` citation in the merged task files must resolve in the invoking tree after the call — copied when absent, idempotent when byte-identical, **refused (throws, zero writes, worktree retained → WT-5) when divergent**. Missing in both trees, an unreadable task file, or a citation set over `MAX_CITED_RUN_FILES = 64` also throws with zero writes performed.
+- **Citation extraction is deliberately permissive; classification is strict.** `RUN_CITATION_RE` keeps template metachars (`* … { } < > ? ,`) attached so abbreviated/glob references are classified non-literal rather than truncating into a phantom filename (`fadca099-` out of `fadca099-…-wrapup-learnings.md`); a negative lookbehind drops root-qualified paths (`knowledge-kit/.spur/run/…`, `/abs/…`, `~/.spur/run/…`) because another project's evidence is neither owned nor losable.
+- **Generated twin must be regenerated.** `plugins/sp/lib/inline-run.generated.mjs` is emitted from the app service — a source change without the twin drifts the bundled plugin.
+- **Feature corpus regeneration is a tool call.** Stale `## Tasks` blocks in F96 / H1 / F91 / D3 were refreshed with `spur feature refresh --feature`, never hand-edited.
+
+### Gotchas
+
+- `newKeys.length === 0` is **not** the warning condition on its own; the task must also cover at least one linked-feature scenario. Scope is the whole point of the fix.
+- Trailing sentence punctuation after a citation is prose, not a filename: `… .spur/run/x.json.` must not become a phantom `x.json.` (fatal, blocks teardown), and `… .spur/run/x.json, …` must not be dropped as non-literal.
+- Divergent target record bytes are never overwritten — `record-conflict:<file>` is a skip, not a merge.
+- Doc-evolve judgment: a doc merely **silent** about new behavior is not drift, but a verb's own contract row is a §5 T3 obligation — omitting a changed behavior from the verb's owning row is the drift (the 0980 `--no-lifecycle` precedent).
