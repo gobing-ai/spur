@@ -4,7 +4,7 @@ name: Make pipeline script resolution revision-safe across the project copy and 
 status: done
 template: issue
 created_at: 2026-09-26T00:36:38.726Z
-updated_at: "2026-09-28T22:08:29.473Z"
+updated_at: "2026-09-28T23:28:02.556Z"
 feature_id: I
 
 ac_altitude: task-local
@@ -219,23 +219,23 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Guard idiom at all 18 inventoried sites plus a 19th found in `plugins/sp/skills/spur-dev/references/execution-batch.md:855`: `config/workflows/{task-pipeline,wrapup-pipeline,idea-pipeline,feature-verification}.yaml` + the two reference files now take the project branch only under `[ -f config/plugin-scripts.json -a -f … ]`. `bun plugins/sp/scripts/script-contract-check.ts` → 0 violations; consumer replay with a stale vendored dir and no marker ran the installed twin for both probe forms |
-| R2 | MET | `plugins/sp/scripts/script-root.ts` (+ built `script-root.mjs` twin) writes `.spur/run/<runId>-script-root.json` with `{mode, source, dir, scriptSetDigest}`; registered in `config/plugin-scripts.json` as `standard`; wired as the first shell action of task-pipeline `precheck`, wrapup `start`, idea `start`, feature-verification `verify`, and the inline driver's setup snippet. Consumer replay recorded `{"mode":"installed","source":"global","dir":…,"scriptSetDigest":"sha256:…"}` and printed the one vendored-dir warning |
-| R3 | MET | Every `script-root` error path writes `{mode:"unresolved", error}` and exits 0 (`runScriptRoot` never throws past `write`); tests "unresolved mode" and "main … rejects an unknown flag" pin it. The pipeline action appends `; exit 0`. The 0824 fail-closed wrapper contract is unchanged (`bun run spur-check` green, 9414 pass) |
-| R4 | MET | All 13 remedy strings in the three YAMLs (task 7, wrapup 4, idea 1) + the driver reference now name `superskill install sp --marketplace gobing-ai/spur`; `${…}`-free shell keeps the workflow validator green |
-| R5 | MET | `scanShippedSurfaces` gained `config/workflows/*.yaml` (resolved from `pluginDir/../..`) with `[ -f …`, `[A-Z_]*S(?:CRIPT)?=`, and `bun plugins/sp/scripts/` patterns, allowed only when the line/block names `config/plugin-scripts.json`; new fixture test "R5 — an ungated project-first probe in a workflow YAML fails; a guarded probe passes" plus the live-repo test |
-| R6 | MET | `source-repo` mode returns `dir: plugins/sp/scripts`, `source: project`; test "source-repo mode" asserts it never probes superskill. The four sp-probe shells keep running `bun plugins/sp/scripts/<name>.ts` under the marker |
-| R7 | MET | `feature-verification.yaml` `verify` gained the `plugins/sp/scripts/feature-verification-steps.ts` project probe gated on the marker, the `.mjs` twin fallback, and a fail-closed `printf 'FAIL …' > .spur/run/$__runId-feature-verification.status` branch naming the install command |
+| R1 | MET | `config/workflows/task-pipeline.yaml:217` project branch gated on `config/plugin-scripts.json`; every probe in the four YAMLs + driver reference carries the marker (rg sweep: 0 ungated non-comment probes); consumer replay with a stale vendored `plugins/sp/scripts/` and no marker ran `TWIN script-root` / `TWIN fvs` |
+| R2 | MET | `plugins/sp/scripts/script-root.ts:13` writes `{mode, source, dir, scriptSetDigest}`; wired first at `config/workflows/task-pipeline.yaml:196`, `config/workflows/idea-pipeline.yaml:92`, `config/workflows/feature-verification.yaml:58`, `config/workflows/wrapup-pipeline.yaml:121`; FIXED this run: all 5 sites keyed the runner on `case "" in`, so a `.mjs` twin always ran under bun — now `case "$S"`, pinned by `plugins/sp/tests/task-pipeline-resilience.test.ts:146` (red before, green after) |
+| R3 | MET | `plugins/sp/tests/script-root.test.ts:114` unresolved mode exits 0; pipeline actions end `exit 0` |
+| R4 | MET | `config/workflows/idea-pipeline.yaml:92` remedy names `superskill install sp --marketplace gobing-ai/spur`; rg for bare `superskill install sp` without `--marketplace` across the YAMLs + references → 0 hits |
+| R5 | MET | `plugins/sp/scripts/script-contract-check.ts:121` scans workflow YAML with the marker guard at `plugins/sp/scripts/script-contract-check.ts:123`; `plugins/sp/tests/script-contract-check.test.ts:321`; live `script-contract-check` → 0 violations PASS |
+| R6 | MET | `plugins/sp/tests/script-root.test.ts:26` source-repo mode; marker-gated project branch at `config/workflows/task-pipeline.yaml:217` |
+| R7 | MET | `config/workflows/feature-verification.yaml:62` marker probe, `.mjs` twin, fail-closed FAIL; FIXED this run: FAIL write failed in a fresh consumer (no `.spur/run`) — added `mkdir -p .spur/run`, pinned by `plugins/sp/tests/feature-verification-scope.test.ts:93` (red before, green after) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `bash /tmp/replay-0960.sh` in a temp project (stale `plugins/sp/scripts/*.ts`, no marker): S=-form → `TWIN tool`, if-form → `TWIN wrapup-steps`, run-start → `TWIN script-root` + the vendored-dir warning |
-| AC2 | MET | test | `plugins/sp/tests/script-root.test.ts` "scriptSetDigest is non-recursive and changes when one resolved file changes"; replay emitted a live `scriptSetDigest` |
-| AC3 | MET | test | "unresolved mode: nothing resolves → error recorded, exit 0, run never aborted"; the pipeline action ends `; exit 0` |
-| AC4 | MET | command | `grep -rn "superskill install sp" config/workflows/*.yaml plugins/sp/skills/spur-dev/references/*.md` — every remedy carries `--marketplace gobing-ai/spur`; `bun run spur-check` rule `recommended-pre-check` green |
-| AC5 | MET | test | `plugins/sp/tests/script-contract-check.test.ts` R5 fixture (ungated → `forbidden_invocation` on `ungated.yaml`; guarded → none); live repo `script-contract-check` → 0 violations |
-| AC6 | MET | test | `script-root.test.ts` "source-repo mode: the marker selects the project tree and never probes superskill"; the four pipelines keep `bun plugins/sp/scripts/<name>.ts` under the marker |
-| AC7 | MET | command | `config/workflows/feature-verification.yaml` `verify` resolves `plugins/sp/scripts/feature-verification-steps.ts` under the marker, else `superskill script path sp feature-verification-steps.mjs`, else writes `FAIL …` naming the install command |
+| AC1 | MET | command | consumer replay (`$TMPDIR/replay0960.ts`): stale vendored dir, no marker → both verify actions ran the twin; warning path pinned by `plugins/sp/tests/script-root.test.ts:56` |
+| AC2 | MET | test | `plugins/sp/tests/script-root.test.ts:127` digest changes on one-file edit (25 pass / 0 fail) |
+| AC3 | MET | test | `plugins/sp/tests/script-root.test.ts:114`; `plugins/sp/tests/feature-verification-scope.test.ts:93` no-script run exits 0 with FAIL status |
+| AC4 | MET | command | `rg -n "superskill install sp" config/workflows/*.yaml plugins/sp/skills/spur-dev/references/*.md \| rg -v marketplace` → no output |
+| AC5 | MET | test | `plugins/sp/tests/script-contract-check.test.ts:321`; `bun plugins/sp/scripts/script-contract-check.ts` → 0 violation(s) PASS |
+| AC6 | MET | test | `plugins/sp/tests/script-root.test.ts:26` source-repo mode never probes superskill |
+| AC7 | MET | test | `plugins/sp/tests/feature-verification-scope.test.ts:93` FAIL + install command in fresh consumer; replay twin=true ran `TWIN fvs` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -248,7 +248,6 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:ffa8724fb6293c925722f90836d0e894b6d9cc16540b7ffc11f6fe52c11f4fa8 |
 
 ### References
 

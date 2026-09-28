@@ -12,8 +12,10 @@
  *        consult the feature pass or the relocated repo-wide test tree.
  */
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
 import { parse as parseYaml } from 'yaml';
 
 const REPO_ROOT = join(import.meta.dir, '../../..');
@@ -86,6 +88,31 @@ describe('feature-verification scope split (task 0872)', () => {
             if (t.guard) guardKinds.add(t.guard.kind);
         }
         expect([...guardKinds].sort()).toEqual(['always', 'shell']);
+    });
+
+    test('0960 R7: with no resolvable script, verify writes FAIL naming the install command in a fresh consumer', () => {
+        const wf = readWorkflow('feature-verification.yaml');
+        const verify = (wf.states as Array<{ id: string; onEnter?: Array<{ options?: { command?: string } }> }>).find(
+            (s) => s.id === 'verify',
+        );
+        const command = verify?.onEnter?.[1]?.options?.command ?? '';
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0960-fv-'));
+        try {
+            // No marker, no .spur/run, and a superskill stub that resolves nothing.
+            mkdirSync(join(dir, 'bin'));
+            writeFileSync(join(dir, 'bin', 'superskill'), '#!/bin/sh\nexit 2\n');
+            chmodSync(join(dir, 'bin', 'superskill'), 0o755);
+            const result = Bun.spawnSync(['sh', '-c', command], {
+                cwd: dir,
+                env: { ...getEnvVars(), PATH: `${join(dir, 'bin')}:${getEnvVar('PATH') ?? ''}`, __runId: 'r0960' },
+            });
+            expect(result.exitCode).toBe(0);
+            const status = readFileSync(join(dir, '.spur/run/r0960-feature-verification.status'), 'utf8');
+            expect(status).toStartWith('FAIL');
+            expect(status).toContain('superskill install sp --marketplace gobing-ai/spur');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test('R4: feature-lifecycle verifying→done requires the strict done check (bound receipt, 0915)', () => {

@@ -118,7 +118,7 @@ states:
       - kind: shell
         options:
           command: >-
-            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
+            S=plugins/sp/scripts/script-root.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp script-root.mjs 2>/dev/null)"; RUNNER=bun; case "$S" in *.mjs) RUNNER=node ;; esac; [ -f "$S" ] && "$RUNNER" "$S" --run-id "$__runId" --spur-bin "$spurBin" || echo "script-root failed closed — run 'superskill install sp --marketplace gobing-ai/spur'" >&2; exit 0
       - kind: note
         options:
           message: "Wrap-up pipeline start for tasks: ${vars.tasks}. Task statuses are NOT mutated."

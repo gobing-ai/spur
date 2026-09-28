@@ -143,6 +143,32 @@ describe('0503 task-pipeline resilience', () => {
         expect(commandFor('precheck', 2)).not.toContain('|| true');
     });
 
+    test('run-start script-root runs a resolved .mjs twin under node, not bun (0960 R2)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-0960-runner-'));
+        try {
+            // Consumer: no source-repo marker, so the staged .mjs twin is the only resolution.
+            const bin = join(dir, 'bin');
+            mkdirSync(bin, { recursive: true });
+            const twin = join(dir, 'script-root.mjs');
+            writeFileSync(twin, '');
+            const ran = join(dir, 'runner');
+            executable(bin, 'superskill', `echo "${twin}"`);
+            executable(bin, 'node', `echo node > "${ran}"`);
+            executable(bin, 'bun', `echo bun > "${ran}"`);
+            const command = commandFor('precheck', 0);
+            expect(command).toContain('script-root');
+            const result = runShell(command, dir, {
+                __runId: 'r0960',
+                spurBin: 'spur',
+                PATH: `${bin}:${getEnvVar('PATH') ?? ''}`,
+            });
+            expect(result.exitCode).toBe(0);
+            expect(readFileSync(ran, 'utf8')).toBe('node\n');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('precheck size gate fails closed when the checker script is absent (0723 R2)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0723-nosize-'));
         try {
