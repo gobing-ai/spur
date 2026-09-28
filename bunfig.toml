@@ -8,6 +8,10 @@ exact = true
 coverage = true
 coverageReporter = ["text", "lcov"]
 coverageDir = ".coverage"
+# Bun applies this table PER MEASURED FILE, not to the aggregate (verified 2026-09-28: a
+# single file at 60% functions failed the whole run while the "All files" line read 99%,
+# and the run still reported `0 fail`). A new module that becomes test-visible can therefore
+# fail `bun test` without any failing test.
 coverageThreshold = { lines = 0.9, functions = 0.9 }
 passWithNoTests = true
 preload = ["./tests/setup.ts"]
