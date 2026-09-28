@@ -156,6 +156,47 @@ describe('0968 runAgentLoopCore', () => {
         const code = await runAgentLoopCore(deps, { recipient: 'orch-1', pollMs: 10, flags: {}, runtime: {} });
         expect(code).toBe(2);
     });
+
+    test('a heartbeat that loses ownership mid-loop exits 2 and releases the claim', async () => {
+        const db = await memDb();
+        const cwd = mkdtempSync(join(tmpdir(), 'loop-lost-'));
+        const proto = ProjectClaimDao.prototype;
+        const { heartbeat, release } = proto;
+        const realSetInterval = globalThis.setInterval;
+        const released: number[] = [];
+        // Another owner took the claim: every renewal is refused. The renewal timer
+        // fires every millisecond instead of every CLAIM_TTL_MS / 3.
+        proto.heartbeat = async () => false;
+        proto.release = async function (this: ProjectClaimDao, ...args: Parameters<typeof release>) {
+            released.push(args[3]);
+            return release.apply(this, args);
+        };
+        globalThis.setInterval = ((fn: () => void) => realSetInterval(fn, 1)) as typeof setInterval;
+        try {
+            const deps = memberDeps(db, {
+                cwd,
+                fleet: {
+                    load: async () => ({}),
+                    resolveOrchestrator: async () => ({ instanceId: 'orch-1' }),
+                    assertLaunchGroundTruth: async () => {},
+                } as unknown as FleetService,
+                makeStrategyRuntime: async () =>
+                    ({ dispatchNext: async () => {}, resume: async () => {} }) as unknown as StrategyRuntime,
+            });
+            const code = await runAgentLoopCore(deps, {
+                recipient: 'orch-1',
+                pollMs: 10,
+                flags: {},
+                runtime: { maxIterations: 1_000 },
+            });
+            expect(code).toBe(2);
+            expect(released.length).toBe(1);
+        } finally {
+            proto.heartbeat = heartbeat;
+            proto.release = release;
+            globalThis.setInterval = realSetInterval;
+        }
+    });
 });
 
 // Keep the EventBus import meaningful for the type-level contract check above.

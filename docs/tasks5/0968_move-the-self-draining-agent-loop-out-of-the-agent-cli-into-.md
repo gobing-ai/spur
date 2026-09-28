@@ -4,7 +4,7 @@ name: Move the self-draining agent loop out of the agent CLI into a spur-app loo
 status: done
 template: feature-impl
 created_at: 2026-09-26T05:53:31.176Z
-updated_at: "2026-09-28T22:29:16.050Z"
+updated_at: "2026-09-28T23:31:48.811Z"
 feature_id: G67
 
 dependencies: ["0967"]
@@ -208,16 +208,16 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-loop-service.ts` (new) owns the orchestrator claim/heartbeat/release (`ProjectClaimDao`, `CLAIM_TTL_MS`), reconcile-before-first-drain (`formatReconcileReport`), orchestrator resume, member-session setup (`MemberSession`), the wake-then-drain loop (`waitForWake`, `loopSleep`, `WAKE_EVENT_NAMES`, `IDLE_HOLD_EVENT`, `WAKE_FOLLOW_BATCH`), orchestrator `dispatchNext`, member drain+settle, idle-hold dedupe, and the `ownershipLost → 2` exit |
-| R2 | MET | `AgentLoopDeps` is structural; the ledger attach, drain, settle, strategy-runtime factory, spec listing and `write`/`error` sinks are injected. Probe: `rg -n "from '(\.\./)+.*apps/\|CliContext" packages/app/src/services/agent-loop-service.ts` → none |
-| R3 | MET | `runAgentLoop` keeps its signature and `--spec` exit-2 message + `parseLoopPoll`; it builds `AgentLoopDeps` from the context and returns the service's code. `awk` size: 40 lines. `export type { AgentLoopRuntime }` preserved on `agent.ts` |
-| R4 | MET | `(cd apps/cli && bun test tests/commands/agent-loop-wake.test.ts tests/commands/agent-loop-member-session.test.ts tests/commands/agent.test.ts tests/commands/agent-team.test.ts)` → 90 pass / 0 fail with no assertion edits (`git diff HEAD -- apps/cli/tests` empty) |
-| R5 | MET | `packages/app/tests/services/agent-loop-service.test.ts` → 6 pass / 0 fail: waitForWake first-wake + consumed non-wake row + no replay, deadline fallback, abort fallback; idle hold one-row-per-key + reset; not-accepted persistent send settles `not-started`; a refused orchestrator claim exits 2 |
+| R1 | MET | `packages/app/src/services/agent-loop-service.ts:255` `runAgentLoopCore` owns the orchestrator claim (`packages/app/src/services/agent-loop-service.ts:271`), heartbeat, release (`packages/app/src/services/agent-loop-service.ts:480`) and the ownershipLost exit 2 (`packages/app/src/services/agent-loop-service.ts:470`) |
+| R2 | MET | `packages/app/src/services/agent-loop-service.ts:44` structural `AgentLoopDeps`; probe `rg -n "from '(\.\./)+.*apps/\|CliContext" packages/app/src/services/agent-loop-service.ts` → none |
+| R3 | MET | `apps/cli/src/commands/agent.ts:1028` `runAgentLoop` keeps its signature, 40 lines: flag checks, deps object, service call |
+| R4 | MET | `(cd apps/cli && bun test tests/commands/agent-loop-wake.test.ts tests/commands/agent-loop-member-session.test.ts tests/commands/agent.test.ts tests/commands/agent-team.test.ts)` → 90 pass / 0 fail; `git diff 0eaad428a~1 0eaad428a -- apps/cli/tests` has no `expect(` edits |
+| R5 | MET | `packages/app/tests/services/agent-loop-service.test.ts:37`, `packages/app/tests/services/agent-loop-service.test.ts:51`, `packages/app/tests/services/agent-loop-service.test.ts:57`, `packages/app/tests/services/agent-loop-service.test.ts:65`, `packages/app/tests/services/agent-loop-service.test.ts:127`, `packages/app/tests/services/agent-loop-service.test.ts:141`, plus new mid-loop heartbeat-loss case `packages/app/tests/services/agent-loop-service.test.ts:160` (exit 2 + claim released; fails when the exit code is mutated) → 7 pass / 0 fail |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| R3 — The agent loop is an application service | MET | command | Probe 1 `rg -n "function (waitForWake\|recordIdleHold\|loopSleep\|formatReconcileReport)\|WAKE_EVENT_NAMES =\|IDLE_HOLD_EVENT =" apps/cli/src` → none; probe 2 (no `apps/`/`CliContext` in the service) → none; probe 3 `runAgentLoop` → 40 lines |
-| R4 — Loop behavior is unchanged | MET | command | `(cd apps/cli && bun test …agent-loop-wake…agent-loop-member-session…agent…agent-team)` → 90 pass / 0 fail; `git diff HEAD -- apps/cli/tests` → empty (no `expect(` edits); `(cd packages/app && bun test tests/services/agent-loop-service.test.ts)` → 6 pass; `bun run spur-check` → 9421 pass / 0 fail |
+| R3 — The agent loop is an application service | MET | command | AC1 probes in `apps/cli/src` and the service → none; `packages/app/src/services/agent-loop-service.ts:255`; `apps/cli/src/commands/agent.ts:1028` is 40 lines |
+| R4 — Loop behavior is unchanged | MET | test | CLI loop suites 90 pass / 0 fail; `packages/app/tests/services/agent-loop-service.test.ts:160` and the other service cases 7 pass / 0 fail; no `expect(` edits in `apps/cli/tests` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -230,7 +230,6 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:5ea53c7775e64b7400c6a2ab0bf60dd2b9d1c260f275194e577c6c86b0f61861 |
 
 ### References
 
