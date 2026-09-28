@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.58.0
+version: 1.59.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-27
@@ -876,7 +876,10 @@ attempt evidence. It accepts literal executable/args only and delegates directly
 `ProcessExecutor`; a compound gate belongs in the named project script, not a runtime shell string.
 `run.artifact` owns safe `.spur/run` path resolution and path-only artifact metadata. Domain
 mutations continue through the normal application/CLI boundaries so task and feature lifecycle
-guards cannot be bypassed. Exact shapes live in
+guards cannot be bypassed. A pipeline-internal hop that suppresses the lifecycle run record
+(`--no-lifecycle`, so a nested run cannot outlive the pipeline as a `running` orphan) still runs
+the target-aware structural `spur task check --as <target>` gate inline: the guard is relocated,
+never dropped (ADR-050; 0980). Exact shapes live in
 `docs/design/workflow-composition-contract.md`.
 
 ### 20.3 Proof-state invariant

@@ -3,7 +3,7 @@ kind: design
 title: "Workflow shell ownership surface (feature D6, task 0608; amended by 0625)"
 status: accepted
 created_at: 2026-08-20
-updated_at: 2026-09-12
+updated_at: 2026-09-27
 related: [D6, A3, "0604", "0608", "0613", "0614", "0704", "0723"]
 tags: [system, D6, A3, workflow]
 ---
@@ -229,7 +229,7 @@ write order without a subprocess pipe-buffer cap before appending each attempt t
 | `verify:onEnter:2` | EXT | wrapper for `verify-answer-lint.ts` (option d) |
 | `verify:onEnter:3` | SIMPLE | single `task verdict --from-answer` |
 | `verify:onEnter:4` | GLUE (warn) | proof-digest injection into the verdict json (one jq mutation) |
-| `record:onEnter:1` | BUILTIN | `command.gate` `task record --solution-from-diff --transition testing` with transient retry |
+| `record:onEnter:1` | BUILTIN | `command.gate` `task record --solution-from-diff --transition testing --no-lifecycle` with transient retry |
 | `record:onEnter:2` | EXT (warn) | `feature-sync-bounded.ts` (option d) + `feature sync` fallback + orphan note |
 | `done:onEnter:0` | BUILTIN | `command.gate` `task update done --no-lifecycle` with transient retry |
 | `done:onEnter:2` | GLUE (warn) | terminal checkpoint write |

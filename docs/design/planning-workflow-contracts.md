@@ -73,8 +73,10 @@ routes to `failed` with the unanswered question appended to the run report. The 
 deleted before dispatch (0751 R3 freshness), so a question left by a prior run can never pause the
 current one. Invariants: it never touches files
 directly — status moves use the normal `spur task update <wbs> <status>` verb and section writes go
-through `spur task record` (0108) / `spur task update --section`, so the lifecycle guards apply
-identically; `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
+through `spur task record` (0108) / `spur task update --section`, so the structural lifecycle guards
+apply; a hop that suppresses the lifecycle run record (`--no-lifecycle`, so a nested run cannot
+outlive the pipeline as a `running` orphan) still runs the target-aware structural `spur task check
+--as <target>` gate inline (0980). `approve` is a `hitl.confirm` gate skippable with `--vars '{"profile":"auto"}'`.
 
 **Rival pipeline — retired.** `config/workflows/task-pipeline2.yaml` (feature I6, task 0596) was a
 parallel file beside the live pipeline, adding a `residual-sweep` FSM stage reached only via the PASS
