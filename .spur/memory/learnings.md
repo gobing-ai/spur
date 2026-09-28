@@ -3385,3 +3385,64 @@ Learnings artifact written to `.spur/run/be97dc82-f326-446d-ae76-2c581d042082-wr
 ### Deferred
 
 - 0979 (persist-out must skip a record-less run row), 0983 (order the residual-sweep box check against the record-stage box flip), 0984 (persist worktree run evidence) carry the three harness repairs this run exposed.
+Doc-evolve wrapup complete: 3 confirmed T3 drift findings repaired in the owning `docs/design/` satellites; `00_ADR`, `03_ARCHITECTURE`, `04_DESIGN` returned zero delta. No task/feature corpus written.
+
+| # | Doc | Reality | Doc said | Trigger | Repair |
+|---|---|---|---|---|---|
+| 1 | `docs/design/planning-workflow-contracts.md` | `proof-input-fingerprint.ts` `DEFAULT_EXCLUDE_GLOBS`/task/feature section arrays at `:241/:335/:368`; `canonicalizeCheckboxMarkers` folds tick markers before hashing (0958 R3/R4) | anchors `:172/:249/:282`; no checkbox fact | T3 | re-anchored; added the canonicalization contract |
+| 2 | `docs/design/feature-check-strict-ac-satisfaction.md` | matcher credits explicit embedded refs `(feature R<n>)`/`(covers: R<n>)`/`[R<n>]` against a scenario's leading `R<n>` label (0958 R1) | title + `AC-N` alias + trailing-parenthetical strip only | T3 | added the accepted forms; `related`/`updated_at` bumped |
+| 3 | `docs/design/planning-record-contracts.md` | hard-fail at `apps/cli/src/commands/task.ts:1279-1300`; L4 accepts the same five key forms | `:1253-1277`; L4 row named only the `scenario` alias | T3 | re-anchored; added the key forms |
+
+Zero-delta (commands run): `rg` over `00_ADR` (ADR-100/124 unaffected — bugfix restoring a contract, §6.1), `03_ARCHITECTURE` §20.2 (section set unchanged; exact shapes are owned by `04`, §6.4), `04_DESIGN` (pointers/titles unchanged, §4.5). Frontmatter parses on all three; anchors re-resolved. The pre-existing `plugins/sp/tests/skill-structure.test.ts` modification (0987) was left untouched.
+
+Artifact written: `/Users/robin/xprojects/spur-new/.spur/run/35e4672b-c055-4b2d-b31c-0cb5f22a59ce-wrapup-learnings.md`
+
+# Working learnings — wrapup batch `35e4672b-c055-4b2d-b31c-0cb5f22a59ce`
+
+Tasks: `0958` — Fix verdict-row scenario crediting and proof-digest checkbox invalidation in the completion gate.
+Evidence: task record `docs/tasks5/0958_fix-verdict-row-scenario-crediting-and-proof-digest-checkbox.md`; commits `6aec61858` (feat) and `b8c9f3f0b` (test pin + re-verify); drift repair in this wrapup.
+
+## 2026-09-26 · 0958
+
+### Conventions
+- Put a done-gate prevention check in the last app-side step before certification — `spur task verdict --from-answer` — not in the plugin-side verify lint. `plugins/sp/scripts/*` may value-import only `node:*`/`bun:*` builtins and relative paths (`sp-plugin-standalone`), so a plugin lint cannot import `rowMatchesScenario`; a second copy of the matcher is the exact divergence the defect came from.
+- Reuse the gate's own covering decision (`checkAcCoverage` → `taskCoversScenario`) and the same matcher (`rowMatchesScenario`) in the prevention check, so check and gate cannot disagree.
+- Scope a new failure mode to covering tasks only; task-local rows must stay unaffected (the 0956 R3 trap).
+- Canonicalize only the checkbox *marker*. List bullets, non-checkbox indentation, and checkbox ordering stay spec content.
+- Only the three explicit, delimited embedded reference forms are accepted: `(feature R<n>)`, `(covers: R<n>)`, `[R<n>]`. `(covers: …)` is already the corpus's task-AC → feature-scenario binding syntax (`COVERS_RE`).
+
+### Errors fixed
+- **Defect A — under-credit.** The done gate credited only normalized-title and `AC-<n>` alias matches, so rows keyed `Req2 (feature R3) — …` matched no scenario; three tasks reached `done` and the feature still could not close. Fix: credit a row carrying an explicit embedded reference against the scenario's leading `R<n>` label, evaluated over the raw id.
+- **Defect B — over-invalidate.** Ticking a `Requirements`/`AC` checkbox is the pipeline's sanctioned record step, but the marker is part of the hashed section body, so a more-verified task looked less-certified and forced a manual re-capture + verdict proof-block re-bind. Fix: `canonicalizeCheckboxMarkers` folds every `-`/`*`/`+` marker at any indentation to `- [x]` before hashing; item text still moves the digest.
+- Prevention message made self-describing: name the first 5 offending row ids plus `(+N more)` and list all accepted key forms, so the repair is derivable from the finding alone.
+
+### Patterns
+- Two mirror-image defects from one run: one path under-credits valid evidence, the other over-invalidates it. Diagnose both together — the manual workaround is the reproduction.
+- Enumeration parity: `indexScenarioAliases` must mirror `parseFeature` (count `Scenario Outline:` entries, skip `"""` doc-strings in parser line order) so certify-time `AC-<n>` ordinals match the gate.
+- A one-time digest-value change is acceptable when the digest is per-run state, not a persisted cross-version contract — document the compatibility note beside the helper so a live run spanning the upgrade is diagnosable, not mysterious.
+
+### Gotchas
+- The embedded-reference branch must run over the **raw** row id: `bodyStripped` strips the trailing parenthetical that carries `(feature R3)`, so evaluating after that strip silently misses it.
+- Do not fix a false invalidation by moving the pipeline bracket. `task-pipeline.yaml`'s capture point and the `test-recheck` re-capture stay as-is; changing the YAML re-opens the digest/definition binding for every project.
+- Revise a closed Q&A decision in place when the original is not implementable: "prevention in the lint" was replaced by "prevention in `task verdict`", with the plugin-standalone reason recorded rather than shipping a duplicate matcher.
+
+## 2026-09-27 · 0958
+
+### Conventions
+- Pin the invariance you claim: AC5 asserted the checkbox digest only for `Requirements`; the review flagged the `Acceptance Criteria` half as mechanism-only, and the follow-up added the AC-section digest assertion. Test the section, not just the shared helper.
+- Re-resolve line anchors at wrap-up. The owning satellite cited `apps/cli/src/commands/task.ts:1253-1277` while the shipped hard-fail sits at `:1279-1300`, and `proof-input-fingerprint.ts` anchors `:172/:249/:282` were stale (actual `:241/:335/:368`). Line citations drift as source moves.
+- An existing verb gaining a failure mode updates its owning `04` satellite and needs no new-noun/verb consent. An unchanged index pointer (`04_DESIGN.md`) needs no ceremonial edit (§4.5).
+- Verify-pass evidence discipline: run the scoped suites fresh (`26 / 129 / 190` pass), re-resolve every anchor in current source, and prove the delta with `git diff --numstat` plus mtimes.
+
+### Errors fixed
+- Task-file section wipe during a multi-pass run: `Requirements`/`AC`/`Plan` were restored from HEAD with ticks and `Solution` recovered; the review re-verified the restored text byte-identical to HEAD modulo tick flips.
+- Doc drift left by 0958: `docs/design/planning-workflow-contracts.md` lacked the checkbox-canonicalization fact and carried stale anchors; `docs/design/feature-check-strict-ac-satisfaction.md` lacked the embedded-ref forms; `docs/design/planning-record-contracts.md` line 104 named only the `scenario` alias while line 51 already listed all five accepted forms. Repaired in this wrapup (satellites only; no corpus writes).
+
+### Patterns
+- Advisory P4 findings are accept-or-fold: fold the cheap correctness one (the AC-section test), leave the locality and presentation duplicates as named follow-ups.
+- A wrap-up drift repair is a focused §7 check: fix the defective owner, report zero-delta elsewhere (no ADR — a bugfix restoring an existing contract passes §6.1), and never touch task/feature corpus.
+
+### Gotchas
+- The CLI re-implements the bounded first-5 row summary instead of exporting the private `summarizeRowIds` — two copies of one presentation rule can drift (P4 #1).
+- `readFeatureAcBody` is a third copy of the `<id>_*.md` feature-resolution scan (also `task-service.resolveFeatureAcBody` and the CLI's `isFeatureFile`); fold into one shared helper if the shape ever changes (P4 #2).
+- A stale vendored `inline-run-setup.ts` lacking `--fingerprint` was a provenance defect owned by `0960`, not `0958` — do not fix a sibling owner's defect inside the current task.
