@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createNodeFileSystem } from '@gobing-ai/ts-runtime';
@@ -76,6 +76,21 @@ function seedEnv(opts: {
         path: taskPath,
         cleanup: () => rmSync(root, { recursive: true, force: true }),
     };
+}
+
+/**
+ * Seed one repository-relative evidence file under a seeded task's repo root.
+ *
+ * Live records must RESOLVE every in-repo anchor (0994 follow-up: `L4.anchor-unresolved`
+ * is an error), so a fixture that cites a real-looking path has to materialize it —
+ * otherwise the fixture is asserting on a gate finding it never intended to model.
+ * Only task paths built by `seedEnv` work here: its repo root is one level above the
+ * `tasks/` dir, whereas `seedFile` resolves its root to the system temp dir.
+ */
+function seedRepoFile(taskPath: string, rel: string, content: string): void {
+    const abs = join(taskPath, '..', '..', rel);
+    mkdirSync(join(abs, '..'), { recursive: true });
+    writeFileSync(abs, content);
 }
 
 /** Minimal valid task frontmatter for L4 tests. */
@@ -3275,7 +3290,8 @@ describe('F92 R2 — target-status (asStatus) validation projection', () => {
             'Text',
         ].join('\n');
 
-        const { fs, path, cleanup } = seedFile(testingTaskMissingReview);
+        const { fs, path, cleanup } = seedEnv({ taskContent: testingTaskMissingReview });
+        seedRepoFile(path, 'packages/app/src/services/x.ts', 'export const x = 1;\n'.repeat(14));
         const svc = new TaskCheckService(fs, matrix);
 
         // Plain check (current status = testing): testing requires Solution+Testing
@@ -3380,8 +3396,18 @@ describe('0800 R1 — open Plan box is an error at a terminal transition target'
     const openBoxFinding = (result: { findings: Array<{ code: string; severity: string }> }) =>
         result.findings.find((f) => f.code === FINDING_CODES.L3_UNCHECKED_CHECKLIST);
 
+    // The fixture cites `packages/app/src/services/x.ts:12`; seed it under the seeded
+    // repo root so the certification gate sees a resolvable anchor and this describe
+    // stays about open-box severity. Terminal variants are exempt from the gate
+    // anyway, but seeding them too keeps one fixture shape.
+    function seedOpenBox(content: string) {
+        const env = seedEnv({ taskContent: content });
+        seedRepoFile(env.path, 'packages/app/src/services/x.ts', 'export const x = 1;\n'.repeat(14));
+        return env;
+    }
+
     test('AC1: --as done on a testing task with an open box reports error and blocks', async () => {
-        const { fs, path, cleanup } = seedFile(testingTaskOpenBox);
+        const { fs, path, cleanup } = seedOpenBox(testingTaskOpenBox);
         const svc = new TaskCheckService(fs, matrix);
         const result = await svc.check(path, '0001', { asStatus: 'done' });
         cleanup();
@@ -3391,7 +3417,7 @@ describe('0800 R1 — open Plan box is an error at a terminal transition target'
     });
 
     test('no --as on the same testing task reports nothing (non-terminal current row)', async () => {
-        const { fs, path, cleanup } = seedFile(testingTaskOpenBox);
+        const { fs, path, cleanup } = seedOpenBox(testingTaskOpenBox);
         const svc = new TaskCheckService(fs, matrix);
         const result = await svc.check(path, '0001');
         cleanup();
@@ -3401,7 +3427,7 @@ describe('0800 R1 — open Plan box is an error at a terminal transition target'
 
     test('--as testing (a differing but non-terminal target) reports nothing', async () => {
         const wip = testingTaskOpenBox.replace('status: testing', 'status: wip');
-        const { fs, path, cleanup } = seedFile(wip);
+        const { fs, path, cleanup } = seedOpenBox(wip);
         const svc = new TaskCheckService(fs, matrix);
         const result = await svc.check(path, '0001', { asStatus: 'testing' });
         cleanup();
@@ -3549,7 +3575,11 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
 
     const noContentWarnings = (result: { findings: Array<{ code: string }> }) =>
         result.findings.filter(
-            (f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR || f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH,
+            (f) =>
+                f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR ||
+                f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH ||
+                // 0994 follow-up: the certification gate must not leak into terminal records.
+                f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED,
         );
 
     // — Terminal records: not re-checked at all (ADR-092, task 0862 R3 — completed
@@ -3604,6 +3634,74 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
             cleanup();
 
             expect(noContentWarnings(result)).toHaveLength(0);
+        });
+    });
+
+    // — Certification gate (task 0994 follow-up): a live record's in-repo anchors must
+    // RESOLVE. File-missing and line-past-EOF are objective conditions, so they are
+    // errors, and the record's own status is what the rule reads — a `testing` row being
+    // checked `--as done` is still live, so the gate bites exactly at certification
+    // while the evidence is current. Subject matching stays a warning: the repo already
+    // tried it as an error (0583 R6, reverted as 982 frozen-legacy residuals), and a
+    // fresh census agrees (2,173 mismatches / 4,078 checked = 53%).
+    describe('the completion target must resolve every in-repo anchor (L4.anchor-unresolved)', () => {
+        test('a resolving anchor with a matching subject leaves the completion check clean', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:1` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
+            cleanup();
+
+            // No anchor finding at all — asserted on the codes rather than `pass`, so
+            // this fixture's section completeness cannot mask the anchor behaviour.
+            expect(noContentWarnings(result)).toHaveLength(0);
+        });
+
+        // Bounded blast radius (the review's Option A): the error fires at the completion
+        // target only. Entering `testing` must not be blocked for evidence still being
+        // assembled, so the same unresolvable anchor is a warning there.
+        test('the same unresolved anchor only warns at a non-completion live check', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`does-not-exist.ts:1` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'testing' });
+            cleanup();
+
+            const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
+            expect(unresolved).toHaveLength(1);
+            expect(unresolved[0]?.severity).toBe('warning');
+        });
+
+        // The gate must not swallow the heuristic: a resolved-but-unnamed subject is a
+        // hint to re-read the row, never a blocked transition (0994 follow-up).
+        test('a resolved anchor whose range lacks the subject stays advisory at the completion target', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`workflow.ts:1` — closes `registerCancel`',
+                'export function other() {}\nconst unused = 1;\n',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
+            cleanup();
+
+            const mismatch = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_SUBJECT_MISMATCH);
+            expect(mismatch).toHaveLength(1);
+            expect(mismatch[0]?.severity).toBe('warning');
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED)).toHaveLength(0);
+        });
+
+        // ADR-092 / 0862 R3 preserved: a terminal record is history, and its evidence is
+        // never re-litigated — the gate only ever sees live records.
+        test('a terminal record reports no unresolved anchor even when the path is gone', async () => {
+            const { fs, path, cleanup } = seedChangeMap(
+                '`does-not-exist.ts:1` — closes `registerCancel`',
+                'export function registerCancel() {}\n',
+                'done',
+            );
+            const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+            cleanup();
+
+            expect(result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED)).toHaveLength(0);
         });
     });
 
@@ -3678,31 +3776,36 @@ describe('0714 R1 — anchor content matching: terminal suppression + live preci
     });
 
     // 0688 AC3: subject matching is matching-only — bounds still use the cited
-    // range. A line past EOF or a missing path must still report stale-line.
-    test('a cited line past EOF still reports L4.stale-line-anchor (window is matching-only)', async () => {
+    // range. A line past EOF or a missing path still reports; since the 0994
+    // follow-up that report is `L4.anchor-unresolved` at ERROR (resolution gates the
+    // completion target), not a stale-line warning. Error severity IS the pass gate
+    // (`summarizeWithStatus` fails on any error), so no fixture-completeness noise.
+    test('a cited line past EOF reports L4.anchor-unresolved at error severity (window is matching-only)', async () => {
         const { fs, path, cleanup } = seedChangeMap(
             '`workflow.ts:99` — closes `registerCancel`',
             'export function registerCancel() {}\n',
         );
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
         cleanup();
 
-        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-        expect(stale.length).toBeGreaterThanOrEqual(1);
-        expect(stale[0]?.message).toMatch(/outside file|line 99/);
+        const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
+        expect(unresolved.length).toBeGreaterThanOrEqual(1);
+        expect(unresolved[0]?.severity).toBe('error');
+        expect(unresolved[0]?.message).toMatch(/outside file|line 99/);
     });
 
-    test('a missing path still reports L4.stale-line-anchor', async () => {
+    test('a missing path reports L4.anchor-unresolved at error severity', async () => {
         const { fs, path, cleanup } = seedChangeMap(
             '`does-not-exist.ts:1` — closes `registerCancel`',
             'export function registerCancel() {}\n',
         );
-        const result = await new TaskCheckService(fs, matrix).check(path, '0001');
+        const result = await new TaskCheckService(fs, matrix).check(path, '0001', { asStatus: 'done' });
         cleanup();
 
-        const stale = result.findings.filter((f) => f.code === FINDING_CODES.L4_STALE_LINE_ANCHOR);
-        expect(stale.length).toBeGreaterThanOrEqual(1);
-        expect(stale[0]?.message).toMatch(/file not found/i);
+        const unresolved = result.findings.filter((f) => f.code === FINDING_CODES.L4_ANCHOR_UNRESOLVED);
+        expect(unresolved.length).toBeGreaterThanOrEqual(1);
+        expect(unresolved[0]?.severity).toBe('error');
+        expect(unresolved[0]?.message).toMatch(/file not found/i);
     });
 });
 

@@ -24,6 +24,14 @@ let cwd: string;
 beforeAll(async () => {
     cwd = join(import.meta.dir, '..', `.tmp-task-test-${Date.now()}`);
     await mkdir(join(cwd, 'docs', 'tasks'), { recursive: true });
+    // Materialize the file the fixtures cite as their evidence anchor. Since the 0994
+    // follow-up a live record's Testing/Solution `file:line` anchor must RESOLVE at the
+    // `--as done` guard (`L4.anchor-unresolved` is an error there), so a fixture citing a
+    // path that does not exist would be denied by the anchor gate before the behaviour
+    // each test below exists to exercise. Every fixture cites line 1 of this file.
+    const evidenceTarget = join(cwd, 'apps', 'cli', 'src', 'commands', 'task.ts');
+    await mkdir(join(evidenceTarget, '..'), { recursive: true });
+    await writeFile(evidenceTarget, '// fixture evidence target (no real code)\nexport {};\n', 'utf-8');
 });
 
 afterAll(() => {
@@ -1964,7 +1972,7 @@ Only this section exists.
                 output: createCapturedOutput(),
             });
             const solutionBody = join(cwd, 'sol-strict-core.md');
-            await Bun.write(solutionBody, 'Fix applied in `apps/cli/src/commands/task.ts:645`.\n');
+            await Bun.write(solutionBody, 'Fix applied in `apps/cli/src/commands/task.ts:1`.\n');
             await main(['task', 'update', wbs, '--section', 'Solution', '--from-file', solutionBody], {
                 cwd,
                 output: createCapturedOutput(),
@@ -2215,7 +2223,7 @@ Only this section exists.
         };
         await writeSection('Requirements', 'R1. The pipeline record stage must not orphan a lifecycle run.\n');
         await writeSection('Acceptance Criteria', '- [x] Scenario: record reaches testing without a lifecycle row.\n');
-        await writeSection('Solution', 'Applied in `apps/cli/src/commands/task.ts:1180`.\n');
+        await writeSection('Solution', 'Applied in `apps/cli/src/commands/task.ts:1`.\n');
 
         // Pipeline precheck shape: status hops run with --no-lifecycle.
         await main(['task', 'update', wbs, 'todo', '--no-lifecycle'], { cwd, output: createCapturedOutput() });
@@ -2563,7 +2571,7 @@ Only this section exists.
         // Body contains a ### heading — same level as section headers, triggers strip warning.
         await Bun.write(
             bodyFile,
-            'Some text citing `apps/cli/src/commands/task.ts:645`.\n\n### Rogue heading\n\nMore text.\n',
+            'Some text citing `apps/cli/src/commands/task.ts:1`.\n\n### Rogue heading\n\nMore text.\n',
         );
 
         const output = createCapturedOutput();

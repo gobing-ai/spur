@@ -574,7 +574,7 @@ export class TaskCheckService extends PlanningCheckService {
         // ── L4: Traceability — feature_id edges, parent_wbs, dependencies, AC coverage
         const tasksDir = dirname(filePath);
         const featuresDir = join(dirname(tasksDir), 'features');
-        await this.runL4(doc, fm, effectiveStatus, findings, featuresDir, tasksDir, wbs);
+        await this.runL4(doc, fm, effectiveStatus, findings, featuresDir, tasksDir, wbs, status);
 
         // ── L4 roll-up (0121, R1–R3): parent↔child status drift + roster presence.
         // Inert unless one or more sibling tasks declare parent_wbs == this wbs.
@@ -979,6 +979,13 @@ export class TaskCheckService extends PlanningCheckService {
         featuresDir: string,
         tasksDir: string,
         wbs: string,
+        /**
+         * The record's OWN frontmatter status, which `status` above is not: `status` is the
+         * effective (possibly `--as`) status every policy rule evaluates as. The anchor rule
+         * needs both — the stored status decides the terminal exemption (ADR-092), the
+         * effective one decides whether this check is the completion target.
+         */
+        recordStatus: string,
     ): Promise<void> {
         // ── R1: Done-gate verdict artifact check (testing/done status) ──
         if (status === 'testing' || status === 'done') {
@@ -1030,9 +1037,12 @@ export class TaskCheckService extends PlanningCheckService {
         // ── Stale file:line anchors in Testing / Solution (dogfood F81 P2) ──
         // Re-check backtick citations ``path:line`` / ``path:start-end`` against
         // the working tree: file must exist and the line number must fall within
-        // the file. Warning-only (L4) — does not block done unless elevated.
-        // Content heuristics see the effective status (task 0714 R1).
-        await this.checkLineAnchors(doc, tasksDir, findings, status);
+        // the file. Resolution failures ERROR at the completion target
+        // (`L4.anchor-unresolved`) and warn elsewhere; subject matching stays a
+        // warning, and TERMINAL records (by their own status, not `--as`) are exempt
+        // — so the gate bites at the live certification window without blocking
+        // `wip → testing`, and a done record is never re-litigated (ADR-092).
+        await this.checkLineAnchors(doc, tasksDir, findings, recordStatus, status === 'done');
 
         // Resolve feature_id from either snake_case or legacy kebab-case key.
         const featureId = (fm.feature_id as string | undefined) ?? (fm['feature-id'] as string | undefined);
@@ -1458,29 +1468,51 @@ export class TaskCheckService extends PlanningCheckService {
 
     /**
      * Validate backtick `path:line` / `path:start-end` citations in Testing and
-     * Solution against the working tree. Emits L4.stale-line-anchor warnings when
-     * the file is missing or the line is out of range (dogfood F81 P2).
+     * Solution against the working tree.
+     *
+     * Two distinct failures, two severities (task 0994 follow-up, 2026-09-28):
+     *
+     * - **Resolution gates the completion target.** A citation whose file is missing, or whose
+     *   line range falls outside the file, reports `L4.anchor-unresolved` — at **error** when the
+     *   check is the completion target (`--as done`, i.e. the `testing → done` guard) and at
+     *   **warning** on any other live check, so `wip → testing` is never blocked for evidence that
+     *   is still being assembled. The two conditions are objective, and a citation that points at
+     *   nothing certifies nothing. Measured before promotion: 0 of the 17 live records in this
+     *   corpus carried an unresolvable Testing/Solution anchor, so the gate's blast radius is new
+     *   work, not the existing corpus (T10 `corpus-check`: 377 findings before and after).
+     * - **Subject matching stays advisory.** `L4.anchor-subject-mismatch` remains a
+     *   warning. The repo already tried it as an error (0583 R6, reverted): the matcher
+     *   left 982 frozen-legacy residuals rather than a worked-down true-positive set, and
+     *   a fresh census agrees — 2,173 mismatches over 4,078 checked anchors (53%), because
+     *   a row's subject tokens legitimately live in prose beside the anchor. Promoting it
+     *   would block correct work; it stays a hint pointing at the row to re-read.
      *
      * Caps findings per section to 5. Terminal records (`done`/`cancelled`) are not
      * checked at all: their evidence is historical (ADR-092) and re-verifying it after
      * later code moves only manufactures permanent warnings on recorded `## Testing`
-     * bodies (task 0862 R3, reversing 0714 R1 for terminal records only).
+     * bodies (task 0862 R3, reversing 0714 R1 for terminal records only). The gate therefore
+     * bites while the record is still live, and only when the check is the completion target —
+     * `recordStatus` decides the terminal exemption, `completionGate` decides the severity — so
+     * certification checks anchors while the evidence is still current, and a done record is
+     * never re-litigated. Before this split the rule read the EFFECTIVE status, so `--as done`
+     * tripped the terminal exemption and the check never ran at the done gate at all.
      *
-     * A live record first gets repository-relative path existence and line bounds; task
-     * 0714 R1 narrows content matching to its provable form: subject-matched only when
-     * its citing row carries exactly one parsed anchor and yields real subject tokens;
-     * failed exact-range matching then reports `L4.anchor-subject-mismatch`. No
-     * filename-derived subjects and no whole-file "first matching line" scan: neither
-     * verifies evidence, both guess it.
+     * A live record then gets repository-relative path existence and line bounds; task 0714 R1
+     * narrows content matching to its provable form: subject-matched only when its citing row
+     * carries exactly one parsed anchor and yields real subject tokens; failed exact-range
+     * matching then reports `L4.anchor-subject-mismatch`. No filename-derived subjects and no
+     * whole-file "first matching line" scan: neither verifies evidence, both guess it.
      */
     private async checkLineAnchors(
         doc: MarkdownDocument,
         tasksDir: string,
         findings: CheckFindings[],
-        status: string,
+        recordStatus: string,
+        completionGate: boolean,
     ): Promise<void> {
-        const terminal = status === 'done' || status === 'cancelled';
+        const terminal = recordStatus === 'done' || recordStatus === 'cancelled';
         if (terminal) return;
+        const resolutionSeverity = completionGate ? ('error' as const) : ('warning' as const);
         const projectRoot = resolveProjectRootFromTasksDir(tasksDir);
         for (const section of ['Testing', 'Solution'] as const) {
             const body = doc.getSection(section);
@@ -1521,10 +1553,10 @@ export class TaskCheckService extends PlanningCheckService {
                 if (!exists) {
                     findings.push({
                         layer: 'L4',
-                        code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
-                        severity: 'warning',
+                        code: FINDING_CODES.L4_ANCHOR_UNRESOLVED,
+                        severity: resolutionSeverity,
                         section,
-                        message: `Stale line anchor \`${cite.raw}\` — file not found at ${cite.path} (from project root)`,
+                        message: `Unresolved line anchor \`${cite.raw}\` — file not found at ${cite.path} (from project root). Point the citation at the code that implements this row, or move it to the external-evidence form if the file is not in this repo.`,
                     });
                     reported++;
                     continue;
@@ -1537,10 +1569,10 @@ export class TaskCheckService extends PlanningCheckService {
                     if (cite.startLine < 1 || end > lineCount) {
                         findings.push({
                             layer: 'L4',
-                            code: FINDING_CODES.L4_STALE_LINE_ANCHOR,
-                            severity: 'warning',
+                            code: FINDING_CODES.L4_ANCHOR_UNRESOLVED,
+                            severity: resolutionSeverity,
                             section,
-                            message: `Stale line anchor \`${cite.raw}\` — line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} outside file (${lineCount} lines)`,
+                            message: `Unresolved line anchor \`${cite.raw}\` — line ${cite.startLine}${cite.endLine ? `-${cite.endLine}` : ''} outside file (${lineCount} lines). Re-derive the range from the file the row is certifying.`,
                         });
                         reported++;
                         continue;
