@@ -2,9 +2,9 @@
 doc: 00_ADR
 owns: WHY — lasting architectural choices, context and tradeoffs
 authority: authoritative
-version: 1.53.0
+version: 1.54.0
 owner: Robin Min
-updated_at: 2026-09-25
+updated_at: 2026-09-27
 read_before: any structural change; before diverging from a decision
 edit_rules: 99 §6.1
 sync: [T1, T2]
@@ -1985,3 +1985,13 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
   stays feature-scoped, not per-task).
 - **Detail:** `03 §29`; `plugins/sp/skills/spur-dev/references/execution-batch.md` § Parallel
   isolation; task 0931.
+
+## ADR-128: Project-Owned Board Contributions Share One Host Registry
+
+- **Status:** Accepted (design) · **Date:** 2026-09-27
+- **Decision:** Select downstream UI contributions through project configuration and adapt native React entries and URL-backed frames into the existing Board registry. Native entries use the Board's shared browser runtime and a versioned public component contract; frames use a Board-owned adapter. This boundary does not import downstream backend code or revive the removed generic server plugin container.
+- **Why:** A single host registry integrates native tools and existing embeddable apps while keeping project selection separate from rendering and preserving the installed Board distribution.
+- **Alternatives:** Iframe-only integration sacrifices native shell participation; project-specific Board builds naturally share dependencies but require a portable build kit and full rebuilds. The latter remains the fallback if the shared-runtime distribution proof fails.
+- **Consequence:** Spur owns a supported browser ABI and asset-serving boundary. Native code is trusted within the Board document; framed applications retain browser embedding restrictions. Config changes use restart/reload, and the actual installed-Board runtime proof is required before production loader work.
+- **Retains:** ADR-012's upstream lifecycle ownership and removal of unused backend plugin machinery; ADR-019's runtime separation; ADR-021's thin transports; ADR-027's single config loader.
+- **Detail:** `03 §30`; [downstream Board module contract](design/downstream-board-modules.md). This decision does not claim implementation.

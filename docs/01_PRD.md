@@ -2,9 +2,9 @@
 doc: 01_PRD
 owns: WHAT — product vision, users, scope (in / out / deferred)
 authority: authoritative-on-scope
-version: 1.11.0
+version: 1.12.0
 owner: Robin Min
-updated_at: 2026-09-09
+updated_at: 2026-09-27
 read_before: adding a command or feature
 edit_rules: 99 §6.2
 sync: [T1, T4, T6]
@@ -87,6 +87,7 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 | Capability                                                 | Command                                            | Backed by                                  |
 | ---------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
 | Local planning Board and launcher | Existing Board/task/feature API | server/web contracts |
+| Project-owned Board contributions | Embedded project configuration and the installed Board; native React contributions and URL-backed iframe compatibility | A8; [contribution contract](design/downstream-board-modules.md) |
 | Project scaffold                                           | `spur init`                                        | local CLI + DAOs                           |
 | Agent detection / health                                   | `spur agent list\|doctor`                          | `ts-ai-runner`                             |
 | Agent run execution                                        | `spur agent run`                                   | `ts-ai-runner` (`AiRunner`)                |
@@ -124,7 +125,7 @@ SQLite lock cause. Delivery depends on compatible released upstream capabilities
 - **`spur inspect <verb>`** — adapter-based project-state interrogation (coverage/lint/typecheck/deps).
 - **Meta-tooling, research, and context layers** — stay live in cc-agents until the core stabilizes.
 - **`spur plugin convert`** + per-platform adapter generation — per-platform install scripts suffice.
-- **Web plugin container & multi-workspace** — any board ships as plain pages first (ADR-012 lesson).
+- **General web plugin container & multi-workspace** — remain deferred (ADR-012 lesson). A8 reactivates the narrower project-owned UI contribution capability above; it does not include backend plugins, process management, or simultaneous multi-workspace composition.
 - **Scheduler auto-trigger** — lifecycle events exist on the engine's EventBus seam (ADR-022);
   the scheduler consumer comes later.
 - **Asset inspection / SSOT asset model** — old `@spur/assets` discarded; rebuild only if needed.

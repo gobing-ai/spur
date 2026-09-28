@@ -438,6 +438,23 @@ the shared canvas/surface/hairline/type tokens above.
   under the event name and Agent. No horizontal information loss may require
   color interpretation.
 
+## Product UI — Downstream Board Modules (proposed)
+
+These accepted design rules accompany the [contribution contract](docs/design/downstream-board-modules.md)
+and do not describe shipped behavior. Both contribution types use the existing sidebar and project
+identity; one selected module occupies the workspace at a time.
+
+- Native contributions follow Board tokens and use scoped styles. External native modules show a
+  right panel only when supplied; preserve built-in panel behavior and saved layout preferences.
+- Iframe routes fill the available region beside the sidebar, without an empty right panel,
+  right-panel resize handle, or global agent overlay. The child owns content scrolling. Keep
+  a compact host action to open the configured resource externally; do not promise child readiness
+  solely from a frame load event or attempt to style a cross-origin child's document.
+- Preserve mobile navigation, an accessible frame title, visible keyboard focus, and normal focus
+  traversal. Error routes use an actionable diagnostic and leave Board navigation available.
+- Changing rendering types must not overwrite saved built-in sidebar/panel preferences. Frame
+  unmounting can reset child state; keeping hidden frames or split views is outside this design.
+
 ## Do's and Don'ts
 
 ### Do
