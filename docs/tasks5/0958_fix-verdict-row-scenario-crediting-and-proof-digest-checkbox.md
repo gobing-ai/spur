@@ -4,7 +4,7 @@ name: Fix verdict-row scenario crediting and proof-digest checkbox invalidation 
 status: done
 template: feature-impl
 created_at: 2026-09-26T00:29:55.505Z
-updated_at: "2026-09-27T19:50:16.348Z"
+updated_at: "2026-09-28T02:48:22.891Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -256,22 +256,22 @@ Digest compatibility (Q&A 2026-09-26, closed): checkbox-canonicalized digests ch
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | feature-check.ts:1280 extractor over raw row id; `(feature R3)` credited, tests feature-check.test.ts (126 pass) |
-| R2 | MET | feature-check.ts:1393 `verdictScenarioKeyGap` covering-scoped; task.ts:1253-1277 CLI transport, exit 1, no artifact; tests task.test.ts (190 pass) |
-| R3 | MET | proof-input-fingerprint.ts:309 `canonicalizeCheckboxMarkers`; tick-only invariant tests proof-input-fingerprint.test.ts (26 pass) |
-| R4 | MET | proof-input-fingerprint.ts:340,373 applied in both extractTaskProofData and extractFeatureProofData |
-| R5 | MET | feature-check.ts:917-926 bounded done-gate finding names first 5 ids + count + accepted forms |
-| R6 | MET | shared `taskCoversScenario` helper; task-local/orphan/scenario-less no-op cases tested |
+| R1 | MET | `packages/app/src/services/feature-check.ts:1243-1253` EMBEDDED_SCENARIO_REF_RES + embeddedScenarioRefs; raw-id branch `packages/app/src/services/feature-check.ts:1280`; label in both builders `packages/app/src/services/feature-check.ts:1213` and `:1348`; tests `packages/app/tests/services/feature-check.test.ts:3561` (155 pass fresh) |
+| R2 | MET | `packages/app/src/services/feature-check.ts:1414` verdictScenarioKeyGap (covering via `taskCoversScenario` `:1359`); CLI `apps/cli/src/commands/task.ts:1280-1292` no artifact + non-zero exit; tests `apps/cli/tests/commands/task.test.ts:3762` / `:3795` (191 pass fresh) |
+| R3 | MET | `packages/app/src/workflow/proof-input-fingerprint.ts:309` canonicalizeCheckboxMarkers applied `:340` (task) / `:373` (feature); tests `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584` / `:608` |
+| R4 | MET | text-edit + section add/remove digest tests `packages/app/tests/workflow/proof-input-fingerprint.test.ts:596` / `:616` |
+| R5 | MET | `packages/app/src/services/feature-check.ts:915-926` finding names `summarizeRowIds` (`:1368`) + VERDICT_SCENARIO_KEY_FORMS (`:1379`); test `packages/app/tests/services/feature-check.test.ts:3779` / `:3802` |
+| R6 | MET | tests `packages/app/tests/services/feature-check.test.ts:3600` (title/AC-N), `:3945` / `:3952` / `:3960` (task-local, orphan, scenario-less); CLI `apps/cli/tests/commands/task.test.ts:3822` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `(feature R3)` row credited — feature-check tests |
-| AC2 | MET | test | `(covers: R6)` and `[R6]` forms credited — feature-check tests |
-| AC3 | MET | test | bare `R3`/prose `R<n>` rejected — negative tests |
-| AC4 | MET | test | CLI gap → exit 1, no artifact; re-keyed row → exit 0 — task.test.ts |
-| AC5 | MET | test | tick-only digest invariant; variant fold; content-edit sensitivity; section add/remove |
-| AC6 | MET | test | finding names ids, count, accepted forms — bounded message tests |
-| AC7 | MET | test | title/alias matching unchanged; task-local/orphan/scenario-less unchanged |
+| AC1 | MET | test | `packages/app/tests/services/feature-check.test.ts:3562`; D6 replay `packages/app/tests/services/feature-check.test.ts:3763` |
+| AC2 | MET | test | `packages/app/tests/services/feature-check.test.ts:3569` |
+| AC3 | MET | test | `packages/app/tests/services/feature-check.test.ts:3585` |
+| AC4 | MET | test | `packages/app/tests/services/feature-check.test.ts:3926` / `:3937`; CLI `apps/cli/tests/commands/task.test.ts:3762` / `:3795` |
+| AC5 | MET | test | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584` (Requirements), `:633` (Acceptance Criteria — added this verify pass, fix-all), `:596` text edit |
+| AC6 | MET | test | `packages/app/tests/services/feature-check.test.ts:3779` |
+| AC7 | MET | test | `packages/app/tests/services/feature-check.test.ts:3600`, `:3945`, `:3952`, `:3960` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

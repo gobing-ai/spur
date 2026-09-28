@@ -629,4 +629,15 @@ ${listBody}
         expect(added).not.toBe(before);
         expect(removed).not.toBe(before);
     });
+
+    test('digest (e): a tick-only edit in Acceptance Criteria is invariant; a text edit is not (AC5)', async () => {
+        const withAc = (acBody: string): Promise<string> =>
+            ProofInputFingerprint.compute({
+                taskContent: `${checklistTask('- [ ] R1. First')}\n### Acceptance Criteria\n${acBody}\n`,
+                processExecutor: executor,
+            });
+        const unticked = await withAc('- [ ] AC1 — first');
+        expect(await withAc('- [x] AC1 — first')).toBe(unticked);
+        expect(await withAc('- [ ] AC1 — first, refined')).not.toBe(unticked);
+    });
 });
