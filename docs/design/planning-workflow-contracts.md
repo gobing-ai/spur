@@ -3,8 +3,8 @@ kind: design
 title: "Planning workflow and operation contracts"
 status: implemented
 created_at: 2026-09-09
-updated_at: 2026-09-26
-related: ["0889", "0898", "0949", "0976"]
+updated_at: 2026-09-27
+related: ["0889", "0898", "0949", "0976", "0958"]
 tags: [contract, planning, workflow]
 ---
 
@@ -208,14 +208,18 @@ completion can never cross the lifecycle boundary. This is the spur-native repla
 components and deliberately nothing more, so an operator can tell a safe task-file edit from a
 digest-breaking one. The git-tree half hashes the working tree minus
 `DEFAULT_EXCLUDE_GLOBS = ['docs/tasks*', 'docs/features*']`
-(`packages/app/src/workflow/proof-input-fingerprint.ts:172`) — the corpus and ephemeral trees the proof
+(`packages/app/src/workflow/proof-input-fingerprint.ts:241`) — the corpus and ephemeral trees the proof
 documents never contribute, which is why record-time evidence writes (ledger rows under `Solution` /
 `Testing` / `Review`, new run artifacts) leave the digest unchanged. The task-spec half folds the task
 sections `['Background', 'Requirements', 'Acceptance Criteria', 'Design', 'Plan']`
-(`proof-input-fingerprint.ts:249`) via `taskSpecPath`, and the linked-feature half folds
-`['Goal', 'Scope', 'Acceptance Criteria']` (`proof-input-fingerprint.ts:282`) via `featureSpecPath`.
+(`proof-input-fingerprint.ts:335`) via `taskSpecPath`, and the linked-feature half folds
+`['Goal', 'Scope', 'Acceptance Criteria']` (`proof-input-fingerprint.ts:368`) via `featureSpecPath`.
 `Solution` / `Testing` / `Review` are out of the input set by design, so post-verification prose does not
-re-open the gate; editing a `Requirements`, `Design`, or `Plan` section after capture does.
+re-open the gate; editing a `Requirements`, `Design`, or `Plan` section after capture does. Checkbox
+markers are canonicalized before folding (`canonicalizeCheckboxMarkers`, 0958 R3): a `-`/`*`/`+` marker
+at any indentation folds to `- [x]`, so ticking `- [ ]` → `- [x]` via `spur task update` cannot move the
+digest while the item's text still can (0958 R4); list bullets, non-checkbox indentation, and checkbox
+ordering remain spec content.
 **Task-input shape validation (task 0818 R4):** `readProofInputContents`
 (`packages/app/src/workflow/proof-input-fingerprint.ts`) is the shared read boundary for the
 task-spec half and rejects a `taskFile` that is not a task specification before any digest input is

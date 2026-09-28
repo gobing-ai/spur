@@ -1,18 +1,18 @@
 ---
 kind: design
-title: "Feature check `--strict`: AC satisfaction (tasks 0340, 0410, 0561, 0672)"
+title: "Feature check `--strict`: AC satisfaction (tasks 0340, 0410, 0561, 0672, 0958)"
 status: implemented
 created_at: 2026-07-26
-updated_at: 2026-08-25
-related: ["0340", "0410", "0561", "0672"]
+updated_at: 2026-09-27
+related: ["0340", "0410", "0561", "0672", "0958"]
 tags: [contract, planning, cli]
 ---
 
-# Feature check `--strict`: AC satisfaction (tasks 0340, 0410, 0561, 0672)
+# Feature check `--strict`: AC satisfaction (tasks 0340, 0410, 0561, 0672, 0958)
 
 **Status:** implemented  
 **Date:** 2026-07-26  
-**Updated:** 2026-08-25 (task 0672)
+**Updated:** 2026-09-27 (task 0958)
 **Authority:** design satellite for tasks 0340 and 0410 (constitution: surface/design decisions live under `docs/design/`; process remains in `docs/99`)
 
 ## Decision
@@ -43,7 +43,10 @@ normalized scenario-title handling and the `AC-N` ordinal alias (1-based); a row
 trailing parenthetical — an embedded Gherkin body, any nesting, line breaks included — is
 additionally evaluated with the parenthetical greedily stripped (additive backstop, 0561). The raw
 and stripped forms are always evaluated first, so a title that legitimately ends in `(...)` still
-matches unmodified. Verdict artifacts preserve row ids verbatim.
+matches unmodified. A scenario whose title carries a leading `R<n>` label additionally matches a row
+id embedding that label in an explicit reference form — `(feature R<n>)`, `(covers: R<n>)`, or
+`[R<n>]` (case-insensitive and delimiter-bounded; a bare `R<n>` elsewhere in the id never matches —
+0958 R1). Verdict artifacts preserve row ids verbatim.
 
 Malformed JSON or non-object roots, a missing required `requirements` array, non-array coverage
 fields, and rejected rows in an existing artifact emit one bounded `L4.malformed-verdict-artifact`
