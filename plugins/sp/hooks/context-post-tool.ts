@@ -34,7 +34,7 @@ export const REDACTION_CAP_BYTES = 4096;
 /** Max command/pattern summary length before ellipsis (chars). */
 export const SUMMARY_MAX_CHARS = 200;
 
-interface ToolPayload {
+export interface ToolPayload {
     session_id?: string;
     tool_name?: string;
     tool_input?: {

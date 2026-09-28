@@ -49,30 +49,30 @@ function computeSessionTotals(
     return { reads, writes, tokens };
 }
 
-function exitOk(): never {
-    process.exit(0);
-}
-
-async function main(): Promise<void> {
-    const dir = join(getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd(), '.spur', 'context');
-
+/**
+ * Finalize one session (task 0969 R3): read the `.session.json` pointer, compute the session's
+ * rollup totals, append the `session_end` row, remove the pointer (best-effort) and return the
+ * event. Shared by this hook's entrypoint and Pi's `session_shutdown` so both hosts roll up
+ * identically. Returns null on every fail-open path.
+ */
+export function recordSessionEnd(dir: string, now: () => Date = () => new Date()): Record<string, unknown> | null {
     const sessionFile = join(dir, '.session.json');
-    if (!existsSync(sessionFile)) exitOk();
+    if (!existsSync(sessionFile)) return null;
 
     let sessionId = '';
     try {
         const session = JSON.parse(readFileSync(sessionFile, 'utf-8')) as { session?: string };
         sessionId = session.session ?? '';
     } catch {
-        exitOk();
+        return null;
     }
 
-    if (!sessionId) exitOk();
+    if (!sessionId) return null;
 
     const totals = computeSessionTotals(join(dir, 'token-ledger.jsonl'), sessionId);
 
     const event = {
-        ts: new Date().toISOString(),
+        ts: now().toISOString(),
         session: sessionId,
         type: 'session_end' as const,
         totals,
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
     try {
         appendFileSync(join(dir, 'token-ledger.jsonl'), `${JSON.stringify(event)}\n`);
     } catch {
-        exitOk();
+        return null;
     }
 
     try {
@@ -90,7 +90,15 @@ async function main(): Promise<void> {
         // cleanup is best-effort
     }
 
-    exitOk();
+    return event;
 }
 
-void main().catch(exitOk);
+// Entrypoint: run the shared core, then exit 0 (fail-open) as this hook always has.
+if (import.meta.main) {
+    try {
+        recordSessionEnd(join(getEnvVar('CLAUDE_PROJECT_DIR') ?? process.cwd(), '.spur', 'context'));
+    } catch {
+        /* fail-open: every error path exits 0 */
+    }
+    process.exit(0);
+}

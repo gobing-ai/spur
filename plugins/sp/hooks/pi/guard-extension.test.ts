@@ -19,6 +19,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, removeEnvVar, setEnvVar } from '../../lib/env';
+import { recordToolUseEvent } from '../context-post-tool';
 import guardExtension from './guard-extension';
 
 // ─── Harness ─────────────────────────────────────────────────────────────
@@ -52,7 +53,7 @@ function makeCtx(confirmResult = true): FakeCtx {
 }
 
 type Handler = (
-    event: { toolName?: string; input?: Record<string, unknown> },
+    event: { toolName?: string; input?: Record<string, unknown>; content?: unknown },
     ctx: FakeCtx,
 ) => Promise<{ block?: boolean; reason?: string } | undefined>;
 
@@ -283,35 +284,42 @@ describe('session lifecycle and token ledger', () => {
         const sessionFile = join(dir, '.spur', 'context', '.session.json');
         expect(existsSync(sessionFile)).toBe(true);
         const session = JSON.parse(readFileSync(sessionFile, 'utf-8')) as Record<string, unknown>;
-        expect(typeof session.session_id).toBe('string');
-        expect(session.started_at).toBeDefined();
+        expect(typeof session.session).toBe('string');
+        expect(String(session.session)).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{4}$/);
+        expect(session.started).toBeDefined();
+        expect(session.session_id).toBeUndefined();
+        expect(session.started_at).toBeUndefined();
 
         const ledger = readLedger(dir);
         expect(ledger).toHaveLength(1);
         expect(ledger[0]?.type).toBe('session_start');
-        expect(ledger[0]?.session).toBe(session.session_id);
+        expect(ledger[0]?.session).toBe(session.session);
+        expect(typeof ledger[0]?.contextFreshness).toBe('object');
     });
 
-    test('tool_result records a bash event with a token estimate', async () => {
+    test('tool_result records a bash event with a token estimate from the response', async () => {
         const dir = makeTempDir('spur-pi-s2-');
         await handlers.session_start?.({}, makeCtx());
-        await handlers.tool_result?.({ toolName: 'bash', input: { command: 'ls' } }, makeCtx());
+        await handlers.tool_result?.(
+            { toolName: 'bash', input: { command: 'ls' }, content: [{ type: 'text', text: 'abcd' }] },
+            makeCtx(),
+        );
 
-        const events = readLedger(dir).filter((e) => e.type === 'write');
+        const events = readLedger(dir).filter((e) => e.type === 'bash');
         expect(events).toHaveLength(1);
         expect(events[0]?.summary).toBe('ls');
-        expect(events[0]?.tokens).toBe(1); // ceil(2/4)
+        expect(events[0]?.tokens).toBe(1); // ceil(4/4)
     });
 
-    test('a Read tool_result records a read event with zero tokens (no command)', async () => {
+    test('a Pi read tool_result records a read event with its path; tokens are omitted without content', async () => {
         const dir = makeTempDir('spur-pi-s3-');
         await handlers.session_start?.({}, makeCtx());
-        await handlers.tool_result?.({ toolName: 'Read', input: { file_path: '/x.ts' } }, makeCtx());
+        await handlers.tool_result?.({ toolName: 'read', input: { path: '/x.ts' } }, makeCtx());
 
         const events = readLedger(dir).filter((e) => e.type === 'read');
         expect(events).toHaveLength(1);
         expect(events[0]?.file).toBe('/x.ts');
-        expect(events[0]?.tokens).toBe(0);
+        expect(events[0]?.tokens).toBeUndefined();
     });
 
     test('a Pi-native read (lowercase tool, `path` input) records a read event with its path', async () => {
@@ -328,9 +336,12 @@ describe('session lifecycle and token ledger', () => {
         const dir = makeTempDir('spur-pi-s4-');
         await handlers.session_start?.({}, makeCtx());
         const command = `echo ghp_${'a'.repeat(36)} sk-${'b'.repeat(20)} AKIA${'C'.repeat(16)} api_key="${'d'.repeat(16)}"`;
-        await handlers.tool_result?.({ toolName: 'bash', input: { command } }, makeCtx());
+        await handlers.tool_result?.(
+            { toolName: 'bash', input: { command }, content: [{ type: 'text', text: command }] },
+            makeCtx(),
+        );
 
-        const events = readLedger(dir).filter((e) => e.type === 'write');
+        const events = readLedger(dir).filter((e) => e.type === 'bash');
         expect(events).toHaveLength(1);
         expect(typeof events[0]?.tokens).toBe('number');
         // The persisted summary must not carry the raw secrets.
@@ -343,24 +354,33 @@ describe('session lifecycle and token ledger', () => {
     test('token estimates cap at 4 KiB of command text', async () => {
         const dir = makeTempDir('spur-pi-s5-');
         await handlers.session_start?.({}, makeCtx());
-        await handlers.tool_result?.({ toolName: 'bash', input: { command: 'x'.repeat(5000) } }, makeCtx());
+        await handlers.tool_result?.(
+            {
+                toolName: 'bash',
+                input: { command: 'x'.repeat(5000) },
+                content: [{ type: 'text', text: 'y'.repeat(5000) }],
+            },
+            makeCtx(),
+        );
 
-        const events = readLedger(dir).filter((e) => e.type === 'write');
+        const events = readLedger(dir).filter((e) => e.type === 'bash');
         expect(events[0]?.tokens).toBe(Math.ceil(4096 / 4));
         // The summary is truncated at 200 chars
         expect(String(events[0]?.summary)).toHaveLength(200);
         expect(String(events[0]?.summary).endsWith('…')).toBe(true);
     });
 
-    test('summary candidate chain falls back through pattern to a tool-name placeholder', async () => {
+    test('a Pi grep records a grep row with a pattern summary; an unmapped tool writes nothing', async () => {
         const dir = makeTempDir('spur-pi-s6-');
         await handlers.session_start?.({}, makeCtx());
-        await handlers.tool_result?.({ toolName: 'Grep', input: { pattern: 'TODO' } }, makeCtx());
+        await handlers.tool_result?.({ toolName: 'grep', input: { pattern: 'TODO' } }, makeCtx());
         await handlers.tool_result?.({ toolName: 'ToolX', input: {} }, makeCtx());
 
-        const events = readLedger(dir).filter((e) => e.type === 'write');
-        expect(events[0]?.summary).toBe('TODO');
-        expect(events[1]?.summary).toBe('(ToolX)');
+        const events = readLedger(dir).filter((e) => e.type === 'grep');
+        expect(events).toHaveLength(1);
+        expect(events[0]?.summary).toBe('/TODO/');
+        // The unmapped ToolX writes no row (R1 filter).
+        expect(readLedger(dir)).toHaveLength(2);
     });
 
     test('every row carries the fields the ledger reader requires (ts, session, type)', async () => {
@@ -423,8 +443,8 @@ describe('session lifecycle and token ledger', () => {
         const dir = makeTempDir('spur-pi-s12-');
         const ctx = makeCtx();
         await handlers.session_start?.({}, ctx);
-        await handlers.tool_result?.({ toolName: 'Read', input: { file_path: '/a' } }, ctx);
-        await handlers.tool_result?.({ toolName: 'bash', input: { command: 'aaaa' } }, ctx); // 1 token
+        await handlers.tool_result?.({ toolName: 'read', input: { path: '/a' } }, ctx);
+        await handlers.tool_result?.({ toolName: 'write', input: { path: '/b', content: 'aaaa' } }, ctx); // 1 token
 
         const ledgerPath = join(dir, '.spur', 'context', 'token-ledger.jsonl');
         writeFileSync(
@@ -436,9 +456,9 @@ describe('session lifecycle and token ledger', () => {
 
         const end = readLedger(dir).find((e) => e.type === 'session_end');
         expect(end).toBeDefined();
-        expect(end?.reads).toBe(1);
-        expect(end?.writes).toBe(1);
-        expect(end?.tokens).toBe(1);
+        expect(end?.totals).toEqual({ reads: 1, writes: 1, tokens: 1 });
+        expect(typeof end?.ts).toBe('string');
+        expect(typeof end?.session).toBe('string');
         expect(existsSync(join(dir, '.spur', 'context', '.session.json'))).toBe(false);
     });
 
@@ -455,5 +475,145 @@ describe('session lifecycle and token ledger', () => {
         writeFileSync(join(dir, '.spur', 'context', '.session.json'), 'not json');
         await handlers.session_shutdown?.({}, makeCtx());
         // no throw = fail-open contract held
+    });
+});
+
+// ─── Pi/Claude parity (task 0969) ────────────────────────────────────────
+
+/** Drop the wall-clock `ts` so two rows recorded at different instants can be compared. */
+function withoutTs(row: Record<string, unknown> | undefined): Record<string, unknown> {
+    const { ts: _ts, ...rest } = row ?? {};
+    return rest;
+}
+
+describe('Pi/Claude ledger parity (0969 R1)', () => {
+    const cases: Array<{
+        pi: string;
+        input: Record<string, unknown>;
+        claude: string;
+        claudeInput: Record<string, unknown>;
+    }> = [
+        { pi: 'read', input: { path: '/a.ts' }, claude: 'Read', claudeInput: { file_path: '/a.ts' } },
+        {
+            pi: 'write',
+            input: { path: '/b.ts', content: 'hello' },
+            claude: 'Write',
+            claudeInput: { file_path: '/b.ts', content: 'hello' },
+        },
+        {
+            pi: 'edit',
+            input: { path: '/c.ts', edits: [{ oldText: 'a', newText: 'b' }] },
+            claude: 'Edit',
+            claudeInput: { file_path: '/c.ts', old_string: 'a', new_string: 'b' },
+        },
+        {
+            pi: 'grep',
+            input: { pattern: 'TODO', path: 'src', glob: '*.ts' },
+            claude: 'Grep',
+            claudeInput: { pattern: 'TODO', path: 'src', glob: '*.ts' },
+        },
+        {
+            pi: 'find',
+            input: { pattern: '*.md', path: 'docs' },
+            claude: 'Glob',
+            claudeInput: { pattern: '*.md', path: 'docs' },
+        },
+        { pi: 'bash', input: { command: 'ls -la' }, claude: 'Bash', claudeInput: { command: 'ls -la' } },
+    ];
+
+    test('every mapped Pi tool row deep-equals the Claude row for the same event after ts', async () => {
+        for (const c of cases) {
+            const dirA = makeTempDir('parity-pi-');
+            await handlers.session_start?.({}, makeCtx());
+            await handlers.tool_result?.({ toolName: c.pi, input: c.input }, makeCtx());
+            const piRow = readLedger(dirA).find((r) => r.type !== 'session_start');
+
+            // dir B: the same `.session.json`, the equivalent Claude payload through the core.
+            const dirB = makeTempDir('parity-claude-');
+            const bCtx = join(dirB, '.spur', 'context');
+            mkdirSync(bCtx, { recursive: true });
+            writeFileSync(join(bCtx, '.session.json'), readFileSync(join(dirA, '.spur', 'context', '.session.json')));
+            recordToolUseEvent(bCtx, { tool_name: c.claude, tool_input: c.claudeInput });
+            const claudeRow = readLedger(dirB).find((r) => r.type !== 'session_start');
+
+            expect(withoutTs(piRow), `${c.pi} vs ${c.claude}`).toEqual(withoutTs(claudeRow));
+        }
+    });
+
+    test('an ls event and an unknown custom tool write no row', async () => {
+        const dir = makeTempDir('parity-none-');
+        await handlers.session_start?.({}, makeCtx());
+        await handlers.tool_result?.({ toolName: 'ls', input: { path: '/a' } }, makeCtx());
+        await handlers.tool_result?.({ toolName: 'custom_tool', input: {} }, makeCtx());
+        expect(readLedger(dir).filter((r) => r.type !== 'session_start')).toHaveLength(0);
+    });
+});
+
+describe('Pi session schema and reuse (0969 R2)', () => {
+    test('session_start writes the Claude schema with a pi agent fallback and a freshness stamp', async () => {
+        const dir = makeTempDir('parity-session-');
+        const saved: Record<string, string | undefined> = {};
+        for (const key of ['SPUR_AGENT', 'CLAUDE_CODE_ENTRYPOINT', 'TERM_PROGRAM', 'SPUR_DEFAULT_AGENT']) {
+            saved[key] = getEnvVar(key);
+            removeEnvVar(key);
+        }
+        try {
+            await handlers.session_start?.({}, makeCtx());
+            const session = JSON.parse(readFileSync(join(dir, '.spur', 'context', '.session.json'), 'utf-8')) as Record<
+                string,
+                unknown
+            >;
+            expect(Object.keys(session)).toContain('session');
+            expect(String(session.session)).toMatch(/^session-\d{4}-\d{2}-\d{2}-\d{4}$/);
+            expect(session.started).toBeDefined();
+            expect(session.session_id).toBeUndefined();
+            expect(session.started_at).toBeUndefined();
+            expect(session.agent).toBe('pi');
+
+            const starts = readLedger(dir).filter((r) => r.type === 'session_start');
+            expect(starts).toHaveLength(1);
+            expect(typeof starts[0]?.contextFreshness).toBe('object');
+        } finally {
+            for (const [key, value] of Object.entries(saved)) {
+                if (value === undefined) removeEnvVar(key);
+                else setEnvVar(key, value);
+            }
+        }
+    });
+
+    test('a fresh session with SPUR_RUN_ID is reused byte-identically with no new row', async () => {
+        const dir = makeTempDir('parity-reuse-');
+        await handlers.session_start?.({}, makeCtx());
+        const sessionFile = join(dir, '.spur', 'context', '.session.json');
+        const before = readFileSync(sessionFile, 'utf-8');
+        const rowsBefore = readLedger(dir).length;
+        setEnvVar('SPUR_RUN_ID', 'x');
+        try {
+            await handlers.session_start?.({}, makeCtx());
+        } finally {
+            removeEnvVar('SPUR_RUN_ID');
+        }
+        expect(readFileSync(sessionFile, 'utf-8')).toBe(before);
+        expect(readLedger(dir)).toHaveLength(rowsBefore);
+    });
+});
+
+describe('Pi session shutdown rollup (0969 R3)', () => {
+    test('session_end carries nested totals, satisfies the reader contract, and removes the pointer', async () => {
+        const dir = makeTempDir('parity-shutdown-');
+        const ctx = makeCtx();
+        await handlers.session_start?.({}, ctx);
+        await handlers.tool_result?.({ toolName: 'read', input: { path: '/a' } }, ctx);
+        await handlers.tool_result?.({ toolName: 'write', input: { path: '/b', content: 'aaaa' } }, ctx); // 1 token
+        await handlers.session_shutdown?.({}, ctx);
+
+        const end = readLedger(dir).find((r) => r.type === 'session_end');
+        expect(end).toBeDefined();
+        expect(end?.totals).toEqual({ reads: 1, writes: 1, tokens: 1 });
+        // Reader contract (token-ledger-service.ts:97-117): string ts/session/type + object totals.
+        expect(typeof end?.ts).toBe('string');
+        expect(typeof end?.session).toBe('string');
+        expect(typeof end?.totals).toBe('object');
+        expect(existsSync(join(dir, '.spur', 'context', '.session.json'))).toBe(false);
     });
 });

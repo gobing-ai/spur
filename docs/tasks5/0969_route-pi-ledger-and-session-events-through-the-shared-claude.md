@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Route Pi ledger and session events through the shared Claude hook cores
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-26T06:13:43.199Z
-updated_at: "2026-09-27T16:45:03.793Z"
+updated_at: "2026-09-28T23:09:54.918Z"
 feature_id: H21
 
 priority: P2
@@ -35,21 +35,21 @@ Origin: `/sp:dev-review plugins` architecture candidate (major: tight coupling a
 
 ### Requirements
 
-- [ ] R1. Pi `tool_result` events are recorded by the shared `recordToolUseEvent` (`plugins/sp/hooks/context-post-tool.ts:266`) after a pure Pi→Claude payload normalization; Pi rows then equal Claude rows for the same event on every ts-independent field (fixes D7–D11).
-- [ ] R2. Pi `session_start` is handled by the shared `recordSessionStart` (`plugins/sp/hooks/context-session-start.ts:125`), with the agent hint falling back to `'pi'`. `.session.json` uses the Claude schema; nested-run reuse and `contextFreshness` apply (fixes D1–D5).
-- [ ] R3. The session-stop logic in `context-session-stop.ts` is extracted into an exported, testable `recordSessionEnd(dir, now?)` core that Claude's `main()` and Pi's `session_shutdown` both call; Pi `session_end` rows carry nested `totals` (fixes D6).
-- [ ] R4. `guard-extension.ts` no longer defines `appendToLedger`, `summarizeToolEvent`, `readSessionId`, `generateSessionId`, `initSession` or `cleanupSession`; its only ledger/session code is the normalizer plus three one-line event handlers.
-- [ ] R5. Claude hook behavior is unchanged: existing `context-hooks.test.ts` and `token-estimate.test.ts` assertions pass with no edits to `expect(` lines.
+- [x] R1. Pi `tool_result` events are recorded by the shared `recordToolUseEvent` (`plugins/sp/hooks/context-post-tool.ts:266`) after a pure Pi→Claude payload normalization; Pi rows then equal Claude rows for the same event on every ts-independent field (fixes D7–D11).
+- [x] R2. Pi `session_start` is handled by the shared `recordSessionStart` (`plugins/sp/hooks/context-session-start.ts:125`), with the agent hint falling back to `'pi'`. `.session.json` uses the Claude schema; nested-run reuse and `contextFreshness` apply (fixes D1–D5).
+- [x] R3. The session-stop logic in `context-session-stop.ts` is extracted into an exported, testable `recordSessionEnd(dir, now?)` core that Claude's `main()` and Pi's `session_shutdown` both call; Pi `session_end` rows carry nested `totals` (fixes D6).
+- [x] R4. `guard-extension.ts` no longer defines `appendToLedger`, `summarizeToolEvent`, `readSessionId`, `generateSessionId`, `initSession` or `cleanupSession`; its only ledger/session code is the normalizer plus three one-line event handlers.
+- [x] R5. Claude hook behavior is unchanged: existing `context-hooks.test.ts` and `token-estimate.test.ts` assertions pass with no edits to `expect(` lines.
 
 ### Acceptance Criteria
 
 Graduates all five of feature H21's scenarios (exact titles below); the numbered rows are the verify lens.
 
-- [ ] AC1 — R1 — Pi tool rows match Claude tool rows (req: R1)
-- [ ] AC2 — R2 — Pi session file uses the Claude schema (req: R2)
-- [ ] AC3 — R3 — Pi reuses an in-flight session like Claude (req: R2)
-- [ ] AC4 — R4 — Pi shutdown rolls up like Claude (req: R3)
-- [ ] AC5 — R5 — Pi has no private ledger or session implementation (req: R4, R5)
+- [x] AC1 — R1 — Pi tool rows match Claude tool rows (req: R1)
+- [x] AC2 — R2 — Pi session file uses the Claude schema (req: R2)
+- [x] AC3 — R3 — Pi reuses an in-flight session like Claude (req: R2)
+- [x] AC4 — R4 — Pi shutdown rolls up like Claude (req: R3)
+- [x] AC5 — R5 — Pi has no private ledger or session implementation (req: R4, R5)
 
 **Verify lens**
 
@@ -136,26 +136,104 @@ Graduates all five of feature H21's scenarios (exact titles below); the numbered
 
 ### Plan
 
-1. Branch `refactor/pi-hook-core-parity` from main.
-2. Add the AC1–AC4 tests first in `plugins/sp/hooks/pi/guard-extension.test.ts` (reuse the existing temp-dir + fake `pi` harness in the `session lifecycle and token ledger` describe at `:278`). Confirm they fail against current code.
-3. `context-session-stop.ts`: extract `recordSessionEnd`. Add unit tests in `context-hooks.test.ts` (`describe('context-session-stop — session finalization')` at `:362`) for the happy path, a missing pointer and a corrupt pointer.
-4. `context-session-start.ts`: add the `agentFallback` parameter. `context-post-tool.ts`: export `ToolPayload`.
-5. `guard-extension.ts`: add `normalizePiToolEvent`, rewire the three handlers, delete the private helpers and unused imports.
-6. Update existing Pi ledger tests that assert the old Pi-only shapes (`session_id`, flat totals, `type:'write'` for bash). The new shape is the requirement; note each changed assertion in Solution.
-7. Gates: `bun test plugins/sp/hooks` (run from the repo root), `bun run typecheck`, `bunx biome check plugins/sp`, `bun run plugin-smoke`, `bun run spur-check`. Run the AC5 `rg` and `git diff` checks.
-8. Commit: `refactor(plugins): route Pi ledger and session events through the shared hook cores`.
+- [x] Branch `refactor/pi-hook-core-parity` from main.
+- [x] Add the AC1–AC4 tests first in `plugins/sp/hooks/pi/guard-extension.test.ts` (reuse the existing temp-dir + fake `pi` harness in the `session lifecycle and token ledger` describe at `:278`). Confirm they fail against current code.
+- [x] `context-session-stop.ts`: extract `recordSessionEnd`. Add unit tests in `context-hooks.test.ts` (`describe('context-session-stop — session finalization')` at `:362`) for the happy path, a missing pointer and a corrupt pointer.
+- [x] `context-session-start.ts`: add the `agentFallback` parameter. `context-post-tool.ts`: export `ToolPayload`.
+- [x] `guard-extension.ts`: add `normalizePiToolEvent`, rewire the three handlers, delete the private helpers and unused imports.
+- [x] Update existing Pi ledger tests that assert the old Pi-only shapes (`session_id`, flat totals, `type:'write'` for bash). The new shape is the requirement; note each changed assertion in Solution.
+- [x] Gates: `bun test plugins/sp/hooks` (run from the repo root), `bun run typecheck`, `bunx biome check plugins/sp`, `bun run plugin-smoke`, `bun run spur-check`. Run the AC5 `rg` and `git diff` checks.
+- [x] Commit: `refactor(plugins): route Pi ledger and session events through the shared hook cores`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `plugins/sp/hooks/context-hooks.test.ts:733` |
+| `plugins/sp/hooks/context-post-tool.ts:37` |
+| `plugins/sp/hooks/context-session-start.ts:129` |
+| `plugins/sp/hooks/context-session-start.ts:144` |
+| `plugins/sp/hooks/context-session-stop.ts:52` |
+| `plugins/sp/hooks/context-session-stop.ts:60` |
+| `plugins/sp/hooks/context-session-stop.ts:67` |
+| `plugins/sp/hooks/context-session-stop.ts:70` |
+| `plugins/sp/hooks/context-session-stop.ts:75` |
+| `plugins/sp/hooks/context-session-stop.ts:84` |
+| `plugins/sp/hooks/context-session-stop.ts:93` |
+| `plugins/sp/hooks/context-session-stop.ts:96` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:22` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:287` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:296` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:300` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:303` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:308` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:311` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:314` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:317` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:322` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:339` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:344` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:357` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:366` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:373` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:376` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:379` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:446` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:459` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:480` |
+| `plugins/sp/hooks/pi/guard-extension.test.ts:56` |
+| `plugins/sp/hooks/pi/guard-extension.ts:10` |
+| `plugins/sp/hooks/pi/guard-extension.ts:118` |
+| `plugins/sp/hooks/pi/guard-extension.ts:140` |
+| `plugins/sp/hooks/pi/guard-extension.ts:143` |
+| `plugins/sp/hooks/pi/guard-extension.ts:178` |
+| `plugins/sp/hooks/pi/guard-extension.ts:238` |
+| `plugins/sp/hooks/pi/guard-extension.ts:240` |
+| `plugins/sp/hooks/pi/guard-extension.ts:25` |
+| `plugins/sp/hooks/pi/guard-extension.ts:252` |
+| `plugins/sp/hooks/pi/guard-extension.ts:254` |
+| `plugins/sp/hooks/pi/guard-extension.ts:261` |
+| `plugins/sp/hooks/pi/guard-extension.ts:263` |
+| `plugins/sp/hooks/pi/guard-extension.ts:30` |
+| `plugins/sp/hooks/pi/guard-extension.ts:41` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/hooks/pi/guard-extension.ts` `normalizePiToolEvent` (pure Pi→Claude adapter) feeds the shared `recordToolUseEvent`; `plugins/sp/hooks/pi/guard-extension.test.ts` "Pi/Claude ledger parity" records each of read/write/edit/grep/find/bash through the extension into dir A and the equivalent Claude payload through `recordToolUseEvent` into dir B, asserting deep-equality after deleting `ts`; `ls` and an unknown tool write no row |
+| R2 | MET | The `session_start` handler calls `recordSessionStart(spurContextDir(), getEnvVars(), undefined, 'pi')`; `context-session-start.ts` gained the optional `agentFallback` (line 143 → `resolveAgentHint(env, agentFallback)`). Test asserts `session` matches `/^session-\d{4}-\d{2}-\d{2}-\d{4}$/`, `started` present, no `session_id`/`started_at`, `agent === 'pi'`, one `session_start` row with `contextFreshness`, and byte-identical reuse under `SPUR_RUN_ID` |
+| R3 | MET | `context-session-stop.ts` exports `recordSessionEnd(dir, now?)` (reads the pointer, computes totals, appends `{ts, session, type:'session_end', totals}`, removes the pointer, returns the event/null); its entrypoint and Pi's `session_shutdown` both call it. Unit tests cover happy path, missing pointer, corrupt pointer and empty id |
+| R4 | MET | `rg -n "function (appendToLedger\|summarizeToolEvent\|readSessionId\|generateSessionId\|initSession\|cleanupSession)\b" plugins/sp/hooks/pi/guard-extension.ts` → none; the file keeps 4 `pi.on(` handlers and only the normalizer plus three one-line handlers |
+| R5 | MET | `git diff HEAD -- plugins/sp/hooks/context-hooks.test.ts` has no removed `expect(` line; the Claude-side hook tests (80 tests across `context-hooks` + `guard-extension`) pass; `bun run spur-check` → 9428 pass / 0 fail |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| R1 — Pi tool rows match Claude tool rows | MET | test | "every mapped Pi tool row deep-equals the Claude row for the same event after ts" (6 tool cases) + "an ls event and an unknown custom tool write no row" |
+| R2 — Pi session file uses the Claude schema | MET | test | "session_start writes the Claude schema with a pi agent fallback and a freshness stamp" |
+| R3 — Pi reuses an in-flight session like Claude | MET | test | "a fresh session with SPUR_RUN_ID is reused byte-identically with no new row" |
+| R4 — Pi shutdown rolls up like Claude | MET | test | "session_end carries nested totals, satisfies the reader contract, and removes the pointer" + `recordSessionEnd` core unit tests |
+| R5 — Pi has no private ledger or session implementation | MET | command | AC5 `rg` probe → none; `bunx biome check plugins/sp` clean; `bun run plugin-smoke` PASS; `bun run spur-check` EXIT 0 |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:e96fbffa3bed6447378948dab7cfe5e415bd41ef4270f8fd2ec8cca3f8932734 |
 
 ### References
 
@@ -170,4 +248,7 @@ Graduates all five of feature H21's scenarios (exact titles below); the numbered
 ### History
 
 - 2026-09-26T06:18:47.624Z backlog → todo (system)
+- 2026-09-28T23:09:32.691Z todo → wip (system)
+- 2026-09-28T23:09:33.404Z wip → testing (system)
+- 2026-09-28T23:09:54.918Z testing → done (system)
 

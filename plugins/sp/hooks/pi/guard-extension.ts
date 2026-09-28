@@ -7,9 +7,12 @@
  * Implements:
  *   - task-write-guard  (tool_call → block Write/Edit to Spur task files)
  *   - careful-guard     (tool_call → warn on destructive Bash commands)
- *   - context-post-tool (tool_result → append to token-ledger.jsonl)
- *   - context-session-start (session_start → init .session.json)
- *   - context-session-stop  (session_shutdown → rollup + cleanup)
+ *   - context-post-tool (tool_result → shared recordToolUseEvent)
+ *   - context-session-start (session_start → shared recordSessionStart)
+ *   - context-session-stop  (session_shutdown → shared recordSessionEnd)
+ *
+ * The ledger and session cores are shared with the Claude hooks (task 0969): this
+ * extension only normalizes Pi event shapes and adapts them to those cores.
  *
  * Installation:
  *   Add to ~/.pi/agent/settings.json packages:
@@ -19,13 +22,14 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { getEnvVar, getEnvVars } from '../../lib/env';
-import { resolveAgentHint as resolveAgentHintShared, resolveModelHint as resolveModelHintShared } from '../agent-hint';
-import { cappedByteLength, truncateSummary } from '../context-post-tool';
+import { recordToolUseEvent, type ToolPayload } from '../context-post-tool';
+import { recordSessionStart } from '../context-session-start';
+import { recordSessionEnd } from '../context-session-stop';
 import { classifyCommand } from '../destructive-policy';
 import { couldBeTaskFile } from '../task-file-policy';
 
@@ -35,8 +39,6 @@ import { couldBeTaskFile } from '../task-file-policy';
 // process lifetime, and lazy resolution keeps the extension testable (tests
 // chdir into a temp project before driving handlers).
 const spurContextDir = (): string => join(process.cwd(), '.spur', 'context');
-const sessionFilePath = (): string => join(spurContextDir(), '.session.json');
-const ledgerFilePath = (): string => join(spurContextDir(), 'token-ledger.jsonl');
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -113,137 +115,86 @@ function resolveSpurTaskOwnership(filePath: string): TaskOwnership {
 // `git push origin +main`, and warned on `git push --force-with-lease`). Do not
 // re-introduce a local copy — add cases to `destructive-policy.test.ts` instead.
 
-// ─── Token ledger helpers (mirrors context-post-tool.ts) ──────────────────
+// ─── Pi → Claude payload normalization (task 0969 R1) ─────────────────────
 
-interface ToolEvent {
-    session_id?: string;
-    tool_name?: string;
-    tool_input?: Record<string, unknown>;
-}
+/** Pi tool name → the Claude tool name the shared core records. */
+const PI_TO_CLAUDE: Record<string, string> = {
+    read: 'Read',
+    write: 'Write',
+    edit: 'Edit',
+    bash: 'Bash',
+    grep: 'Grep',
+    find: 'Glob',
+};
 
-// Summaries persist to disk, so they go through the same scrubber as the Claude hook —
-// the local copy this replaced stored the raw command (secrets included) as `summary`.
-function summarizeToolEvent(event: ToolEvent): string {
-    const input = event.tool_input ?? {};
-    const candidates = [input.file_path, input.command, input.pattern, input.glob_pattern, input.glob, input.path];
-    for (const c of candidates) {
-        if (typeof c === 'string' && c.trim()) return truncateSummary(c);
-    }
-    return `(${event.tool_name ?? 'unknown'})`;
-}
-
-function appendToLedger(event: ToolEvent, command: string | undefined): void {
-    try {
-        if (!existsSync(spurContextDir())) return;
-        const sessionId = readSessionId();
-        if (!sessionId) return;
-
-        const summary = summarizeToolEvent(event);
-        const tokens = command ? Math.ceil(cappedByteLength(command) / 4) : 0;
-        const input = event.tool_input ?? {};
-        // Pi tool names are lowercase (`read`) and its write/edit tools take `path`, not `file_path`.
-        const path = typeof input.file_path === 'string' ? input.file_path : input.path;
-
-        const ledgerEntry = JSON.stringify({
-            session: sessionId,
-            type: event.tool_name?.toLowerCase() === 'read' ? 'read' : 'write',
-            tool: event.tool_name,
-            file: typeof path === 'string' ? path : undefined,
-            summary,
-            tokens,
-            ts: new Date().toISOString(),
-        });
-
-        appendFileSync(ledgerFilePath(), `${ledgerEntry}\n`);
-    } catch {
-        // fail-open: skip ledger writes on error
-    }
-}
-
-function readSessionId(): string | undefined {
-    try {
-        if (!existsSync(sessionFilePath())) return undefined;
-        const data = JSON.parse(readFileSync(sessionFilePath(), 'utf-8')) as { session_id?: string };
-        return data.session_id;
-    } catch {
-        return undefined;
-    }
-}
-
-// ─── Session helpers (agent/model hints from agent-hint.ts; mirrors context-session-stop.ts) ─
-
-function generateSessionId(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).slice(2, 10);
-    return `${timestamp}-${random}`;
-}
-
-function initSession(): void {
-    try {
-        mkdirSync(spurContextDir(), { recursive: true });
-        const sessionId = generateSessionId();
-        const session = {
-            session_id: sessionId,
-            agent: resolveAgentHintShared(getEnvVars(), 'pi'),
-            model: resolveModelHintShared(getEnvVars()),
-            started_at: new Date().toISOString(),
-        };
-        writeFileSync(sessionFilePath(), `${JSON.stringify(session, null, 2)}\n`);
-
-        // Append session_start event to ledger
-        const startEntry = JSON.stringify({
-            session: sessionId,
-            type: 'session_start',
-            agent: session.agent,
-            model: session.model,
-            ts: session.started_at,
-        });
-        appendFileSync(ledgerFilePath(), `${startEntry}\n`);
-    } catch {
-        // fail-open
-    }
-}
-
-function cleanupSession(): void {
-    try {
-        if (!existsSync(sessionFilePath())) return;
-        const session = JSON.parse(readFileSync(sessionFilePath(), 'utf-8')) as { session_id?: string };
-        const sessionId = session.session_id;
-
-        // Compute rollup totals from ledger
-        let reads = 0;
-        let writes = 0;
-        let tokens = 0;
-        if (sessionId && existsSync(ledgerFilePath())) {
-            for (const line of readFileSync(ledgerFilePath(), 'utf-8').split('\n')) {
-                if (!line.trim()) continue;
-                try {
-                    const evt = JSON.parse(line) as { session?: string; type?: string; tokens?: number };
-                    if (evt.session !== sessionId) continue;
-                    if (evt.type === 'read') reads++;
-                    else if (evt.type === 'write') writes++;
-                    if (evt.tokens) tokens += evt.tokens;
-                } catch {
-                    // skip unparseable lines
-                }
-            }
+/** Join the text parts of a Pi tool_result `content` payload. */
+function piContentText(content: unknown): string {
+    if (typeof content === 'string') return content;
+    if (!Array.isArray(content)) return '';
+    const parts: string[] = [];
+    for (const part of content) {
+        if (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string') {
+            parts.push((part as { text: string }).text);
         }
+    }
+    return parts.join('\n');
+}
 
-        // Append session_end event
-        const endEntry = JSON.stringify({
-            session: sessionId,
-            type: 'session_end',
-            reads,
-            writes,
-            tokens,
-            ts: new Date().toISOString(),
-        });
-        appendFileSync(ledgerFilePath(), `${endEntry}\n`);
+/**
+ * Pure Pi-event → Claude-{@link ToolPayload} adapter. An unmapped tool returns null so the
+ * shared core writes no row (R1's row filter). Search tools keep `path` (never `file_path`)
+ * because the core treats `file_path` as the written file, not a search root.
+ */
+export function normalizePiToolEvent(
+    toolName: string,
+    input: Record<string, unknown> | undefined,
+    content?: unknown,
+): ToolPayload | null {
+    const mapped = PI_TO_CLAUDE[toolName];
+    if (mapped === undefined) return null;
+    const i = input ?? {};
+    const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+    const path = str(i.path) || str(i.file_path);
+    const text = piContentText(content);
+    const tool_response = text.length > 0 ? { content: text } : undefined;
 
-        // Cleanup session file
-        rmSync(sessionFilePath(), { force: true });
-    } catch {
-        // fail-open
+    switch (mapped) {
+        case 'Read':
+            return { tool_name: mapped, tool_input: { file_path: path }, tool_response };
+        case 'Write':
+            return { tool_name: mapped, tool_input: { file_path: path, content: str(i.content) }, tool_response };
+        case 'Edit': {
+            const edits = Array.isArray(i.edits) ? (i.edits as Array<Record<string, unknown>>) : [];
+            return {
+                tool_name: mapped,
+                tool_input: {
+                    file_path: path,
+                    old_string: edits.map((e) => str(e.oldText)).join(''),
+                    new_string: edits.map((e) => str(e.newText)).join(''),
+                },
+                tool_response,
+            };
+        }
+        case 'Grep':
+            return {
+                tool_name: mapped,
+                tool_input: {
+                    pattern: str(i.pattern),
+                    ...(path ? { path } : {}),
+                    ...(str(i.glob) ? { glob: str(i.glob) } : {}),
+                },
+                tool_response,
+            };
+        case 'Glob':
+            return {
+                tool_name: mapped,
+                tool_input: { pattern: str(i.pattern), ...(path ? { path } : {}) },
+                tool_response,
+            };
+        case 'Bash':
+            return { tool_name: mapped, tool_input: { command: str(i.command) }, tool_response };
+        default:
+            return null;
     }
 }
 
@@ -284,27 +235,35 @@ export default function (pi: ExtensionAPI): void {
         return {};
     });
 
-    // ── context-post-tool: append to token-ledger.jsonl ───────────────
+    // ── context-post-tool: shared recordToolUseEvent (task 0969 R1) ──
     pi.on('tool_result', async (event) => {
-        const input = event.input as Record<string, unknown> | undefined;
-        const command = typeof input?.command === 'string' ? input.command : undefined;
-        appendToLedger(
-            {
-                session_id: readSessionId(),
-                tool_name: event.toolName,
-                tool_input: input as Record<string, unknown>,
-            },
-            command,
-        );
+        try {
+            const payload = normalizePiToolEvent(
+                event.toolName,
+                event.input as Record<string, unknown> | undefined,
+                (event as { content?: unknown }).content,
+            );
+            if (payload) recordToolUseEvent(spurContextDir(), payload);
+        } catch {
+            // fail-open
+        }
     });
 
-    // ── context-session-start: init session tracking ─────────────────
+    // ── context-session-start: shared recordSessionStart (R2) ────────
     pi.on('session_start', async () => {
-        initSession();
+        try {
+            recordSessionStart(spurContextDir(), getEnvVars(), undefined, 'pi');
+        } catch {
+            // fail-open
+        }
     });
 
-    // ── context-session-stop: rollup + cleanup ───────────────────────
+    // ── context-session-stop: shared recordSessionEnd (R3) ──────────
     pi.on('session_shutdown', async () => {
-        cleanupSession();
+        try {
+            recordSessionEnd(spurContextDir());
+        } catch {
+            // fail-open
+        }
     });
 }

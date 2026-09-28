@@ -730,3 +730,47 @@ describe('context freshness sidecar (task 0711 R4)', () => {
         }
     });
 });
+
+// ---------------------------------------------------------------------------
+// context-session-stop — recordSessionEnd core (task 0969 R3)
+// ---------------------------------------------------------------------------
+
+describe('context-session-stop — recordSessionEnd core (0969 R3)', () => {
+    test('writes nested totals and removes the pointer (happy path)', async () => {
+        const dir = makeTempProject();
+        try {
+            const contextDir = join(dir, '.spur', 'context');
+            writeFileSync(
+                join(contextDir, '.session.json'),
+                JSON.stringify({ session: 's1', started: new Date().toISOString() }),
+            );
+            writeFileSync(
+                join(contextDir, 'token-ledger.jsonl'),
+                `${JSON.stringify({ ts: 't', session: 's1', type: 'read' })}\n${JSON.stringify({ ts: 't', session: 's1', type: 'write', tokens: 3 })}\n`,
+            );
+            const { recordSessionEnd } = await import('./context-session-stop');
+            const event = recordSessionEnd(contextDir);
+            expect(event?.type).toBe('session_end');
+            expect(event?.session).toBe('s1');
+            expect(event?.totals).toEqual({ reads: 1, writes: 1, tokens: 3 });
+            expect(existsSync(join(contextDir, '.session.json'))).toBe(false);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('returns null for a missing pointer, a corrupt pointer, and an empty session id', async () => {
+        const dir = makeTempProject();
+        try {
+            const contextDir = join(dir, '.spur', 'context');
+            const { recordSessionEnd } = await import('./context-session-stop');
+            expect(recordSessionEnd(contextDir)).toBeNull();
+            writeFileSync(join(contextDir, '.session.json'), 'not json');
+            expect(recordSessionEnd(contextDir)).toBeNull();
+            writeFileSync(join(contextDir, '.session.json'), JSON.stringify({ session: '' }));
+            expect(recordSessionEnd(contextDir)).toBeNull();
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});

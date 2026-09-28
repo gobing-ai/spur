@@ -126,6 +126,7 @@ export function recordSessionStart(
     dir: string,
     env: NodeJS.ProcessEnv = getEnvVars(),
     now: () => Date = () => new Date(),
+    agentFallback?: string,
 ): string | null {
     try {
         mkdirSync(dir, { recursive: true });
@@ -140,7 +141,7 @@ export function recordSessionStart(
     const pad = (n: number) => String(n).padStart(2, '0');
     const sessionId = `session-${at.toISOString().slice(0, 10)}-${pad(at.getHours())}${pad(at.getMinutes())}`;
     const ts = at.toISOString();
-    const agent = resolveAgentHint(env);
+    const agent = resolveAgentHint(env, agentFallback);
     const model = resolveModelHint(env);
 
     const sessionBody: Record<string, unknown> = {
