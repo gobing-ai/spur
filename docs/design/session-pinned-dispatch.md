@@ -3,8 +3,8 @@ kind: design
 title: "Session-pinned headless dispatch and the executor availability lifecycle"
 status: accepted
 created_at: 2026-09-17
-updated_at: 2026-09-26
-related: [B6, B7, B8, G66, H53, I31, "0888", "0889", "0890", "0891", "0892", "0893", "0967"]
+updated_at: 2026-09-28
+related: [B6, B7, B8, G66, H53, I31, "0888", "0889", "0890", "0891", "0892", "0893", "0967", "0968"]
 tags: [system, B6, B7, B8, G66, H53, I31, agent, workflow]
 ---
 
@@ -134,6 +134,15 @@ into `packages/app/src/services/member-session.ts` as a `MemberSession` class be
 `MemberSessionDeps` seam (ADR-021). `runAgentLoop` constructs and drives the class at the five
 former inline sites and re-exports `MemberAgentProcess` / `selectsPersistentStdinDispatch` for the
 existing tests. Modes, reset reasons, the failed-drain budget and every ledger row are unchanged.
+
+**Amendment (2026-09-28, task 0968):** the loop itself moved out of the CLI transport into
+`packages/app/src/services/agent-loop-service.ts` as `runAgentLoopCore` over the structural
+`AgentLoopDeps` seam (ADR-021). The service now constructs and drives `MemberSession` — superseding
+the 0967 wording that placed that construction in `runAgentLoop`. The CLI's `runAgentLoop` is a
+thin transport that validates `--spec`, parses `--poll`, binds `AgentLoopDeps`, delegates, and
+re-exports `MAX_CONSECUTIVE_FAILED_DRAINS` / `MemberSession` / `selectsPersistentStdinDispatch` for
+the existing tests. Loop behavior, ledger rows, exit codes and the failed-drain budget are
+unchanged.
 
 ## 7. Sequencing and dependencies
 

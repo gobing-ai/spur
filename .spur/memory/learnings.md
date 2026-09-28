@@ -3657,3 +3657,60 @@ Updated ADR-003 and the architecture and gate contracts; the `04` index already 
 
 - When changing `plugins/sp/scripts/*.ts`, regenerate committed `.mjs` twins with `bun run build:scripts`; do not hand-edit generated twins. Type-only edits may leave them unchanged, but the contract check determines parity.
 - Include plugin tests in the strict plugin TypeScript config: stale test contracts exposed real type errors, and test files are part of the shipped repository gate.
+Doc-evolve wrapup done. Batch resolved to task **0968** (feature G67, dependency 0967).
+
+## Drift report — 2026-09-28
+
+Checks run: 8 (§7 items) · Findings: 2 · Repairs: 2 files
+
+| # | Doc | Reality says | Doc says | Authority | Trigger | Repair |
+|---|-----|--------------|----------|-----------|---------|--------|
+| 1 | `docs/03_ARCHITECTURE.md:553` | `runAgentLoopCore` (`packages/app/src/services/agent-loop-service.ts`) constructs/drives `MemberSession`; CLI binds `AgentLoopDeps` and delegates | "the CLI's `agent loop` constructs it over a structural deps seam and drives mode resolution, resets and resume-id capture" | 03 (§6.4) | T9 | mechanism replaced in place; `version 1.60.0 → 1.61.0` |
+| 2 | `docs/design/session-pinned-dispatch.md` | loop core + `MemberSession` construction moved to the app service | 0967 amendment placed construction in the CLI's `runAgentLoop`; `updated_at: 2026-09-26`; `related` lacked 0968 | satellite (§6.5) | T9 | `updated_at → 2026-09-28`, `related += "0968"`, appended dated 0968 amendment superseding the 0967 wording |
+
+Zero-finding checks (with the command that produced zero): `docs/04_DESIGN.md` index pointer unchanged (same slug, `rg` on 04 for agent/loop) · `docs/00_ADR.md` no entry (ADR-021 already governs — `rg "ADR-021" docs/00_ADR.md`) · satellite §1 problem-measurement snapshot left as dated history per §7.2 · existing `project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62` anchor still resolves · referenced symbols exist (`rg "export function runAgentLoopCore"`) · `bun run link-check` OK.
+
+Evidence: `git show --name-only 0eaad428a` — 0968 touched no doc but its task file, so the T3/T9 obligation was unmet at implementation time; the run's `drift-probe.json` flagged `apps/cli/src/commands/agent.ts` as a doc-owned surface 19×. No task/feature corpus written; no constitution edit (§6.8 not authorized). Artifact written to `.spur/run/94c2840b-a783-4786-8dce-95d708d97cd8-wrapup-learnings.md` (capture-shape validator: PASS).
+
+# Wrapup Learnings — run 94c2840b (task 0968 · feature G67)
+
+## 2026-09-28 · Task 0968 — Move the self-draining agent loop out of the agent CLI into a spur-app loop service
+
+### Conventions
+
+- **Pure move means verbatim.** Bodies relocate unchanged; only `context.x` becomes `deps.x`. The 0831/0834/0839/G66 citations inside comments are the WHY and must survive the move — a "cleanup" of them is drift.
+- **Dependency direction is one-way.** `apps/cli` imports `@gobing-ai/spur-app`; `packages/app` never imports CLI (ADR-021). CLI-only collaborators (`drainIntoPrompt`, `settleClaimedMessages`, `attachSystemEventLedger`, `makeFleetRuntime`, `FleetService`, `DeliveryReconciler`, `AgentCoordinationService`) stay on the CLI side of a structural `AgentLoopDeps` seam, injected as functions.
+- **Transport keeps transport work.** `--spec` validation and `parseLoopPoll` stay in the CLI; the service receives already-validated `{ recipient, pollMs, flags, runtime, runDeps }`. Moving flag parsing into `packages/app` would re-couple the service to the CLI's flag shape.
+- **The proof of a pure move is an unchanged assertion set.** Existing tests pass with zero `expect(` edits; only import paths may move. New assertions would hide a behavior change.
+- **Keep the public signature.** `runAgentLoop(context, flags, runtime?, deps?)` and `export type { AgentLoopRuntime }` stay so `apps/cli/tests` imports hold; the app exports `runAgentLoopCore` so the CLI's `runAgentLoop` name is not duplicated or made circular.
+- **Doc repair follows the 0967 precedent.** Edit the authoritative `03_ARCHITECTURE.md` mechanism in place and bump its minor version; on the design satellite bump `updated_at`, add the task id to `related`, and append a dated amendment. Never rewrite the earlier amendment — supersede it.
+
+### Errors fixed / avoided
+
+- **Local variable shadowing.** Naming the local deps object `deps` would shadow the `deps?: AgentRunDeps` parameter; it was renamed `loopDeps`, with `runDeps: deps` on the call.
+- **`makeFleetRuntime` deliberately stayed in the CLI.** It needs the CLI's `makeService` / `makeCheckService`; moving it would have dragged CLI-only construction into the app and broken the one-way dependency.
+- **Known flake, not a regression.** `agent-run-fleet` R3 can exceed its 5s timeout under full-suite load; re-run it in isolation instead of "fixing" the assertion.
+- **Doc drift the implementation missed.** The loop moved, but `docs/design/session-pinned-dispatch.md` still placed `MemberSession` construction in the CLI's `runAgentLoop`, and `docs/03_ARCHITECTURE.md:553` still said the CLI drives mode resolution. Both are T3/T9 same-commit obligations that the wrap had to repair.
+
+### Patterns
+
+- **Inject the seam, don't move everything.** Deferring `drain` / `settle` / `attachLedger` / `makeFleetRuntime` behind function injection kept the blast radius fixed and let "move them too" become a separate deepening step rather than scope creep.
+- **One `EventBus`, built in the core.** `new EventBus()` lives inside `runAgentLoopCore` and is bound via `deps.agentService(bus)`, so the ledger listeners and the runner share one bus (0831 R4). A bus built by the CLI caller would silently desynchronize them.
+- **Run-local state stays local.** `cursor`, `lastHoldKey`, `invocationStarted`, `lastExitRunId` remain locals of the call, not instance fields; a function (`runAgentLoopCore`) with one `run()` entry point beats a class, and prevents accidental reuse across loop lifetimes.
+- **R5 tests need no `CliContext`.** Stub deps plus an in-memory SQLite `SystemEventDao` exercise the loop directly — the seam is what makes the service unit-testable outside the CLI.
+- **Deferred work is recorded, not silently widened.** The follow-up (move drain/settle/ledger-attach into `packages/app`) is captured as a task note next to the injected seam.
+
+### Gotchas
+
+- **Line-number anchors rot after a dependency lands.** 0967 rewrote `agent.ts`, so 0968's Solution line anchors were stale; symbols are stable, line numbers are not — re-resolve before relying on them.
+- **The auto-generated Solution change-map is a hint, not evidence.** It listed a spurious `apps/cli/src/commands/agent.ts:0` entry because the implement step recorded no Solution.
+- **`expectFile` proves existence, never shape.** The wrapup pipeline's `learnings-validate` state (0986) classifies a nonempty capture — date + four-digit WBS + at least one bullet — so a narration-only capture cannot be appended verbatim to the tracked memory file.
+- **A doc-owned surface triggers doc-sync even for an internal move.** The drift probe flagged `apps/cli/src/commands/agent.ts` 19×; the obligation is real and the repair is small, but skipping it leaves the satellite describing the pre-refactor location.
+- **`packages/app/src/index.ts` is the barrel that must export the new types.** The service file can be perfect while the CLI import still fails — the barrel is part of the move.
+
+### Wrapup drift audit (detection evidence, this run)
+
+- **Detection:** `rg` over `docs/` for `runAgentLoop` / `agent-loop-service` / `commands/agent.ts`; `git show --name-only 0eaad428a` (0968 touched no doc but its task file); `git show bbfb689cf` for the 0967 repair precedent; `rg` for exported symbols in `agent-loop-service.ts` and CLI re-exports.
+- **Repaired (2 files):** `docs/03_ARCHITECTURE.md` — mechanism sentence now names `runAgentLoopCore` in `packages/app/src/services/agent-loop-service.ts` as the constructor/driver and the CLI as the delegating transport, version `1.60.0 → 1.61.0` (§6.4). `docs/design/session-pinned-dispatch.md` — `updated_at 2026-09-26 → 2026-09-28`, `related += "0968"`, and a dated 0968 amendment superseding the 0967 wording (§6.5, T9).
+- **Zero-finding:** `docs/04_DESIGN.md` index pointer unchanged (same satellite slug, §7.1 "unchanged owners need no edit"); `docs/00_ADR.md` needs no entry because ADR-021 ("Functionality Lives in `packages/app`") already governs the move, so no new architectural choice (T1 not triggered); the satellite's §1 "Problem, measured" snapshot was left as dated history per §7.2; the existing `project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62` anchor still resolves.
+- **Verification:** referenced path/symbols exist (`agent-loop-service.ts`, `runAgentLoopCore`, `AgentLoopDeps`, CLI re-exports); `bun run link-check` OK. The repo has no markdown-anchor checker and Biome ignores `docs/**`, so link verification was done by resolving the one affected anchor directly.

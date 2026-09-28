@@ -2,7 +2,7 @@
 doc: 03_ARCHITECTURE
 owns: HOW — module boundaries, data flow, runtime model, invariants
 authority: derived
-version: 1.60.0
+version: 1.61.0
 derived_from: [01_PRD, 00_ADR]
 owner: Robin Min
 updated_at: 2026-09-28
@@ -550,8 +550,10 @@ A final launch guard checks owner/strategy after executor resolution. Capacity r
 the originating owner and write generation; reconciliation precedes slot release. Rest starts no
 queued assignments. This adds no message transport or workflow engine. A member's coding-agent
 session is loop-lifetime state owned by the `MemberSession` service in `packages/app` (ADR-021,
-task 0967): the CLI's `agent loop` constructs it over a structural deps seam and drives mode
-resolution, resets and resume-id capture; the mode resolves once per loop lifetime from the runner
+tasks 0967, 0968): the loop core (`runAgentLoopCore` in
+`packages/app/src/services/agent-loop-service.ts`) constructs it over a structural deps seam and
+drives mode resolution, resets and resume-id capture; the CLI's `agent loop` binds the
+`AgentLoopDeps` seam and delegates. The mode resolves once per loop lifetime from the runner
 capability record (`persistentStdin` → `resumeById` → one-shot) and each deliberate reset writes a
 reason-named `fleet.member-session-reset` ledger row (ADR-121, G66). Boundary details:
 [project fleet dispatch](design/project-switcher.md#fleet-ownership-and-dispatch-boundaries-g62).
