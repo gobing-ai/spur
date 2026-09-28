@@ -4,7 +4,7 @@ name: Route the remaining executor-availability reads through executorDisabled
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:11.665Z
-updated_at: "2026-09-28T22:16:02.817Z"
+updated_at: "2026-09-28T23:29:26.925Z"
 feature_id: B21
 
 ac_numbering: task-local
@@ -89,15 +89,15 @@ Each entry cites the first changed line per file (`file:line`).
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-service.ts:569` (`enabledExecutors` filter), `:634` (disabled ladder rows), and `:710` (executor-level doctor gate) now call `executorDisabled(e)` instead of `normalizeExecutorAvailability(e.disabled).disabled`. The two remaining object reads are metadata consumers: `:452` (the availability lookup) and the doctor report `availability: normalizeExecutorAvailability(executor.disabled)` |
-| R2 | MET | The resource-exhaustion fallback selection now starts from `cheapestEligibleExecutors(executors, targetTier)` and applies only the local `exclude` / exhausted-agent predicates; the duplicated inline `!executorDisabled && isTierEligible` filter and its `TIER_RANK` sort are gone, so no second tier-selection/sort funnel remains |
-| R3 | MET | `cheapestEligibleExecutors` (`packages/app/src/services/executor-tier.ts:68-76`) filters `!executorDisabled` + `isTierEligible` and sorts ascending by `TIER_RANK` — identical to the removed inline funnel. Its own suite plus the existing escalation/ordering tests and the new disabled-fallback test pin the behavior |
+| R1 | MET | `packages/app/src/services/agent-service.ts:569`, `packages/app/src/services/agent-service.ts:634`, `packages/app/src/services/agent-service.ts:707` use `executorDisabled`; remaining object reads `packages/app/src/services/agent-service.ts:452` (availability lookup) and `packages/app/src/services/agent-service.ts:2939` (doctor report) consume owner/since/reason |
+| R2 | MET | `packages/app/src/services/agent-service.ts:2120` starts from `cheapestEligibleExecutors(executors, targetTier)` then applies only `exclude`/exhausted-agent predicates; inline tier filter + `TIER_RANK` sort removed (cd2f0572f) |
+| R3 | MET | `packages/app/src/services/executor-tier.ts:68` funnel = removed inline filter + stable ascending sort; `packages/app/tests/services/executor-tier.test.ts:52` boolean/object forms, `packages/app/tests/services/executor-tier.test.ts:56` absent, `packages/app/tests/services/agent-service.test.ts:3108` excluded + exhausted-agent siblings skipped with order `['pi','claude','codex']` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts` "disabled executors (0796)" + the doctor availability-provenance tests still pass; the two object consumers keep `owner`/`since`/`reason` |
-| AC2 | MET | test | New "0982 R2: a disabled tier-eligible fallback profile is skipped by the shared funnel" — a disabled `capable-1` profile is filtered by the funnel, the chain exhausts, and only the live starting rung dispatches |
-| AC3 | MET | command | `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts tests/services/fleet-service.test.ts tests/services/agent-quota-updates.test.ts tests/services/agent-roles.test.ts)` → 297 pass / 0 fail; `bun run spur-check` → 9415 pass / 0 fail |
+| AC1 | MET | test | `packages/app/tests/services/executor-tier.test.ts:75` both disabled forms filtered; doctor availability object preserved at `packages/app/src/services/agent-service.ts:2939` |
+| AC2 | MET | test | `packages/app/tests/services/agent-service.test.ts:3727` disabled fallback skipped by the shared funnel; `packages/app/tests/services/agent-service.test.ts:3108` local exclusions preserved |
+| AC3 | MET | command | `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts tests/services/fleet-service.test.ts tests/services/agent-quota-updates.test.ts tests/services/agent-roles.test.ts)` → 298 pass / 0 fail |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -110,7 +110,6 @@ Each entry cites the first changed line per file (`file:line`).
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | proof-input-digest | — | sha256:42be081e191d5b4ba15d61e071bbe41dc1538ca61c4fcc214065aef237762af0 |
 
 ### References
 
