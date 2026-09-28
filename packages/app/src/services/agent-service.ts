@@ -566,7 +566,7 @@ export class AgentService {
         // runner. renderDoctor keeps reading the UNMODIFIED config array (R2).
         // 111 R5: disabled profiles are stripped too — they get synthesized rows
         // (no install/liveness/auth probe) instead of real ones.
-        const enabledExecutors = executors?.filter((e) => !normalizeExecutorAvailability(e.disabled).disabled);
+        const enabledExecutors = executors?.filter((e) => !executorDisabled(e));
         const runnerExecutors = args.probeHealth
             ? enabledExecutors
             : enabledExecutors?.map(({ name, agent }) => ({ name, agent }));
@@ -631,11 +631,7 @@ export class AgentService {
             // tier-eligible profiles are appended after the enabled rungs.
             const executorsConfigured = this.ctx.agentConfig?.executors ?? [];
             const disabledLadderRows = executorsConfigured
-                .filter(
-                    (e) =>
-                        normalizeExecutorAvailability(e.disabled).disabled &&
-                        isTierEligible(getExecutorTier(e), roleDef.tier),
-                )
+                .filter((e) => executorDisabled(e) && isTierEligible(getExecutorTier(e), roleDef.tier))
                 .map((e) => rowByName.get(e.name))
                 .filter((row): row is DoctorRow => row !== undefined);
             const ladderRows = [
@@ -708,9 +704,7 @@ export class AgentService {
         // covers the name; on a miss run only what the selector needs and write nothing.
         // 111 R6: a targeted check of a disabled profile fails (exit 1) without probing —
         // before the cache/runner paths so the disable is authoritative.
-        const disabledEntry = (executors ?? []).find(
-            (e) => e.name === args.agent && normalizeExecutorAvailability(e.disabled).disabled,
-        );
+        const disabledEntry = (executors ?? []).find((e) => e.name === args.agent && executorDisabled(e));
         if (disabledEntry !== undefined) {
             this.renderDoctor(
                 syntheticDisabledRows([disabledEntry]),
@@ -2121,11 +2115,11 @@ export class AgentService {
                           .filter((agent): agent is AgentName => agent !== undefined),
                   )
                 : undefined;
-        const eligible = executors.filter((e) => {
+        // 0982 R2: the shared funnel owns the disable filter and the ascending tier order;
+        // the resource-exhaustion exclusions (excluded names, exhausted agents) stay local.
+        const eligible = cheapestEligibleExecutors(executors, targetTier).filter((e) => {
             const canonical = resolveAgentName(e.agent);
             return (
-                !executorDisabled(e) &&
-                isTierEligible(getExecutorTier(e), targetTier) &&
                 !(exclude?.has(e.name) ?? false) &&
                 (canonical === undefined || !(exhaustedAgents?.has(canonical) ?? false))
             );
@@ -2133,9 +2127,6 @@ export class AgentService {
         if (eligible.length === 0) {
             return undefined;
         }
-
-        // Sort by tier ascending (cheapest eligible first)
-        eligible.sort((a, b) => TIER_RANK[getExecutorTier(a)] - TIER_RANK[getExecutorTier(b)]);
 
         for (const executor of eligible) {
             const canonical = resolveAgentName(executor.agent);

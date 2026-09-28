@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Route the remaining executor-availability reads through executorDisabled
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:11.665Z
-updated_at: "2026-09-27T16:45:14.026Z"
+updated_at: "2026-09-28T22:16:02.817Z"
 feature_id: B21
 
 ac_numbering: task-local
@@ -37,15 +37,15 @@ A second, larger observation from the same review (`agent-service.ts:2124-2133` 
 
 ### Requirements
 
-- [ ] R1. Every boolean enablement decision in `agent-service.ts` uses `executorDisabled`. Full availability-object reads remain only where callers use owner/since/reason metadata.
-- [ ] R2. The resource-exhaustion selection path obtains tier-filtered, tier-sorted candidates from `cheapestEligibleExecutors`, then applies its local `exclude` and exhausted-agent filters. No second tier-selection/sort funnel remains.
-- [ ] R3. Decisions and ordering are unchanged for boolean, object and absent `disabled`, including excluded and exhausted candidates.
+- [x] R1. Every boolean enablement decision in `agent-service.ts` uses `executorDisabled`. Full availability-object reads remain only where callers use owner/since/reason metadata.
+- [x] R2. The resource-exhaustion selection path obtains tier-filtered, tier-sorted candidates from `cheapestEligibleExecutors`, then applies its local `exclude` and exhausted-agent filters. No second tier-selection/sort funnel remains.
+- [x] R3. Decisions and ordering are unchanged for boolean, object and absent `disabled`, including excluded and exhausted candidates.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Boolean availability decisions use the shared helper; object consumers keep their metadata (req: R1)
-- [ ] AC2 — Resource-exhaustion selection uses the shared tier funnel and preserves local exclusions (req: R2, R3)
-- [ ] AC3 — Focused agent/fleet tests and the task gate pass (req: R3)
+- [x] AC1 — Boolean availability decisions use the shared helper; object consumers keep their metadata (req: R1)
+- [x] AC2 — Resource-exhaustion selection uses the shared tier funnel and preserves local exclusions (req: R2, R3)
+- [x] AC3 — Focused agent/fleet tests and the task gate pass (req: R3)
 
 ### Q&A
 
@@ -61,22 +61,56 @@ At the resource-exhaustion path, start with `cheapestEligibleExecutors(executors
 
 ### Plan
 
-- [ ] Trace each direct availability read and the resource-exhaustion selection callers.
-- [ ] Replace boolean reads and use `cheapestEligibleExecutors` in the selection path, preserving exclusions and ordering.
-- [ ] Test boolean/object/absent disabled forms, excluded/exhausted candidates and unknown-agent behavior.
-- [ ] Run focused agent/fleet suites and `bun run spur-check`.
+- [x] Trace each direct availability read and the resource-exhaustion selection callers.
+- [x] Replace boolean reads and use `cheapestEligibleExecutors` in the selection path, preserving exclusions and ordering.
+- [x] Test boolean/object/absent disabled forms, excluded/exhausted candidates and unknown-agent behavior.
+- [x] Run focused agent/fleet suites and `bun run spur-check`.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change-map (auto-generated — implement step did not record a Solution).
+Each entry cites the first changed line per file (`file:line`).
+
+| Change (`file:line`) |
+|----------------------|
+| `packages/app/src/services/agent-service.ts:2118` |
+| `packages/app/src/services/agent-service.ts:2122` |
+| `packages/app/src/services/agent-service.ts:2130` |
+| `packages/app/src/services/agent-service.ts:569` |
+| `packages/app/src/services/agent-service.ts:634` |
+| `packages/app/src/services/agent-service.ts:707` |
+| `packages/app/tests/services/agent-service.test.ts:3727` |
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/agent-service.ts:569` (`enabledExecutors` filter), `:634` (disabled ladder rows), and `:710` (executor-level doctor gate) now call `executorDisabled(e)` instead of `normalizeExecutorAvailability(e.disabled).disabled`. The two remaining object reads are metadata consumers: `:452` (the availability lookup) and the doctor report `availability: normalizeExecutorAvailability(executor.disabled)` |
+| R2 | MET | The resource-exhaustion fallback selection now starts from `cheapestEligibleExecutors(executors, targetTier)` and applies only the local `exclude` / exhausted-agent predicates; the duplicated inline `!executorDisabled && isTierEligible` filter and its `TIER_RANK` sort are gone, so no second tier-selection/sort funnel remains |
+| R3 | MET | `cheapestEligibleExecutors` (`packages/app/src/services/executor-tier.ts:68-76`) filters `!executorDisabled` + `isTierEligible` and sorts ascending by `TIER_RANK` — identical to the removed inline funnel. Its own suite plus the existing escalation/ordering tests and the new disabled-fallback test pin the behavior |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts` "disabled executors (0796)" + the doctor availability-provenance tests still pass; the two object consumers keep `owner`/`since`/`reason` |
+| AC2 | MET | test | New "0982 R2: a disabled tier-eligible fallback profile is skipped by the shared funnel" — a disabled `capable-1` profile is filtered by the funnel, the chain exhausts, and only the live starting rung dispatches |
+| AC3 | MET | command | `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts tests/services/fleet-service.test.ts tests/services/agent-quota-updates.test.ts tests/services/agent-roles.test.ts)` → 297 pass / 0 fail; `bun run spur-check` → 9415 pass / 0 fail |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | proof-input-digest | — | sha256:42be081e191d5b4ba15d61e071bbe41dc1538ca61c4fcc214065aef237762af0 |
 
 ### References
 
@@ -85,4 +119,7 @@ At the resource-exhaustion path, start with `cheapestEligibleExecutors(executors
 ### History
 
 - 2026-09-27T16:45:14.026Z backlog → todo (system)
+- 2026-09-28T22:16:01.316Z todo → wip (system)
+- 2026-09-28T22:16:01.797Z wip → testing (system)
+- 2026-09-28T22:16:02.817Z testing → done (system)
 

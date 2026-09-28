@@ -3724,6 +3724,29 @@ describe('AgentService tier fallback under real failure (0540)', () => {
         expect(exhaustedEvent.severity).toBe('error');
     });
 
+    test('0982 R2: a disabled tier-eligible fallback profile is skipped by the shared funnel', async () => {
+        // The changed fallback-tier selection starts from `cheapestEligibleExecutors` and only
+        // then applies the local exclusions. A disabled capable-1 profile must be filtered by the
+        // funnel, so the chain exhausts instead of dispatching a disabled executor (R2/R3).
+        const config: AgentConfig = {
+            executors: [
+                { name: 'std-exec', agent: 'pi', tier: 'standard', disabled: false },
+                { name: 'capable-disabled', agent: 'claude', tier: 'capable-1', disabled: true },
+            ],
+        };
+        const { svc, errors } = escalationHarness(config);
+        const { deps, runPromptCommand } = sequentialDispatchDeps([
+            makeRunResult({ exitCode: null, signal: 'SIGKILL', stderr: '' }),
+        ]);
+
+        const code = await svc.run('Implement the task', { agent: 'auto', stage: 'implement', json: false }, deps);
+
+        expect(code).not.toBe(0);
+        // Only the live starting rung dispatched; the disabled fallback never did.
+        expect(runPromptCommand.mock.calls.map((c) => c[0] as string)).toEqual(['pi']);
+        expect(errors.some((e) => e.includes('Escalation chain exhausted'))).toBe(true);
+    });
+
     test('R3: escalation into an unconfigured fallback tier is reported unreachable and continues to the next reachable tier', async () => {
         // The live `.spur/config.yaml` gap as a fixture: capable-2 is
         // unconfigured while capable-1 and capable-3 are live. Stage `verify`
