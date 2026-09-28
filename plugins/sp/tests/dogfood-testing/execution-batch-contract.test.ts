@@ -195,3 +195,61 @@ describe('execution-batch spec contract (task 0984 — cited run evidence surviv
         expect(SPEC).toContain('Abbreviated references');
     });
 });
+
+const RUNALL = readFileSync(join(import.meta.dir, '../../commands/dev-runall.md'), 'utf8');
+const GLOSSARY = readFileSync(join(import.meta.dir, '../../skills/spur-dev/references/flag-glossary.md'), 'utf8');
+
+describe('execution-batch spec contract (task 0477 — worktree isolation lifecycle)', () => {
+    test('R2.1/R2.2 — one worktree cut from the current ref, not literally main', () => {
+        expect(SPEC).toContain('BASE_REF=$(git rev-parse --abbrev-ref HEAD)');
+        expect(SPEC).toContain(
+            'git worktree add "../<repo>-<command>-<selector-slug>-<short-id>" -b "$BRANCH" "$BASE_REF"',
+        );
+    });
+
+    test('R3.1/R3.2 — dirty main tree aborts before creation; --force proceeds with a warning', () => {
+        expect(SPEC).toContain('**Dirty tree** → **abort** before any worktree is created');
+        expect(SPEC).toContain('proceed past a dirty tree with a divergence warning');
+    });
+
+    test('R4.1/R4.2 — FF-only merge; a non-FF base falls through to retention', () => {
+        expect(SPEC).toContain(
+            'git merge --ff-only "$BRANCH"          # FF-only: never rebase, merge-commit, or resolve conflicts',
+        );
+        expect(SPEC).toContain('WT-5 retains the worktree and branch whenever FF is impossible');
+    });
+
+    test('R5.1–R5.3 — halted batch retains intact; report names path/branch/cause + three commands', () => {
+        expect(SPEC).toContain('worktree directory and branch are left **intact**');
+        expect(SPEC).toContain(
+            'flag combination (`--auto`, `--force`, `--keep-going` — all leave the worktree in place)',
+        );
+        for (const field of ['**Halt cause:**', '**Worktree path:**', '**Branch:**', 'resume:', 'merge:', 'discard:']) {
+            expect(SPEC).toContain(field);
+        }
+    });
+
+    test('R6.1/R6.2 — marker under .spur/run; a killed session leaves it recoverable', () => {
+        expect(SPEC).toContain('`.spur/run/worktree-<marker-id>.json`');
+        expect(SPEC).toContain('a killed session leaves the marker at `status: active`');
+    });
+
+    test('R7.1/R7.2 — --continue re-enters via the marker; no marker fails loudly', () => {
+        expect(SPEC).toContain('must re-enter the existing worktree via');
+        expect(SPEC).toContain('**Not found** → fail loudly: "no resolvable worktree marker');
+    });
+
+    test('R8.1 — --worktree --mode parallel is rejected in the command doc and WT-7', () => {
+        expect(RUNALL).toContain('`--worktree --mode parallel` is **rejected**');
+        expect(SPEC).toContain('**`--mode parallel`** is rejected when combined with `--worktree`');
+    });
+
+    test('R9.1 — the flag glossary documents --worktree', () => {
+        expect(GLOSSARY).toContain('### `--worktree [<name>]` — run the batch in an isolated git worktree');
+    });
+
+    test('R10.1 — portable git only; no Claude-Code-only worktree tools', () => {
+        expect(SPEC).toContain('Use portable `git worktree` commands only');
+        expect(RUNALL).not.toContain('EnterWorktree');
+    });
+});

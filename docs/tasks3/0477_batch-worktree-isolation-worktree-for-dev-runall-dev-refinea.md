@@ -13,7 +13,7 @@ tags: []
 dependencies: []
 ac_numbering: task-local
 created_at: "2026-08-07T23:46:39.945Z"
-updated_at: "2026-08-08T03:01:41.432Z"
+updated_at: "2026-09-28T03:20:47.879Z"
 ---
 
 ## 0477. Batch worktree isolation --worktree for dev-runall dev-refineall dev-verifyall
@@ -360,89 +360,46 @@ Plugin-layer spec only. No `apps/cli` change (R8.4 - process cwd already suffice
 
 **Scope note:** The working tree also contains task 0474 (history analyze SQL aggregation) changes in `apps/cli/`, `packages/app/`, `packages/domain/` - these are NOT 0477 scope and must be committed separately. `plugins/sp/plugin.json` is a trivial Biome formatting artifact, also not 0477.
 ### Testing
-**Verdict: PASS** — re-audit via `/sp:dev-verify 0477 --auto --next --force --focus all --fix all`
-(2026-08-08). Supersedes the prior `UNKNOWN` verdict, which recorded no requirements and did not
-constitute a real verify.
 
-**Scope.** Spec-only deliverable (R8.4: no `apps/cli` change). The `sp` plugin's execution model is
-agent-read-markdown, so the instruction text *is* the implementation; AC evidence is deterministic
-`rg` anchors against the shipped spec plus the executable flag-parity gate.
+**Pipeline verify results**
 
-**Per-Requirement Traceability**
+- Verdict: PASS (from verdict artifact)
 
-| Req | Status | Evidence |
-|---|---|---|
-| R1 | MET | `bun test plugins/sp/tests/flag-contract-parity.test.ts` → 24 pass / 0 fail. `plugins/sp/commands/dev-runall.md:3`, `plugins/sp/commands/dev-refineall.md:3`, `plugins/sp/commands/dev-verifyall.md:3`; `plugins/sp/commands/dev-next.md` 0 matches |
-| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:378` WT-2 — base ref `git rev-parse --abbrev-ref HEAD:385`, `git worktree add … -b:388` |
-| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:361` WT-1 — abort names files `:372`; `--force` override `:374` |
-| R4 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:422` WT-4 — `git merge --ff-only:431`; non-FF → retention `:439` |
-| R5 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:443` WT-5 — retained intact `:448`; resume/merge/discard block `:458` |
-| R6 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:397` WT-3 — marker schema `:403`; crash recovery `:419` |
-| R7 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:472` WT-6 — re-enter `:476`; loud failure `:483` |
-| R8 | MET | **Repaired this run.** `plugins/sp/commands/dev-runall.md:51` states the `--mode parallel` rejection in the command doc as R8 requires; also `plugins/sp/skills/spur-dev/references/execution-batch.md:486` WT-7, `plugins/sp/skills/spur-dev/references/flag-glossary.md:346` |
-| R9 | MET | `plugins/sp/skills/spur-dev/references/flag-glossary.md:339` (`### --worktree`, anchor `#flag-worktree`); `plugins/sp/skills/spur-dev/references/execution-batch.md:343` lifecycle |
-| R10 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:355` portability note; `rg EnterWorktree plugins/sp` → 0 matches |
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `plugins/sp/commands/dev-runall.md:26`, `plugins/sp/commands/dev-refineall.md:30`, `plugins/sp/commands/dev-verifyall.md:27`; `bun test tests/flag-contract-parity.test.ts` (plugins/sp) 40 pass / 0 fail |
+| R2 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:653` base ref from `git rev-parse --abbrev-ref HEAD`; `plugins/sp/skills/spur-dev/references/execution-batch.md:660` `git worktree add -b` |
+| R3 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:619` dirty tree aborts naming files; `plugins/sp/skills/spur-dev/references/execution-batch.md:621` `--force` divergence warning |
+| R4 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:838` `git merge --ff-only`; `plugins/sp/skills/spur-dev/references/execution-batch.md:930` non-FF retains via WT-5 |
+| R5 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:959` worktree left intact under every flag; `plugins/sp/skills/spur-dev/references/execution-batch.md:976` resume/merge/discard commands |
+| R6 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:752` WT-3 crash-safe marker; `plugins/sp/skills/spur-dev/references/execution-batch.md:777` killed session leaves marker active |
+| R7 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:990` `--continue` re-enters via marker; `plugins/sp/skills/spur-dev/references/execution-batch.md:1004` not-found fails loudly |
+| R8 | MET | `plugins/sp/commands/dev-runall.md:62` rejects `--worktree --mode parallel`; `plugins/sp/skills/spur-dev/references/execution-batch.md:1013` WT-7 exclusions |
+| R9 | MET | `plugins/sp/skills/spur-dev/references/flag-glossary.md:432` `--worktree` entry |
+| R10 | MET | `plugins/sp/skills/spur-dev/references/execution-batch.md:602` portability note; `rg EnterWorktree plugins/sp/commands` → 0 matches |
 
-**Acceptance Criteria Verification**
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| Scenario: R1.1 The three batch commands accept --worktree | MET | test | `plugins/sp/tests/flag-contract-parity.test.ts` 40 pass; `plugins/sp/commands/dev-runall.md:26` |
+| Scenario: R1.2 dev-next does not accept --worktree | MET | test | parity gate glossary membership; `rg -c -- --worktree plugins/sp/commands/dev-next.md` → 0; `plugins/sp/skills/spur-dev/references/execution-batch.md:1015` |
+| Scenario: R2.1 A clean run creates one worktree before any task work | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:203` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:660` |
+| Scenario: R2.2 The base ref is the current ref, not literally main | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:203` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:653` |
+| Scenario: R3.1 A dirty main tree aborts before any worktree is created | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:210` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:619` |
+| Scenario: R3.2 --force proceeds past a dirty tree with a warning | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:210` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:621` |
+| Scenario: R4.1 A fully successful batch fast-forward-merges and cleans up | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:215` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:838` |
+| Scenario: R4.2 A moved base ref falls through to retention, never a conflict resolve | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:215` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:930` |
+| Scenario: R5.1 A halted batch retains the worktree intact | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:222` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:959` |
+| Scenario: R5.2 The retention report names path, branch, cause, and three commands | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:222` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:976` |
+| Scenario: R5.3 No flag combination auto-deletes a failed run's worktree | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:222` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:961` |
+| Scenario: R6.1 A marker is written under .spur/run at creation | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:232` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:756` |
+| Scenario: R6.2 A killed session leaves a recoverable marker | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:232` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:777` |
+| Scenario: R7.1 --continue re-enters the existing worktree | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:237` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:990` |
+| Scenario: R7.2 --continue without a resolvable marker fails loudly | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:237` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:1004` |
+| Scenario: R8.1 --worktree with --mode parallel is rejected | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:242` (34 pass / 0 fail) pins `plugins/sp/commands/dev-runall.md:62` |
+| Scenario: R9.1 The flag glossary documents --worktree | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:247` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/flag-glossary.md:432` |
+| Scenario: R10.1 The mechanism is portable git, not a Claude-Code-only tool | MET | test | `plugins/sp/tests/dogfood-testing/execution-batch-contract.test.ts:251` (34 pass / 0 fail) pins `plugins/sp/skills/spur-dev/references/execution-batch.md:602` |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
-| AC | Status | Evidence Type | Evidence |
-|---|---|---|---|
-| R1.1 three commands accept --worktree | MET | test | `plugins/sp/tests/flag-contract-parity.test.ts` 24 pass; parity across hint/table/usage/`plugins/sp/skills/spur-dev/references/dev-operations.md:59` |
-| R1.2 dev-next does not accept --worktree | MET | test | Mutation-proven: adding `--worktree` to `dev-next.md` makes the parity gate fail with "glossary declaring-commands list for --worktree omits dev-next that declared it"; reverted, gate green |
-| R2.1 clean run creates one worktree | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:388` |
-| R2.2 base ref is current ref not main | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:385` |
-| R3.1 dirty tree aborts pre-creation | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:372` |
-| R3.2 --force proceeds with warning | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:374` |
-| R4.1 success FF-merges and cleans up | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:431` |
-| R4.2 moved base falls through to retention | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:439` |
-| R5.1 halted batch retains worktree | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:448` |
-| R5.2 report names path/branch/cause + 3 cmds | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:458` |
-| R5.3 no flag combination auto-deletes | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:448` (`--auto`/`--force`/`--keep-going` all retain) |
-| R6.1 marker written under .spur/run | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:403` |
-| R6.2 killed session leaves recoverable marker | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:419` |
-| R7.1 --continue re-enters existing worktree | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:476` |
-| R7.2 --continue without marker fails loudly | MET | static | `plugins/sp/skills/spur-dev/references/execution-batch.md:483` |
-| R8.1 --worktree + --mode parallel rejected | MET | static | `plugins/sp/commands/dev-runall.md:51` (repaired this run); `plugins/sp/skills/spur-dev/references/execution-batch.md:349` |
-| R9.1 flag glossary documents --worktree | MET | command | `rg -n -- --worktree plugins/sp/skills/spur-dev/references/flag-glossary.md` → `:339,348,351` |
-| R10.1 portable git, not Claude-Code-only | MET | command | `rg EnterWorktree plugins/sp` → 0 matches; `plugins/sp/skills/spur-dev/references/execution-batch.md:355` |
-
-**Gates run this turn**
-
-- `bun test plugins/sp/tests/` → **496 pass / 0 fail** (13 files), re-run after the R8 repair.
-- `bun test plugins/sp/tests/flag-contract-parity.test.ts` → **24 pass / 0 fail**; mutation-checked
-  against `dev-next` (fails when mutated, green when reverted).
-- `spur task check 0477 --strict-core` → **pass=true, errors=0**.
-- Coverage: N/A (documentation-only change; no runtime code path added).
-
-**Fix pass (`--fix all`)**
-
-Three repairs applied:
-
-1. `plugins/sp/commands/dev-runall.md:51` — added the `--worktree --mode parallel` rejection. R8
-   requires exclusions be stated *in the command docs*; they existed only in `execution-batch.md`
-   WT-7 and the flag glossary. R8 PARTIAL → MET. A missing blank line before the corpus-visibility
-   paragraph was corrected in the same edit.
-2. `docs/features/H1_spur-dev-skill.md` § Acceptance Criteria — promoted all 18 task scenarios into
-   the feature AC (34 → 52 scenarios), matching how sibling tasks 0141 and 0161 already appear
-   there. Cleared 18 × `L4.uncovered-task-scenario` (DD-09 subset rule).
-3. This Testing section — rewrote all evidence anchors as repo-relative paths after the checker
-   flagged 5 × `L4.stale-line-anchor` on bare filenames.
-
-**Residuals**
-
-| Severity | Finding | State |
-|---|---|---|
-| P3 | "No executable test asserts `dev-next` must not carry `--worktree`" | **Withdrawn — false finding.** The parity gate's `checkGlossaryMembership` enforces exact declaring-commands equality; mutation-proven above. |
-
-**Artifact disclosure.** This run wrote `.spur/run/0477-verdict.json` (gitignored) — verdict `PASS`,
-10 requirement rows, 18 AC rows, `checks[]` carrying `design-conformance`, `strict-core`,
-`plugin-test-suite`, `coverage`, and `shippable`.
-
-**Shippable: FAIL — feature H1.** Not caused by 0477 and not 0477 work to fix.
-`spur feature check H1` carries `L4.scenario-unverified` findings against covering tasks **0141**
-and **0161** (neither has a PASS verdict with MET requirement rows), plus
-`L4.uncovered-feature-scenario` orphans predating this task. Incomplete linked tasks: **0**.
-Recovery: re-verify 0141 and 0161 so their scenarios carry PASS+MET verdict rows.
 ### Review
 **Reviewer:** inline `sp-dev-review --auto` (functional traceability + SECUA + architecture).
 **Verdict: PASS** - all R1–R10 requirements and every AC scenario are satisfied by the plugin-layer spec. Three low-severity residuals noted; none block progression to verify.
