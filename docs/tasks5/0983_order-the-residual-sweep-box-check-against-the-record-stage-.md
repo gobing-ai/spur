@@ -4,7 +4,7 @@ name: Order the residual-sweep box check against the record-stage box flip
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:28.202Z
-updated_at: "2026-09-27T23:28:39.431Z"
+updated_at: "2026-09-28T02:55:46.130Z"
 feature_id: F96
 
 ac_altitude: task-local
@@ -81,8 +81,8 @@ If the fold changes PASS to PARTIAL, re-record the task's Testing section from t
 Moved the residual sweep from verify to record so it reads the post-record task file; classification unchanged (scan/fold only re-ordered).
 
 - `config/workflows/task-pipeline.yaml:17-19` — removed the verify scan+fold action; verify now binds the verdict straight to the proof digest (0967 root cause: a pre-record fold folded unticked-but-verdict-proven boxes the `record` stage had not flipped yet).
-- `config/workflows/task-pipeline.yaml:800` — record gains the scan+fold hard action after `task record` (box flips) and feature sync, before `record → done`; any box still unchecked post-record (unproven R/AC, open Plan) stays blocking and fails the done guard closed (R1–R3).
-- `config/workflows/task-pipeline.yaml:809` — R5 soft step: on a folded non-PASS verdict, re-runs `task record` from the final artifact so Testing carries the downgraded verdict (idempotent; no-op on PASS; soft exit 0 so the failed state still renders the recovery report — a hard failure would bypass it).
+- `config/workflows/task-pipeline.yaml:804` — record gains the scan+fold hard action after `task record` (box flips) and feature sync, before `record → done`; any box still unchecked post-record (unproven R/AC, open Plan) stays blocking and fails the done guard closed (R1–R3).
+- `config/workflows/task-pipeline.yaml:820` — R5 soft step: on a folded non-PASS verdict, re-runs `task record` from the final artifact so Testing carries the downgraded verdict (idempotent; no-op on PASS; soft exit 0 so the failed state still renders the recovery report — a hard failure would bypass it).
 - `plugins/sp/tests/task-pipeline-resilience.test.ts:334` — reordered-sweep coverage: verify no longer sweeps (R1), record orders fold after the flips and before the PASS+proof done guard (R3), behavioral pass/fail paths through the real scanner (R2), and the R5 re-record no-op/act split.
 - `docs/design/task-residual-sweep.md` — rule-owner update: sweep runs in record, downgrade fails at the done hop (no remediation hop for record-owned boxes), Testing re-record rule, pipeline-flow diagram, terminal-path table (failed sweep leaves the task `testing`).
 - `plugins/sp/skills/next-router/references/routing-table.md:116` + `docs/help/how_to_use_dev_slash_commands_for_daily_software_development.md:246` — C6 row and the help section reworded for the record-stage sweep.
@@ -95,15 +95,17 @@ Moved the residual sweep from verify to record so it reads the post-record task 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | task-pipeline.yaml:800 — scan+fold shell action moved into record state onEnter, sequenced after `task record` (verdict-proven R/AC flips via flipVerifiedCheckboxes, task-record.ts:201) and feature sync, before the record→done guard; verify state no longer sweeps (task-pipeline.yaml:721 binds verdict→proof directly); ordering pinned by plugins/sp/tests/task-pipeline-resilience.test.ts |
-| R2 | MET | residual-scan.ts:290,336,387 — findUncheckedBoxes + blocking classification unchanged; scanner reads the post-record task file, so unproven R/AC and open Plan boxes stay blocking (behavioral test: open Plan box → PARTIAL + failing residual-sweep check) |
-| R3 | MET | task-pipeline.yaml:1166-1175 — record→done guard requires verdict==PASS and proof.digest match; fold downgrade before the guard routes to the failed edge (fail-closed preserved; verified in reordered-coverage tests) |
-| R4 | MET | plugins/sp/tests/task-pipeline-resilience.test.ts — 4 rewritten tests incl. behavioral pass/fail through the real scanner in a temp dir (flipped-plan PASS kept; open-plan PARTIAL) — both outcomes covered |
-| R5 | MET | task-pipeline.yaml:808 — soft step: folded non-PASS → re-record from final artifact (`task record --solution-from-diff --transition testing`, legal flags task.ts:1184-1195, idempotent transition task-service.ts:1502-1503); no-op on PASS; tested both branches (canary spur-bin untouched on PASS) |
+| R1 | MET | `config/workflows/task-pipeline.yaml:804` scan+fold in record after `task record` flips (`packages/app/src/services/task-record.ts:209` flipVerifiedCheckboxes) and feature sync; verify binds verdict→proof directly `config/workflows/task-pipeline.yaml:727`; tests `plugins/sp/tests/task-pipeline-resilience.test.ts:341` / `:350` (25 pass fresh) |
+| R2 | MET | classification unchanged `plugins/sp/scripts/residual-scan.ts:221` findUncheckedBoxes / `:279` classify; behavioral open-box downgrade `plugins/sp/tests/task-pipeline-resilience.test.ts:368` |
+| R3 | MET | fold precedes the done guard `config/workflows/task-pipeline.yaml:1164-1175` (PASS + proof digest + task check); order pinned `plugins/sp/tests/task-pipeline-resilience.test.ts:350` |
+| R4 | MET | pass and fail paths through the real scanner `plugins/sp/tests/task-pipeline-resilience.test.ts:368` |
+| R5 | MET | soft re-record on non-PASS `config/workflows/task-pipeline.yaml:820`; both branches `plugins/sp/tests/task-pipeline-resilience.test.ts:417` |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC3 | MET | test | 25+25+38 tests pass / 0 fail across task-pipeline-resilience, lifecycle-drift (record.onEnter length 5 asserted), focused suites; `bun run spur-check` 9342/9342 green |
+| AC1 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:368` (flipped task passes post-record sweep) |
+| AC2 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:368` (open box downgrades) + `:350` (fold before PASS guard) |
+| AC3 | MET | test | `plugins/sp/tests/task-pipeline-resilience.test.ts:341`, `:350`, `:368`, `:417` (25/25 pass fresh); `packages/domain/tests/planning/lifecycle-drift.test.ts` 25/25 pass fresh |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
