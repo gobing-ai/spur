@@ -4,10 +4,13 @@ name: Sideways availability failover must skip a disabled executor
 status: todo
 template: issue
 created_at: 2026-09-28T23:16:57.820Z
-updated_at: "2026-09-28T23:17:39.565Z"
+updated_at: "2026-09-28T23:26:07.308Z"
 feature_id: B21
 
 ac_altitude: task-local
+priority: P2
+ac_numbering: task-local
+estimate_hours: 2
 ---
 
 ## 0995. Sideways availability failover must skip a disabled executor
@@ -55,7 +58,9 @@ Evidence (0982 session, `packages/app/tests/services/agent-service.test.ts`): a 
 
 Add `!executorDisabled(e)` to the sideways candidate predicate in `resolveStageModelPolicy` (one term, beside the existing `!(exclude?.has(e.name) ?? false)`). `executorDisabled` is already imported in the file. No other change: the loop, the usability probe and the fallback-tier hand-off stay as they are.
 
-Test direction: in `packages/app/tests/services/agent-service.test.ts`, drive `escalationHarness` with a standard-tier `disabled: true` profile sharing the failed binary's successor slot and assert it is never dispatched while a live same-tier profile is. The existing `R1: a timeout on the starting tier escalates…` and the 0485 sideways cases are the behavior lock.
+Test direction: in `packages/app/tests/services/agent-service.test.ts`, drive `escalationHarness` with two same-tier, different-binary profiles beside the failed one — one `disabled: true`, one live — and assert that on a `resource-exhaustion` signal only the live profile is dispatched (the disabled one never appears in `runPromptCommand.mock.calls`). The existing `R1: a timeout on the starting tier escalates…` and the 0485 sideways cases are the behavior lock.
+
+Pick the fixture agents so the sideways filter is actually reachable: both candidates must share the failed executor's tier, differ from its binary, and not already be in `exclude`/the exhausted set.
 
 ### Plan
 
@@ -65,7 +70,24 @@ Test direction: in `packages/app/tests/services/agent-service.test.ts`, drive `e
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+`resolveStageModelPolicy` (`packages/app/src/services/agent-service.ts`) selects a failover candidate on two paths. The **fallback-tier** path was corrected (0982) to start from `cheapestEligibleExecutors`, which filters `!executorDisabled`. The **sideways availability-failover** path keeps its own inline predicate and never gained the disable term:
+
+```ts
+const sideways = executors.filter((e) => {
+    const canonical = resolveAgentName(e.agent);
+    return (
+        e.name !== fromExecutor &&
+        getExecutorTier(e) === failedTier &&
+        canonical !== failedCanonical &&
+        (canonical === undefined || !exhaustedAgents.has(canonical)) &&
+        !(exclude?.has(e.name) ?? false)
+    );
+});
+```
+
+The term is missing because this path predates the 0890 rule ("every eligibility/probe/inventory site branches on `executorDisabled`") and was outside 0982's three-read scope — 0982's R3 required decisions and ordering to be unchanged, so the draft that exposed it was retargeted at the fallback-tier path instead.
+
+The rule is enforced where the extracted helper is used, not at this inline filter, so nothing failed. Reproduced in the 0982 session: with `{ name: 'std-disabled', agent: 'codex', tier: 'standard', disabled: true }` beside `std-exec`/`capable-exec`, a resource-exhaustion signal dispatched `codex` (`Received: ["pi", "codex"]`).
 
 ### Solution
 
@@ -81,6 +103,9 @@ Test direction: in `packages/app/tests/services/agent-service.test.ts`, drive `e
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+- Sideways failover block: `packages/app/src/services/agent-service.ts` (`resolveStageModelPolicy`, the `signal === 'resource-exhaustion' && fromExecutor !== undefined` branch)
+- Behavior lock: `packages/app/tests/services/agent-service.test.ts` — `R1: a timeout on the starting tier escalates by the declared chain…`, `0485 R3+R4: exhaustion fails over sideways to a same-tier different-binary executor…`
+- Sibling selection path (correct model to copy): the fallback-tier block directly below, `cheapestEligibleExecutors` in `packages/app/src/services/executor-tier.ts`
+- Related tasks: 0890 (availability ownership rule, feature B6), 0965 (extracted `executor-tier.ts`, B21), 0982 (routed the remaining reads through `executorDisabled`, B21 — commit `cd2f0572f`; this hole was its review finding P3)
 
 ### History

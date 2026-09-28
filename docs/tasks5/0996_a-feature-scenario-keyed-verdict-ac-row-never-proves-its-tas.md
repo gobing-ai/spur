@@ -4,10 +4,13 @@ name: A feature-scenario-keyed verdict AC row never proves its task AC box
 status: todo
 template: issue
 created_at: 2026-09-28T23:16:58.188Z
-updated_at: "2026-09-28T23:17:34.255Z"
+updated_at: "2026-09-28T23:26:06.928Z"
 feature_id: D62
 
 ac_altitude: task-local
+priority: P2
+ac_numbering: task-local
+estimate_hours: 3
 ---
 
 ## 0996. A feature-scenario-keyed verdict AC row never proves its task AC box
@@ -39,14 +42,28 @@ The task file already carries the alias on the AC line itself (`- [ ] AC1 — R3
 
 <!-- Clarifications and triage decisions. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-28T23:26:06.645Z
+
+#### Q&A entry — 2026-09-28T23:25:00.000Z
+
+- **CLOSED — alias resolution at flip time (Design shape 1), not an answer-schema rule.** The alias
+  (`AC1 — R3 — <title>`) already lives in the Acceptance Criteria body that the flip function holds,
+  so resolving it there needs no change to the verdict answer schema and keeps the id→box mapping in
+  the one place that turns verdict ids into boxes. Shape 2 (`AC1 (feature R3)`) would first have to be
+  verified against both `verify-answer-lint`'s accepted forms and the verdict tool's scenario keying;
+  making a delegated implementation depend on that verification is the larger risk. Revisit shape 2
+  only if flip-time resolution turns out to need context the function does not have.
+- **CLOSED — a scenario key the task does not alias proves nothing.** No "first unchecked box"
+  fallback: silence stays non-proof (0692's conservative contract), so an unrelated feature key can
+  never tick an AC it does not name.
+
 ### Design
 
-Resolve the id in `flipVerifiedCheckboxes` against the section body before matching. Two viable shapes, pick one:
+Resolve the id in `flipVerifiedCheckboxes` against the section body before matching — **chosen shape 1** (see Q&A). After computing `proven`, resolve each proven id that is not already an `AC\d+`/`R\d+` prefix to the AC label whose checklist line aliases it: a proven key `R3` matches the item whose text is `AC1 — R3 — <title>`, proving `AC1`. `parseChecklist` already returns the per-line item text and the function already holds the body, so this is a local lookup — no signature change, no new module, no engine change.
 
-1. **Alias resolution at flip time.** After computing `proven`, for each proven id that is not a `AC\d+`/`R\d+` prefix, scan the checklist items for a line whose AC label aliases that key (`AC1 — R3 — <title>` → the `AC1` box is proven by a `R3` key). The section body is already in hand and `parseChecklist` returns the per-line text.
-2. **Accept the combined key at the verdict layer.** Confirm whether `AC1 (feature R3)` satisfies both the lint's accepted forms and the verdict's scenario keying; if it does, the fix is a documented answer-schema rule rather than flip-time logic.
+Keep `prefixId`'s existing forms intact: `AC1` and `AC1 — <title>` must still resolve to `AC1`, and an `R1` requirement key must still prove the `R1` box. A scenario key the task does not alias proves nothing.
 
-Verify the chosen shape by reproducing the 0968/0969 path end to end (feature-linked task + scenario-keyed AC rows) and confirming the AC boxes flip during `task record`.
+Verify by reproducing the 0968/0969 path end to end (feature-linked task + scenario-keyed AC rows) and confirming the AC boxes flip during `task record`, with no manual `spur task update --section` step and no `PASS → PARTIAL` downgrade.
 
 ### Plan
 
@@ -57,7 +74,20 @@ Verify the chosen shape by reproducing the 0968/0969 path end to end (feature-li
 
 ### Root Cause
 
-<!-- Verified underlying cause with file:line evidence. Fill once reproduced/isolated. -->
+`flipVerifiedCheckboxes` (`packages/app/src/services/task-record.ts`) normalizes each proven verdict id through `prefixId`, whose `/^(?:AC|R)\d+/` keeps only a leading `AC<n>`/`R<n>` token:
+
+```ts
+function prefixId(id: string): string {
+    const m = /^(?:AC|R)\d+/.exec(id);
+    return m ? m[0] : id;
+}
+```
+
+A verdict row keyed to a feature scenario — the form `spur task verdict` requires for a feature-linked task — begins with the **feature's** own `R<n>`, e.g. `R3 — The agent loop is an application service`. `prefixId` therefore yields `R3`, a Requirements-namespace id. The task's AC checkbox is labelled `AC1` (`- [ ] AC1 — R3 — …`), so `proven` never contains `AC1` and the box is never flipped.
+
+The alias information is present in the section body the function already holds, and `prefixId`'s own comment names the intended contract — it handles the forward direction (`AC1 — <scenario title>` → `AC1`) but not a bare scenario key resolving back to the AC label that aliases it.
+
+Observed on 0968 (feature G67) and 0969 (feature H21): the record-stage residual sweep counted the untouched AC boxes as blocking, folded `PASS → PARTIAL`, and the `record → done` gate failed with `Task is done but carries N unchecked checklist box(es)`. Recovery was a manual `spur task update <wbs> --section "Acceptance Criteria"` tick followed by a second verdict derivation, residual sweep and done gate.
 
 ### Solution
 
@@ -73,6 +103,9 @@ Verify the chosen shape by reproducing the 0968/0969 path end to end (feature-li
 
 ### References
 
-<!-- Links to failing logs, related issues, tasks, docs, or external references. -->
+- Flip site: `packages/app/src/services/task-record.ts` (`flipVerifiedCheckboxes`, `prefixId`)
+- Verdict keying requirement: `plugins/sp/scripts/verify-answer-lint.ts` and the `spur task verdict` scenario-key gate; the error text observed was `Verdict rows key to no scenario of linked feature G67: R1, R2, R3, R4, R5 (+2 more)`
+- Aliasing source (task side): the task file's AC lines carry both labels, e.g. `- [ ] AC1 — R3 — The agent loop is an application service`
+- Related tasks: 0692 (verdict-driven checkbox auto-flip, feature F94), 0956 (D64 scenario-key verdict evidence), 0968 (G67) and 0969 (H21) where the conflict was observed
 
 ### History
