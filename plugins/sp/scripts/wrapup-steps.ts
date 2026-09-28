@@ -271,16 +271,23 @@ function readFileSyncSafe(path: string): string | null {
 
 /**
  * Verdict from a task record's tracked `Testing` section — the durable copy that outlives a
- * worktree teardown or clone (F93). Local copy of `parseVerdictLine`
- * (`packages/app/src/services/task-record.ts`) because ADR-065 keeps plugin scripts on builtin
- * and relative imports only; keep the two in step by hand. Returns null when the section or the
- * verdict line is absent.
+ * worktree teardown or clone (F93). Local copy of `parseVerdictLine` and of the `Testing` slice
+ * in `extractTestingSection` (`packages/app/src/services/task-record.ts`) because ADR-065 keeps
+ * plugin scripts on builtin and relative imports only; keep the three literals in step by hand
+ * (the parity guard in `plugins/sp/tests/wrapup-steps.test.ts` reads the canonical literals).
+ *
+ * The slice rule is the canonical one verbatim — `#{1,6}` heading, end at the next
+ * same-or-higher heading — so an `# Testing` or `#### Testing` heading, and an h4 subheading
+ * inside a `## Testing` section, read the same here and in the app. One deliberate difference:
+ * with no `Testing` heading at all this returns null instead of falling back to the whole
+ * document, so a `Verdict:` token in another section cannot be misread as this task's verdict.
  */
 export function verdictFromTestingSection(content: string): string | null {
-    const heading = /^#{2,4}\s+Testing\s*$/m.exec(content);
+    const heading = /^#{1,6}\s+Testing\s*$/m.exec(content);
     if (!heading) return null;
+    const level = heading[0].match(/^#+/)?.[0]?.length ?? 2;
     const rest = content.slice(heading.index + heading[0].length);
-    const next = /^#{2,4}\s+\S/m.exec(rest);
+    const next = new RegExp(`^#{1,${level}}\\s+\\S`, 'm').exec(rest);
     const section = next ? rest.slice(0, next.index) : rest;
     for (const line of section.split('\n')) {
         // Line-anchored (optionally after `- ` bullet or `**` bold) so evidence text
@@ -367,9 +374,11 @@ export function runMetrics(env: WrapupStepsEnv, options: WrapupStepsOptions = {}
         const artifactVerdict = verdictOfArtifact(abs(verdictPath));
         const trackedVerdict = verdictFromTestingSection(typeof parsed.content === 'string' ? parsed.content : '');
         const verdict = artifactVerdict ?? trackedVerdict ?? 'UNKNOWN';
-        if (artifactVerdict === null && trackedVerdict === null) {
+        if (verdict === 'UNKNOWN') {
+            // R3: name the task, the artifact path and the tracked state. An explicit UNKNOWN on
+            // either source is still an uncertified row, so it reports the same way as a miss.
             process.stderr.write(
-                `metrics-record: task ${wbs} has no verdict — ${verdictPath} is missing or carries none, and the tracked Testing section has no Verdict: line — recording UNKNOWN telemetry\n`,
+                `metrics-record: task ${wbs} has no certifying verdict — ${verdictPath}: ${artifactVerdict ?? 'missing or carries none'}, tracked Testing: ${trackedVerdict ?? 'no Verdict: line'} — recording UNKNOWN telemetry\n`,
             );
         }
 

@@ -173,11 +173,12 @@ function readFileSyncSafe(path) {
   }
 }
 function verdictFromTestingSection(content) {
-  const heading = /^#{2,4}\s+Testing\s*$/m.exec(content);
+  const heading = /^#{1,6}\s+Testing\s*$/m.exec(content);
   if (!heading)
     return null;
+  const level = heading[0].match(/^#+/)?.[0]?.length ?? 2;
   const rest = content.slice(heading.index + heading[0].length);
-  const next = /^#{2,4}\s+\S/m.exec(rest);
+  const next = new RegExp(`^#{1,${level}}\\s+\\S`, "m").exec(rest);
   const section = next ? rest.slice(0, next.index) : rest;
   for (const line of section.split(`
 `)) {
@@ -240,8 +241,8 @@ function runMetrics(env, options = {}) {
     const artifactVerdict = verdictOfArtifact(abs(verdictPath));
     const trackedVerdict = verdictFromTestingSection(typeof parsed.content === "string" ? parsed.content : "");
     const verdict = artifactVerdict ?? trackedVerdict ?? "UNKNOWN";
-    if (artifactVerdict === null && trackedVerdict === null) {
-      process.stderr.write(`metrics-record: task ${wbs} has no verdict \u2014 ${verdictPath} is missing or carries none, and the tracked Testing section has no Verdict: line \u2014 recording UNKNOWN telemetry
+    if (verdict === "UNKNOWN") {
+      process.stderr.write(`metrics-record: task ${wbs} has no certifying verdict \u2014 ${verdictPath}: ${artifactVerdict ?? "missing or carries none"}, tracked Testing: ${trackedVerdict ?? "no Verdict: line"} \u2014 recording UNKNOWN telemetry
 `);
     }
     const timestamp = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");

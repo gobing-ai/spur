@@ -4,7 +4,7 @@ name: Derive the wrap-up metrics verdict from the tracked Testing record
 status: done
 template: feature-impl
 created_at: 2026-09-28T08:31:25.123Z
-updated_at: "2026-09-28T19:12:58.304Z"
+updated_at: "2026-09-28T19:30:49.387Z"
 feature_id: D62
 
 ac_altitude: task-local
@@ -40,9 +40,9 @@ AC altitude: task-local. Regression fix on the wrap-up metrics path, not a new f
 - [x] AC2 — Artifact precedence kept (req: R1)
   - Verify: a test case where the artifact says `PARTIAL` and the tracked line says `PASS` records `PARTIAL`.
 - [x] AC3 — Absent verdict is honest (req: R3)
-  - Verify: the existing no-artifact case (`plugins/sp/tests/wrapup-steps.test.ts:290`) still records `UNKNOWN`, and stderr names `.spur/run/0770-verdict.json`.
+  - Verify: the existing no-artifact case (`plugins/sp/tests/wrapup-steps.test.ts:317-324`) still records `UNKNOWN`, and stderr names `.spur/run/0770-verdict.json`.
 - [x] AC4 — Schema unchanged (req: R4)
-  - Verify: the key-order assertion at `plugins/sp/tests/wrapup-steps.test.ts:294` passes unchanged.
+  - Verify: the key-order assertion at `plugins/sp/tests/wrapup-steps.test.ts:320` passes unchanged.
 - [x] AC5 — Real-data reproduction (req: R1)
   - Verify: in a scratch copy, a metrics run over a capture of `["0967"]` in the main tree records `PASS` (before the fix: `UNKNOWN`). Then `bun run spur-check` is green.
 
@@ -80,87 +80,49 @@ Residual: a stale main-tree artifact from an earlier non-worktree attempt still 
 
 ### Solution
 
-`runMetrics` now reads the tracked `Testing` verdict when the artifact yields none. Artifact first,
-tracked `Testing` line second, honest `UNKNOWN` last; the row schema, the `UNKNOWN`-stays-telemetry
-semantics and the `PASS`/`FAIL` status file are untouched.
+`runMetrics` now reads the tracked `Testing` verdict when the artifact yields none — artifact first, tracked `Testing` line second, honest `UNKNOWN` last — and reports every uncertified row. The row schema, the `UNKNOWN`-stays-telemetry semantics and the `PASS`/`FAIL` status file are untouched.
+
+A follow-up revision on the same task (2026-09-28) closed this task's own review findings P3/P4: the `Testing` slice was aligned to the canonical rule, the uncertified-row diagnostic now also fires on an explicit `UNKNOWN`, and the exported helper gained direct tests plus a machine parity guard. Task 0995 — the residual follow-up `residual-scan settle` filed for the deferred P3 — was folded back into this task and removed, so nothing is deferred.
 
 #### Change map (`file:line`)
 
-- `plugins/sp/scripts/wrapup-steps.ts:273-289` — new `verdictFromTestingSection(content)`: slices the
-  tracked `### Testing` section (heading depth 2–4, same slice rule as `solutionSectionOf` at
-  `plugins/sp/scripts/wrapup-drift-probe.ts:112`) and returns the first line-anchored
-  `Verdict: PASS|PARTIAL|FAIL|UNKNOWN`. Local copy of `parseVerdictLine` in
-  `packages/app/src/services/task-record.ts` — ADR-065 keeps plugin scripts on builtin and relative
-  imports only, so the two must be kept in step by hand.
-- `plugins/sp/scripts/wrapup-steps.ts:291-304` — new `verdictOfArtifact(path)`: the artifact's
-  `verdict` field, or `null` when the file is absent, unreadable, malformed or carries no usable
-  value (jq `//` semantics: null/undefined/false are missing, an empty string stays empty).
-- `plugins/sp/scripts/wrapup-steps.ts:361-375` — the row verdict is now
-  `artifactVerdict ?? trackedVerdict ?? 'UNKNOWN'`; when neither source yields a verdict the row
-  stays `UNKNOWN` and one stderr line names the task, the missing artifact path and the missing
-  tracked verdict line (the workflow run log captures it).
-- `plugins/sp/scripts/wrapup-steps.mjs` — regenerated twin
-  (`superskill script convert sp wrapup-steps.ts`, part of `bun run build:scripts`);
-  `bun run plugin-smoke` PASS.
-- `plugins/sp/tests/wrapup-steps.test.ts:57-72` — `writeTaskShowStub` / `onlyMetricsRow` helpers
-  (the `task show` payload is written to a file so task content with newlines and quotes survives
-  the shell).
-- `plugins/sp/tests/wrapup-steps.test.ts:315-317` — AC3: the existing no-artifact, no-Testing-verdict
-  case still records `UNKNOWN` and its stderr names `.spur/run/0770-verdict.json`.
-- `plugins/sp/tests/wrapup-steps.test.ts:323-343` — AC1: no artifact plus a tracked
-  `- Verdict: PASS (from verdict artifact)` line ⇒ row `verdict: "PASS"`, and no honest-`UNKNOWN`
-  diagnostic on stderr.
-- `plugins/sp/tests/wrapup-steps.test.ts:345-363` — AC1 (second case): a mid-line `Verdict: FAIL`
-  inside an evidence table cell does not match ⇒ the row stays `UNKNOWN`.
-- `plugins/sp/tests/wrapup-steps.test.ts:365-379` — AC2: artifact `PARTIAL` plus tracked `PASS` ⇒
-  `PARTIAL` (artifact stays the first source).
-- `plugins/sp/tests/wrapup-steps.test.ts:383-397` — R1 "yields no verdict": an artifact without a
-  `verdict` field falls back to a bold `**Verdict: FAIL**` tracked line.
+- `plugins/sp/scripts/wrapup-steps.ts:285-299` — `verdictFromTestingSection(content)`: slices the tracked `Testing` section and returns the first line-anchored `Verdict: PASS|PARTIAL|FAIL|UNKNOWN`. The matcher (`:295`) and the slice (`:286-291`) are byte-identical to `parseVerdictLine` and the `Testing` slice in `extractTestingSection` (`packages/app/src/services/task-record.ts:275-290`, `:336-347`); ADR-065 keeps plugin scripts on builtin and relative imports only, so the copies are kept in step by hand and by the parity guard below. One deliberate difference, documented in the JSDoc (`:275-284`): with no `Testing` heading this returns `null` instead of falling back to the whole document, so a `Verdict:` token in another section cannot be misread as this task's verdict.
+- `plugins/sp/scripts/wrapup-steps.ts:301-313` — `verdictOfArtifact(path)`: the artifact's `verdict` field, or `null` when the file is absent, unreadable, malformed or carries no usable value (jq `//` semantics: null/undefined/false are missing, an empty string stays empty).
+- `plugins/sp/scripts/wrapup-steps.ts:373-383` — the row verdict is `artifactVerdict ?? trackedVerdict ?? 'UNKNOWN'` (`:376`); whenever it resolves to `UNKNOWN` (`:377`) one stderr line (`:381`) names the task, the artifact path and both source readings. An explicit `UNKNOWN` on either source is an uncertified row, so it reports the same way a miss does.
+- `plugins/sp/scripts/wrapup-steps.ts:386` — the row literal `{ wbs, feature_id, status, verdict, timestamp }`; `:396-397` — the `PASS|FAIL` status file is unchanged.
+- `plugins/sp/scripts/wrapup-steps.mjs` — regenerated twin (`bun run build:scripts`; `bun run script-contract-check` PASS, 29 scripts, 0 violations, which re-converts each twin and byte-compares).
+- `plugins/sp/tests/wrapup-steps.test.ts:66-79` — `writeTaskShowStub` / `onlyMetricsRow` helpers (the `task show` payload is written to a file so task content with newlines and quotes survives the shell).
+- `plugins/sp/tests/wrapup-steps.test.ts:320` — R4: the untouched row-schema key-order assertion.
+- `plugins/sp/tests/wrapup-steps.test.ts:324` — AC3: the no-artifact, no-Testing-verdict case records `UNKNOWN` and its stderr names `.spur/run/0770-verdict.json`.
+- `plugins/sp/tests/wrapup-steps.test.ts:330-351` — AC1: no artifact plus a tracked `- Verdict: PASS (from verdict artifact)` line ⇒ row `verdict: "PASS"`, and no uncertified diagnostic on stderr.
+- `plugins/sp/tests/wrapup-steps.test.ts:352-371` — AC1 (second case): a mid-line `Verdict: FAIL` inside an evidence table cell does not match ⇒ the row stays `UNKNOWN`.
+- `plugins/sp/tests/wrapup-steps.test.ts:372-389` — AC2: artifact `PARTIAL` plus tracked `PASS` ⇒ `PARTIAL` (artifact stays the first source).
+- `plugins/sp/tests/wrapup-steps.test.ts:390-407` — R1 "yields no verdict": an artifact without a `verdict` field falls back to a bold `**Verdict: FAIL**` tracked line.
+- `plugins/sp/tests/wrapup-steps.test.ts:764-779` — P3 parity guard: reads `packages/app/src/services/task-record.ts` and this script, asserting the `Testing` heading literal, the `Verdict:` matcher literal and the level-aware end-anchor statement are identical in both — it fails when either copy moves. Independently mutation-tested: moving any one literal in either copy failed the guard.
+- `plugins/sp/tests/wrapup-steps.test.ts:780-791` — P3 slice cases that previously diverged: an `# Testing` heading, an h4 subheading inside `## Testing`, a sibling `## Solution` heading that must end the section, no `Testing` heading at all, and a section with no verdict line.
+- `plugins/sp/tests/wrapup-steps.test.ts:792-811`, `:812-828` — P4: an explicit tracked `UNKNOWN` still reports the uncertified row, and the h1 slice reaches a real metrics row end to end.
 
 #### Why
 
-`runMetrics` already fetched `task show --json` for every captured task but only ever read the
-gitignored `.spur/run/<wbs>-verdict.json`. `/sp:dev-run --worktree` fast-forwards and removes the
-tree on success, so the artifact dies with it and every row landed `UNKNOWN` (28 such rows in
-`.spur/memory/wrapup-metrics.jsonl`). The tracked `## Testing` section that `task record` wrote from
-that same verdict before the merge is the durable copy (F93), and it needs no new process call.
+`runMetrics` already fetched `task show --json` for every captured task but only ever read the gitignored `.spur/run/<wbs>-verdict.json`. `/sp:dev-run --worktree` fast-forwards and removes the tree on success, so the artifact dies with it and every row landed `UNKNOWN` (28 such rows in `.spur/memory/wrapup-metrics.jsonl`). The tracked `## Testing` section that `task record` wrote from that same verdict before the merge is the durable copy (F93), and it needs no new process call.
 
 #### Targeted tests actually run
 
 ```text
 $ (cd plugins/sp && bun test tests/wrapup-steps.test.ts)
-(pass) a resolvable task appends exactly one well-formed metrics row and PASSes [39.07ms]
-(pass) 0994 R1: a missing artifact derives the verdict from the tracked Testing section [110.00ms]
-(pass) 0994 R2: a mid-line verdict inside an evidence cell is not the Testing verdict [122.84ms]
-(pass) 0994 R1: an existing artifact outranks the tracked Testing verdict [109.19ms]
-(pass) 0994 R1: an artifact carrying no verdict falls back to the tracked Testing verdict [108.09ms]
- 31 pass
+(pass) 0994 R1: a missing artifact derives the verdict from the tracked Testing section
+(pass) 0994 R2: a mid-line verdict inside an evidence cell is not the Testing verdict
+(pass) 0994 R1: an existing artifact outranks the tracked Testing verdict
+(pass) 0994 R1: an artifact carrying no verdict falls back to the tracked Testing verdict
+(pass) 0994 P3: the local verdict literals stay identical to the canonical parser
+(pass) 0994 R1: verdictFromTestingSection slices like the canonical extractTestingSection
+(pass) 0994 P4: an explicit tracked UNKNOWN still reports the uncertified row
+(pass) 0994 R1: an h1 Testing heading reaches the metrics row
+ 35 pass
  0 fail
- 119 expect() calls
-Ran 31 tests across 1 file. [2.96s]
+ 137 expect() calls
+Ran 35 tests across 1 file. [3.43s]
 ```
-
-#### AC5 real-data reproduction
-
-Scratch copy at `.spur/tmp/0994-ac5` (repo working tree minus `node_modules`/`.git`, with the
-pre-fix script from `HEAD` and the fixed script side by side), removed afterwards. The real
-`.spur/memory/wrapup-metrics.jsonl` was not touched — 207 rows before and after.
-
-```text
-$ cd .spur/tmp/0994-ac5        # 0967 tracked Testing: "- Verdict: PASS (from verdict artifact)";
-                               # no .spur/run/0967-verdict.json in this copy
-$ export spurBin="bun <repo>/apps/cli/src/index.ts"
-$ __runId=ac5-pre bun plugins/sp/scripts/wrapup-steps-prefix.ts metrics   # HEAD
-$ __runId=ac5-fix bun plugins/sp/scripts/wrapup-steps.ts metrics          # fixed
-$ cat .spur/memory/wrapup-metrics.jsonl
-{"wbs":"0967","feature_id":"G67","status":"done","verdict":"UNKNOWN","timestamp":"2026-09-28T18:44:28Z"}
-{"wbs":"0967","feature_id":"G67","status":"done","verdict":"PASS","timestamp":"2026-09-28T18:44:28Z"}
-```
-
-#### Gate
-
-`bun run lint` (biome + tsc, including `plugins/sp/tsconfig.json`) clean; `bun run plugin-smoke`
-PASS; `bun run spur-check` → 9394 pass / 0 fail across 541 files, post-check rules PASS.
 
 ### Testing
 
@@ -170,54 +132,54 @@ PASS; `bun run spur-check` → 9394 pass / 0 fail across 541 files, post-check r
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | Artifact-first fallback in the row verdict: `plugins/sp/scripts/wrapup-steps.ts:369` = `artifactVerdict ?? trackedVerdict ?? 'UNKNOWN'`, fed by `verdictFromTestingSection` (`:279-292`, reads the tracked `Testing` section of the already-fetched `task show --json` content) with the artifact unchanged as the first source `verdictOfArtifact` (`:298-306`). Tests `plugins/sp/tests/wrapup-steps.test.ts:323-342` (no artifact + tracked PASS ⇒ `PASS`, no diagnostic) and `:383-397` (artifact without a `verdict` field ⇒ tracked bold `FAIL`); `(cd plugins/sp && bun test tests/wrapup-steps.test.ts)` 31 pass / 0 fail this run. Real-data repro (AC5) derived `PASS` for 0967 from the tracked line with no artifact present. |
-| R2 | MET | Line-anchored matcher at `plugins/sp/scripts/wrapup-steps.ts:288` is byte-identical to `parseVerdictLine`'s regex at `packages/app/src/services/task-record.ts:340` (machine-diffed the two literals this run — `grep -o '/^(?:-.*exec(line.trim())'` on both files, `diff` reported no difference: same optional `- ` bullet and `**` bold prefixes, same `Verdict:` head, same `\s*` gap, same four-value alternation PASS, PARTIAL, FAIL, UNKNOWN, same `\b` and `i` flag, same `line.trim()` input, same skip-and-continue loop). JSDoc `:273-278` names `parseVerdictLine` and records the ADR-065 local-copy reason; the file value-imports only `node:*` and `../lib/env` — `spur rule run --preset recommended-pre-check` 49 rules PASS in this run's gate log. Negative case `plugins/sp/tests/wrapup-steps.test.ts:345-362` (mid-line `Verdict: FAIL` inside an evidence table cell) stays `UNKNOWN`. |
-| R3 | MET | No source ⇒ honest `UNKNOWN` plus one stderr diagnostic naming the task, the artifact path and the missing tracked verdict line: `plugins/sp/scripts/wrapup-steps.ts:370-374`; asserted at `plugins/sp/tests/wrapup-steps.test.ts:310` (row `UNKNOWN`) and `:317` (stderr contains `.spur/run/0770-verdict.json`). Status semantics untouched: `:387-388` still derive the status file from `metricsRc` only, and `config/workflows/wrapup-pipeline.yaml:282` still reads `is UNKNOWN telemetry, never proof of completion` (workflow file unmodified in the diff). |
-| R4 | MET | Row literal unchanged and still single-sourced at `plugins/sp/scripts/wrapup-steps.ts:377` = `{ wbs, feature_id: featureId, status, verdict, timestamp }`; the pre-existing key-order assertion `plugins/sp/tests/wrapup-steps.test.ts:313` is a context line in `git diff eccb8caf3` (untouched) and passes in this run. |
+| R1 | MET | Artifact stays first source, tracked `Testing` verdict second: `plugins/sp/scripts/wrapup-steps.ts:376` = `artifactVerdict ?? trackedVerdict ?? 'UNKNOWN'`; the fallback `verdictFromTestingSection` (`plugins/sp/scripts/wrapup-steps.ts:285`) reads the already-fetched `task show --json` content, and `verdictOfArtifact` (`plugins/sp/scripts/wrapup-steps.ts:305`) is untouched. Tests `plugins/sp/tests/wrapup-steps.test.ts:330` (no artifact, tracked `- Verdict: PASS (from verdict artifact)` ⇒ row `PASS`) and `plugins/sp/tests/wrapup-steps.test.ts:390` (artifact without a `verdict` field ⇒ tracked `**Verdict: FAIL**`). AC5 scratch rerun derived `PASS` for 0967 from the tracked line with no artifact. |
+| R2 | MET | Line-anchored matcher `plugins/sp/scripts/wrapup-steps.ts:295` is byte-identical to `parseVerdictLine` at `packages/app/src/services/task-record.ts:340` (diffed this run: same optional `- `/`**` prefixes, `Verdict:` head, four-value alternation, `\b`, `i` flag, `line.trim()`); slice (`plugins/sp/scripts/wrapup-steps.ts:286-290`) is the canonical `extractTestingSection` rule (`packages/app/src/services/task-record.ts:276-288`). Local copy per ADR-065 (file value-imports only `node:*` and `../lib/env`), documented in the JSDoc and machine-enforced by the parity guard `plugins/sp/tests/wrapup-steps.test.ts:764`. Negative mid-line case `plugins/sp/tests/wrapup-steps.test.ts:352`. |
+| R3 | MET | No certifying verdict ⇒ honest `UNKNOWN` plus one stderr line naming the task, the artifact path and the tracked reading: `plugins/sp/scripts/wrapup-steps.ts:377` (fires on any `UNKNOWN`, including an explicit one); row literal `plugins/sp/scripts/wrapup-steps.ts:386`; status file still derived from `metricsRc` only at `plugins/sp/scripts/wrapup-steps.ts:396`. Asserts `plugins/sp/tests/wrapup-steps.test.ts:317` (row `UNKNOWN`) and `plugins/sp/tests/wrapup-steps.test.ts:324` (stderr names `.spur/run/0770-verdict.json`). |
+| R4 | MET | Row literal `plugins/sp/scripts/wrapup-steps.ts:386` = `{ wbs, feature_id: featureId, status, verdict, timestamp }` (key order unchanged); key-order assertion `plugins/sp/tests/wrapup-steps.test.ts:320` passes and is untouched by the diff. |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:323-342` — no artifact + tracked `- Verdict: PASS (from verdict artifact)` ⇒ row `verdict: "PASS"` and empty stderr; second case `:345-362` — `Verdict: FAIL` only inside an evidence table cell ⇒ row stays `UNKNOWN`. Both pass this run (31 pass / 0 fail, 119 expect() calls). Corroborated end-to-end by the AC5 scratch run over real task 0967. |
-| AC2 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:365-380` — artifact `{"verdict":"PARTIAL"}` plus tracked `PASS` records `PARTIAL` (artifact stays the first source, `plugins/sp/scripts/wrapup-steps.ts:369`). Passes this run. |
-| AC3 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:296-320` — the no-artifact, no-tracked-verdict case still records `verdict: "UNKNOWN"` (`:310`) and its stderr names `.spur/run/0770-verdict.json` (`:317`). Passes this run; the step status file stays `PASS` for that case (`:307`). |
-| AC4 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:313` — `expect(Object.keys(row)).toEqual(['wbs','feature_id','status','verdict','timestamp'])` passes and was not modified by the diff (context line in `git diff eccb8caf3 -- plugins/sp/tests/wrapup-steps.test.ts`). |
-| AC5 | MET | command | Scratch copy `.spur/tmp/0994-verify-ac5` (main tree minus `node_modules`/`.git`, no `.spur/run/0967-verdict.json`, tracked `- Verdict: PASS (from verdict artifact)` at `docs/tasks5/0967_move-the-g66-member-session-out-of-the-agent-cli-into-a-spur.md:194`), capture `["0967"]`, `spurBin=bun apps/cli/src/index.ts`: base script (`git show eccb8caf3:plugins/sp/scripts/wrapup-steps.ts`) appended `{"wbs":"0967","feature_id":"G67","status":"done","verdict":"UNKNOWN","timestamp":"2026-09-28T19:04:07Z"}`; the working-tree script appended `…"verdict":"PASS"…` in the same second. The copy's log went 207 → 209 rows while the real `.spur/memory/wrapup-metrics.jsonl` stayed at 207 rows (its 0967 row is still `UNKNOWN` at `:197`). `bun run spur-check` on the current revision: rc=0, 9394 pass / 0 fail across 541 files, `rule run --preset recommended-post-check` 2 rules PASS (log `.spur/tmp/0994-verify-spur-check.log`; the stage's own gate log `.spur/run/0994-test-gate.log` was written at 11:58, after the last source edit at 11:45). |
+| AC1 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:330` — no artifact plus tracked `- Verdict: PASS (from verdict artifact)` ⇒ row `verdict: "PASS"` with empty stderr; second case `plugins/sp/tests/wrapup-steps.test.ts:352` — `Verdict: FAIL` only inside an evidence table cell ⇒ row stays `UNKNOWN`. Both pass in `(cd plugins/sp && bun test tests/wrapup-steps.test.ts)` (35 pass / 0 fail). |
+| AC2 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:372` — artifact `{"verdict":"PARTIAL"}` plus tracked `PASS` records `PARTIAL` (artifact stays the first source, `plugins/sp/scripts/wrapup-steps.ts:376`). Passes in the 35-test run. |
+| AC3 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:303` — the no-artifact, no-tracked-verdict case still records `verdict: "UNKNOWN"` (`plugins/sp/tests/wrapup-steps.test.ts:317`) and its stderr names `.spur/run/0770-verdict.json` (`plugins/sp/tests/wrapup-steps.test.ts:324`); step status file stays `PASS`. Passes in the 35-test run. |
+| AC4 | MET | test | `plugins/sp/tests/wrapup-steps.test.ts:320` — `expect(Object.keys(row)).toEqual(['wbs','feature_id','status','verdict','timestamp'])` passes unchanged by the diff. Passes in the 35-test run. |
+| AC5 | MET | command | Independent rerun this stage in scratch `.spur/tmp/0994-verify-ac5-rerun` (real 0967 lookup, no `.spur/run/0967-verdict.json`, tracked `- Verdict: PASS (from verdict artifact)`): working-tree script appended `{"wbs":"0967","feature_id":"G67","status":"done","verdict":"PASS",...}`; the base script (`git show eccb8caf3:plugins/sp/scripts/wrapup-steps.ts`) appended `...,"verdict":"UNKNOWN",...`; the real `.spur/memory/wrapup-metrics.jsonl` stayed at 207 rows. |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-Review — 0994 (D62, wrap-up metrics verdict derivation), lane `safety:triage standard lane`, base `eccb8caf3425b58f213e3bcef1b0eaf67fea908c`. Diff: `wrapup-steps.ts` (+ `verdictFromTestingSection`, `verdictOfArtifact`, artifact-first row verdict, no-source stderr line), its `.mjs` twin, 4 new tests + 1 stderr assertion, task Solution/change map.
+Review — 0994 (D62, wrap-up metrics verdict derivation), lane `safety:triage standard lane`, base `eccb8caf3425b58f213e3bcef1b0eaf67fea908c`. Reviewed revisions: the pipeline's implementation, then the follow-up revision that closes this review's own findings.
 
-**Disposition: OK with notes.** No P1/P2 findings. The fallback is correct, minimal and artifact-first; the open items are a drift guard for the hand-copied parser and two advisories. Review P3-2 — the `.mjs` twin-parity gate gap — was closed during this run by `bun run script-contract-check` (29 scripts baselined, 0 violations).
+**Disposition: OK, all findings closed.** No P1/P2. Every P3/P4 below was addressed in this task rather than deferred — 0995 was folded back in and removed, so no residual follow-up is outstanding.
 
 #### Functional traceability (verified)
 
 | Claim | Evidence |
 | --- | --- |
-| Root cause is real | `docs/tasks5/0967_…md:194` `- Verdict: PASS (from verdict artifact)`; `.spur/run/0967-verdict.json` absent in the main tree; the only 0967 row is `UNKNOWN` (`.spur/memory/wrapup-metrics.jsonl:197`) |
-| R1 fallback + artifact precedence | `plugins/sp/scripts/wrapup-steps.ts:367-369`; test `plugins/sp/tests/wrapup-steps.test.ts:365-379` |
-| R2 line-anchored match == `parseVerdictLine` | regex identical to `packages/app/src/services/task-record.ts:340` (machine diff, no difference); test `wrapup-steps.test.ts:345-363` |
-| R3 honest UNKNOWN + named diagnostic | `wrapup-steps.ts:369-374`; status unchanged (`:382-385`); workflow semantics unchanged (`config/workflows/wrapup-pipeline.yaml:281-283`); assert `wrapup-steps.test.ts:317` |
-| R4 schema unchanged | row literal `wrapup-steps.ts:376`; key-order assertion intact at `wrapup-steps.test.ts:313` |
-| AC5 causal reproduction | scratch capture `["0967"]`: base script appended `UNKNOWN`, working-tree script appended `PASS`; real `.spur/memory/wrapup-metrics.jsonl` untouched at 207 rows |
-| No collateral damage | `existsSync` still used (`wrapup-steps.ts:483,494`); twin mirrors the logic (`wrapup-steps.mjs:175-196,240-246,428`); no design satellite documents the verdict source, so no T3 doc sync is owed |
+| Root cause is real | `docs/tasks5/0967_…md:194` `- Verdict: PASS (from verdict artifact)`; `.spur/run/0967-verdict.json` absent; the last recorded 0967 row is `UNKNOWN` (`.spur/memory/wrapup-metrics.jsonl:197`) |
+| R1 fallback + artifact precedence | `plugins/sp/scripts/wrapup-steps.ts:376`; tests `plugins/sp/tests/wrapup-steps.test.ts:372-389`, `:390-407` |
+| R2 line-anchored match == `parseVerdictLine` | matcher byte-identical to `packages/app/src/services/task-record.ts:340`, slice now byte-identical to `extractTestingSection` (`:275-290`) — both asserted by the parity guard `wrapup-steps.test.ts:764-779` (mutation-tested); behavioural cases `:352-371`, `:780-791` |
+| R3 honest UNKNOWN + named diagnostic | `wrapup-steps.ts:377-383`; status unchanged (`:396-397`); workflow semantics unchanged (`config/workflows/wrapup-pipeline.yaml:281-283`); asserts `wrapup-steps.test.ts:324`, `:792-811` |
+| R4 schema unchanged | row literal `wrapup-steps.ts:386`; key-order assertion `wrapup-steps.test.ts:320` |
+| AC5 causal reproduction | scratch capture `["0967"]`: base `eccb8caf3` script appended `UNKNOWN`, working-tree script appended `PASS`; real `.spur/memory/wrapup-metrics.jsonl` untouched at 207 rows |
+| No collateral damage | `existsSync` still used (`wrapup-steps.ts:492,503`); twin regenerated by `bun run build:scripts` and verified by `bun run script-contract-check`; no design satellite documents the verdict source, so no T3 doc sync is owed |
 
 #### Findings
 
 | Priority | Area | Location | Finding | Disposition |
 | --- | --- | --- | --- | --- |
-| P3 | maintainability | plugins/sp/scripts/wrapup-steps.ts:279-291 | Hand-copied verdict matcher with no drift guard: the copy is verbatim (ADR-065), but its `Testing` slice uses `#{2,4}` where the canonical `extractTestingSection` (`packages/app/src/services/task-record.ts:275-289`) uses `#{1,6}`. Reachable divergence: an h1 `# Testing` heading, or an h4 subheading before the Verdict line, reads as no verdict on the plugin side while the app sees one. Both degrade to honest `UNKNOWN` and `renderTesting` writes the Verdict line first, so no wrong `PASS` is reachable today. | DEFER — nothing fails if `parseVerdictLine` changes, so a parity test over a shared line corpus (or a JSDoc note recording the intentional slice divergence) is owed; it is a guard, not a defect, so it is filed rather than fixed inside a certification run |
-| P4 | telemetry | plugins/sp/scripts/wrapup-steps.ts:369-374 | An explicit tracked `- Verdict: UNKNOWN` line yields `UNKNOWN` without the new diagnostic, because the stderr line fires only when both sources are `null`. R3's letter is met; log-based triage under-reports. | DEFER — optional hardening: `if (verdict === 'UNKNOWN')` |
-| P4 | tests | plugins/sp/scripts/wrapup-steps.ts:273 | `verdictFromTestingSection` is exported but no test imports it directly. | DEFER — covered through the four `runMetrics` cases; a direct unit test is nicer, not required |
-| P4 | docs | docs/tasks5/0994_persist-the-verify-verdict-artifact-so-wrap-up-metrics-survi.md | The Solution change-map ranges and the AC3/AC4 `Verify` line anchors drifted by about five lines once the section bodies were rewritten. | RESOLVED — section bodies rewritten through `spur task update` during this run |
+| P3 | maintainability | plugins/sp/scripts/wrapup-steps.ts:286-290 | Hand-copied verdict parser: the matcher was already verbatim per ADR-065, but the `Testing` slice used `#{2,4}` where the canonical `extractTestingSection` uses `#{1,6}` and ends at the next same-or-higher heading. An `# Testing` heading, or a verdict below an h4 subheading inside `## Testing`, read as absent here while the app read one — both degraded to honest `UNKNOWN`, so no wrong `PASS` was reachable, but the two copies disagreed on reachable input. | FIXED — the slice is now the canonical rule verbatim, the deliberate difference (no `Testing` heading ⇒ `null`, never a document-wide scan) is documented in the JSDoc at `:275-284`, and the parity guard reads both files and fails if any of the three literals moves (`wrapup-steps.test.ts:764-779`) |
+| P4 | telemetry | plugins/sp/scripts/wrapup-steps.ts:377-383 | An explicit tracked `- Verdict: UNKNOWN` produced a silent UNKNOWN row, because the diagnostic fired only when both sources were null. R3's letter was met; log-based triage under-reported. | FIXED — the diagnostic now fires whenever the row resolves to `UNKNOWN` and names the task, the artifact path and both source readings; asserted at `wrapup-steps.test.ts:792-811` |
+| P4 | tests | plugins/sp/scripts/wrapup-steps.ts:285 | `verdictFromTestingSection` was exported but no test imported it, so the helper's slice semantics had no direct coverage. | FIXED — direct unit cases at `wrapup-steps.test.ts:780-791` (h1 heading, h4 subheading, level-aware end anchor, no heading, no verdict line) plus an end-to-end h1 case at `:812-828` |
+| P4 | docs | docs/tasks5/0994_persist-the-verify-verdict-artifact-so-wrap-up-metrics-survi.md | Documentation line anchors drifted twice: once when the section bodies were first rewritten, then again when the follow-up revision reformatted the test import block (+7) and grew the script JSDoc (+7) after the ranges had been derived — the first "RESOLVED" disposition was therefore inaccurate. | FIXED — every `file:line` anchor in this section, in `## Solution` and in the AC3/AC4 `Verify` lines was re-derived from the current files and verified against them; the re-verification pass that caught the second drift is recorded in the run log |
 
 #### Residual risk
 
 1. Rows can now come from a human-writable tracked line (F93 measured 78 artifact-less `done` tasks carrying a `Verdict:` line); the log no longer distinguishes a machine-certified verdict from a hand-written one. Intended by R1 — relevant when the log is cited as evidence.
-2. A literal artifact `"verdict": "UNKNOWN"` counts as a verdict and does not fall through to the tracked record. R1's "absent or yields no verdict" is honoured at field level; a present artifact stays authoritative. ACs pass either way.
+2. A literal artifact `"verdict": "UNKNOWN"` stays authoritative and does not fall through to the tracked record. R1's "absent or yields no verdict" is honoured at field level; the uncertified row is now reported rather than silent. Documented invariant, not a defect.
 3. Stale main-tree artifact precedence over a newer tracked verdict (pre-existing, disclosed in the task's Design, not widened).
 
-Provenance: produced by the `review` stage's dispatched subagent (mission `730e7c2a-74ee-4bfa-9b45-b145b00c79de`, role reviewer, fresh context) and persisted by the pipeline host, because the reviewer agent is read-only and cannot write `answerFile` nor run `spur task update --section`. The review's content was not re-derived in the host.
+Provenance: the review was produced by the `review` stage's dispatched subagent (mission `730e7c2a-74ee-4bfa-9b45-b145b00c79de`, role reviewer, fresh context) and persisted by the pipeline host, because the reviewer agent is read-only and cannot write `answerFile` nor run `spur task update --section`. The findings were then fixed in-task and the revision re-verified by a second fresh verifier (mission `d5fbd55f-ff5b-4089-b88e-b38ebca12e71`), which is what caught the second anchor drift.
 
 ### References
 

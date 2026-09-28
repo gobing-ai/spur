@@ -3,7 +3,14 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars, setEnvVar } from '@gobing-ai/ts-utils';
-import { main, WBS_PATTERN, WRAPUP_STEPS_USAGE, type WrapupStepsEnv, writeRouteReason } from '../scripts/wrapup-steps';
+import {
+    main,
+    verdictFromTestingSection,
+    WBS_PATTERN,
+    WRAPUP_STEPS_USAGE,
+    type WrapupStepsEnv,
+    writeRouteReason,
+} from '../scripts/wrapup-steps';
 
 /**
  * 0824: execution pins for the wrapup-steps plugin script, migrated from the workflow
@@ -735,6 +742,86 @@ test('0944: an empty __runId is a hard mis-invocation (exit 1, nothing written)'
         }
         expect(code).toBe(1);
         expect(seen.join('')).toContain('__runId is empty');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+/**
+ * 0994 P3: parity guard for the hand-copied verdict parser. ADR-065 forces the copy, so the
+ * guard reads both files and fails when either literal moves — without it, an edit to
+ * `parseVerdictLine` or to the `Testing` slice in `extractTestingSection` splits the plugin
+ * from the app silently, and the split only surfaces as a wrong metrics row much later.
+ */
+const TESTING_HEADING_LITERAL = String.raw`/^#{1,6}\s+Testing\s*$/m`;
+const VERDICT_LINE_LITERAL = String.raw`/^(?:-\s*|\*\*)?Verdict:\s*(PASS|PARTIAL|FAIL|UNKNOWN)\b/i`;
+
+/** The level-aware end anchor is a template literal, so compare the whole statement instead. */
+function anchorStatement(source: string): string {
+    return (source.split('\n').find((line) => line.includes('new RegExp(`^#{1,')) ?? '').trim();
+}
+
+test('0994 P3: the local verdict literals stay identical to the canonical parser', () => {
+    const canonical = readFileSync(join(import.meta.dir, '../../../packages/app/src/services/task-record.ts'), 'utf8');
+    const local = readFileSync(join(import.meta.dir, '../scripts/wrapup-steps.ts'), 'utf8');
+    expect(canonical).toContain(TESTING_HEADING_LITERAL);
+    expect(local).toContain(TESTING_HEADING_LITERAL);
+    expect(canonical).toContain(VERDICT_LINE_LITERAL);
+    expect(local).toContain(VERDICT_LINE_LITERAL);
+    expect(anchorStatement(local)).not.toBe('');
+    expect(anchorStatement(local)).toBe(anchorStatement(canonical));
+});
+
+/**
+ * 0994 P3: the slice rule the pre-fix copy got wrong. The local `#{2,4}` heading and end anchor
+ * read an `# Testing` section (or a verdict below an h4 subheading) as absent while the app saw
+ * one — both degraded to honest UNKNOWN, but the two copies disagreed on reachable input.
+ */
+test('0994 R1: verdictFromTestingSection slices like the canonical extractTestingSection', () => {
+    expect(verdictFromTestingSection('# Testing\n\n- Verdict: PARTIAL\n')).toBe('PARTIAL');
+    expect(verdictFromTestingSection('## Testing\n\n#### Coverage\n\n- Verdict: FAIL\n')).toBe('FAIL');
+    expect(verdictFromTestingSection('## Testing\n\nnothing here\n\n## Solution\n\n- Verdict: PASS\n')).toBeNull();
+    expect(verdictFromTestingSection('## Solution\n\n- Verdict: PASS\n')).toBeNull();
+    expect(verdictFromTestingSection('## Testing\n\nno verdict line here\n')).toBeNull();
+});
+
+/**
+ * 0994 P4: an explicit `Verdict: UNKNOWN` is still an uncertified row, so it reports the way a
+ * missing source does instead of passing silently through the log-based triage path.
+ */
+test('0994 P4: an explicit tracked UNKNOWN still reports the uncertified row', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-metrics-'));
+    try {
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        writeFileSync(join(cwd, '.spur/run/r-unknown-wrapup-tasks.json'), '["0770"]\n');
+        const spurBin = writeTaskShowStub(cwd, {
+            frontmatter: { status: 'done', feature_id: 'D61' },
+            content: '### Testing\n\n- Verdict: UNKNOWN\n',
+        });
+        const run = runSteps(['metrics'], { __runId: 'r-unknown', spurBin }, cwd);
+        expect(run.code).toBe(0);
+        expect(onlyMetricsRow(cwd)).toMatchObject({ wbs: '0770', verdict: 'UNKNOWN' });
+        expect(run.err).toContain('.spur/run/0770-verdict.json');
+        expect(run.err).toContain('tracked Testing: UNKNOWN');
+    } finally {
+        cleanup(cwd);
+    }
+});
+
+/** The canonical slice reaches `runMetrics` too, not only the exported helper. */
+test('0994 R1: an h1 Testing heading reaches the metrics row', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'wrapup-steps-metrics-'));
+    try {
+        mkdirSync(join(cwd, '.spur/run'), { recursive: true });
+        writeFileSync(join(cwd, '.spur/run/r-h1-wrapup-tasks.json'), '["0967"]\n');
+        const spurBin = writeTaskShowStub(cwd, {
+            frontmatter: { status: 'done', feature_id: 'G67' },
+            content: '# Testing\n\n- Verdict: FAIL\n',
+        });
+        const run = runSteps(['metrics'], { __runId: 'r-h1', spurBin }, cwd);
+        expect(run.code).toBe(0);
+        expect(onlyMetricsRow(cwd)).toMatchObject({ wbs: '0967', verdict: 'FAIL' });
+        expect(run.err).toBe('');
     } finally {
         cleanup(cwd);
     }
