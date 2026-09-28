@@ -4,7 +4,7 @@ name: Make the feature-lifecycle R4 (0872) guard test load-deterministic
 status: done
 template: feature-impl
 created_at: 2026-09-27T07:11:02.973Z
-updated_at: "2026-09-28T05:43:32.017Z"
+updated_at: "2026-09-28T08:31:55.617Z"
 feature_id: D63
 
 ac_numbering: task-local
@@ -80,15 +80,15 @@ Test-local budget only — no production or workflow change.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:199-205,289,366` — `CLI_GUARD_TIMEOUT_MS = 20_000` applied to both R4 tests |
-| R2 | MET | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:399,410,416` — missing/FAIL deny the hop, PASS allows it; guard bodies untouched |
-| R3 | MET | `bun test --help` reports the per-test default of 5000 ms; the observed 5001 ms failure is that default, not a guard bound |
+| R1 | MET | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:199-205` — `CLI_GUARD_TIMEOUT_MS = 20_000` + `testCliGuard`; applied at `:289` (R4 0418) and `:366` (R4 0872); re-run 2026-09-28: 11 pass / 0 fail isolated, 4x parallel load 11/0 each |
+| R2 | MET | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:399`, `:410`, `:416` — missing/FAIL receipts deny, PASS allows; `config/workflows/feature-lifecycle.yaml` unchanged by 433b56010 |
+| R3 | MET | `bun test --help` → "Set the per-test timeout in milliseconds, default is 5000"; Solution records the boundary and scoped override |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | command | `(cd packages/app && bun test tests/workflow/feature-lifecycle-adapter.test.ts)` → 11 pass / 0 fail; 4x parallel load → 11 pass / 0 fail |
-| AC2 | MET | test | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:399,410,416` |
-| AC3 | MET | command | `bun test --help` default 5000 ms; Solution names the default and the scoped override |
+| AC1 | MET | command | `(cd packages/app && bun test tests/workflow/feature-lifecycle-adapter.test.ts)` → 11 pass / 0 fail (2.16s); 4 concurrent runs → 11 pass / 0 fail each |
+| AC2 | MET | test | `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:399`, `:410`, `:416` |
+| AC3 | MET | command | `bun test --help` default 5000 ms; Solution names Bun's default and `CLI_GUARD_TIMEOUT_MS` override at `packages/app/tests/workflow/feature-lifecycle-adapter.test.ts:202` |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
