@@ -942,6 +942,9 @@ describe('spur task CLI', () => {
         // --fix repairs structural findings only — it must not auto-close fences.
         await main(['task', 'check', wbs, '--fix'], { cwd, output: createCapturedOutput() });
         expect(await Bun.file(taskPath).text()).toContain('never closed');
+        // This file shares one corpus cwd across all tests; drop the corrupted
+        // fixture so later corpus-facing tests don't sweep its L2 error.
+        rmSync(taskPath);
     });
 
     test('check --as <status> projects the target row (F92 R2): result.status is the target', async () => {
