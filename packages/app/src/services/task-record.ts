@@ -209,15 +209,24 @@ const normalizeKey = (text: string): string =>
  * Requirements box. When a task AC line aliases that scenario (`AC1 — R3 — <title>`), the row
  * proves `AC1`; an unaliased scenario key (`R<n> — <title>`) proves nothing. `AC1`,
  * `AC1 — <title>` and bare/parenthesized `R1` keys keep the {@link prefixId} behavior.
+ *
+ * `AC-<n>` is the feature's 1-based scenario alias, not the task's `AC<n>` box — the numbering
+ * spaces differ — so it resolves through `scenarioTitles[n-1]` to the AC line aliasing that
+ * scenario, and proves nothing when no line does (never a numeric guess).
  */
-function acRowProves(rowId: string, items: ReturnType<typeof parseChecklist>): string | undefined {
-    const key = normalizeKey(rowId);
+function acRowProves(
+    rowId: string,
+    items: ReturnType<typeof parseChecklist>,
+    scenarioTitles: readonly string[],
+): string | undefined {
+    const ordinal = /^AC-(\d+)$/.exec(rowId.trim());
+    const key = normalizeKey(ordinal ? (scenarioTitles[Number(ordinal[1]) - 1] ?? '') : rowId);
     for (const item of items) {
         if (!item.requirementId?.startsWith('AC')) continue;
         const alias = normalizeKey(item.text.replace(/\s*\(req:[^)]*\)\s*$/, ''));
-        if (alias !== '' && (alias === key || alias.endsWith(`— ${key}`))) return item.requirementId;
+        if (alias !== '' && key !== '' && (alias === key || alias.endsWith(`— ${key}`))) return item.requirementId;
     }
-    if (/^R\d+\s*[—-]\s*\S/.test(rowId.trim())) return undefined;
+    if (ordinal || /^R\d+\s*[—-]\s*\S/.test(rowId.trim())) return undefined;
     return prefixId(rowId);
 }
 
@@ -232,9 +241,14 @@ function acRowProves(rowId: string, items: ReturnType<typeof parseChecklist>): s
  *
  * @param body      Section body (Requirements or Acceptance Criteria).
  * @param verdict   Canonical verdict whose proven ids drive the flip.
+ * @param scenarioTitles  Linked feature's scenario titles in `AC-<n>` order; empty when unlinked.
  * @returns the body with proven boxes checked; unchanged when nothing proves.
  */
-export function flipVerifiedCheckboxes(body: string, verdict: CanonicalVerifyVerdict): string {
+export function flipVerifiedCheckboxes(
+    body: string,
+    verdict: CanonicalVerifyVerdict,
+    scenarioTitles: readonly string[] = [],
+): string {
     if (verdict.verdict === 'FAIL' || verdict.verdict === 'UNKNOWN') return body;
     // Verdict ids may carry trailing context (`R1 (anchor-drift detection)`)
     // while parseChecklist extracts the bare `R1` prefix — normalize both sides
@@ -244,11 +258,13 @@ export function flipVerifiedCheckboxes(body: string, verdict: CanonicalVerifyVer
 
     const proven = new Set<string>();
     for (const req of verdict.requirements) {
-        if (req.status === 'MET') proven.add(prefixId(req.id));
+        if (req.status !== 'MET') continue;
+        const id = /^AC-\d+$/.test(req.id.trim()) ? acRowProves(req.id, items, scenarioTitles) : prefixId(req.id);
+        if (id !== undefined) proven.add(id);
     }
     for (const ac of verdict.acceptanceCriteria ?? []) {
         if (ac.status !== 'MET') continue;
-        const id = acRowProves(ac.id, items);
+        const id = acRowProves(ac.id, items, scenarioTitles);
         if (id !== undefined) proven.add(id);
     }
     if (proven.size === 0) return body;

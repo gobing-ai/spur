@@ -1365,6 +1365,27 @@ describe('TaskService.record', () => {
 
             expect(result.scenarioWarnings).toBeUndefined();
         });
+
+        // 0993 residual: `AC-<n>` is the feature's scenario ordinal, so one row credits the scenario
+        // AND ticks the AC box aliasing that scenario — even when the task numbers its ACs differently.
+        test('graduating record: AC-<n> rows tick the aliasing boxes and keep every scenario key', async () => {
+            await seedRecordFeature('Z7', ['R1 — First outcome', 'R2 — Second outcome']);
+            const wbs = await createTask(svc);
+            await svc.updateField(wbs, 'feature_id', 'Z7');
+            await writeTaskAc(wbs, '- [ ] AC1 — R2 — Second outcome\n- [ ] AC2 — R1 — First outcome\n');
+            const verdictPath = await writeVerdictRows(wbs, [
+                { id: 'AC-1', status: 'MET' },
+                { id: 'AC-2', status: 'MET' },
+            ]);
+            const first = await svc.record(wbs, { verdictFile: verdictPath });
+            const again = await svc.record(wbs, { verdictFile: verdictPath });
+
+            const raw = await createNodeFileSystem(root()).readFile(`${tasksDir}/${wbs}_record-test-task.md`);
+            expect(raw).toContain('- [x] AC1 — R2 — Second outcome');
+            expect(raw).toContain('- [x] AC2 — R1 — First outcome');
+            expect(first.scenarioWarnings).toBeUndefined();
+            expect(again.scenarioWarnings).toBeUndefined();
+        });
     });
 });
 
@@ -1448,6 +1469,20 @@ describe('flipVerifiedCheckboxes', () => {
             { id: 'R3 — The loop is a service', status: 'MET', evidenceType: 'test', evidence: 'e' },
         ] as VerifyVerdict['acceptanceCriteria'];
         expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — R3 — The loop is a service (req: R1)');
+    });
+
+    test('0993: AC-<n> resolves through the feature scenario order, never the same-numbered box', () => {
+        const body = '- [ ] AC1 — R2 — Second outcome\n- [ ] AC2 — R1 — First outcome\n- [ ] AC3 — task-local\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'AC-1', status: 'MET', evidenceType: 'test', evidence: 'e' },
+            { id: 'AC-3', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        const titles = ['R1 — First outcome', 'R2 — Second outcome'];
+        // AC-1 = "First outcome" → the AC2 box; AC-3 is out of range → proves nothing (not AC3).
+        expect(boxed(flipVerifiedCheckboxes(body, verdict, titles))).toBe('- [x] AC2 — R1 — First outcome');
+        // Unlinked (no titles): the ordinal alias proves nothing.
+        expect(flipVerifiedCheckboxes(body, verdict)).toBe(body);
     });
 
     test('0996: a title-only scenario key proves its aliasing AC box', () => {

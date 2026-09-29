@@ -1320,6 +1320,11 @@ export function matchedScenarioKeys(rows: Array<{ id: string; status: string }>,
     return scenarios.filter((sc) => met.some((r) => rowMatchesScenario(r.id, sc))).map((sc) => sc.title);
 }
 
+/** Feature scenario titles in `AC-<n>` order (index n-1) — the ordinal space verdict `AC-<n>` rows key into. */
+export function featureScenarioTitles(ac: string): string[] {
+    return indexScenarioAliases(ac).map((sc) => sc.title);
+}
+
 /**
  * Index the scenario lines of an AC body with their 1-based AC-N aliases and `R<n>` labels.
  *

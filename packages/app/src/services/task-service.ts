@@ -30,7 +30,12 @@ import {
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import { ValidationError } from '@gobing-ai/ts-utils';
 import { GuardDeniedError } from '../errors';
-import { matchedScenarioKeys, readFeatureAcBody, taskCoversAnyFeatureScenario } from './feature-check';
+import {
+    featureScenarioTitles,
+    matchedScenarioKeys,
+    readFeatureAcBody,
+    taskCoversAnyFeatureScenario,
+} from './feature-check';
 import { ensurePipelineRunLink, TASK_FORWARD_CHAIN } from './pipeline-run-link';
 import { type CheckFindings, FINDING_CODES, type SectionMatrix } from './planning-check-base';
 import type { EntityRef, PlanningEventName, PlanningWriteService, WriteResult } from './planning-write-service';
@@ -1461,10 +1466,13 @@ export class TaskService {
         // A verdict that marks a requirement MET proves its box; flip exactly the
         // proven boxes in Requirements and Acceptance Criteria, never on
         // PARTIAL/FAIL/UNKNOWN beyond the proven ids and never unmentioned boxes.
+        // `AC-<n>` rows resolve through the linked feature's scenario order; a feature read miss only disables that form.
+        const featureAc = await this.resolveFeatureAcBody(filePath).catch(() => null);
+        const scenarioTitles = featureScenarioTitles(featureAc?.ac ?? '');
         for (const section of ['Requirements', 'Acceptance Criteria']) {
             const body = doc.getSection(section);
             if (body === null || body.trim().length === 0) continue;
-            const flipped = flipVerifiedCheckboxes(body, verdict);
+            const flipped = flipVerifiedCheckboxes(body, verdict, scenarioTitles);
             if (flipped !== body) {
                 await this.writeService.updateSection(ref, section, flipped);
             }
