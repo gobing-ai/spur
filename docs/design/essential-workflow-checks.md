@@ -26,6 +26,7 @@ Target-state checks (`--as testing/done`) remain distinct from current-state che
 | --- | --- |
 | Invalid identity, frontmatter, required reference, ambiguous lookup or illegal lifecycle | Fail at the affected boundary |
 | Missing task/AC contract required by the consuming stage | Fail; malformed unparseable AC is not a style warning |
+| Parser-invisible document structure (unclosed code fence, missing required section) | Fail; a truncated parse hides every later section, so downstream checks would pass on corrupted input |
 | Unfinished linked work, missing/unverified required scenarios, stale/non-PASS proof | Diagnose pending work before implementation; fail completion |
 | Heading order, prose length, checkbox presentation, lexical/line-anchor resemblance | Advisory where actual consumer semantics remain intact |
 | Missing required evidence artifact or explicit contradiction of completion | Fail completion independently of stylistic presentation |

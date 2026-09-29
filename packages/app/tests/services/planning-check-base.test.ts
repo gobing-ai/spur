@@ -411,6 +411,48 @@ describe('PlanningCheckService.summarizeWithStatus (D61 task 0765 — R1 unsuppr
         ]);
     });
 
+    test('essential L2 unclosed-code-fence error survives severityOverrides and accepted-map suppression', () => {
+        expect(isUnsuppressibleFinding(FINDING_CODES.L2_UNCLOSED_CODE_FENCE)).toBe(true);
+        const svc = new TestCheckService(simpleMatrix);
+        const findings: CheckFindings[] = [
+            {
+                layer: 'L2',
+                code: FINDING_CODES.L2_UNCLOSED_CODE_FENCE,
+                severity: 'error',
+                section: '',
+                message: 'unclosed code fence',
+            },
+        ];
+        for (const severity of ['off', 'warning'] as const) {
+            const result = svc.summarizeWithStatus('testing', findings, false, {
+                [FINDING_CODES.L2_UNCLOSED_CODE_FENCE]: severity,
+            });
+            expect(result.findings).toHaveLength(1);
+            expect(result.findings[0]?.severity).toBe('error');
+            expect(result.pass).toBe(false);
+        }
+        const accepted = new Map<string, CorpusSeverity>([
+            [`task:0810:${FINDING_CODES.L2_UNCLOSED_CODE_FENCE}`, 'error'],
+        ]);
+        // Full 6-arg signature via cast; TestCheckService exposes a 3-arg shim only.
+        const protectedCall = (
+            svc as unknown as {
+                summarizeWithStatus: (
+                    s: string,
+                    f: CheckFindings[],
+                    strict: boolean,
+                    overrides: undefined,
+                    accepted: Map<string, CorpusSeverity>,
+                    id: string,
+                ) => CheckResultBase;
+            }
+        ).summarizeWithStatus;
+        const result = protectedCall('testing', findings, false, undefined, accepted, '0810');
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0]?.severity).toBe('error');
+        expect(result.pass).toBe(false);
+    });
+
     test('advisory L3 warning is still suppressed by severityOverrides: { code: off }', () => {
         const svc = new TestCheckService(simpleMatrix);
         const findings: CheckFindings[] = [

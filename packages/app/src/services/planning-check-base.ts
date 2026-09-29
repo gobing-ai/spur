@@ -77,6 +77,9 @@ const REQUIRED_FINDING_CODES: ReadonlySet<FindingCode> = new Set<FindingCode>([
     FINDING_CODES.L1_MARKDOWN_PARSE,
     FINDING_CODES.L1_SCHEMA_VALIDATION,
     FINDING_CODES.L2_MISSING_REQUIRED_SECTION,
+    // Parser-invisible structure: an unclosed fence truncates the parsed view,
+    // so later-section checks would pass on corrupted input (task 1010).
+    FINDING_CODES.L2_UNCLOSED_CODE_FENCE,
     FINDING_CODES.L3_AC_BDD_ERROR,
     FINDING_CODES.L3_AC_BDD_INVALID,
     FINDING_CODES.L3_REQUIREMENTS_EMPTY,

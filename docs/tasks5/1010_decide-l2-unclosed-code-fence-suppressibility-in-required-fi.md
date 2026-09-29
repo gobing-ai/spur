@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Decide L2.unclosed-code-fence suppressibility in REQUIRED_FINDING_CODES (1008 P3-2)
-status: backlog
+status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:17.374Z
-updated_at: "2026-09-29T19:53:51.696Z"
+updated_at: "2026-09-29T20:54:49.425Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -32,8 +32,8 @@ Why it matters (F91 intent): an unclosed fence makes `findHeadings` see a trunca
 
 ### Acceptance Criteria
 
-- [ ] AC1 — `packages/app/tests/services/planning-check-base.test.ts` (beside the `essential L1 schema error survives severityOverrides` case, ~:390) proves `isUnsuppressibleFinding(L2_UNCLOSED_CODE_FENCE)` is true, a `severityOverrides: { 'L2.unclosed-code-fence': 'off' }` / `'warning'` leaves the finding at severity `error` with `pass: false`, and an accepted-map entry for the code does not absorb it (req: R1)
-- [ ] AC2 — `docs/design/essential-workflow-checks.md` finding-class table classifies parser-invisible structure (unclosed fence, missing required section) as essential; `configuration-contracts.md` notes `tasks.severity` cannot override essential codes (req: R2)
+- [x] AC1 — `packages/app/tests/services/planning-check-base.test.ts` (beside the `essential L1 schema error survives severityOverrides` case, ~:390) proves `isUnsuppressibleFinding(L2_UNCLOSED_CODE_FENCE)` is true, a `severityOverrides: { 'L2.unclosed-code-fence': 'off' }` / `'warning'` leaves the finding at severity `error` with `pass: false`, and an accepted-map entry for the code does not absorb it (req: R1)
+- [x] AC2 — `docs/design/essential-workflow-checks.md` finding-class table classifies parser-invisible structure (unclosed fence, missing required section) as essential; `configuration-contracts.md` notes `tasks.severity` cannot override essential codes (req: R2)
 
 ### Q&A
 
@@ -71,17 +71,39 @@ Verify: `(cd packages/app && bun test tests/services/planning-check-base.test.ts
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/planning-check-base.ts:82` set membership beside L2_MISSING_REQUIRED_SECTION; isUnsuppressibleFinding (:96-98) delegates to set; summarizeWithStatus off-refusal (:339-341), downgrade-ignore (:346-350), accepted-map guard (:358) gate on membership. |
+| R2 | MET | `docs/design/essential-workflow-checks.md:29` parser-invisible structure row; `docs/design/configuration-contracts.md:49` tasks.severity clause. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/planning-check-base.test.ts:414-452` — isUnsuppressibleFinding true; off/warning overrides keep severity error / pass false; accepted-map not absorbed (:434-450); reviewer re-ran 44 pass / 0 fail; absorption cross-checked planning-check-base.ts:358-363. |
+| AC2 [docs-only] | MET | static-ref | `docs/design/essential-workflow-checks.md:29`; `docs/design/configuration-contracts.md:49`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
-- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-2)
-- Code: `packages/app/src/services/planning-check-base.ts:76-91` (set), `:93` (`isUnsuppressibleFinding`), `:228-241` (emission), `:315+` (`summarizeWithStatus`) · `packages/app/tests/services/planning-check-base.test.ts:390`
-- Docs: `docs/design/essential-workflow-checks.md:25-37` (policy owner) · `docs/design/configuration-contracts.md` (~:49, `tasks.severity`)
-- Tasks: 1008 (source), 1009 · Feature: F91
+- Review (2026-09-29): sp-super-reviewer fresh session — verdict PASS. Answer: `.spur/run/task-1010-03ed1d55-review-answer.txt`. P4 finding (observational): `packages/app/tests/services/planning-check-base.test.ts:438-448` signature cast on 6-arg `summarizeWithStatus` omits the 7th `requiredList?` param — functional, correctly ordered; rides post-batch.
 
 ### History
+
+- 2026-09-29T20:36:22.758Z backlog → todo (system)
+- 2026-09-29T20:40:08.977Z todo → wip (system)
+- 2026-09-29T20:53:03.759Z wip → testing (system)
+- 2026-09-29T20:54:49.425Z testing → done (system)
+
