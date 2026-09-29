@@ -252,6 +252,9 @@ describe('0726 pipeline wiring', () => {
             // resilience harness seeding plugins/sp/scripts into the sandbox).
             mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
             symlinkSync(SCRIPT, join(dir, 'plugins', 'sp', 'scripts', 'task-evidence-precheck.ts'));
+            // 0960: the project-first probe is gated on the source-repo marker.
+            mkdirSync(join(dir, 'config'), { recursive: true });
+            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
             const command = shellCommands('precheck').find((c) => c.includes('task-evidence-precheck.ts'));
             const result = Bun.spawnSync(['sh', '-c', command ?? ''], {
                 cwd: dir,

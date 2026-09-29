@@ -451,6 +451,10 @@ describe('wrapup-pipeline truthfulness (task 0770, feature R8; task 0783, R1-R5)
         const scaffold = (cwd: string, stubBody: string): string => {
             mkdirSync(join(cwd, 'plugins', 'sp'), { recursive: true });
             symlinkSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts'), join(cwd, 'plugins', 'sp', 'scripts'));
+            // 0960: the project-first probe is gated on the source-repo marker — without it
+            // the shells fall back to a globally installed superskill twin (dev macs only).
+            mkdirSync(join(cwd, 'config'), { recursive: true });
+            writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
             const stub = join(cwd, 'stub-spur');
             writeFileSync(stub, stubBody);
             chmodSync(stub, 0o755);

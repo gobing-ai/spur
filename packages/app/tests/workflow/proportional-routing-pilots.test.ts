@@ -217,6 +217,11 @@ describe('route reason writers are run-attributed (0758 R4/R5)', () => {
         mkdirSync(join(cwd, 'plugins/sp'), { recursive: true });
         const scaffold = join(cwd, 'plugins/sp/scripts');
         if (!existsSync(scaffold)) symlinkSync(join(REPO_ROOT, 'plugins', 'sp', 'scripts'), scaffold);
+        // 0960: the project-first probe is gated on the source-repo marker — without it the
+        // shells fall back to a globally installed superskill twin (present on dev macs,
+        // absent in CI) instead of the monorepo branch under test.
+        mkdirSync(join(cwd, 'config'), { recursive: true });
+        writeFileSync(join(cwd, 'config', 'plugin-scripts.json'), '{}\n');
         for (const cmd of command) {
             const res = spawnSync('sh', ['-c', cmd], { cwd, env: { ...getEnvVars(), ...vars, spurBin } });
             expect(res.status).toBe(0);

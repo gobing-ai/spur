@@ -402,6 +402,9 @@ esac`,
             // ../lib/env (getEnvVars) — stage it too (self-contained node builtins).
             mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
             mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
+            // 0960: the project-first probe is gated on the source-repo marker.
+            mkdirSync(join(dir, 'config'), { recursive: true });
+            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
             copyFileSync(
                 join(import.meta.dir, '..', 'scripts', 'residual-scan.ts'),
                 join(dir, 'plugins', 'sp', 'scripts', 'residual-scan.ts'),
@@ -533,6 +536,9 @@ esac`,
             // owner runs the bare-spur last resort (no bounded wrapper / staged module here).
             mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
             mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
+            // 0960: the project-first probe is gated on the source-repo marker.
+            mkdirSync(join(dir, 'config'), { recursive: true });
+            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
             copyFileSync(
                 join(import.meta.dir, '..', 'scripts', 'record-feature-sync.ts'),
                 join(dir, 'plugins', 'sp', 'scripts', 'record-feature-sync.ts'),
