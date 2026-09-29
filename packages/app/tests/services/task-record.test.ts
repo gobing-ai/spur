@@ -566,8 +566,21 @@ describe('renderReview', () => {
     test('renders no-findings P4 row when checks empty', () => {
         const v = makeVerdict({ checks: [] });
         const out = renderReview(v);
-        expect(out).toContain('| P4 | — | — | No P1–P3 findings');
+        expect(out).toContain('| P4 | — | — | No findings (verify verdict PASS) |');
         expect(out).not.toContain('| P1 |');
+    });
+
+    test('passing checks are gate outcomes, not findings: an all-pass verdict renders only the no-findings row', () => {
+        // A P4 row per passing gate made the residual sweep report advisory residuals on every clean task.
+        const v = makeVerdict({
+            checks: [
+                { name: 'spur task check', status: 'pass', evidence: 'task check passed' },
+                { name: 'residual-sweep', status: 'pass', evidence: 'blocking=0' },
+            ],
+        });
+        const out = renderReview(v);
+        expect(out).toContain('| P4 | — | — | No findings (verify verdict PASS) |');
+        expect(out).not.toContain('task check passed');
     });
 
     test('collapses newlines in findings', () => {
@@ -588,7 +601,7 @@ describe('renderReview', () => {
         expect(out).not.toMatch(/\| config\|secret\|key \|/);
     });
 
-    test('maps pass/fail status to P4/P1 when status is not already P1-P4', () => {
+    test('maps fail status to P1 and drops pass rows when status is not already P1-P4', () => {
         const v = makeVerdict({
             checks: [
                 { name: 'spur task check', status: 'pass', evidence: 'task check passed' },
@@ -596,7 +609,8 @@ describe('renderReview', () => {
             ],
         });
         const out = renderReview(v);
-        expect(out).toContain('| P4 | spur task check | — | task check passed |');
+        expect(out).not.toContain('task check passed');
+        expect(out).not.toContain('No findings');
         expect(out).toContain('| P1 | coverage gate | — | coverage below threshold |');
     });
 
@@ -851,7 +865,7 @@ describe('TaskService.record', () => {
         const raw = await fs.readFile(`${tasksDir}/${wbs}_record-test-task.md`);
         expect(raw).toContain('- Verdict: UNKNOWN');
         expect(raw).toContain('No requirements recorded');
-        expect(raw).toContain('No P1–P3 findings');
+        expect(raw).toContain('No findings (verify verdict UNKNOWN)');
     });
 
     test('backfills Solution when --solution-from-diff and bare', async () => {
@@ -1443,6 +1457,15 @@ describe('flipVerifiedCheckboxes', () => {
             { id: 'The loop is a service', status: 'MET', evidenceType: 'test', evidence: 'e' },
         ] as VerifyVerdict['acceptanceCriteria'];
         expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — R3 — The loop is a service (req: R1)');
+    });
+
+    test('0996: a hyphen or en-dash alias separator resolves like an em dash', () => {
+        const body = '- [ ] AC1 - R3 – The loop is a service (req: R1)\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'R3 — The loop is a service', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 - R3 – The loop is a service (req: R1)');
     });
 
     test('0996: a scenario key the task does not alias flips nothing', () => {

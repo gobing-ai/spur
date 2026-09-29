@@ -327,7 +327,7 @@ Verdict: PASS
 ### SECUA Review
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | — | — | No P1–P3 findings; verify verdict PASS |
+| P4 | — | — | No findings (verify verdict PASS) |
 ```
 
 The per-requirement traceability table MUST use `| Req | Status | Evidence |` (exactly this header, no `R#`/`R`/`Requirement` variant — `Status` in column 2 — and no extra columns between Req and Status). The Acceptance Criteria table MUST use `| AC | Status | Evidence Type | Evidence |`.

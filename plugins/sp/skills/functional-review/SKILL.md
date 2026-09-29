@@ -253,7 +253,7 @@ shape, e.g. `| Req | Status | Evidence |` alone, is structurally rejected and de
 ```markdown
 | Priority | Dimension | Location | Finding |
 | --- | --- | --- | --- |
-| P4 | — | — | No P1–P3 findings; functional verdict PASS |
+| P4 | — | — | No findings (functional verdict PASS) |
 
 | Req | Status | Evidence |
 | --- | --- | --- |

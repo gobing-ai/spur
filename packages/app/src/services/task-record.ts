@@ -195,7 +195,13 @@ function prefixId(id: string): string {
     return m ? m[0] : id;
 }
 
-const normalizeKey = (text: string): string => text.replace(/\s+/g, ' ').trim().toLowerCase();
+// A spaced hyphen or en dash is the same separator as an em dash, so `AC1 - R3 — <title>` still aliases.
+const normalizeKey = (text: string): string =>
+    text
+        .replace(/\s+[-–—]\s+/g, ' — ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
 
 /**
  * Resolve the checkbox an AC verdict row proves (0996). A feature-linked task keys its AC rows
@@ -512,10 +518,12 @@ const SEVERITY_PRIORITY: Record<string, string | undefined> = {
 /**
  * Render the `## Review` section body from a verdict.
  *
- * Produces a P1–P4 priority findings table. When there are no P1–P3 check
- * findings, emits exactly one "no findings" P4 row — a clean verify is a valid
- * review outcome (the section-matrix requires a P1–P4 table, not an empty
- * section).
+ * Produces a P1–P4 priority findings table. A passing check with no explicit
+ * severity is a gate outcome, not a finding, so it gets no row — rendering it as
+ * P4 made the residual sweep count every clean gate as an advisory residual. When
+ * no finding remains, emits exactly one "No findings" P4 row — a clean verify is a
+ * valid review outcome (the section-matrix requires a P1–P4 table, not an empty
+ * section), and the residual sweep reads that row as no finding.
  *
  * Design: section-matrix §Review — P1–P4 priority table.
  */
@@ -528,10 +536,11 @@ export function renderReview(v: VerifyVerdict): string {
     lines.push('| Priority | Dimension | Location | Finding |');
     lines.push('|----------|-----------|----------|----------|');
 
-    if (v.checks.length === 0) {
-        lines.push(`| P4 | — | — | No P1–P3 findings; verify verdict ${v.verdict} |`);
+    const findings = v.checks.filter((check) => check.severity !== undefined || check.status !== 'pass');
+    if (findings.length === 0) {
+        lines.push(`| P4 | — | — | No findings (verify verdict ${v.verdict}) |`);
     } else {
-        for (const check of v.checks) {
+        for (const check of findings) {
             const finding = escapeTablePipe(check.evidence.replace(/\n/g, ' '));
             // Map to P1–P4 so the L3 regex /P[1-4]/ matches. An explicit `severity`
             // (0721) wins — dropping it would collapse major/blocker into the same P1.
