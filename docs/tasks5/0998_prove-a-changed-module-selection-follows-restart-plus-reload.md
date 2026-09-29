@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Prove a changed module selection follows restart plus reload end to end
-status: todo
+status: wip
 template: feature-impl
 created_at: 2026-09-29T03:05:27.931Z
-updated_at: "2026-09-29T03:18:47.492Z"
+updated_at: "2026-09-29T03:58:48.454Z"
 feature_id: A8
 
 ---
@@ -132,11 +132,19 @@ config-file parsing.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+- `apps/web/tests/test-helpers/board-server.ts:49` — `BoardServeOptions` gains `readonly port?: number`; `serveBoard` passes `port: options.port ?? 0` to `Bun.serve` (`:96`). Test-helper only; no production change (R3).
+- `apps/web/tests/modules/composed-board-browser.test.ts:176` — new module-scope `expectAltCatalog(origin)` helper holding the alt-catalog post-conditions: sidebar routes `native-probe` + `frame-alt` present and `frame-ok`/`broken-probe` absent, `data-probe-variant=alternate` present and `original` absent, stylesheet `rgb(10, 150, 60)`, counter reset to `0`, and `/board/modules/frame-alt` framing `fixtures.deniedUrl`. Extracted verbatim from the second-origin case (the only permitted refactor) so both proofs share one drift-proof assertion set; `host` hoisted from `beforeAll` to module scope (`:38`, `:213`) to feed it.
+- `apps/web/tests/modules/composed-board-browser.test.ts:479` — new case in the R4 describe: "a changed selection is used only after restart plus reload on the same origin (R13)". It owns its server lifecycle (shared `server`/`altServer` untouched): serve the first catalog on an ephemeral port, render `native-probe`, click the counter to `1`; then `first.stop()` and a new `serveBoard` on the SAME port with `altCatalog` + `ALT_FIXTURE_DIR` (bounded EADDRINUSE retry, never a new port); R2 asserts the running Board still shows `original` and first-catalog routes before any reload, including across an in-app (client-side) click-navigation to `/board/designs` and back; then `Page.reload` and `expectAltCatalog` on the same origin — changed routes, content, stylesheet and frame URL with no first-catalog route, content or in-page state left (counter back to `0`).
+
+Rationale: same port is load-bearing — a new port is a new origin, which is the existing AC3 case; only a same-origin swap can catch origin-scoped catalog caching (storage, service worker, memoised fetch). The pre-reload assertion plus in-app navigation attributes the post-reload positive result to restart plus reload, not live replacement.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+- `(cd apps/web && bun test tests/modules/composed-board-browser.test.ts)` — **16 pass, 0 fail** (66 expect calls, 10.7s), including the new case `a changed selection is used only after restart plus reload on the same origin (R13)` [901ms] and the refactored second-origin case still green (455ms).
+- Negative control (Plan step 4): temporarily pointed the changed server at the FIRST catalog — the new case **failed** at the reload post-conditions (first-catalog sidebar routes still rendered after reload) — then reverted and re-ran green. The proof can fail; it is not vacuous.
+- `bun run test` (repo-wide) — **9580 pass, 0 fail** across 557 files. `bun run lint` + typecheck — clean. `bun run test-post-check` — all 2 rules passed.
+- `bun run spur-check` — **pre-existing failure, not this diff**: the `recommended-pre-check` preset reports 4 `no-globalthis-fetch-mutation` violations in `apps/web/tests/components/BoardLayoutFramed.test.tsx:52,59` and `ThemeToggle.test.tsx:43,50`; verified present on the clean base tree (git stash → identical errors; files untouched by this task). Everything else in the chain is green. Left for the owning task; no suppression added.
+- Inherited, named not re-proven (scope cut, Q&A 2026-09-28): before-listen refusal and the no-module legacy path stay owned by `apps/server/tests/board-modules.test.ts` — incompatible distribution `:288`, enabled-contribution-without-distribution `:277`, manifest-less legacy distribution `:324`, unreadable manifest `:343`; the ordering is structural in `apps/server/src/serve.ts` (catalog prepared `:706` before `Bun.serve` `:1042`).
 
 ### Review
 
@@ -153,4 +161,5 @@ config-file parsing.
 ### History
 
 - 2026-09-29T03:18:42.641Z backlog → todo (system)
+- 2026-09-29T03:58:48.454Z todo → wip (system)
 

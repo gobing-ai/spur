@@ -46,6 +46,8 @@ export interface BoardServeOptions {
     readonly catalog?: BoardCatalog;
     /** Module id -> absolute asset directory, served read-only under `/modules/<id>/*` (R5). */
     readonly moduleAssets?: Readonly<Record<string, string>>;
+    /** Fixed TCP port, for same-origin restart proofs; omit for an ephemeral port. */
+    readonly port?: number;
 }
 
 /** Plain-text refusal, so a missing module asset is never answered with the SPA document. */
@@ -88,10 +90,10 @@ async function serveModuleAsset(
     });
 }
 
-/** Serve `distDir` on an ephemeral port, with SPA fallback for client routes. */
+/** Serve `distDir` on an ephemeral (or fixed, `options.port`) port, with SPA fallback for client routes. */
 export function serveBoard(distDir: string, options: BoardServeOptions = {}): BoardServer {
     const server = Bun.serve({
-        port: 0,
+        port: options.port ?? 0,
         hostname: '127.0.0.1',
         async fetch(request) {
             const pathname = decodeURIComponent(new URL(request.url).pathname);

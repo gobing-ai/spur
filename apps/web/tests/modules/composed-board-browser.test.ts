@@ -35,6 +35,7 @@ const THROW_MESSAGE = 'composed probe failed to render';
 
 let fixtures: FrameFixtureServer;
 let proofBuild: string;
+let host: BoardHostRuntime;
 let server: BoardServer;
 let altServer: BoardServer;
 let browser: BrowserSession;
@@ -172,11 +173,46 @@ function altCatalog(host: BoardHostRuntime): BoardCatalog {
     };
 }
 
+/**
+ * The alt-catalog post-conditions (AC3 and the same-origin restart proof): this catalog's sidebar
+ * routes, content, stylesheet and declared frame URL render, with no first-catalog route, content
+ * or in-page state left. Shared by the second-origin and restart-plus-reload cases so the two
+ * proofs cannot drift apart.
+ */
+async function expectAltCatalog(origin: string): Promise<void> {
+    // This catalog's sidebar module routes are present and the first catalog's are not.
+    const hrefs = await dom<string[]>(
+        '[...document.querySelectorAll("nav a[href^=\\"/board/modules/\\"]")].map((a) => a.getAttribute("href"))',
+    );
+    expect(hrefs).toContain('/board/modules/native-probe');
+    expect(hrefs).toContain('/board/modules/frame-alt');
+    expect(hrefs).not.toContain('/board/modules/frame-ok');
+    expect(hrefs).not.toContain('/board/modules/broken-probe');
+    // This catalog's compiled content and stylesheet, not the first catalog's.
+    expect(await dom<boolean>('Boolean(document.querySelector("[data-probe-variant=alternate]"))')).toBe(true);
+    expect(await dom<boolean>('Boolean(document.querySelector("[data-probe-variant=original]"))')).toBe(false);
+    expect(await dom<string>('getComputedStyle(document.querySelector("[data-probe]")).color')).toBe(
+        'rgb(10, 150, 60)',
+    );
+    // No prior-catalog module state survives: the counter starts fresh.
+    expect(await dom<string>('document.querySelector("[data-probe-counter]").textContent')).toBe('0');
+
+    // The declared frame URL belongs to this catalog too.
+    await browser.navigate(`${origin}/board/modules/frame-alt`, page);
+    await browser.waitFor('Boolean(document.querySelector("[data-testid=framed-resource-frame]"))', {
+        sessionId: page,
+        label: 'alternate frame to render',
+    });
+    expect(await dom<string>('document.querySelector("[data-testid=framed-resource-frame]").src')).toBe(
+        fixtures.deniedUrl,
+    );
+}
+
 beforeAll(async () => {
     if (!availableBrowserBinary()) throw new Error('no Chromium binary available for the composed-path proof');
     fixtures = await serveFrameFixtures();
     proofBuild = await buildBoardToTemp();
-    const host = await hostFromBuild(proofBuild);
+    host = await hostFromBuild(proofBuild);
     server = serveBoard(proofBuild, {
         catalog: proofCatalog(host),
         moduleAssets: { 'native-probe': FIXTURE_DIR, 'broken-probe': FIXTURE_DIR },
@@ -424,33 +460,7 @@ describe('each project origin owns its own catalog (R2, AC3)', () => {
             label: 'second project module to render',
             timeoutMs: 60_000,
         });
-        // This origin's sidebar catalog, not the first project's: this origin's module routes are
-        // present and the first project's (frame-ok, broken-probe, missing-probe) are not.
-        const hrefs = await dom<string[]>(
-            '[...document.querySelectorAll("nav a[href^=\\"/board/modules/\\"]")].map((a) => a.getAttribute("href"))',
-        );
-        expect(hrefs).toContain('/board/modules/native-probe');
-        expect(hrefs).toContain('/board/modules/frame-alt');
-        expect(hrefs).not.toContain('/board/modules/frame-ok');
-        expect(hrefs).not.toContain('/board/modules/broken-probe');
-        // This origin's compiled content and stylesheet, not the first project's.
-        expect(await dom<boolean>('Boolean(document.querySelector("[data-probe-variant=alternate]"))')).toBe(true);
-        expect(await dom<boolean>('Boolean(document.querySelector("[data-probe-variant=original]"))')).toBe(false);
-        expect(await dom<string>('getComputedStyle(document.querySelector("[data-probe]")).color')).toBe(
-            'rgb(10, 150, 60)',
-        );
-        // No prior-project module state survives the origin change: the counter starts fresh.
-        expect(await dom<string>('document.querySelector("[data-probe-counter]").textContent')).toBe('0');
-
-        // This origin's declared frame URL differs from the first project's.
-        await browser.navigate(`${altServer.origin}/board/modules/frame-alt`, page);
-        await browser.waitFor('Boolean(document.querySelector("[data-testid=framed-resource-frame]"))', {
-            sessionId: page,
-            label: 'second project frame to render',
-        });
-        expect(await dom<string>('document.querySelector("[data-testid=framed-resource-frame]").src')).toBe(
-            fixtures.deniedUrl,
-        );
+        await expectAltCatalog(altServer.origin);
     }, 60_000);
 });
 
@@ -465,6 +475,84 @@ describe('module assets follow the documented restart lifecycle (R4)', () => {
         // a restart plus a reload, and no-store is what keeps the reload from serving a stale entry.
         expect(cache.entry).toBe('no-store');
         expect(cache.style).toBe('no-store');
+    }, 60_000);
+    test('a changed selection is used only after restart plus reload on the same origin (R13)', async () => {
+        // Owns its server lifecycle: not the shared `server`/`altServer`.
+        const first = serveBoard(proofBuild, {
+            catalog: proofCatalog(host),
+            moduleAssets: { 'native-probe': FIXTURE_DIR, 'broken-probe': FIXTURE_DIR },
+        });
+        let changed: BoardServer | undefined;
+        try {
+            // The first catalog composed and rendered, with in-page state to detect leaks of.
+            await browser.navigate(`${first.origin}/board/modules/native-probe`, page);
+            await browser.waitFor('Boolean(document.querySelector("[data-probe-counter]"))', {
+                sessionId: page,
+                label: 'first catalog native module to render',
+                timeoutMs: 60_000,
+            });
+            await browser.click('[data-probe-increment]', page);
+            await browser.waitFor('document.querySelector("[data-probe-counter]").textContent === "1"', {
+                sessionId: page,
+                label: 'counter to mark retained first-catalog state',
+            });
+
+            // "Restart": the SAME port now serves the changed catalog and module assets.
+            const port = first.port;
+            first.stop();
+            // A forced close can release the port a beat late; retry briefly on EADDRINUSE —
+            // never fall back to a new port, which would silently become the second-origin case.
+            for (let attempt = 0; !changed; attempt += 1) {
+                try {
+                    changed = serveBoard(proofBuild, {
+                        catalog: altCatalog(host),
+                        moduleAssets: { 'native-probe': ALT_FIXTURE_DIR },
+                        port,
+                    });
+                } catch (error) {
+                    if (attempt >= 9 || !(error instanceof Error) || !error.message.includes('EADDRINUSE')) {
+                        throw error;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                }
+            }
+
+            // Before any reload, the running Board must still show the first catalog ...
+            expect(await dom<boolean>('Boolean(document.querySelector("[data-probe-variant=original]"))')).toBe(true);
+            const firstHrefs = await dom<string[]>(
+                '[...document.querySelectorAll("nav a[href^=\\"/board/modules/\\"]")].map((a) => a.getAttribute("href"))',
+            );
+            expect(firstHrefs).toContain('/board/modules/frame-ok');
+            expect(firstHrefs).not.toContain('/board/modules/frame-alt');
+            // ... including after an in-app (client-side) navigation away and back.
+            await browser.click('nav a[href="/board/designs"]', page);
+            await browser.waitFor(
+                'document.querySelector("nav a[aria-current=page]").getAttribute("href") === "/board/designs"',
+                { sessionId: page, label: 'in-app navigation away from the module' },
+            );
+            await browser.click('nav a[href="/board/modules/native-probe"]', page);
+            await browser.waitFor('Boolean(document.querySelector("[data-probe-counter]"))', {
+                sessionId: page,
+                label: 'module route reached by in-app navigation',
+            });
+            expect(await dom<boolean>('Boolean(document.querySelector("[data-probe-variant=original]"))')).toBe(true);
+            const backHrefs = await dom<string[]>(
+                '[...document.querySelectorAll("nav a[href^=\\"/board/modules/\\"]")].map((a) => a.getAttribute("href"))',
+            );
+            expect(backHrefs).not.toContain('/board/modules/frame-alt');
+
+            // Reload: only now may the changed selection render (R1) — same origin throughout.
+            await browser.send('Page.reload', {}, page);
+            await browser.waitFor('Boolean(document.querySelector("[data-probe-variant=alternate]"))', {
+                sessionId: page,
+                label: 'changed catalog content after reload',
+                timeoutMs: 60_000,
+            });
+            await expectAltCatalog(`http://127.0.0.1:${port}`);
+        } finally {
+            first.stop();
+            changed?.stop();
+        }
     }, 60_000);
 });
 
