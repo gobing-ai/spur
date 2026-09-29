@@ -1,11 +1,4 @@
-#!/usr/bin/env node
-// @bun
-
-// plugins/sp/scripts/history-anatomy-cache.ts
-import { spawnSync } from "child_process";
-import { mkdirSync, readFileSync as readFileSync2, writeFileSync as writeFileSync2 } from "fs";
-
-// plugins/sp/lib/history-anatomy.generated.mjs
+// packages/app/src/services/history-anatomy.ts
 import { createHash as createHash2 } from "node:crypto";
 import {
   closeSync,
@@ -20,6 +13,8 @@ import {
   writeFileSync
 } from "node:fs";
 import { join } from "node:path";
+
+// packages/domain/src/analytics/artifact-digest.ts
 import { createHash } from "node:crypto";
 var ARTIFACT_ARRAY_CLASSIFICATION = {
   byTool: "ranked",
@@ -62,6 +57,8 @@ function semanticArtifactDigest(artifactJson) {
   const material = JSON.stringify(canonicalize(artifactJson, "root"));
   return createHash("sha256").update(material).digest("hex");
 }
+
+// packages/app/src/services/history-anatomy.ts
 var REPORT_SECTIONS = [
   "Scope and provenance",
   "Executive summary",
@@ -666,247 +663,10 @@ function diffPorcelain(before, now, expects) {
   const beforePaths = porcelainPaths(before);
   return [...porcelainPaths(now)].filter((p) => !beforePaths.has(p) && !expects.has(p)).sort();
 }
-
-// plugins/sp/scripts/history-anatomy-cache.ts
-var VALID_COMMANDS = "digest, check, paths, assert-clean, probe, stamp, refresh, publish";
-var PROBE_USAGE = "<script> probe --artifact <a.json> --target <report.md> [--baseline <b.json>] [--mode daily|ad-hoc] " + "[--date <YYYY-MM-DD>] [--recompute true] [--out <prov.json>] [--skill-dir <d>] [--contract <f>] [--workflow <f>] [--helper <f>]";
-function parseFlags(args) {
-  const out = {};
-  for (let i = 0;i < args.length; i++) {
-    const a = args[i] ?? "";
-    if (!a.startsWith("--"))
-      continue;
-    const key = a.slice(2);
-    const next = args[i + 1];
-    if (next === undefined || next.startsWith("--")) {
-      out[key] = "true";
-    } else {
-      out[key] = next;
-      i++;
-    }
-  }
-  return out;
-}
-function runCacheCli(argv) {
-  const [cmd, a, b] = argv;
-  switch (cmd) {
-    case "digest": {
-      if (a === undefined) {
-        return { exitCode: 1, stdout: "", stderr: `usage: <script> digest <artifact.json>
-` };
-      }
-      let artifact;
-      try {
-        artifact = JSON.parse(readFileSync2(a, "utf8"));
-      } catch {
-        return { exitCode: 1, stdout: "", stderr: `could not parse artifact at ${a}
-` };
-      }
-      const digest = semanticArtifactDigest(artifact);
-      return { exitCode: 0, stdout: `${digest}
-`, stderr: "" };
-    }
-    case "check": {
-      if (a === undefined) {
-        return { exitCode: 1, stdout: "", stderr: `usage: <script> check <report.md>
-` };
-      }
-      const result = checkReportStructure(readFileSync2(a, "utf8"));
-      const stdout = `${result.ok ? "PASS" : "FAIL"}
-${result.problems.map((p) => `- ${p}
-`).join("")}`;
-      return { exitCode: result.ok ? 0 : 1, stdout, stderr: "" };
-    }
-    case "publish": {
-      if (a === undefined || b === undefined) {
-        return { exitCode: 1, stdout: "", stderr: `usage: <script> publish <candidate.md> <target.md>
-` };
-      }
-      publishAtomically(a, b);
-      return { exitCode: 0, stdout: "", stderr: "" };
-    }
-    case "assert-clean": {
-      const f = parseFlags(argv.slice(1));
-      if (f.baseline === undefined) {
-        return {
-          exitCode: 1,
-          stdout: "",
-          stderr: `usage: <script> assert-clean --baseline <porcelain.txt> [--expect <path>]...
-`
-        };
-      }
-      const expects = new Set;
-      for (const arg of argv.slice(1)) {
-        if (arg.startsWith("--expect="))
-          expects.add(arg.slice("--expect=".length));
-      }
-      let now;
-      try {
-        now = spawnSync("git", ["status", "--porcelain"], {
-          encoding: "utf8",
-          ...f.cwd !== undefined ? { cwd: f.cwd } : {}
-        }).stdout ?? "";
-      } catch {
-        return { exitCode: 0, stdout: "", stderr: `assert-clean: git unavailable; skipped
-` };
-      }
-      const undeclared = diffPorcelain(readFileSync2(f.baseline, "utf8"), now, expects);
-      if (undeclared.length > 0) {
-        return {
-          exitCode: 1,
-          stdout: "",
-          stderr: undeclared.map((p) => `undeclared write: ${p}
-`).join("")
-        };
-      }
-      return { exitCode: 0, stdout: `clean
-`, stderr: "" };
-    }
-    case "paths": {
-      const f = parseFlags(argv.slice(1));
-      if (f.helper === undefined || f.out === undefined) {
-        return {
-          exitCode: 1,
-          stdout: "",
-          stderr: `usage: <script> paths --helper <p> --out <env> [--report-dir <d>] [--date <d>] [--output <p>] [--mode <m>] [--since <s>] [--until <u>] [--focus <text>] [--recompute true|false] [--run-id <id>]
-`
-        };
-      }
-      const v = validateSelector({
-        mode: f.mode,
-        date: f.date,
-        since: f.since,
-        until: f.until,
-        focus: f.focus,
-        recompute: f.recompute,
-        output: f.output
-      });
-      if (!v.ok)
-        return { exitCode: 1, stdout: "", stderr: `${v.errors.join(`
-`)}
-` };
-      const env = resolvePaths({
-        helper: f.helper,
-        reportDir: f["report-dir"] ?? "docs/report",
-        date: f.date,
-        output: f.output,
-        mode: v.mode,
-        since: f.since,
-        until: f.until
-      });
-      writeFileSync2(f.out, env);
-      if (f["run-id"] !== undefined && f["run-id"] !== "") {
-        mkdirSync(".spur/run", { recursive: true });
-        const envVars = Object.fromEntries(env.trim().split(`
-`).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
-        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-        writeFileSync2(`.spur/run/${f["run-id"]}-selector.json`, `${JSON.stringify({
-          mode: v.mode,
-          date: envVars.HA_DATE ?? null,
-          focus: v.focus,
-          since: envVars.HA_SINCE ?? null,
-          until: envVars.HA_UNTIL ?? null,
-          timezone: tz
-        }, null, 2)}
-`);
-      }
-      return { exitCode: 0, stdout: "", stderr: "" };
-    }
-    case "probe": {
-      const f = parseFlags(argv.slice(1));
-      if (f.artifact === undefined || f.target === undefined) {
-        return { exitCode: 1, stdout: "", stderr: `usage: ${PROBE_USAGE}
-` };
-      }
-      let result;
-      try {
-        result = probe({
-          artifact: f.artifact,
-          target: f.target,
-          baseline: f.baseline,
-          mode: f.mode === "ad-hoc" ? "ad-hoc" : "daily",
-          date: f.date,
-          recompute: f.recompute === "true",
-          executor: f.executor,
-          model: f.model,
-          skillDir: f["skill-dir"],
-          contractFile: f.contract,
-          workflowFile: f.workflow,
-          helperFile: f.helper,
-          contractVersion: f["contract-version"],
-          runId: f["run-id"],
-          spurVersion: f["spur-version"]
-        });
-      } catch {
-        return { exitCode: 1, stdout: "", stderr: `could not read artifact at ${f.artifact}
-` };
-      }
-      if (f.out !== undefined)
-        writeFileSync2(f.out, `${JSON.stringify(result.current, null, 2)}
-`);
-      const reasons = result.decision.reasons.map((r) => `- ${r}
-`).join("");
-      return { exitCode: 0, stdout: `${result.decision.disposition}
-${reasons}`, stderr: "" };
-    }
-    case "stamp": {
-      const f = parseFlags(argv.slice(1));
-      if (f.candidate === undefined || f.provenance === undefined || f.out === undefined) {
-        return {
-          exitCode: 1,
-          stdout: "",
-          stderr: `usage: <script> stamp --candidate <c.md> --provenance <p.json> --out <o.md>
-`
-        };
-      }
-      try {
-        const p = JSON.parse(readFileSync2(f.provenance, "utf8"));
-        writeFileSync2(f.out, `${stampReport(readFileSync2(f.candidate, "utf8"), p)}
-`);
-      } catch {
-        return { exitCode: 1, stdout: "", stderr: `stamp: could not read candidate or provenance
-` };
-      }
-      return { exitCode: 0, stdout: "", stderr: "" };
-    }
-    case "refresh": {
-      const f = parseFlags(argv.slice(1));
-      if (f.report === undefined || f.out === undefined) {
-        return {
-          exitCode: 1,
-          stdout: "",
-          stderr: `usage: <script> refresh --report <published.md> --out <o.md> [--disposition hit]
-`
-        };
-      }
-      try {
-        const disposition = f.disposition ?? "hit";
-        const refreshed = refreshReport(readFileSync2(f.report, "utf8"), f["validated-at"] ?? new Date().toISOString(), disposition);
-        writeFileSync2(f.out, refreshed.endsWith(`
-`) ? refreshed : `${refreshed}
-`);
-      } catch {
-        return { exitCode: 1, stdout: "", stderr: `refresh: could not read report at ${f.report}
-` };
-      }
-      return { exitCode: 0, stdout: "", stderr: "" };
-    }
-    default:
-      return { exitCode: 1, stdout: "", stderr: `valid commands: ${VALID_COMMANDS}
-` };
-  }
-}
-{
-  const { exitCode, stdout, stderr } = runCacheCli(process.argv.slice(2));
-  process.stdout.write(stdout);
-  process.stderr.write(stderr);
-  process.exitCode = exitCode;
-}
 export {
   validateSelector,
   stampReport,
   semanticArtifactDigest,
-  runCacheCli,
   resolvePaths,
   renderProvenanceFrontmatter,
   refreshReport,

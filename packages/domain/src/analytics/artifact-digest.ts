@@ -10,10 +10,11 @@ import type { HistoryArtifact } from './artifact';
  * canonicalize — the ranked-versus-set classification below is type-derived, so adding an array
  * field to `HistoryArtifact` without classifying it fails `tsc` naming the key.
  *
- * Consumers: `plugins/sp/scripts/history-anatomy-cache.ts` reaches this module through a generated
- * copy (`plugins/sp/lib/artifact-digest.generated.mjs`) because the plugin script is an ADR-065
- * standard script — no monorepo import may survive into its committed `.mjs` twin. Regenerate with
- * `bun run build:plugin-lib`; do not hand-edit the generated files.
+ * Consumers: `packages/app/src/services/history-anatomy.ts` imports this module directly (task
+ * 1005 R2) and reaches the ADR-065 plugin script through the generated standalone bundle
+ * `plugins/sp/lib/history-anatomy.generated.mjs` — no monorepo import may survive into the
+ * script's committed `.mjs` twin. Regenerate with `bun run build:plugin-lib`; do not hand-edit the
+ * generated files.
  */
 
 /** JSON-compatible value — the shape of canonicalized artifact material. */

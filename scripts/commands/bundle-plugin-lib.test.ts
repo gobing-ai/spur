@@ -1,27 +1,101 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { bundlePluginLib, bundleResidualScanLib } from './bundle-plugin-lib';
+import { bundleResidualScanLib } from './bundle-plugin-lib';
 
-describe('bundle-plugin-lib (task 0669)', () => {
+describe('bundleStepProfileLib (task 1005 R1)', () => {
     test('generated artifacts exist and are committed', () => {
-        const mjs = join(import.meta.dir, '../../plugins/sp/lib/artifact-digest.generated.mjs');
-        const dmts = join(import.meta.dir, '../../plugins/sp/lib/artifact-digest.generated.d.mts');
+        const mjs = join(import.meta.dir, '../../plugins/sp/lib/step-profile.generated.mjs');
+        const dmts = join(import.meta.dir, '../../plugins/sp/lib/step-profile.generated.d.mts');
         expect(existsSync(mjs)).toBeTrue();
         expect(existsSync(dmts)).toBeTrue();
     });
 
-    test('regeneration is deterministic and exports the digest', async () => {
+    test('regeneration is deterministic and exports the aggregation core', async () => {
+        const before = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/step-profile.generated.mjs'), 'utf8');
+        // Build in the release process boundary: Bun's in-process test loader can rewrite
+        // cached workspace modules while the bundler reads their dependency graph.
+        const result = Bun.spawnSync(
+            [
+                'bun',
+                '-e',
+                'import { bundleStepProfileLib } from "./scripts/commands/bundle-plugin-lib"; await bundleStepProfileLib();',
+            ],
+            { cwd: join(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
+        );
+        expect(result.exitCode, result.stderr.toString()).toBe(0);
+        const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/step-profile.generated.mjs'), 'utf8');
+        for (const name of [
+            'buildStepProfile',
+            'nearestRankP50',
+            'extractExecutions',
+            'rowFlags',
+            'nonDryRuns',
+            'formatStepProfileHuman',
+        ]) {
+            expect(after).toContain(name);
+        }
+        expect(after).toBe(before);
+    });
+
+    test('runtime exports and declared names are the same set', async () => {
+        const lib = join(import.meta.dir, '../../plugins/sp/lib');
+        const exported = Object.keys(await import(join(lib, 'step-profile.generated.mjs'))).sort();
+        const dmts = readFileSync(join(lib, 'step-profile.generated.d.mts'), 'utf8');
+        const declared = [...dmts.matchAll(/^export declare (?:const|function) (\w+)/gm)].map((m) => m[1]).sort();
+        expect(declared).toEqual(exported);
+    });
+});
+
+describe('bundleHistoryAnatomyLib (task 1005 R2)', () => {
+    test('generated artifacts exist and are committed', () => {
+        const mjs = join(import.meta.dir, '../../plugins/sp/lib/history-anatomy.generated.mjs');
+        const dmts = join(import.meta.dir, '../../plugins/sp/lib/history-anatomy.generated.d.mts');
+        expect(existsSync(mjs)).toBeTrue();
+        expect(existsSync(dmts)).toBeTrue();
+    });
+
+    test('regeneration is deterministic and exports the cache core', async () => {
         const before = readFileSync(
-            join(import.meta.dir, '../../plugins/sp/lib/artifact-digest.generated.mjs'),
+            join(import.meta.dir, '../../plugins/sp/lib/history-anatomy.generated.mjs'),
             'utf8',
         );
-        const result = await bundlePluginLib();
-        expect(result.mjs.endsWith('artifact-digest.generated.mjs')).toBeTrue();
-        expect(result.dmts.endsWith('artifact-digest.generated.d.mts')).toBeTrue();
-        const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/artifact-digest.generated.mjs'), 'utf8');
-        expect(after).toContain('semanticArtifactDigest');
+        const result = Bun.spawnSync(
+            [
+                'bun',
+                '-e',
+                'import { bundleHistoryAnatomyLib } from "./scripts/commands/bundle-plugin-lib"; await bundleHistoryAnatomyLib();',
+            ],
+            { cwd: join(import.meta.dir, '../..'), stdout: 'pipe', stderr: 'pipe' },
+        );
+        expect(result.exitCode, result.stderr.toString()).toBe(0);
+        const after = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/history-anatomy.generated.mjs'), 'utf8');
+        for (const name of [
+            'semanticArtifactDigest',
+            'decideCache',
+            'checkReportStructure',
+            'publishAtomically',
+            'probe',
+            'diffPorcelain',
+        ]) {
+            expect(after).toContain(name);
+        }
         expect(after).toBe(before);
+    });
+
+    test('the bundle stays standalone — only node builtin runtime imports (task 1005 R4)', async () => {
+        const mjs = readFileSync(join(import.meta.dir, '../../plugins/sp/lib/history-anatomy.generated.mjs'), 'utf8');
+        for (const imported of new Bun.Transpiler({ loader: 'js' }).scanImports(mjs)) {
+            expect(imported.path.startsWith('node:') || imported.path.startsWith('bun:')).toBe(true);
+        }
+    });
+
+    test('runtime exports and declared names are the same set', async () => {
+        const lib = join(import.meta.dir, '../../plugins/sp/lib');
+        const exported = Object.keys(await import(join(lib, 'history-anatomy.generated.mjs'))).sort();
+        const dmts = readFileSync(join(lib, 'history-anatomy.generated.d.mts'), 'utf8');
+        const declared = [...dmts.matchAll(/^export declare (?:const|function) (\w+)/gm)].map((m) => m[1]).sort();
+        expect(declared).toEqual(exported);
     });
 });
 

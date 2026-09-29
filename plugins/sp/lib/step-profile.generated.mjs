@@ -1,18 +1,4 @@
-#!/usr/bin/env node
-// @bun
-
-// plugins/sp/scripts/workflow-step-profile.ts
-import { spawnSync } from "child_process";
-import { existsSync } from "fs";
-import { fileURLToPath } from "url";
-
-// plugins/sp/lib/env.ts
-function getEnvVar(name, fallback) {
-  const raw = process.env[name];
-  return raw === undefined ? fallback : raw;
-}
-
-// plugins/sp/lib/step-profile.generated.mjs
+// packages/app/src/workflow/step-profile.ts
 var DEFAULT_LAST = 20;
 var DEFAULT_WINDOW_SEC = 300;
 function nearestRankP50(values) {
@@ -175,158 +161,14 @@ function formatStepProfileHuman(profile) {
 `)}
 `;
 }
-
-// plugins/sp/scripts/workflow-step-profile.ts
-function defaultSpurBin() {
-  const fromEnv = getEnvVar("SPUR_BIN");
-  if (fromEnv)
-    return fromEnv;
-  const local = fileURLToPath(new URL("../../../apps/cli/src/index.ts", import.meta.url));
-  if (existsSync(local))
-    return `bun ${local}`;
-  return "spur";
-}
-function positiveInt(raw, fallback) {
-  const parsed = Number.parseInt(raw ?? "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-function parseStepProfileCliArgs(argv) {
-  let workflow = "";
-  let spurBin = defaultSpurBin();
-  let last = DEFAULT_LAST;
-  let windowSec = DEFAULT_WINDOW_SEC;
-  let json = false;
-  let help = false;
-  for (let i = 0;i < argv.length; i++) {
-    const a = argv[i];
-    if (a === undefined)
-      continue;
-    if (a === "--help" || a === "-h")
-      help = true;
-    else if (a === "--json")
-      json = true;
-    else if (a === "--last")
-      last = positiveInt(argv[++i], last);
-    else if (a === "--window")
-      windowSec = positiveInt(argv[++i], windowSec);
-    else if (a === "--spur-bin")
-      spurBin = argv[++i] ?? spurBin;
-    else if (!a.startsWith("--") && workflow === "")
-      workflow = a;
-  }
-  return { workflow, last, windowSec, spurBin, json, help };
-}
-function runSpurJson(spurBin, args) {
-  const binParts = spurBin.split(/\s+/).filter(Boolean);
-  const cmd = binParts[0] ?? "spur";
-  const cmdArgs = [...binParts.slice(1), ...args];
-  const r = spawnSync(cmd, cmdArgs, { stdio: ["ignore", "pipe", "pipe"], encoding: "utf8" });
-  const decode = (b) => typeof b === "string" ? b : Buffer.from(b ?? []).toString("utf8");
-  return {
-    stdout: typeof r.stdout === "string" ? r.stdout : decode(r.stdout),
-    stderr: typeof r.stderr === "string" ? r.stderr : decode(r.stderr),
-    exitCode: r.status ?? (r.error ? 1 : 0),
-    ok: (r.status ?? (r.error ? 1 : 0)) === 0
-  };
-}
-var STEP_PROFILE_USAGE = `usage: workflow-step-profile <workflow> [--last <N>] [--window <sec>] [--json] [--spur-bin <cmd>]
-
-Read-only step profile from \`spur workflow trace\`: per node and action kind it reports runs,
-executions, p50/max durationMs, p50 idle gap, session mode and cacheHit p50 with coverage, then
-flags the satellite \xA710 cache-window budgets. --last defaults to ${DEFAULT_LAST} runs and --window
-(W) to ${DEFAULT_WINDOW_SEC} seconds. Unknown evidence is reported as \`?\` / null, never 0.
-
-Exit: 0 = profile produced (flags included); 1 = a spur call failed, its JSON did not parse, or the
-workflow argument is missing.`;
-function failure(message) {
-  return { exitCode: 1, stdout: "", stderr: `workflow-step-profile: ${message}
-` };
-}
-function runFailure(spurBin, result, what) {
-  const detail = result.stderr.trim().split(`
-`).slice(-1)[0] ?? "";
-  return failure(`${what} failed (exit ${result.exitCode}${detail === "" ? "" : `: ${detail}`}) [${spurBin}]`);
-}
-function runStepProfileCli(argv) {
-  const args = parseStepProfileCliArgs(argv);
-  if (args.help)
-    return { exitCode: 0, stdout: `${STEP_PROFILE_USAGE}
-`, stderr: "" };
-  if (args.workflow === "")
-    return failure(`a workflow name is required
-${STEP_PROFILE_USAGE}`);
-  const listArgs = [
-    "workflow",
-    "trace",
-    "--workflow",
-    args.workflow,
-    "--status",
-    "done",
-    "--last",
-    String(args.last),
-    "--json"
-  ];
-  const list = runSpurJson(args.spurBin, listArgs);
-  if (!list.ok)
-    return runFailure(args.spurBin, list, `spur ${listArgs.join(" ")}`);
-  let entries;
-  try {
-    const parsed = JSON.parse(list.stdout);
-    if (!Array.isArray(parsed.entries))
-      throw new Error('no "entries" array');
-    entries = parsed.entries;
-  } catch (err) {
-    return failure(`spur workflow trace output did not parse as JSON: ${String(err)}`);
-  }
-  const runs = [];
-  for (const entry of nonDryRuns(entries)) {
-    const runArgs = ["workflow", "trace", entry.runId, "--json"];
-    const timeline = runSpurJson(args.spurBin, runArgs);
-    if (!timeline.ok)
-      return runFailure(args.spurBin, timeline, `spur ${runArgs.join(" ")}`);
-    try {
-      const parsed = JSON.parse(timeline.stdout);
-      if (!Array.isArray(parsed.events))
-        throw new Error('no "events" array');
-      runs.push({ runId: entry.runId, events: parsed.events });
-    } catch (err) {
-      return failure(`spur workflow trace ${entry.runId} output did not parse as JSON: ${String(err)}`);
-    }
-  }
-  const profile = buildStepProfile({ workflow: args.workflow, windowSec: args.windowSec, runs });
-  return {
-    exitCode: 0,
-    stdout: args.json ? `${JSON.stringify(profile, null, 2)}
-` : formatStepProfileHuman(profile),
-    stderr: ""
-  };
-}
-function main(argv) {
-  const { exitCode, stdout, stderr } = runStepProfileCli(argv);
-  if (stdout)
-    process.stdout.write(stdout);
-  if (stderr)
-    process.stderr.write(stderr.endsWith(`
-`) ? stderr : `${stderr}
-`);
-  return exitCode;
-}
-{
-  process.exit(main(process.argv.slice(2)));
-}
 export {
-  runStepProfileCli,
   rowFlags,
-  parseStepProfileCliArgs,
   nonDryRuns,
   nearestRankP50,
-  main,
   formatStepProfileHuman,
   extractExecutions,
-  defaultSpurBin,
   buildStepProfile,
   buildRows,
-  STEP_PROFILE_USAGE,
   DEFAULT_WINDOW_SEC,
   DEFAULT_LAST
 };

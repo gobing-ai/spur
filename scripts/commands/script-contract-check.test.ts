@@ -583,6 +583,9 @@ test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
     // (script-contract-check excluded: task 1000 itself moved it to scripts/commands)
     const expected = rows
         .filter((m) => m.name !== 'script-contract-check')
+        // task 1005 R6: the two W3 scripts' logic moved into packages/app lib bundles; the
+        // ≤250 glue stays, so their plan-§2 rows left the baseline instead of their files.
+        .filter((m) => !['history-anatomy-cache', 'workflow-step-profile'].includes(m.name))
         .filter(
             (m) =>
                 /Delete|→scripts|Move→CLI/.test(m.target) ||

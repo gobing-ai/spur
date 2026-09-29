@@ -987,14 +987,19 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         expect(text).toContain('--out .spur/run');
     });
 
-    // HA-S1 (0660 R9): workflow fixtures cover the eight cache cases.
+    // HA-S1 (0660 R9): workflow fixtures cover the eight cache cases. Task 1005: the logic moved
+    // to packages/app, so the matrix is covered across both the plugin script pins and the app
+    // module tests — the union of the two fixture files must carry every case.
     test('history-anatomy workflow fixtures cover the cache decision matrix (0660 R9)', () => {
         const testsDir = join(PLUGIN_ROOT, 'tests');
         const fixture = join(testsDir, 'history-anatomy-cache.test.ts');
         if (!existsSync(fixture)) {
             return;
         }
-        const text = readFileSync(fixture, 'utf8');
+        const text = [
+            readFileSync(fixture, 'utf8'),
+            readFileSync(join(REPO_ROOT, 'packages/app/tests/services/history-anatomy.test.ts'), 'utf8'),
+        ].join('\n');
         const cases = [
             'identical cache is a hit',
             'changed artifact digest',
@@ -1100,6 +1105,8 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
     // Task 0669 (R5): the script-side `REPORT_SECTIONS` / `FINDING_FIELDS` constants are the
     // executable owner; this test reads THEM (not a third literal copy) and requires the markdown
     // contract to name every entry — so the two can no longer drift silently in either direction.
+    // Task 1005 (R5): the executable owner moved to packages/app/src/services/history-anatomy.ts
+    // (the script is now thin glue over the generated bundle); this pin follows it.
     test('history-anatomy report contract carries the frozen twelve sections and finding fields (HA-S1 0658 R4, 0669 R5)', () => {
         const contract = join(SKILLS_DIR, 'history-anatomy/references/report-contract.md');
         if (!existsSync(contract)) {
@@ -1107,11 +1114,11 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         }
         const text = readFileSync(contract, 'utf8');
 
-        const scriptSource = readFileSync(join(PLUGIN_ROOT, 'scripts/history-anatomy-cache.ts'), 'utf8');
+        const moduleSource = readFileSync(join(REPO_ROOT, 'packages/app/src/services/history-anatomy.ts'), 'utf8');
         const extractStringArray = (name: string): string[] => {
-            const match = scriptSource.match(new RegExp(`const ${name} = \\[((?:.|\\n)*?)\\];`));
+            const match = moduleSource.match(new RegExp(`const ${name} = \\[((?:.|\\n)*?)\\];`));
             if (!match?.[1]) {
-                throw new Error(`history-anatomy-cache.ts must keep exporting const ${name}`);
+                throw new Error(`history-anatomy.ts must keep exporting const ${name}`);
             }
             return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1] ?? '');
         };

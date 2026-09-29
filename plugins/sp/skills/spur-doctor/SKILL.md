@@ -105,7 +105,7 @@ rows stay per file. Flagged rows wait for the operator's answer.
 
 ## Workflow step profile and cache-window flags
 
-The step profile (`plugins/sp/scripts/workflow-step-profile`, ADR-065 plugin entrypoint) reads
+The step profile (`plugins/sp/scripts/workflow-step-profile`, ADR-065 plugin entrypoint whose aggregation core lives in `packages/app/src/workflow/step-profile.ts`) reads
 `spur workflow trace` for a workflow's last N completed, non-dry runs. Per node and action kind it
 reports run count, executions, p50 and max `durationMs`, p50 idle gap before the step, session mode
 (`fresh`, `resumed` or `mixed`) and `cacheHit` p50 with its coverage — satellite §10 step evidence.
