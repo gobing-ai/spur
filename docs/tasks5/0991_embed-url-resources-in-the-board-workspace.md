@@ -4,7 +4,7 @@ name: Embed URL resources in the Board workspace
 status: done
 template: feature-impl
 created_at: 2026-09-28T01:46:26.509Z
-updated_at: "2026-09-29T01:21:59.964Z"
+updated_at: "2026-09-29T03:07:00.637Z"
 feature_id: A8
 priority: P2
 tags:
@@ -190,6 +190,11 @@ One corrective note recorded for the next slice: this task deliberately does **n
 from a frame load, which means the Board cannot tell a rendered frame from a refused one. Any future
 slice that wants to distinguish them must do so from an explicit operator-visible signal, not from
 `load`.
+
+
+**Successors (filed 2026-09-28).** The residual above is now owned: the in-app project-switch mechanism
+that this slice did not exercise is filed as task **0997**, with its evidence and fix direction recorded
+there rather than only here.
 
 ### References
 

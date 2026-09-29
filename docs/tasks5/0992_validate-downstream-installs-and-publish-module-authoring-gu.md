@@ -4,7 +4,7 @@ name: Validate downstream installs and publish module authoring guidance
 status: done
 template: feature-impl
 created_at: 2026-09-28T01:46:26.510Z
-updated_at: "2026-09-29T01:55:03.491Z"
+updated_at: "2026-09-29T03:07:01.020Z"
 feature_id: A8
 priority: P2
 tags:
@@ -177,6 +177,12 @@ rather than accepted as a known flake.
 | P3 | The published-example test extracts guide fences by a sentinel comment (`# board-modules-authoring-example`). A future example block added without the sentinel is not validated. | Accepted: one sentinel, documented in the test comment; a silently-unvalidated example is the failure mode, and drift is caught by the schema parse on the marked block. |
 | P3 | The test `serveBoard` helper re-implements a reduced subset of the real `/modules/:id/*` handler (no symlink-resolution check) because `apps/web` cannot import `apps/server`. | Accepted: the real handler's containment is owned by `apps/server/tests/board-modules.test.ts`; the helper only needs to serve declared trees for the render proof. |
 | P4 | The per-origin sidebar assertion compares module route hrefs rather than label text, because the default sidebar mounts collapsed (icon only). | Accepted: href presence/absence proves the same this-origin-catalog property without coupling to collapse state. |
+
+
+**Successors (filed 2026-09-28).** The three disclosed gaps above are now owned instead of carried:
+the in-app `ProjectSwitcher` mechanism is task **0997**, the changed-selection restart lifecycle is task
+**0998**, and the sentinel-gated authoring-example validation is task **0999**. Each carries this
+slice's evidence and fix direction; this Review stays as the historical record.
 
 ### References
 
