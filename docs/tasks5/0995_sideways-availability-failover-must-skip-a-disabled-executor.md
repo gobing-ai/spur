@@ -4,7 +4,7 @@ name: Sideways availability failover must skip a disabled executor
 status: done
 template: issue
 created_at: 2026-09-28T23:16:57.820Z
-updated_at: "2026-09-29T00:04:03.340Z"
+updated_at: "2026-09-29T00:18:46.938Z"
 feature_id: B21
 
 ac_altitude: task-local
@@ -123,8 +123,7 @@ The rule is enforced where the extracted helper is used, not at this inline filt
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 

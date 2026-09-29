@@ -4,7 +4,7 @@ name: A feature-scenario-keyed verdict AC row never proves its task AC box
 status: done
 template: issue
 created_at: 2026-09-28T23:16:58.188Z
-updated_at: "2026-09-29T00:10:53.491Z"
+updated_at: "2026-09-29T00:18:49.713Z"
 feature_id: D62
 
 ac_altitude: task-local
@@ -108,15 +108,15 @@ Chosen shape 1: resolve the AC row against the section body the flip already hol
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-record.ts:207` `acRowProves` resolves a scenario-keyed AC row to the aliasing AC label, called at `packages/app/src/services/task-record.ts:245`; `packages/app/tests/services/task-record.test.ts:766` (through `TaskService.record`) and `packages/app/tests/services/task-record.test.ts:1427` |
-| R2 | MET | `packages/app/tests/services/task-record.test.ts:1457` (bare `AC1`, `R1` keys), `packages/app/tests/services/task-record.test.ts:1415` (`AC1 — <title>`), `packages/app/tests/services/task-record.test.ts:1448` (unaliased scenario key flips nothing) |
-| R3 | MET | `(cd packages/app && bun test tests/services/task-record.test.ts)` → 99 pass / 0 fail (re-run 2026-09-28); against pre-fix `task-record.ts` (4fade1730~1) 4 fail: `packages/app/tests/services/task-record.test.ts:766`, `:1427`, `:1439`, `:1448` |
+| R1 | MET | `packages/app/src/services/task-record.ts:213` `acRowProves` resolves a scenario-keyed AC row to the aliasing AC label, called at `packages/app/src/services/task-record.ts:251`; `packages/app/tests/services/task-record.test.ts:780` (through `TaskService.record`) and `packages/app/tests/services/task-record.test.ts:1441` |
+| R2 | MET | `packages/app/tests/services/task-record.test.ts:1480` (bare `AC1`, `R1` keys), `packages/app/tests/services/task-record.test.ts:1429` (`AC1 — <title>`), `packages/app/tests/services/task-record.test.ts:1471` (unaliased scenario key flips nothing) |
+| R3 | MET | `(cd packages/app && bun test tests/services/task-record.test.ts)` → 101 pass / 0 fail (re-run 2026-09-28); 0996 cases red against pre-fix source (4fade1730~1) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:766` record ticks `AC1 — R3 — …` from an `R3 — …` row with no manual tick and leaves task R3 unticked |
-| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1457`, `packages/app/tests/services/task-record.test.ts:1415`, `packages/app/tests/services/task-record.test.ts:1448` |
-| AC3 | MET | test | `packages/app/tests/services/task-record.test.ts:1427`, `packages/app/tests/services/task-record.test.ts:1439`, `packages/app/tests/services/task-record.test.ts:1448`; 99 pass / 0 fail. `bun run spur-check` re-run: lint + typecheck + pre-check pass, tests 9391 pass / 1 fail — sole failure `apps/cli/tests/commands/feature.test.ts:33` fixture `git init` denied by the agent sandbox (nested `.git/hooks` write); post-check coverage-gate on `apps/cli/src/commands/feature.ts` is the knock-on of that skipped suite. Neither file is touched by 4fade1730 |
+| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:780` record ticks `AC1 — R3 — …` from an `R3 — …` row with no manual tick and leaves task R3 unticked |
+| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1480`, `packages/app/tests/services/task-record.test.ts:1429`, `packages/app/tests/services/task-record.test.ts:1471` |
+| AC3 | MET | test | `packages/app/tests/services/task-record.test.ts:1441`, `packages/app/tests/services/task-record.test.ts:1453`, `packages/app/tests/services/task-record.test.ts:1471`; 101 pass / 0 fail; `bun run spur-check` all PASS (operator run 2026-09-28); `bun run lint` + typecheck pass and `packages/app` suite 3432 pass / 0 fail after 5e53b76ad |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -127,8 +127,7 @@ Chosen shape 1: resolve the AC row against the section body the flip already hol
 
 | Priority | Dimension | Location | Finding |
 |----------|-----------|----------|----------|
-| P4 | spur task check | — | task check passed |
-| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
