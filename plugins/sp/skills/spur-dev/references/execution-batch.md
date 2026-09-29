@@ -291,8 +291,8 @@ Each pipeline run ends in one of two terminal states:
 `.spur/run/<wbs>-verify-answer.txt` AC table is exactly four columns:
 `| AC | Status | Evidence Type | Evidence |`. The evidence-type token
 (`test`, `command`, `static-ref`, `manual-review`, `llm-judge`, `n/a`, or a `+`
-compound) is isolated in cell 3. A token merged into the evidence cell fails
-`verify-answer-lint`.
+compound) is isolated in cell 3. A token merged into the evidence cell fails the
+`spur task verdict` answer lint.
 
 **Driver acceptance (0930 R3).** The trace row and `.spur/run/<wbs>-verdict.json` are accepted as
 terminal evidence only if BOTH hold:

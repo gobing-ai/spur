@@ -240,11 +240,8 @@ function runInlineSmoke(
                 let command = expand(action.options?.command ?? '', vars);
                 // 1002 R4: the precheck→implement guard is `$spurBin task check $wbs --precheck`;
                 // the fake spur handles `task check` (exit 0), so no status-file simulation remains.
-                // 0726 R3: lint semantics live in verify-answer-lint.test.ts; the smoke keeps
-                // only the file-must-exist coupling of the gate step.
-                if (command.includes('verify-answer-lint.ts')) {
-                    command = 'test -f ".spur/run/$wbs-verify-answer.txt"';
-                }
+                // 1003 R2: the verify-stage lint gate is `spur task verdict` itself — the fake
+                // spur already handles `task verdict`, no separate lint step remains to simulate.
                 // 0823: the quality gate is a plugin script (quality-gate.ts run|recheck) the
                 // shell resolves like the other checkers, so the smoke simulates its verdict
                 // contract (plugins/sp/tests/quality-gate.test.ts owns the script): run resets

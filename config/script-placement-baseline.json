@@ -19,17 +19,13 @@
             "reason": "logic → packages/app + quality-gate lib bundle; script ≤250 glue, W3 (plan §2)"
         },
         "plugins/sp/scripts/residual-scan.ts": {
-            "kinds": ["budget", "corpus-parse"],
-            "reason": "logic → packages/app + residual-scan lib bundle; script ≤250, W2 (plan §2)"
+            "kinds": [],
+            "reason": "migration ledger (plan §2): logic → packages/app + residual-scan lib bundle; script slimmed to 246 LOC glue, W2"
         },
         "plugins/sp/scripts/wrapup-steps.ts": {
             "kinds": ["budget"],
             "reason": "Keep (budget exemption), W2 (plan §2)",
             "exempt": true
-        },
-        "plugins/sp/scripts/verify-answer-lint.ts": {
-            "kinds": ["budget"],
-            "reason": "Move→CLI: spur task verdict lints its answer (C2), W2 (plan §2)"
         },
         "plugins/sp/scripts/feature-sync-bounded.ts": {
             "kinds": ["budget"],

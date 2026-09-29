@@ -1,13 +1,14 @@
-#!/usr/bin/env bun
 /**
- * verify-answer-lint — deterministic pre-verdict answer lint (0726 R3).
+ * Verify-answer lint — deterministic pre-verdict answer checks (0726 R3, task 1003 R1).
  *
- * Runs AFTER the verify agent exits and BEFORE `spur task verdict --from-answer`.
- * The verifier owns the answer file (`.spur/run/<wbs>-verify-answer.txt`): it creates
- * it with `Verdict: PARTIAL`, appends one complete requirement/AC row at a time, and
- * only replaces the first verdict line once every row is certified. Because the file
- * is now append-progress instead of a single captured blob, malformed rows can reach
- * the verdict step — this lint rejects each invalid class with a row-level message:
+ * Ported from the deleted plugin script `plugins/sp/scripts/verify-answer-lint.ts`:
+ * `spur task verdict` now owns the lint (task 1003 R2) and calls this pure function
+ * before `deriveVerdict`. The verifier owns the answer file
+ * (`.spur/run/<wbs>-verify-answer.txt`): it creates it with `Verdict: PARTIAL`, appends
+ * one complete requirement/AC row at a time, and only replaces the first verdict line once
+ * every row is certified. Because the file is append-progress instead of a single captured
+ * blob, malformed rows can reach the verdict step — this lint rejects each invalid class
+ * with a row-level finding:
  *
  *   - missing, duplicate, or unknown requirement IDs (vs the task's Requirements)
  *   - AC IDs that do not exactly match the task's AC checklist label or a linked
@@ -18,71 +19,114 @@
  * Compound evidence types (`test + command`) stay valid — normalization mirrors
  * `packages/app/src/services/task-verdict.ts` exactly, so anything this lint accepts
  * is also accepted by `spur task verdict --from-answer` (and vice versa).
- *
- * Exits non-zero on any finding, with bounded diagnostics (first 10). Writes nothing.
- *
- * Ships with the plugin to arbitrary projects; node-builtin only — no workspace imports.
- *
- * Usage:
- *   bun plugins/sp/scripts/verify-answer-lint.ts <wbs> --answer <path> [--spur-bin <path>]
- *
- * Env: SPUR_BIN
  */
 
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { getEnvVar } from '../lib/env';
+// ─── Public surface ──────────────────────────────────────────────────────────
 
-// ─── CLI (same spur-bin chain as the other precheck scripts) ─────────────────
+/** Bounded diagnostics: lint collection stops at this many findings (0726 R3). */
+export const ANSWER_LINT_MAX_FINDINGS = 10;
 
-function usage(): never {
-    console.error('Usage: bun plugins/sp/scripts/verify-answer-lint.ts <wbs> --answer <path> [--spur-bin <path>]');
-    process.exit(1);
+/** One lint rejection, row-addressed. `line` is 1-based; `0` = no answer row (task-side gap). */
+export interface AnswerLintFinding {
+    line: number;
+    rule: string;
+    message: string;
 }
 
-function defaultSpurBin(): string {
-    const fromEnv = getEnvVar('SPUR_BIN');
-    if (fromEnv) return fromEnv;
-    const local = fileURLToPath(new URL('../../../apps/cli/src/index.ts', import.meta.url));
-    if (existsSync(local)) return `bun ${local}`;
-    return 'spur';
-}
+/**
+ * Lint a verify answer against the task's declared requirement/AC identities.
+ * `featureContent` is the linked feature's markdown (optional; its `Scenario:` titles
+ * back the documented `AC-N` positional alias). Findings are capped at
+ * {@link ANSWER_LINT_MAX_FINDINGS}.
+ */
+export function lintVerifyAnswer(
+    answerText: string,
+    taskContent: string,
+    featureContent?: string | null,
+): AnswerLintFinding[] {
+    const findings: AnswerLintFinding[] = [];
+    const add = (line: number, rule: string, message: string): void => {
+        if (findings.length < ANSWER_LINT_MAX_FINDINGS) findings.push({ line, rule, message });
+    };
 
-function parseArgs(argv: string[]): { wbs: string; answer: string; spurBin: string } {
-    let spurBin = defaultSpurBin();
-    let wbs = '';
-    let answer = '';
-    let i = 0;
-    while (i < argv.length) {
-        const arg = argv[i];
-        if (arg === undefined) break;
-        if (arg === '--spur-bin') {
-            spurBin = argv[i + 1] ?? defaultSpurBin();
-            i += 2;
-        } else if (arg === '--answer') {
-            answer = argv[i + 1] ?? '';
-            i += 2;
-        } else if (!arg.startsWith('--')) {
-            wbs = arg;
-            i++;
-        } else {
-            i++;
-        }
+    const tables = parseAnswer(answerText);
+    if (tables.verdict === null) {
+        add(0, 'verdict-missing', 'no `Verdict:` line (expected exactly one `Verdict: PASS|PARTIAL|FAIL` line)');
+    } else if (!/^(PASS|PARTIAL|FAIL)$/i.test(tables.verdict.value)) {
+        add(
+            tables.verdict.line,
+            'verdict-value',
+            `invalid Verdict value "${tables.verdict.value}" (PASS | PARTIAL | FAIL)`,
+        );
     }
-    if (!wbs || !answer) usage();
-    return { wbs, answer, spurBin };
+
+    const reqIds = extractRequirementIds(taskContent);
+    const acIndex = buildAcIdentityIndex(taskContent, featureContent ?? null);
+
+    // Requirement rows: completeness, no unknowns, no duplicates, valid status, non-empty evidence.
+    const seenReq = new Set<string>();
+    for (const row of tables.reqs) {
+        if (!reqIds.includes(row.id))
+            add(
+                row.line,
+                'req-unknown',
+                `unknown requirement ID "${row.id}" (task declares: ${reqIds.join(', ') || 'none'})`,
+            );
+        else if (seenReq.has(row.id)) add(row.line, 'req-duplicate', `duplicate requirement row "${row.id}"`);
+        seenReq.add(row.id);
+        if (normalizeReqStatus(row.status) === null)
+            add(row.line, 'req-status', `"${row.id}" invalid status "${row.status}" (MET | PARTIAL | UNMET)`);
+        if (!row.evidence.trim()) add(row.line, 'req-evidence', `"${row.id}" has empty evidence`);
+    }
+    for (const id of reqIds) {
+        if (!seenReq.has(id)) add(0, 'req-missing', `missing requirement row for "${id}"`);
+    }
+
+    // AC rows: identity must resolve to ONE canonical task AC identity — a
+    // checklist label/token or a scenario title in any ac-style-guide form
+    // (exact/bare title, `Scenario:` prefix, bracket tags, declared AC-N
+    // alias; 0804 R4). Alias-equivalent spellings of the same identity are
+    // duplicates even when the raw strings differ. Status and evidence type
+    // must normalize; evidence non-empty. AC completeness is the verifier's
+    // authoring contract, not a lint rejection class (0726 R3).
+    const seenAc = new Map<string, string>(); // canonical key → first raw row id
+    for (const row of tables.acs) {
+        const resolution = resolveAcIdentity(row.id, acIndex);
+        const canonicalKey = resolution.ok ? normalizeAcTitle(resolution.canonical) : null;
+        if (!resolution.ok) {
+            if (resolution.error !== '') add(row.line, 'ac-ordinal', resolution.error);
+            else
+                add(
+                    row.line,
+                    'ac-identity',
+                    `AC ID "${row.id.slice(0, 60)}" matches no task AC checklist label or scenario title ` +
+                        "(accepted forms: exact title, bare title, a criterion bullet's bold head or full bold span, " +
+                        '`Scenario:` prefix, bracket tags, declared AC-N alias)',
+                );
+        } else if (canonicalKey !== null && seenAc.has(canonicalKey)) {
+            const first = seenAc.get(canonicalKey) ?? '';
+            add(
+                row.line,
+                'ac-duplicate',
+                `duplicate AC row "${row.id.slice(0, 60)}" — alias-equivalent to "${first.slice(0, 60)}"`,
+            );
+        }
+        if (canonicalKey !== null && !seenAc.has(canonicalKey)) seenAc.set(canonicalKey, row.id);
+        if (normalizeAcStatus(row.status) === null)
+            add(row.line, 'ac-status', `invalid AC status "${row.status}" (MET | PARTIAL | UNMET | N/A)`);
+        if (normalizeEvidenceType(row.evidenceType) === null)
+            add(
+                row.line,
+                'ac-evidence-type',
+                `invalid evidence type "${row.evidenceType}" (test | command | static-ref | manual-review | llm-judge | n/a, or a + compound)`,
+            );
+        if (!row.evidence.trim()) add(row.line, 'ac-evidence', `AC "${row.id.slice(0, 40)}" has empty evidence`);
+    }
+
+    return findings;
 }
 
-function runSpur(spurBin: string, args: string[]): string {
-    const [file = 'spur', ...lead] = spurBin.split(/\s+/).filter(Boolean);
-    return execFileSync(file, [...lead, ...args], {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-    });
-}
-
-// ─── Answer parsing — mirrors packages/app/src/services/task-verdict.ts ─────
+// ─── Answer parsing — mirrors packages/app/src/services/task-verdict.ts ──────
 
 interface ReqRow {
     id: string;
@@ -380,7 +424,6 @@ type AcIdentityResolution = { ok: true; canonical: string } | { ok: false; error
  * alias — accepted only against a real scenario ordinal, and refused with an
  * actionable diagnostic when task and feature ordinals disagree. Undeclared
  * `ACn` tokens, paraphrases and invented ordinals never resolve.
- * `ACn` tokens, paraphrases and invented ordinals never resolve.
  *
  * Declared forms recognized in the index include the bold-trajectory
  * `**AC id**` paragraph (task 0817 R3); the AC-N failure hint names it.
@@ -417,133 +460,3 @@ function resolveAcIdentity(rowId: string, index: AcIdentityIndex): AcIdentityRes
     }
     return { ok: false, error: '' };
 }
-
-// ─── Main ────────────────────────────────────────────────────────────────────
-
-function main(): void {
-    const { wbs, answer, spurBin } = parseArgs(process.argv.slice(2));
-    const findings: string[] = [];
-    const add = (msg: string): void => {
-        if (findings.length < 10) findings.push(msg);
-    };
-
-    if (!existsSync(answer)) {
-        console.error(`verify-answer-lint: FAIL — answer file not found: ${answer}`);
-        process.exit(1);
-    }
-    const raw = readFileSync(answer, 'utf8');
-    if (!raw.trim()) {
-        console.error(`verify-answer-lint: FAIL — answer file is empty: ${answer}`);
-        process.exit(1);
-    }
-
-    const tables = parseAnswer(raw);
-    if (tables.verdict === null) {
-        add('no `Verdict:` line (expected exactly one `Verdict: PASS|PARTIAL|FAIL` line)');
-    } else if (!/^(PASS|PARTIAL|FAIL)$/i.test(tables.verdict.value)) {
-        add(`line ${tables.verdict.line}: invalid Verdict value "${tables.verdict.value}" (PASS | PARTIAL | FAIL)`);
-    }
-
-    let taskContent = '';
-    let featureId = '';
-    try {
-        const task = JSON.parse(runSpur(spurBin, ['task', 'show', wbs, '--json'])) as {
-            content?: string;
-            body?: string;
-            feature_id?: string;
-            frontmatter?: { feature_id?: string };
-        };
-        taskContent = task.content ?? task.body ?? '';
-        featureId = task.feature_id ?? task.frontmatter?.feature_id ?? '';
-    } catch {
-        console.error(`verify-answer-lint: FAIL — could not fetch task ${wbs} via ${spurBin}`);
-        process.exit(1);
-    }
-    if (!taskContent) {
-        console.error(`verify-answer-lint: FAIL — task ${wbs} returned no content via ${spurBin}`);
-        process.exit(1);
-    }
-
-    let featureContent: string | null = null;
-    if (featureId) {
-        try {
-            const feature = JSON.parse(runSpur(spurBin, ['feature', 'show', featureId, '--json'])) as {
-                content?: string;
-            };
-            featureContent = feature.content ?? '';
-        } catch {
-            featureContent = null; // checklist labels still apply; scenario titles unavailable
-        }
-    }
-
-    const reqIds = extractRequirementIds(taskContent);
-    const acIndex = buildAcIdentityIndex(taskContent, featureContent);
-
-    // Requirement rows: completeness, no unknowns, no duplicates, valid status, non-empty evidence.
-    const seenReq = new Set<string>();
-    for (const row of tables.reqs) {
-        if (!reqIds.includes(row.id))
-            add(`line ${row.line}: unknown requirement ID "${row.id}" (task declares: ${reqIds.join(', ') || 'none'})`);
-        else if (seenReq.has(row.id)) add(`line ${row.line}: duplicate requirement row "${row.id}"`);
-        seenReq.add(row.id);
-        if (normalizeReqStatus(row.status) === null)
-            add(`line ${row.line}: "${row.id}" invalid status "${row.status}" (MET | PARTIAL | UNMET)`);
-        if (!row.evidence.trim()) add(`line ${row.line}: "${row.id}" has empty evidence`);
-    }
-    for (const id of reqIds) {
-        if (!seenReq.has(id)) add(`missing requirement row for "${id}"`);
-    }
-
-    // AC rows: identity must resolve to ONE canonical task AC identity — a
-    // checklist label/token or a scenario title in any ac-style-guide form
-    // (exact/bare title, `Scenario:` prefix, bracket tags, declared AC-N
-    // alias; 0804 R4). Alias-equivalent spellings of the same identity are
-    // duplicates even when the raw strings differ. Status and evidence type
-    // must normalize; evidence non-empty. AC completeness is the verifier's
-    // authoring contract, not a lint rejection class (0726 R3).
-    const seenAc = new Map<string, string>(); // canonical key → first raw row id
-    for (const row of tables.acs) {
-        const resolution = resolveAcIdentity(row.id, acIndex);
-        const canonicalKey = resolution.ok ? normalizeAcTitle(resolution.canonical) : null;
-        if (!resolution.ok) {
-            if (resolution.error !== '') add(`line ${row.line}: ${resolution.error}`);
-            else
-                add(
-                    `line ${row.line}: AC ID "${row.id.slice(0, 60)}" matches no task AC checklist label or scenario title ` +
-                        "(accepted forms: exact title, bare title, a criterion bullet's bold head or full bold span, " +
-                        '`Scenario:` prefix, bracket tags, declared AC-N alias)',
-                );
-        } else if (canonicalKey !== null && seenAc.has(canonicalKey)) {
-            const first = seenAc.get(canonicalKey) ?? '';
-            add(
-                `line ${row.line}: duplicate AC row "${row.id.slice(0, 60)}" — alias-equivalent to "${first.slice(0, 60)}"`,
-            );
-        }
-        if (canonicalKey !== null && !seenAc.has(canonicalKey)) seenAc.set(canonicalKey, row.id);
-        if (normalizeAcStatus(row.status) === null)
-            add(`line ${row.line}: invalid AC status "${row.status}" (MET | PARTIAL | UNMET | N/A)`);
-        if (normalizeEvidenceType(row.evidenceType) === null)
-            add(
-                `line ${row.line}: invalid evidence type "${row.evidenceType}" (test | command | static-ref | manual-review | llm-judge | n/a, or a + compound)`,
-            );
-        if (!row.evidence.trim()) add(`line ${row.line}: AC "${row.id.slice(0, 40)}" has empty evidence`);
-    }
-
-    if (findings.length > 0) {
-        console.error(
-            `verify-answer-lint: FAIL — ${findings.length}${findings.length >= 10 ? '+' : ''} finding(s) in ${answer}`,
-        );
-        for (const f of findings) console.error(`  ${f}`);
-        process.exit(1);
-    }
-
-    const reqCount = tables.reqs.length;
-    const acCount = tables.acs.length;
-    console.error(
-        `verify-answer-lint: PASS — ${reqCount} requirement row(s), ${acCount} AC row(s), verdict ${tables.verdict?.value ?? '?'}`,
-    );
-    process.exit(0);
-}
-
-// CLI entry (guarded so the helpers stay importable for focused tests).
-if (import.meta.main) main();

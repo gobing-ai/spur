@@ -3,7 +3,6 @@
 
 // plugins/sp/scripts/residual-scan.ts
 import { spawnSync } from "child_process";
-import { createHash } from "crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -13,11 +12,11 @@ function getEnvVars() {
   return process.env;
 }
 
-// plugins/sp/scripts/residual-scan.ts
-var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
+// plugins/sp/lib/residual-scan.generated.mjs
+import { createHash } from "node:crypto";
 var MARKER_PATTERN = /TODO|FIXME|XXX|HACK/;
 var PRIORITY_PATTERN = /^P[1-4]/;
-var NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|\u2014)\s*(\(.*\))?\.?$/i;
+var NONE_FINDING = /^(none( found)?|no (findings?|issues?)( found)?|—)\s*(\(.*\))?\.?$/i;
 var DISPOSITION_HEADER = /^(Disposition|Action|Status|Resolution|Fixed)$/i;
 var RESOLVED_DISPOSITION = /^(FIXED|RESOLVED|DONE)\b/i;
 var DEFERRED_DISPOSITION = /^DEFER(RED)?\b/i;
@@ -25,16 +24,6 @@ var ANCHOR_PATTERN = /[A-Za-z0-9_./-]+\.[A-Za-z]+:[0-9]+/g;
 var RANGE_ANCHOR = /([A-Za-z0-9_./-]+\.[A-Za-z]+):([0-9]+)-[0-9]+/g;
 var EXCLUDED_PATHS = ["docs/tasks", "docs/features/", ".spur/"];
 var ALLOW_PRAGMA = "residual-scan:allow";
-function spurCommand(spurBin) {
-  const parts = (spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
-  return { cmd: parts[0] ?? "spur", prefix: parts.slice(1) };
-}
-function run(cmd, args, cwd) {
-  const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
-  if (result.error !== undefined)
-    return { status: result.status ?? 1, stdout: "" };
-  return { status: result.status ?? 1, stdout: result.stdout ?? "" };
-}
 function makeItemId(category, location, text) {
   const normalized = text.trim().replace(/\s+/g, " ");
   const hex = createHash("sha256").update(`${location}${normalized}`).digest("hex");
@@ -45,7 +34,7 @@ function normalizeAnchor(location) {
 }
 function locationOf(locationCell, finding) {
   const cell = locationCell.trim().replace(/`/g, "");
-  if (cell.length > 0 && cell !== "\u2014")
+  if (cell.length > 0 && cell !== "—")
     return normalizeAnchor(cell);
   const backtick = finding.match(/`([^`]+)`/)?.[1];
   return backtick === undefined ? "" : normalizeAnchor(backtick);
@@ -96,42 +85,6 @@ function parseReviewFindings(taskContent) {
 function splitRow(line) {
   return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
 }
-function collectAddedLines(root, base) {
-  const out = [];
-  const diff = run("git", ["diff", "--unified=0", base], root);
-  let file = "";
-  let newLine = 0;
-  for (const line of diff.stdout.split(`
-`)) {
-    if (line.startsWith("+++ b/"))
-      file = line.slice(6);
-    else if (line.startsWith("@@")) {
-      const m = line.match(/\+[0-9]+/);
-      newLine = m === null ? newLine : Number.parseInt(m[0].slice(1), 10);
-    } else if (line.startsWith("+") && !line.startsWith("+++")) {
-      out.push({ file, line: newLine, text: line.slice(1) });
-      newLine++;
-    }
-  }
-  const untracked = run("git", ["ls-files", "--others", "--exclude-standard"], root);
-  for (const f of untracked.stdout.split(`
-`)) {
-    if (f.length === 0)
-      continue;
-    try {
-      if (!statSync(join(root, f)).isFile())
-        continue;
-    } catch {
-      continue;
-    }
-    const content = readFileSync(join(root, f), "utf8").split(`
-`);
-    content.forEach((text, idx) => {
-      out.push({ file: f, line: idx + 1, text });
-    });
-  }
-  return out;
-}
 function parseDiffMarkers(addedLines) {
   return addedLines.filter((l) => !EXCLUDED_PATHS.some((p) => l.file.startsWith(p))).filter((l) => !l.text.includes(ALLOW_PRAGMA)).filter((l) => MARKER_PATTERN.test(l.text)).map((l) => ({ location: `${l.file}:${l.line}`, text: l.text.trim() }));
 }
@@ -139,34 +92,6 @@ function findUncheckedBoxes(taskContent) {
   const path = "task-file";
   return taskContent.split(`
 `).map((text, idx) => ({ text: text.trim(), line: idx + 1 })).filter((l) => l.text.startsWith("- [ ]")).map((l) => ({ location: `${path}:${l.line}`, text: l.text }));
-}
-function listStagingResidue(tmpDir, wbs) {
-  let names;
-  try {
-    names = readdirSync(tmpDir);
-  } catch {
-    return [];
-  }
-  return names.filter((n) => n.startsWith(`${wbs}-`)).filter((n) => {
-    try {
-      return statSync(join(tmpDir, n)).isFile();
-    } catch {
-      return false;
-    }
-  }).map((n) => join(tmpDir, n));
-}
-function readDeferrals(runDir, wbs) {
-  const path = join(runDir, `${wbs}-residual-deferrals.json`);
-  if (!existsSync(path))
-    return [];
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8"));
-    if (!Array.isArray(parsed))
-      return [];
-    return parsed.filter((e) => typeof e === "object" && e !== null && typeof e.id === "string" && typeof e.reason === "string" && e.reason.trim().length > 0);
-  } catch {
-    return [];
-  }
 }
 function classify(items, deferrals) {
   const deferred = new Map(deferrals.map((d) => [d.id, d.reason]));
@@ -195,10 +120,8 @@ function classify(items, deferrals) {
     };
   });
 }
-function scanResiduals(root, wbs, tmpDir, taskContent, _env) {
-  const runDir = join(root, ".spur", "run");
-  const basePath = join(runDir, `${wbs}-base.sha`);
-  const base = existsSync(basePath) ? readFileSync(basePath, "utf8").trim() : null;
+function scanResiduals(inputs) {
+  const { wbs, base, taskContent, addedLines, stagingResidue, deferrals } = inputs;
   const reviewRows = parseReviewFindings(taskContent);
   const tableDeferrals = reviewRows.flatMap((r) => r.deferral === undefined ? [] : [{ id: makeItemId("review-finding", r.location, r.text), reason: r.deferral }]);
   const review = reviewRows.map((r) => ({
@@ -207,7 +130,7 @@ function scanResiduals(root, wbs, tmpDir, taskContent, _env) {
     location: r.location,
     text: r.text
   }));
-  const markers = base === null ? [] : parseDiffMarkers(collectAddedLines(root, base)).map((m) => ({
+  const markers = base === null ? [] : parseDiffMarkers(addedLines).map((m) => ({
     category: "diff-marker",
     location: m.location,
     text: m.text
@@ -217,12 +140,12 @@ function scanResiduals(root, wbs, tmpDir, taskContent, _env) {
     location: b.location,
     text: b.text
   }));
-  const residue = listStagingResidue(tmpDir, wbs).map((p) => ({
+  const residue = stagingResidue.map((p) => ({
     category: "staging-residue",
     location: p,
     text: p
   }));
-  const items = classify([...review, ...markers, ...boxes, ...residue], [...tableDeferrals, ...readDeferrals(runDir, wbs)]);
+  const items = classify([...review, ...markers, ...boxes, ...residue], [...tableDeferrals, ...deferrals]);
   const counts = { blocking: 0, deferrable: 0, advisory: 0, housekeeping: 0 };
   for (const item of items)
     counts[item.class]++;
@@ -271,7 +194,7 @@ function foldVerdict(verdict, scan, existingFindings, maxFindings = 20) {
 }
 function renderReport(wbs, items, attemptCount) {
   const lines = [
-    `# Residual report \u2014 ${wbs}`,
+    `# Residual report — ${wbs}`,
     "",
     `Attempt: ${attemptCount}`,
     "",
@@ -284,6 +207,81 @@ function renderReport(wbs, items, attemptCount) {
   return `${lines.join(`
 `)}
 `;
+}
+
+// plugins/sp/scripts/residual-scan.ts
+var RESIDUAL_SCAN_USAGE = "usage: residual-scan.ts <scan|fold|settle|report> <wbs> [--spur-bin <bin>] [--root <dir>] [--tmp-dir <dir>]";
+function run(cmd, args, cwd) {
+  const result = spawnSync(cmd, args, { cwd, encoding: "utf8" });
+  if (result.error !== undefined)
+    return { status: result.status ?? 1, stdout: "" };
+  return { status: result.status ?? 1, stdout: result.stdout ?? "" };
+}
+function spur(env, spurBinFlag, args, cwd) {
+  const parts = (spurBinFlag ?? env.spurBin ?? "spur").trim().split(/\s+/).filter((p) => p.length > 0);
+  return run(parts[0] ?? "spur", [...parts.slice(1), ...args], cwd);
+}
+function isRegularFile(path) {
+  try {
+    return statSync(path).isFile();
+  } catch {
+    return false;
+  }
+}
+function collectAddedLines(root, base) {
+  const out = [];
+  const diff = run("git", ["diff", "--unified=0", base], root);
+  let file = "";
+  let newLine = 0;
+  for (const line of diff.stdout.split(`
+`)) {
+    if (line.startsWith("+++ b/"))
+      file = line.slice(6);
+    else if (line.startsWith("@@"))
+      newLine = Number.parseInt((line.match(/\+[0-9]+/) ?? ["+0"])[0].slice(1), 10);
+    else if (line.startsWith("+") && !line.startsWith("+++"))
+      out.push({ file, line: newLine++, text: line.slice(1) });
+  }
+  const untracked = run("git", ["ls-files", "--others", "--exclude-standard"], root);
+  for (const f of untracked.stdout.split(`
+`)) {
+    if (f.length === 0 || !isRegularFile(join(root, f)))
+      continue;
+    for (const [idx, text] of readFileSync(join(root, f), "utf8").split(`
+`).entries())
+      out.push({ file: f, line: idx + 1, text });
+  }
+  return out;
+}
+function listStagingResidue(tmpDir, wbs) {
+  let names;
+  try {
+    names = readdirSync(tmpDir);
+  } catch {
+    return [];
+  }
+  return names.filter((n) => n.startsWith(`${wbs}-`) && isRegularFile(join(tmpDir, n))).map((n) => join(tmpDir, n));
+}
+function readDeferrals(runDir, wbs) {
+  const path = join(runDir, `${wbs}-residual-deferrals.json`);
+  if (!existsSync(path))
+    return [];
+  const isDeferral = (e) => typeof e === "object" && e !== null && typeof e.id === "string" && typeof e.reason === "string" && e.reason.trim().length > 0;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    return (Array.isArray(parsed) ? parsed : []).filter(isDeferral);
+  } catch {
+    return [];
+  }
+}
+function scanResiduals2(root, wbs, tmpDir, taskContent, _env) {
+  const runDir = join(root, ".spur", "run");
+  const basePath = join(runDir, `${wbs}-base.sha`);
+  const base = existsSync(basePath) ? readFileSync(basePath, "utf8").trim() : null;
+  const stagingResidue = listStagingResidue(tmpDir, wbs);
+  const deferrals = readDeferrals(runDir, wbs);
+  const addedLines = base === null ? [] : collectAddedLines(root, base);
+  return scanResiduals({ wbs, base, taskContent, addedLines, stagingResidue, deferrals });
 }
 function parseArgs(argv) {
   let mode = "";
@@ -308,31 +306,24 @@ function parseArgs(argv) {
     else if (wbs === "")
       wbs = a;
   }
-  if (mode === "" || wbs === "")
-    return null;
-  return { mode, wbs, spurBin, root, tmpDir };
-}
-function spur(env, spurBinFlag, args, cwd) {
-  return run(spurCommand(spurBinFlag ?? env.spurBin).cmd, [...spurCommand(spurBinFlag ?? env.spurBin).prefix, ...args], cwd);
+  return mode === "" || wbs === "" ? null : { mode, wbs, spurBin, root, tmpDir };
 }
 function loadTask(env, spurBinFlag, wbs, root) {
   const res = spur(env, spurBinFlag, ["task", "show", wbs, "--json"], root);
   if (res.status !== 0)
     throw new Error(`task show ${wbs} failed`);
   const parsed = JSON.parse(res.stdout);
-  const content = typeof parsed.content === "string" ? parsed.content : "";
-  const fm = parsed.frontmatter;
-  const featureId = typeof parsed.feature_id === "string" ? parsed.feature_id : fm !== null && typeof fm === "object" && typeof fm.feature_id === "string" ? fm.feature_id : "";
-  return { content, featureId };
+  const featureId = [parsed.feature_id, parsed.frontmatter?.feature_id].find((v) => typeof v === "string") ?? "";
+  return { content: typeof parsed.content === "string" ? parsed.content : "", featureId };
 }
 function loadVerdict(runDir, wbs) {
   return JSON.parse(readFileSync(join(runDir, `${wbs}-verdict.json`), "utf8"));
 }
 function scanMode(opts, env, io) {
-  const task = loadTask(env, opts.spurBin, opts.wbs, opts.root);
   const runDir = join(opts.root, ".spur", "run");
   mkdirSync(runDir, { recursive: true });
-  const artifact = scanResiduals(opts.root, opts.wbs, opts.tmpDir, task.content, env);
+  const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
+  const artifact = scanResiduals2(opts.root, opts.wbs, opts.tmpDir, content, env);
   writeFileSync(join(runDir, `${opts.wbs}-residuals.json`), `${JSON.stringify(artifact, null, 2)}
 `);
   io.out(`residual-scan: ${opts.wbs} blocking=${artifact.counts.blocking} deferrable=${artifact.counts.deferrable} advisory=${artifact.counts.advisory} housekeeping=${artifact.counts.housekeeping}
@@ -345,59 +336,54 @@ function foldMode(opts, _env, io) {
   const verdictPath = join(runDir, `${opts.wbs}-verdict.json`);
   const verdict = loadVerdict(runDir, opts.wbs);
   const findingsPath = join(runDir, `${opts.wbs}-test-gate.findings`);
-  const existing = existsSync(findingsPath) ? readFileSync(findingsPath, "utf8") : "";
-  const folded = foldVerdict(verdict, scan, existing);
-  writeFileSync(verdictPath, `${JSON.stringify({ ...verdict, verdict: folded.verdict, checks: folded.checks }, null, 2)}
+  const fold = foldVerdict(verdict, scan, existsSync(findingsPath) ? readFileSync(findingsPath, "utf8") : "");
+  writeFileSync(verdictPath, `${JSON.stringify({ ...verdict, verdict: fold.verdict, checks: fold.checks }, null, 2)}
 `);
-  writeFileSync(findingsPath, folded.findings);
-  io.out(`residual-fold: ${opts.wbs} verdict=${folded.verdict} residual-sweep=${folded.checks.find((c) => c.name === "residual-sweep")?.status}
+  writeFileSync(findingsPath, fold.findings);
+  io.out(`residual-fold: ${opts.wbs} verdict=${fold.verdict} residual-sweep=${fold.checks.find((c) => c.name === "residual-sweep")?.status}
 `);
   return 0;
 }
 function settleMode(opts, env, io) {
-  const task = loadTask(env, opts.spurBin, opts.wbs, opts.root);
+  const wbs = opts.wbs;
+  const task = loadTask(env, opts.spurBin, wbs, opts.root);
   const runDir = join(opts.root, ".spur", "run");
-  const scan = scanResiduals(opts.root, opts.wbs, opts.tmpDir, task.content, env);
-  const residualsPath = join(runDir, `${opts.wbs}-residuals.json`);
+  const scan = scanResiduals2(opts.root, wbs, opts.tmpDir, task.content, env);
+  const residualsPath = join(runDir, `${wbs}-residuals.json`);
+  let prior = {};
+  if (existsSync(residualsPath))
+    prior = JSON.parse(readFileSync(residualsPath, "utf8"));
   const deferred = scan.items.filter((i) => i.class === "deferrable");
-  const prior = existsSync(residualsPath) ? JSON.parse(readFileSync(residualsPath, "utf8")) : {};
   if (deferred.length > 0 && prior.followUp === undefined) {
     if (task.featureId === "") {
-      io.err(`residual-settle: ${opts.wbs} deferrals pending but feature_id unknown; re-run: residual-scan settle ${opts.wbs}
+      io.err(`residual-settle: ${wbs} deferrals pending but feature_id unknown; re-run: residual-scan settle ${wbs}
 `);
       return 0;
     }
-    const created = spur(env, opts.spurBin, ["task", "create", `Residuals from ${opts.wbs}`, "--feature", task.featureId, "--skip-ready", "--json"], opts.root);
-    if (created.status !== 0) {
-      io.err(`residual-settle: task create failed; re-run: residual-scan settle ${opts.wbs}
-`);
-      return 0;
-    }
+    const args = ["task", "create", `Residuals from ${wbs}`, "--feature", task.featureId, "--skip-ready", "--json"];
+    const created = spur(env, opts.spurBin, args, opts.root);
     let wbsNew = "";
     try {
       const parsed = JSON.parse(created.stdout);
-      const pick = (o) => typeof o.wbs === "string" ? o.wbs : "";
-      wbsNew = pick(parsed) || (parsed.data !== null && typeof parsed.data === "object" ? pick(parsed.data) : "");
+      const data = typeof parsed.data === "object" && parsed.data !== null ? parsed.data : {};
+      wbsNew = [parsed.wbs, data.wbs].find((v) => typeof v === "string") ?? "";
     } catch {
       wbsNew = "";
     }
-    if (wbsNew === "") {
-      io.err(`residual-settle: could not read created task wbs; re-run: residual-scan settle ${opts.wbs}
+    if (created.status !== 0 || wbsNew === "") {
+      io.err(`residual-settle: task create failed or unreadable wbs; re-run: residual-scan settle ${wbs}
 `);
       return 0;
     }
-    const bg = [
-      `Source task: ${opts.wbs} (feature ${task.featureId}) \u2014 deferred residuals filed by residual-scan settle.`,
-      "",
-      ...deferred.map((i) => `- ${i.id} \u2014 ${i.location}: ${i.text}`)
-    ].join(`
+    const rows = deferred.map((i) => `- ${i.id} \u2014 ${i.location}: ${i.text}`);
+    const head = `Source task: ${wbs} (feature ${task.featureId}) \u2014 deferred residuals filed by residual-scan settle.`;
+    const bgFile = join(runDir, `${wbs}-residual-background.md`);
+    writeFileSync(bgFile, `${[head, "", ...rows].join(`
+`)}
 `);
-    const bgFile = join(runDir, `${opts.wbs}-residual-background.md`);
-    writeFileSync(bgFile, `${bg}
-`);
-    const upd = spur(env, opts.spurBin, ["task", "update", wbsNew, "--section", "Background", "--from-file", bgFile], opts.root);
-    if (upd.status !== 0) {
-      io.err(`residual-settle: background write failed; re-run: residual-scan settle ${opts.wbs}
+    const updArgs = ["task", "update", wbsNew, "--section", "Background", "--from-file", bgFile];
+    if (spur(env, opts.spurBin, updArgs, opts.root).status !== 0) {
+      io.err(`residual-settle: background write failed; re-run: residual-scan settle ${wbs}
 `);
       return 0;
     }
@@ -405,11 +391,11 @@ function settleMode(opts, env, io) {
     io.out(`residual-settle: filed follow-up ${wbsNew} for ${deferred.length} deferred item(s)
 `);
   }
-  for (const path of listStagingResidue(opts.tmpDir, opts.wbs)) {
+  for (const path of listStagingResidue(opts.tmpDir, wbs)) {
     try {
       rmSync(path, { force: true });
     } catch {
-      io.err(`residual-settle: could not remove ${path}; re-run: residual-scan settle ${opts.wbs}
+      io.err(`residual-settle: could not remove ${path}; re-run: residual-scan settle ${wbs}
 `);
       return 0;
     }
@@ -420,17 +406,15 @@ function settleMode(opts, env, io) {
 }
 function reportMode(opts, env, io) {
   const runDir = join(opts.root, ".spur", "run");
-  const verdict = loadVerdict(runDir, opts.wbs);
-  const sweep = verdict.checks.find((c) => c.name === "residual-sweep");
+  const sweep = loadVerdict(runDir, opts.wbs).checks.find((c) => c.name === "residual-sweep");
   if (sweep === undefined || sweep.status !== "fail")
     return 0;
-  const task = loadTask(env, opts.spurBin, opts.wbs, opts.root);
-  const scan = scanResiduals(opts.root, opts.wbs, opts.tmpDir, task.content, env);
+  const { content } = loadTask(env, opts.spurBin, opts.wbs, opts.root);
+  const scan = scanResiduals2(opts.root, opts.wbs, opts.tmpDir, content, env);
   const blocking = scan.items.filter((i) => i.class === "blocking");
   const attemptFile = join(runDir, `${opts.wbs}-test-fix-attempt`);
   const attempts = existsSync(attemptFile) ? Number.parseInt(readFileSync(attemptFile, "utf8").trim() || "0", 10) : 0;
-  const reportPath = join(runDir, `${opts.wbs}-residual-report.md`);
-  writeFileSync(reportPath, renderReport(opts.wbs, blocking, Number.isNaN(attempts) ? 0 : attempts));
+  writeFileSync(join(runDir, `${opts.wbs}-residual-report.md`), renderReport(opts.wbs, blocking, Number.isNaN(attempts) ? 0 : attempts));
   io.out(`Recovery: fix the items in .spur/run/${opts.wbs}-residual-report.md, then /sp:dev-run ${opts.wbs}
 `);
   return 0;
@@ -440,32 +424,21 @@ function main(argv, env = getEnvVars(), options = {}) {
     out: (line) => process.stdout.write(line),
     err: (line) => process.stderr.write(line)
   };
+  const cwd = options.cwd ?? process.cwd();
   const opts = parseArgs(argv);
-  if (opts === null) {
+  const modes = { scan: scanMode, fold: foldMode, settle: settleMode, report: reportMode };
+  const modeFn = opts === null ? undefined : modes[opts.mode];
+  if (opts === null || modeFn === undefined) {
     io.err(`${RESIDUAL_SCAN_USAGE}
 `);
     return 2;
   }
-  const cwd = options.cwd ?? process.cwd();
   const resolved = { ...opts, root: opts.root.startsWith("/") ? opts.root : join(cwd, opts.root) };
-  if (resolved.mode === "scan")
-    return scanMode(resolved, env, io);
-  if (resolved.mode === "fold")
-    return foldMode(resolved, env, io);
-  if (resolved.mode === "settle")
-    return settleMode(resolved, env, io);
-  if (resolved.mode === "report")
-    return reportMode(resolved, env, io);
-  io.err(`${RESIDUAL_SCAN_USAGE}
-`);
-  return 2;
+  return modeFn(resolved, env, io);
 }
-{
-  process.exit(main(process.argv.slice(2)));
-}
+process.exit(main(process.argv.slice(2)));
 export {
-  spurCommand,
-  scanResiduals,
+  scanResiduals2 as scanResiduals,
   renderReport,
   parseReviewFindings,
   parseDiffMarkers,

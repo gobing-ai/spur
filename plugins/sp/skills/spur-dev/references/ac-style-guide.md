@@ -125,7 +125,7 @@ Any of the four may additionally carry a **bracket tag** in any position — `[d
 `Scenario: [advisory] Foo`. Tags are stripped before matching (0398 R7), so tagging never breaks
 the linkage.
 
-Task-side, `verify-answer-lint` additionally accepts a fifth declared id source — a **bold-trajectory
+Task-side, the `spur task verdict` answer lint additionally accepts a fifth declared id source — a **bold-trajectory
 paragraph**: a whole-line `**AC id…**` paragraph inside the task's `### Acceptance Criteria`
 block (task 0817 R3). The id up to its first `:` and the paragraph's full spelling are both
 declared; two bold spans on one line are not a declaration (an interpolated bold id stays
@@ -141,7 +141,7 @@ unmatchable):
 
 ### A bullet's bold head is its id
 
-`verify-answer-lint` declares the bold span of a single-line criterion bullet
+The `spur task verdict` answer lint declares the bold span of a single-line criterion bullet
 (`- **AC2 — The roster runtime is gone (R3).** Given …, when …, then …`) and its head before the
 first ` — ` or `:` — so answer rows may key `AC2` or `AC2 — The roster runtime is gone (R3).`. Keep
 at least one answer row keyed to the verbatim feature scenario title the task graduates, and keep

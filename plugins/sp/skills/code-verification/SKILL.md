@@ -338,7 +338,8 @@ canonical.
 Under the pipeline, the verifier owns the answer file `.spur/run/<wbs>-verify-answer.txt` (0726
 R3): `Verdict: PARTIAL` first, append one row at a time, replace the verdict line only when all
 rows are certified — interruptions leave lintable partial rows; retries fill only missing IDs.
-Host: `expectFile` → `verify-answer-lint.ts` → verdict + `spur task check` (R9). Vocabularies,
+Host: `spur task verdict --from-answer` lints the answer file, then derives the verdict +
+`spur task check` (R9). Vocabularies,
 rejection classes, and the AC identity rule: `references/verdict-schema.md`. Sections follow the
 Step 10 contract.
 

@@ -235,6 +235,8 @@ export type {
 export {
     DEFAULT_FEATURE_MATRIX,
     FeatureCheckService,
+    lintVerifyAnswerForTask,
+    readFeatureBody,
     summarizeRowIds,
     VERDICT_SCENARIO_KEY_FORMS,
     type VerdictScenarioKeyGap,
@@ -722,6 +724,8 @@ export type {
     TokenLedgerWatchListener,
 } from './services/token-ledger-watcher';
 export { TokenLedgerWatcher } from './services/token-ledger-watcher';
+export type { AnswerLintFinding } from './services/verify-answer-lint';
+export { ANSWER_LINT_MAX_FINDINGS, lintVerifyAnswer } from './services/verify-answer-lint';
 export type {
     CleanedRun,
     PausedRun,

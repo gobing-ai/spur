@@ -348,7 +348,8 @@ esac`,
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
             // Stage the scanner exactly as the pipeline finds it in-repo. It imports
-            // ../lib/env (getEnvVars) — stage it too (self-contained node builtins).
+            // ../lib/env (getEnvVars) and ../lib/residual-scan.generated.mjs (1003 R5
+            // bundle twin) — stage both (self-contained node builtins).
             mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
             mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
             // 0960: the project-first probe is gated on the source-repo marker.
@@ -359,6 +360,10 @@ esac`,
                 join(dir, 'plugins', 'sp', 'scripts', 'residual-scan.ts'),
             );
             copyFileSync(join(import.meta.dir, '..', 'lib', 'env.ts'), join(dir, 'plugins', 'sp', 'lib', 'env.ts'));
+            copyFileSync(
+                join(import.meta.dir, '..', 'lib', 'residual-scan.generated.mjs'),
+                join(dir, 'plugins', 'sp', 'lib', 'residual-scan.generated.mjs'),
+            );
             const fold = shellCommands('record').find((c) => c.includes('residual-scan') && c.includes('fold'));
             if (fold === undefined) throw new Error('record sweep command missing');
             const verdict = { wbs: '0983', verdict: 'PASS', requirements: [], checks: [] };

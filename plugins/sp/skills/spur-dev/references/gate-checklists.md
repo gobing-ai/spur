@@ -101,11 +101,12 @@ Entered before `task-pipeline.yaml` `review` state dispatches `sp:code-verificat
 Entered before `task-pipeline.yaml` `verify` state produces a task verdict.
 
 - [ ] The verify answer file (`.spur/run/<wbs>-verify-answer.txt`) is lint-clean before
-      verdict derivation: `plugins/sp/scripts/verify-answer-lint.ts <wbs>` (0726 R3)
-      rejects missing/duplicate/unknown R IDs, AC identities that are not an exact task
-      checklist label or linked-feature scenario title, invalid status/evidence-type
-      values, and empty evidence on any row. A lint failure fails the verify
-      step (fail-closed) before `spur task verdict` runs.
+      verdict derivation: `spur task verdict <wbs> --from-answer …` (0726 R3) lints the
+      file first and rejects missing/duplicate/unknown R IDs, AC identities that are not an
+      exact task checklist label or linked-feature scenario title, invalid status/evidence-type
+      values, and empty evidence on any row. A lint failure fails the verdict step
+      (fail-closed) before verdict derivation; an unresolvable task file fails open so
+      pre-lint historical runs (8001–8005) stay reproducible.
 - [ ] `spur task check <wbs> --strict-core --json` returns PASS.
 - [ ] Every AC scenario has a corresponding verify command that exited 0.
 - [ ] The `## Solution` section is filled (not the placeholder comment).

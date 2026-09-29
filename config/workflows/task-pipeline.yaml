@@ -688,24 +688,8 @@ states:
                 compareExecutorWith: implement
                 timeoutMs: ${vars.stepTimeoutMs}
                 expectFile: .spur/run/${vars.wbs}-verify-answer.txt
-          # 0726 R3: hard lint gate over the verifier-owned answer — shape and
-          # evidence-row identity, before the verdict derivation reads it.
-          # Hard action: a malformed answer halts the sequence here instead of
-          # poisoning the verdict parse downstream.
-          # (d) verify-answer-lint.ts owns the answer lint; shell only resolves it.
-          - kind: shell
-            options:
-                command: >-
-                    LINT_SCRIPT="plugins/sp/scripts/verify-answer-lint.ts";
-                    [ -f config/plugin-scripts.json -a -f "$LINT_SCRIPT" ] ||
-                    LINT_SCRIPT="$(superskill script path sp verify-answer-lint.ts 2>/dev/null)";
-                    if [ -z "$LINT_SCRIPT" ] || [ ! -f "$LINT_SCRIPT" ]; then
-                      echo "verify-answer-lint: checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'" >&2;
-                      exit 1;
-                    fi;
-                    bun "$LINT_SCRIPT" "$wbs"
-                    --answer ".spur/run/$wbs-verify-answer.txt"
-                    --spur-bin "$spurBin"
+          # (d) `spur task verdict` owns the answer lint (task 1003 R2) — the shell below
+          # fails closed when the verifier's answer is malformed, before any verdict artifact.
           - kind: shell
             options:
                 command: "$spurBin task verdict $wbs --from-answer .spur/run/$wbs-verify-answer.txt"

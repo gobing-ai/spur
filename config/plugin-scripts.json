@@ -96,10 +96,6 @@
             "twin": "task-diffstat.mjs"
         },
         {
-            "rel": "verify-answer-lint.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "workflow-step-profile.ts",
             "contract": "standard",
             "twin": "workflow-step-profile.mjs"

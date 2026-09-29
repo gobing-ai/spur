@@ -5,11 +5,11 @@
  *   1. the driver reference carries the five payload fields (and no longer the "Send only"
  *      restriction), plus a real child proving the supplied invocation beats a competing PATH `spur`;
  *   2. an answer fixture authored from that contract round-trips through the real
- *      `verify-answer-lint` and the real `spur task verdict` derivation.
+ *      `spur task verdict` — which owns the answer lint and the derivation (task 1003 R2).
  */
 
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getEnvVar, getEnvVars } from '@gobing-ai/ts-utils';
@@ -19,7 +19,6 @@ const DRIVER = readFileSync(
     join(ROOT, 'plugins', 'sp', 'skills', 'spur-dev', 'references', 'inline-pipeline-driver.md'),
     'utf8',
 );
-const LINT = join(ROOT, 'plugins', 'sp', 'scripts', 'verify-answer-lint.ts');
 const CLI = join(ROOT, 'apps', 'cli', 'src', 'index.ts');
 
 describe('0818 R2 — dispatch payload contract', () => {
@@ -102,15 +101,6 @@ const TASK_CONTENT = `## 0818. Handoff fixture task
 - [ ] AC1 (R1): the guard rejects an unsafe input.
 `;
 
-const FAKE_SPUR_BODY = [
-    '#!/bin/sh',
-    'case "$1:$2" in',
-    '  task:show) cat "$FAKE_TASK" ;;',
-    '  feature:show) cat "$FAKE_FEATURE" ;;',
-    '  *) exit 3 ;;',
-    'esac',
-].join('\n');
-
 function answer(reqStatus: string, acEvidenceType: string): string {
     return [
         'Verdict: PASS',
@@ -129,59 +119,59 @@ function answer(reqStatus: string, acEvidenceType: string): string {
 }
 
 interface RoundTrip {
-    lintCode: number;
-    lintErr: string;
-    verdict: string;
+    code: number | null;
+    verdict?: string;
+    lintFindings: unknown[];
+    verdictFile: boolean;
 }
 
 function roundTrip(body: string): RoundTrip {
     const dir = mkdtempSync(join(tmpdir(), 'spur-0818-answer-'));
-    writeFileSync(join(dir, 'task.json'), JSON.stringify({ wbs: '0818', feature_id: 'F9', content: TASK_CONTENT }));
-    writeFileSync(join(dir, 'feature.json'), JSON.stringify({ id: 'F9', content: 'Scenarios:\n' }));
-    const fake = join(dir, 'spur-fake');
-    writeFileSync(fake, FAKE_SPUR_BODY);
-    chmodSync(fake, 0o755);
+    // Task 1003 moved the lint into the CLI: `task verdict` resolves the task corpus
+    // in-process (TaskLocator over the default docs/tasks folder) — no fake spur.
+    mkdirSync(join(dir, 'docs', 'tasks'), { recursive: true });
+    writeFileSync(join(dir, 'docs', 'tasks', '0818_fixture.md'), TASK_CONTENT);
     const answerPath = join(dir, 'verify-answer.txt');
     writeFileSync(answerPath, body);
-    const env = { ...getEnvVars(), FAKE_TASK: join(dir, 'task.json'), FAKE_FEATURE: join(dir, 'feature.json') };
-
-    const lint = Bun.spawnSync(['bun', LINT, '0818', '--answer', answerPath, '--spur-bin', fake], {
-        cwd: dir,
-        env,
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
     const derived = Bun.spawnSync(['bun', CLI, 'task', 'verdict', '0818', '--from-answer', answerPath, '--json'], {
         cwd: dir,
-        env,
         stdout: 'pipe',
         stderr: 'pipe',
     });
-    const parsed = JSON.parse(derived.stdout.toString()) as { verdict: string };
-    return { lintCode: lint.exitCode, lintErr: lint.stderr.toString(), verdict: parsed.verdict };
+    const parsed = JSON.parse(derived.stdout.toString()) as { verdict?: string; lintFindings?: unknown[] };
+    return {
+        code: derived.exitCode,
+        verdict: parsed.verdict,
+        lintFindings: parsed.lintFindings ?? [],
+        verdictFile: existsSync(join(dir, '.spur', 'run', '0818-verdict.json')),
+    };
 }
 
-describe('0818 R2 — answer fixtures round-trip through the real validators', () => {
+describe('0818 R2 — answer fixtures round-trip through the real verdict gate', () => {
     test('a contract-shaped answer is accepted without a repair pass', () => {
         const r = roundTrip(answer('MET', 'test'));
-        expect(r.lintCode).toBe(0);
+        expect(r.code).toBe(0);
         expect(r.verdict).toBe('PASS');
+        expect(r.lintFindings).toEqual([]);
     });
 
-    test('PASS in a requirement Status cell is rejected', () => {
+    test('PASS in a requirement Status cell is lint-rejected with no verdict artifact', () => {
         const r = roundTrip(answer('PASS', 'test'));
-        expect(r.lintCode).not.toBe(0);
-        expect(r.verdict).toBe('UNKNOWN'); // the row is not a requirement status → nothing parses
+        expect(r.code).not.toBe(0);
+        expect(r.lintFindings.length).toBeGreaterThan(0);
+        expect(r.verdictFile).toBe(false);
     });
 
-    test('N/A in a requirement Status cell is rejected', () => {
+    test('N/A in a requirement Status cell is lint-rejected with no verdict artifact', () => {
         const r = roundTrip(answer('N/A', 'test'));
-        expect(r.lintCode).not.toBe(0);
-        expect(r.verdict).toBe('UNKNOWN');
+        expect(r.code).not.toBe(0);
+        expect(r.lintFindings.length).toBeGreaterThan(0);
+        expect(r.verdictFile).toBe(false);
     });
 
     test('a behavioral MET AC carried only by static evidence cannot yield PASS', () => {
         const r = roundTrip(answer('MET', 'static-ref'));
+        expect(r.code).not.toBe(0);
         expect(r.verdict).toBe('PARTIAL');
     });
 });

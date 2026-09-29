@@ -1253,15 +1253,45 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (wbs, options) => {
             // Lazy-import to keep the barrel clean for typecheck.
-            const { deriveVerdict, summarizeRowIds, VERDICT_SCENARIO_KEY_FORMS, verdictScenarioKeyGap } = await import(
-                '@gobing-ai/spur-app'
-            );
+            const {
+                ANSWER_LINT_MAX_FINDINGS,
+                deriveVerdict,
+                lintVerifyAnswerForTask,
+                summarizeRowIds,
+                VERDICT_SCENARIO_KEY_FORMS,
+                verdictScenarioKeyGap,
+            } = await import('@gobing-ai/spur-app');
             const answerPath = options.fromAnswer ?? `.spur/run/${wbs}-verify-answer.txt`;
             let answerText: string;
             try {
                 answerText = await context.fs.readFile(context.fs.resolve(answerPath));
             } catch {
                 writeJsonError(context.output, options, `Answer file not found: ${answerPath}`);
+                context.setExitCode(1);
+                return;
+            }
+
+            // 1003 R2: the answer lint owns the pre-verdict gate — a malformed answer
+            // blocks derivation here (no verdict artifact) instead of poisoning the
+            // verdict parse downstream.
+            const { foldersConfig, featuresDir } = await resolvePlanningFolders(context.fs);
+            const corpusDeps = {
+                fs: context.fs,
+                tasksDir: context.fs.resolve(options.folder ?? foldersConfig.active_folder),
+                foldersConfig,
+                featuresDir: context.fs.resolve(featuresDir),
+            };
+            const lintFindings = await lintVerifyAnswerForTask(wbs, answerText, corpusDeps);
+            if (lintFindings.length > 0) {
+                if (options.json) {
+                    context.output.write(JSON.stringify({ wbs, lintFindings }, null, 2));
+                } else {
+                    context.output.error(
+                        `task verdict: answer lint failed — ${lintFindings.length}` +
+                            `${lintFindings.length >= ANSWER_LINT_MAX_FINDINGS ? '+' : ''} finding(s) in ${answerPath}`,
+                    );
+                    for (const f of lintFindings) context.output.error(`  line ${f.line}: ${f.message}`);
+                }
                 context.setExitCode(1);
                 return;
             }
@@ -1277,16 +1307,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // clears it, and it reads both tables exactly as the done gate credits them. It
             // runs here, before the artifact exists, so the repair is a re-key instead of the
             // recorded manual re-derive + re-bind loop at the feature done gate.
-            const { foldersConfig, featuresDir } = await resolvePlanningFolders(context.fs);
             const gap = await verdictScenarioKeyGap(
                 wbs,
                 [...result.requirements, ...(result.acceptanceCriteria ?? [])],
-                {
-                    fs: context.fs,
-                    tasksDir: context.fs.resolve(options.folder ?? foldersConfig.active_folder),
-                    foldersConfig,
-                    featuresDir: context.fs.resolve(featuresDir),
-                },
+                corpusDeps,
             );
             if (gap !== null) {
                 writeJsonError(
