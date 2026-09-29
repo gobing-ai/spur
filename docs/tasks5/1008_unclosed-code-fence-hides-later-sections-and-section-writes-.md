@@ -4,7 +4,7 @@ name: Unclosed code fence hides later sections and section writes silently drop 
 status: done
 template: feature-impl
 created_at: 2026-09-29T07:03:58.072Z
-updated_at: "2026-09-29T21:28:47.303Z"
+updated_at: "2026-09-29T21:54:50.082Z"
 feature_id: F91
 
 estimate_hours: 4
@@ -84,13 +84,13 @@ Single chokepoints per concern; no per-caller guards.
 | R1 | MET | `packages/domain/src/planning/markdown-document.ts:131` findUnclosedFenceLine toggle scan; parse-time capture with frontmatter re-base :258-262; public `unclosedFenceLine()` :377; tests `packages/domain/tests/planning/markdown-document.test.ts:945-962`; fresh run 82 pass / 0 fail |
 | R2 | MET | `packages/config/src/finding-codes.ts:20` + :105 L2.unclosed-code-fence; `packages/app/src/services/planning-check-base.ts:234-242` emits severity error with the fence line; CLI tests `apps/cli/tests/commands/task.test.ts:922` and `apps/cli/tests/commands/feature.test.ts:413-447` (incl. --fix never auto-closes); fresh 192 + 48 pass / 0 fail (temp worktree) |
 | R3 | MET | `packages/domain/src/planning/markdown-document.ts:398` assertFenceBalance, called before mutation by replaceSection :479 and replaceMarkerRegion :576; tests `packages/domain/tests/planning/markdown-document.test.ts:963-1008` (body fence, doc fence, marker region, balanced) and :885 duplicate-section refusal |
-| R4 | MET | `packages/app/src/services/feature-service.ts:377-407` skipped [{id, reason}] returned (reason vocabulary refined by 1009); `apps/cli/src/commands/feature.ts:386` JSON, :392 human output; test `packages/app/tests/services/feature-service.test.ts:393-399` missing-tasks-section (re-anchored: 1009 moved skip sites) |
+| R4 | MET | `packages/app/src/services/feature-service.ts:379-412` skipped [{id, reason}] returned (reason vocabulary refined by 1009); `apps/cli/src/commands/feature.ts:387` JSON, :393-395 human output; test `packages/app/tests/services/feature-service.test.ts:407-412` missing-tasks-section (re-anchored: 1009 moved skip sites) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | `apps/cli/tests/commands/task.test.ts:922` and `apps/cli/tests/commands/feature.test.ts:413` — check reports L2.unclosed-code-fence severity error; fresh runs green |
 | AC2 | MET | test | `packages/domain/tests/planning/markdown-document.test.ts:963-1008` — refusal leaves serialize() byte-identical; :885 duplicate-section write refusal; fresh 82 pass |
-| AC3 | MET | test | `packages/app/tests/services/feature-service.test.ts:343-399` — every skip reported with {id, reason}; fresh 100 pass |
+| AC3 | MET | test | `packages/app/tests/services/feature-service.test.ts:344-412` — every skip reported with {id, reason}; fresh 100 pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -119,11 +119,11 @@ Findings table:
 | --- | --- | --- | --- |
 | P2 | Design satellite finding-code counts stale ("62 codes / L2×5") | Resolved | docs/design/configuration-contracts.md:49 refreshed to 63 codes / L2×6, verified against finding-codes.ts |
 | P2 | Literal R3(b) section-count refusal missing — duplicate-section writes dropped bytes with a warning | Resolved | packages/domain/src/planning/markdown-document.ts:406 refuses naming dropped sections; refusal tests in packages/domain/tests/planning/markdown-document.test.ts |
-| P3 | Fence opening inside Tasks body skipped as `no-tasks-marker-region` (mislabel) | Recorded — out of scope | packages/app/src/services/feature-service.ts:390 |
-| P3 | `L2.unclosed-code-fence` suppressible via `tasks.severity` (default error confirmed; not in REQUIRED_FINDING_CODES) | Recorded — accepted behavior | packages/app/src/services/planning-check-base.ts |
-| P3 | Task CLI test leaves corrupted fixture in shared corpus (feature test cleans up) | Recorded — out of scope | apps/cli/tests/commands/task.test.ts:922 |
-| P3 | Feature-side `--fix` never auto-closes not directly tested (shared engine) | Recorded — out of scope | packages/app/src/services/structural-repair.ts:126 |
-| P3 | Server refresh handler drops `skipped` silently (R4 is CLI-scope) | Recorded — deferred | packages/app/src/services/feature-service.ts:356 |
+| P3 | Fence opening inside Tasks body skipped as `no-tasks-marker-region` (mislabel) | Resolved — 1009: skip reasons classified by root cause (`unclosed-code-fence` precedes marker check) | packages/app/src/services/feature-service.ts:385-388 |
+| P3 | `L2.unclosed-code-fence` suppressible via `tasks.severity` (default error confirmed; not in REQUIRED_FINDING_CODES) | Resolved — 1010: added to REQUIRED_FINDING_CODES (unsuppressible) | packages/app/src/services/planning-check-base.ts |
+| P3 | Task CLI test leaves corrupted fixture in shared corpus (feature test cleans up) | Resolved — corrupted fixture removed in `finally` | apps/cli/tests/commands/task.test.ts:946-950 |
+| P3 | Feature-side `--fix` never auto-closes not directly tested (shared engine) | Resolved — 1009 R2: feature-side `--fix` leaves the fence open | apps/cli/tests/commands/feature.test.ts:421-437 |
+| P3 | Server refresh handler drops `skipped` silently (R4 is CLI-scope) | Resolved — 1011: server handler passes `skipped` through | apps/server/src/modules/feature/handlers.ts:70-71 |
 
 ### References
 

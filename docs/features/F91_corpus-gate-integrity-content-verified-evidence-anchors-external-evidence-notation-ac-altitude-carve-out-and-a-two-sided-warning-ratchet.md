@@ -108,6 +108,11 @@ Feature: Corpus gate integrity
 | 0816 | Close the plugins conflict-audit residuals: 0587 AC-altitude ruling, bare-basename anchor re-authoring, and the six surface/gate drifts left open | done |
 | 0958 | Fix verdict-row scenario crediting and proof-digest checkbox invalidation in the completion gate | done |
 | 0985 | Require the feature-credited AC id form in the verify-answer lint | cancelled |
+| 0993 | Make one verdict row id satisfy both the AC-N scenario alias and the AC checkbox flip | done |
+| 1008 | Unclosed code fence hides later sections and section writes silently drop them | done |
+| 1009 | Feature refresh skip-reason fidelity and feature-side --fix fence coverage (1008 P3-1/P3-4) | done |
+| 1010 | Decide L2.unclosed-code-fence suppressibility in REQUIRED_FINDING_CODES (1008 P3-2) | done |
+| 1011 | Server feature refresh reports skipped with reasons (1008 P3-5) | done |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

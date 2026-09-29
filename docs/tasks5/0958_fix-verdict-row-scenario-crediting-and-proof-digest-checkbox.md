@@ -4,7 +4,7 @@ name: Fix verdict-row scenario crediting and proof-digest checkbox invalidation 
 status: done
 template: feature-impl
 created_at: 2026-09-26T00:29:55.505Z
-updated_at: "2026-09-29T21:27:52.183Z"
+updated_at: "2026-09-29T22:59:14.697Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -257,18 +257,18 @@ Digest compatibility (Q&A 2026-09-26, closed): checkbox-canonicalized digests ch
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `packages/app/src/services/feature-check.ts:1243-1253` EMBEDDED_SCENARIO_REF_RES + embeddedScenarioRefs; tests `packages/app/tests/services/feature-check.test.ts:3562-3600` |
-| R2 | MET | `packages/app/src/services/feature-check.ts:1414` verdictScenarioKeyGap (covering via taskCoversScenario :1359); CLI `apps/cli/src/commands/task.ts:1280-1292`; tests `apps/cli/tests/commands/task.test.ts:3800` / :3833 (re-anchored from :3762/:3795) |
+| R2 | MET | `packages/app/src/services/feature-check.ts:1419` verdictScenarioKeyGap (covering via taskCoversScenario :1364); CLI `apps/cli/src/commands/task.ts:1280-1292`; tests `apps/cli/tests/commands/task.test.ts:3803` / :3836 (re-anchored from :3800/:3833) |
 | R3 | MET | `packages/app/src/workflow/proof-input-fingerprint.ts:309` canonicalizeCheckboxMarkers applied :340 (task) / :373 (feature); tests `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584` / :633 |
 | R4 | MET | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:596` text edit changes digest; :633 AC text edit |
 | R5 | MET | `packages/app/src/services/feature-check.ts:915-926` finding names summarizeRowIds (:1368) + VERDICT_SCENARIO_KEY_FORMS (:1379); tests `packages/app/tests/services/feature-check.test.ts:3779` / :3802 |
-| R6 | MET | `packages/app/tests/services/feature-check.test.ts:3600`, :3945, :3952, :3960; CLI `apps/cli/tests/commands/task.test.ts:3860` (re-anchored from :3822) |
+| R6 | MET | `packages/app/tests/services/feature-check.test.ts:3600`, :3945, :3952, :3960; CLI `apps/cli/tests/commands/task.test.ts:3863` (re-anchored from :3860) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
 | AC1 | MET | test | `packages/app/tests/services/feature-check.test.ts:3562`; replay :3763 |
 | AC2 | MET | test | `packages/app/tests/services/feature-check.test.ts:3569` |
 | AC3 | MET | test | `packages/app/tests/services/feature-check.test.ts:3585` |
-| AC4 | MET | test | `packages/app/tests/services/feature-check.test.ts:3926` / :3937; CLI `apps/cli/tests/commands/task.test.ts:3800` / :3833 |
+| AC4 | MET | test | `packages/app/tests/services/feature-check.test.ts:3926` / :3937; CLI `apps/cli/tests/commands/task.test.ts:3803` / :3836 |
 | AC5 | MET | test | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584`, :596, :633 |
 | AC6 | MET | test | `packages/app/tests/services/feature-check.test.ts:3779` |
 | AC7 | MET | test | `packages/app/tests/services/feature-check.test.ts:3600`, :3945, :3952, :3960 |
@@ -284,12 +284,12 @@ Digest compatibility (Q&A 2026-09-26, closed): checkbox-canonicalized digests ch
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P4 (advisory) | architecture | The CLI inlines the bounded first-5 + `(+N more)` row summary instead of reusing `summarizeRowIds` (still private) — two copies of one presentation rule can drift (gate message calls the helper; the CLI re-implements it). Accept or export the helper in a follow-up. | `apps/cli/src/commands/task.ts:1265-1268` |
-| 2 | P4 (advisory) | architecture | Weak locality: `readFeatureAcBody` re-implements the `<id>_*.md` prefix scan already present in `task-service.resolveFeatureAcBody` and the CLI's `isFeatureFile` — third copy of the feature-resolution rule; fold into one shared helper if it ever changes shape. | `packages/app/src/services/feature-check.ts:1456-1467` |
-| 3 | P4 (advisory) | correctness | The four digest tests (tick-only, text-edit, marker variants, add/remove) exercise only the Requirements section; AC5's "or Acceptance Criteria" half is covered by mechanism (`TASK_SPEC_SECTIONS` canonicalizes every proof-input section uniformly, `packages/app/src/workflow/proof-input-fingerprint.ts:337-341,367-374`), not by an AC-section digest assertion. | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584-640` |
-| 4 | P4 (advisory) | correctness | Plan 6's "replay the reproduction against the OLD build" half was not literally executed; the AC6 negative-path done-gate test covers the equivalent failing behavior on the new build. | `docs/tasks5/0958_…md` Plan 6 |
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P4 (advisory) | architecture | The CLI inlines the bounded first-5 + `(+N more)` row summary instead of reusing `summarizeRowIds` (still private) — two copies of one presentation rule can drift (gate message calls the helper; the CLI re-implements it). Accept or export the helper in a follow-up. | `apps/cli/src/commands/task.ts:1265-1268` | Resolved — CLI calls the exported `summarizeRowIds` (`apps/cli/src/commands/task.ts:1295`) |
+| 2 | P4 (advisory) | architecture | Weak locality: `readFeatureAcBody` re-implements the `<id>_*.md` prefix scan already present in `task-service.resolveFeatureAcBody` and the CLI's `isFeatureFile` — third copy of the feature-resolution rule; fold into one shared helper if it ever changes shape. | `packages/app/src/services/feature-check.ts:1456-1467` | Resolved — single `isFeatureFile` matcher (`packages/app/src/services/feature-check.ts:1466`) used by `readFeatureAcBody`, task-check and the CLI |
+| 3 | P4 (advisory) | correctness | The four digest tests (tick-only, text-edit, marker variants, add/remove) exercise only the Requirements section; AC5's "or Acceptance Criteria" half is covered by mechanism (`TASK_SPEC_SECTIONS` canonicalizes every proof-input section uniformly, `packages/app/src/workflow/proof-input-fingerprint.ts:337-341,367-374`), not by an AC-section digest assertion. | `packages/app/tests/workflow/proof-input-fingerprint.test.ts:584-640` | Resolved — digest (e) covers the Acceptance Criteria half (`packages/app/tests/workflow/proof-input-fingerprint.test.ts:633`) |
+| 4 | P4 (advisory) | correctness | Plan 6's "replay the reproduction against the OLD build" half was not literally executed; the AC6 negative-path done-gate test covers the equivalent failing behavior on the new build. | `docs/tasks5/0958_…md` Plan 6 | Resolved — replayed the D6 reproduction (verbatim row ids) against the OLD build `1196be573` and the new tree: OLD credited 0/2 scenarios, `verdictRowsMatchScenarios=false`, tick-only digest changed; NEW credited 2/2 (`R3 — …`, `R6 — …`), `true`, digest stable (2026-09-29 re-verify) |
 
 No P1–P3 findings. Incident cross-check: the restored Requirements/AC/Plan text is byte-identical to HEAD modulo the checkbox ticks (diff shows tick flips only), and the recovered `### Solution`'s digest-compatibility citation (`packages/app/src/workflow/proof-input-fingerprint.ts:296-308`) resolves to the real note this run.
 
@@ -326,7 +326,7 @@ Carried from pass 2/4 (valid — nothing outside the task markdown changed since
 
 Design conformance: Plan items 1–7 DONE (Plan 6's old-build replay half → advisory #4); design satellite row for `task verdict` updated (`docs/design/planning-record-contracts.md`, cites `apps/cli/src/commands/task.ts:1253-1277`).
 
-**Next:** `/sp:dev-verify 0958` → `spur task record` to fill `## Testing` and proceed toward `done`; the four P4s are accept-or-fold.
+**Next:** `/sp:dev-verify 0958` → `spur task record` to fill `## Testing` and proceed toward `done`; all four P4s resolved.
 
 ### References
 

@@ -4,7 +4,7 @@ name: Make one verdict row id satisfy both the AC-N scenario alias and the AC ch
 status: done
 template: feature-impl
 created_at: 2026-09-28T08:31:24.792Z
-updated_at: "2026-09-29T21:34:07.861Z"
+updated_at: "2026-09-29T22:59:29.616Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -90,26 +90,26 @@ This removes the need for the `R1 (covers: R1) [R2]` workaround used when 0970 w
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
 | R1 | MET | `packages/app/src/services/task-record.ts:193-196` prefixId normalizes `/^(?:AC |
-| R2 | MET | `packages/app/tests/services/task-record.test.ts:1429` AC row keyed by scenario title flips its task box; fresh probe of matchedScenarioKeys over docs/features/A32 with rows `AC1..AC3 — <title>` → 3 of 3 scenarios matched, no (covers:) workaround |
-| R3 | MET | `plugins/sp/skills/spur-cli/references/tasks/verbs.md:336-342` documents the `AC<n> — <scenario title>` form and which variant satisfies which check |
-| R4 | MET | fresh `bun test tests/services/task-record.test.ts` 101 pass / 0 fail; repo-wide spur-check 9567 pass / 4 fail, all 4 environmental (3 Chromium DevTools-port launch failures in sandbox; bundle determinism failure only in temp worktree, passes 7/0 in main repo) |
+| R2 | MET | `packages/app/tests/services/task-record.test.ts:1371` end-to-end graduating record: feature-linked task, `AC-<n>` rows tick both aliasing boxes, two records emit no `scenarioWarnings`; `:1450` `AC<n> — <title>` flips its box; `:1474` `AC-<n>` never ticks the same-numbered box; fresh A32 probe: 3/3 scenarios credited by both `AC<n> — <title>` and `AC-<n>` rows |
+| R3 | MET | `plugins/sp/skills/spur-cli/references/tasks/verbs.md:337-346` documents `AC<n> — <scenario title>` and bare `AC-<i>`, and which check each satisfies |
+| R4 | MET | fresh `bun test tests/services/task-record.test.ts` 103 pass / 0 fail; packages/app 3451 pass / 0 fail; spur-check lint + 50 pre-rules + 2 post-rules pass, tests 9570 pass / 4 fail, all environmental (3 Chromium DevTools-port launch failures in sandbox; bundle determinism fails only in the temp worktree, 7/0 in main repo) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:1429` flips AC1 box for `AC1 — <title>` row; A32 probe credits all three scenarios |
-| AC2 | MET | command | fresh `bun run $TMPDIR/a32-probe.ts` → matchedScenarioKeys returned 3 of 3 A32 scenario keys; task-record tests 101 pass / 0 fail |
-| AC3 | MET | command | `rg -c "Graduating tasks — one row keyed to both checks" plugins/sp/skills/spur-cli/references/tasks/verbs.md` → 1 (`plugins/sp/skills/spur-cli/references/tasks/verbs.md:336`) |
-| AC4 | MET | command | `bun run spur-check`: lint + typecheck + 50 rules pass; tests 9567 pass / 4 fail, all environmental and unrelated to task-record (Chromium launch denied in sandbox ×3; bundle-plugin-lib determinism fails only via worktree node_modules symlinks, `bun test scripts/commands/bundle-plugin-lib.test.ts` in main repo 7 pass / 0 fail) |
+| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:1450` flips AC1 for an `AC1 — <title>` row; `:1474` resolves `AC-<n>` to the aliasing box; A32 probe credits all three scenarios |
+| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1371` drives `TaskService.record` end to end on a feature-linked task — boxes flip and `scenarioWarnings` is undefined on both records; fresh A32 probe `matchedScenarioKeys` → 3 of 3 for both row forms |
+| AC3 | MET | command | `rg -c "Graduating tasks — one row keyed to both checks" plugins/sp/skills/spur-cli/references/tasks/verbs.md` → 1 (`plugins/sp/skills/spur-cli/references/tasks/verbs.md:337`) |
+| AC4 | MET | command | `bun run spur-check`: lint + typecheck + 50 rules pass; tests 9570 pass / 4 fail, all environmental (Chromium launch denied in sandbox ×3; bundle-plugin-lib determinism fails only via worktree node_modules symlinks, 7 pass / 0 fail in main repo); `bun run test-post-check` 2 rules pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
 **SECU findings** (self-review)
 
-| Priority | Dimension | Location | Finding |
-|----------|-----------|----------|---------|
-| P4 | Correctness | `packages/app/src/services/task-record.ts:192` | `^(?:AC|R)\\d+` does not match the hyphenated alias `AC-1`, so that spelling still flips no box. Accepted: `AC-1` is the *crediting* alias and the title-suffixed form is the documented one-id answer. |
-| P4 | Scope | `packages/app/tests/services/task-record.test.ts` | The end-to-end graduating `record` path was not re-run; both halves are verified against the production functions the gate uses, and the CLI plumbing is covered by the four pipeline tasks. |
+| Priority | Dimension | Location | Finding | Disposition |
+|----------|-----------|----------|---------|-------------|
+| P4 | Correctness | `packages/app/src/services/task-record.ts:192` | `prefixId`'s AC/R-number pattern does not match the hyphenated alias `AC-1`, so that spelling still flips no box. Accepted: `AC-1` is the *crediting* alias and the title-suffixed form is the documented one-id answer. | Resolved — `AC-<n>` resolves through the linked feature's scenario order to the aliasing AC box (`packages/app/src/services/task-record.ts:217-233`, titles from `packages/app/src/services/feature-check.ts:1324`, wired at `packages/app/src/services/task-service.ts:1471`); never the same-numbered box (unit `packages/app/tests/services/task-record.test.ts:1474`); authoring note `plugins/sp/skills/spur-cli/references/tasks/verbs.md:342` |
+| P4 | Scope | `packages/app/tests/services/task-record.test.ts` | The end-to-end graduating `record` path was not re-run; both halves are verified against the production functions the gate uses, and the CLI plumbing is covered by the four pipeline tasks. | Resolved — end-to-end graduating `record` test: feature-linked task, `AC-<n>` rows tick the aliasing boxes and two records emit no `scenarioWarnings` (`packages/app/tests/services/task-record.test.ts:1371`) |
 
 No P1–P3 findings. Behavior for `R\\d+` rows and `ac_altitude: task-local` tasks is unchanged.
 

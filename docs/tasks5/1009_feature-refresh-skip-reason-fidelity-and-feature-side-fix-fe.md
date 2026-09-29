@@ -4,7 +4,7 @@ name: Feature refresh skip-reason fidelity and feature-side --fix fence coverage
 status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:16.889Z
-updated_at: "2026-09-29T21:28:44.598Z"
+updated_at: "2026-09-29T21:54:48.156Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -120,13 +120,13 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/feature-service.ts:383-400` — classify before write in spec precedence: unclosedFenceLine → unclosed-code-fence (:383-386), duplicateSectionNames → duplicate-sections (:387-390), !hasSection('Tasks') → missing-tasks-section (:391-394), replaceMarkerRegion throw → no-tasks-marker-region (:395-400); tests `packages/app/tests/services/feature-service.test.ts:343-399` (re-verify 2026-09-29: 100 pass / 0 fail with planning-check-base) |
+| R1 | MET | `packages/app/src/services/feature-service.ts:385-405` — classify before write in spec precedence: unclosedFenceLine → unclosed-code-fence (:385-388), duplicateSectionNames → duplicate-sections (:389-392), !hasSection('Tasks') → missing-tasks-section (:393-396), replaceMarkerRegion marker-missing throw → no-tasks-marker-region, any other error rethrown (:397-405); tests `packages/app/tests/services/feature-service.test.ts:344-412` (re-verify 2026-09-29: 100 pass / 0 fail with planning-check-base) |
 | R2 | MET | `apps/cli/tests/commands/feature.test.ts:431-440` — feature check --fix leg: fence text survives, re-check exit 1 and still reports L2.unclosed-code-fence; rmSync in finally (:441-445); fresh run 48 pass / 0 fail (temp worktree — sandbox denies nested .git/config in repo tree) |
 | R3 | MET | `docs/design/data-output-contracts.md:204` — refresh row lists skipped: [{id, reason}] and the four reason values |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/feature-service.test.ts:343` fence above Tasks, :358 fence after Tasks (no write), :369 duplicate-sections, :380 no-tasks-marker-region, :393 missing-tasks-section; fresh run green |
+| AC1 | MET | test | `packages/app/tests/services/feature-service.test.ts:344` fence above Tasks, :359 fence after Tasks (no write), :370 duplicate-sections, :381 no-tasks-marker-region, :394 unexpected replaceMarkerRegion error rethrown, :407 missing-tasks-section; fresh run green |
 | AC2 | MET | test | `apps/cli/tests/commands/feature.test.ts:413-447` — --fix leg + finally cleanup; fresh run 48 pass / 0 fail |
 | AC3 | MET | command | `rg -c "skipped: \[\{id, reason\}\].*unclosed-code-fence.*duplicate-sections.*missing-tasks-section.*no-tasks-marker-region" docs/design/data-output-contracts.md` → 1 (row at `docs/design/data-output-contracts.md:204`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
@@ -141,10 +141,10 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, 
 
 ##### Findings (ranked)
 
-| # | Priority | Dimension | Finding | Location |
-|---|----------|-----------|---------|----------|
-| 1 | P3 (minor) | usability | `refresh()` JSDoc `@returns` still lists only two skip causes; Solution step 1 required updating it to the four reasons | `packages/app/src/services/feature-service.ts:351` |
-| 2 | P4 (advisory) | correctness | Bare `catch` classifies any `replaceMarkerRegion` throw as `no-tasks-marker-region`; only marker-missing is reachable today, but future domain guards would be silently misclassified | `packages/app/src/services/feature-service.ts:397` |
+| # | Priority | Dimension | Finding | Location | Disposition |
+|---|----------|-----------|---------|----------|-------------|
+| 1 | P3 (minor) | usability | `refresh()` JSDoc `@returns` still lists only two skip causes; Solution step 1 required updating it to the four reasons | `packages/app/src/services/feature-service.ts:351` | Resolved — JSDoc `@returns` lists all four reasons (`packages/app/src/services/feature-service.ts:349-355`) |
+| 2 | P4 (advisory) | correctness | Bare `catch` classifies any `replaceMarkerRegion` throw as `no-tasks-marker-region`; only marker-missing is reachable today, but future domain guards would be silently misclassified | `packages/app/src/services/feature-service.ts:397` | Resolved — `catch` rethrows any error but the marker-missing guard (`packages/app/src/services/feature-service.ts:399-404`); test `packages/app/tests/services/feature-service.test.ts:394` |
 
 ##### Functional Traceability
 
@@ -168,7 +168,7 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, 
 
 **Architecture:** classification lives in the app service using domain getters (no new domain surface — right layer); server parity with the open `reason` string is deliberately deferred to 1011 per the contract note, so no union-type coupling finding. Test placement is correct: classification matrix in `packages/app/tests/services`, `--fix` policy in `apps/cli/tests/commands`; the shared `corruptA` helper deepens the corpus-mutation tests. Contract doc ownership matches the task's stated owner (`data-output-contracts.md`, not 04_DESIGN.md).
 
-**Next:** fix the `refresh()` JSDoc `@returns` to list the four reasons (one-line follow-up, rides with 1011); optionally tighten the `catch` to match the marker-missing error.
+**Next:** none — both findings resolved in the F91 re-verify fix pass.
 
 ### References
 
