@@ -67,8 +67,8 @@ export function createFeatureHandlers(ctx: ServerContext) {
         }),
 
         refresh: os.feature.refresh.handler(async () => {
-            const { tasksUpdated } = await ctx.featureService().refresh();
-            return { ok: true as const, data: { rebuilt: tasksUpdated } };
+            const { tasksUpdated, skipped } = await ctx.featureService().refresh();
+            return { ok: true as const, data: { rebuilt: tasksUpdated, skipped } };
         }),
 
         check: os.feature.check.handler(async ({ input }) => {

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Server feature refresh reports skipped with reasons (1008 P3-5)
-status: backlog
+status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:17.810Z
-updated_at: "2026-09-29T19:53:33.539Z"
+updated_at: "2026-09-29T21:08:00.339Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -35,7 +35,7 @@ Detail: transport DTO only (ADR-021). Additive, backward-compatible. OpenAPI is 
 
 ### Acceptance Criteria
 
-- [ ] AC1 — `apps/server/tests/modules/feature/handlers.test.ts` refresh test: the `makeCtx` stub returns `skipped: [{ id: 'A', reason: 'missing-tasks-section' }]` and the handler result carries `data.skipped` equal to it alongside `rebuilt`; the contract output schema accepts the shape (req: R1)
+- [x] AC1 — `apps/server/tests/modules/feature/handlers.test.ts` refresh test: the `makeCtx` stub returns `skipped: [{ id: 'A', reason: 'missing-tasks-section' }]` and the handler result carries `data.skipped` equal to it alongside `rebuilt`; the contract output schema accepts the shape (req: R1)
 
 ### Q&A
 
@@ -75,16 +75,37 @@ Verify: `(cd apps/server && bun test tests/modules/feature/handlers.test.ts test
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/contracts/src/feature.ts:231-232` — skipped z.array({id, reason}), reason open string, JSDoc; `apps/server/src/modules/feature/handlers.ts:70-72` — lossless destructure + return beside rebuilt. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `apps/server/tests/modules/feature/handlers.test.ts:39` stub; `:143-145` asserts data.rebuilt + data.skipped toEqual; reviewer fresh-ran handlers+openapi 20 pass / 0 fail, contracts contract.test.ts 60 pass / 0 fail, tsc --noEmit both workspaces exit 0. Losslessness + backward-compat verified at `packages/contracts/src/shared.ts:24-31` (unknown keys stripped) and `packages/app/src/services/feature-service.ts:356`. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
-- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-5)
-- Code: `packages/contracts/src/feature.ts:219-230` · `apps/server/src/modules/feature/handlers.ts:70-73` · `apps/server/tests/modules/feature/handlers.test.ts:36,133` · `apps/server/src/openapi.ts` (runtime spec) · `apps/cli/src/commands/feature.ts:378-400`
-- Tasks: 1008 (R4 shape), 1009 (reason vocabulary) · Feature: F91
+- Review (2026-09-29): sp-super-reviewer fresh session — verdict PASS. Answer: `.spur/run/task-1011-c68e4d9e-review-answer.txt`. P4 finding (observational): refresh output schema acceptance is proven indirectly (compile-time via oRPC return-type check, tsc exit 0); a one-line `featureRefreshResponseSchema.parse(...)` in contracts tests would make it direct — rides post-batch.
 
 ### History
+
+- 2026-09-29T20:55:02.856Z backlog → todo (system)
+- 2026-09-29T20:57:46.102Z todo → wip (system)
+- 2026-09-29T21:07:33.025Z wip → testing (system)
+- 2026-09-29T21:08:00.339Z testing → done (system)
+

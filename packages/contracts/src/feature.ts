@@ -227,6 +227,8 @@ export const featureContract = {
             apiSuccessSchema(
                 z.object({
                     rebuilt: z.number().int().nonnegative(),
+                    /** Features skipped during the Tasks-region pass ({id, reason}), mirroring CLI `feature refresh --json`. */
+                    skipped: z.array(z.object({ id: z.string(), reason: z.string() })),
                 }),
             ),
         ),

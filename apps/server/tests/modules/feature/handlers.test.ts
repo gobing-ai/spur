@@ -33,7 +33,11 @@ describe('feature handlers', () => {
                 transition: async () => ({
                     ref: { id: 'A', filePath: '/test/A.md', kind: 'feature' as const, folder: '.' },
                 }),
-                refresh: async () => ({ index: '', tasksUpdated: 3 }),
+                refresh: async () => ({
+                    index: '',
+                    tasksUpdated: 3,
+                    skipped: [{ id: 'A', reason: 'missing-tasks-section' }],
+                }),
                 syncFeature: async (id: string) => ({
                     proposal: { featureId: id, from: 'backlog', to: 'active', reason: 'Active task' },
                     applied: true,
@@ -134,10 +138,11 @@ describe('feature handlers', () => {
         const handlers = createFeatureHandlers(makeCtx());
         const fn = handlers.refresh['~orpc'].handler as unknown as (
             opts: Record<string, unknown>,
-        ) => Promise<{ ok: boolean; data: { rebuilt: number } }>;
+        ) => Promise<{ ok: boolean; data: { rebuilt: number; skipped: Array<{ id: string; reason: string }> } }>;
         const result = await fn({});
         expect(result.ok).toBe(true);
         expect(result.data.rebuilt).toBe(3);
+        expect(result.data.skipped).toEqual([{ id: 'A', reason: 'missing-tasks-section' }]);
     });
 
     test('check handler runs FeatureCheckService and returns findings', async () => {
