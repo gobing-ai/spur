@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Prove a changed module selection follows restart plus reload end to end
-status: testing
+status: done
 template: feature-impl
 created_at: 2026-09-29T03:05:27.931Z
-updated_at: "2026-09-29T04:44:43.963Z"
+updated_at: "2026-09-29T04:45:41.866Z"
 feature_id: A8
 
 ---
@@ -178,4 +178,5 @@ Rationale: same port is load-bearing — a new port is a new origin, which is th
 - 2026-09-29T03:18:42.641Z backlog → todo (system)
 - 2026-09-29T03:58:48.454Z todo → wip (system)
 - 2026-09-29T04:44:43.963Z wip → testing (system)
+- 2026-09-29T04:45:41.866Z testing → done (system)
 
