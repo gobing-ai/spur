@@ -31,7 +31,18 @@ import { cleanup } from '@testing-library/react';
  */
 export function registerHappyDom(): void {
     try {
-        GlobalRegistrator.register();
+        GlobalRegistrator.register({
+            settings: {
+                navigation: {
+                    // Unit tests render <iframe src> (FramedResource, BoardLayoutFramed); left
+                    // enabled, happy-dom navigates child frames for real — async "null" URL
+                    // TypeErrors and CORS warnings surface as unhandled errors and exit the
+                    // runner non-zero even when every assertion passes. Frames keep their URL
+                    // (attribute asserts hold); real frame policy is covered over CDP.
+                    disableChildFrameNavigation: true,
+                },
+            },
+        });
     } catch {
         // Already registered by an earlier test file in the same suite.
     }

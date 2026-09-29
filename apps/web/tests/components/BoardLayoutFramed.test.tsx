@@ -41,12 +41,22 @@ function renderAt(path: string, modules: readonly WebModule[]) {
     );
 }
 
+let realFetch: typeof fetch;
+
 beforeEach(() => {
     resetLayoutState();
+    // The board shell fetches /api/* on mount. Left to happy-dom, those requests run its
+    // CORS machinery and print "Cross-Origin Request Blocked" warnings per mount. Reject
+    // like a real failed fetch instead — components render their empty state either way.
+    realFetch = globalThis.fetch;
+    globalThis.fetch = async (): Promise<Response> => {
+        throw new TypeError('Failed to fetch');
+    };
 });
 
 afterEach(() => {
     cleanup();
+    globalThis.fetch = realFetch;
 });
 
 test('a framed module mounts in the workspace and marks the shell as framed', async () => {

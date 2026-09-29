@@ -32,13 +32,22 @@ function mockMatchMedia(initialDark = false) {
 }
 
 describe('ThemeToggle system-preference sync', () => {
+    let realFetch: typeof fetch;
+
     beforeEach(() => {
         localStorage.clear();
         document.documentElement.removeAttribute('data-theme');
+        // The board shell fetches /api/* on mount; reject like a real failed fetch instead
+        // of running happy-dom's CORS machinery ("Cross-Origin Request Blocked" noise).
+        realFetch = globalThis.fetch;
+        globalThis.fetch = async (): Promise<Response> => {
+            throw new TypeError('Failed to fetch');
+        };
     });
 
     afterEach(() => {
         cleanup();
+        globalThis.fetch = realFetch;
         // @ts-expect-error reset matchMedia between tests
         globalThis.matchMedia = undefined;
     });
