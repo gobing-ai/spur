@@ -763,6 +763,38 @@ describe('TaskService.record', () => {
         expect(raw).toContain('- [ ] R3. third requirement');
     });
 
+    test('0996 AC1: record ticks the AC box a scenario-keyed row aliases, not the same-numbered R box', async () => {
+        const wbs = await createTask(svc);
+        const root = tasksDir.replace('/tasks', '');
+        const fs = createNodeFileSystem(root);
+        const ws = new PlanningWriteService({ fs });
+        const filePath = `${tasksDir}/${wbs}_record-test-task.md`;
+        const ref: EntityRef = { kind: 'task', id: wbs, filePath, folder: tasksDir };
+        await ws.updateSection(ref, 'Requirements', '- [ ] R1. first\n- [ ] R3. third\n');
+        await ws.updateSection(ref, 'Acceptance Criteria', '- [ ] AC1 — R3 — The loop is a service (req: R1)\n');
+
+        const verdictPath = join(root, '.spur', 'run', `${wbs}-verdict.json`);
+        await fs.writeFile(
+            verdictPath,
+            JSON.stringify({
+                wbs,
+                verdict: 'PASS',
+                requirements: [{ id: 'R1', status: 'MET', evidence: 'covered' }],
+                acceptanceCriteria: [
+                    { id: 'R3 — The loop is a service', status: 'MET', evidenceType: 'test', evidence: 'covered' },
+                ],
+                checks: [],
+            }),
+        );
+
+        await svc.record(wbs, { verdictFile: verdictPath });
+
+        const raw = await fs.readFile(filePath);
+        expect(raw).toContain('- [x] AC1 — R3 — The loop is a service (req: R1)');
+        expect(raw).toContain('- [x] R1. first');
+        expect(raw).toContain('- [ ] R3. third');
+    });
+
     test('AC3 (0800 R1): a PASS verdict never flips a Plan box — Plan stays byte-identical', async () => {
         // 0788 is the counter-example that fixed this rule: verdict PASS with a plan
         // step deliberately left open. A verdict certifies requirements; flipping a
@@ -1390,6 +1422,46 @@ describe('flipVerifiedCheckboxes', () => {
             { id: 'AC-2', status: 'MET', evidenceType: 'test', evidence: 'e' },
         ] as VerifyVerdict['acceptanceCriteria'];
         expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — R4 — one table (req: R1)');
+    });
+
+    test('0996: a feature-scenario key proves the AC box that aliases it, not the same-numbered R box', () => {
+        // `task verdict` requires feature-linked AC rows keyed by scenario (`R3 — <title>`); the
+        // leading R3 is the feature's id, so it must resolve to the aliasing AC1, not task R3.
+        const body =
+            '- [ ] R3. task requirement three\n- [ ] AC1 — R3 — The loop is a service (req: R1)\n- [ ] AC2 — R4 — Behavior\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'R3 — The loop is a service', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — R3 — The loop is a service (req: R1)');
+    });
+
+    test('0996: a title-only scenario key proves its aliasing AC box', () => {
+        const body = '- [ ] AC1 — R3 — The loop is a service (req: R1)\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'The loop is a service', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] AC1 — R3 — The loop is a service (req: R1)');
+    });
+
+    test('0996: a scenario key the task does not alias flips nothing', () => {
+        const body = '- [ ] R9. task requirement nine\n- [ ] AC1 — R3 — The loop is a service\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'R9 — Some other scenario', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(flipVerifiedCheckboxes(body, verdict)).toBe(body);
+    });
+
+    test('0996: bare AC and R keys in the AC table keep their existing flips', () => {
+        const body = '- [ ] R1. one\n- [ ] AC1 — first\n- [ ] AC2 — second\n';
+        const verdict = mkVerdict('PASS', []);
+        verdict.acceptanceCriteria = [
+            { id: 'AC1', status: 'MET', evidenceType: 'test', evidence: 'e' },
+            { id: 'R1 (context)', status: 'MET', evidenceType: 'test', evidence: 'e' },
+        ] as VerifyVerdict['acceptanceCriteria'];
+        expect(boxed(flipVerifiedCheckboxes(body, verdict))).toBe('- [x] R1. one\n- [x] AC1 — first');
     });
 
     test('PARTIAL flips only the proven ids and leaves the rest', () => {

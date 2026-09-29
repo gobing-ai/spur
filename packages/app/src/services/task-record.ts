@@ -195,6 +195,26 @@ function prefixId(id: string): string {
     return m ? m[0] : id;
 }
 
+const normalizeKey = (text: string): string => text.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * Resolve the checkbox an AC verdict row proves (0996). A feature-linked task keys its AC rows
+ * by feature scenario (`R3 — <title>`), whose leading `R3` is the feature's id, not the task's
+ * Requirements box. When a task AC line aliases that scenario (`AC1 — R3 — <title>`), the row
+ * proves `AC1`; an unaliased scenario key (`R<n> — <title>`) proves nothing. `AC1`,
+ * `AC1 — <title>` and bare/parenthesized `R1` keys keep the {@link prefixId} behavior.
+ */
+function acRowProves(rowId: string, items: ReturnType<typeof parseChecklist>): string | undefined {
+    const key = normalizeKey(rowId);
+    for (const item of items) {
+        if (!item.requirementId?.startsWith('AC')) continue;
+        const alias = normalizeKey(item.text.replace(/\s*\(req:[^)]*\)\s*$/, ''));
+        if (alias !== '' && (alias === key || alias.endsWith(`— ${key}`))) return item.requirementId;
+    }
+    if (/^R\d+\s*[—-]\s*\S/.test(rowId.trim())) return undefined;
+    return prefixId(rowId);
+}
+
 /**
  * Flip `- [ ]` → `- [x]` on exactly the Requirements/AC boxes a verdict proves.
  *
@@ -213,17 +233,19 @@ export function flipVerifiedCheckboxes(body: string, verdict: CanonicalVerifyVer
     // Verdict ids may carry trailing context (`R1 (anchor-drift detection)`)
     // while parseChecklist extracts the bare `R1` prefix — normalize both sides
     // to the `R\d+` prefix so a MET row proves its box.
+    const items = parseChecklist(body);
+    if (items.length === 0) return body;
+
     const proven = new Set<string>();
     for (const req of verdict.requirements) {
         if (req.status === 'MET') proven.add(prefixId(req.id));
     }
     for (const ac of verdict.acceptanceCriteria ?? []) {
-        if (ac.status === 'MET') proven.add(prefixId(ac.id));
+        if (ac.status !== 'MET') continue;
+        const id = acRowProves(ac.id, items);
+        if (id !== undefined) proven.add(id);
     }
     if (proven.size === 0) return body;
-
-    const items = parseChecklist(body);
-    if (items.length === 0) return body;
 
     const lines = body.split('\n');
     let changed = false;

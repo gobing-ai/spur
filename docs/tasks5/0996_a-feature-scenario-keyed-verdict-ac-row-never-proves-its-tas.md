@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: A feature-scenario-keyed verdict AC row never proves its task AC box
-status: todo
+status: done
 template: issue
 created_at: 2026-09-28T23:16:58.188Z
-updated_at: "2026-09-28T23:26:06.928Z"
+updated_at: "2026-09-28T23:47:06.815Z"
 feature_id: D62
 
 ac_altitude: task-local
@@ -28,15 +28,15 @@ The task file already carries the alias on the AC line itself (`- [ ] AC1 — R3
 
 ### Requirements
 
-- [ ] R1. A verdict AC row keyed by a feature-scenario identifier proves the task AC checkbox that aliases that scenario, so a feature-linked task needs no manual AC tick between `record` and `done`.
-- [ ] R2. Existing keying forms keep their behavior: `AC1`, `AC1 — <scenario title>`, and `R1`-style requirement keys flip exactly what they flip today; a scenario key that the task does not alias flips nothing.
-- [ ] R3. Tests cover the aliased-scenario key flipping its AC box, the non-aliased key flipping nothing, and the existing forms staying green.
+- [x] R1. A verdict AC row keyed by a feature-scenario identifier proves the task AC checkbox that aliases that scenario, so a feature-linked task needs no manual AC tick between `record` and `done`.
+- [x] R2. Existing keying forms keep their behavior: `AC1`, `AC1 — <scenario title>`, and `R1`-style requirement keys flip exactly what they flip today; a scenario key that the task does not alias flips nothing.
+- [x] R3. Tests cover the aliased-scenario key flipping its AC box, the non-aliased key flipping nothing, and the existing forms staying green.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — A feature-linked task whose AC lines alias feature scenarios reaches `done` from `record` with no manual AC tick and no PASS→PARTIAL downgrade (req: R1)
-- [ ] AC2 — `AC1`, `AC1 — <title>` and `R1` keying still flip exactly their boxes; an unaliased scenario key flips none (req: R2)
-- [ ] AC3 — Focused `task-record` tests cover all three cases and the full gate is green (req: R3)
+- [x] AC1 — A feature-linked task whose AC lines alias feature scenarios reaches `done` from `record` with no manual AC tick and no PASS→PARTIAL downgrade (req: R1)
+- [x] AC2 — `AC1`, `AC1 — <title>` and `R1` keying still flip exactly their boxes; an unaliased scenario key flips none (req: R2)
+- [x] AC3 — Focused `task-record` tests cover all three cases and the full gate is green (req: R3)
 
 ### Q&A
 
@@ -67,10 +67,10 @@ Verify by reproducing the 0968/0969 path end to end (feature-linked task + scena
 
 ### Plan
 
-- [ ] Reproduce the two-keying conflict in a focused test (feature-linked task, scenario-keyed AC row).
-- [ ] Implement the chosen alias resolution; keep `prefixId`'s existing forms intact.
-- [ ] Cover the three R3 cases in the `task-record` suite, then run `bun run spur-check`.
-- [ ] Update the verdict-answer authoring guidance with the keying rule that works for feature-linked tasks.
+- [x] Reproduce the two-keying conflict in a focused test (feature-linked task, scenario-keyed AC row).
+- [x] Implement the chosen alias resolution; keep `prefixId`'s existing forms intact.
+- [x] Cover the three R3 cases in the `task-record` suite, then run `bun run spur-check`.
+- [x] Update the verdict-answer authoring guidance with the keying rule that works for feature-linked tasks.
 
 ### Root Cause
 
@@ -91,15 +91,45 @@ Observed on 0968 (feature G67) and 0969 (feature H21): the record-stage residual
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Chosen shape 1: resolve the AC row against the section body the flip already holds.
+
+| Change (`file:line`) | Rationale |
+|---|---|
+| `packages/app/src/services/task-record.ts:207` | `acRowProves` maps a MET AC row to the AC label whose checklist line aliases it (`AC1 — R3 — <title>`, full key or title-only). An unaliased `R<n> — <title>` scenario key proves nothing, so it no longer ticks the same-numbered task R box. `AC1`, `AC1 — <title>` and `R1 (context)` keep the `prefixId` path. |
+| `packages/app/src/services/task-record.ts:231` | `flipVerifiedCheckboxes` parses the checklist first and routes AC rows through `acRowProves`; Requirements rows unchanged. |
+| `packages/app/tests/services/task-record.test.ts:1395` | Aliased scenario key, title-only key, unaliased key, existing forms. The three new-behavior cases fail against the pre-fix source. |
+| `plugins/sp/skills/code-verification/references/verdict-schema.md:127` | Authoring rule: alias every graduated scenario on its AC line so a scenario-keyed row ticks it. |
 
 ### Testing
 
-<!-- Filled during verification: regression command(s), outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/task-record.ts:207` `acRowProves` resolves a scenario-keyed AC row to the AC label that aliases it, used by `packages/app/src/services/task-record.ts:231`; `packages/app/tests/services/task-record.test.ts:766` (through `TaskService.record`) and `packages/app/tests/services/task-record.test.ts:1395` |
+| R2 | MET | `packages/app/tests/services/task-record.test.ts:1425` (`AC1`, `R1 (context)`), existing `AC1 — <title>` case in the `flipVerifiedCheckboxes` suite, and `packages/app/tests/services/task-record.test.ts:1416` (unaliased scenario key flips nothing) |
+| R3 | MET | `(cd packages/app && bun test tests/services/task-record.test.ts)` → 99 pass / 0 fail; three new-behavior cases fail against `git show HEAD:packages/app/src/services/task-record.ts` |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:766` record ticks `AC1 — R3 — …` from a `R3 — …` row with no manual tick and leaves task R3 unticked |
+| AC2 | MET | test | `packages/app/tests/services/task-record.test.ts:1425`, `packages/app/tests/services/task-record.test.ts:1416` |
+| AC3 | MET | test | `packages/app/tests/services/task-record.test.ts:1395`, `packages/app/tests/services/task-record.test.ts:1407`; 99 pass / 0 fail; full gate in the task report |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | spur task check | — | task check passed |
+| P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
+| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=2 |
 
 ### References
 
@@ -109,3 +139,8 @@ Observed on 0968 (feature G67) and 0969 (feature H21): the record-stage residual
 - Related tasks: 0692 (verdict-driven checkbox auto-flip, feature F94), 0956 (D64 scenario-key verdict evidence), 0968 (G67) and 0969 (H21) where the conflict was observed
 
 ### History
+
+- 2026-09-28T23:40:59.022Z todo → wip (system)
+- 2026-09-28T23:47:06.283Z wip → testing (system)
+- 2026-09-28T23:47:06.815Z testing → done (system)
+

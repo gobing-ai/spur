@@ -125,6 +125,9 @@ scenario's normalized title or its `AC-N` ordinal alias. Such a row therefore ca
 while crediting no scenario, and the feature's `verifying → done` gate denies with
 `L4.scenario-unverified` / `L4.verdict-rows-match-no-scenario`. When the task has a linked feature,
 key each AC row `AC-N` (1-based scenario ordinal, hyphenated) or by the exact scenario title.
+A scenario-keyed row (`R3 — <title>`) ticks the task AC box whose line aliases that scenario
+(`- [ ] AC1 — R3 — <title>`) during `spur task record` (0996); a scenario key no AC line aliases
+ticks nothing, so alias every graduated scenario on its AC line.
 
 **Concrete anchors only (task 0804 R9).** An evidence anchor must be a concrete existing `file:line`
 (or `file:start-end`) path. A glob or directory summary (`src/services/*.ts`, `the retry
