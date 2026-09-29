@@ -72,16 +72,15 @@ Entered before `task-pipeline.yaml` `precheck` state runs `spur task check <wbs>
 - [ ] The `## Plan` section is an ordered checklist (not prose).
 - [ ] The `## Design` section, if present, does not contradict the parent feature's design.
 - [ ] No `TODO`, `TBD`, or `???` placeholders in Requirements, AC, Design, or Plan.
-- [ ] The evidence-channel precheck (0726 R2) status file is consulted by the
-      pipeline guard: `plugins/sp/scripts/task-evidence-precheck.ts` parses the task
-      content for an exact `evidence-channel: history_tool_call.args_raw[pi]`
+- [ ] The evidence-channel precheck (0726 R2, folded into the pipeline guard by 1002) is
+      enforced by `spur task check <wbs> --precheck` — the guard command itself. It parses the
+      task content for an exact `evidence-channel: history_tool_call.args_raw[pi]`
       declaration and, when present, counts live pi rows with `args_raw` on
-      `.spur/spur.db` via bun:sqlite. Tasks without a declaration pass without opening
-      SQLite; unknown declarations, a missing database/table, and a zero count write
-      FAIL. Both precheck guard conjuncts (`precheck-size.status` and
-      `precheck-evidence.status`) must read PASS — tasks declaring a live-data
-      evidence channel must import real history (safe importer, non-dry-run) before
-      implementation begins.
+      `.spur/spur.db` via the domain read (fail-closed: unknown declarations, a missing
+      database/table, and a zero count error). Tasks without a declaration pass without
+      opening the database; size limits (10 R-items / 16 plan items) are checked in the
+      same call. Tasks declaring a live-data evidence channel must import real history
+      (safe importer, non-dry-run) before implementation begins.
 
 ## review gate
 

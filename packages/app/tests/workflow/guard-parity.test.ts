@@ -97,12 +97,6 @@ const FILES: Array<{ key: string; path: string; values: string[] }> = [
         values: ['{"value":"stop"}\n', '{"value":"retryable"}\n', '{"value":"fix"}\n', 'not-json\n'],
     },
     { key: 'verdict.json', path: `.spur/run/${WBS}-verdict.json`, values: verdictVariants() },
-    { key: 'precheck-size.status', path: `.spur/run/${WBS}-precheck-size.status`, values: ['PASS\n', 'FAIL\n'] },
-    {
-        key: 'precheck-evidence.status',
-        path: `.spur/run/${WBS}-precheck-evidence.status`,
-        values: ['PASS\n', 'FAIL\n'],
-    },
 ];
 
 function verdictVariants(): string[] {

@@ -143,19 +143,19 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(yaml.initialState).toBe('precheck');
     });
 
-    test('R1: precheck→implement is guarded by size status + `task check`, with fail-closed fall-through', () => {
+    test('R1: precheck→implement is guarded by `task check --precheck`, with fail-closed fall-through', () => {
         const toImpl = yaml.transitions.find((t) => t.from === 'precheck' && t.to === 'implement');
         expect(toImpl?.guard?.kind).toBe('shell');
-        // Deterministic size status file + task check.
-        // Guard command must reference a task check — whether literal `spur` or
-        // `${vars.spurBin}` (ADR-026 PATH-independent spur invocation).
+        // 1002 R4: one guard command — `task check --precheck` carries the size and
+        // evidence-channel gates inline (no status files). Whether literal `spur` or
+        // `$spurBin` (ADR-026 PATH-independent spur invocation).
         const passCmd = String(toImpl?.guard?.options?.command ?? '');
         expect(passCmd).toMatch(/task check/);
-        expect(passCmd).toMatch(/precheck-size\.status/);
+        expect(passCmd).toMatch(/--precheck/);
         expect(passCmd).not.toMatch(/precheck-doctor\.status/);
         // Declaration order: PASS first, then fail-closed `always` fall-through (soft probe
-        // pattern — size FAIL and/or task check red both land on `failed` without inverted
-        // shell guards that race set -e). `always` is safe only AFTER the PASS guard.
+        // pattern — precheck FAIL lands on `failed` without inverted shell guards that race
+        // set -e). `always` is safe only AFTER the PASS guard.
         const idxPass = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'implement');
         const idxFail = yaml.transitions.findIndex((t) => t.from === 'precheck' && t.to === 'failed');
         expect(idxFail).toBeGreaterThan(idxPass);
@@ -259,11 +259,11 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
 
     test('R2 (task 0482): every `bun plugins/sp/scripts/...` step passes --spur-bin so spur resolves regardless of shell PATH', () => {
         // Regression for 0471's double precheck FAIL (`could not fetch task 0471 via spur`):
-        // task-size-precheck.ts already honors `--spur-bin` / `SPUR_BIN`, but the workflow
-        // invoked it without either, so the workflow shell (`/bin/sh -c`, no user PATH)
-        // could not resolve bare `spur`. Sibling steps (doctor, feature-sync) already pass
-        // `$spurBin`. Guard: any shell step that shells spur through a bundled script must
-        // hand it the resolved binary.
+        // the precheck shell could not resolve bare `spur`, so the workflow invoked a
+        // bundled checker without `--spur-bin` / `SPUR_BIN` and the shell (`/bin/sh -c`, no
+        // user PATH) failed the fetch. Sibling steps (doctor, feature-sync) pass `$spurBin`.
+        // Guard: any shell step that shells spur through a bundled script must hand it the
+        // resolved binary.
         const allCmds = yaml.states
             .flatMap((s) => s.onEnter ?? [])
             .filter((a) => a.kind === 'shell')

@@ -964,6 +964,96 @@ describe('spur task CLI', () => {
         expect(output.messages.join('')).toMatch(/\d{4}/);
     });
 
+    // ── check --precheck (1002 R1) ──
+
+    test('check --precheck fails a task over the size limits (exit 1, precheck-size code)', async () => {
+        // 11 R-items and 17 plan items exceed DEFAULT_TASK_SIZE_LIMITS (10/16).
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Too big for precheck'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const reqBody = join(cwd, `req-${wbs}.md`);
+        await Bun.write(reqBody, Array.from({ length: 11 }, (_, i) => `- R${i + 1}. Requirement ${i + 1}.`).join('\n'));
+        await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const acBody = join(cwd, `ac-${wbs}.md`);
+        await Bun.write(acBody, '- [ ] Given a task / When checked / Then it is measured.\n');
+        await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const planBody = join(cwd, `plan-${wbs}.md`);
+        await Bun.write(planBody, Array.from({ length: 17 }, (_, i) => `- [ ] Step ${i + 1}.`).join('\n'));
+        await main(['task', 'update', wbs, '--section', 'Plan', '--from-file', planBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+
+        // Without --precheck the plain four-layer check stays clean.
+        const plain = createCapturedOutput();
+        const plainExit = await main(['task', 'check', wbs, '--json'], { cwd, output: plain });
+        expect(plainExit).toBe(0);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs, '--precheck', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lastMessage(output));
+        const codes = (parsed[0].findings as { code: string }[]).map((f) => f.code);
+        expect(codes).toContain('precheck-size');
+        // No evidence declaration on this task — the evidence precheck passed silently.
+        expect(codes).not.toContain('precheck-evidence');
+    });
+
+    test('check --precheck rejects --corpus and a missing WBS (exit 2)', async () => {
+        const corpus = createCapturedOutput();
+        const corpusExit = await main(['task', 'check', '--precheck', '--corpus'], { cwd, output: corpus });
+        expect(corpusExit).toBe(2);
+        expect(corpus.errors.join('\n')).toContain('--precheck requires a <wbs> argument');
+
+        const bare = createCapturedOutput();
+        const bareExit = await main(['task', 'check', '--precheck'], { cwd, output: bare });
+        expect(bareExit).toBe(2);
+        expect(bare.errors.join('\n')).toContain('--precheck requires a <wbs> argument');
+    });
+
+    test('check --precheck fails closed on an unknown evidence-channel declaration (exit 1)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Unknown evidence channel'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const reqBody = join(cwd, `req-${wbs}.md`);
+        await Bun.write(reqBody, 'R1. Real requirement.\n');
+        await main(['task', 'update', wbs, '--section', 'Requirements', '--from-file', reqBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const acBody = join(cwd, `ac-${wbs}.md`);
+        await Bun.write(acBody, '- [ ] Given / When / Then.\n');
+        await main(['task', 'update', wbs, '--section', 'Acceptance Criteria', '--from-file', acBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const planBody = join(cwd, `plan-${wbs}.md`);
+        await Bun.write(planBody, '- [ ] Step 1.\n');
+        await main(['task', 'update', wbs, '--section', 'Plan', '--from-file', planBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+        const designBody = join(cwd, `design-${wbs}.md`);
+        await Bun.write(designBody, 'evidence-channel: not.a.real.channel[x]\n');
+        await main(['task', 'update', wbs, '--section', 'Design', '--from-file', designBody], {
+            cwd,
+            output: createCapturedOutput(),
+        });
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs, '--precheck', '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lastMessage(output));
+        const codes = (parsed[0].findings as { code: string }[]).map((f) => f.code);
+        expect(codes).toContain('precheck-evidence');
+    });
+
     test('check with unknown WBS prints error and exits 1', async () => {
         const output = createCapturedOutput();
         const exitCode = await main(['task', 'check', '9999'], { cwd, output });

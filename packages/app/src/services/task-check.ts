@@ -28,7 +28,9 @@ import {
     type Severity,
 } from './planning-check-base';
 import { applyStructuralRepairs, type StructuralRepair } from './structural-repair';
+import { evaluateTaskEvidence, type TaskEvidenceDeps } from './task-evidence-precheck';
 import { TaskLocator } from './task-locator';
+import { evaluateTaskSize } from './task-size-precheck';
 import { readVerifyVerdict } from './verify-verdict';
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -518,6 +520,19 @@ export class TaskCheckService extends PlanningCheckService {
             accepted?: ReadonlyMap<string, CorpusSeverity>;
             /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
             fix?: boolean;
+            /**
+             * Implement-readiness prechecks (1002 R1): evaluate the size limits and the
+             * evidence-channel rule on top of the four-layer check; failures are error
+             * findings (codes `precheck-size` / `precheck-evidence`, unsuppressible).
+             * Absent → the plain four-layer check, byte-for-byte unchanged.
+             */
+            precheck?: boolean;
+            /**
+             * Evidence DB counter (1002 R3): the caller (CLI) injects it because domain is
+             * the sole ts-db consumer. Required when `precheck` is set; a missing counter
+             * fails closed (null → error finding).
+             */
+            countArgsRaw?: (source: string) => Promise<number | null>;
         },
     ): Promise<CheckResult> {
         const strict = options?.strict === true;
@@ -584,6 +599,34 @@ export class TaskCheckService extends PlanningCheckService {
         // Terminal tasks are completion records, not readiness candidates.
         if (effectiveStatus !== 'done' && effectiveStatus !== 'cancelled') {
             await this.runL4Readiness(doc, fm, wbs, effectiveStatus, findings, tasksDir);
+        }
+
+        // ── Implement-readiness prechecks (1002 R1): size limits + evidence channel.
+        // Only under `--precheck`; evaluated on the body WITHOUT frontmatter, matching the
+        // deleted plugin scripts that counted `task show --json` content.
+        if (options?.precheck === true) {
+            const size = evaluateTaskSize(doc.bodyWithoutFrontmatter);
+            for (const reason of size.reasons) {
+                findings.push({
+                    layer: 'L4',
+                    code: FINDING_CODES.PRECHECK_SIZE,
+                    severity: 'error',
+                    section: '',
+                    message: reason,
+                });
+            }
+            // No counter injected → fail closed (1002 R1).
+            const deps: TaskEvidenceDeps = { countArgsRaw: options.countArgsRaw ?? (async () => null) };
+            const evidence = await evaluateTaskEvidence(doc.bodyWithoutFrontmatter, deps);
+            for (const reason of evidence.reasons) {
+                findings.push({
+                    layer: 'L4',
+                    code: FINDING_CODES.PRECHECK_EVIDENCE,
+                    severity: 'error',
+                    section: '',
+                    message: reason,
+                });
+            }
         }
 
         return {

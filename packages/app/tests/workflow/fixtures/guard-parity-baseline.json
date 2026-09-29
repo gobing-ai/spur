@@ -4,7 +4,7 @@
             "from": "precheck",
             "to": "implement",
             "kind": "shell",
-            "command": "size_status=\"$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)\"; evidence_status=\"$(cat .spur/run/$wbs-precheck-evidence.status 2>/dev/null)\"; test \"$size_status\" = PASS && test \"$evidence_status\" = PASS && $spurBin task check $wbs"
+            "command": "$spurBin task check $wbs --precheck"
         },
         {
             "from": "precheck",

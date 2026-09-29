@@ -163,12 +163,6 @@ vars:
     # anchors directly in the /sp:dev-fixall input, so the fix agent starts AT the failing
     # file:line instead of re-deriving it from a fresh gate run (0482 R3).
     gateFindings: ""
-    # Max R-items in ## Requirements before size precheck fails (R2, task 0454).
-    # Override with `--vars '{"maxImplementReqs":"20"}'`.
-    maxImplementReqs: "10"
-    # Max checklist items under ## Plan before size precheck fails (R2, task 0454).
-    # Override with `--vars '{"maxImplementPlanItems":"32"}'`.
-    maxImplementPlanItems: "16"
     # Diff-scope guard on the implement hop (R1, task 0487). When the target task
     # body backticks at least one path, non-corpus changes outside those paths
     # fail the step by name. New files beside a declared file are allowed. Empty
@@ -210,16 +204,6 @@ states:
             options:
                 command: >-
                     [ "$profile" = auto ] || exit 0; FID=$($spurBin task show $wbs --json 2>/dev/null | jq -r '.feature_id // .frontmatter.feature_id // empty' 2>/dev/null); [ -z "$FID" ] || $spurBin feature sync "$FID" --force 2>/dev/null || $spurBin feature update "$FID" active 2>/dev/null || { echo "precheck: FAIL - feature reactivation $FID failed — feature sync + feature update both errored" >&2; exit 1; }; exit 0
-          # (d) task-size-precheck.ts owns the check; shell only resolves it and fails closed (0454 R2 / 0723 R2).
-          - kind: shell
-            options:
-                command: >-
-                    mkdir -p .spur/run; S=plugins/sp/scripts/task-size-precheck.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp task-size-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin" --max-reqs "$maxImplementReqs" --max-plan-items "$maxImplementPlanItems"; else echo "task-size-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-size.status"; fi; exit 0
-          # (d) task-evidence-precheck.ts owns the check; shell only resolves it and fails closed (0726 R2).
-          - kind: shell
-            options:
-                command: >-
-                    mkdir -p .spur/run; S=plugins/sp/scripts/task-evidence-precheck.ts; [ -f config/plugin-scripts.json -a -f "$S" ] || S="$(superskill script path sp task-evidence-precheck.ts 2>/dev/null)"; if [ -f "$S" ]; then bun "$S" "$wbs" --spur-bin "$spurBin"; else echo "task-evidence-precheck failed closed — checker not found in plugins/sp/scripts/ nor staged — run 'superskill install sp --marketplace gobing-ai/spur'." >&2; echo "FAIL" > ".spur/run/$wbs-precheck-evidence.status"; fi; exit 0
           # (e) F96 R1 (0950): capture the run's base commit once — a resumed or re-entered run
           # keeps its original base so residual scans stay anchored to the same diff.
           - kind: shell
@@ -886,18 +870,16 @@ states:
       description: Terminal — pipeline cancelled by operator at the approval gate (R1).
 
 transitions:
-    # ── precheck: size PASS + task check → implement; else → failed ──
+    # ── precheck: task check --precheck (size + evidence + four-layer, 1002 R4) → implement; ──
+    # else → failed. The flag folds the two deleted precheck scripts into one fail-closed
+    # guard: any size/evidence/structural error exits 1 and the fallback edge terminates.
     - from: precheck
       to: implement
       description: Deterministic size, evidence, and task checks are green — begin implementation.
-      # (warn) 5 commands: named size/evidence status reads + task check (legibility, 0874).
       guard:
           kind: shell
           options:
-              command: >-
-                  size_status="$(cat .spur/run/$wbs-precheck-size.status 2>/dev/null)";
-                  evidence_status="$(cat .spur/run/$wbs-precheck-evidence.status 2>/dev/null)";
-                  test "$size_status" = PASS && test "$evidence_status" = PASS && $spurBin task check $wbs
+              command: '$spurBin task check $wbs --precheck'
     - from: precheck
       to: failed
       terminalReason: failed-check

@@ -407,12 +407,7 @@ export function parseVerdict(json: string): string | null {
 }
 
 /** Gate outcome artifacts the pipeline writes per task, in pipeline order. */
-const GATE_FILES = [
-    '{wbs}-precheck-doctor.status',
-    '{wbs}-precheck-size.status',
-    '{wbs}-test-gate.status',
-    '{wbs}-verdict.json',
-];
+const GATE_FILES = ['{wbs}-precheck-doctor.status', '{wbs}-test-gate.status', '{wbs}-verdict.json'];
 
 export async function readGateOutcomes(wbs: string, runDir = join(REPO_ROOT, '.spur/run')): Promise<string[]> {
     const out: string[] = [];

@@ -54,14 +54,6 @@
             "reason": "Keep (glue over capture file; budget exemption) (plan §2)",
             "exempt": true
         },
-        "plugins/sp/scripts/task-size-precheck.ts": {
-            "kinds": [],
-            "reason": "Move→CLI: spur task check --precheck (C1); delete, W2 (plan §2)"
-        },
-        "plugins/sp/scripts/task-evidence-precheck.ts": {
-            "kinds": ["db-import"],
-            "reason": "Move→CLI: spur task check --precheck (C1); delete, W2 (plan §2)"
-        },
         "plugins/sp/scripts/idea-coverage-check.ts": {
             "kinds": [],
             "reason": "Move→CLI: spur feature check --inventory (C3); delete, W2 (plan §2)"

@@ -133,12 +133,10 @@ describe('0503 task-pipeline resilience', () => {
         expect(Object.keys(probe?.roles ?? {}).sort()).toEqual(['coder', 'reviewer']);
         expect(probe?.resultFile).toContain('.spur/run/');
         expect(commands.join('\n')).not.toContain('agent doctor');
-        const size = commandFor('precheck', 3);
-        expect(size).toContain('task-size-precheck.ts');
-        expect(size).not.toContain('--executor');
-        // Fail closed: the missing-checker fallback writes FAIL, never PASS.
-        expect(size).toContain('"FAIL"');
-        expect(size).not.toContain('skipped');
+        // 1002 R4: the size/evidence prechecks fold into the precheck→implement guard as one
+        // `task check --precheck` call — no script invocation and no status-file reads remain.
+        expect(commands.join('\n')).not.toContain('precheck-size');
+        expect(commands.join('\n')).not.toContain('precheck-evidence');
         // Feature reactivation surfaces failure instead of swallowing it (no `|| true`).
         expect(commandFor('precheck', 2)).not.toContain('|| true');
     });
@@ -164,55 +162,6 @@ describe('0503 task-pipeline resilience', () => {
             });
             expect(result.exitCode).toBe(0);
             expect(readFileSync(ran, 'utf8')).toBe('node\n');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('precheck size gate fails closed when the checker script is absent (0723 R2)', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0723-nosize-'));
-        try {
-            // Absent means unresolvable on BOTH branches: no repo-relative copy AND
-            // no staged copy. The stub mimics `superskill script path` on an
-            // unstaged script (stderr + exit 2), so the gate must write FAIL.
-            const bin = join(dir, 'bin');
-            mkdirSync(bin, { recursive: true });
-            executable(bin, 'superskill', 'echo "Script not found" >&2; exit 2');
-            const command = commandFor('precheck', 3);
-            const result = runShell(command, dir, {
-                wbs: '0723',
-                spurBin: 'spur',
-                PATH: `${bin}:${getEnvVar('PATH') ?? ''}`,
-            });
-            expect(result.exitCode).toBe(0);
-            expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('FAIL\n');
-            expect(result.output).toContain('failed closed');
-        } finally {
-            rmSync(dir, { recursive: true, force: true });
-        }
-    });
-
-    test('precheck size gate runs the checker exactly once and carries PASS through (0723 R2)', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'spur-0723-size-'));
-        try {
-            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
-            // 0960: the project-first probe is gated on the source-repo marker.
-            mkdirSync(join(dir, 'config'), { recursive: true });
-            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
-            const counter = join(dir, 'size-counter');
-            writeFileSync(
-                join(dir, 'plugins', 'sp', 'scripts', 'task-size-precheck.ts'),
-                `#!/usr/bin/env bun
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-appendFileSync(process.argv[2] === "0723" ? "${counter}" : "/dev/null", "x\\n");
-mkdirSync(".spur/run", { recursive: true });
-writeFileSync(".spur/run/" + process.argv[2] + "-precheck-size.status", "PASS\\n");
-`,
-            );
-            const result = runShell(commandFor('precheck', 3), dir, { wbs: '0723', spurBin: 'spur' });
-            expect(result.exitCode).toBe(0);
-            expect(readFileSync(counter, 'utf8').split('\n').filter(Boolean).length).toBe(1);
-            expect(readFileSync(join(dir, '.spur/run/0723-precheck-size.status'), 'utf8')).toBe('PASS\n');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

@@ -238,14 +238,8 @@ function runInlineSmoke(
             }
             if (action.kind === 'shell') {
                 let command = expand(action.options?.command ?? '', vars);
-                if (command.includes('task-size-precheck.ts')) {
-                    command = 'mkdir -p .spur/run && printf "PASS\\n" > ".spur/run/$wbs-precheck-size.status"';
-                }
-                // 0726 R2: evidence precheck ships with the plugin; the smoke simulates its
-                // PASS outcome exactly like the size precheck above.
-                if (command.includes('task-evidence-precheck.ts')) {
-                    command = 'mkdir -p .spur/run && printf "PASS\\n" > ".spur/run/$wbs-precheck-evidence.status"';
-                }
+                // 1002 R4: the precheck→implement guard is `$spurBin task check $wbs --precheck`;
+                // the fake spur handles `task check` (exit 0), so no status-file simulation remains.
                 // 0726 R3: lint semantics live in verify-answer-lint.test.ts; the smoke keeps
                 // only the file-must-exist coupling of the gate step.
                 if (command.includes('verify-answer-lint.ts')) {

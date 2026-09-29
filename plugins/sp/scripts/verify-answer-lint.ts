@@ -34,7 +34,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getEnvVar } from '../lib/env';
 
-// ─── CLI (same spur-bin chain as task-evidence-precheck.ts) ─────────────────
+// ─── CLI (same spur-bin chain as the other precheck scripts) ─────────────────
 
 function usage(): never {
     console.error('Usage: bun plugins/sp/scripts/verify-answer-lint.ts <wbs> --answer <path> [--spur-bin <path>]');

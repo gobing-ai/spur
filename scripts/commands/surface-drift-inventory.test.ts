@@ -372,31 +372,24 @@ describe('sweepHooks — hook contract against the real plugin tree', () => {
 // ─── executeScripts (fake bins — deterministic) ──────────────────────────
 
 describe('executeScripts — spur-shelling scripts against fake bins', () => {
-    test('both scripts exit as expected against their fake bins', () => {
+    test('the remaining spur-shelling script exits as expected against its fake bin', () => {
         const before = rows.length;
         executeScripts();
         const added = rows.slice(before);
 
-        const precheck = added.find((r) => r.asserted.startsWith('task-size-precheck'));
-        expect(precheck?.method).toBe('script-exec(fake-bin)');
-        expect(precheck?.status).toBe('ok');
-        expect(precheck?.actual).toContain('PASS');
-
         const sync = added.find((r) => r.asserted.startsWith('feature-sync-bounded'));
         expect(sync?.method).toBe('script-exec(fake-bin)');
         expect(sync?.status).toBe('ok');
-    }, 60_000); // two real bun spawns of the plugin scripts
+    }, 60_000); // one real bun spawn of the plugin script
 
-    test('a script that cannot run is drift for the precheck and unverified for the sync', () => {
-        // Asymmetric by design: task-size-precheck's argv contract is fully exercised by the
-        // fake bin, so a failure there is real drift; feature-sync-bounded's fake-bin run is a
-        // best-effort extra on top of argv extraction, so it degrades to unverified instead of
-        // manufacturing a mismatch. Row isolation keeps the passing rows above intact.
+    test('a script that cannot run is unverified for the sync', () => {
+        // feature-sync-bounded's fake-bin run is a best-effort extra on top of argv
+        // extraction, so a failure degrades to unverified instead of manufacturing a
+        // mismatch. Row isolation keeps the passing rows above intact.
         const dir = mkdtempSync(join(tmpdir(), 'spur-noscripts-'));
         const saved = rows.splice(0, rows.length);
         try {
-            executeScripts(dir); // no scripts/ here — both spawns fail
-            expect(rowFor('task-size-precheck --spur-bin <bin> (executed)')?.status).toBe('mismatch');
+            executeScripts(dir); // no scripts/ here — the spawn fails
             expect(rowFor('feature-sync-bounded --feature <id> --spur-bin <bin> (executed)')?.status).toBe(
                 'unverified',
             );
@@ -746,7 +739,6 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
 
     test('the fields the plugin scripts depend on are confirmed against the captured envelope', () => {
         // feature-sync-bounded reads a bare task-list array, asserted in script code.
-        // (task-size-precheck stopped reading doctor's capabilityTier in 0723 — count-only.)
         expect(rows.find((r) => r.asserted.includes('bare array'))?.status).toBe('ok');
         // Launching a real coding agent is not mechanically reachable — recorded, never passed.
         expect(rows.find((r) => r.asserted.includes('roleOrigin'))?.status).toBe('unverified');
@@ -764,7 +756,6 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
     });
 
     test('a field that vanishes from the envelope is drift, and a failed probe is not a pass', () => {
-        // 0723: task-size-precheck stopped reading doctor's capabilityTier — the row is gone.
         expect(rows.find((r) => r.asserted.includes('capabilityTier'))).toBeUndefined();
         // Same second probe run: task list exited non-zero — a failed probe is not a pass.
         expect(rows.find((r) => r.asserted.includes('bare array'))?.status).toBe('mismatch');

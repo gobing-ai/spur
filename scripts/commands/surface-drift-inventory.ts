@@ -529,40 +529,6 @@ export function sweepScriptArgv(root: string = PLUGIN_ROOT): void {
 export function executeScripts(root: string = PLUGIN_ROOT): void {
     const dir = mkdtempSync(join(tmpdir(), 'spur-drift-'));
     try {
-        // task-size-precheck against a fake bin — argument construction under execution.
-        const fake = join(dir, 'spur');
-        writeFileSync(
-            fake,
-            `#!/bin/sh
-printf '%s' '{"content":"### Requirements\\n- [ ] R1. x\\n### Plan\\n- [ ] p1"}'
-`,
-        );
-        chmodSync(fake, 0o755);
-        const statusPath = join(dir, '.spur', 'run', '0487-precheck-size.status');
-        try {
-            execFileSync(
-                process.execPath,
-                [join(root, 'scripts', 'task-size-precheck.ts'), '0487', '--spur-bin', fake],
-                { cwd: dir, encoding: 'utf8', timeout: 30_000, stdio: 'pipe' },
-            );
-            const content = readFileSync(statusPath, 'utf8');
-            record(
-                'task-size-precheck --spur-bin <bin> (executed)',
-                'script-exec(fake-bin)',
-                content.trim() === 'PASS' ? 'ok' : 'mismatch',
-                `status file: ${content.trim()}`,
-                { file: 'plugins/sp/scripts/task-size-precheck.ts', line: 1 },
-            );
-        } catch (e) {
-            record(
-                'task-size-precheck --spur-bin <bin> (executed)',
-                'script-exec(fake-bin)',
-                'mismatch',
-                `script exited non-zero: ${String(e).slice(0, 200)}`,
-                { file: 'plugins/sp/scripts/task-size-precheck.ts', line: 1 },
-            );
-        }
-
         // feature-sync-bounded against a fake bin — feature show / task list / feature sync argv.
         const fake2 = join(dir, 'spur2');
         writeFileSync(

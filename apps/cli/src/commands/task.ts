@@ -43,6 +43,7 @@ import {
 import { AGENT_ID_REGEX } from '@gobing-ai/spur-config';
 import { bundledConfigRoot } from '@gobing-ai/spur-config/loader';
 import {
+    countToolCallArgsRaw,
     extractTemplateBodies,
     normalizeTaskStatus,
     TASK_STATUSES,
@@ -1388,6 +1389,10 @@ export function registerTaskCommand(program: Command, context: CliContext): void
         .summary('Validate a task file through the four-layer check (design §3).')
         .argument('[wbs]', 'Task WBS number (validates all tasks in the folder when omitted)')
         .option('--corpus', 'Explicit unsuppressed audit of active tasks and features; warnings are advisory')
+        .option(
+            '--precheck',
+            'Also run the implement-readiness prechecks (size, evidence channel); failures are errors.',
+        )
         .option('--since <ref>', 'Scope the corpus fog comparison to changes since a git ref (requires --corpus)')
         .option(...SHARED_OPTIONS.strictTaskAll)
         .option(
@@ -1410,6 +1415,18 @@ export function registerTaskCommand(program: Command, context: CliContext): void
             // the default severity computation (no blanket elevation). The flag
             // exists so the testing→done lifecycle guard has a real, stable verb.
             const strict = options.strict === true;
+            // 1002 R1: the prechecks gate ONE task's readiness — they need a WBS and are
+            // meaningless for the corpus fog audit.
+            if (options.precheck === true && (options.corpus || !wbs)) {
+                writeJsonError(
+                    context.output,
+                    options,
+                    '--precheck requires a <wbs> argument and cannot be combined with --corpus',
+                    'VALIDATION_FAILED',
+                );
+                context.setExitCode(2);
+                return;
+            }
             if (
                 (options.since !== undefined && !options.corpus) ||
                 (options.corpus &&
@@ -1511,6 +1528,20 @@ export function registerTaskCommand(program: Command, context: CliContext): void
                             asStatus,
                             severityOverrides: planningFolders.severityOverrides,
                             fix: options.fix === true,
+                            ...(options.precheck === true
+                                ? {
+                                      precheck: true,
+                                      // 1002 R3: the domain reader owns the SQL; reader errors
+                                      // (missing DB/table) become null → fail closed.
+                                      countArgsRaw: async (source: string) => {
+                                          try {
+                                              return await countToolCallArgsRaw(await context.getDb(), source);
+                                          } catch {
+                                              return null;
+                                          }
+                                      },
+                                  }
+                                : {}),
                         });
                         results.push(result);
                         printResult(result);
