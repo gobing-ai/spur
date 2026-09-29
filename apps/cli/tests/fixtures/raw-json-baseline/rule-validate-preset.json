@@ -2,7 +2,7 @@
   "valid": true,
   "kind": "preset",
   "source": "recommended-pre-check",
-  "ruleCount": 49,
+  "ruleCount": 50,
   "rules": [
     "cli-json-output",
     "cli-register-pattern",
@@ -48,6 +48,7 @@
     "sp-no-vendor-refs",
     "sp-plugin-standalone",
     "sp-runtime-path",
+    "sp-script-placement",
     "spur-config-loader-only-at-composition-roots",
     "structured-config-loader-only-in-config",
     "tables-via-defineTable",

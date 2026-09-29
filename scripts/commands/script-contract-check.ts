@@ -10,10 +10,15 @@
  * 4. No shipped surface (commands/, skills/, agents/, README.md) may reference 'bun plugins/sp/scripts/'.
  *
  * Usage:
- *   bun plugins/sp/scripts/script-contract-check.ts
+ *   bun scripts/commands/script-contract-check.ts
  *     [--manifest <path>]     default: config/plugin-scripts.json
  *     [--scripts-dir <path>]  default: plugins/sp/scripts
  *     [--plugin-dir <path>]   default: plugins/sp
+ *
+ * Placement scan (ADR-130, task 1000) — plugins/sp script placement contract only:
+ *   bun scripts/commands/script-contract-check.ts --placement-only
+ *     [--baseline <path>]     default: config/script-placement-baseline.json
+ *     [--repo-root <dir>]     default: . (fixture tests point this at a temp tree)
  *
  * Exit code: 0 on success, 1 on any violation.
  */
@@ -55,17 +60,26 @@ export function parseArgs(argv: string[]): {
     manifest: string;
     scriptsDir: string;
     pluginDir: string;
+    placementOnly: boolean;
+    baseline: string;
+    repoRoot: string;
     cwd: string;
 } {
     let manifest = 'config/plugin-scripts.json';
     let scriptsDir = 'plugins/sp/scripts';
     let pluginDir = 'plugins/sp';
+    let placementOnly = false;
+    let baseline = 'config/script-placement-baseline.json';
+    let repoRoot = '.';
     for (let i = 0; i < argv.length; i++) {
         if (argv[i] === '--manifest') manifest = argv[++i] ?? manifest;
         else if (argv[i] === '--scripts-dir') scriptsDir = argv[++i] ?? scriptsDir;
         else if (argv[i] === '--plugin-dir') pluginDir = argv[++i] ?? pluginDir;
+        else if (argv[i] === '--placement-only') placementOnly = true;
+        else if (argv[i] === '--baseline') baseline = argv[++i] ?? baseline;
+        else if (argv[i] === '--repo-root') repoRoot = argv[++i] ?? repoRoot;
     }
-    return { manifest, scriptsDir, pluginDir, cwd: process.cwd() };
+    return { manifest, scriptsDir, pluginDir, placementOnly, baseline, repoRoot, cwd: process.cwd() };
 }
 
 export function loadManifest(path: string): { manifest: ScriptManifest | null; error: string | null } {
@@ -470,8 +484,152 @@ export function validateContract(
     return violations;
 }
 
+// ---- Placement scan (ADR-130, task 1000): W0 placement-contract enforcement ----
+
+export const GLUE_BUDGET_LINES = 250;
+
+export type PlacementFindingKind = 'budget' | 'db-import' | 'corpus-parse' | 'noun-clash' | 'stale-baseline';
+
+export interface PlacementFinding {
+    file: string;
+    kind: PlacementFindingKind;
+    detail: string;
+}
+
+export interface PlacementBaselineEntry {
+    kinds: string[];
+    reason?: string;
+    exempt?: boolean;
+}
+
+export interface PlacementBaseline {
+    schemaVersion: number;
+    entries: Record<string, PlacementBaselineEntry>;
+}
+
+export function loadPlacementBaseline(path: string): { baseline: PlacementBaseline | null; error: string | null } {
+    if (!existsSync(path)) return { baseline: null, error: `baseline not found: ${path}` };
+    try {
+        const parsed = JSON.parse(readFileSync(path, 'utf8')) as PlacementBaseline;
+        if (
+            typeof parsed !== 'object' ||
+            parsed === null ||
+            typeof parsed.entries !== 'object' ||
+            parsed.entries === null
+        ) {
+            return { baseline: null, error: `malformed baseline (missing entries object): ${path}` };
+        }
+        return { baseline: parsed, error: null };
+    } catch (error) {
+        return { baseline: null, error: `unreadable baseline: ${(error as Error).message}` };
+    }
+}
+
+function placementLineCount(content: string): number {
+    const lines = content.split('\n');
+    if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+    return lines.length;
+}
+
+// ponytail: single line-shape regex; a value-import spread across statements in one
+// expression is not a real pattern. Widen only if a false negative is reported.
+const DB_IMPORT_RE = /import\s+(?!type\b)[^;]*?from\s+['"](bun:sqlite|drizzle-orm(?:\/[\w.-]+)?)['"]/;
+
+function collectPlacementTsFiles(dir: string, out: string[] = []): string[] {
+    if (!existsSync(dir)) return out;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const abs = join(dir, entry.name);
+        if (entry.isDirectory()) collectPlacementTsFiles(abs, out);
+        else if (entry.isFile() && entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) out.push(abs);
+    }
+    return out;
+}
+
+export function checkPlacement(opts: { repoRoot: string; baselinePath: string }): PlacementFinding[] {
+    const root = resolve(opts.repoRoot);
+    const findings: PlacementFinding[] = [];
+    const produced = new Map<string, Set<PlacementFindingKind>>();
+    const record = (file: string, kind: PlacementFindingKind, detail: string): void => {
+        findings.push({ file, kind, detail });
+        let kinds = produced.get(file);
+        if (!kinds) {
+            kinds = new Set<PlacementFindingKind>();
+            produced.set(file, kinds);
+        }
+        kinds.add(kind);
+    };
+
+    const cliCommandsDir = join(root, 'apps', 'cli', 'src', 'commands');
+    const cliCommandNames = existsSync(cliCommandsDir)
+        ? new Set(readdirSync(cliCommandsDir).filter((f) => f.endsWith('.ts')))
+        : new Set<string>();
+    const repoCommandsDir = join(root, 'scripts', 'commands');
+    if (existsSync(repoCommandsDir)) {
+        for (const name of readdirSync(repoCommandsDir)) {
+            if (!name.endsWith('.ts') || name.endsWith('.test.ts')) continue;
+            if (cliCommandNames.has(name)) {
+                record(
+                    join('scripts/commands', name),
+                    'noun-clash',
+                    `basename clashes with public CLI command apps/cli/src/commands/${name}`,
+                );
+            }
+        }
+    }
+
+    for (const dir of [join(root, 'plugins', 'sp', 'scripts'), join(root, 'plugins', 'sp', 'hooks')]) {
+        for (const abs of collectPlacementTsFiles(dir)) {
+            const rel = abs.slice(root.length + 1);
+            const content = readFileSync(abs, 'utf8');
+            const lines = placementLineCount(content);
+            if (lines > GLUE_BUDGET_LINES) record(rel, 'budget', `${lines} lines > budget ${GLUE_BUDGET_LINES}`);
+            const dbImport = DB_IMPORT_RE.exec(content);
+            if (dbImport) record(rel, 'db-import', `value-import of ${dbImport[1]}`);
+            if (content.includes('docs/tasks') || content.includes('docs/features')) {
+                record(rel, 'corpus-parse', 'contains a docs/tasks or docs/features path literal (corpus parsing)');
+            }
+        }
+    }
+
+    const { baseline, error } = loadPlacementBaseline(resolve(opts.baselinePath));
+    if (error || !baseline) {
+        // No baseline: report raw findings (fail closed for placement purposes).
+        return findings;
+    }
+    const entries = baseline.entries;
+    const out: PlacementFinding[] = [];
+    for (const finding of findings) {
+        const entry = entries[finding.file];
+        if (entry?.kinds.includes(finding.kind)) continue;
+        out.push(finding);
+    }
+    for (const [file, entry] of Object.entries(entries)) {
+        const has = produced.get(file);
+        for (const kind of entry.kinds) {
+            if (!has?.has(kind as PlacementFindingKind)) {
+                out.push({
+                    file,
+                    kind: 'stale-baseline',
+                    detail: `baseline lists '${kind}' but the file no longer produces it (baseline can only shrink)`,
+                });
+            }
+        }
+    }
+    return out;
+}
+
 export function run(argv: string[] = process.argv.slice(2)): number {
-    const { manifest, scriptsDir, pluginDir, cwd } = parseArgs(argv);
+    const { manifest, scriptsDir, pluginDir, placementOnly, baseline, repoRoot, cwd } = parseArgs(argv);
+
+    if (placementOnly) {
+        const findings = checkPlacement({ repoRoot: resolve(cwd, repoRoot), baselinePath: resolve(cwd, baseline) });
+        for (const f of findings) console.error(`script-contract-check: FAIL (${f.kind}) - ${f.file}: ${f.detail}`);
+        console.log(
+            `script-contract-check: placement scan over plugins/sp scripts+hooks — ${findings.length} finding(s) — ${findings.length === 0 ? 'PASS' : 'FAIL'}`,
+        );
+        return findings.length === 0 ? 0 : 1;
+    }
+
     const manifestPath = resolve(cwd, manifest);
     const absScriptsDir = resolve(cwd, scriptsDir);
     const absPluginDir = resolve(cwd, pluginDir);

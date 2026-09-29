@@ -91,7 +91,7 @@
         "spur-check-new:full": "bun run link-check && bun run transition-shim-check && bun run script-contract-check && bun run inline-pipeline-parity-check && bun run dependency-drift-check && bun run importer-schema-check && bun run history-surface-freeze-check && bun run lint && bun run test-pre-check:full && bun run test:coverage && bun run test-post-check:full",
         "eval": "bun run plugins/sp/evals/run-eval.ts",
         "transition-shim-check": "bun plugins/sp/scripts/transition-shim-check.ts",
-        "script-contract-check": "bun plugins/sp/scripts/script-contract-check.ts",
+        "script-contract-check": "bun scripts/commands/script-contract-check.ts",
         "inline-pipeline-parity-check": "bun plugins/sp/scripts/inline-pipeline-parity-check.ts",
         "workflow-promotion-check": "bun scripts/spur-dev.ts promotion check",
         "validate-commands": "bun plugins/sp/scripts/validate-commands.ts",

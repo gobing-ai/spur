@@ -1,17 +1,19 @@
 import { expect, spyOn, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+    checkPlacement,
     loadManifest,
+    loadPlacementBaseline,
     parseArgs,
     run,
     type ScriptManifest,
     spawnConvertTwin,
     validateContract,
-} from '../scripts/script-contract-check';
+} from './script-contract-check';
 
-const SCRIPT = join(import.meta.dir, '..', 'scripts', 'script-contract-check.ts');
+const SCRIPT = join(import.meta.dir, 'script-contract-check.ts');
 
 function createTempEnv() {
     const root = mkdtempSync(join(tmpdir(), 'script-contract-test-'));
@@ -393,7 +395,7 @@ test('Clean setup with standard twins and repo-only scripts passes', () => {
 
 test('CLI runner exits 0 for live repo manifest and scripts', () => {
     const proc = Bun.spawnSync(['bun', SCRIPT], {
-        cwd: join(import.meta.dir, '../../..'),
+        cwd: join(import.meta.dir, '../..'),
         stdout: 'pipe',
         stderr: 'pipe',
     });
@@ -442,4 +444,171 @@ test('in-process run() handles success, manifest error, and validation failure',
         errSpy.mockRestore();
         env.cleanup();
     }
+});
+
+// ---- Placement scan (task 1000: --placement-only, baseline, plan §2 reconcile) ----
+
+function createPlacementFixture(): string {
+    const root = mkdtempSync(join(tmpdir(), 'placement-test-'));
+    const scriptsDir = join(root, 'plugins', 'sp', 'scripts');
+    const hooksDir = join(root, 'plugins', 'sp', 'hooks');
+    const repoCommandsDir = join(root, 'scripts', 'commands');
+    const cliCommandsDir = join(root, 'apps', 'cli', 'src', 'commands');
+    for (const dir of [scriptsDir, hooksDir, repoCommandsDir, cliCommandsDir]) mkdirSync(dir, { recursive: true });
+    writeFileSync(join(scriptsDir, 'big.ts'), `${Array.from({ length: 301 }, (_, i) => `// line ${i}`).join('\n')}\n`);
+    writeFileSync(join(scriptsDir, 'db.ts'), `import { Database } from 'bun:sqlite';\nexport const db = 1;\n`);
+    writeFileSync(join(scriptsDir, 'corpus.ts'), `export const path = 'docs/tasks/0099_task.md';\n`);
+    writeFileSync(join(scriptsDir, 'typed.ts'), `import type { Database } from 'bun:sqlite';\nexport const t = 1;\n`);
+    writeFileSync(join(repoCommandsDir, 'task.ts'), 'export const glue = 1;\n');
+    writeFileSync(join(cliCommandsDir, 'task.ts'), 'export const noun = 1;\n');
+    writeFileSync(join(hooksDir, 'fine.ts'), 'export const fine = 1;\n');
+    writeFileSync(join(scriptsDir, 'skipped.test.ts'), `import { test } from 'bun:test';\ntest('skip', () => {});\n`);
+    return root;
+}
+
+test('checkPlacement reports each finding kind once per file', () => {
+    const root = createPlacementFixture();
+    try {
+        const findings = checkPlacement({ repoRoot: root, baselinePath: join(root, 'config', 'missing.json') });
+        const byFile = new Map(findings.map((f) => [f.file, f.kind]));
+        expect(byFile.get('plugins/sp/scripts/big.ts')).toBe('budget');
+        expect(findings.find((f) => f.file === 'plugins/sp/scripts/big.ts')?.detail).toContain('301');
+        expect(byFile.get('plugins/sp/scripts/db.ts')).toBe('db-import');
+        expect(byFile.get('plugins/sp/scripts/corpus.ts')).toBe('corpus-parse');
+        expect(byFile.get('scripts/commands/task.ts')).toBe('noun-clash');
+        expect(findings.some((f) => f.file.endsWith('typed.ts'))).toBe(false);
+        expect(findings.some((f) => f.file.endsWith('skipped.test.ts'))).toBe(false);
+        expect(findings.some((f) => f.file.endsWith('fine.ts'))).toBe(false);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('baseline suppresses listed kinds and flags stale entries', () => {
+    const root = createPlacementFixture();
+    try {
+        const baselinePath = join(root, 'config', 'script-placement-baseline.json');
+        mkdirSync(join(root, 'config'), { recursive: true });
+        writeFileSync(
+            baselinePath,
+            JSON.stringify({
+                schemaVersion: 1,
+                entries: {
+                    'plugins/sp/scripts/big.ts': { kinds: ['budget'] },
+                    'plugins/sp/scripts/db.ts': { kinds: ['budget', 'db-import'] },
+                    'plugins/sp/hooks/fine.ts': { kinds: ['budget'] },
+                },
+            }),
+        );
+        const findings = checkPlacement({ repoRoot: root, baselinePath });
+        expect(findings.some((f) => f.file === 'plugins/sp/scripts/big.ts')).toBe(false);
+        expect(
+            findings.find((f) => f.file === 'plugins/sp/scripts/db.ts' && f.kind === 'stale-baseline'),
+        ).toBeDefined();
+        expect(
+            findings.find((f) => f.file === 'plugins/sp/hooks/fine.ts' && f.kind === 'stale-baseline'),
+        ).toBeDefined();
+        expect(findings.some((f) => f.file === 'plugins/sp/scripts/corpus.ts')).toBe(true);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('--placement-only run() exits 1 with findings and 0 when fully suppressed', () => {
+    const root = createPlacementFixture();
+    try {
+        expect(run(['--placement-only', '--repo-root', root, '--baseline', join(root, 'config', 'none.json')])).toBe(1);
+        const baselinePath = join(root, 'config', 'b.json');
+        mkdirSync(join(root, 'config'), { recursive: true });
+        writeFileSync(
+            baselinePath,
+            JSON.stringify({
+                schemaVersion: 1,
+                entries: {
+                    'plugins/sp/scripts/big.ts': { kinds: ['budget'] },
+                    'plugins/sp/scripts/db.ts': { kinds: ['db-import'] },
+                    'plugins/sp/scripts/corpus.ts': { kinds: ['corpus-parse'] },
+                    'scripts/commands/task.ts': { kinds: ['noun-clash'] },
+                },
+            }),
+        );
+        expect(run(['--placement-only', '--repo-root', root, '--baseline', baselinePath])).toBe(0);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('placement baseline reconciles with plan §2 (task 1000 R7)', () => {
+    const repoRoot = join(import.meta.dir, '..', '..');
+    const section: string[] = [];
+    let inSection = false;
+    for (const line of readFileSync(join(repoRoot, 'docs', 'plans', 'A9-script-placement-migration.md'), 'utf8').split(
+        '\n',
+    )) {
+        if (line.startsWith('## 2.')) inSection = true;
+        else if (line.startsWith('## 3.')) inSection = false;
+        else if (inSection) section.push(line);
+    }
+    const loaded = loadPlacementBaseline(join(repoRoot, 'config', 'script-placement-baseline.json'));
+    if (!loaded.baseline) throw new Error(loaded.error ?? 'placement baseline missing');
+    const entries = loaded.baseline.entries;
+    const keys = Object.keys(entries);
+
+    const rows = section
+        .map((line) => line.match(/^\| ([a-z0-9-]+) \| (\d+|—) \| .* \| (.+) \| ([A-Z0-9—-]+) \|$/))
+        .filter((m): m is RegExpMatchArray => m !== null)
+        .map((m) => ({ name: m[1] ?? '', loc: m[2] ?? '—', target: m[3] ?? '' }));
+    expect(rows.length).toBeGreaterThan(20);
+    const scriptNames = new Set(rows.map((m) => m.name));
+
+    // direction B: every baseline key is accounted for by plan §2
+    const hookCell = section.find((line) => line.startsWith('| context-post-tool'));
+    const hookNames = new Set(hookCell?.match(/[a-z][a-z0-9-]+/g) ?? []);
+    for (const key of keys) {
+        expect(key.startsWith('plugins/sp/')).toBe(true);
+        const inScripts =
+            key.startsWith('plugins/sp/scripts/') &&
+            scriptNames.has(key.replace('plugins/sp/scripts/', '').replace(/\.ts$/, ''));
+        const underDirs = /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(key);
+        const hookFile = key.split('/').at(-1)?.replace(/\.ts$/, '') ?? '';
+        const inHooks =
+            (key.startsWith('plugins/sp/hooks/') && hookNames.has(hookFile)) ||
+            key === 'plugins/sp/hooks/pi/guard-extension.ts';
+        expect(inScripts || underDirs || inHooks).toBe(true);
+    }
+    const dirKeys = keys.filter((k) => /^(plugins\/sp\/scripts\/)?(daily-summary|dogfood-testing)\//.test(k));
+    expect(dirKeys).toHaveLength(3);
+
+    // direction A: plan §2 Move/Delete/→scripts/over-budget rows are all baselined
+    // (script-contract-check excluded: task 1000 itself moved it to scripts/commands)
+    const expected = rows
+        .filter((m) => m.name !== 'script-contract-check')
+        .filter(
+            (m) =>
+                /Delete|→scripts|Move→CLI/.test(m.target) ||
+                (m.loc !== '—' && Number(m.loc) > 250 && !/within budget/.test(m.target)),
+        )
+        .map((m) => `plugins/sp/scripts/${m.name}.ts`)
+        .filter((p) => existsSync(join(repoRoot, p)))
+        .sort();
+    const actual = keys
+        .filter(
+            (k) =>
+                k.startsWith('plugins/sp/scripts/') &&
+                !/^(daily-summary|dogfood-testing)\//.test(k.replace('plugins/sp/scripts/', '')),
+        )
+        .sort();
+    expect(actual).toEqual(expected);
+
+    // exempt: true is exactly the five over-budget Keep files (task-frozen list)
+    const exempt = keys.filter((k) => entries[k]?.exempt === true).sort();
+    expect(exempt).toEqual(
+        [
+            'plugins/sp/hooks/context-post-tool.ts',
+            'plugins/sp/scripts/batch-preflight.ts',
+            'plugins/sp/scripts/feature-verification-steps.ts',
+            'plugins/sp/scripts/wrapup-drift-probe.ts',
+            'plugins/sp/scripts/wrapup-steps.ts',
+        ].sort(),
+    );
 });
