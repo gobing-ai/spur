@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Prove a changed module selection follows restart plus reload end to end
-status: wip
+status: testing
 template: feature-impl
 created_at: 2026-09-29T03:05:27.931Z
-updated_at: "2026-09-29T03:58:48.454Z"
+updated_at: "2026-09-29T04:44:43.963Z"
 feature_id: A8
 
 ---
@@ -35,14 +35,14 @@ end-to-end in a browser here."
 
 ### Requirements
 
-- [ ] R1. In the composed browser proof, on **one fixed origin**: render the first catalog's native module, stop
+- [x] R1. In the composed browser proof, on **one fixed origin**: render the first catalog's native module, stop
   that board server, start a board server on the **same port** serving the changed catalog and assets, reload
   the page, and assert the changed selection renders — changed sidebar routes, changed module content and
   stylesheet, changed frame URL — with no first-catalog route, content or state remaining.
-- [ ] R2. Before the reload, with the changed server already listening, assert the running Board still shows the
+- [x] R2. Before the reload, with the changed server already listening, assert the running Board still shows the
   first catalog — including after an in-app (client-side) navigation away from and back to the module — so R1's
   positive result is attributable to restart plus reload, not to live replacement.
-- [ ] R3. Test-helper change only: `serveBoard` may gain an optional fixed `port`. No production code change, no
+- [x] R3. Test-helper change only: `serveBoard` may gain an optional fixed `port`. No production code change, no
   live replacement, file watching, polling or HMR.
 
 ### Acceptance Criteria
@@ -140,15 +140,30 @@ Rationale: same port is load-bearing — a new port is a new origin, which is th
 
 ### Testing
 
-- `(cd apps/web && bun test tests/modules/composed-board-browser.test.ts)` — **16 pass, 0 fail** (66 expect calls, 10.7s), including the new case `a changed selection is used only after restart plus reload on the same origin (R13)` [901ms] and the refactored second-origin case still green (455ms).
-- Negative control (Plan step 4): temporarily pointed the changed server at the FIRST catalog — the new case **failed** at the reload post-conditions (first-catalog sidebar routes still rendered after reload) — then reverted and re-ran green. The proof can fail; it is not vacuous.
-- `bun run test` (repo-wide) — **9580 pass, 0 fail** across 557 files. `bun run lint` + typecheck — clean. `bun run test-post-check` — all 2 rules passed.
-- `bun run spur-check` — **pre-existing failure, not this diff**: the `recommended-pre-check` preset reports 4 `no-globalthis-fetch-mutation` violations in `apps/web/tests/components/BoardLayoutFramed.test.tsx:52,59` and `ThemeToggle.test.tsx:43,50`; verified present on the clean base tree (git stash → identical errors; files untouched by this task). Everything else in the chain is green. Left for the owning task; no suppression added.
-- Inherited, named not re-proven (scope cut, Q&A 2026-09-28): before-listen refusal and the no-module legacy path stay owned by `apps/server/tests/board-modules.test.ts` — incompatible distribution `:288`, enabled-contribution-without-distribution `:277`, manifest-less legacy distribution `:324`, unreadable manifest `:343`; the ordering is structural in `apps/server/src/serve.ts` (catalog prepared `:706` before `Bun.serve` `:1042`).
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | New case "a changed selection is used only after restart plus reload on the same origin (R13)" `apps/web/tests/modules/composed-board-browser.test.ts:479`: first catalog served and rendered with counter clicked to 1 (`:488-498`); server swapped on the SAME port (`:500-518`, bounded EADDRINUSE retry, never a new port); `Page.reload` (`:545`); then shared `expectAltCatalog` (`:551`, helper `:182-209`): alt sidebar routes `native-probe`+`frame-alt` present and `frame-ok`/`broken-probe` absent (`:187-190`), `variant=alternate` present and `original` absent (`:192-193`), stylesheet `rgb(10, 150, 60)` (`:194-196`), counter reset to 0 (`:198`), `/board/modules/frame-alt` frames `fixtures.deniedUrl` (`:201-208`) — no first-catalog route, content or in-page state remains. |
+| R2 | MET | Same case before any reload, with the changed server already listening: `original` asserted and first-catalog routes held (`frame-ok` present, `frame-alt` absent, `:521-526`); in-app client-side navigation to `/board/designs` (`:528-532`) and back to `native-probe` (`:533-537`); `original` re-asserted and `frame-alt` still absent (`:538-542`) — the post-reload positive is attributable to restart plus reload, not live replacement. |
+| R3 | MET | Test-helper only: `apps/web/tests/test-helpers/board-server.ts:50` adds `readonly port?: number` to BoardServeOptions; `:96` passes `port: options.port ?? 0` to Bun.serve. `git diff --name-only b21c9e264..HEAD` lists only the two test files plus the task doc — no production file; no watcher, polling or HMR anywhere in the diff. |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 — Module selection changes use the documented restart lifecycle (req: R1; R2; R3) | MET | test | `apps/web/tests/modules/composed-board-browser.test.ts:479-556` enacts the scenario line by line: given (first catalog composed and rendered, counter=1), when (same-port server swap to the changed catalog/assets), then (running Board still shows the first catalog incl. in-app nav), and after a page reload (changed routes, module content, stylesheet and frame URL render; counter back to 0; no first-catalog residue). Fresh run this session: 16 pass / 0 fail / 66 expect() calls, real Chromium. |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+<!-- spur:record-review -->
+
+**SECU findings** (pipeline verify step — verdict: PASS)
+
+| Priority | Dimension | Location | Finding |
+|----------|-----------|----------|----------|
+| P4 | — | — | No findings (verify verdict PASS) |
 
 ### References
 
@@ -162,4 +177,5 @@ Rationale: same port is load-bearing — a new port is a new origin, which is th
 
 - 2026-09-29T03:18:42.641Z backlog → todo (system)
 - 2026-09-29T03:58:48.454Z todo → wip (system)
+- 2026-09-29T04:44:43.963Z wip → testing (system)
 
