@@ -1,8 +1,7 @@
 /**
  * surface-drift-inventory — unit coverage for the span/flag parsers (task 0539),
  * the pure row/walk/flatten helpers, and the two deterministic sweeps
- * (sweepHooks reads repo-owned files; executeScripts runs the spur-shelling
- * scripts against fake bins).
+ * (sweepHooks reads repo-owned files).
  *
  * These parsers decide what the drift inventory even *looks at*: a span the
  * extractor drops is a surface claim that can never be reported as drift, so a
@@ -27,7 +26,6 @@ import {
     type CliRunner,
     checkNounVerbFlags,
     checkSectionOperand,
-    executeScripts,
     flagNames,
     flattenKeys,
     isFlagSpan,
@@ -369,38 +367,6 @@ describe('sweepHooks — hook contract against the real plugin tree', () => {
     });
 });
 
-// ─── executeScripts (fake bins — deterministic) ──────────────────────────
-
-describe('executeScripts — spur-shelling scripts against fake bins', () => {
-    test('the remaining spur-shelling script exits as expected against its fake bin', () => {
-        const before = rows.length;
-        executeScripts();
-        const added = rows.slice(before);
-
-        const sync = added.find((r) => r.asserted.startsWith('feature-sync-bounded'));
-        expect(sync?.method).toBe('script-exec(fake-bin)');
-        expect(sync?.status).toBe('ok');
-    }, 60_000); // one real bun spawn of the plugin script
-
-    test('a script that cannot run is unverified for the sync', () => {
-        // feature-sync-bounded's fake-bin run is a best-effort extra on top of argv
-        // extraction, so a failure degrades to unverified instead of manufacturing a
-        // mismatch. Row isolation keeps the passing rows above intact.
-        const dir = mkdtempSync(join(tmpdir(), 'spur-noscripts-'));
-        const saved = rows.splice(0, rows.length);
-        try {
-            executeScripts(dir); // no scripts/ here — the spawn fails
-            expect(rowFor('feature-sync-bounded --feature <id> --spur-bin <bin> (executed)')?.status).toBe(
-                'unverified',
-            );
-        } finally {
-            rows.splice(0, rows.length);
-            rows.push(...saved);
-            rmSync(dir, { recursive: true, force: true });
-        }
-    }, 60_000);
-});
-
 // ─── runCli (the one live-spawn test) ────────────────────────────────────
 
 describe('runCli — exit classification against the source-local CLI', () => {
@@ -738,7 +704,7 @@ describe('probeJsonShapes — --json envelopes captured by execution', () => {
     });
 
     test('the fields the plugin scripts depend on are confirmed against the captured envelope', () => {
-        // feature-sync-bounded reads a bare task-list array, asserted in script code.
+        // The task service reads a bare task-list array (JSON envelope probe).
         expect(rows.find((r) => r.asserted.includes('bare array'))?.status).toBe('ok');
         // Launching a real coding agent is not mechanically reachable — recorded, never passed.
         expect(rows.find((r) => r.asserted.includes('roleOrigin'))?.status).toBe('unverified');

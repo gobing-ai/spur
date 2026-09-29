@@ -27,17 +27,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import {
-    chmodSync,
-    existsSync,
-    mkdirSync,
-    mkdtempSync,
-    readdirSync,
-    readFileSync,
-    rmSync,
-    writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { captureCliSurface } from '../../plugins/sp/tests/helpers/cli-surface';
 
@@ -526,56 +516,6 @@ export function sweepScriptArgv(root: string = PLUGIN_ROOT): void {
     }
 }
 
-export function executeScripts(root: string = PLUGIN_ROOT): void {
-    const dir = mkdtempSync(join(tmpdir(), 'spur-drift-'));
-    try {
-        // feature-sync-bounded against a fake bin — feature show / task list / feature sync argv.
-        const fake2 = join(dir, 'spur2');
-        writeFileSync(
-            fake2,
-            `#!/bin/sh
-if [ "$1" = feature ] && [ "$2" = show ]; then printf '%s' '{"content":"x"}';
-elif [ "$1" = task ]; then printf '%s' '[{"wbs":"0001","status":"done"}]';
-elif [ "$1" = feature ] && [ "$2" = sync ]; then printf '%s' '{"status":"ok","changed":0}';
-fi
-`,
-        );
-        chmodSync(fake2, 0o755);
-        try {
-            execFileSync(
-                process.execPath,
-                [
-                    join(root, 'scripts', 'feature-sync-bounded.ts'),
-                    '--feature',
-                    'I3',
-                    '--spur-bin',
-                    fake2,
-                    '--run-dir',
-                    join(dir, 'run'),
-                ],
-                { cwd: dir, encoding: 'utf8', timeout: 30_000, stdio: 'pipe' },
-            );
-            record(
-                'feature-sync-bounded --feature <id> --spur-bin <bin> (executed)',
-                'script-exec(fake-bin)',
-                'ok',
-                'exited 0 against fake bin',
-                { file: 'plugins/sp/scripts/feature-sync-bounded.ts', line: 1 },
-            );
-        } catch (e) {
-            record(
-                'feature-sync-bounded --feature <id> --spur-bin <bin> (executed)',
-                'script-exec(fake-bin)',
-                'unverified',
-                `fake-bin execution errored: ${String(e).slice(0, 200)} — argv still checked by extraction`,
-                { file: 'plugins/sp/scripts/feature-sync-bounded.ts', line: 1 },
-            );
-        }
-    } finally {
-        rmSync(dir, { recursive: true, force: true });
-    }
-}
-
 // ─── C. Hook contract ───────────────────────────────────────────────────────
 
 export function sweepHooks(root: string = PLUGIN_ROOT): void {
@@ -749,11 +689,11 @@ export function probeJsonShapes(run: CliRunner = runCli): void {
         { file: 'plugins/sp/skills/parallel-execution/references/dispatch-surface.md', line: 112 },
     );
     record(
-        'task list --json -> bare array of {wbs,status,…} (asserted by feature-sync-bounded.ts:291)',
+        'task list --json -> bare array of {wbs,status,…} (asserted in packages/app task-service)',
         'json-exec(field-presence)',
         jsonEnvelopeShapes['spur task list']?.exit === 0 ? 'ok' : 'mismatch',
         jsonEnvelopeShapes['spur task list']?.exit === 0 ? 'array envelope confirmed' : 'probe failed',
-        { file: 'plugins/sp/scripts/feature-sync-bounded.ts', line: 291 },
+        { file: 'packages/app/src/services/task-service.ts', line: 1 },
     );
 }
 
@@ -931,7 +871,6 @@ function main(): void {
     const outIdx = process.argv.indexOf('--out');
     sweepPluginTrees();
     sweepScriptArgv();
-    executeScripts();
     sweepHooks();
     probeJsonShapes();
     sweepWorkflows();

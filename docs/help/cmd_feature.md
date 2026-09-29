@@ -245,7 +245,7 @@ spur feature sync [options] [id]
 |---|---|
 | `--all` | Sync all features with linked tasks |
 | `--dry-run` | Report proposed status transitions without applying |
-| `--force` | Apply reopen proposals without confirmation |
+| `--force` | Apply reopen proposals without confirmation; also bypasses repeated-BLOCKED suppression (task 1004) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 
@@ -274,6 +274,7 @@ spur feature check [options] [id]
 | `--strict` | Elevate warnings to failures |
 | `--as <status>` | Evaluate the one-active-goal rule as if the feature were in `<status>` (0418: lifecycle FSM guards pass the transition target) |
 | `--fix` | Repair structural findings in place (heading presence/level, section order, R-item checkboxes) — never authors content, never removes off-variant sections (task 0619) |
+| `--inventory <report>` | Cross-check the report's `## Requirement inventory` against the feature's AC `# covers:` lines; uncovered non-deferred items are errors (`inventory-coverage`) (task 1004) |
 | `--folder <path>` | Custom features folder |
 | `--json` | Output machine-readable JSON |
 

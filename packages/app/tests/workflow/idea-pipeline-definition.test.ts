@@ -322,8 +322,21 @@ describe('idea-pipeline definition — design-review feedback contract (0515 R2)
             expect(g.softFail).toBe(true);
             // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
             expect(g.executable).toBe('${vars.spurBin}');
-            // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
-            expect(g.args).toEqual(['feature', 'check', '${vars.featureId}']);
+            if (g.state === 'ac-generate') {
+                // 1004 R2: requirement coverage folds into the recorded check via --inventory.
+                expect(g.args).toEqual([
+                    'feature',
+                    'check',
+                    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+                    '${vars.featureId}',
+                    '--inventory',
+                    // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+                    '.spur/run/${vars.__runId}-idea-eval-report.md',
+                ]);
+            } else {
+                // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+                expect(g.args).toEqual(['feature', 'check', '${vars.featureId}']);
+            }
             expect(g.resultFile).toMatch(/^\.spur\/run\/\$\{vars\.__runId\}-idea-(ac|design)-check\.status$/);
         }
         // Guards must consume the recorded result — no transition re-runs the CLI.
@@ -625,43 +638,42 @@ describe('idea-pipeline definition — 0887 robustness contract', () => {
         expect(prompt).toContain('[deferred:');
     });
 
-    test('R4: ac-generate measures requirement coverage in a soft shell after idea-ac-check', () => {
+    test('R4: ac-generate measures requirement coverage via the idea-ac-check gate --inventory flag', () => {
         const actions = stateActions('ac-generate');
         const kinds = actions.map((a) => a.kind);
-        // The gate runs before the coverage shell; both sit at the same author/revise boundary.
-        expect(kinds.indexOf('command.gate')).toBeGreaterThanOrEqual(0);
-        expect(kinds.indexOf('command.gate')).toBeLessThan(kinds.lastIndexOf('shell'));
-        const coverage = actions
-            .filter((a) => a.kind === 'shell')
-            .find((a) => String(a.options?.command).includes('idea-coverage-check.ts'));
-        expect(coverage).toBeDefined();
-        const command = String(coverage?.options?.command ?? '');
-        expect(command).toContain('-idea-eval-report.md');
-        expect(command).toContain('-idea-ac-content.md');
-        expect(command).toContain('-idea-coverage.status');
-        // Seeded-project resolution: repo checkout first, then the superskill-staged script;
-        // neither present fails closed to FAIL (the shell itself always exits 0 — soft).
-        expect(command).toContain('superskill script path');
-        expect(command).toContain("printf 'FAIL");
+        expect(kinds).toContain('command.gate');
+        const gate = actions.find((a) => a.kind === 'command.gate');
+        const args = ((gate?.options as { args?: string[] } | undefined)?.args ?? []) as string[];
+        // 1004 R2: coverage folds into the recorded gate — no separate soft coverage shell.
+        expect(args).toContain('--inventory');
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: asserting the literal YAML template, not interpolating
+        expect(args).toContain('.spur/run/${vars.__runId}-idea-eval-report.md');
+        // The retired standalone coverage shell must not resurface.
+        expect(
+            actions
+                .filter((a) => a.kind === 'shell')
+                .some((a) => String(a.options?.command).includes('coverage-check')),
+        ).toBe(false);
     });
 
-    test('R4: profile=auto ac-generate guards conjunct the recorded coverage status', () => {
+    test('R4: profile=auto ac-generate guards conjunct the recorded check status', () => {
         const forward = guardCommand('ac-generate', 'system-design');
-        // 0945: coverage conjuncts via the derived readiness file (R2 writer folds ac-check AND
-        // coverage into PASS); guards never read the coverage status inline.
+        // 0945/1004: coverage folds into the recorded idea-ac-check status (gate --inventory);
+        // guards read the derived readiness file, never check internals inline.
         expect(forward).toContain('-idea-ac-ready.status');
         expect(forward).not.toContain('-idea-coverage.status');
         expect(guardCommand('ac-generate', 'decompose')).toContain('-idea-ac-ready.status');
-        // Retry/failed edges keep the direct dual-status pair (0945 changed only the route edges).
+        // Retry/failed edges keep the direct single-status pair (1004 R2 dropped cov_status).
         for (const to of ['ac-generate', 'failed'] as const) {
             const command = guardCommand('ac-generate', to);
-            expect(command).toContain('test "$ac_status" != PASS || test "$cov_status" != PASS');
+            expect(command).toContain('test "$ac_status" != PASS');
+            expect(command).not.toContain('cov_status');
         }
     });
 
-    test('R4: interactive feature-check surfaces the coverage status in its prompt', () => {
+    test('R4: interactive feature-check surfaces the recorded check status in its prompt', () => {
         const confirm = stateActions('feature-check').find((a) => a.kind === 'hitl.confirm');
-        expect(String(confirm?.options?.prompt ?? '')).toContain('-idea-coverage.status');
+        expect(String(confirm?.options?.prompt ?? '')).toContain('-idea-ac-check.status');
     });
 
     test('R5: ac-generate prompt carries both task-check rules (verbatim titles, gate language)', () => {

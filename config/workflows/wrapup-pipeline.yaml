@@ -345,7 +345,8 @@ states:
 
   - id: feature-transition
     description: >
-      If vars.feature is set, sync feature status via bounded feature-sync-bounded
+      If vars.feature is set, sync feature status via `spur feature sync` (repeated-BLOCKED
+      suppression is built into the sync service, so no wrapper script is needed)
       (0411). The shell terminates `exit 0` so artifacts already landed are never
       discarded, but the outcome is truthful (0770 + 0783 R4): sync succeeds only
       with a valid proposal matching vars.feature, no gateBlocked/requiresConfirm

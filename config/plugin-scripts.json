@@ -27,11 +27,6 @@
             "twin": "dogfood-testing/validate-report.mjs"
         },
         {
-            "rel": "feature-sync-bounded.ts",
-            "contract": "standard",
-            "twin": "feature-sync-bounded.mjs"
-        },
-        {
             "rel": "idea-handoff.ts",
             "contract": "standard",
             "twin": "idea-handoff.mjs"
@@ -62,18 +57,9 @@
             "twin": "feature-verification-steps.mjs"
         },
         {
-            "rel": "idea-coverage-check.ts",
-            "contract": "repo-only"
-        },
-        {
             "rel": "pr-reviewing.ts",
             "contract": "standard",
             "twin": "pr-reviewing.mjs"
-        },
-        {
-            "rel": "record-feature-sync.ts",
-            "contract": "standard",
-            "twin": "record-feature-sync.mjs"
         },
         {
             "rel": "quality-gate.ts",

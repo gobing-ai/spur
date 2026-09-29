@@ -404,6 +404,10 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
         .option(...SHARED_OPTIONS.asFeature0418)
         .option(...SHARED_OPTIONS.folderFeatures)
         .option('--fix', 'repair structural findings in place (heading presence/level/order, R-item checkboxes)')
+        .option(
+            '--inventory <report>',
+            'Cross-check the report requirement inventory against the AC covers lines (errors on uncovered items)',
+        )
         .option(...SHARED_OPTIONS.json)
         .option(...SHARED_OPTIONS.jsonEnvelope)
         .action(async (id, options) => {
@@ -416,6 +420,14 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
             const svc = new FeatureCheckService(context.fs);
             const json = options.json === true;
             const strict = options.strict === true;
+            // 1004 R1: read the inventory report once; an unreadable/absent file is an
+            // empty report, which the coverage rule fails closed on (missing section).
+            // fs.readFile is `string | Promise<string>` — normalize before .catch so a
+            // missing/unreadable report degrades to '' (the coverage rule fails closed).
+            const inventoryText =
+                typeof options.inventory === 'string'
+                    ? await Promise.resolve(context.fs.readFile(context.fs.resolve(options.inventory))).catch(() => '')
+                    : undefined;
             try {
                 const entries = await context.fs.readDir(featuresDir);
                 const ids: string[] = id
@@ -446,6 +458,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                         severityOverrides: resolved.severityOverrides,
                         asStatus: options.as,
                         fix: options.fix === true,
+                        inventory: inventoryText,
                     });
                     results.push(result);
                     if (!json) {
@@ -513,6 +526,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     const result = await svc.syncAllFeatures({
                         dryRun: options.dryRun,
                         forceConfirm: options.force,
+                        force: options.force,
                     });
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));
@@ -537,6 +551,7 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     const result = await svc.syncFeature(id, {
                         dryRun: options.dryRun,
                         forceConfirm: options.force,
+                        force: options.force,
                     });
                     if (options.json) {
                         context.output.write(toEnvelopeJson(result, { enveloped: options.jsonEnvelope }));

@@ -19,7 +19,7 @@
  * parse, or the workflow argument is missing.
  *
  * Node-builtin imports only; the pure builders are exported for unit testing, `runStepProfileCli`
- * and `main` do the I/O (mirrors the batch-preflight / feature-sync-bounded script shape).
+ * and `main` do the I/O (mirrors the batch-preflight script shape).
  */
 
 import { spawnSync } from 'node:child_process';
@@ -317,7 +317,7 @@ export interface StepProfileCliArgs {
 }
 
 /**
- * Resolve the spur CLI monorepo-safely (copied from feature-sync-bounded: twins stay
+ * Resolve the spur CLI monorepo-safely (twin-safe resolution:
  * self-contained and no plugin script imports another):
  * --spur-bin > SPUR_BIN > monorepo-local CLI entry > PATH `spur`.
  */

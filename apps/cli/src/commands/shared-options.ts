@@ -116,7 +116,10 @@ export const SHARED_OPTIONS = {
     fileRuleAdhocPath: ['--file <path>', 'Ad-hoc rule file path'] as const,
     fileTaskBatch: ['--file <path>', 'Path to the batch JSON file validated against task-batch.schema.json'] as const,
     fileTaskTest: ['--file <path>', 'Custom target test file path'] as const,
-    forceFeatureReopen: ['--force', 'Force applying reopen proposals without confirmation'] as const,
+    forceFeatureReopen: [
+        '--force',
+        'Force applying reopen proposals without confirmation; also bypasses repeated-BLOCKED suppression',
+    ] as const,
     forceInitRecreate: ['--force', 'Recreate files that already exist'] as const,
     forceWorkflowClean: ['--force', 'Clean ALL non-terminal runs regardless of age (overrides --older-than)'] as const,
     forceWorkflowContinue: ['--force', 'Proceed with resume even if workflow definition drift is detected'] as const,

@@ -23,7 +23,7 @@
  * workflow's cache branch turns on — it must run AFTER analyze, because ADR-079 derives validity
  * from the fresh artifact rather than trusting what the cached report claims about itself.
  *
- * Mirrors the feature-sync-bounded.ts pattern (ADR-065 / 0659): pure exported functions for every
+ * Mirrors the plugin-script pattern (ADR-065 / 0659): pure exported functions for every
  * decision, a thin CLI entry, `node:` imports only, `process.argv.slice(2)`, local types — no
  * `packages/` imports and no `Bun.*` globals, so the committed `.mjs` twin runs under bare `node`.
  */
@@ -942,7 +942,7 @@ function parseFlags(args: string[]): Record<string, string | undefined> {
 
 /**
  * Run the CLI with captured stdout/stderr (data, not process side-effects) so unit tests invoke
- * it in-process without leaking into the test runner's own output (feature-sync-bounded pattern).
+ * it in-process without leaking into the test runner's own output.
  */
 export function runCacheCli(argv: string[]): CacheCliResult {
     const [cmd, a, b] = argv;

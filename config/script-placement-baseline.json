@@ -27,10 +27,6 @@
             "reason": "Keep (budget exemption), W2 (plan §2)",
             "exempt": true
         },
-        "plugins/sp/scripts/feature-sync-bounded.ts": {
-            "kinds": ["budget"],
-            "reason": "Move→CLI: spur feature sync suppressed BLOCKED (C4); delete, W2 (plan §2)"
-        },
         "plugins/sp/scripts/workflow-step-profile.ts": {
             "kinds": ["budget"],
             "reason": "logic → packages/app + step-profile lib bundle; script ≤250 glue, W3 (plan §2)"
@@ -50,11 +46,6 @@
             "reason": "Keep (glue over capture file; budget exemption) (plan §2)",
             "exempt": true
         },
-        "plugins/sp/scripts/idea-coverage-check.ts": {
-            "kinds": [],
-            "reason": "Move→CLI: spur feature check --inventory (C3); delete, W2 (plan §2)"
-        },
-        "plugins/sp/scripts/record-feature-sync.ts": { "kinds": [], "reason": "Delete W2 (plan §2)" },
         "plugins/sp/scripts/daily-summary/daily-summary.ts": {
             "kinds": ["budget"],
             "reason": "Keep (daily-summary/, plan §2)"

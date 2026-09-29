@@ -448,17 +448,17 @@ esac`,
 
     // 0931 R5: parallel batches launch each pipeline with deferFeatureSync "true" so a task
     // branch never touches feature files; the record-step sync shell must skip cleanly. The
-    // default "false" keeps sequential/inline behavior unchanged — the sync is owned by
-    // record-feature-sync.ts (ADR-115 moved the old inline chain out of the shell).
+    // default "false" keeps sequential/inline behavior unchanged — 1004 R4 inlined the sync
+    // (repeated-BLOCKED suppression lives in the feature sync service now).
     test('deferFeatureSync "true" skips the record-step feature sync and notes the deferral (0931 R5)', () => {
         expect(PIPELINE.vars?.deferFeatureSync).toBe('false');
 
         const sync = commandFor('record', 0);
-        expect(sync.startsWith('S=plugins/sp/scripts/record-feature-sync.ts;')).toBe(true);
-        expect(sync).toContain('record-feature-sync.mjs');
         expect(sync).toContain('[ "$deferFeatureSync" = "true" ]');
         expect(sync).toContain('feature sync deferred to batch integration');
-        expect(sync).toContain('bun "$S" --spur-bin "$spurBin"');
+        expect(sync).toContain('$spurBin feature sync "$FID" --json');
+        // 1004 R4: no helper-script resolution — the shell is self-contained.
+        expect(sync).not.toContain('-feature-sync');
 
         // Behavioral: with deferFeatureSync=true the (canary) spurBin is never invoked.
         const dir = mkdtempSync(join(tmpdir(), 'spur-0931-defer-'));
@@ -480,24 +480,11 @@ esac`,
         }
     });
 
-    test('deferFeatureSync default delegates the sync to record-feature-sync (0931 R5 default)', () => {
+    test('deferFeatureSync default runs the bare feature sync for the linked feature (1004 R4)', () => {
         const dir = mkdtempSync(join(tmpdir(), 'spur-0931-default-'));
         try {
             mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
-            // Stage the owner script exactly as the pipeline finds it in-repo, so the shell
-            // actually delegates. The script imports ../lib/env (getEnvVar) — stage it too
-            // (self-contained node builtins). Canary: `task show` yields a feature_id -> the
-            // owner runs the bare-spur last resort (no bounded wrapper / staged module here).
-            mkdirSync(join(dir, 'plugins', 'sp', 'scripts'), { recursive: true });
-            mkdirSync(join(dir, 'plugins', 'sp', 'lib'), { recursive: true });
-            // 0960: the project-first probe is gated on the source-repo marker.
-            mkdirSync(join(dir, 'config'), { recursive: true });
-            writeFileSync(join(dir, 'config', 'plugin-scripts.json'), '{}\n');
-            copyFileSync(
-                join(import.meta.dir, '..', 'scripts', 'record-feature-sync.ts'),
-                join(dir, 'plugins', 'sp', 'scripts', 'record-feature-sync.ts'),
-            );
-            copyFileSync(join(import.meta.dir, '..', 'lib', 'env.ts'), join(dir, 'plugins', 'sp', 'lib', 'env.ts'));
+            // Canary: `task show` yields a top-level feature_id -> the shell syncs it.
             const spurBin = executable(
                 dir,
                 'spur-bin-empty',
@@ -507,11 +494,36 @@ esac`,
 
             expect(result.exitCode).toBe(0);
             expect(result.output).not.toContain('deferred');
-            expect(result.output).toContain('SYNC feature sync F1');
+            expect(result.output).toContain('SYNC feature sync F1 --json');
             const reportPath = join(dir, '.spur', 'run', '0931-report.txt');
             if (existsSync(reportPath)) {
                 expect(readFileSync(reportPath, 'utf8')).not.toContain('Orphan task 0931');
             }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('record-step sync reads a frontmatter feature_id and notes an orphan task (1004 R4)', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'spur-1004-sync-'));
+        try {
+            mkdirSync(join(dir, '.spur', 'run'), { recursive: true });
+            // Frontmatter-shaped feature_id (task show --json envelope).
+            const linked = executable(
+                dir,
+                'spur-bin-linked',
+                'if [ "$1" = "task" ]; then echo \'{"frontmatter":{"feature_id":"F9"}}\'; else echo "SYNC $*"; fi',
+            );
+            const linkedRun = runShell(commandFor('record', 0), dir, { wbs: '1004', spurBin: linked });
+            expect(linkedRun.exitCode).toBe(0);
+            expect(linkedRun.output).toContain('SYNC feature sync F9 --json');
+
+            // No feature_id anywhere -> orphan proposal note, best-effort exit 0.
+            const orphan = executable(dir, 'spur-bin-orphan', "echo '{}'");
+            const orphanRun = runShell(commandFor('record', 0), dir, { wbs: '1004', spurBin: orphan });
+            expect(orphanRun.exitCode).toBe(0);
+            const report = readFileSync(join(dir, '.spur', 'run', '1004-report.txt'), 'utf8');
+            expect(report).toContain('Orphan task 1004 — no feature_id linked');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

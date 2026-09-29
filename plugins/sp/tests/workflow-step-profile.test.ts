@@ -594,7 +594,7 @@ describe('task 0827 R1 — main runs end to end against a spur stub', () => {
 // stub scripts, no spawn mocking) so the success path, the two failure branches and `main`'s
 // stdout/stderr writes are exercised here.
 
-/** Capture stdout/stderr.write during a callback (same shape as feature-sync-bounded). */
+/** Capture stdout/stderr.write during a callback. */
 function captureOutput<T>(fn: () => T): { out: string; err: string; result: T } {
     const realOut = process.stdout.write.bind(process.stdout);
     const realErr = process.stderr.write.bind(process.stderr);

@@ -31,6 +31,7 @@ import {
 } from '../workflow/feature-verification-receipt';
 import { resolveWorkflowDefinition } from '../workflow/workflow-resolver';
 import { computeAggregate, readVerdictArtifact as readGuardVerdictArtifact } from './done-transition-guard';
+import { checkInventoryCoverage } from './feature-inventory';
 import {
     type CheckFindings,
     FINDING_CODES,
@@ -205,6 +206,13 @@ export class FeatureCheckService extends PlanningCheckService {
             asStatus?: string;
             /** Repair structural findings (heading presence/level/order, R-item checkboxes) in place before validating (task 0619). */
             fix?: boolean;
+            /**
+             * Inventory-report text (1004 R1): cross-check the report's
+             * `## Requirement inventory` items against the feature's AC
+             * `# covers:` lines (rule `inventory-coverage`). Set by
+             * `feature check --inventory <report>`.
+             */
+            inventory?: string;
         },
     ): Promise<CheckFeatureResult> {
         const strict = options?.strict === true;
@@ -292,6 +300,12 @@ export class FeatureCheckService extends PlanningCheckService {
                   ? [options.tasksDir]
                   : [];
         await this.runL4(doc, featureId, effectiveStatus, taskScanDirs, dogfoodDir, runDir, findings);
+
+        // ── 1004 R1: requirement-inventory ↔ AC coverage (feature check --inventory) ──
+        if (typeof options?.inventory === 'string') {
+            const acText = doc.getSection('Acceptance Criteria') ?? '';
+            findings.push(...checkInventoryCoverage(options.inventory, acText));
+        }
 
         return {
             id: featureId,

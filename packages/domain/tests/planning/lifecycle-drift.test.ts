@@ -167,9 +167,9 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         const cmds = (record?.onEnter ?? []).map((a) => String(a.options?.command ?? ''));
         // Proof certification + record step + post-record feature sync (task 0328 / ADR-0322,
         // task 0612 / ADR-071; 0785 R3 replaced the bare fingerprint compare with the bound
-        // run.artifact registration, which re-captures the proof inputs itself). 0931 R5 moved
-        // the sync chain into record-feature-sync.ts and added the deferFeatureSync guard in
-        // the shell; certification stays FIRST. 0983 appended the post-record residual sweep
+        // run.artifact registration, which re-captures the proof inputs itself). 0931 R5 added
+        // the deferFeatureSync guard to the shell; certification stays FIRST. 1004 R4 inlined
+        // the sync (service-level suppression). 0983 appended the post-record residual sweep
         // (+ the R5 Testing re-record) AFTER the sync, so the sweep reads the post-record
         // task file and folds before the done guard.
         expect(record?.onEnter ?? []).toHaveLength(5);
@@ -194,17 +194,10 @@ describe('task-pipeline.yaml structure (task 0062)', () => {
         expect(gateArgs).toContain('--solution-from-diff');
         expect(gateArgs).toContain('"--transition"');
         expect(gateArgs).toContain('"testing"');
-        // The post-record hop must still sync feature status, but the mechanism is free: task 0411
-        // routes it through `feature-sync-bounded.ts`, which wraps `spur feature sync --json` with
-        // retry suppression. Assert the intent (a feature-sync hop exists), not one spelling.
-        expect(
-            cmds.some(
-                (c) =>
-                    c.includes('feature sync') ||
-                    c.includes('feature-sync-bounded') ||
-                    c.includes('record-feature-sync'),
-            ),
-        ).toBe(true);
+        // The post-record hop must still sync feature status, but the mechanism is free: 0411's
+        // retry suppression moved into the feature sync service (1004 R3/R4), so the shell is a
+        // bare `feature sync`. Assert the intent (a feature-sync hop exists), not one spelling.
+        expect(cmds.some((c) => c.includes('feature sync'))).toBe(true);
     });
 
     test('R3: status transitions go through the normal verb (`spur task update <wbs> <status>`)', () => {

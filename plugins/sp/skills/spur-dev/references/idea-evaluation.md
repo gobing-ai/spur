@@ -33,7 +33,7 @@ before any processing); the `## Requirement inventory` items trace back to it.
 <one-paragraph refined statement of what the idea actually requires — the "real requirement" after discovery sharpens the vague input>
 
 ## Requirement inventory
-<mandatory — the coverage gate (idea-coverage-check) parses this section, so keep the exact `- I<n> — ` item form>
+<mandatory — the coverage gate (`feature check --inventory`) parses this section, so keep the exact `- I<n> — ` item form>
 - I1 — <requirement stated as an ask, quoting or paraphrasing the source line from the run's idea-input artifact> (source: "<quoted fragment from the operator's idea>")
 - I2 — <next requirement>
 - I<n> — <optional: a requirement explicitly out of scope> [deferred: <reason>]
@@ -83,7 +83,7 @@ Stakes: <plain-English cost of proceeding vs not; reversibility; blast radius>
 |------|--------|
 | Filled instance path | `.spur/run/idea-eval-report.md` |
 | Template home | this file |
-| Requirement inventory | mandatory `## Requirement inventory` section (0887 R3); consumed by `idea-coverage-check` (R4) |
+| Requirement inventory | mandatory `## Requirement inventory` section (0887 R3); consumed by the `feature check --inventory` coverage gate (R4) |
 | HITL state | `idea-eval` in `idea-pipeline.yaml` |
 | Approve | continue → `feature-create` |
 | Reject / cancel | → `cancelled` (no feature) |

@@ -96,13 +96,11 @@ export function evaluateTaskSize(content: string, limits: TaskSizeLimits = DEFAU
 
     const reasons: string[] = [];
     if (reqCount > limits.maxReqs) {
-        reasons.push(
-            `Task has ${reqCount} R-items (max ${limits.maxReqs}). ` + `Consider decomposing into smaller tasks.`,
-        );
+        reasons.push(`Task has ${reqCount} R-items (max ${limits.maxReqs}). Consider decomposing into smaller tasks.`);
     }
     if (planItemCount > limits.maxPlanItems) {
         reasons.push(
-            `Task has ${planItemCount} Plan items (max ${limits.maxPlanItems}). ` + `Consider simplifying the plan.`,
+            `Task has ${planItemCount} Plan items (max ${limits.maxPlanItems}). Consider simplifying the plan.`,
         );
     }
 

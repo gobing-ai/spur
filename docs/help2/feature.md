@@ -100,13 +100,14 @@ changes. Scope is explicit: a bare invocation refuses to sweep; pass `--feature 
 ## spur feature check
 
 ```bash
-spur feature check [id] [--strict] [--as <status>] [--fix] [--folder <path>] [--json]
+spur feature check [id] [--strict] [--as <status>] [--fix] [--inventory <report>] [--folder <path>] [--json]
 ```
 
 Four layers: frontmatter schema (L1), status-driven section matrix (L2), acceptance-criteria and
 goal rules (L3), incoming edges and coverage warnings (L4). `--strict` elevates warnings to
-failures, `--as <status>` evaluates as if the feature were in that status, and `--fix` repairs
-structural findings in place (never authors content).
+failures, `--as <status>` evaluates as if the feature were in that status, `--fix` repairs
+structural findings in place (never authors content), and `--inventory <report>` errors on
+requirement-inventory items the AC does not cover (task 1004).
 
 ## spur feature sync
 
@@ -115,8 +116,8 @@ spur feature sync [id | --all] [--dry-run] [--force] [--folder <path>] [--json]
 ```
 
 Aligns feature **lifecycle status** with the states of its linked tasks — real transitions with
-guards. Prefer `--dry-run` first. `--force` applies reopen proposals without confirmation.
-Docs regeneration is `refresh`, not `sync`.
+guards. Prefer `--dry-run` first. `--force` applies reopen proposals without confirmation and
+bypasses repeated-BLOCKED suppression (task 1004). Docs regeneration is `refresh`, not `sync`.
 
 ```bash
 spur feature sync F7 --dry-run --json

@@ -11,7 +11,7 @@
 # replaced the very portability the tests were supposed to verify.
 #
 # SCOPE / discriminator: mocking the subprocess boundary to control *subprocess
-# responses* (e.g. feature-sync-bounded.test.ts intercepting `show`/`list`/`sync`
+# responses* (e.g. a boundary test intercepting `show`/`list`/`sync`
 # commands) is legitimate and NOT flagged — the boundary mock returns canned
 # responses, it does not re-implement the syscall the code under test calls. The
 # rule fires only when the mock handler itself references `stat`/`%m`/`birthtime`

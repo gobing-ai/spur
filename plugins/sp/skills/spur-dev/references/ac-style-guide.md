@@ -222,7 +222,8 @@ Use the canonical BDD template at `templates/bdd/gherkin.md`. Key rules:
   ```
 
   Every inventory item without a `[deferred: ...]` marker must be covered by at least one
-  scenario — `idea-coverage-check` measures this at the idea-pipeline's ac-generate boundary.
+  scenario — the `feature check --inventory` gate (inventory-coverage finding) measures this at
+  the idea-pipeline's ac-generate boundary.
 
 Avoid:
 

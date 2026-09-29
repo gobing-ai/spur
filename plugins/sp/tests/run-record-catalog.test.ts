@@ -129,8 +129,9 @@ describe('canonical workflow catalog run-record classification (0928)', () => {
 
     test('idea-pipeline driver artifacts keep their declared owners (audited no-change)', () => {
         const text = readFileSync(join(CATALOG_DIR, 'idea-pipeline.yaml'), 'utf8');
-        // The driver-owned status file the coverage script writes (declared seam).
-        expect(text).toContain('-idea-coverage.status');
+        // The driver-owned status file the idea-ac-check gate writes (declared seam; 1004 R2
+        // folded requirement coverage into this recorded result via --inventory).
+        expect(text).toContain('-idea-ac-check.status');
         // The handoff products the finalize stage consumes (idea-handoff.ts readers).
         for (const artifact of [
             '-idea-task-batch.json',

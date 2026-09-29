@@ -30,7 +30,7 @@
  */
 
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getEnvVars } from '../lib/env';
 
@@ -484,34 +484,14 @@ export function runFeatureTransition(env: WrapupStepsEnv, options: WrapupStepsOp
         return { status: 'FAIL', statusFile: relStatusFile, exitCode: 1 };
     }
 
-    // Three branches, first that exists relative to the cwd; current arguments including --spur-bin.
+    // 1004 R5: one direct service sync (stderr streams through, stdout is the JSON payload).
+    // Repeated-BLOCKED suppression (0411) lives in the feature sync service itself (1004 R3),
+    // so the bounded-wrapper resolution branches are gone.
     let syncOutput = '';
     let syncRc = 1;
-    const boundedTs = join('plugins', 'sp', 'scripts', 'feature-sync-bounded.ts');
-    const boundedArgs = [feature, '--spur-bin', env.spurBin ?? 'spur', '--json'];
-    if (existsSync(cwd ? join(cwd, boundedTs) : boundedTs)) {
-        const result = spawnSync('bun', [boundedTs, ...boundedArgs], { cwd, encoding: 'utf8' });
-        syncOutput = result.stdout ?? '';
-        syncRc = result.status ?? 1;
-        if (result.stderr !== null && result.stderr.length > 0) process.stderr.write(result.stderr);
-    } else {
-        const probe = spawnSync('superskill', ['script', 'path', 'sp', 'feature-sync-bounded.mjs'], {
-            cwd,
-            encoding: 'utf8',
-        });
-        const twin = probe.status === 0 ? (probe.stdout ?? '').trim() : '';
-        if (twin.length > 0 && existsSync(twin)) {
-            const result = spawnSync('node', [twin, ...boundedArgs], { cwd, encoding: 'utf8' });
-            syncOutput = result.stdout ?? '';
-            syncRc = result.status ?? 1;
-            if (result.stderr !== null && result.stderr.length > 0) process.stderr.write(result.stderr);
-        } else {
-            // Last branch: stderr streams through (visible), stdout is the JSON payload.
-            const result = spur(env, ['feature', 'sync', feature, '--json'], { cwd, stderr: 'inherit' });
-            syncOutput = result.stdout;
-            syncRc = result.status;
-        }
-    }
+    const sync = spur(env, ['feature', 'sync', feature, '--json'], { cwd, stderr: 'inherit' });
+    syncOutput = sync.stdout;
+    syncRc = sync.status;
     process.stdout.write(`${syncOutput}\n`);
 
     const shown = spur(env, ['feature', 'show', feature, '--json'], { cwd });
