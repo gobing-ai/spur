@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Load and serve validated project module catalogs and restricted assets
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-28T01:46:26.508Z
-updated_at: "2026-09-28T01:51:42.069Z"
+updated_at: "2026-09-28T23:39:42.418Z"
 feature_id: A8
 priority: P2
 tags:
@@ -27,12 +27,12 @@ Rubric: E8 D1 L4 C1 R1 = 15; config, resolution, DTOs and HTTP handling form one
 
 ### Requirements
 
-- [ ] R1. Extend the existing merged project config loader with a strict bootstrap.modules array defaulting empty, discriminated by required type react|iframe; preserve bootstrap.options and unrelated configuration. Shared id/name/icon are required, optional sidebarLabel/description/order/enabled follow the contract, and enabled defaults true. React web has directory/entry and styles defaults []; iframe source has url; each type forbids the other's fields.
-- [ ] R2. Reject unsupported or mixed fields, duplicate IDs/routes and collisions with all host/retired identities, including disabled declarations. IDs match ^[a-z][a-z0-9-]*$, name/icon are nonempty, order finite. Invalid iframe URLs (non-absolute, non-http(s), embedded credentials) are configuration errors.
-- [ ] R3. At Board serve startup resolve enabled native directories from the selected project root and canonical entry/style paths inside each root; check existence and containment before Bun.serve. Disabled declarations perform structural validation but require no asset files or native code evaluation. Ordinary CLI config loading performs no asset IO or extension import.
-- [ ] R4. Expose contract.board.modules as a typed read-only GET /api/board/modules procedure with catalogVersion:1, the host runtime descriptor and enabled safe module descriptors; omit filesystem roots and server-only state. Use implement(contract), existing OpenAPI generation and typed client shape.
-- [ ] R5. Serve declared native trees through fixed /modules/:id/* handlers before static/SPA fallback with correct MIME and Cache-Control:no-store. Reject traversal, malformed encoding and symlink escape at request time, return real missing-asset errors and expose no undeclared or disabled roots.
-- [ ] R6. Fail clearly before listening on malformed explicit module config or an incompatible selected Board distribution with enabled contributions; preserve the established no-module/standalone paths. Build one project-owned catalog per server and use restart/reload semantics, without route mutation or downstream server imports.
+- [x] R1. Extend the existing merged project config loader with a strict bootstrap.modules array defaulting empty, discriminated by required type react|iframe; preserve bootstrap.options and unrelated configuration. Shared id/name/icon are required, optional sidebarLabel/description/order/enabled follow the contract, and enabled defaults true. React web has directory/entry and styles defaults []; iframe source has url; each type forbids the other's fields.
+- [x] R2. Reject unsupported or mixed fields, duplicate IDs/routes and collisions with all host/retired identities, including disabled declarations. IDs match ^[a-z][a-z0-9-]*$, name/icon are nonempty, order finite. Invalid iframe URLs (non-absolute, non-http(s), embedded credentials) are configuration errors.
+- [x] R3. At Board serve startup resolve enabled native directories from the selected project root and canonical entry/style paths inside each root; check existence and containment before Bun.serve. Disabled declarations perform structural validation but require no asset files or native code evaluation. Ordinary CLI config loading performs no asset IO or extension import.
+- [x] R4. Expose contract.board.modules as a typed read-only GET /api/board/modules procedure with catalogVersion:1, the host runtime descriptor and enabled safe module descriptors; omit filesystem roots and server-only state. Use implement(contract), existing OpenAPI generation and typed client shape.
+- [x] R5. Serve declared native trees through fixed /modules/:id/* handlers before static/SPA fallback with correct MIME and Cache-Control:no-store. Reject traversal, malformed encoding and symlink escape at request time, return real missing-asset errors and expose no undeclared or disabled roots.
+- [x] R6. Fail clearly before listening on malformed explicit module config or an incompatible selected Board distribution with enabled contributions; preserve the established no-module/standalone paths. Build one project-owned catalog per server and use restart/reload semantics, without route mutation or downstream server imports.
 
 ### Acceptance Criteria
 
@@ -97,25 +97,104 @@ DELEGATION CONTRACT: Prerequisite 0988: packaged manifest, generated reserved ho
 
 ### Plan
 
-- [ ] Step 0 — Start from a clean task-specific branch/worktree containing this planning batch and completed dependency outputs. Re-read AGENTS.md, the contribution contract and root DESIGN.md for UI changes. Preserve unrelated work: task 0984 currently owns run-evidence helpers in another worktree; do not touch its files. Verify installed dependency resolution and lockfile, then build fresh generated assets when testing distribution; existing dist/web is not proof of freshness.
-- [ ] Step 1 (R1,R2) — Add discriminated schemas/defaults and inferred types through existing loader; test absent/empty lists, layered config preservation, unknown/mixed fields, finite order, defaults and credentials/scheme rejection.
-- [ ] Step 2 (R2,R3,R6) — Implement prepareBoardModules and manifest/reserved-inventory consumption. Test duplicate/retired/built-in collisions even disabled, project-root independence from cwd, disabled missing directory, valid external asset tree, absolute paths, traversal and symlink escapes.
-- [ ] Step 3 (R4) — Add board DTO/contract and implement(contract) handler using ServerContext. Generate OpenAPI through its existing generator; assert the typed payload has no private path and standalone returns an empty catalog without filesystem capability.
-- [ ] Step 4 (R5) — Mount one fixed native asset namespace ahead of SPA fallback. Use real temporary JS/CSS/chunk/image files and real Hono requests for MIME, no-store, unknown/disabled IDs, missing JS, encoded traversal and a symlink changed after startup.
-- [ ] Step 5 (R3,R6) — Thread prepared state through serve/createApp before listening; remove silent loss of explicit module parse failures. Test listen is not invoked for malformed/missing assets/incompatible enabled override, and no-module existing overrides/health path still start.
-- [ ] Step 6 (R1–R6) — Run config loader/bootstrap-options tests, proposed packages/app/tests/services/board-modules.test.ts, packages/contracts/tests/board.test.ts and apps/server/tests/board-modules.test.ts, plus focused serve regressions and the task gate. Run focused tests inside their workspace (its bunfig supplies preloads), then the task pipeline's required bun run spur-check once. Record real commands, versions, fixture locations, expected/actual observations and verdicts in execution-owned sections during implementation. Leave feature-wide checks to the final slice. No CLI noun/verb is added.
+- [x] Step 0 — Start from a clean task-specific branch/worktree containing this planning batch and completed dependency outputs. Re-read AGENTS.md, the contribution contract and root DESIGN.md for UI changes. Preserve unrelated work: task 0984 currently owns run-evidence helpers in another worktree; do not touch its files. Verify installed dependency resolution and lockfile, then build fresh generated assets when testing distribution; existing dist/web is not proof of freshness.
+- [x] Step 1 (R1,R2) — Add discriminated schemas/defaults and inferred types through existing loader; test absent/empty lists, layered config preservation, unknown/mixed fields, finite order, defaults and credentials/scheme rejection.
+- [x] Step 2 (R2,R3,R6) — Implement prepareBoardModules and manifest/reserved-inventory consumption. Test duplicate/retired/built-in collisions even disabled, project-root independence from cwd, disabled missing directory, valid external asset tree, absolute paths, traversal and symlink escapes.
+- [x] Step 3 (R4) — Add board DTO/contract and implement(contract) handler using ServerContext. Generate OpenAPI through its existing generator; assert the typed payload has no private path and standalone returns an empty catalog without filesystem capability.
+- [x] Step 4 (R5) — Mount one fixed native asset namespace ahead of SPA fallback. Use real temporary JS/CSS/chunk/image files and real Hono requests for MIME, no-store, unknown/disabled IDs, missing JS, encoded traversal and a symlink changed after startup.
+- [x] Step 5 (R3,R6) — Thread prepared state through serve/createApp before listening; remove silent loss of explicit module parse failures. Test listen is not invoked for malformed/missing assets/incompatible enabled override, and no-module existing overrides/health path still start.
+- [x] Step 6 (R1–R6) — Run config loader/bootstrap-options tests, proposed packages/app/tests/services/board-modules.test.ts, packages/contracts/tests/board.test.ts and apps/server/tests/board-modules.test.ts, plus focused serve regressions and the task gate. Run focused tests inside their workspace (its bunfig supplies preloads), then the task pipeline's required bun run spur-check once. Record real commands, versions, fixture locations, expected/actual observations and verdicts in execution-owned sections during implementation. Leave feature-wide checks to the final slice. No CLI noun/verb is added.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+Change map for task 0989 (feature A8). Every path below is `file:line` in this worktree; the work builds on 0988's manifest, reserved inventory and distribution guard without reimplementing them.
+
+**R1 — strict declaration schema inside the existing merged loader**
+
+- `packages/config/src/board-modules.ts:80` — `boardModuleDeclarationSchema`: discriminated union on the required `type` (`react` | `iframe`); both variants are `.strict()`, so an unknown field or the other variant's fields are rejected.
+- `packages/config/src/board-modules.ts:61` — shared fields (`sharedDeclarationFields`): required nonempty `id`/`name`/`icon`, optional `sidebarLabel`/`description`, finite `order`, `enabled` defaulting true.
+- `packages/config/src/board-modules.ts:84` — react variant: required `directory`/`entry`, `styles` defaulting `[]`; `packages/config/src/board-modules.ts:99` — iframe variant: required `url`.
+- `packages/config/src/index.ts:914` — `bootstrapSectionSchema` extends the existing `bootstrapOptionsSchema` with `modules`, so `bootstrap.options` and every unrelated key keep their previous shape and readers.
+- `packages/config/src/index.ts:915` — `modules` is optional in the schema; the empty default is resolved once at the read seam (`packages/app/src/services/board-catalog-service.ts:62`), so a partial config never restates it and no existing `SpurConfig` literal breaks.
+
+**R2 — unsupported/mixed fields, duplicates and host collisions**
+
+- `packages/config/src/board-modules.ts:49` — `isSafeFrameUrl`: absolute http(s) with no embedded credentials; relative paths and other schemes are configuration errors.
+- `packages/config/src/board-modules.ts:159` — `validateBoardModuleDeclarations`: duplicate ids and collisions with any host or retired identity (by id or by derived route) fail, disabled declarations included.
+- `packages/config/src/board-modules.ts:120` — `BoardModuleConfigError` carries declaration index, id and reason for the AC1 diagnostic.
+- `packages/config/src/board-modules.ts:193` — `parseBoardModuleDeclarations` composes schema parse and cross-declaration rules for one entry point.
+- `apps/server/src/serve.ts:697` — the cross-declaration rules are applied on the serve path against the 0988-generated inventory read from `board-runtime.json` (`apps/server/src/serve.ts:82`), never a second hand-written host list.
+
+**R3 — resolve enabled native trees before listening; no IO for CLI or disabled declarations**
+
+- `packages/app/src/services/board-catalog-service.ts:120` — `prepareBoardModules`: disabled declarations are skipped before any probe, so they require no files and no code is evaluated.
+- `packages/app/src/services/board-catalog-service.ts:87` — `resolveContained` (doc comment at `:81`): absolute and escaping entry/style paths are rejected against the declared directory.
+- `packages/app/src/services/board-catalog-service.ts:178` — existence of the enabled entry (and each style) through the injected probe.
+- `packages/app/src/services/board-catalog-service.ts:198` — real-path (symlink-resolved) containment of the module directory inside the project root and of the entry inside that directory.
+- `apps/server/src/serve.ts:698` — the snapshot is built in `startServer` before `createApp` and before `Bun.serve` (`apps/server/src/serve.ts:1034`); ordinary CLI config loading never reaches this code and performs no asset IO.
+
+**R4 — read-only `GET /api/board/modules`**
+
+- `packages/contracts/src/board.ts:72` — `boardCatalogSchema` (`catalogVersion: 1`, `host`, `modules`); `packages/contracts/src/board.ts:39` — descriptor union carrying public asset URLs or the frame URL only.
+- `packages/contracts/src/board.ts:92` — `boardContract.modules` (GET `/board/modules`), merged into the public contract at `packages/contracts/src/index.ts:32`, so the existing OpenAPI generator and typed client shape pick it up unchanged.
+- `apps/server/src/router.ts:45` — `implement(contract)` handler returning the per-server snapshot; `apps/server/src/router.ts:16` — the empty catalog a context without a snapshot answers (standalone path).
+- `apps/server/src/context.ts:153` — the prepared snapshot is per-server state, assigned at `apps/server/src/context.ts:414`.
+
+**R5 — fixed `/modules/:id/*` handlers ahead of static/SPA fallback**
+
+- `apps/server/src/modules/board/index.ts:100` — `boardModule`; registered at `apps/server/src/modules/registry.ts:30`, which `registerModules` mounts (`apps/server/src/bootstrap.ts:36`) before the static wildcard and SPA `notFound`.
+- `apps/server/src/modules/board/index.ts:62` — `serveModuleAsset`: 405 for non-GET/HEAD, 400 malformed percent-encoding, 403 traversal and symlink escape (real-path containment), 404 unknown, disabled or missing.
+- `apps/server/src/modules/board/index.ts:50` — refusals are `text/plain` with `cache-control: no-store`, so a missing asset is never answered with index.html; served assets carry the runtime MIME type at `apps/server/src/modules/board/index.ts:103` plus the same no-store policy at `apps/server/src/modules/board/index.ts:105`.
+- `apps/server/src/modules/board/index.ts:17` — `/modules/<id>` with no asset segment is not an asset path, so the board's own deep route still reaches the SPA fallback.
+
+**R6 — fail before listening; restart-only reload**
+
+- `apps/server/src/serve.ts:655` — a config-load failure naming `bootstrap.modules` is rethrown instead of degrading to null (`isBoardModuleConfigError`, `packages/config/src/board-modules.ts:144`); every other failure keeps the documented env-only tolerance.
+- `packages/app/src/services/board-catalog-service.ts:137` — enabled contributions with no installed distribution fail startup instead of rendering an empty board; `packages/app/src/services/board-catalog-service.ts:144` — a manifest/contribution API version mismatch names both versions.
+- `apps/server/src/serve.ts:82` — an unreadable `board-runtime.json` only fails startup when contributions exist, preserving the established no-module/standalone path.
+- AC5 needs no reload machinery: one snapshot is built per server and the procedure reads it (`apps/server/src/router.ts:46`), so a declaration edit is invisible until restart and no live route is inserted.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+Focused tests were run **inside their workspace** so each workspace `bunfig.toml` preload applies;
+the full gate was run once from the worktree root.
+
+| Command | Outcome |
+| --- | --- |
+| `(cd packages/config && bun test tests/board-modules.test.ts)` | **12 pass / 0 fail**, 41 assertions, 31.00ms — id pattern enforcement, iframe URL safety (absolute credential-free http(s) accepted; relative URLs, other schemes and embedded credentials rejected), cross-declaration uniqueness including a disabled duplicate, and collisions with host or retired identities reported by index and reason |
+| `(cd packages/app && bun test tests/services/board-catalog-service.test.ts)` | **9 pass / 0 fail**, 19 assertions, 27.00ms — a disabled declaration is dropped before any IO; an enabled module publishes public URLs while keeping its roots server-side; an iframe declaration needs no asset IO; a missing module directory fails naming the declaration index and id; an escaping entry path and a symlinked entry leaving its directory are both refused; containment is re-checked lexically at the request layer |
+| `(cd apps/server && bun test tests/board-modules.test.ts tests/modules/registry.test.ts)` | **26 pass / 0 fail**, 54 assertions, 332.00ms — the emitted manifest is read as the host descriptor; an unreadable manifest fails only when the project declared contributions; the probe reports existence and degrades an unresolvable real path; the builtin module set still registers and mounts |
+| `bun run lint` | **exit 0** — Biome clean across 1173 files, then typecheck exit 0 for all eight workspaces plus `scripts/` and `plugins/sp` |
+| `bun run <cli> rule run --preset recommended-post-check --fail-on warning --no-logo` | **all 2 rules pass** |
+| `bun run spur-check` | **exit 0 — 9494 pass / 0 fail** across 551 files (278.18s), post-check rules pass |
+
+#### Defect found during this task and its fix
+
+The first gate run died at its first step (`lint`) with **13 Biome errors** — export-ordering and
+formatting in the touched barrels, e.g. `packages/contracts/src/index.ts` needed
+`export * from './board'` ordered ahead of its `./feature` export. It never reached typecheck or
+tests. Repaired with `bun run format` plus hand fixes, after which `bun run lint` exits 0; the
+subsequent full gate run passed end to end at 9494/0.
+
+#### Regression position
+
+The suite grew from 9452 to **9494 passing** tests (+42) across 551 files, with **0 failures**. No
+existing test was modified to accommodate the new behavior except `apps/server/tests/modules/registry.test.ts`,
+which pins the builtin module set and therefore had to acknowledge the added board module.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Findings are ranked P1 (blocker) to P4 (nit). No P1 remained open at handoff: every requirement and acceptance scenario has at least one executed check, and the repository gate is green.
+
+| Severity | Finding | Evidence | Disposition |
+| --- | --- | --- | --- |
+| P1 | None outstanding — no requirement or acceptance scenario is unproven, and no check was weakened to go green. | Pre-check 49/49 and post-check 2/2 rules pass; the three new test files pass; `bun run spur-check` exit 0. | accepted |
+| P2 | AC1's "never calls listen" is proven by ordering plus unit-level startup failures, not by a live `startServer` regression with injected deps: the snapshot is prepared at `apps/server/src/serve.ts:698`, which runs before the only listen (`apps/server/src/serve.ts:1034`), and the failure modes are asserted directly on `prepareBoardModules`. A refactor that moved the prepare call below the listen would pass these tests. | `apps/server/src/serve.ts:698`; `apps/server/tests/board-modules.test.ts` startup describe block | accepted with follow-up: add an injected-deps serve regression the next time that seam is edited |
+| P2 | The `bootstrap` section itself stays non-strict, so an unknown sibling key (`bootstrap.module:`) is ignored. R2 requires strictness of the module declarations, which the discriminated union enforces field by field; tightening the whole section would break existing partial configs. | `packages/config/src/index.ts:914`; `packages/config/src/board-modules.ts:80` | accepted as scoped |
+| P3 | Module routes are derived as `/modules/<id>`, coupling the config-layer collision rule to the server mount path. If the board later renders project modules elsewhere, the reserved-identity comparison and `entryUrl` must move with it. | `packages/config/src/board-modules.ts:40`; `packages/app/src/services/board-catalog-service.ts:206` | noted; one exported constant owns the prefix |
+| P3 | `FileSystem.realPath` is optional, so on a backend that omits it the symlink-escape refusal is skipped and only lexical containment applies. | `packages/app/src/services/board-catalog-service.ts:59`; `apps/server/src/modules/board/index.ts:14` | accepted: identical contract to the extension loader's containment check (ADR-022) |
+| P4 | Every module asset is served `no-store`, so a rebuilt chunk cannot be revalidated; there is no ETag because the build emits no content hash for module trees. | `apps/server/src/modules/board/index.ts:33` | noted for the consuming slices (0990/0992) |
+| P4 | Asset MIME types come from the runtime's extension lookup rather than an explicit table — deliberately the same behavior as the existing static handler, so the two cannot disagree. | `apps/server/src/modules/board/index.ts:87`; `apps/server/src/bootstrap.ts` static branch | accepted |
 
 ### References
 
@@ -127,6 +206,11 @@ DELEGATION CONTRACT: Prerequisite 0988: packaged manifest, generated reserved ho
 - Source facts and proposed new targets are distinguished in Background/Design. Existing dist/web/generated artifacts must be rebuilt before distribution evidence; no generation-freshness claim was inferred from their presence.
 
 ### History
+
+- 2026-09-28T23:39:20.085Z todo → wip (system)
+- 2026-09-28T23:39:21.844Z wip → testing (system)
+- 2026-09-28T23:39:22.827Z testing → done (system)
+
 ### Notes
 
 Planning freeze (2026-09-27): Requirements, Design, Plan, AC mapping, closed decisions, dependency contracts and current-tree premises have been audited. These specifications are ready for ordered delegation. Only 0988 is execution-eligible immediately; later tasks wait for their named prerequisites. Normal task checks pass with only L4.prerequisite-not-done warnings on dependent tasks; --as todo elevates those waiting-state findings to errors. Do not remove dependencies, change prerequisite statuses or suppress those findings to make all tasks simultaneously runnable.

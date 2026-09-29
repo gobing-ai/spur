@@ -48,6 +48,17 @@ body {
 }
 
 /*
+ * A framed resource owns the workspace (task 0991 R2): the right-panel column and its handle
+ * collapse to zero so the frame fills everything beside the sidebar. This is derived from the
+ * ACTIVE MODULE, not from layout state — nothing is written to persistence, so a user's saved
+ * left/right collapse preferences survive switching between framed and built-in modules.
+ */
+.board-layout[data-framed-workspace="true"] {
+    --rightpanel-w: 0px;
+    --rightpanel-handle-w: 0px;
+}
+
+/*
  * Collapse is driven only by data-sidebar-collapsed (and persisted layout state).
  * A previous md breakpoint forced --sidebar-w:48px unconditionally, which made the
  * expand toggle a no-op below 1024px: labels rendered in the DOM but stayed clipped.

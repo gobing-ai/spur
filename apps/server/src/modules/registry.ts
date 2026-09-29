@@ -1,5 +1,6 @@
 import type { Hono } from 'hono';
 import type { ServerContext } from '../context';
+import { boardModule } from './board';
 import { commandsModule } from './commands';
 import { eventsModule } from './events';
 import { featureModule } from './feature';
@@ -26,6 +27,7 @@ import type { ServerModule } from './types';
  */
 const builtins: ServerModule[] = [
     healthModule,
+    boardModule,
     taskModule,
     featureModule,
     eventsModule,

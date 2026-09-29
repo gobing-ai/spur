@@ -104,6 +104,12 @@ function sourceOf(mod: WebModule): string {
 
 const registry = createRegistry(discoverModules(), { disabled: disabledModules });
 
+/**
+ * The built-in registry instance — discovery with the configured disables applied. BoardApp
+ * composes this with the project catalog; the shell's context default is this same instance.
+ */
+export const builtinRegistry: Registry = registry;
+
 /** Read-only enabled module list — derived from discovery. */
 export const modules: ReadonlyArray<WebModule> = registry.modules;
 

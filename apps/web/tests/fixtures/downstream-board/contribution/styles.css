@@ -1,0 +1,30 @@
+/*
+ * Scoped fixture CSS (task 0988 R3/R4).
+ *
+ * Every rule is namespaced under `.spur-downstream-*`; no global resets, no element selectors, no
+ * Tailwind shell output. The browser proof asserts the computed style lands on the contribution
+ * while the Board's own chrome keeps its own styling.
+ */
+.spur-downstream-fixture {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    color: rgb(12, 34, 156);
+}
+
+.spur-downstream-button {
+    border: 1px solid rgb(12, 34, 156);
+    border-radius: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    color: rgb(12, 34, 156);
+}
+
+.spur-downstream-panel {
+    color: rgb(178, 34, 34);
+}
+
+.spur-downstream-asset {
+    width: 16px;
+    height: 16px;
+}

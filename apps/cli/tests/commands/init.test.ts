@@ -116,6 +116,19 @@ describe('init command', () => {
         expect(config).toContain('version: "1.2"');
     });
 
+    test('seeds an explicit empty downstream Board module list and points at the guide (0992 R5)', async () => {
+        const cwd = await createTempProject();
+        const { options } = await isolatedOptions(cwd);
+
+        expect(await main(['init'], options)).toBe(0);
+
+        const config = await readFile(join(cwd, '.spur', 'config.yaml'), 'utf8');
+        // A fresh project opts in module by module: the declaration contract ships empty, never
+        // pre-populated, so built-ins are all a new project renders until it declares its own.
+        expect(config).toMatch(/^ {2}modules: \[\]$/m);
+        expect(config).toContain('docs/design/downstream-board-modules.md');
+    });
+
     test('seeds the global rules directory from the bundled presets', async () => {
         const cwd = await createTempProject();
         const { options, globalDir } = await isolatedOptions(cwd);

@@ -12,6 +12,7 @@
  *   publish <package-dir> [--otp <code>]       resolve deps + npm publish (OIDC)
  *   bundle-config <out-dir>                     copy config/ into a tarball dir
  *   bundle-web [out-dir]                        copy dist/web into apps/cli/web for npm
+ *   emit-board-types                            emit apps/cli/board/index.d.ts from the authoring source
  *   bundle-plugins                               copy plugins/ + .claude-plugin into apps/cli for npm
  *   check-marketplace-version                    fail if marketplace/plugin versions drifted from the CLI package
  *   verify-pack <tgz>                            extract + assert the packed tarball ships plugin + marketplace
@@ -31,6 +32,7 @@ import { bundlePlugins } from './commands/bundle-plugins';
 import { bundleWeb } from './commands/bundle-web';
 import { checkMarketplaceVersion } from './commands/check-marketplace-version';
 import { devAll } from './commands/dev-all';
+import { emitBoardDeclarations } from './commands/emit-board-types';
 import { evalPipeline } from './commands/eval-pipeline';
 import { linkCheck } from './commands/link-check';
 import { checkPipelineBudgets } from './commands/pipeline-budgets';
@@ -42,7 +44,7 @@ import { runWorkflowPromotion } from './commands/workflow-promotion';
 
 function usage(message?: string): never {
     console.error(
-        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets, promotion',
+        'Commands: bump-ver, drop-tags, publish, bundle-config, bundle-web, bundle-plugins, emit-board-types, check-marketplace-version, verify-pack, build-binaries, build-cli, dev-all, link-check, eval-pipeline, real-run-cost, check-pipeline-budgets, promotion',
     );
     process.exit(message ? 1 : 0);
 }
@@ -83,6 +85,11 @@ try {
         case 'bundle-plugins': {
             const result = await bundlePlugins();
             console.log(`Staged plugins ${result.pluginTarget} + marketplace ${result.marketplaceTarget} for npm`);
+            break;
+        }
+        case 'emit-board-types': {
+            const result = await emitBoardDeclarations();
+            console.log(`${result.changed ? 'Wrote' : 'Unchanged'} board declaration ${result.target}`);
             break;
         }
         case 'check-marketplace-version':

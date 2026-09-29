@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Prove and package the Board shared runtime and downstream authoring contract
-status: todo
+status: done
 template: feature-impl
 created_at: 2026-09-28T01:46:26.503Z
-updated_at: "2026-09-28T01:50:16.849Z"
+updated_at: "2026-09-28T23:01:47.639Z"
 feature_id: A8
 priority: P2
 tags:
@@ -27,12 +27,12 @@ Rubric: E8 D1 L2 C1 R1 = 13; keep this cohesive proof/distribution deliverable w
 
 ### Requirements
 
-- [ ] R1. Publish the type-only @gobing-ai/spur/board export containing BoardModuleContribution with readonly apiVersion: 1, component: ComponentType and optional rightPanelComponent: ComponentType; the entry export name is webModule. Generate/package declarations from one authoring source without a CLI React value dependency.
-- [ ] R2. Ship board-runtime.json and React/JSX facade assets emitted from the same client build graph as the real Board renderer. Install an import map before any external entry evaluates; prove identity rather than version equality.
-- [ ] R3. Build a downstream Vite ESM fixture outside the Spur checkout with its own React installation, a useState interaction, scoped CSS, a referenced asset/lazy chunk, a deep route and an optional right-panel component. Type-check it using the installed tarball's public export.
-- [ ] R4. Demonstrate the fixture under the installed CLI's actual Board renderer in a real browser, plus malformed exports and a throwing contribution that do not disable built-ins. Use a build-known test adapter rather than implementing the generic catalog/config loader in this slice.
-- [ ] R5. Exercise an owned frame-permitting URL app and a frame-denying URL app in the same real-browser proof harness; record focus/scroll/mobile/external-open observations without interpreting iframe load as readiness.
-- [ ] R6. Preserve a repeatable assertion-based Bun/Hono probe proving listener handler replacement, rejection of late route insertion into a finalized Hono matcher, and dispatch through a freshly constructed replacement app; document the fixed-handler v1 conclusion.
+- [x] R1. Publish the type-only @gobing-ai/spur/board export containing BoardModuleContribution with readonly apiVersion: 1, component: ComponentType and optional rightPanelComponent: ComponentType; the entry export name is webModule. Generate/package declarations from one authoring source without a CLI React value dependency.
+- [x] R2. Ship board-runtime.json and React/JSX facade assets emitted from the same client build graph as the real Board renderer. Install an import map before any external entry evaluates; prove identity rather than version equality.
+- [x] R3. Build a downstream Vite ESM fixture outside the Spur checkout with its own React installation, a useState interaction, scoped CSS, a referenced asset/lazy chunk, a deep route and an optional right-panel component. Type-check it using the installed tarball's public export.
+- [x] R4. Demonstrate the fixture under the installed CLI's actual Board renderer in a real browser, plus malformed exports and a throwing contribution that do not disable built-ins. Use a build-known test adapter rather than implementing the generic catalog/config loader in this slice.
+- [x] R5. Exercise an owned frame-permitting URL app and a frame-denying URL app in the same real-browser proof harness; record focus/scroll/mobile/external-open observations without interpreting iframe load as readiness.
+- [x] R6. Preserve a repeatable assertion-based Bun/Hono probe proving listener handler replacement, rejection of late route insertion into a finalized Hono matcher, and dispatch through a freshly constructed replacement app; document the fixed-handler v1 conclusion.
 
 ### Acceptance Criteria
 
@@ -87,25 +87,142 @@ DELEGATION CONTRACT: Prerequisites: none. Handoff to tasks 0989, 0990 and 0992: 
 
 ### Plan
 
-- [ ] Step 0 — Start from a clean task-specific branch/worktree containing this planning batch and completed dependency outputs. Re-read AGENTS.md, the contribution contract and root DESIGN.md for UI changes. Preserve unrelated work: task 0984 currently owns run-evidence helpers in another worktree; do not touch its files. Verify installed dependency resolution and lockfile, then build fresh generated assets when testing distribution; existing dist/web is not proof of freshness.
-- [ ] Step 1 (R1,R2) — Inspect the installed Astro/Vite client graph and island script ordering. Add the smallest same-graph facade integration, manifest and declaration emission; verify the installed package's ./board type path and absence of a runtime React import in CLI/plugin artifacts.
-- [ ] Step 2 (R2,R3) — Fresh-build apps/web, run the existing CLI bundle pipeline, pack locally and install into a temporary consumer outside the checkout. Create the Vite library fixture with the explicit external list and consumer React/types; check scoped CSS, separate chunk and asset URLs.
-- [ ] Step 3 (R3,R4) — Run the temporary adapter under the installed Board root in a real browser. Assert click/state updates and shared context/hook identity, deep links, panel render, malformed export and render-failure isolation. Capture package/build/tool provenance and browser observations.
-- [ ] Step 4 (R5) — Serve owned allowed/denied frame fixtures on separate origins; observe host navigation, mobile/focus/scroll and an always-usable external link. Keep browser refusal intact and make no readiness claim for a denied frame.
-- [ ] Step 5 (R6) — Add an isolated listener lifecycle test with ephemeral ports and finally cleanup. Assert late Hono mutation failure and fresh-app handler replacement separately from Bun listener behavior.
-- [ ] Step 6 (R1–R6) — Run package inclusion, focused runtime/lifecycle tests and the task gate. Publish exact output files, supported specifiers and proof receipts for dependent tasks. Run focused tests inside their workspace (its bunfig supplies preloads), then the task pipeline's required bun run spur-check once. Record real commands, versions, fixture locations, expected/actual observations and verdicts in execution-owned sections during implementation. Leave feature-wide checks to the final slice. No CLI noun/verb is added.
+- [x] Step 0 — Start from a clean task-specific branch/worktree containing this planning batch and completed dependency outputs. Re-read AGENTS.md, the contribution contract and root DESIGN.md for UI changes. Preserve unrelated work: task 0984 currently owns run-evidence helpers in another worktree; do not touch its files. Verify installed dependency resolution and lockfile, then build fresh generated assets when testing distribution; existing dist/web is not proof of freshness.
+- [x] Step 1 (R1,R2) — Inspect the installed Astro/Vite client graph and island script ordering. Add the smallest same-graph facade integration, manifest and declaration emission; verify the installed package's ./board type path and absence of a runtime React import in CLI/plugin artifacts.
+- [x] Step 2 (R2,R3) — Fresh-build apps/web, run the existing CLI bundle pipeline, pack locally and install into a temporary consumer outside the checkout. Create the Vite library fixture with the explicit external list and consumer React/types; check scoped CSS, separate chunk and asset URLs.
+- [x] Step 3 (R3,R4) — Run the temporary adapter under the installed Board root in a real browser. Assert click/state updates and shared context/hook identity, deep links, panel render, malformed export and render-failure isolation. Capture package/build/tool provenance and browser observations.
+- [x] Step 4 (R5) — Serve owned allowed/denied frame fixtures on separate origins; observe host navigation, mobile/focus/scroll and an always-usable external link. Keep browser refusal intact and make no readiness claim for a denied frame.
+- [x] Step 5 (R6) — Add an isolated listener lifecycle test with ephemeral ports and finally cleanup. Assert late Hono mutation failure and fresh-app handler replacement separately from Bun listener behavior.
+- [x] Step 6 (R1–R6) — Run package inclusion, focused runtime/lifecycle tests and the task gate. Publish exact output files, supported specifiers and proof receipts for dependent tasks. Run focused tests inside their workspace (its bunfig supplies preloads), then the task pipeline's required bun run spur-check once. Record real commands, versions, fixture locations, expected/actual observations and verdicts in execution-owned sections during implementation. Leave feature-wide checks to the final slice. No CLI noun/verb is added.
 
 ### Solution
 
-<!-- Filled during implementation: file:line change map and concise rationale. -->
+One authoring source for the contribution ABI, a generated declaration-only export, an emitted runtime
+manifest + import map, and a bundle-time guard that refuses to ship a board without it.
+
+**Contract and runtime — added**
+
+| File | Role |
+| --- | --- |
+| `apps/web/src/modules/contribution.ts:18` | The ONE authoring source for `BoardModuleContribution`; `apiVersion: 1` at `:20`. Type-only, no React value import. |
+| `apps/cli/board/index.d.ts:19` | Generated declaration-only ABI; `apiVersion: 1` at `:21`, `export declare const webModule` at `:38`. Header marks it generated. |
+| `scripts/commands/emit-board-types.ts:20` | Pins `BOARD_AUTHORING_SOURCE`; renders the `.d.ts` at `:44`; writes it at `:97`. |
+| `apps/web/src/modules/runtime/manifest.ts:12` | `BoardRuntimeManifest`; frozen versions at `:40`; `BOARD_FACADE_SPECIFIERS` at `:53`, with `react-dom/client` at `:58` and `react-router/dom` at `:60`; `BoardFacadeSpecifier` at `:69`; facade source at `:86`; manifest build at `:97`; `importMapFor` at `:121`; `renderImportMapScript` at `:126`; `injectImportMap` at `:136`. |
+| `apps/web/scripts/board-runtime.ts:192` | The `boardRuntime()` Astro integration; facade chunk naming at `:143`; import-map injection at `:226`. |
+| `apps/web/scripts/host-inventory.ts:20` | `hostReservedModules()` derives the reserved inventory from the host's own declarations — never hand-written. |
+
+**Existing seams — modified**
+
+| File | Change |
+| --- | --- |
+| `apps/cli/package.json:28` | `exports["./board"] = { "types": "./board/index.d.ts" }` — a types-only condition, so no runtime entry point exists; `board` added to `files` at `:36`; `emit-board-types` prepended to `build:bundle` at `:52`. |
+| `apps/web/astro.config.mjs:14` | `integrations: [react(), boardRuntime()]`. |
+| `scripts/commands/bundle-web.ts:38` | `verifyBoardRuntime()`; file/version constants at `:26`–`:27`; invoked before packaging at `:108`. Packaging now fails loudly on a missing/malformed manifest, a wrong protocol version, or an unsupported facade URL shape. |
+| `apps/web/tsconfig.json`, `.gitignore` | Fixture/test path config; ignore board build and browser-proof scratch. |
+| `scripts/spur-dev.ts` | `emit-board-types` subcommand. |
+
+**Proofs — added**
+
+- Unit: `apps/web/tests/modules/contribution.test.ts`, `apps/web/tests/modules/runtime-distribution.test.ts`, `apps/web/tests/modules/runtime/manifest.test.ts`; `scripts/commands/emit-board-types.test.ts`; `scripts/commands/bundle-web.test.ts` (extended).
+- Real browser: `apps/web/tests/modules/board-runtime-browser.test.ts` (R3/R4, AC1), `apps/web/tests/modules/board-frames-browser.test.ts` (R5, AC2).
+- Lifecycle: `apps/server/tests/board-listener-lifecycle.test.ts` (R6, AC2).
+- Helpers: `apps/web/tests/test-helpers/cdp.ts`, `board-build.ts`, `board-server.ts`, `downstream-fixture.ts`, `frame-fixtures.ts`.
+- Fixtures: `apps/web/tests/fixtures/downstream-board/**` (out-of-checkout Vite ESM app with its own React — `useState`, scoped CSS, lazy chunk, SVG asset, deep route, optional right panel, plus `malformed.ts` / `throwing.ts` / `own-react.ts`), `apps/web/tests/fixtures/frames/**` (permitted/denied/harness), `apps/web/tests/fixtures/board-test-adapter/**`.
+
+**Decisions**
+
+- `board-runtime.json` is emitted at the **distribution root** (`apps/web/scripts/board-runtime.ts:46`), not under `_astro/`, so the import map's facade URLs are stable across content-hashed rebuilds.
+- Facade source is generated from the **measured** export names (`apps/web/src/modules/runtime/manifest.ts:86`) rather than `export * from 'react'`: Vite's production CJS interop (`strictRequires`) hides React's named exports from Rollup's static analysis, so `export *` emits nothing usable while the interop namespace yields the renderer's real bindings — the same function objects the Board hydrates with.
+- Explicit subpaths only — `react-dom/client` is named at `apps/web/src/modules/runtime/manifest.ts:58` and `react-router/dom` at `apps/web/src/modules/runtime/manifest.ts:60`, so no wildcard matches them; no wildcard, so every entry is a deliberate resolution promise.
+- The `./board` export carries a `types` condition and nothing else — there is no runtime SDK to accidentally import.
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+#### Commands and outcomes
+
+Focused tests were run **inside their workspace** so each workspace `bunfig.toml` preload applies;
+the full gate was run once from the worktree root.
+
+| Command | Outcome |
+| --- | --- |
+| `(cd apps/web && bun test tests/modules/contribution.test.ts tests/modules/runtime-distribution.test.ts tests/modules/runtime/)` | **25 pass / 0 fail**, 106 assertions, 9.64s — R1 ABI, R2 manifest, import-map ordering/idempotence |
+| `(cd apps/server && bun test tests/board-listener-lifecycle.test.ts)` | **4 pass / 0 fail**, 16 assertions, 24ms — R6 (handler replacement; finalized matcher rejects late route; fresh app serves it) |
+| `bun test scripts/commands/emit-board-types.test.ts scripts/commands/bundle-web.test.ts` | **9 pass / 0 fail**, 24 assertions, 2.73s — artifact is exactly what the source generates, declaration-only, regeneration deterministic; bundler refuses a manifest-less/invalid board |
+| `(cd apps/web && bun test tests/modules/board-runtime-browser.test.ts tests/modules/board-frames-browser.test.ts)` | **14 pass / 0 fail**, 70 assertions, 20.87s — real Chrome via CDP |
+| `bun run spur-check` (run 1) | lint clean (1166 files) · typecheck clean (8 workspaces + scripts + plugins) · pre-check 49 rules pass · **9452 pass / 0 fail** across 548 files (344.20s) · **post-check FAILED** |
+| `bun run <cli> rule run --preset recommended-post-check` (after fix) | **all 2 rules pass** |
+| `bun run spur-check` (run 2, recheck) | **PASS** — exit 0 · 9452 pass / 0 fail across 548 files (372.60s) · post-check rules pass |
+
+#### The one defect found, and its fix
+
+Run 1's post-check failed on a single rule:
+
+```
+ERROR every-export-has-tsdoc apps/web/src/modules/runtime/manifest.ts:63
+  Exported type "BoardFacadeSpecifier" is missing a doc comment
+```
+
+Fixed by documenting the type in the file's established voice — explaining *why* it is derived from
+`BOARD_FACADE_SPECIFIERS` (single source, the two cannot drift) rather than declaring it separately.
+Post-check then passed. No other rule, test, lint, or typecheck failure occurred.
+
+#### What the browser actually proved (AC1 / AC2)
+
+Run against the **installed tarball's** renderer, not a mock, using **Chrome** over CDP
+(`/Applications/Google Chrome.app`, no puppeteer — the harness talks raw CDP):
+
+- The Board renderer mounted the downstream fixture on a **deep link**.
+- **React is shared by instance, not by version** — strict object/function identity of the React
+  instance observed inside the contribution against the host's, which is what `AC1` asks for and
+  what version-string equality would not establish.
+- Hooks, host context, and **scoped CSS** all work inside the Board's React tree.
+- A **lazy chunk** and a referenced **SVG asset** load on demand (111.78ms) — i.e. the fixture is a
+  real Vite build, not a stub.
+- The optional **right panel** renders in the Board's own panel chrome.
+- The downstream entry **type-checks against the installed `./board` export**.
+- **Malformed export and a throwing contribution both leave the built-ins usable** (221.77ms).
+- Frames: the permitted app **actually runs** inside the frame; the denied app **never runs** and its
+  refusal is observable; **no readiness claim is derived from a frame load event**; the external-open
+  link carries `noopener`/`noreferrer` and opens; focus and scrolling inside the framed document are
+  observed separately; a mobile viewport keeps the embed working with no readiness claim from the
+  refusal.
+
+Happy-DOM was not used for the identity or framing proofs — both required a real browser.
+
+#### Residual
+
+- The `implement` stage's `agent.run` hit the 30-minute pipeline budget mid-cleanup, before it ran its
+  own full gate. Its work-in-progress intent was to stop the browser-proof test helpers from reading
+  the adapter location out of `process.env`. Functionally complete and green, but that helper coupling
+  remains — worth a follow-up if the helpers are reused.
+- Vite is not a direct dependency of `apps/web`; it resolves through Astro 6.4.2's own graph
+  (Astro 6.4.2 → Vite 7.3.3). The facade/import-map work depends on that transitive resolution.
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+Reviewed the change set against R1–R6, AC1–AC3, and the frozen constraints. Verification was
+observation-only; every row below is a finding I observed in this change set, not a restatement of
+the task text.
+
+| Priority | Severity | Finding | Evidence | Disposition |
+| --- | --- | --- | --- | --- |
+| P3 (minor) | minor | The browser-proof helpers read the adapter path out of `process.env` and mutate that ambient state in a shared test process. Correct under Bun's per-file isolation, but it couples the harness to process state — this is precisely the cleanup the interrupted implement run was mid-way through when it exhausted its budget. | `apps/web/tests/test-helpers/board-build.ts`, `apps/web/tests/test-helpers/board-server.ts`, `apps/web/tests/test-helpers/downstream-fixture.ts` | Deferred — no behavioural impact; the suite is green. Recorded here and in the Testing residual. |
+| P4 (advisory) | advisory | `apps/web` declares no direct Vite dependency. The facade generation and import-map injection resolve Vite transitively through Astro 6.4.2, so an Astro bump could move the Vite major with no signal in any manifest this repo controls. | `apps/web/package.json` lists no `vite` entry; `apps/web/node_modules/vite` is absent while `astro` resolves it | Accepted — the emitted manifest records the measured React/DOM/Router versions at build time, and the real-browser proof fails loudly on a broken facade rather than silently degrading. |
+| P4 (advisory) | advisory | Nothing asserts that a *value* import of `@gobing-ai/spur/board` fails for a non-TypeScript consumer. The safety of the type-only export currently rests on the declaration alone, so a plain-JS consumer's mistake would surface at their bundle time rather than ours. | `apps/cli/board/index.d.ts:38` is `export declare const webModule`; no fixture performs a value import | Deferred — outside this slice's frozen scope, which requires only the type-check against the installed export (R3). |
+
+No P1 (blocker) and no P2 (major) findings were identified.
+
+Frozen constraints were re-verified clean against the final change set:
+
+- no new public `spur` noun or verb — no CLI source file was modified at all;
+- no dependency added, upgraded, or removed in any manifest;
+- no plugin/catalog/config loader, no Module Federation, no bridge SDK;
+- the reserved-module inventory is generated from host declarations rather than hand-written.
+
+Residual risk: the `implement` stage's agent run exhausted its 30-minute budget before it ran its own
+gate. The green gate referenced by the verification verdict was produced by a separate full run over
+the same tree, and the task and feature specification files were frozen before that run and were not
+modified after it.
 
 ### References
 
@@ -117,6 +234,11 @@ DELEGATION CONTRACT: Prerequisites: none. Handoff to tasks 0989, 0990 and 0992: 
 - Source facts and proposed new targets are distinguished in Background/Design. Existing dist/web/generated artifacts must be rebuilt before distribution evidence; no generation-freshness claim was inferred from their presence.
 
 ### History
+
+- 2026-09-28T22:51:12.159Z todo → wip (system)
+- 2026-09-28T23:01:12.318Z wip → testing (system)
+- 2026-09-28T23:01:47.639Z testing → done (system)
+
 ### Notes
 
 Planning freeze (2026-09-27): Requirements, Design, Plan, AC mapping, closed decisions, dependency contracts and current-tree premises have been audited. These specifications are ready for ordered delegation. Only 0988 is execution-eligible immediately; later tasks wait for their named prerequisites. Normal task checks pass with only L4.prerequisite-not-done warnings on dependent tasks; --as todo elevates those waiting-state findings to errors. Do not remove dependencies, change prerequisite statuses or suppress those findings to make all tasks simultaneously runnable.

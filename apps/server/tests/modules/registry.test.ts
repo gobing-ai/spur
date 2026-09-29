@@ -7,6 +7,7 @@ describe('module registry', () => {
         const names = builtins.map((m) => m.name);
         expect(names).toEqual([
             'health',
+            'board',
             'task',
             'feature',
             'events',

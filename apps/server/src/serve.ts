@@ -5,6 +5,7 @@ import {
     AgentService,
     configuredSecretValues,
     createSystemEventCatchAllSink,
+    declaredBoardModules,
     type FeatureActionJob,
     FleetService,
     HISTORY_REFRESH_JOB,
@@ -18,6 +19,7 @@ import {
     loadSectionMatrix,
     normalizeProjectPath,
     ProjectRegistry,
+    prepareBoardModules,
     resolveAgentRoles,
     resolveHistoryRefreshTimeoutMs,
     resolveKillGraceMs,
@@ -31,8 +33,14 @@ import {
     type TaskActionJob,
     terminateJobChildren,
 } from '@gobing-ai/spur-app';
-import { getEnvVars, IN_MEMORY_DATABASE_URL } from '@gobing-ai/spur-config';
+import {
+    getEnvVars,
+    IN_MEMORY_DATABASE_URL,
+    isBoardModuleConfigError,
+    validateBoardModuleDeclarations,
+} from '@gobing-ai/spur-config';
 import { loadSpurConfig, resolveConfigFile } from '@gobing-ai/spur-config/loader';
+import type { BoardHostRuntime } from '@gobing-ai/spur-contracts';
 import {
     failOrphanedProcessingJobs,
     failStaleSchedulerCustomJob,
@@ -58,6 +66,56 @@ import { openUrl } from './open-url';
 
 /** Built-in queue job kind for scheduled system_events retention pruning. */
 export const SYSTEM_EVENTS_PRUNE_JOB = 'system-events-prune';
+
+/** Distribution-root file holding the selected Board's runtime facts (task 0988 R2). */
+const BOARD_RUNTIME_MANIFEST_FILE = 'board-runtime.json';
+
+/**
+ * Read the selected Board distribution's runtime facts (task 0988 R2), if one is installed.
+ *
+ * `null` when there is no distribution or it carries no manifest. A manifest that IS present
+ * but unreadable is a real failure once the project declared contributions: the reserved
+ * identity inventory and the renderer's contribution API version live there, so guessing
+ * them would mount project modules beside an unknown renderer (R6).
+ */
+export async function readBoardHostRuntime(
+    webDistPath: string | undefined,
+    hasContributions: boolean,
+): Promise<BoardHostRuntime | null> {
+    if (!webDistPath) return null;
+    const manifestPath = join(webDistPath, BOARD_RUNTIME_MANIFEST_FILE);
+    try {
+        const file = Bun.file(manifestPath);
+        if (!(await file.exists())) return null;
+        return (await file.json()) as BoardHostRuntime;
+    } catch (error) {
+        if (hasContributions) {
+            throw new Error(`Selected Board distribution is unusable: ${manifestPath} — ${String(error)}`);
+        }
+        return null;
+    }
+}
+
+/**
+ * Filesystem probe for the module snapshot (R3/R5).
+ *
+ * Built on the ts-runtime `FileSystem` seam rather than `node:fs` (rule `no-direct-fs-io`),
+ * so the probe is the same backend the rest of the server uses and CF stubs degrade to
+ * `undefined` real paths instead of throwing.
+ */
+export function boardModuleProbe(fs: FileSystem) {
+    return {
+        isFile: async (path: string): Promise<boolean> => (await fs.stat(path))?.isFile() ?? false,
+        isDirectory: async (path: string): Promise<boolean> => (await fs.stat(path))?.isDirectory() ?? false,
+        realPath: (path: string): string | undefined => {
+            try {
+                return fs.realPath?.(path);
+            } catch {
+                return undefined;
+            }
+        },
+    };
+}
 
 /** Built-in no-op queue job kind used as a scheduler/worker smoke path. */
 export const SMOKE_JOB = 'smoke';
@@ -596,7 +654,15 @@ export async function startServer(options: StartServerOptions, deps: StartServer
     // Load the merged global+project config BEFORE boot so `bootstrap.options` (task 0902)
     // reaches serverBootstrapConfig. A load failure degrades to null (env-only), same
     // tolerance as the CLI root; the same value is reused for the server context below.
-    const spurConfig = await loadSpurConfig(projectRoot).catch(() => null);
+    //
+    // Task 0989 R6 narrows that tolerance for one case: a project that EXPLICITLY declared
+    // `bootstrap.modules` must not be silently degraded to "no modules" — that turns a config
+    // typo into a board that quietly renders nothing. Every other load failure keeps the
+    // env-only fallback.
+    const spurConfig = await loadSpurConfig(projectRoot).catch((error: unknown) => {
+        if (isBoardModuleConfigError(error)) throw error;
+        return null;
+    });
     const bootConfig = deps.serverBootstrapConfig(env, spurConfig);
     const configFile = deps.resolveConfigFile(projectRoot);
 
@@ -625,6 +691,25 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 );
             }
 
+            // ── Project Board modules (0989 R3/R4/R6) ──
+            // Resolved ONCE, before the Hono app is composed and before Bun.serve: malformed
+            // explicit declarations, a missing enabled asset, or a selected distribution that
+            // cannot render them all fail startup instead of serving a half-broken board (AC1).
+            // The snapshot is frozen for the process lifetime, so a declaration edit needs a
+            // restart and never mutates a live route table (AC5).
+            const boardDeclarations = declaredBoardModules(spurConfig);
+            const boardHost = await readBoardHostRuntime(
+                webDistPath,
+                boardDeclarations.some((declaration) => declaration.enabled),
+            );
+            validateBoardModuleDeclarations(boardDeclarations, boardHost?.reservedModules ?? []);
+            const boardModules = await prepareBoardModules({
+                projectRoot,
+                declarations: boardDeclarations,
+                host: boardHost,
+                probe: boardModuleProbe(fs),
+            });
+
             // Load the merged global+project config ONCE (A5/ADR-082) and thread
             // it into the server context so Team/Workflow services + the history-
             // refresh job (J8 R2) never re-read the config per slice. Loaded above
@@ -637,6 +722,7 @@ export async function startServer(options: StartServerOptions, deps: StartServer
                 folders: await resolvePlanningFolders(fs),
                 sectionMatrix: await loadSectionMatrix(projectRoot),
                 webDistPath,
+                boardModules,
                 jobQueueEnabled: bootConfig.jobqueue.enabled,
                 scheduler,
                 bootConfig,

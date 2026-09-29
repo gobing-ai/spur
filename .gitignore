@@ -149,6 +149,10 @@ spur.js
 logs/
 .tmp/
 **/.tmp-*/
+# A8 / task 0988: the board-runtime browser proof copies its test-only contribution module here
+# for one temporary proof build (`boardRuntime({ testAdapterDir })`), then removes it. Never
+# present in a shipped build; ignored so a crashed proof build cannot show up as source drift.
+apps/web/src/modules/__tests-board-adapter__/
 *.db
 # Coverage
 .coverage/

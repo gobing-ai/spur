@@ -1992,9 +1992,9 @@ posture); [workflow composition](design/workflow-composition-contract.md#composi
 - **Decision:** Select downstream UI contributions through project configuration and adapt native React entries and URL-backed frames into the existing Board registry. Native entries use the Board's shared browser runtime and a versioned public component contract; frames use a Board-owned adapter. This boundary does not import downstream backend code or revive the removed generic server plugin container.
 - **Why:** A single host registry integrates native tools and existing embeddable apps while keeping project selection separate from rendering and preserving the installed Board distribution.
 - **Alternatives:** Iframe-only integration sacrifices native shell participation; project-specific Board builds naturally share dependencies but require a portable build kit and full rebuilds. The latter remains the fallback if the shared-runtime distribution proof fails.
-- **Consequence:** Spur owns a supported browser ABI and asset-serving boundary. Native code is trusted within the Board document; framed applications retain browser embedding restrictions. Config changes use restart/reload, and the actual installed-Board runtime proof is required before production loader work.
+- **Consequence:** Spur owns a supported browser ABI and asset-serving boundary. Native code is trusted within the Board document; framed applications retain browser embedding restrictions. Config changes use restart/reload, and the shared runtime must match the installed Board distribution.
 - **Retains:** ADR-012's upstream lifecycle ownership and removal of unused backend plugin machinery; ADR-019's runtime separation; ADR-021's thin transports; ADR-027's single config loader.
-- **Detail:** `03 §30`; [downstream Board module contract](design/downstream-board-modules.md). This decision does not claim implementation.
+- **Detail:** `03 §30`; [downstream Board module contract](design/downstream-board-modules.md).
 
 ## ADR-129: One Ledger and Session Core; Host Extensions Are Normalizing Adapters
 

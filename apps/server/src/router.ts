@@ -1,3 +1,4 @@
+import type { BoardCatalog } from '@gobing-ai/spur-contracts';
 import { contract } from '@gobing-ai/spur-contracts';
 import { implement } from '@orpc/server';
 import type { ServerContext } from './context';
@@ -8,6 +9,12 @@ import { createTaskHandlers } from './modules/task';
 const version = '0.0.0';
 
 const os = implement(contract);
+/**
+ * Catalog answered by a server with no prepared module snapshot (stand-alone/test contexts):
+ * a valid empty catalog, so the read-only procedure exists everywhere the contract does (R4/R6).
+ */
+export const EMPTY_BOARD_CATALOG: BoardCatalog = { catalogVersion: 1, host: null, modules: [] };
+
 /** Proxy-based stub that throws on any property access — used when no real ServerContext is available. */
 export const stubCtx: ServerContext = new Proxy({} as ServerContext, {
     get(_t, p) {
@@ -33,6 +40,11 @@ export function createRouter(ctx?: ServerContext) {
         feature: createFeatureHandlers(ctx ?? stubCtx),
 
         history: createHistoryHandlers(ctx ?? stubCtx),
+
+        // Read-only project module catalog: the frozen startup snapshot, never a live re-read (AC5).
+        board: {
+            modules: os.board.modules.handler(() => ctx?.boardModules?.catalog ?? EMPTY_BOARD_CATALOG),
+        },
 
         stream: os.stream.handler(async () => {
             throw new Error('SSE stream served by raw Hono route (modules/events)');

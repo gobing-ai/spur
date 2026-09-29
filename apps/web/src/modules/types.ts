@@ -13,4 +13,10 @@ export interface WebModule {
     readonly description?: string;
     /** Optional declarative ordering key; declared modules sort ascending by this value, undeclared modules retain their existing relative order after them. */
     readonly order?: number;
+    /**
+     * Host-internal provenance of this entry's component. Built-in modules leave it unset and
+     * keep their current layout behavior; `composeBoardModules` sets `react`/`iframe` so the
+     * layout can treat a downstream entry differently (failure containment, panel handling).
+     */
+    readonly contributionType?: 'builtin' | 'react' | 'iframe';
 }

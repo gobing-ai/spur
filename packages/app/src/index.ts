@@ -135,6 +135,17 @@ export {
     qualifySectionBody,
     resolveConfiguredTaskDirs,
 } from './services/anchor-qualifier';
+// Project Board module catalog preparation (0989 R3/R4/R6)
+export {
+    type BoardModuleAssetRoot,
+    type BoardModuleFileProbe,
+    declaredBoardModules,
+    isInsideRoot,
+    type PreparedBoardModules,
+    prepareBoardModules,
+    SUPPORTED_BOARD_CONTRIBUTION_API_VERSION,
+    SUPPORTED_BOARD_MANIFEST_VERSION,
+} from './services/board-catalog-service';
 export type { BoundedChildOptions, BoundedChildResult } from './services/bounded-child-run';
 export {
     CHILD_KILL_GRACE_MS,

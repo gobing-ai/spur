@@ -24,12 +24,16 @@
         "spur": "spur.js"
     },
     "exports": {
-        "./schemas/*": "./schemas/*"
+        "./schemas/*": "./schemas/*",
+        "./board": {
+            "types": "./board/index.d.ts"
+        }
     },
     "files": [
         "spur.js",
         "config",
         "schemas",
+        "board",
         "web",
         "README.md",
         "plugins/",
@@ -45,7 +49,7 @@
         "dev": "bun run src/index.ts",
         "build": "bun run ../../scripts/spur-dev.ts build-cli",
         "build:binaries": "bun run ../../scripts/spur-dev.ts build-binaries",
-        "build:bundle": "bun run ../../scripts/spur-dev.ts bundle-web && bun build src/index.ts --target=bun --outfile spur.js && bun run ../../scripts/spur-dev.ts bundle-config config && bun run ../../scripts/spur-dev.ts bundle-plugins",
+        "build:bundle": "bun run ../../scripts/spur-dev.ts bundle-web && bun run ../../scripts/spur-dev.ts emit-board-types && bun build src/index.ts --target=bun --outfile spur.js && bun run ../../scripts/spur-dev.ts bundle-config config && bun run ../../scripts/spur-dev.ts bundle-plugins",
         "test": "bun test tests --coverage --coverage-dir=../../.coverage --pass-with-no-tests",
         "typecheck": "tsc --noEmit",
         "prepack": "bun run build:bundle",
