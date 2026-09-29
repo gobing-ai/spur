@@ -410,6 +410,31 @@ describe('spur feature CLI', () => {
         expect(parsed[0]).toHaveProperty('pass');
     });
 
+    test('check reports an unclosed code fence as an L2 error (task 1008 R2)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['feature', 'create', 'Fence Feature'], { cwd, output: cOut });
+        const id = createdId(cOut);
+        const featurePath = cOut.messages.join('\n').match(/Created feature \S+: (\S+)/)?.[1];
+        if (!featurePath) throw new Error('no feature file path in create output');
+        try {
+            const raw = await Bun.file(featurePath).text();
+            await Bun.write(featurePath, `${raw}\n## Stray\n\n\`\`\`text\nnever closed\n`);
+
+            const output = createCapturedOutput();
+            const exitCode = await main(['feature', 'check', id, '--json'], { cwd, output });
+            expect(exitCode).toBe(1);
+            const parsed = JSON.parse(lastMessage(output));
+            const fence = parsed[0].findings.find((f: { code: string }) => f.code === 'L2.unclosed-code-fence');
+            expect(fence).toBeDefined();
+            expect(fence.severity).toBe('error');
+        } finally {
+            // This file shares one corpus cwd across all tests; the feature must
+            // not linger — dropping the file frees its top-level letter (A-Z
+            // allocation is finite) for the later move/refresh tests.
+            rmSync(featurePath);
+        }
+    });
+
     test('check unknown ID exits 1', async () => {
         const exitCode = await main(['feature', 'check', 'ZZZZZ'], { cwd, output: createCapturedOutput() });
         expect(exitCode).toBe(1);

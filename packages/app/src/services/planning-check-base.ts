@@ -224,6 +224,21 @@ export abstract class PlanningCheckService {
         findings: CheckFindings[],
         raw: string,
     ): void {
+        // R2 (task 1008): an unclosed ``` fence hides every later heading from
+        // findHeadings, so the parsed section set is a truncated prefix of the
+        // real one and downstream checks would pass on corrupted input. Fail
+        // closed with the opening fence line instead of trusting the slice.
+        const fenceLine = doc.unclosedFenceLine();
+        if (fenceLine !== null) {
+            findings.push({
+                layer: 'L2',
+                code: FINDING_CODES.L2_UNCLOSED_CODE_FENCE,
+                severity: 'error',
+                section: '',
+                message: `Unclosed code fence at line ${fenceLine}: all later sections are hidden from this check. Close the fence to restore them.`,
+            });
+        }
+
         if (!entry) return;
 
         const sectionNames: string[] = doc.sectionNames;

@@ -919,6 +919,31 @@ describe('spur task CLI', () => {
         expect(parsed[0].findings.length).toBeGreaterThan(0);
     });
 
+    test('check reports an unclosed code fence as an L2 error; --fix never auto-closes (task 1008 R2)', async () => {
+        const cOut = createCapturedOutput();
+        await main(['task', 'create', '--skip-ready', 'Fence Check'], { cwd, output: cOut });
+        const wbs = createdWbs(cOut);
+        const taskPath = createdPath(cOut);
+
+        // Corrupt the fixture: a section whose fence never closes — every later
+        // heading becomes invisible to the parser.
+        const raw = await Bun.file(taskPath).text();
+        await Bun.write(taskPath, `${raw}\n### Solution\n\n\`\`\`text\nnever closed\n`);
+
+        const output = createCapturedOutput();
+        const exitCode = await main(['task', 'check', wbs, '--json'], { cwd, output });
+        expect(exitCode).toBe(1);
+        const parsed = JSON.parse(lastMessage(output));
+        const fence = parsed[0].findings.find((f: { code: string }) => f.code === 'L2.unclosed-code-fence');
+        expect(fence).toBeDefined();
+        expect(fence.severity).toBe('error');
+        expect(fence.message).toMatch(/line \d+/);
+
+        // --fix repairs structural findings only — it must not auto-close fences.
+        await main(['task', 'check', wbs, '--fix'], { cwd, output: createCapturedOutput() });
+        expect(await Bun.file(taskPath).text()).toContain('never closed');
+    });
+
     test('check --as <status> projects the target row (F92 R2): result.status is the target', async () => {
         // A freshly-created backlog task. Plain check reports the CURRENT status
         // (backlog); check --as done must report the TARGET status (done) in the
@@ -1269,7 +1294,9 @@ describe('spur task CLI', () => {
             parentPath,
             parentBody
                 .replace('status: backlog', 'status: todo')
-                .replace('\n### History', '\n### Plan\n\nManual parent execution plan.\n\n### History'),
+                // Fill the template's existing `### Plan` section (inserting a second
+                // Plan would be a duplicate-section doc, which guarded writes refuse).
+                .replace('\n### Plan\n', '\n### Plan\n\nManual parent execution plan.\n'),
         );
 
         const batchFile = join(cwd, 'batch-parent-wire.json');

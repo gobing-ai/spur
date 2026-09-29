@@ -380,11 +380,18 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
                     const featuresDir = options.folder ?? (await resolvePlanningFolders(context.fs)).featuresDir;
                     context.output.write(
                         toEnvelopeJson(
-                            { index_path: `${featuresDir}/INDEX.md`, tasksUpdated: result.tasksUpdated },
+                            {
+                                index_path: `${featuresDir}/INDEX.md`,
+                                tasksUpdated: result.tasksUpdated,
+                                skipped: result.skipped,
+                            },
                             { enveloped: options.jsonEnvelope },
                         ),
                     );
                 } else {
+                    for (const s of result.skipped) {
+                        context.output.write(`Skipped ${s.id} (${s.reason})`);
+                    }
                     context.output.write(
                         `INDEX.md regenerated (${result.index.split('\n').length} lines); ${result.tasksUpdated} feature Tasks region(s) updated`,
                     );

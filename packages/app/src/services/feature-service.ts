@@ -346,10 +346,14 @@ export class FeatureService {
      *                           deterministic — it changes only if the tree changed).
      *                           Use this to keep a refresh from sweeping unrelated
      *                           features into the working tree alongside scoped work.
-     * @returns the rendered INDEX content and the count of features whose Tasks
-     *          region actually changed.
+     * @returns the rendered INDEX content, the count of features whose Tasks
+     *          region actually changed, and the features skipped during the
+     *          Tasks-region pass (missing section / missing marker region —
+     *          R4, task 1008; previously silent).
      */
-    async refresh(options?: { featureId?: string }): Promise<{ index: string; tasksUpdated: number }> {
+    async refresh(options?: {
+        featureId?: string;
+    }): Promise<{ index: string; tasksUpdated: number; skipped: Array<{ id: string; reason: string }> }> {
         const features = await this.list();
         features.sort((a, b) => a.id.localeCompare(b.id));
 
@@ -367,16 +371,24 @@ export class FeatureService {
         const tasksByFeature = await this.collectTasksByFeature();
         const targets = options?.featureId ? features.filter((f) => f.id === options.featureId) : features;
         let tasksUpdated = 0;
+        // R4 (task 1008): a feature whose Tasks section is missing — commonly
+        // because an unclosed ``` fence hides it from the parser — used to be
+        // skipped silently. Report every skip so the corruption is observable.
+        const skipped: Array<{ id: string; reason: string }> = [];
         for (const feature of targets) {
             const rows = tasksByFeature.get(feature.id) ?? [];
             const table = renderTasksTable(rows);
             const raw = await this.ctx.fs.readFile(feature.filePath);
             const doc = MarkdownDocument.parse(raw, 'feature');
-            if (!doc.hasSection('Tasks')) continue; // no Tasks section → nothing to populate
+            if (!doc.hasSection('Tasks')) {
+                skipped.push({ id: feature.id, reason: 'missing-tasks-section' });
+                continue;
+            }
             try {
                 doc.replaceMarkerRegion('Tasks', table);
             } catch {
-                continue; // no marker region → leave the feature untouched
+                skipped.push({ id: feature.id, reason: 'no-tasks-marker-region' });
+                continue;
             }
             const next = doc.serialize();
             if (next === raw) continue; // roster already current → no write, no working-tree churn
@@ -384,7 +396,7 @@ export class FeatureService {
             tasksUpdated += 1;
         }
 
-        return { index, tasksUpdated };
+        return { index, tasksUpdated, skipped };
     }
 
     /**

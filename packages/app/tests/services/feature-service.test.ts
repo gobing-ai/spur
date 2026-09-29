@@ -330,6 +330,24 @@ describe('FeatureService', () => {
             };
         }
 
+        test('R4 (task 1008): refresh reports skipped features instead of dropping them silently', async () => {
+            const { svc: s, cleanup } = await seedRefreshCorpus();
+            // Corrupt feature A: an unclosed ``` fence right after the frontmatter
+            // hides every section — including ## Tasks — from the parser.
+            const features = await s.list();
+            const a = features.find((f) => f.id === 'A');
+            if (!a) throw new Error('feature A not found in seed corpus');
+            const raw = await Bun.file(a.filePath).text();
+            const corrupted = raw.replace(/^(---\r?\n[\s\S]*?\r?\n---\r?\n)/, `$1\`\`\`text\nnever closed\n\n`);
+            await Bun.write(a.filePath, corrupted);
+
+            const { skipped } = await s.refresh();
+            cleanup();
+            expect(skipped).toContainEqual({ id: 'A', reason: 'missing-tasks-section' });
+            // Healthy siblings still populate — only the corrupted one is skipped.
+            expect(skipped.find((x) => x.id === 'A1')).toBeUndefined();
+        });
+
         test('R1: INDEX.md renders a deterministic ID-encoded tree with status + links', async () => {
             const { svc: s, featuresDir, cleanup } = await seedRefreshCorpus();
             const { index } = await s.refresh();

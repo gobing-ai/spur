@@ -124,6 +124,39 @@ function findHeadings(body: string, hashes: string): HeadingHit[] {
 }
 
 /**
+ * Find the 1-based line of an unclosed ``` fence in the given text, or `null`
+ * when every opened fence is closed (R1, task 1008). Toggles fence state exactly
+ * like {@link findHeadings}, so the two scans agree on what is a section.
+ */
+function findUnclosedFenceLine(text: string): number | null {
+    let inCodeBlock = false;
+    let openLine = 0;
+    let lineNo = 0;
+    let lineStart = 0;
+
+    for (let i = 0; i <= text.length; i++) {
+        const atEnd = i === text.length;
+        if (!atEnd && text[i] !== '\n') continue;
+
+        const line = text.slice(lineStart, i);
+        lineNo++;
+
+        if (line.startsWith('```')) {
+            if (inCodeBlock) {
+                inCodeBlock = false;
+            } else {
+                inCodeBlock = true;
+                openLine = lineNo;
+            }
+        }
+
+        lineStart = i + 1;
+    }
+
+    return inCodeBlock ? openLine : null;
+}
+
+/**
  * Normalize YAML-parsed scalar values that the `yaml` library resolves to
  * non-string types back to their canonical string form for the frontmatter
  * data map. Without this, ISO 8601 timestamps written without YAML quotes
@@ -166,6 +199,8 @@ export class MarkdownDocument {
     private readonly _demotedHeadings: string[] = [];
     /** Section names that appeared more than once in the source — dropped at parse time, keeping first. */
     private readonly _duplicateSectionNames: string[] = [];
+    /** R1 (task 1008): 1-based file line of the opening ``` fence when the body ends inside an open code fence, else null. */
+    private readonly _unclosedFenceLine: number | null;
 
     private constructor(
         domain: MarkdownDomain,
@@ -173,12 +208,14 @@ export class MarkdownDocument {
         frontmatter: ParsedFrontmatter | null,
         preamble: string,
         sections: Section[],
+        unclosedFenceLine: number | null,
     ) {
         this._domain = domain;
         this._frontmatterBlock = frontmatterBlock;
         this._frontmatter = frontmatter;
         this._preamble = preamble;
         this._sections = sections;
+        this._unclosedFenceLine = unclosedFenceLine;
     }
 
     /**
@@ -215,6 +252,15 @@ export class MarkdownDocument {
             body = content.slice(fmMatch[0].length);
         }
 
+        // R1 (task 1008): capture the unclosed-fence state before section slicing
+        // so hidden later sections are visible to checks and guarded writes. The
+        // scan is body-relative; re-base onto the file line numbering.
+        const bodyUnclosedFenceLine = findUnclosedFenceLine(body);
+        const unclosedFenceLine =
+            bodyUnclosedFenceLine === null
+                ? null
+                : bodyUnclosedFenceLine + (frontmatterBlock.match(/\n/g) ?? []).length;
+
         // --- sections ---
         const hits = findHeadings(body, hashes);
         const first = hits[0];
@@ -247,7 +293,7 @@ export class MarkdownDocument {
             }
         }
 
-        const doc = new MarkdownDocument(domain, frontmatterBlock, frontmatter, preamble, sections);
+        const doc = new MarkdownDocument(domain, frontmatterBlock, frontmatter, preamble, sections, unclosedFenceLine);
         doc._duplicateSectionNames.push(...duplicateNames);
         return doc;
     }
@@ -321,6 +367,59 @@ export class MarkdownDocument {
         return this._duplicateSectionNames;
     }
 
+    /**
+     * R1 (task 1008): the 1-based line of the opening ``` fence when the body
+     * ends inside an open code fence, else `null`. A still-open fence hides every
+     * later section heading from {@link findHeadings}, so callers can surface the
+     * corruption (L2 check) and refuse guarded writes (R3) instead of silently
+     * serializing a truncated document.
+     */
+    unclosedFenceLine(): number | null {
+        return this._unclosedFenceLine;
+    }
+
+    /**
+     * R3 guards (task 1008): refuse a section write that would corrupt or
+     * truncate the document, before any mutation is applied.
+     *
+     * (a) A body with an odd number of ``` fence lines leaves the serialized
+     *     file inside an open fence, hiding every later section heading on
+     *     re-parse — the corruption that motivated this task.
+     * (b) A document parsed with an already-unclosed fence hides its later
+     *     sections (they sit in the tail of the last visible section); any
+     *     write would serialize without them.
+     * (c) A document parsed with duplicate top-level section names has lost
+     *     the later occurrences to dedup; any write would serialize fewer
+     *     top-level sections than the input (task 1008 R3b).
+     *
+     * @throws naming the offending fence line or the dropped sections; the
+     *     document is left untouched.
+     */
+    private assertFenceBalance(name: string, body: string): void {
+        const docFenceLine = this._unclosedFenceLine;
+        if (docFenceLine !== null) {
+            throw new Error(
+                `Cannot write section "${name}": the document has an unclosed code fence at line ${docFenceLine}; ` +
+                    'later sections are hidden and would be dropped by this write. Close the fence and re-parse.',
+            );
+        }
+        if (this._duplicateSectionNames.length > 0) {
+            const names = this._duplicateSectionNames.map((n) => `"${n}"`).join(', ');
+            throw new Error(
+                `Cannot write section "${name}": the document has duplicate top-level sections (${names}); ` +
+                    'the serialized result would have fewer sections than the input and the duplicates would be dropped. ' +
+                    'Merge or remove the duplicates and re-parse.',
+            );
+        }
+        const bodyFenceLine = findUnclosedFenceLine(body);
+        if (bodyFenceLine !== null) {
+            throw new Error(
+                `Cannot write section "${name}": the new body has an unclosed code fence (opening at body line ${bodyFenceLine}); ` +
+                    'writing it would leave the document inside an open fence and hide later sections.',
+            );
+        }
+    }
+
     private get canonicalSections(): readonly string[] {
         const base = this._domain === 'task' ? TASK_CANONICAL_SECTIONS : FEATURE_CANONICAL_SECTIONS;
         const extra = UNIVERSAL_SECTIONS.filter((s) => !(base as readonly string[]).includes(s));
@@ -373,9 +472,11 @@ export class MarkdownDocument {
      * @param name - canonical section name (validated against the domain vocabulary)
      * @param body - new body text (everything that should follow the heading line)
      * @throws if the section name is not canonical
+     * @throws if the document already has an unclosed code fence, or `body` leaves one open — either would hide later sections (R3, task 1008)
      */
     replaceSection(name: string, body: string): void {
         this.validateSectionName(name);
+        this.assertFenceBalance(name, body);
         const cleaned = this.stripSameLevelHeadings(body);
         const section = this.findSection(name);
         if (section !== undefined) {
@@ -472,6 +573,7 @@ export class MarkdownDocument {
      */
     replaceMarkerRegion(name: string, content: string): void {
         this.validateSectionName(name);
+        this.assertFenceBalance(name, content);
         const section = this.findSection(name);
         if (section === undefined) {
             throw new Error(`Section "${name}" does not exist in this document.`);

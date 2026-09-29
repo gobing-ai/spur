@@ -17,6 +17,7 @@ export const ALL_FINDING_CODES = [
     'L2.disallowed-section',
     'L2.heading-level',
     'L2.section-order',
+    'L2.unclosed-code-fence',
 
     // L3: Format rules
     'L3.requirements-format',
@@ -99,6 +100,9 @@ export const FINDING_CODES = {
     L2_DISALLOWED_SECTION: 'L2.disallowed-section',
     L2_HEADING_LEVEL: 'L2.heading-level',
     L2_SECTION_ORDER: 'L2.section-order',
+    // R2 (task 1008): an unclosed ``` fence hides every later heading from the
+    // parser, so the parsed section set is a truncated prefix of the real file.
+    L2_UNCLOSED_CODE_FENCE: 'L2.unclosed-code-fence',
 
     // L3
     L3_REQUIREMENTS_FORMAT: 'L3.requirements-format',

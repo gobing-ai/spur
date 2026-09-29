@@ -882,7 +882,7 @@ describe('MarkdownDocument', () => {
             expect(doc.duplicateSectionNames).toHaveLength(0);
         });
 
-        test('replaceSection still targets the (sole) section after dedup', () => {
+        test('reads target the sole section after dedup, but writes refuse while duplicates exist (task 1008 R3b)', () => {
             const content = [
                 '---',
                 'name: Replace Test',
@@ -902,14 +902,144 @@ describe('MarkdownDocument', () => {
             ].join('\n');
 
             const doc = MarkdownDocument.parse(content, 'task');
-            doc.replaceSection('Background', 'New background content.');
-            const out = doc.serialize();
 
-            const reparsed = MarkdownDocument.parse(out, 'task');
-            expect(reparsed.duplicateSectionNames).toHaveLength(0);
-            expect(reparsed.getSection('Background')).toContain('New background content.');
-            expect(reparsed.getSection('Background')).not.toContain('Old background');
-            expect(reparsed.getSection('Background')).not.toContain('Duplicate background');
+            // Reads still target the first (sole surviving) occurrence.
+            expect(doc.getSection('Background')).toContain('Old background.');
+
+            // task 1008 R3b: any write would serialize fewer top-level sections
+            // than the input (the duplicate would be dropped) — refuse until the
+            // duplicates are merged or removed in the file itself.
+            expect(() => doc.replaceSection('Background', 'New background content.')).toThrow(
+                /duplicate top-level sections \("Background"\)/,
+            );
+        });
+    });
+
+    // ── task 1008: unclosed code fence (R1) + guarded section writes (R3) ──
+    describe('unclosed code fence (task 1008)', () => {
+        // ```text lands on file line 14; the fence never closes, so `### Notes`
+        // and everything after it is invisible to the parser.
+        const FENCED_FILE = [
+            '---',
+            'name: Fenced',
+            'status: backlog',
+            '---',
+            '',
+            '## 0102. Fenced',
+            '',
+            '### Background',
+            '',
+            'Before the fence.',
+            '',
+            '### Solution',
+            '',
+            '```text',
+            'never closed',
+            '',
+            '### Notes',
+            '',
+            'Hidden behind the open fence.',
+            '',
+        ].join('\n');
+
+        test('R1: unclosedFenceLine() is null when every fence is closed', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            expect(doc.unclosedFenceLine()).toBeNull();
+        });
+
+        test('R1: unclosedFenceLine() reports the file-level opening fence line', () => {
+            const doc = MarkdownDocument.parse(FENCED_FILE, 'task');
+            expect(doc.unclosedFenceLine()).toBe(14);
+            // Later sections are hidden behind the open fence.
+            expect(doc.hasSection('Notes')).toBe(false);
+        });
+
+        test('R1: fence line is body-relative when there is no frontmatter', () => {
+            const bodyOnly = FENCED_FILE.slice(FENCED_FILE.indexOf('\n## ') + 1);
+            const doc = MarkdownDocument.parse(bodyOnly, 'task');
+            expect(doc.unclosedFenceLine()).toBe(9);
+        });
+
+        test('R3: replaceSection refuses a body that leaves a fence open', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            const before = doc.serialize();
+            expect(() => doc.replaceSection('Solution', '```\nodd fence\n')).toThrow(/unclosed code fence/);
+            expect(doc.serialize()).toBe(before); // no partial mutation
+        });
+
+        test('R3: replaceSection refuses to write into a document with an unclosed fence', () => {
+            const doc = MarkdownDocument.parse(FENCED_FILE, 'task');
+            const before = doc.serialize();
+            expect(() => doc.replaceSection('Background', 'Innocent rewrite.')).toThrow(/line 14/);
+            expect(doc.serialize()).toBe(before);
+        });
+
+        test('R3: replaceMarkerRegion refuses the same corruptions', () => {
+            const feature = [
+                '# A: Feature',
+                '',
+                '## Summary',
+                '',
+                'Body.',
+                '',
+                '## Tasks',
+                '',
+                '<!-- tasks:auto:start -->',
+                '| WBS | Name | Status |',
+                '<!-- tasks:auto:end -->',
+                '',
+            ].join('\n');
+            const doc = MarkdownDocument.parse(feature, 'feature');
+            const before = doc.serialize();
+            expect(() => doc.replaceMarkerRegion('Tasks', '| WBS | Name | Status |\n```table\n')).toThrow(
+                /unclosed code fence/,
+            );
+            expect(doc.serialize()).toBe(before);
+
+            // A document-level unclosed fence blocks the region write too.
+            const corrupted = `${feature}## Stray\n\n\`\`\`\n`;
+            const doc2 = MarkdownDocument.parse(corrupted, 'feature');
+            expect(() => doc2.replaceMarkerRegion('Tasks', '| WBS | Name | Status |')).toThrow(
+                /unclosed code fence at line/,
+            );
+            expect(doc2.serialize()).toBe(corrupted);
+        });
+
+        test('R3: balanced fences still write normally', () => {
+            const doc = MarkdownDocument.parse(TASK_FILE, 'task');
+            doc.replaceSection('Solution', '```\nclosed\n```');
+            expect(doc.getSection('Solution')).toContain('closed');
+        });
+
+        test('R3b: refuses writes when the document has duplicate top-level sections', () => {
+            const dup = [
+                '---',
+                'name: Dup Write',
+                'status: backlog',
+                '---',
+                '',
+                '## 0103. Dup Write',
+                '',
+                '### Background',
+                '',
+                'First background — the real one.',
+                '',
+                '### Plan',
+                '',
+                '- [ ] Real plan item',
+                '',
+                '### Background',
+                '',
+                'Second background — duplicate.',
+                '',
+            ].join('\n');
+            const doc = MarkdownDocument.parse(dup, 'task');
+            expect(doc.duplicateSectionNames).toEqual(['Background']);
+            expect(() => doc.replaceSection('Plan', '- [ ] new item')).toThrow(
+                /duplicate top-level sections \("Background"\)/,
+            );
+            // Guard throws before any mutation — sections keep their original bodies.
+            expect(doc.getSection('Plan')).toContain('Real plan item');
         });
     });
 });
