@@ -1001,7 +1001,7 @@ describe('agent doctor — availability provenance (0893)', () => {
     test('bare-boolean and object-form disables render normalized availability in --json', async () => {
         writeProjectConfig();
         const { code, stdout } = await runDoctor(true);
-        expect(code).toBe(1); // tier-2 disabled row fails the support-tier exit aggregation
+        expect(code).toBe(0); // all-disabled config probes nothing; tier-2 disabled rows never fail the exit
         const parsed = JSON.parse(stdout.find((l) => l.includes('"agents"')) ?? '');
         const bare = parsed.agents.find((a: { agent: string }) => a.agent === 'dis-bare');
         expect(bare.availability).toEqual({ disabled: true, owner: 'operator', since: null, reason: null });
@@ -1039,7 +1039,7 @@ describe('agent doctor — availability provenance (0893)', () => {
     test('text table renders OWNER/SINCE/REASON with provenance from the project config', async () => {
         writeProjectConfig();
         const { code, stdout } = await runDoctor(false);
-        expect(code).toBe(1);
+        expect(code).toBe(0);
         const table = stdout.join('\n');
         expect(table).toContain('OWNER');
         expect(table).toContain('SINCE');

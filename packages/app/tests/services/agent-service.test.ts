@@ -275,6 +275,23 @@ describe('AgentService.doctor', () => {
         expect(jsonLine).toBeDefined();
     });
 
+    test('all-disabled executors probe nothing — no fallback to host-wide detection', async () => {
+        const { lines, output } = captureOutput();
+        const svc = makeService({}, output, {
+            executors: [{ name: 'dis', agent: 'omp', disabled: true }],
+        } as AgentConfig);
+        // An empty executor list makes the real runner detect every host agent (slow, host-dependent).
+        const runAll = mock(() => Promise.resolve([mockDoctorResult({ agent: 'claude', tier: 1, usable: false })]));
+        const doctorRunner = { runAll, runOne: mock() } as unknown as AgentRunDeps['doctorRunner'];
+
+        const exitCode = await svc.doctor({ json: true }, { doctorRunner });
+
+        expect(runAll).not.toHaveBeenCalled();
+        expect(exitCode).toBe(0);
+        const parsed = JSON.parse(lines.find((l) => l.includes('"agents"')) ?? '');
+        expect(parsed.agents.map((a: { agent: string }) => a.agent)).toEqual(['dis']);
+    });
+
     test('R3 (0487): --json carries the executor capability tier, distinct from the support tier', async () => {
         const { lines, output } = captureOutput();
         const svc = makeService({}, output, {

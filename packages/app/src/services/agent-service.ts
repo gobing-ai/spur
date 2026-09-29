@@ -598,7 +598,10 @@ export class AgentService {
                     usage,
                 );
             }
-            const probeResults = await doctorRunner.runAll();
+            // The runner reads an empty executor list as "none configured" and probes every host
+            // agent; a config whose executors are all disabled must probe nothing instead.
+            const allDisabled = (executors?.length ?? 0) > 0 && enabledExecutors?.length === 0;
+            const probeResults = allDisabled ? [] : await doctorRunner.runAll();
             const results = withDisabledRows(probeResults, executors);
             if (cacheOn && !args.probeHealth) {
                 // R5: a forced refresh rewrites the file so capturedAt advances.
