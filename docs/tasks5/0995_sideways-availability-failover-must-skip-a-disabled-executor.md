@@ -4,7 +4,7 @@ name: Sideways availability failover must skip a disabled executor
 status: done
 template: issue
 created_at: 2026-09-28T23:16:57.820Z
-updated_at: "2026-09-28T23:50:54.994Z"
+updated_at: "2026-09-29T00:04:03.340Z"
 feature_id: B21
 
 ac_altitude: task-local
@@ -104,15 +104,15 @@ The rule is enforced where the extracted helper is used, not at this inline filt
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/agent-service.ts:2031` `!executorDisabled(e)` in the sideways availability failover filter; `packages/app/tests/services/agent-service.test.ts:3160` |
-| R2 | MET | Other predicates untouched at `packages/app/src/services/agent-service.ts:2031`; existing `packages/app/tests/services/agent-service.test.ts:3108` still dispatches `['pi', 'claude', 'codex']`; `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts)` → 229 pass / 0 fail |
-| R3 | MET | `packages/app/tests/services/agent-service.test.ts:3160` failed before the fix (`Received: ["pi", "codex"]`) and passes after |
+| R1 | MET | `packages/app/src/services/agent-service.ts:2031` `!executorDisabled(e)` leads the sideways availability failover filter; `packages/app/tests/services/agent-service.test.ts:3160` |
+| R2 | MET | Remaining predicates unchanged at `packages/app/src/services/agent-service.ts:2032-2036`; `packages/app/tests/services/agent-service.test.ts:3108` still dispatches `['pi', 'claude', 'codex']`; `(cd packages/app && bun test tests/services/agent-service.test.ts tests/services/executor-tier.test.ts tests/services/fleet-service.test.ts)` → 265 pass / 0 fail (re-run 2026-09-28) |
+| R3 | MET | `packages/app/tests/services/agent-service.test.ts:3160` re-proven red this run with line 2031 removed (1 fail, Received `["pi", "codex"]`), green with it restored |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` disabled `codex` same-tier candidate is never dispatched |
-| AC2 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` first live candidate `claude` chosen over later `gemini`; `packages/app/tests/services/agent-service.test.ts:3108` unchanged and passing; no removed `expect(` lines |
-| AC3 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` red on the pre-fix filter, green after |
+| AC1 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` disabled `codex` same-tier candidate listed first is never dispatched |
+| AC2 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` first live `claude` chosen over later `gemini`; `packages/app/tests/services/agent-service.test.ts:3108` unchanged and passing; focused suites 265 pass / 0 fail |
+| AC3 | MET | test | `packages/app/tests/services/agent-service.test.ts:3160` fails with `packages/app/src/services/agent-service.ts:2031` removed, passes with it (re-proven this run) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
@@ -125,7 +125,6 @@ The rule is enforced where the extracted helper is used, not at this inline filt
 |----------|-----------|----------|----------|
 | P4 | spur task check | — | task check passed |
 | P4 | evidence-rule-pass | — | All behavior-bearing AC rows have executable evidence or are explicitly non-behavioral. |
-| P4 | residual-sweep | — | blocking=0 deferrable=0 advisory=2 housekeeping=0 |
 
 ### References
 
