@@ -23,6 +23,7 @@ export function sanitizeMermaidSvg(svg: string): string {
     return DOMPurify(window).sanitize(svg, {
         USE_PROFILES: { svg: true, svgFilters: true, html: true },
         ADD_TAGS: ['foreignObject'],
+        HTML_INTEGRATION_POINTS: { foreignobject: true },
     });
 }
 
