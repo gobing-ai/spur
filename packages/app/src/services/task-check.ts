@@ -19,6 +19,7 @@ import {
 } from '@gobing-ai/spur-domain';
 import type { FileSystem } from '@gobing-ai/ts-runtime';
 import type { CorpusSeverity } from './corpus-check';
+import { isFeatureFile } from './feature-check';
 import {
     type CheckFindings,
     FINDING_CODES,
@@ -1703,7 +1704,7 @@ export class TaskCheckService extends PlanningCheckService {
         try {
             const entries = await this.fs.readDir(featuresDir);
             for (const name of entries) {
-                if (name.startsWith(`${id}_`) && name.endsWith('.md')) {
+                if (isFeatureFile(name, id)) {
                     return `${featuresDir}/${name}`;
                 }
             }

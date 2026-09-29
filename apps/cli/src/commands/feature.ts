@@ -4,6 +4,7 @@ import {
     FeatureCheckService,
     type FeatureReceiptRunPort,
     FeatureService,
+    isFeatureFile,
     PlanningWriteService,
     resolvePlanningFolders,
     type WriteResult,
@@ -574,11 +575,6 @@ export function registerFeatureCommand(program: Command, context: CliContext): v
  * registration surfaces as a fail-closed `run` rejection at the completion
  * boundary.
  */
-/** `<id>_<slug>.md` match without a RegExp: the id is operator input (`.*` must not match, `(` must not throw). */
-export function isFeatureFile(name: string, id: string): boolean {
-    return name.startsWith(`${id}_`) && name.endsWith('.md') && name.length > id.length + 4;
-}
-
 async function makeReceiptRunPort(context: CliContext): Promise<FeatureReceiptRunPort> {
     const db = await context.getDb();
     const runs = new RunDao(db);

@@ -1457,6 +1457,11 @@ export function taskCoversAnyFeatureScenario(taskAc: string, featureAc: string):
     return scenarioKeys(parsed.scenarios).some((sc) => taskCoversScenario(taskAc, sc));
 }
 
+/** `<id>_<slug>.md` match without a RegExp: the id is operator input (`.*` must not match, `(` must not throw). */
+export function isFeatureFile(name: string, id: string): boolean {
+    return name.startsWith(`${id}_`) && name.endsWith('.md') && name.length > id.length + 4;
+}
+
 /**
  * Fence-stripped Acceptance Criteria of `<featuresDir>/<featureId>_*.md`, or `null` on any miss —
  * the single `<id>_<slug>.md` prefix-scan resolution shared with `task-service`.
@@ -1468,7 +1473,7 @@ export async function readFeatureAcBody(
 ): Promise<string | null> {
     try {
         for (const name of await fs.readDir(featuresDir)) {
-            if (!name.startsWith(`${featureId}_`) || !name.endsWith('.md')) continue;
+            if (!isFeatureFile(name, featureId)) continue;
             const doc = MarkdownDocument.parse(await fs.readFile(`${featuresDir}/${name}`), 'feature');
             const ac = stripAcFence(doc.getSection('Acceptance Criteria') ?? '');
             return ac.trim().length > 0 ? ac : null;

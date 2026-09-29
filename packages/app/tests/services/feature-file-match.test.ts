@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isFeatureFile } from '../../src/commands/feature';
+import { isFeatureFile } from '../../src/services/feature-check';
 
 describe('isFeatureFile', () => {
     test('matches <id>_<slug>.md literally — operator ids are not regex patterns', () => {
