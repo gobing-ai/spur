@@ -925,26 +925,29 @@ describe('spur task CLI', () => {
         const wbs = createdWbs(cOut);
         const taskPath = createdPath(cOut);
 
-        // Corrupt the fixture: a section whose fence never closes — every later
-        // heading becomes invisible to the parser.
-        const raw = await Bun.file(taskPath).text();
-        await Bun.write(taskPath, `${raw}\n### Solution\n\n\`\`\`text\nnever closed\n`);
+        try {
+            // Corrupt the fixture: a section whose fence never closes — every later
+            // heading becomes invisible to the parser.
+            const raw = await Bun.file(taskPath).text();
+            await Bun.write(taskPath, `${raw}\n### Solution\n\n\`\`\`text\nnever closed\n`);
 
-        const output = createCapturedOutput();
-        const exitCode = await main(['task', 'check', wbs, '--json'], { cwd, output });
-        expect(exitCode).toBe(1);
-        const parsed = JSON.parse(lastMessage(output));
-        const fence = parsed[0].findings.find((f: { code: string }) => f.code === 'L2.unclosed-code-fence');
-        expect(fence).toBeDefined();
-        expect(fence.severity).toBe('error');
-        expect(fence.message).toMatch(/line \d+/);
+            const output = createCapturedOutput();
+            const exitCode = await main(['task', 'check', wbs, '--json'], { cwd, output });
+            expect(exitCode).toBe(1);
+            const parsed = JSON.parse(lastMessage(output));
+            const fence = parsed[0].findings.find((f: { code: string }) => f.code === 'L2.unclosed-code-fence');
+            expect(fence).toBeDefined();
+            expect(fence.severity).toBe('error');
+            expect(fence.message).toMatch(/line \d+/);
 
-        // --fix repairs structural findings only — it must not auto-close fences.
-        await main(['task', 'check', wbs, '--fix'], { cwd, output: createCapturedOutput() });
-        expect(await Bun.file(taskPath).text()).toContain('never closed');
-        // This file shares one corpus cwd across all tests; drop the corrupted
-        // fixture so later corpus-facing tests don't sweep its L2 error.
-        rmSync(taskPath);
+            // --fix repairs structural findings only — it must not auto-close fences.
+            await main(['task', 'check', wbs, '--fix'], { cwd, output: createCapturedOutput() });
+            expect(await Bun.file(taskPath).text()).toContain('never closed');
+        } finally {
+            // This file shares one corpus cwd across all tests; drop the corrupted
+            // fixture even on failure so later corpus-facing tests don't sweep its L2 error.
+            rmSync(taskPath);
+        }
     });
 
     test('check --as <status> projects the target row (F92 R2): result.status is the target', async () => {
