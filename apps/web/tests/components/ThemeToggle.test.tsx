@@ -40,9 +40,9 @@ describe('ThemeToggle system-preference sync', () => {
         // The board shell fetches /api/* on mount; reject like a real failed fetch instead
         // of running happy-dom's CORS machinery ("Cross-Origin Request Blocked" noise).
         realFetch = globalThis.fetch;
-        globalThis.fetch = async (): Promise<Response> => {
+        globalThis.fetch = (async (): Promise<Response> => {
             throw new TypeError('Failed to fetch');
-        };
+        }) as unknown as typeof fetch;
     });
 
     afterEach(() => {

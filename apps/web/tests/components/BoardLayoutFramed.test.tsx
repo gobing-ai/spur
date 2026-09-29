@@ -49,9 +49,9 @@ beforeEach(() => {
     // CORS machinery and print "Cross-Origin Request Blocked" warnings per mount. Reject
     // like a real failed fetch instead — components render their empty state either way.
     realFetch = globalThis.fetch;
-    globalThis.fetch = async (): Promise<Response> => {
+    globalThis.fetch = (async (): Promise<Response> => {
         throw new TypeError('Failed to fetch');
-    };
+    }) as unknown as typeof fetch;
 });
 
 afterEach(() => {
