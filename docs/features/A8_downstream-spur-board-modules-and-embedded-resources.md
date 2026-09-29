@@ -170,6 +170,9 @@ Feature: Downstream Spur Board modules and embedded resources
 | 0990 | Render native downstream modules through one Board registry | done |
 | 0991 | Embed URL resources in the Board workspace | done |
 | 0992 | Validate downstream installs and publish module authoring guidance | done |
+| 0997 | Prove per-project module catalog isolation through the in-app project switcher | cancelled |
+| 0998 | Prove a changed module selection follows restart plus reload end to end | todo |
+| 0999 | Harden published authoring-example validation against unmarked code fences | todo |
 <!-- END AUTO-GENERATED -->
 
 ## Notes

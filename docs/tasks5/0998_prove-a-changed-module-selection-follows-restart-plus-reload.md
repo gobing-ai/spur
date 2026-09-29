@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Prove a changed module selection follows restart plus reload end to end
-status: backlog
+status: todo
 template: feature-impl
 created_at: 2026-09-29T03:05:27.931Z
-updated_at: "2026-09-29T03:06:48.238Z"
+updated_at: "2026-09-29T03:18:47.492Z"
 feature_id: A8
 
 ---
@@ -13,60 +13,47 @@ feature_id: A8
 
 ### Background
 
-A8 R4 states: "Prove changes follow restart plus browser reload, and enabled modules under a compatible
-project `dist/web` override work while incompatible overrides fail clearly before listen; no-module
-legacy overrides remain usable."
+Feature A8 scenario **R13** ("Module selection changes use the documented restart lifecycle") and 0992 R4 promise:
+change the module configuration, restart the project server, reload the browser, and the new selection is used.
 
-The **mechanism** is proven. A **changed selection** is not driven end to end.
+The two halves are proven separately; the browser half of a *changed* selection is not.
 
-What 0992 established:
-- Module assets are served `no-store`, so a restart plus reload cannot be masked by a cached chunk
-  (`apps/web/tests/modules/composed-board-browser.test.ts:458` — asserts `cache.entry === 'no-store'`).
-- Leaving and returning to a module mounts it fresh, with no retained in-page state.
-- The server-side halves — the catalog snapshot being built before the listener opens, and an
-  incompatible enabled override being refused before listen — are owned by
-  `apps/server/tests/board-modules.test.ts` (0989) and run green inside the feature gate.
+- **Server half — owned, green:** `apps/server/src/serve.ts:706` prepares the catalog snapshot before
+  `Bun.serve` at `:1042`. `apps/server/tests/board-modules.test.ts` covers: snapshot stable when the declaration
+  changes on disk (`:301`), incompatible distribution refused (`:288`), enabled contribution without a
+  distribution refused (`:277`), missing asset refused (`:262`), and the no-module legacy distribution path
+  (`:324` manifest-less distribution is not a failure; `:343` unreadable manifest fails only with declared
+  contributions).
+- **Browser half — missing:** `apps/web/tests/modules/composed-board-browser.test.ts:458` (the only R4-labelled
+  case) asserts `cache-control: no-store`; the second-origin case (`:420`) proves a fresh load on a *different*
+  origin. No case keeps the same origin, swaps the served catalog/assets, and shows (a) the running page does not
+  pick the change up and (b) a reload does. A Board that cached the catalog per origin (storage, service worker,
+  memoised fetch) would pass every current test.
 
-What is missing: no test changes a module selection (edits the declaration, or rebuilds/replaces a
-served native asset), restarts the project server, reloads the browser, and observes that the **updated**
-selection and assets are what render. R4's "the updated module selection/assets appear after
-restart/reload" clause is therefore established by inference from mechanism rather than by one run.
-
-**Evidence**
-- `apps/web/tests/modules/composed-board-browser.test.ts:458` — the only R4-labelled case; it asserts
-  the cache header, not a changed selection.
-- 0992 Review residual (P2): "R4's restart-plus-reload for a *changed* selection is not driven
-  end-to-end in a browser here" — disclosed and never closed.
-- `apps/web/tests/modules/composed-board-browser.test.ts` serves one catalog per server instance; no case
-  restarts a server with a different catalog.
-
-**Why it matters**
-"Edits the config, restarts, reloads, sees the change" is the operator-visible promise of the whole
-slice. Today a regression that pinned the catalog at first composition, or that served a cached
-stylesheet despite `no-store`, would be caught only by mechanism-adjacent tests, not by the outcome.
+**Evidence:** 0992 Review residual (P2): "R4's restart-plus-reload for a *changed* selection is not driven
+end-to-end in a browser here."
 
 ### Requirements
 
-- [ ] R1. Drive a changed selection end to end: change a project's module declaration (and/or replace its
-  served native asset), restart the project server, reload the browser, and assert the **updated**
-  selection and assets are what render.
-- [ ] R2. Assert no live replacement: with the same change applied, the already-running Board does not
-  pick it up before the restart. This is the clause that makes R1's positive result meaningful.
-- [ ] R3. Assert the incompatible-override path fails before the listener opens for that fixture — the
-  process must refuse to start, not start and serve a broken catalog.
-- [ ] R4. Assert a no-module (legacy) override stays usable, so the change path does not regress the
-  built-ins-only deployment.
-- [ ] R5. Reuse the existing composed fixtures and CDP harness; keep the proof a real-browser proof.
+- [ ] R1. In the composed browser proof, on **one fixed origin**: render the first catalog's native module, stop
+  that board server, start a board server on the **same port** serving the changed catalog and assets, reload
+  the page, and assert the changed selection renders — changed sidebar routes, changed module content and
+  stylesheet, changed frame URL — with no first-catalog route, content or state remaining.
+- [ ] R2. Before the reload, with the changed server already listening, assert the running Board still shows the
+  first catalog — including after an in-app (client-side) navigation away from and back to the module — so R1's
+  positive result is attributable to restart plus reload, not to live replacement.
+- [ ] R3. Test-helper change only: `serveBoard` may gain an optional fixed `port`. No production code change, no
+  live replacement, file watching, polling or HMR.
 
 ### Acceptance Criteria
 
 ```gherkin
-Scenario: AC1 — Module selection changes use the documented restart lifecycle (req: R4)
-  Given a running project server whose Board has composed a module catalog and rendered a module
-  When the module declaration or its served asset changes
-  Then the running Board does not pick up the change
-  And after the server restarts and the page reloads, the updated selection and assets are what render
-  And an incompatible enabled override fails before listening while a no-module project still serves the built-ins
+Scenario: AC1 — Module selection changes use the documented restart lifecycle (req: R1; R2; R3)
+  Given a board server on a fixed origin whose Board has composed the first catalog and rendered its native module
+  When that server is replaced on the same port by one serving a changed catalog and changed module assets
+  Then the running Board, including after in-app navigation, still shows the first catalog's routes and content
+  And after a page reload the changed catalog's routes, module content, stylesheet and frame URL render
+  And no route, content or in-page state from the first catalog remains
 ```
 
 ### Q&A
@@ -75,35 +62,73 @@ Scenario: AC1 — Module selection changes use the documented restart lifecycle 
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
 
+#### Q&A entry — 2026-09-29T03:18:04.038Z
+
+- **Scope cut (2026-09-28): original R3 (incompatible override fails before listen) and R4 (no-module legacy
+  override stays usable) dropped as duplicates.** Both are owned by `apps/server/tests/board-modules.test.ts`
+  (`:277`, `:288`, `:324`, `:343`) and the ordering is structural in `apps/server/src/serve.ts` (prepare `:706`
+  before `Bun.serve` `:1042`). `apps/web`'s static `serveBoard` helper cannot exercise server startup, so a
+  browser duplicate would be a mock of the real path. Testing must name these as inherited, not re-prove them.
+- **Same port, not a new server on a new port:** a new port is a new origin — that is the existing `:420`
+  second-origin case. Only a same-origin swap can catch origin-scoped caching of the catalog.
+- **Changed selection = the existing alt fixture.** `altCatalog(host)` + `ALT_FIXTURE_DIR` already differ from
+  the first catalog in module set (`frame-alt` vs `frame-ok`/`broken-probe`/`missing-probe`), sidebar label,
+  content (`data-probe-variant=alternate`), stylesheet (`rgb(10, 150, 60)`) and frame URL. No new fixture.
+- **Reload mechanism:** `browser.send('Page.reload', {}, page)` then `waitFor` — no CDP helper change.
+- **Config→catalog translation is out of browser scope:** `prepareBoardModules` is a pure function of the
+  declarations it is given at startup; the browser proof starts from the served catalog.
+- Feature traceability: this AC closes A8 R13's browser half. The Background's original "A8 R4" label was
+  0992 R4.
+
 ### Design
 
-**Fix direction**
+**Change map**
 
-- Add the changed-selection case to `apps/web/tests/modules/composed-board-browser.test.ts`, using the
-  proof server helper to (a) serve an initial catalog, (b) serve a changed catalog and/or replaced asset
-  after a restart. Confirm how the helper binds a catalog to a server instance before extending it —
-  0992's `serveBoard` (`apps/web/tests/test-helpers/board-server.ts`) currently serves one catalog per
-  instance, so the restart likely means stopping and starting a new instance with new inputs.
-- The "no live replacement" assertion (R2) is the load-bearing one: without it, a test that changes the
-  fixture and then restarts proves little.
-- Prefer reusing `apps/server/tests/board-modules.test.ts` for the before-listen refusal (R3) if that
-  path is already covered there rather than duplicating server-level coverage in a browser test; state
-  in Testing which of R3/R4 is proven here and which is inherited, with the owning test named.
+- `apps/web/tests/test-helpers/board-server.ts` — add `readonly port?: number` to `BoardServeOptions`; pass
+  `port: options.port ?? 0` to `Bun.serve`. Nothing else.
+- `apps/web/tests/modules/composed-board-browser.test.ts` — replace the body of the R4 describe (`:457`) scope with
+  the existing no-store case **plus** one new case. The new case owns its server lifecycle (do not touch the
+  shared `server`/`altServer`):
+  1. `const first = serveBoard(proofBuild, { catalog: proofCatalog(host), moduleAssets: { 'native-probe': FIXTURE_DIR, 'broken-probe': FIXTURE_DIR } })`
+     — `host` must be hoisted from `beforeAll` to module scope.
+  2. Navigate to `${first.origin}/board/modules/native-probe`; wait for `[data-probe-counter]`; click it once
+     (counter `1`) so retained state is detectable.
+  3. `const port = first.port; first.stop();`
+     `const changed = serveBoard(proofBuild, { catalog: altCatalog(host), moduleAssets: { 'native-probe': ALT_FIXTURE_DIR }, port });`
+  4. R2: assert `data-probe-variant=original` present, sidebar hrefs contain `frame-ok`, not `frame-alt`. Click the
+     `/board/designs` sidebar link, wait for it, click back to `native-probe`; assert still `original` and
+     `frame-alt` still absent.
+  5. `await browser.send('Page.reload', {}, page)`; wait for `[data-probe-variant=alternate]`.
+  6. R1: reuse the `:420` assertions — hrefs contain `native-probe` + `frame-alt`, not `frame-ok`/`broken-probe`;
+     `alternate` present, `original` absent; `[data-probe]` color `rgb(10, 150, 60)`; counter `0`; navigate to
+     `/board/modules/frame-alt` and assert frame `src === fixtures.deniedUrl`.
+  7. `finally { first.stop(); changed?.stop(); }`.
+- Extract the `:420` post-condition assertions into a local `expectAltCatalog()` helper used by both cases, so
+  the two proofs cannot drift (the only permitted refactor).
 
 **Constraints**
 
-- Do not add live replacement, file watching, or HMR to make this easier — R4 explicitly forbids it, and
-  a passing live-reload test would contradict the requirement.
-- Keep the proof in `apps/web`; server-level refusal coverage stays in `apps/server`.
+- No production change. If the Board *does* pick up the change before reload, or does *not* after reload, stop
+  and report — that is a product defect for a separate task, not something to accommodate in the test.
+- Keep the case in the existing composed proof file; reuse its build (`buildBoardToTemp` is the slow step).
+- Port rebinding: `stop()` uses `server.stop(true)`; if rebinding the same port is flaky, retry `serveBoard` a
+  bounded number of times on `EADDRINUSE` in the test, never fall back to a new port (that would silently turn
+  this into the second-origin case).
 
-**Out of scope**
-
-- The project switcher mechanism (filed separately).
-- Any new runtime capability.
+**Out of scope:** switcher-driven switching (0997, cancelled); server startup refusal (owned in `apps/server`);
+config-file parsing.
 
 ### Plan
 
-<!-- Ordered implementation checklist. Fill before moving to todo/wip. -->
+1. Add optional `port` to `BoardServeOptions` / `serveBoard` (`apps/web/tests/test-helpers/board-server.ts`).
+2. Hoist `host` to module scope in `composed-board-browser.test.ts`; extract `expectAltCatalog()` from the `:420`
+   case and keep that case green.
+3. Add the same-origin restart-plus-reload case per Design steps 1–7 in the R4 describe block.
+4. Run `(cd apps/web && bun test tests/modules/composed-board-browser.test.ts)` — green; then temporarily make the
+   changed server serve the *first* catalog and confirm the new case fails at step 5/6 (proves it can fail);
+   revert.
+5. `bun run spur-check`. In Testing, name the inherited server-side owners for before-listen refusal and the
+   no-module legacy path (`apps/server/tests/board-modules.test.ts:277/288/324/343`).
 
 ### Solution
 
@@ -119,6 +144,13 @@ Scenario: AC1 — Module selection changes use the documented restart lifecycle 
 
 ### References
 
-<!-- Links to the parent feature, design docs, related tasks, or external references. -->
+- Feature A8, scenario R13 (`spur feature show A8`).
+- 0992 Review residual P2 (restart-plus-reload for a changed selection).
+- `apps/server/src/serve.ts:706`, `:1042`; `apps/server/tests/board-modules.test.ts:262-312`, `:319-360`.
+- `apps/web/tests/modules/composed-board-browser.test.ts:141-170` (`altCatalog`), `:419-470`.
+- 0997 (cancelled) — switcher path.
 
 ### History
+
+- 2026-09-29T03:18:42.641Z backlog → todo (system)
+
