@@ -410,7 +410,7 @@ describe('spur feature CLI', () => {
         expect(parsed[0]).toHaveProperty('pass');
     });
 
-    test('check reports an unclosed code fence as an L2 error (task 1008 R2)', async () => {
+    test('check reports an unclosed code fence as an L2 error; --fix never auto-closes (task 1008 R2, 1009 R2)', async () => {
         const cOut = createCapturedOutput();
         await main(['feature', 'create', 'Fence Feature'], { cwd, output: cOut });
         const id = createdId(cOut);
@@ -427,6 +427,17 @@ describe('spur feature CLI', () => {
             const fence = parsed[0].findings.find((f: { code: string }) => f.code === 'L2.unclosed-code-fence');
             expect(fence).toBeDefined();
             expect(fence.severity).toBe('error');
+
+            // --fix repairs structural findings only — it must not auto-close fences.
+            await main(['feature', 'check', id, '--fix'], { cwd, output: createCapturedOutput() });
+            expect(await Bun.file(featurePath).text()).toContain('never closed');
+            const rechecked = createCapturedOutput();
+            const recheckCode = await main(['feature', 'check', id, '--json'], { cwd, output: rechecked });
+            expect(recheckCode).toBe(1);
+            const reparsed = JSON.parse(lastMessage(rechecked));
+            expect(
+                reparsed[0].findings.find((f: { code: string }) => f.code === 'L2.unclosed-code-fence'),
+            ).toBeDefined();
         } finally {
             // This file shares one corpus cwd across all tests; the feature must
             // not linger — dropping the file frees its top-level letter (A-Z

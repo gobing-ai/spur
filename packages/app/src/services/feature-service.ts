@@ -371,15 +371,23 @@ export class FeatureService {
         const tasksByFeature = await this.collectTasksByFeature();
         const targets = options?.featureId ? features.filter((f) => f.id === options.featureId) : features;
         let tasksUpdated = 0;
-        // R4 (task 1008): a feature whose Tasks section is missing — commonly
-        // because an unclosed ``` fence hides it from the parser — used to be
-        // skipped silently. Report every skip so the corruption is observable.
+        // R4 (task 1008/1009): a feature whose Tasks region can't be updated used
+        // to be skipped silently. Classify every skip (checked in precedence order:
+        // a fence hides later headings, so it outranks the missing-section look).
         const skipped: Array<{ id: string; reason: string }> = [];
         for (const feature of targets) {
             const rows = tasksByFeature.get(feature.id) ?? [];
             const table = renderTasksTable(rows);
             const raw = await this.ctx.fs.readFile(feature.filePath);
             const doc = MarkdownDocument.parse(raw, 'feature');
+            if (doc.unclosedFenceLine() !== null) {
+                skipped.push({ id: feature.id, reason: 'unclosed-code-fence' });
+                continue;
+            }
+            if (doc.duplicateSectionNames.length > 0) {
+                skipped.push({ id: feature.id, reason: 'duplicate-sections' });
+                continue;
+            }
             if (!doc.hasSection('Tasks')) {
                 skipped.push({ id: feature.id, reason: 'missing-tasks-section' });
                 continue;

@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 name: Feature refresh skip-reason fidelity and feature-side --fix fence coverage (1008 P3-1/P3-4)
-status: backlog
+status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:16.889Z
-updated_at: "2026-09-29T19:53:30.790Z"
+updated_at: "2026-09-29T20:35:34.111Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -49,9 +49,9 @@ References:
 
 ### Acceptance Criteria
 
-- [ ] AC1 — `packages/app/tests/services/feature-service.test.ts` covers all four reasons: fence above the Tasks heading → `unclosed-code-fence` (the existing 1008 R4 test's expectation moves from `missing-tasks-section`); fence opening inside/after the Tasks body → `unclosed-code-fence`; duplicate top-level section → `duplicate-sections`; balanced doc with Tasks but no marker region → `no-tasks-marker-region`; balanced doc with no Tasks heading → `missing-tasks-section` (req: R1)
-- [ ] AC2 — The feature fence test runs `feature check --fix` and asserts the fence text survives and `L2.unclosed-code-fence` is still reported; `rmSync` cleanup stays in `finally`; targeted run green (req: R2)
-- [ ] AC3 — `docs/design/data-output-contracts.md` feature/refresh row lists `skipped: [{id, reason}]` and the four reason values (req: R3)
+- [x] AC1 — `packages/app/tests/services/feature-service.test.ts` covers all four reasons: fence above the Tasks heading → `unclosed-code-fence` (the existing 1008 R4 test's expectation moves from `missing-tasks-section`); fence opening inside/after the Tasks body → `unclosed-code-fence`; duplicate top-level section → `duplicate-sections`; balanced doc with Tasks but no marker region → `no-tasks-marker-region`; balanced doc with no Tasks heading → `missing-tasks-section` (req: R1)
+- [x] AC2 — The feature fence test runs `feature check --fix` and asserts the fence text survives and `L2.unclosed-code-fence` is still reported; `rmSync` cleanup stays in `finally`; targeted run green (req: R2)
+- [x] AC3 — `docs/design/data-output-contracts.md` feature/refresh row lists `skipped: [{id, reason}]` and the four reason values (req: R3)
 
 ### Q&A
 
@@ -114,11 +114,61 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, 
 
 ### Testing
 
-<!-- Filled during verification: commands run, outcomes, coverage claim or N/A. -->
+**Pipeline verify results**
+
+- Verdict: PASS (from verdict artifact)
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| R1 | MET | `packages/app/src/services/feature-service.ts:383-398` — classification precedes the write, in the exact specified precedence: `doc.unclosedFenceLine() !== null` → `unclosed-code-fence` (:383-384), `doc.duplicateSectionNames.length > 0` → `duplicate-sections` (:387-388), `!doc.hasSection('Tasks')` → `missing-tasks-section` (:391-392), `replaceMarkerRegion` throw → `no-tasks-marker-region` (:396-398). Fence check runs before `hasSection` (:383 < :391), so a fence hiding the Tasks heading gets the root-cause label regardless of where it opens |
+| R2 | MET | `apps/cli/tests/commands/feature.test.ts:431-438` — `feature check <id> --fix` leg asserts fence text survives (`toContain('never closed')`, :433), re-check exits 1 (:435-436) and still reports `L2.unclosed-code-fence` (:437-439); `rmSync` cleanup retained in `finally` (:441, :445) |
+| R3 | MET | `docs/design/data-output-contracts.md:204` — feature/refresh row updated to `{index_path, tasksUpdated, skipped: [{id, reason}]}` with the four reason values enumerated, tagged (1009 R1) |
+
+| Acceptance Criteria | Status | Evidence Type | Evidence |
+|---------------------|--------|---------------|----------|
+| AC1 | MET | test | `packages/app/tests/services/feature-service.test.ts:343` (fence above Tasks heading → `unclosed-code-fence`), :358 (fence opened after the Tasks body/EOF → `unclosed-code-fence`), :369 (duplicate top-level section → `duplicate-sections`), :380 (Tasks without auto-gen markers → `no-tasks-marker-region`), :393 (balanced doc, no Tasks heading → `missing-tasks-section`) — all four reasons covered via the `corruptA` helper (:337-342); targeted run green (56 pass, receipt sha256:460e172a…) |
+| AC2 | MET | test | `apps/cli/tests/commands/feature.test.ts:431-438` (--fix leg, fence text survives, re-check reports `L2.unclosed-code-fence`, exit 1), `rmSync` in `finally` (:441-445); targeted run green (48 pass) |
+| AC3 [docs-only] | MET | static-ref | `docs/design/data-output-contracts.md:204` — row lists `skipped: [{id, reason}]` and all four reason values |
+- Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
 
-<!-- Filled during review: P1-P4 findings, residual risk, and final disposition. -->
+#### Review Report — 1009
+
+**Scope:** diff `89d51ac..worktree` — `packages/app/src/services/feature-service.ts`, `packages/app/tests/services/feature-service.test.ts`, `apps/cli/tests/commands/feature.test.ts`, `docs/design/data-output-contracts.md`
+**Dimensions:** functional, security, efficiency, correctness, usability, architecture
+**Verdict:** PASS
+
+##### Findings (ranked)
+
+| # | Priority | Dimension | Finding | Location |
+|---|----------|-----------|---------|----------|
+| 1 | P3 (minor) | usability | `refresh()` JSDoc `@returns` still lists only two skip causes; Solution step 1 required updating it to the four reasons | `packages/app/src/services/feature-service.ts:351` |
+| 2 | P4 (advisory) | correctness | Bare `catch` classifies any `replaceMarkerRegion` throw as `no-tasks-marker-region`; only marker-missing is reachable today, but future domain guards would be silently misclassified | `packages/app/src/services/feature-service.ts:397` |
+
+##### Functional Traceability
+
+| Req | Status | Evidence |
+|-----|--------|----------|
+| R1 | MET | Four-way classification in exact precedence order `unclosedFenceLine` → `duplicateSectionNames` → `hasSection` → `catch` (`feature-service.ts:394-411`); each reason has a dedicated test: fence-above-Tasks → `unclosed-code-fence` (`feature-service.test.ts:368`), fence-at-EOF-after-Tasks → `unclosed-code-fence`, never a write (`:378`), EOF `## Notes` dup → `duplicate-sections` (`:388`), markers stripped → `no-tasks-marker-region` (`:397`), balanced-no-Tasks → `missing-tasks-section` (`:405`) |
+| R2 | MET | CLI test extends the 1008 R2 leg with `--fix`: asserts `never closed` survives (`feature.test.ts:431`), re-check exits 1 with `L2.unclosed-code-fence` still present (`:433-437`); `rmSync` cleanup stays in the existing `finally` |
+| R3 | MET | Contract row updated to `skipped: [{id, reason}]` with the four reason values (`data-output-contracts.md:204`) |
+
+##### Dimension Summaries
+
+**Functional:** AC1/AC2/AC3 each satisfied exactly as specified, including the fence-above-Tasks case landing on `unclosed-code-fence` and the "never a write" guarantee proven by the fence-at-EOF test. The duplicate test is non-vacuous: the feature template ships `## Notes` (`feature-service.ts:1014`), so the EOF append creates a genuine parse-time duplicate.
+
+**Correctness:** classification reads the same parse state the domain guard throws on — `unclosedFenceLine()` and `duplicateSectionNames` are the fields `assertFenceBalance` checks (`markdown-document.ts:398-416`) — so service-level skip classification cannot diverge from `replaceMarkerRegion`'s own protection. No P1–P3 correctness findings.
+
+**Security:** `--fix` not auto-closing fences is a data-integrity safeguard and is now regression-tested; no new trust boundary or injection surface in the diff.
+
+**Efficiency:** the two new checks are O(body) scans on a doc already read and parsed in the same loop iteration; the EOF-fence test additionally proves an avoided write (no serialize + atomic write on the skip path).
+
+**Usability:** skip reasons are actionable strings, contract-documented with an ∈-closed vocabulary; stale JSDoc is the only usability gap (P3).
+
+**Architecture:** classification lives in the app service using domain getters (no new domain surface — right layer); server parity with the open `reason` string is deliberately deferred to 1011 per the contract note, so no union-type coupling finding. Test placement is correct: classification matrix in `packages/app/tests/services`, `--fix` policy in `apps/cli/tests/commands`; the shared `corruptA` helper deepens the corpus-mutation tests. Contract doc ownership matches the task's stated owner (`data-output-contracts.md`, not 04_DESIGN.md).
+
+**Next:** fix the `refresh()` JSDoc `@returns` to list the four reasons (one-line follow-up, rides with 1011); optionally tighten the `catch` to match the marker-missing error.
 
 ### References
 
@@ -128,3 +178,9 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, 
 - Tasks: 1008 (R2/R3b/R4), 1011 (server parity; open `reason` string) · Feature: F91
 
 ### History
+
+- 2026-09-29T20:05:28.662Z backlog → todo (system)
+- 2026-09-29T20:13:52.184Z todo → wip (system)
+- 2026-09-29T20:33:12.194Z wip → testing (system)
+- 2026-09-29T20:35:34.111Z testing → done (system)
+

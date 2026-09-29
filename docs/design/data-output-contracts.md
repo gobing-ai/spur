@@ -201,7 +201,7 @@ Row-level deltas from the default rule:
 | feature | advance | 178, 210 | flat-object `{id, status, hops}` | unwrapped |
 | feature | list | 241 | **bare-array** | wraps as paginated `{ok, data, meta}` |
 | feature | move | 269 | flat-object | unwrapped |
-| feature | refresh | 328 | flat-object `{index_path, tasksUpdated}` | unwrapped |
+| feature | refresh | 328 | flat-object `{index_path, tasksUpdated, skipped: [{id, reason}]}` | unwrapped; `reason` ∈ `unclosed-code-fence \| duplicate-sections \| missing-tasks-section \| no-tasks-marker-region` (1009 R1) |
 | feature | check | 403 | **bare-array** (0688 case 2) | wraps array as `data`, `ok` from aggregate pass/fail |
 | feature | sync | 450, 474 | flat-object | unwrapped |
 | projects (10) | add | 32, 39 | `{ok:true, project, …}` / `{ok:false, error:"<string>"}` | top-level `ok` is command success, not envelope discriminant; `error` is a bare string, not `{code, message}` |
