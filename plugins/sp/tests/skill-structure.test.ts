@@ -1669,7 +1669,7 @@ describe('sp plugin structure — functional split invariants (task 0161 / ADR-0
         // Plugin-level trees exist and pair by skill name: scripts/<skill>/ code is exercised by
         // tests/<skill>/ (coverage gate alone can't prove the suite sits in the right tree).
         const scriptDirs = readdirSync(join(PLUGIN_ROOT, 'scripts'), { withFileTypes: true })
-            .filter((e) => e.isDirectory())
+            .filter((e) => e.isDirectory() && !e.name.startsWith('.')) // host-tool dirs (e.g. .claude) are not skill trees
             .map((e) => e.name);
         const testsDir = join(PLUGIN_ROOT, 'tests');
         const missingSuite: string[] = [];
