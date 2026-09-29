@@ -3812,3 +3812,82 @@ The requested artifact is [.spur/run/3499f03b-8d13-426f-8269-2985de5d0373-wrapup
 - CDP event collections are asynchronous snapshots. For expected events, wait with a bounded timeout; for forbidden events, assert absence immediately. One-shot reads can pass in isolation and flake under the full suite.
 - Make documentation examples executable evidence: extract the marked config example and parse it through the production schema/validator, and assert that initialization keeps the default module list empty.
 - Keep unproven integration paths explicit. Per-origin catalog isolation and fresh-load behavior do not by themselves prove driving the project switcher or a changed-selection restart end to end.
+Doc-evolve wrap-up complete.
+
+**Repair (1 finding):** Task 0999 made `packages/config/tests/board-modules.test.ts` parse *every* YAML fence in `docs/design/downstream-board-modules.md`, but the guide still said only the §6 examples are test-parsed. Stale in two places; repaired in `docs/design/downstream-board-modules.md:63` and `:137`. `docs/00_ADR.md`, `docs/03_ARCHITECTURE.md`, `docs/04_DESIGN.md` had no drift — pointers resolve, no surface change (test-only diff), `updated_at` unchanged and correct. No task/feature corpus written.
+
+**Verification:** `(cd packages/config && bun test tests/board-modules.test.ts)` → 15 pass / 0 fail after the edit. `git status` shows only the satellite modified.
+
+**Artifact:** `.spur/run/8a504e95-0e08-4711-a43e-5cb7c487becd-wrapup-learnings.md` (0 fence lines).
+
+# Wrap-up Learnings — run 8a504e95-0e08-4711-a43e-5cb7c487becd
+
+Batch: task 0999 (feature A8). Base `7e442aab`, head `e1c89fa33`. Diff was test-only plus the task record:
+`packages/config/tests/board-modules.test.ts`, `apps/web/tests/components/BoardLayoutFramed.test.tsx`,
+`apps/web/tests/components/ThemeToggle.test.tsx`, and the 0999 task file.
+
+## 2026-09-29 — Task 0999 — Harden published authoring-example validation against unmarked code fences
+
+### Conventions
+
+- In `docs/design/downstream-board-modules.md`, a YAML fence IS a config example. Every yaml/yml fence in
+  the guide is parsed by `packages/config/tests/board-modules.test.ts` through `spurConfigSchema` and its
+  `bootstrap.modules` through `validateBoardModuleDeclarations`. A non-config snippet must use a different
+  fence language (e.g. text). No exemption marker.
+- No exemption marker. The proposed `board-modules-authoring-example:exempt` was rejected: it contains the
+  validating sentinel as a substring, so the existing `includes()` filter would have selected the "exempt"
+  fence as the validated example — a latent bug. The cheap escape is choosing a different fence language.
+- Guard against a vacuous pass with an at-least-one assertion, not an exact count
+  (`expect(fences.length).toBeGreaterThan(0)`), so adding a legitimate fence later does not require editing
+  the guard.
+- Prove a hardening test can fail. Poison a fence, confirm the failure names the line, then revert. A
+  validation test that passes on the current (already-valid) input proves nothing about the guard.
+- Test-only changes do not trigger T3. No production/CLI/config/schema surface changed, so `00`, `03` and
+  `04` needed no edit; the only doc repair was a factual description of the test's enforcement scope in the
+  design satellite.
+- Failure template names the guide line, not just the error: `downstream-board-modules.md:LINE: MESSAGE`.
+
+### Patterns
+
+- Widen validation instead of partitioning it. Replace a sentinel-gated extractor with one that returns
+  every fence plus its 1-based start line, then filter only where the sentinel semantics are needed. Smaller
+  diff, closes the live hole immediately, lands green when existing inputs already conform.
+- One extractor, two consumers. `yamlFences(markdown)` returns `{line, body}`; the legacy sentinel test
+  filters it, the new all-fences test iterates it. Line-number math stays in one place.
+- 1-based line from a regex match: `markdown.slice(0, match.index).split('\n').length`. Fence regex matches a
+  column-0 opening fence with an optional yaml/yml info string, a non-greedy body, and a column-0 closing
+  fence, under the `m` flag.
+- Accumulate failures, do not fail fast: collect `downstream-board-modules.md:LINE: MESSAGE` strings into an
+  array and assert `toEqual([])` so one run names every offending line.
+
+### Errors fixed / gotchas
+
+- Sentinel-substring trap (latent): a marker containing the sentinel as a substring is matched by
+  `includes()`. Any future sentinel/exemption scheme must not use substring matching for selection.
+- Unclosed YAML fence at EOF is silently unmatched by the fence regex, so it skips validation; the
+  at-least-one guard cannot catch a second unclosed fence. Accepted ceiling for a two-fence guide; upgrade
+  path is a fence-pairing / count-parity assertion if the guide grows (review residual F1).
+- Global `fetch` mutation violates `no-globalthis-fetch-mutation`. The remediation hop replaced the
+  `globalThis.fetch` swap with the pre-existing seam `setFetchForTesting` / `resetFetchForTesting` in
+  `apps/web/src/lib/rpc-client.ts`; `resetFetchForTesting()` runs in `afterEach`. Cast fetch stubs to
+  `typeof fetch` for the web typecheck.
+- Seam scope: the stub intercepts only rpc-client-routed fetch (`_testFetch` consumed in `fetchWithTimeout`);
+  a future raw `fetch()` in a component would reintroduce happy-dom CORS noise — a loud failure, not a
+  silent one. Grep confirmed zero direct `fetch()` callers in `apps/web/src` at the time (review residual
+  F2).
+- Test-only diffs still exercise `apps/web` global state: `ThemeToggle.test.tsx` `afterEach` clears
+  `globalThis.matchMedia` (pre-existing, outside the fetch rule scope).
+
+### Doc-evolve wrap-up (§7.1 / §7.2)
+
+- Detection ran against the affected owners: the `docs/04_DESIGN.md` index row, the `docs/00_ADR.md` and
+  `docs/03_ARCHITECTURE.md` pointers, and the `docs/design/downstream-board-modules.md` satellite.
+- Finding: the guide's two sentences describing test scope were stale after 0999. They implied only the §6
+  examples are parsed, while 0999 now parses every YAML fence including the §4 contract example at the §4
+  fence. Repaired both in place; the §4 example is now explicitly named as parsed, and §6 states the
+  non-config-snippet fence-language rule.
+- Clean: the `04` index pointer resolves; the `00`/`03` pointers resolve; frontmatter `updated_at`
+  (2026-09-28) matches the same-day edit; no competing ledger, no scope/status change, no broken anchors.
+- Verification after the prose repair: `(cd packages/config && bun test tests/board-modules.test.ts)` —
+  15 pass / 0 fail (no YAML fence added, so the all-fences test is unaffected).
+- Scope note: only the design satellite was edited. Task/feature corpus was not written.

@@ -60,7 +60,7 @@ bootstrap:
       url: https://docs.example.test/
 ```
 
-This is the shipped flat declaration shape: type-specific fields sit directly on the declaration (there is no nested `web:` or `source:` object), and every declaration is `.strict()`, so an unknown field is a configuration error. `docs.example.test` is an illustrative URL, not a verified embeddable resource. The live declaration contract, with the examples a test parses, is in §6.
+This is the shipped flat declaration shape: type-specific fields sit directly on the declaration (there is no nested `web:` or `source:` object), and every declaration is `.strict()`, so an unknown field is a configuration error. `docs.example.test` is an illustrative URL, not a verified embeddable resource. The live declaration contract is in §6, and every YAML fence in this guide — this example included — is parsed by `packages/config/tests/board-modules.test.ts`, so none of them can drift from the schema.
 
 ### 4.1 Shared fields and validation
 
@@ -134,8 +134,9 @@ Sources: [React shared-instance requirement](https://react.dev/warnings/invalid-
 Everything an author needs to ship a project Board module. Every fact here is one of the shipped
 surfaces: declarations in `packages/config/src/board-modules.ts`, the loader in
 `apps/web/src/modules/compose.ts`, the runtime manifest in `apps/web/src/modules/runtime/manifest.ts`
-and the frame adapter in `apps/web/src/components/FramedResource.tsx`. The examples below are parsed
-by `packages/config/tests/board-modules.test.ts`, so they cannot drift from the schema.
+and the frame adapter in `apps/web/src/components/FramedResource.tsx`. Every YAML fence in this guide
+is parsed by `packages/config/tests/board-modules.test.ts`, so the examples cannot drift from the
+schema; a non-config snippet uses a different fence language (e.g. `text`).
 
 ### 6.1 The declaration contract (opt in)
 
