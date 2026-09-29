@@ -4,7 +4,7 @@ name: Make one verdict row id satisfy both the AC-N scenario alias and the AC ch
 status: done
 template: feature-impl
 created_at: 2026-09-28T08:31:24.792Z
-updated_at: "2026-09-28T17:27:36.850Z"
+updated_at: "2026-09-29T21:34:07.861Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -89,17 +89,17 @@ This removes the need for the `R1 (covers: R1) [R2]` workaround used when 0970 w
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/task-record.ts:191-194` — `prefixId` matches `^(?:AC\|R)\d+`, so `AC1 — <title>` normalizes to `AC1` and matches the parsed checkbox id |
-| R2 | MET | Probe over feature A32's real AC: rows `AC1 — <title>`, `AC2 — <title>`, `AC3 — <title>` → `verdictRowsMatchScenarios` true, `matchedScenarioKeys` 3 of 3; the same rows flip their boxes per the unit test |
-| R3 | MET | `plugins/sp/skills/spur-cli/references/tasks/verbs.md:337` documents the `AC<n> — <scenario title>` form and what each variant fails to satisfy |
-| R4 | MET | `bun run spur-check` → 9390 pass / 0 fail; existing flip/crediting tests unchanged |
+| R1 | MET | `packages/app/src/services/task-record.ts:193-196` prefixId normalizes `/^(?:AC |
+| R2 | MET | `packages/app/tests/services/task-record.test.ts:1429` AC row keyed by scenario title flips its task box; fresh probe of matchedScenarioKeys over docs/features/A32 with rows `AC1..AC3 — <title>` → 3 of 3 scenarios matched, no (covers:) workaround |
+| R3 | MET | `plugins/sp/skills/spur-cli/references/tasks/verbs.md:336-342` documents the `AC<n> — <scenario title>` form and which variant satisfies which check |
+| R4 | MET | fresh `bun test tests/services/task-record.test.ts` 101 pass / 0 fail; repo-wide spur-check 9567 pass / 4 fail, all 4 environmental (3 Chromium DevTools-port launch failures in sandbox; bundle determinism failure only in temp worktree, passes 7/0 in main repo) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts` (box flip) + probe over A32's AC (crediting, 3/3) |
-| AC2 | MET | test | `(cd packages/app && bun test tests/services/task-record.test.ts)` → 94 pass / 0 fail |
-| AC3 | MET | command | `rg -n "AC<n> — <scenario title>" plugins/sp/skills/spur-cli/references/tasks/verbs.md` → present |
-| AC4 | MET | command | `bun run spur-check` → 9390 pass / 0 fail, 2 rules passed |
+| AC1 | MET | test | `packages/app/tests/services/task-record.test.ts:1429` flips AC1 box for `AC1 — <title>` row; A32 probe credits all three scenarios |
+| AC2 | MET | command | fresh `bun run $TMPDIR/a32-probe.ts` → matchedScenarioKeys returned 3 of 3 A32 scenario keys; task-record tests 101 pass / 0 fail |
+| AC3 | MET | command | `rg -c "Graduating tasks — one row keyed to both checks" plugins/sp/skills/spur-cli/references/tasks/verbs.md` → 1 (`plugins/sp/skills/spur-cli/references/tasks/verbs.md:336`) |
+| AC4 | MET | command | `bun run spur-check`: lint + typecheck + 50 rules pass; tests 9567 pass / 4 fail, all environmental and unrelated to task-record (Chromium launch denied in sandbox ×3; bundle-plugin-lib determinism fails only via worktree node_modules symlinks, `bun test scripts/commands/bundle-plugin-lib.test.ts` in main repo 7 pass / 0 fail) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -526,6 +526,14 @@ describe('fleet + processes wire schemas (0897)', () => {
         ).toBe(false);
     });
 
+    test('feature refresh output carries skipped {id, reason} rows (task 1011)', () => {
+        const output = contract.feature.refresh['~orpc'].outputSchema;
+        if (!output) throw new Error('feature refresh output schema missing');
+        const body = { ok: true, data: { rebuilt: 3, skipped: [{ id: 'A', reason: 'missing-tasks-section' }] } };
+        expect(output.safeParse(body).success).toBe(true);
+        expect(output.safeParse({ ok: true, data: { rebuilt: 3 } }).success).toBe(false);
+    });
+
     test('process list output accepts supervisor entries with and without sessions', () => {
         const output = processesContract.list['~orpc'].outputSchema;
         if (!output) throw new Error('process list output schema missing');

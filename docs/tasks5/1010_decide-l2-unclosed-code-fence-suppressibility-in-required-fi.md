@@ -4,7 +4,7 @@ name: Decide L2.unclosed-code-fence suppressibility in REQUIRED_FINDING_CODES (1
 status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:17.374Z
-updated_at: "2026-09-29T20:54:49.425Z"
+updated_at: "2026-09-29T21:27:42.418Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -77,13 +77,13 @@ Verify: `(cd packages/app && bun test tests/services/planning-check-base.test.ts
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/planning-check-base.ts:82` set membership beside L2_MISSING_REQUIRED_SECTION; isUnsuppressibleFinding (:96-98) delegates to set; summarizeWithStatus off-refusal (:339-341), downgrade-ignore (:346-350), accepted-map guard (:358) gate on membership. |
-| R2 | MET | `docs/design/essential-workflow-checks.md:29` parser-invisible structure row; `docs/design/configuration-contracts.md:49` tasks.severity clause. |
+| R1 | MET | `packages/app/src/services/planning-check-base.ts:80-82` L2_UNCLOSED_CODE_FENCE in REQUIRED_FINDING_CODES beside L2_MISSING_REQUIRED_SECTION with WHY comment; isUnsuppressibleFinding (:96-98); off refused (:339-341), downgrade ignored (:346-350), accepted-map skipped for unsuppressible (:358) |
+| R2 | MET | `docs/design/essential-workflow-checks.md:29` parser-invisible structure row (essential); `docs/design/configuration-contracts.md:49` tasks.severity clause: overrides do not apply to essential codes |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/planning-check-base.test.ts:414-452` — isUnsuppressibleFinding true; off/warning overrides keep severity error / pass false; accepted-map not absorbed (:434-450); reviewer re-ran 44 pass / 0 fail; absorption cross-checked planning-check-base.ts:358-363. |
-| AC2 [docs-only] | MET | static-ref | `docs/design/essential-workflow-checks.md:29`; `docs/design/configuration-contracts.md:49`. |
+| AC1 | MET | test | `packages/app/tests/services/planning-check-base.test.ts:414-453` — isUnsuppressibleFinding true; off/warning overrides keep severity error + pass false; accepted-map entry does not absorb; fresh run 100 pass / 0 fail (with feature-service) |
+| AC2 | MET | command | `rg -c "Parser-invisible document structure" docs/design/essential-workflow-checks.md` → 1 (`docs/design/essential-workflow-checks.md:29`); `rg -c "overrides do not apply to essential codes" docs/design/configuration-contracts.md` → 1 (`docs/design/configuration-contracts.md:49`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

@@ -4,7 +4,7 @@ name: Unclosed code fence hides later sections and section writes silently drop 
 status: done
 template: feature-impl
 created_at: 2026-09-29T07:03:58.072Z
-updated_at: "2026-09-29T17:50:30.791Z"
+updated_at: "2026-09-29T21:28:47.303Z"
 feature_id: F91
 
 estimate_hours: 4
@@ -81,16 +81,16 @@ Single chokepoints per concern; no per-caller guards.
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | packages/domain/src/planning/markdown-document.ts:131 `findUnclosedFenceLine()` toggle-scan (same ``` toggle semantics as `findHeadings`); captured at parse time :258-262 with frontmatter re-base (`bodyUnclosedFenceLine + frontmatterBlock newlines`); exposed via `unclosedFenceLine(): number |
-| R2 | MET | packages/config/src/finding-codes.ts:20 (`'L2.unclosed-code-fence'` in ALL_FINDING_CODES) + :105 (`L2_UNCLOSED_CODE_FENCE` map entry); packages/app/src/services/planning-check-base.ts:231-239 pushes finding severity `error` with `Unclosed code fence at line ${fenceLine}` before the `if (!entry) return` guard — one push covers `task check` (task-check.ts:570, :640) and `feature check` (feature-check.ts:250). `--fix` cannot auto-close: finding is not in `structuralFindings` (structural-repair.ts:126 is the only fix source, planning-check-base.ts:297); CLI test task.test.ts:922 asserts the fence survives `--fix`. Note: code spelled `L2.unclosed-code-fence` per the registry's `L<layer>.<kebab>` convention (unknown codes fail config validation); the requirement's `UNCLOSED_CODE_FENCE` is the conceptual name, mapping documented in the task Solution section. |
-| R3 | MET | packages/domain/src/planning/markdown-document.ts:398-421 `assertFenceBalance()`: (a) new body leaving a fence open refused :414-420 (odd fence count ≡ unclosed fence; message names `opening at body line N`); (b) write refused when the serialized result would have fewer top-level sections than the input — document-level unclosed fence hiding later sections :399-405 and duplicate top-level sections dropped by parse dedup :406-413 (message names the dropped sections). Guard runs pre-mutation in `replaceSection` :479 and `replaceMarkerRegion` :576 — the chokepoint every section writer routes through (planning-write-service.ts:551, :578, :590, :596; task-service.ts:392, :394, :1771, :1803; feature-service.ts:388, :1101). Command exits non-zero with the thrown message via apps/cli/src/index.ts:224-231 (`output.error` + return 1); tests prove byte-identical serialize after refusal (markdown-document.test.ts:963-1006, R3b refusal :885, :1014). |
-| R4 | MET | packages/app/src/services/feature-service.ts:356 signature returns `skipped: Array<{id, reason}>`; skip sites :384 `missing-tasks-section`, :390 `no-tasks-marker-region`; returned :399. CLI: apps/cli/src/commands/feature.ts:386 `skipped` in the JSON envelope; :392-394 human path prints `Skipped <id> (<reason>)` before the summary line. No new flag or verb in the diff (observable-output change only). |
+| R1 | MET | `packages/domain/src/planning/markdown-document.ts:131` findUnclosedFenceLine toggle scan; parse-time capture with frontmatter re-base :258-262; public `unclosedFenceLine()` :377; tests `packages/domain/tests/planning/markdown-document.test.ts:945-962`; fresh run 82 pass / 0 fail |
+| R2 | MET | `packages/config/src/finding-codes.ts:20` + :105 L2.unclosed-code-fence; `packages/app/src/services/planning-check-base.ts:234-242` emits severity error with the fence line; CLI tests `apps/cli/tests/commands/task.test.ts:922` and `apps/cli/tests/commands/feature.test.ts:413-447` (incl. --fix never auto-closes); fresh 192 + 48 pass / 0 fail (temp worktree) |
+| R3 | MET | `packages/domain/src/planning/markdown-document.ts:398` assertFenceBalance, called before mutation by replaceSection :479 and replaceMarkerRegion :576; tests `packages/domain/tests/planning/markdown-document.test.ts:963-1008` (body fence, doc fence, marker region, balanced) and :885 duplicate-section refusal |
+| R4 | MET | `packages/app/src/services/feature-service.ts:377-407` skipped [{id, reason}] returned (reason vocabulary refined by 1009); `apps/cli/src/commands/feature.ts:386` JSON, :392 human output; test `packages/app/tests/services/feature-service.test.ts:393-399` missing-tasks-section (re-anchored: 1009 moved skip sites) |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | planning-check-base.ts:231-239 emits `L2.unclosed-code-fence` severity=error with the fence line, driven by R1's `doc.unclosedFenceLine()` (:377), covering task check (task-check.ts:570, :640) + feature check (feature-check.ts:250); CLI tests apps/cli/tests/commands/task.test.ts:922 and feature.test.ts:413 assert exit 1 + error finding + `/line \d+/` message (recorded pass under the gate run). |
-| AC2 | MET | test | markdown-document.ts:398-421 guard throws before any mutation in `replaceSection` :479 / `replaceMarkerRegion` :576; all writers route through these two methods; domain tests prove refusal + byte-identical serialize for body-fence, doc-fence, and duplicate-section cases (markdown-document.test.ts:963, :970, :977, :1014). |
-| AC3 | MET | test | feature-service.ts:377/:384/:390/:399 reports skips with `{id, reason}`; feature.ts:386/:392-394 surfaces them in JSON and human output; test feature-service.test.ts:333 asserts `skipped` contains `{id: 'A', reason: 'missing-tasks-section'}` while healthy sibling A1 is absent (recorded pass under the gate run). |
+| AC1 | MET | test | `apps/cli/tests/commands/task.test.ts:922` and `apps/cli/tests/commands/feature.test.ts:413` — check reports L2.unclosed-code-fence severity error; fresh runs green |
+| AC2 | MET | test | `packages/domain/tests/planning/markdown-document.test.ts:963-1008` — refusal leaves serialize() byte-identical; :885 duplicate-section write refusal; fresh 82 pass |
+| AC3 | MET | test | `packages/app/tests/services/feature-service.test.ts:343-399` — every skip reported with {id, reason}; fresh 100 pass |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review

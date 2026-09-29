@@ -4,7 +4,7 @@ name: Feature refresh skip-reason fidelity and feature-side --fix fence coverage
 status: done
 template: feature-impl
 created_at: 2026-09-29T18:18:16.889Z
-updated_at: "2026-09-29T20:35:34.111Z"
+updated_at: "2026-09-29T21:28:44.598Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -120,15 +120,15 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, 
 
 | Requirement | Status | Evidence |
 |-------------|--------|----------|
-| R1 | MET | `packages/app/src/services/feature-service.ts:383-398` — classification precedes the write, in the exact specified precedence: `doc.unclosedFenceLine() !== null` → `unclosed-code-fence` (:383-384), `doc.duplicateSectionNames.length > 0` → `duplicate-sections` (:387-388), `!doc.hasSection('Tasks')` → `missing-tasks-section` (:391-392), `replaceMarkerRegion` throw → `no-tasks-marker-region` (:396-398). Fence check runs before `hasSection` (:383 < :391), so a fence hiding the Tasks heading gets the root-cause label regardless of where it opens |
-| R2 | MET | `apps/cli/tests/commands/feature.test.ts:431-438` — `feature check <id> --fix` leg asserts fence text survives (`toContain('never closed')`, :433), re-check exits 1 (:435-436) and still reports `L2.unclosed-code-fence` (:437-439); `rmSync` cleanup retained in `finally` (:441, :445) |
-| R3 | MET | `docs/design/data-output-contracts.md:204` — feature/refresh row updated to `{index_path, tasksUpdated, skipped: [{id, reason}]}` with the four reason values enumerated, tagged (1009 R1) |
+| R1 | MET | `packages/app/src/services/feature-service.ts:383-400` — classify before write in spec precedence: unclosedFenceLine → unclosed-code-fence (:383-386), duplicateSectionNames → duplicate-sections (:387-390), !hasSection('Tasks') → missing-tasks-section (:391-394), replaceMarkerRegion throw → no-tasks-marker-region (:395-400); tests `packages/app/tests/services/feature-service.test.ts:343-399` (re-verify 2026-09-29: 100 pass / 0 fail with planning-check-base) |
+| R2 | MET | `apps/cli/tests/commands/feature.test.ts:431-440` — feature check --fix leg: fence text survives, re-check exit 1 and still reports L2.unclosed-code-fence; rmSync in finally (:441-445); fresh run 48 pass / 0 fail (temp worktree — sandbox denies nested .git/config in repo tree) |
+| R3 | MET | `docs/design/data-output-contracts.md:204` — refresh row lists skipped: [{id, reason}] and the four reason values |
 
 | Acceptance Criteria | Status | Evidence Type | Evidence |
 |---------------------|--------|---------------|----------|
-| AC1 | MET | test | `packages/app/tests/services/feature-service.test.ts:343` (fence above Tasks heading → `unclosed-code-fence`), :358 (fence opened after the Tasks body/EOF → `unclosed-code-fence`), :369 (duplicate top-level section → `duplicate-sections`), :380 (Tasks without auto-gen markers → `no-tasks-marker-region`), :393 (balanced doc, no Tasks heading → `missing-tasks-section`) — all four reasons covered via the `corruptA` helper (:337-342); targeted run green (56 pass, receipt sha256:460e172a…) |
-| AC2 | MET | test | `apps/cli/tests/commands/feature.test.ts:431-438` (--fix leg, fence text survives, re-check reports `L2.unclosed-code-fence`, exit 1), `rmSync` in `finally` (:441-445); targeted run green (48 pass) |
-| AC3 [docs-only] | MET | static-ref | `docs/design/data-output-contracts.md:204` — row lists `skipped: [{id, reason}]` and all four reason values |
+| AC1 | MET | test | `packages/app/tests/services/feature-service.test.ts:343` fence above Tasks, :358 fence after Tasks (no write), :369 duplicate-sections, :380 no-tasks-marker-region, :393 missing-tasks-section; fresh run green |
+| AC2 | MET | test | `apps/cli/tests/commands/feature.test.ts:413-447` — --fix leg + finally cleanup; fresh run 48 pass / 0 fail |
+| AC3 | MET | command | `rg -c "skipped: \[\{id, reason\}\].*unclosed-code-fence.*duplicate-sections.*missing-tasks-section.*no-tasks-marker-region" docs/design/data-output-contracts.md` → 1 (row at `docs/design/data-output-contracts.md:204`) |
 - Coverage: N/A (verdict-based; verify pipeline does not measure code coverage)
 
 ### Review
