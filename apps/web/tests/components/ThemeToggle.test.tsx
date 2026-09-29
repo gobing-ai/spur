@@ -3,6 +3,7 @@ registerHappyDom();
 import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { act, cleanup, render } from '@testing-library/react';
 import ThemeToggle from '../../src/components/ThemeToggle';
+import { resetFetchForTesting, setFetchForTesting } from '../../src/lib/rpc-client';
 import { registerHappyDom, teardownHappyDom } from '../happy-dom';
 
 afterAll(teardownHappyDom);
@@ -32,22 +33,19 @@ function mockMatchMedia(initialDark = false) {
 }
 
 describe('ThemeToggle system-preference sync', () => {
-    let realFetch: typeof fetch;
-
     beforeEach(() => {
         localStorage.clear();
         document.documentElement.removeAttribute('data-theme');
         // The board shell fetches /api/* on mount; reject like a real failed fetch instead
         // of running happy-dom's CORS machinery ("Cross-Origin Request Blocked" noise).
-        realFetch = globalThis.fetch;
-        globalThis.fetch = (async (): Promise<Response> => {
+        setFetchForTesting((async (): Promise<Response> => {
             throw new TypeError('Failed to fetch');
-        }) as unknown as typeof fetch;
+        }) as unknown as typeof fetch);
     });
 
     afterEach(() => {
         cleanup();
-        globalThis.fetch = realFetch;
+        resetFetchForTesting();
         // @ts-expect-error reset matchMedia between tests
         globalThis.matchMedia = undefined;
     });
