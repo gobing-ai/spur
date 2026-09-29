@@ -4,7 +4,7 @@ name: Decide L2.unclosed-code-fence suppressibility in REQUIRED_FINDING_CODES (1
 status: backlog
 template: feature-impl
 created_at: 2026-09-29T18:18:17.374Z
-updated_at: "2026-09-29T19:28:46.637Z"
+updated_at: "2026-09-29T19:53:51.696Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -27,21 +27,24 @@ Why it matters (F91 intent): an unclosed fence makes `findHeadings` see a trunca
 
 ### Requirements
 
-- **R1 (decision recorded)** — decide whether `L2.unclosed-code-fence` is unsuppressible; record the decision + rationale in `docs/design/configuration-contracts.md` finding-code catalog (suppression-policy row).
-- **R2 (implement per decision)** — branch A (suppression disallowed): add `FINDING_CODES.L2_UNCLOSED_CODE_FENCE` to `REQUIRED_FINDING_CODES` (`packages/app/src/services/planning-check-base.ts:76-88`) + regression test proving `severityOverrides` cannot downgrade it and accepted-map filtering cannot absorb it. Branch B (escape hatch intentional): document explicitly in `configuration-contracts.md` which L2 codes stay suppressible and why, so the asymmetry vs `L2.missing-required-section` is a recorded decision rather than an accident.
-
-Detail: emission severity stays `error` in both branches (`planning-check-base.ts:228-241` untouched); no caller-side changes — the shared set at the planning-check-base seam is the only implementation surface.
+- **R1 (unsuppressible)** — add `FINDING_CODES.L2_UNCLOSED_CODE_FENCE` to `REQUIRED_FINDING_CODES` (`packages/app/src/services/planning-check-base.ts:76-91`), beside `L2_MISSING_REQUIRED_SECTION`. `summarizeWithStatus` (`:315+`) already refuses `off`/downgrade overrides and accepted-map absorption for members of the set, so membership is the whole implementation.
+- **R2 (policy recorded at its owner)** — the essential-vs-advisory policy lives in `docs/design/essential-workflow-checks.md` (finding-class table, :25-37), not in `configuration-contracts.md` (which has no suppression-policy row). Record there that a document whose structure the parser cannot see (unclosed code fence, missing required section) is essential. Add one clause to the `tasks.severity` sentence in `docs/design/configuration-contracts.md` (finding-code catalog, ~:49) that overrides do not apply to essential codes, pointing to that doc.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Decision + rationale recorded in `docs/design/configuration-contracts.md` finding-code catalog (req: R1)
-- [ ] AC2 — Implementation matches the decision: branch A — `REQUIRED_FINDING_CODES` contains `L2_UNCLOSED_CODE_FENCE` with a regression test (override attempt still yields severity `error`); branch B — contract doc documents the intended escape hatch (req: R2)
+- [ ] AC1 — `packages/app/tests/services/planning-check-base.test.ts` (beside the `essential L1 schema error survives severityOverrides` case, ~:390) proves `isUnsuppressibleFinding(L2_UNCLOSED_CODE_FENCE)` is true, a `severityOverrides: { 'L2.unclosed-code-fence': 'off' }` / `'warning'` leaves the finding at severity `error` with `pass: false`, and an accepted-map entry for the code does not absorb it (req: R1)
+- [ ] AC2 — `docs/design/essential-workflow-checks.md` finding-class table classifies parser-invisible structure (unclosed fence, missing required section) as essential; `configuration-contracts.md` notes `tasks.severity` cannot override essential codes (req: R2)
 
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-29T19:53:31.565Z
+
+- **Q: Branch A (unsuppressible) or B (keep escape hatch)?** Closed 2026-09-29: **A**. Evidence: (1) `essential-workflow-checks.md` says classify by actual consumer requirements — an unclosed fence truncates the parsed view, so every later-section check passes on corrupted input; consumer semantics are not intact → essential. (2) Corpus scan of all 1180 files under `docs/tasks*/` and `docs/features/` with `MarkdownDocument.unclosedFenceLine()` found **0** unclosed fences — the legacy-escape-hatch argument has no population. (3) The fix is always one line (close the fence); an override that silences corruption only hides data loss (1008 R3). Branch B is dropped.
+- **Q: Does `corpus-check` need a baseline change?** Closed: no — zero existing occurrences, so no accepted-map entries exist to reconcile.
 
 ### Design
 
@@ -53,22 +56,18 @@ Detail: emission severity stays `error` in both branches (`planning-check-base.t
 
 ### Solution
 
-Recommendation on record (from the 1008 review): branch A — the fence code belongs beside `L2_MISSING_REQUIRED_SECTION`; both mean "the parsed view is truncated; later sections are invisible", both fail closed. A corruption signal the config can silence is the gap F91 exists to close.
-
-Implementation steps:
-
-1. Locate the existing severity-override tests: `rg -n "severityOverrides|REQUIRED_FINDING_CODES" packages/app/tests` — add the regression case there (both check services inherit the seam; one test suffices).
-2. Branch A: add `FINDING_CODES.L2_UNCLOSED_CODE_FENCE` to the set literal at `packages/app/src/services/planning-check-base.ts:76-88`; assert in the test that a `tasks.severity` override targeting the code leaves severity `error` and the finding survives accepted-map filtering.
-3. Same-commit doc touch: `configuration-contracts.md` — suppression-policy row for the code (and counts sentence only if the policy table shape changes).
+1. `packages/app/src/services/planning-check-base.ts:76-91` — add `FINDING_CODES.L2_UNCLOSED_CODE_FENCE,` after `L2_MISSING_REQUIRED_SECTION` with a one-line WHY comment (parser-invisible structure; task 1010).
+2. `packages/app/tests/services/planning-check-base.test.ts` — copy the shape of the `essential L1 schema error survives severityOverrides` test for the fence code; add the accepted-map leg.
+3. Docs (same commit): `docs/design/essential-workflow-checks.md` finding-class table row; `docs/design/configuration-contracts.md` `tasks.severity` clause.
 
 Constraints (anti-drift):
 
-- Do NOT touch the emission logic or default severity (`planning-check-base.ts:228-241`).
-- Do NOT shrink the set (the header comment forbids it — MUST NOT shrink).
-- No plugin-bundle regen needed: `packages/app` is not a bundled plugin surface.
-- `ac_altitude: task-local` is already set — do not remove.
+- Do NOT touch emission (`packages/app/src/services/planning-check-base.ts:228-241`) or default severity.
+- Do NOT shrink the set.
+- `packages/app` is bundled into `plugins/sp/lib/*.generated.mjs` only via scripts that import it; if `bun run build:plugin-lib` produces a diff, commit it (1008 precedent). Otherwise none.
+- `ac_altitude: task-local` stays.
 
-Verify: targeted `bun test` in `packages/app`; `bun run spur-check` at the quality boundary.
+Verify: `(cd packages/app && bun test tests/services/planning-check-base.test.ts)`; `bun run spur-check`.
 
 ### Testing
 
@@ -80,8 +79,9 @@ Verify: targeted `bun test` in `packages/app`; `bun run spur-check` at the quali
 
 ### References
 
-- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-2; Dimension 2)
-- Code anchors: `packages/app/src/services/planning-check-base.ts:76-88` (set), `:228-241` (emission) · `docs/design/configuration-contracts.md:49` (catalog)
-- Tasks: 1008 (source; Review table row P3-2), 1009 (sibling fence follow-up) · Feature: F91
+- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-2)
+- Code: `packages/app/src/services/planning-check-base.ts:76-91` (set), `:93` (`isUnsuppressibleFinding`), `:228-241` (emission), `:315+` (`summarizeWithStatus`) · `packages/app/tests/services/planning-check-base.test.ts:390`
+- Docs: `docs/design/essential-workflow-checks.md:25-37` (policy owner) · `docs/design/configuration-contracts.md` (~:49, `tasks.severity`)
+- Tasks: 1008 (source), 1009 · Feature: F91
 
 ### History

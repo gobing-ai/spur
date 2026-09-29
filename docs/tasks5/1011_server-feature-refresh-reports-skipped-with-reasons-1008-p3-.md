@@ -4,7 +4,7 @@ name: Server feature refresh reports skipped with reasons (1008 P3-5)
 status: backlog
 template: feature-impl
 created_at: 2026-09-29T18:18:17.810Z
-updated_at: "2026-09-29T19:28:48.447Z"
+updated_at: "2026-09-29T19:53:33.539Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -29,19 +29,26 @@ Key fact: `FeatureService.refresh()` ALREADY returns `skipped` — the CLI consu
 
 ### Requirements
 
-- **R1 (server parity)** — extend the oRPC `feature.refresh` contract in `packages/contracts` so the response includes `skipped: Array<{ id: string; reason: string }>`, exactly mirroring CLI R4; pass `r.skipped` through in the handler (`apps/server/src/modules/feature/handlers.ts:70-73`); regenerate OpenAPI so typed clients pick it up. Keep `reason` an open `string` — task 1009 may add a third reason value (`unclosed-code-fence`); do not constrain to an enum (avoids cross-task coupling).
+- **R1 (server parity)** — extend the `feature.refresh` output schema in `packages/contracts/src/feature.ts:219-230` with `skipped: z.array(z.object({ id: z.string(), reason: z.string() }))`, mirroring CLI 1008 R4; pass `skipped` through in `apps/server/src/modules/feature/handlers.ts:70-73`. `reason` stays an open string (1009 extends the vocabulary to four values).
 
-Detail: contract DTO only — no domain types in transport (repo rule; ADR-021 thin transports). The response field is additive and backward-compatible.
+Detail: transport DTO only (ADR-021). Additive, backward-compatible. OpenAPI is generated at runtime (`generateOpenApiSpec`, served at `/openapi.json` by `apps/server/src/bootstrap.ts:32` / `worker-app.ts:56`) — there is no committed spec to regenerate. No `apps/web` consumer of `feature.refresh` exists (verified), so no client change.
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Server `feature.refresh` response includes `skipped: [{id, reason}]` with CLI-identical shape; covered by a server-side test (fixture feature missing its Tasks section → one skipped entry) and regenerated OpenAPI committed (req: R1)
+- [ ] AC1 — `apps/server/tests/modules/feature/handlers.test.ts` refresh test: the `makeCtx` stub returns `skipped: [{ id: 'A', reason: 'missing-tasks-section' }]` and the handler result carries `data.skipped` equal to it alongside `rebuilt`; the contract output schema accepts the shape (req: R1)
 
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-29T19:53:33.003Z
+
+- **Q: Seed a real corpus in the server test?** Closed: no. Skip classification is `FeatureService` behavior already covered in `packages/app/tests/services/feature-service.test.ts` (1008 R4, 1009); the server's job is passthrough, which the existing stubbed-service handler test pattern proves.
+- **Q: Regenerate/commit OpenAPI?** Closed: not applicable — spec is generated per request from the contract.
+- **Q: Design doc?** Closed: the contract file is the SSOT for this transport shape; add a JSDoc line on the schema. `docs/04_DESIGN.md` has no refresh entry.
+- **Q: Order vs 1009?** Closed: independent (open `reason` string).
 
 ### Design
 
@@ -53,22 +60,18 @@ Detail: contract DTO only — no domain types in transport (repo rule; ADR-021 t
 
 ### Solution
 
-Implementation steps:
-
-1. `packages/contracts` — add `skipped` array to the feature.refresh output schema (`{ id: string; reason: string }[]`).
+1. `packages/contracts/src/feature.ts:219-230` — add `skipped` to the refresh output `z.object`, with a JSDoc line: features skipped during the Tasks-region pass, `{id, reason}`, mirrors CLI `feature refresh --json`.
 2. `apps/server/src/modules/feature/handlers.ts:70-73` — `const { tasksUpdated, skipped } = await ctx.featureService().refresh(); return { ok: true as const, data: { rebuilt: tasksUpdated, skipped } };`
-3. Regenerate OpenAPI (repo build step); web client types flow from the generated client.
-4. Server test: seed a feature without a Tasks section plus a task roster; call refresh through the contract handler; assert `skipped` carries `{id, reason}`.
-5. Same-commit doc touch: `docs/04_DESIGN.md` refresh response contract — add `skipped`, note it mirrors CLI R4.
+3. `apps/server/tests/modules/feature/handlers.test.ts` — stub at :36 returns `skipped`; extend the `refresh handler returns rebuilt count` test (:133) to assert `data.skipped`.
 
 Constraints (anti-drift):
 
-- Do NOT modify `FeatureService.refresh()` — it already returns `skipped`.
-- Do NOT alias reason values; keep `reason` an open string (task 1009 may extend the vocabulary).
-- Additive field only — no breaking change, no BREAKING CHANGE footer.
-- `ac_altitude: task-local` is already set — do not remove.
+- Do NOT modify `FeatureService.refresh()`.
+- Keep `reason` an open string; no enum.
+- Additive only; no BREAKING CHANGE footer. Out of scope: the server refresh is unscoped (no `featureId`/`--all` gate like CLI 0625) — note only.
+- `ac_altitude: task-local` stays.
 
-Verify: targeted server test in `apps/server`; `bun run test-cf` if the server gate covers the module; `bun run spur-check` at the quality boundary.
+Verify: `(cd apps/server && bun test tests/modules/feature/handlers.test.ts tests/openapi.test.ts)`; `bun run test-cf`; `bun run spur-check`.
 
 ### Testing
 
@@ -80,8 +83,8 @@ Verify: targeted server test in `apps/server`; `bun run test-cf` if the server g
 
 ### References
 
-- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-5; Dimension 3 note)
-- Code anchors: `apps/server/src/modules/feature/handlers.ts:70-73` · `apps/cli/src/commands/feature.ts:386/:392` · task 1008 R4 shape (`skipped: [{id, reason}]`)
-- Tasks: 1008 (source), 1009 (reason vocabulary) · Feature: F91
+- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-5)
+- Code: `packages/contracts/src/feature.ts:219-230` · `apps/server/src/modules/feature/handlers.ts:70-73` · `apps/server/tests/modules/feature/handlers.test.ts:36,133` · `apps/server/src/openapi.ts` (runtime spec) · `apps/cli/src/commands/feature.ts:378-400`
+- Tasks: 1008 (R4 shape), 1009 (reason vocabulary) · Feature: F91
 
 ### History

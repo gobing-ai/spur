@@ -4,7 +4,7 @@ name: Feature refresh skip-reason fidelity and feature-side --fix fence coverage
 status: backlog
 template: feature-impl
 created_at: 2026-09-29T18:18:16.889Z
-updated_at: "2026-09-29T19:28:44.797Z"
+updated_at: "2026-09-29T19:53:30.790Z"
 feature_id: F91
 
 ac_altitude: task-local
@@ -43,21 +43,28 @@ References:
 
 ### Requirements
 
-- **R1 (skip-reason fidelity)** — when a feature's Tasks section exists but its unclosed fence opens inside the Tasks body, the refresh skip reason must name the actual state (fence), not `no-tasks-marker-region`. Detail: in the `replaceMarkerRegion` catch (`packages/app/src/services/feature-service.ts:388-392`), classify with `doc.unclosedFenceLine()` — non-null → reason `unclosed-code-fence`; null → keep `no-tasks-marker-region` for a balanced document with no marker region; `missing-tasks-section` unchanged. Adding a third reason value is an observable-output change (same class as 1008 R4): update the refresh contract line in `docs/04_DESIGN.md` in the same commit.
-- **R2 (feature-side --fix coverage)** — a direct feature-path test proving `feature check --fix` repairs structural findings but never auto-closes an unclosed fence, mirroring the task-path test (shared `applyStructuralRepairs` engine — the test guards the shared contract). Extend the existing fence test at `apps/cli/tests/commands/feature.test.ts:413-436` with a `--fix` leg and keep the `rmSync` cleanup in `finally`.
+- **R1 (skip-reason fidelity)** — every refresh skip names the root cause. `assertFenceBalance` (`packages/domain/src/planning/markdown-document.ts:398`) throws inside `replaceMarkerRegion` for three distinct states — a doc-level unclosed fence **anywhere** (not only inside the Tasks body), duplicate top-level sections (1008 R3b), and a new body with an unclosed fence — and the blind catch at `packages/app/src/services/feature-service.ts:388-392` labels all of them `no-tasks-marker-region`. Classify before writing, in this precedence: `doc.unclosedFenceLine() !== null` → `unclosed-code-fence`; `doc.duplicateSectionNames.length > 0` → `duplicate-sections`; `!doc.hasSection('Tasks')` → `missing-tasks-section`; `replaceMarkerRegion` throw → `no-tasks-marker-region`. The fence check runs **before** `hasSection`, so a fence that hides the Tasks heading (opens above it) is also reported as `unclosed-code-fence` — the same corruption must not get two labels depending on where the fence opens.
+- **R2 (feature-side --fix coverage)** — extend the feature fence test (`apps/cli/tests/commands/feature.test.ts:413-436`) with a `--fix` leg mirroring the task-path test (`apps/cli/tests/commands/task.test.ts:922-948`): after `feature check <id> --fix`, the file still contains the fence text and a re-check still reports `L2.unclosed-code-fence`. `FeatureCheckService.check` calls `applyStructuralRepairs(rawSource, 'feature', …)` directly (`packages/app/src/services/feature-check.ts:219`), so this guards the feature call site, not just the shared engine.
+- **R3 (contract doc)** — `docs/design/data-output-contracts.md:204` still documents `feature refresh` as `{index_path, tasksUpdated}`; it has been stale since 1008 R4 added `skipped`. Update the row to `{index_path, tasksUpdated, skipped: [{id, reason}]}` with the four reason values. (`docs/04_DESIGN.md` carries no refresh contract — not the owner.)
 
 ### Acceptance Criteria
 
-- [ ] AC1 — Feature refresh skip reason is `unclosed-code-fence` (not `no-tasks-marker-region`) when the unclosed fence opens inside the Tasks body, and `no-tasks-marker-region` is still emitted for a balanced document without a marker region — both covered by tests in `packages/app/tests/services/feature-service.test.ts` (req: R1)
-- [ ] AC2 — `apps/cli/tests/commands/feature.test.ts` fence test asserts `--fix` leaves the unclosed fence text intact, fixture cleanup retained; targeted run green (req: R2)
-
-Task-only checks (ac_altitude: task-local): `docs/04_DESIGN.md` refresh contract mentions the third reason value; no existing reason name changed.
+- [ ] AC1 — `packages/app/tests/services/feature-service.test.ts` covers all four reasons: fence above the Tasks heading → `unclosed-code-fence` (the existing 1008 R4 test's expectation moves from `missing-tasks-section`); fence opening inside/after the Tasks body → `unclosed-code-fence`; duplicate top-level section → `duplicate-sections`; balanced doc with Tasks but no marker region → `no-tasks-marker-region`; balanced doc with no Tasks heading → `missing-tasks-section` (req: R1)
+- [ ] AC2 — The feature fence test runs `feature check --fix` and asserts the fence text survives and `L2.unclosed-code-fence` is still reported; `rmSync` cleanup stays in `finally`; targeted run green (req: R2)
+- [ ] AC3 — `docs/design/data-output-contracts.md` feature/refresh row lists `skipped: [{id, reason}]` and the four reason values (req: R3)
 
 ### Q&A
 
 <!-- CLOSED decisions from refinement: what was chosen and why, what was deferred and on what
      condition. Not a parking lot for open questions — an unanswered question here means the task
      is not ready to hand off. Keep empty if none. -->
+
+#### Q&A entry — 2026-09-29T19:53:30.223Z
+
+- **Q: Scope of the mislabel?** Closed (verification 2026-09-29): wider than the review stated. `assertFenceBalance` checks the doc-level fence state, so a fence opening in ANY section after the Tasks heading is mislabeled, and a duplicate-section document is mislabeled too. Fence opening above Tasks yields `missing-tasks-section` — also a symptom label. All three are fixed by pre-classification.
+- **Q: Change the 1008 R4 test expectation (`missing-tasks-section` → `unclosed-code-fence`)?** Closed: yes. The fixture is literally an unclosed fence; the root-cause label is the R4 intent ("make the corruption observable"). Reason names keep their meanings — only fence-caused skips move to the precise label.
+- **Q: Add `duplicate-sections`?** Closed: yes — same bug class (catch mislabel), same one-line classification via the existing public `duplicateSectionNames` getter; leaving it mislabeled would need a follow-up of this exact task.
+- **Q: CLI change?** Closed: none. `apps/cli/src/commands/feature.ts` passes `result.skipped` through to JSON and prints `id`/`reason` generically.
 
 ### Design
 
@@ -69,21 +76,41 @@ Task-only checks (ac_altitude: task-local): `docs/04_DESIGN.md` refresh contract
 
 ### Solution
 
-Implementation guidance from the 1008 review (update during implement):
+1. `packages/app/src/services/feature-service.ts:382-392` — replace the `hasSection` + blind catch with ordered classification:
 
-1. `packages/app/src/services/feature-service.ts:388-392` — replace the blind catch label: `const fence = doc.unclosedFenceLine(); skipped.push({ id: feature.id, reason: fence !== null ? 'unclosed-code-fence' : 'no-tasks-marker-region' });` — no new parsing; `unclosedFenceLine()` is the 1008 R1 domain API.
-2. `packages/app/tests/services/feature-service.test.ts` — fixture A: feature with a Tasks section whose fence opens inside the Tasks body → expect skipped reason `unclosed-code-fence`; fixture B: balanced document with a Tasks section but no marker region → `no-tasks-marker-region` (guards the classification split).
-3. `apps/cli/tests/commands/feature.test.ts:413-436` — after the finding assertions, run `feature check --fix`, then assert the corrupted body still contains the fence text; keep `rmSync(featurePath)` in `finally`.
-4. Same-commit doc touch: `docs/04_DESIGN.md` refresh response (`skipped: [{id, reason}]`) — add the third reason value.
+   ```ts
+   const reason =
+       doc.unclosedFenceLine() !== null
+           ? 'unclosed-code-fence'
+           : doc.duplicateSectionNames.length > 0
+             ? 'duplicate-sections'
+             : !doc.hasSection('Tasks')
+               ? 'missing-tasks-section'
+               : undefined;
+   if (reason !== undefined) {
+       skipped.push({ id: feature.id, reason });
+       continue;
+   }
+   try {
+       doc.replaceMarkerRegion('Tasks', table);
+   } catch {
+       skipped.push({ id: feature.id, reason: 'no-tasks-marker-region' });
+       continue;
+   }
+   ```
+
+   Update the R4 comment and the `refresh()` JSDoc `@returns` to list the four reasons. No new parsing — both getters exist (1008 R1/R3b).
+2. `packages/app/tests/services/feature-service.test.ts` — reuse `seedRefreshCorpus()`; flip the existing R4 expectation to `unclosed-code-fence`; add cases for fence-after-Tasks, duplicate section, balanced-no-marker, and no-Tasks-heading.
+3. `apps/cli/tests/commands/feature.test.ts:413-436` — after the finding assertions: `await main(['feature', 'check', id, '--fix'], …)`, assert file text still contains `never closed`, re-run `check --json` and assert the fence finding persists. Keep `rmSync(featurePath)` in `finally`.
+4. `docs/design/data-output-contracts.md:204` — refresh row shape + reasons (same commit).
 
 Constraints (anti-drift):
 
-- Do NOT change L2 emission, `assertFenceBalance`, `--fix` behavior, or existing reason names (`missing-tasks-section`, `no-tasks-marker-region` keep their semantics).
-- Service returns data; CLI formats — `apps/cli/src/commands/feature.ts:386/:392` consume `result.skipped` generically, so no CLI change is expected; verify, don't assume.
-- No new flags; no server-surface change here (that is task 1011).
-- `ac_altitude: task-local` is already set (ADR-062 carve-out) — do not remove.
+- Do NOT change L2 emission, `assertFenceBalance`, or `--fix` behavior.
+- No CLI source change, no new flags, no server change (task 1011).
+- `ac_altitude: task-local` stays.
 
-Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)` and `(cd apps/cli && bun test tests/commands/feature.test.ts -t fence)`; `bun run spur-check` at the quality boundary.
+Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)`, `(cd apps/cli && bun test tests/commands/feature.test.ts)`, then `bun run spur-check`.
 
 ### Testing
 
@@ -95,8 +122,9 @@ Verify: `(cd packages/app && bun test tests/services/feature-service.test.ts)` a
 
 ### References
 
-- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-1, P3-4; Dimensions 2–3)
-- Tasks: 1008 (R2/R4 source; Review table rows P3-1/P3-4), 1011 (server-side skipped parity) · Feature: F91 · Commit: 12d863b9b
-- Code anchors: `packages/app/src/services/feature-service.ts:388-392` · `apps/cli/tests/commands/feature.test.ts:413-436` · `apps/cli/tests/commands/task.test.ts` fence test · `packages/domain/src/planning/markdown-document.ts` `unclosedFenceLine()` (1008 R1)
+- Review answer: `.spur/run/785c3ca9-fa8e-4ea8-b75e-81ccac2db600-review-answer.txt` (P3-1, P3-4)
+- Code: `packages/app/src/services/feature-service.ts:382-392` · `packages/domain/src/planning/markdown-document.ts:366` (`duplicateSectionNames`), `:377` (`unclosedFenceLine`), `:398` (`assertFenceBalance`), `:574` (`replaceMarkerRegion`) · `packages/app/src/services/feature-check.ts:219` · `apps/cli/tests/commands/feature.test.ts:413-436` · `apps/cli/tests/commands/task.test.ts:922-948` · `packages/app/tests/services/feature-service.test.ts:333-350`
+- Contract: `docs/design/data-output-contracts.md:204`
+- Tasks: 1008 (R2/R3b/R4), 1011 (server parity; open `reason` string) · Feature: F91
 
 ### History
