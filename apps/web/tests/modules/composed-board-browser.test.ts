@@ -22,6 +22,10 @@ import type { BoardCatalog, BoardHostRuntime } from '@gobing-ai/spur-contracts';
 import { buildBoardToTemp, removeBoardBuild } from '../test-helpers/board-build';
 import { type BoardServer, serveBoard } from '../test-helpers/board-server';
 import { availableBrowserBinary, type BrowserSession, launchBrowser } from '../test-helpers/cdp';
+
+// Browser proofs require a real Chromium; state the absence instead of failing machines (and CI runners) without one.
+const browserReady = availableBrowserBinary() !== undefined;
+
 import { type FrameFixtureServer, serveFrameFixtures } from '../test-helpers/frame-fixtures';
 
 /** The native contribution fixture served as a module asset tree. */
@@ -239,7 +243,7 @@ afterAll(async () => {
     await removeBoardBuild(proofBuild);
 });
 
-describe('catalog composition renders without a build-injected adapter (R1, AC1)', () => {
+describe.skipIf(!browserReady)('catalog composition renders without a build-injected adapter (R1, AC1)', () => {
     test('the modules arrived through the served catalog, not the 0988 test adapter', async () => {
         // The build is production-shaped: no adapter route, no proof record compiled in.
         expect(await dom<boolean>('"__spurBoardProof" in window')).toBe(false);
@@ -305,7 +309,7 @@ describe('catalog composition renders without a build-injected adapter (R1, AC1)
     }, 60_000);
 });
 
-describe('framed resources share navigation with native tools (R3, AC2)', () => {
+describe.skipIf(!browserReady)('framed resources share navigation with native tools (R3, AC2)', () => {
     test('an iframe module frames its configured cross-origin URL verbatim, with an escape hatch', async () => {
         await browser.navigate(`${server.origin}/board/modules/frame-ok`, page);
         await browser.waitFor('Boolean(document.querySelector("[data-testid=framed-resource-frame]"))', {
@@ -399,7 +403,7 @@ describe('framed resources share navigation with native tools (R3, AC2)', () => 
     }, 60_000);
 });
 
-describe('failure containment keeps the Board navigable (R3, AC1)', () => {
+describe.skipIf(!browserReady)('failure containment keeps the Board navigable (R3, AC1)', () => {
     test('a throwing contribution is contained by the module boundary', async () => {
         await browser.navigate(`${server.origin}/board/modules/broken-probe`, page);
         await browser.waitFor('Boolean(document.querySelector("[data-testid=module-diagnostic]"))', {
@@ -452,7 +456,7 @@ describe('failure containment keeps the Board navigable (R3, AC1)', () => {
     }, 60_000);
 });
 
-describe('each project origin owns its own catalog (R2, AC3)', () => {
+describe.skipIf(!browserReady)('each project origin owns its own catalog (R2, AC3)', () => {
     test('a second origin serves the same module id with different metadata, content and frame URL', async () => {
         await browser.navigate(`${altServer.origin}/board/modules/native-probe`, page);
         await browser.waitFor('Boolean(document.querySelector("[data-probe-counter]"))', {
@@ -464,7 +468,7 @@ describe('each project origin owns its own catalog (R2, AC3)', () => {
     }, 60_000);
 });
 
-describe('module assets follow the documented restart lifecycle (R4)', () => {
+describe.skipIf(!browserReady)('module assets follow the documented restart lifecycle (R4)', () => {
     test('module assets carry no-store, so restart plus reload cannot be masked by a cached chunk', async () => {
         const cache = await dom<{ entry: string | null; style: string | null }>(
             '(async () => { const entry = await fetch("/modules/native-probe/entry.js");' +
@@ -556,7 +560,7 @@ describe('module assets follow the documented restart lifecycle (R4)', () => {
     }, 60_000);
 });
 
-describe('navigation does not retain a module’s in-page state (R2, R3)', () => {
+describe.skipIf(!browserReady)('navigation does not retain a module’s in-page state (R2, R3)', () => {
     test('leaving and returning to the native module mounts it fresh', async () => {
         await browser.navigate(`${server.origin}/board/modules/native-probe`, page);
         await browser.waitFor('Boolean(document.querySelector("[data-probe-counter]"))', {
