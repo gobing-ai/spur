@@ -48,8 +48,17 @@ function must(result: { code: number; output: string }, label: string): void {
 /**
  * Pack `@gobing-ai/spur` locally (the real release path: `prepack` builds the bundle, the board
  * assets and the declaration artifact).
+ *
+ * `prepack` chains into `build:bundle` → `bundle-web`, which copies the board out of `dist/web` and
+ * refuses to package a board whose runtime manifest is missing. A fresh board build is therefore a
+ * hard precondition of packing, and it is built HERE rather than assumed: `dist/` is gitignored, so
+ * a fresh clone, a CI runner or a tree that never ran `bun run build` would otherwise fail with a
+ * confusing `bundle-web` error rather than a clear one. This also keeps the helper's own contract —
+ * that distribution evidence never comes from a `dist/web` that merely happens to exist.
  */
 export function packCliTarball(destination: string): string {
+    const boardBuild = run(['bun', 'run', '--filter', '@gobing-ai/spur-web', 'build'], REPO_ROOT, 600_000);
+    must(boardBuild, 'board build (dist/web)');
     const result = run(['bun', 'pm', 'pack', '--destination', destination, '--quiet'], join(REPO_ROOT, 'apps/cli'));
     must(result, 'bun pm pack');
     const tarball = result.output
