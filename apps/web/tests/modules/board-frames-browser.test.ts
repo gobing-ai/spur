@@ -53,7 +53,7 @@ async function fixtureTextPerContext(): Promise<{ origin: string; text: string }
 }
 
 beforeAll(async () => {
-    if (!availableBrowserBinary()) throw new Error('no Chromium binary available for the frame proof');
+    if (!browserReady) return;
     fixtures = await serveFrameFixtures();
     harness = await serveFrameHarness(fixtures);
     browser = await launchBrowser();

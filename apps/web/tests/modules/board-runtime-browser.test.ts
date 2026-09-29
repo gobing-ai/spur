@@ -36,7 +36,7 @@ const THROW_MESSAGE = 'downstream contribution failed to render';
 /** Deep route the proof module is mounted at (built-in wildcard child route). */
 const DEEP_PATH = '/board/test-board-runtime-proof/deep/segment';
 
-let workspace: string;
+let workspace: string | undefined;
 let tarballDir: string;
 let tarball: string;
 let consumer: DownstreamConsumer;
@@ -56,8 +56,7 @@ async function dom<T>(expression: string): Promise<T> {
 }
 
 beforeAll(async () => {
-    const browserPath = availableBrowserBinary();
-    if (!browserPath) throw new Error('no Chromium binary available for the browser proof');
+    if (!browserReady) return;
     workspace = await mkdtemp(join(tmpdir(), 'spur-proof-0988-'));
     tarballDir = join(workspace, 'pack');
 
@@ -81,7 +80,7 @@ afterAll(async () => {
     await browser?.close();
     server?.stop();
     await removeBoardBuild(proofBuild);
-    await rm(workspace, { recursive: true, force: true });
+    if (workspace) await rm(workspace, { recursive: true, force: true });
 });
 
 describe.skipIf(!browserReady)('installed package exports (R3)', () => {
