@@ -1,17 +1,23 @@
 import type { BoardCatalog, BoardModuleDescriptor } from '@gobing-ai/spur-contracts';
 import { createElement } from 'react';
+import { FramedResource } from '../components/FramedResource';
 import { ModuleDiagnostic } from '../components/ModuleErrorBoundary';
 import type { BoardModuleContribution } from './contribution';
 import type { WebModule } from './types';
 
 /**
  * Composition of the built-in Board registry with a project catalog's downstream modules
- * (task 0990 R1–R3, `docs/design/downstream-board-modules.md`).
+ * (task 0990 R1–R3, task 0991 R1, `docs/design/downstream-board-modules.md`).
  *
  * One pass, one output: the caller feeds {@link ComposedBoardModules.modules} to
  * `createRegistry` and hands the result to the router and the shell. Failures are values,
  * not throw sites — a module that cannot load still gets a route that renders its
  * {@link BoardModuleDiagnostic}, so navigation survives.
+ *
+ * Two contribution types resolve here and both become ordinary registry entries, so they share
+ * navigation and one selected workspace: a native (`react`) module is imported through the host
+ * import map, while a framed (`iframe`) resource is handed to the Board-owned
+ * {@link FramedResource} adapter and never reaches the ESM loader.
  */
 
 /** Bound for one native module's style + entry load. Internal seam — deliberately not a config flag. */
@@ -260,12 +266,20 @@ export async function composeBoardModules(
     const resolved = await Promise.all(
         external.map(async (descriptor): Promise<WebModule> => {
             if (descriptor.type === 'iframe') {
-                // The iframe slice (0991) replaces this entry with a Board-owned frame component.
-                return diagnosticEntry(descriptor, {
-                    moduleId: descriptor.id,
-                    category: 'unsupported',
-                    message: 'iframe contributions are not rendered by this Board build',
-                });
+                // The Board-owned frame adapter (0991 R1). A framed resource is an ordinary registry
+                // entry, so it shares navigation and the one selected workspace, but it never reaches
+                // the native ESM loader: the configured URL is framed as-is and the browser keeps
+                // every embedding restriction (R4). No readiness is derived from the frame.
+                return {
+                    ...entryMetadata(descriptor),
+                    component: () =>
+                        createElement(FramedResource, {
+                            moduleId: descriptor.id,
+                            url: descriptor.url,
+                            title: descriptor.name,
+                        }),
+                    contributionType: 'iframe',
+                };
             }
             const outcome = await loadNativeModule(descriptor, apiVersion, { timeoutMs, importEntry, loadStyle });
             return isDiagnostic(outcome) ? diagnosticEntry(descriptor, outcome) : outcome;

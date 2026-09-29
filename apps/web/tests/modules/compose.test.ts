@@ -1,5 +1,7 @@
 import { afterAll, describe, expect, it } from 'bun:test';
 import type { BoardCatalog } from '@gobing-ai/spur-contracts';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { composeBoardModules, NATIVE_MODULE_LOAD_TIMEOUT_MS } from '../../src/modules/compose';
 import type { WebModule } from '../../src/modules/types';
 import { registerHappyDom, teardownHappyDom } from '../happy-dom';
@@ -21,6 +23,12 @@ function builtin(id: string): WebModule {
 }
 
 const BUILTINS = [builtin('tasks'), builtin('projects')];
+
+/** Narrow a composed entry without a non-null assertion (forbidden by `lint/style/noNonNullAssertion`). */
+function requireEntry(entry: WebModule | undefined): WebModule {
+    if (!entry) throw new Error('expected a composed module entry');
+    return entry;
+}
 
 function catalog(overrides: Partial<BoardCatalog> = {}): BoardCatalog {
     return {
@@ -155,30 +163,61 @@ describe('composeBoardModules', () => {
         expect(composed.modules.map((m) => m.id)).toEqual(['tasks', 'projects', 'gamma', 'alpha', 'beta']);
     });
 
-    it('does not render iframe descriptors through a native bridge', async () => {
+    it('adapts iframe descriptors into framed entries without touching the native loader', async () => {
+        let imported = false;
+        let styled = false;
         const composed = await composeBoardModules(
             catalog({
                 modules: [
                     {
                         id: 'frame',
-                        name: 'frame',
+                        name: 'Design Docs',
                         icon: '▢',
                         type: 'iframe',
                         route: '/modules/frame',
-                        url: '/modules/frame/index.html',
+                        url: 'https://docs.example.test/',
+                        sidebarLabel: 'Docs',
+                        order: 3,
                     },
                 ],
             }),
             BUILTINS,
             {
                 importEntry: async () => {
+                    imported = true;
                     throw new Error('an iframe descriptor must not be imported');
+                },
+                loadStyle: async () => {
+                    styled = true;
                 },
             },
         );
 
+        // R1: a framed resource is an ordinary registry entry, so it shares navigation with
+        // built-ins and native contributions rather than becoming a diagnostic.
         expect(composed.modules.map((m) => m.id)).toEqual(['tasks', 'projects', 'frame']);
-        expect(composed.modules[2]?.contributionType).toBe('iframe');
+        const framed = composed.modules[2];
+        expect(framed?.contributionType).toBe('iframe');
+        expect(typeof framed?.component).toBe('function');
+        expect(composed.hostDiagnostics).toEqual([]);
+
+        // Configured metadata and the derived /board/<id> route survive the adaptation.
+        expect(framed?.name).toBe('Design Docs');
+        expect(framed?.route).toBe('modules/frame');
+        expect(framed?.sidebarLabel).toBe('Docs');
+        expect(framed?.order).toBe(3);
+
+        // AC1: an iframe entry never uses the native ESM loader or the stylesheet loader.
+        expect(imported).toBe(false);
+        expect(styled).toBe(false);
+
+        // The adapted entry is genuinely renderable and routes to the Board-owned frame adapter,
+        // not to a diagnostic. Rendered server-side so no frame navigation is attempted.
+        expect(framed).toBeDefined();
+        const html = renderToStaticMarkup(createElement(requireEntry(framed).component));
+        expect(html).toContain('framed-resource');
+        expect(html).toContain('Open externally');
+        expect(html).not.toContain('module-diagnostic');
     });
 
     it('reports a style failure without evaluating the entry', async () => {
@@ -223,6 +262,20 @@ describe('composeBoardModules', () => {
 
         expect(composed.modules.every((m) => m.contributionType === undefined)).toBe(true);
     });
+
+    it('reports a contribution whose webModule.component is not a component', async () => {
+        const composed = await composeBoardModules(catalog({ modules: [reactDescriptor('bad-component')] }), BUILTINS, {
+            // A namespace that publishes `webModule` but no usable component must be contained,
+            // not mounted.
+            importEntry: async () => ({ webModule: { apiVersion: 1, component: 'not-a-function' } }),
+        });
+
+        const entry = composed.modules[2];
+        expect(entry?.contributionType).toBe('react');
+        const html = renderToStaticMarkup(createElement(requireEntry(entry).component));
+        expect(html).toContain('module-diagnostic');
+        expect(html).toContain('data-failure-category="export"');
+    });
 });
 
 /** The shipped loaders: a real dynamic ESM import, and a real `<link>` stylesheet in the DOM. */
@@ -262,6 +315,25 @@ describe('default loaders', () => {
         );
 
         expect(composed.modules.map((m) => m.id)).toEqual(['tasks', 'projects', 'bad-css']);
+    });
+
+    it('reports a stylesheet that errors as a style failure without evaluating the entry', async () => {
+        const pending = composeBoardModules(
+            catalog({ modules: [reactDescriptor('css-error', { styles: ['/assets/board/err.css'] })] }),
+            BUILTINS,
+            NATIVE_IMPORT,
+        );
+
+        const link = document.querySelector<HTMLLinkElement>('link[rel="stylesheet"][href="/assets/board/err.css"]');
+        expect(link).not.toBeNull();
+        link?.dispatchEvent(new Event('error'));
+
+        const composed = await pending;
+        const entry = composed.modules[2];
+        expect(entry?.contributionType).toBe('react');
+        const html = renderToStaticMarkup(createElement(requireEntry(entry).component));
+        expect(html).toContain('module-diagnostic');
+        expect(html).toContain('data-failure-category="style"');
     });
 
     it('reuses an already-applied stylesheet instead of appending a second link', async () => {

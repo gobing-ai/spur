@@ -97,6 +97,11 @@ export default function BoardLayout() {
 
     const RightPanelContent = activeModule?.rightPanelComponent;
 
+    // A framed resource owns the whole workspace (task 0991 R2): the panel, its resize handle and
+    // the global agent overlay are suppressed by RENDER ONLY — no layout state is written, so a
+    // user's saved left-collapsed/right-collapsed preferences survive switching rendering types.
+    const isFramedWorkspace = activeModule?.contributionType === 'iframe';
+
     // Auto-expand right panel when there's content to show (e.g. navigating to a task detail).
     useLayoutEffect(() => {
         if (RightPanelContent && state.rightPanelCollapsed) {
@@ -116,15 +121,17 @@ export default function BoardLayout() {
                 ☰
             </Button>
             <span className="text-sm font-semibold text-spur-text">{activeModule?.name ?? 'Spur'}</span>
-            <Button
-                variant="ghost"
-                size="sm"
-                className="text-spur-text"
-                onClick={() => setMobilePanelOpen(true)}
-                aria-label="Open panel"
-            >
-                ◧
-            </Button>
+            {!isFramedWorkspace && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-spur-text"
+                    onClick={() => setMobilePanelOpen(true)}
+                    aria-label="Open panel"
+                >
+                    ◧
+                </Button>
+            )}
         </div>
     );
 
@@ -147,6 +154,7 @@ export default function BoardLayout() {
                     data-rightpanel-collapsed={String(state.rightPanelCollapsed)}
                     data-mobile-sidebar-open={String(mobileSidebarOpen)}
                     data-mobile-panel-open={String(mobilePanelOpen)}
+                    data-framed-workspace={String(isFramedWorkspace)}
                 >
                     <ActiveModuleContext.Provider value={activeModule}>
                         <LeftSidebar
@@ -155,31 +163,33 @@ export default function BoardLayout() {
                             onMobileClose={closeMobile}
                         />
                         <ResizeHandle targetVar="--sidebar-w" onResizeEnd={onSidebarResize} />
-                        <MainWorkspace mobileHeader={mobileHeader}>
+                        <MainWorkspace mobileHeader={mobileHeader} framed={isFramedWorkspace}>
                             <BoardDiagnosticsBanner diagnostics={hostDiagnostics} />
                             <Outlet />
                         </MainWorkspace>
-                        <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
-                        <RightPanel
-                            collapsed={state.rightPanelCollapsed}
-                            onToggle={toggleRightPanel}
-                            onMobileClose={closeMobile}
-                        >
-                            {RightPanelContent ? (
-                                activeModule &&
-                                (activeModule.contributionType === 'react' ||
-                                    activeModule.contributionType === 'iframe') ? (
-                                    <ModuleErrorBoundary moduleId={activeModule.id} category="panel">
-                                        <RightPanelContent />
-                                    </ModuleErrorBoundary>
-                                ) : (
-                                    <RightPanelContent />
-                                )
-                            ) : null}
-                        </RightPanel>
+                        {!isFramedWorkspace && (
+                            <>
+                                <ResizeHandle targetVar="--rightpanel-w" onResizeEnd={onRightPanelResize} />
+                                <RightPanel
+                                    collapsed={state.rightPanelCollapsed}
+                                    onToggle={toggleRightPanel}
+                                    onMobileClose={closeMobile}
+                                >
+                                    {RightPanelContent ? (
+                                        activeModule && activeModule.contributionType === 'react' ? (
+                                            <ModuleErrorBoundary moduleId={activeModule.id} category="panel">
+                                                <RightPanelContent />
+                                            </ModuleErrorBoundary>
+                                        ) : (
+                                            <RightPanelContent />
+                                        )
+                                    ) : null}
+                                </RightPanel>
+                            </>
+                        )}
                     </ActiveModuleContext.Provider>
                 </div>
-                <GlobalAgentBar activeModule={activeModule} />
+                {!isFramedWorkspace && <GlobalAgentBar activeModule={activeModule} />}
                 <ApiErrorToast />
             </ConversationDraftProvider>
         </ProjectProvider>
